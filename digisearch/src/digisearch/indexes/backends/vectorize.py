@@ -7,6 +7,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
+from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result
 from digisearch.indexes.base import DigiIndex
@@ -94,9 +95,15 @@ class VectorizeBackend(DigiIndex):
                         # would truthiness-check it first, which raises ValueError for
                         # a numpy array with more than one element.
                         "values": [float(v) for v in c.embedding],
-                        # doc_id last so the canonical value always wins over a
-                        # caller-supplied metadata["doc_id"].
-                        "metadata": {**dict(c.metadata), "doc_id": c.doc_id},
+                        # doc_id and content last so the canonical values always win over
+                        # caller-supplied metadata["doc_id"]/["content"]. Vectorize returns
+                        # only id/score/metadata on query, so content rides here too — there
+                        # is no document store behind this backend to reconstruct it from.
+                        "metadata": {
+                            **dict(c.metadata),
+                            "doc_id": c.doc_id,
+                            "content": c.content,
+                        },
                     }
                 )
                 for c in batch
@@ -146,5 +153,73 @@ class VectorizeBackend(DigiIndex):
     def snapshot(self, path: str) -> None:
         raise NotImplementedError("Vectorize is the system of record; it is not snapshotted here")
 
+    def _default_embedder(self) -> object:
+        from digisearch.embedding.providers.minilm import MiniLMEmbedder
+
+        return MiniLMEmbedder()
+
     def query(self, query: Query) -> list[Result]:
-        raise NotImplementedError("implemented in the next task")
+        perf_start = time.perf_counter()
+        vector = list(query.embedding or [])
+        if not vector:
+            # Chroma embeds query.text internally; a remote index cannot, so the
+            # backend does it here rather than requiring every caller to remember.
+            provider = self.embedding_provider or self._default_embedder()
+            vector = provider.embed([query.text])[0]  # type: ignore[attr-defined]
+        top_k = min(max(int(query.top_k), 1), MAX_TOP_K)
+        payload: dict[str, Any] = {
+            "vector": vector,
+            "topK": top_k,
+            "returnMetadata": "all",
+            "returnValues": False,
+        }
+        status, text = self._post(
+            self._url("query"), self._headers(), json.dumps(payload).encode(), "application/json"
+        )
+        if status >= 300:
+            logger.error(
+                "vectorize query failed",
+                extra={
+                    "operation": "vectorize_query",
+                    "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                    "outcome": "error",
+                    "collection": self.name,
+                    "top_k": top_k,
+                    "status_code": status,
+                },
+            )
+            raise RuntimeError(f"vectorize query failed ({status}): {text[:500]}")
+
+        body = json.loads(text) if text else {}
+        matches = ((body.get("result") or {}).get("matches")) or []
+        out: list[Result] = []
+        for rank, match in enumerate(matches):
+            metadata = dict(match.get("metadata") or {})
+            content = str(metadata.pop("content", ""))
+            doc_id = str(metadata.pop("doc_id", ""))
+            out.append(
+                Result(
+                    chunk=Chunk(
+                        id=str(match.get("id", "")),
+                        content=content,
+                        doc_id=doc_id,
+                        embedding=None,
+                        metadata=metadata,
+                    ),
+                    score=float(match.get("score", 0.0)),
+                    source_doc=None,
+                    rank=rank,
+                )
+            )
+        logger.info(
+            "vectorize query done",
+            extra={
+                "operation": "vectorize_query",
+                "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                "outcome": "ok",
+                "collection": self.name,
+                "top_k": top_k,
+                "result_count": len(out),
+            },
+        )
+        return out

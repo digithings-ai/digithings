@@ -52,6 +52,7 @@ def test_add_posts_ndjson_multipart_to_upsert() -> None:
     assert first["id"] == "c0"
     assert len(first["values"]) == 384
     assert first["metadata"]["segment_label"] == "page:1"
+    assert first["metadata"]["content"] == "content 0"
 
 
 @pytest.mark.unit
@@ -127,3 +128,133 @@ def test_add_keeps_canonical_doc_id_over_spoofed_metadata() -> None:
     lines = [ln for ln in body.decode().splitlines() if ln.startswith('{"id"')]
     parsed = json.loads(lines[0])
     assert parsed["metadata"]["doc_id"] == "real-doc-id"
+
+
+@pytest.mark.unit
+def test_add_keeps_canonical_content_over_spoofed_metadata() -> None:
+    post = _RecordingPost()
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    chunk = Chunk(
+        id="c0",
+        content="real content",
+        doc_id="d1",
+        embedding=[0.1, 0.2],
+        metadata={"content": "spoofed content"},
+    )
+    backend.add([chunk])
+    _, _, body, _ = post.calls[0]
+    lines = [ln for ln in body.decode().splitlines() if ln.startswith('{"id"')]
+    parsed = json.loads(lines[0])
+    assert parsed["metadata"]["content"] == "real content"
+
+
+_MATCHES = json.dumps(
+    {
+        "success": True,
+        "result": {
+            "count": 2,
+            "matches": [
+                {
+                    "id": "c1",
+                    "score": 0.91,
+                    "metadata": {
+                        "doc_id": "d1",
+                        "content": "first chunk",
+                        "segment_label": "page:12",
+                        "source_url": "https://x/y.pdf",
+                    },
+                },
+                {
+                    "id": "c2",
+                    "score": 0.42,
+                    "metadata": {"doc_id": "d1", "content": "second chunk"},
+                },
+            ],
+        },
+        "errors": [],
+    }
+)
+
+
+@pytest.mark.unit
+def test_query_maps_matches_to_results() -> None:
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    results = backend.query(DsQuery(text="hello", top_k=5, embedding=[0.2] * 384))
+
+    url, _headers, body, content_type = post.calls[0]
+    assert url.endswith("/indexes/i/query")
+    assert content_type == "application/json"
+    sent = json.loads(body)
+    assert sent["topK"] == 5
+    assert sent["returnMetadata"] == "all"
+    assert sent["vector"] == [0.2] * 384
+
+    assert [r.chunk.id for r in results] == ["c1", "c2"]
+    assert results[0].score == 0.91
+    assert results[0].rank == 0
+    assert results[0].chunk.content == "first chunk"
+    assert results[0].chunk.doc_id == "d1"
+    assert results[0].chunk.metadata["segment_label"] == "page:12"
+
+
+@pytest.mark.unit
+def test_query_clamps_top_k_to_vectorize_max() -> None:
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    backend.query(DsQuery(text="x", top_k=500, embedding=[0.0] * 384))
+    assert json.loads(post.calls[0][2])["topK"] == 50
+
+
+@pytest.mark.unit
+def test_query_raises_on_http_error_instead_of_returning_empty() -> None:
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(status=500, body='{"success": false, "errors": [{"message": "boom"}]}')
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(RuntimeError, match="vectorize query failed"):
+        backend.query(DsQuery(text="x", top_k=3, embedding=[0.0] * 384))
+
+
+@pytest.mark.unit
+def test_query_embeds_text_when_no_embedding_supplied() -> None:
+    from digisearch.core.models import Query as DsQuery
+
+    class _StubProvider:
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[0.7] * 384 for _ in texts]
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend(
+        "i", account_id="a", api_token="t", http_post=post, embedding_provider=_StubProvider()
+    )
+    backend.query(DsQuery(text="what is digikey", top_k=3))
+    assert json.loads(post.calls[0][2])["vector"] == [0.7] * 384
+
+
+@pytest.mark.unit
+def test_query_prefers_a_precomputed_embedding_over_the_provider() -> None:
+    from digisearch.core.models import Query as DsQuery
+
+    class _ShouldNotRun:
+        def embed(self, _texts: list[str]) -> list[list[float]]:
+            raise AssertionError("must not embed when Query.embedding is present")
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend(
+        "i", account_id="a", api_token="t", http_post=post, embedding_provider=_ShouldNotRun()
+    )
+    backend.query(DsQuery(text="x", top_k=3, embedding=[0.1] * 384))
+    assert json.loads(post.calls[0][2])["vector"] == [0.1] * 384
