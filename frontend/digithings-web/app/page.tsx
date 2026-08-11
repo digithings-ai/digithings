@@ -10,7 +10,8 @@ import {
   type OdometerStat,
   type StackItem,
 } from "@digithings/web";
-import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import { DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { ModuleManifest } from "@/components/landing/ModuleManifest";
@@ -279,26 +280,18 @@ export default function Home() {
               on your own infrastructure.
             </p>
             <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
-              <a
-                className="btn btn-primary"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20inquiry`}
-              >
+              <ContactMailto className="btn btn-primary" subject="digithings%20inquiry">
                 Email us <span aria-hidden="true">→</span>
-              </a>
-              <a
-                className="btn btn-ghost"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20enterprise`}
-              >
+              </ContactMailto>
+              <ContactMailto className="btn btn-ghost" subject="digithings%20enterprise">
                 Enterprise
-              </a>
+              </ContactMailto>
             </div>
             <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <a
+              <ContactMailto
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
-                href={`mailto:${DT_CONTACT_EMAIL}`}
-              >
-                {DT_CONTACT_EMAIL}
-              </a>
+                showAddress
+              />
             </p>
           </Reveal>
         </section>
