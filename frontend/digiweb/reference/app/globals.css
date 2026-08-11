@@ -341,13 +341,40 @@ html {
 
 /* Collapsed state — driven by JS fit-detection (SiteNav), not a fixed
    breakpoint: the inline links give way to the hamburger the instant they
-   would no longer fit on one row, whatever the viewport width. */
+   would no longer fit on one row, whatever the viewport width. The livery
+   and type-suite pickers collapse in lockstep (they move into the sheet —
+   see .site-nav-sheet-controls) so the always-visible row only ever has to
+   fit the brand mark, theme toggle, and hamburger: that trio must never
+   overflow, since the hamburger is the only way back into the sheet. */
 .site-nav.is-collapsed .site-nav-links {
+  display: none;
+}
+
+.site-nav.is-collapsed .site-nav-livery,
+.site-nav.is-collapsed .site-nav-suite {
   display: none;
 }
 
 .site-nav.is-collapsed .site-nav-burger {
   display: inline-flex;
+}
+
+/* Livery + type-suite pickers duplicated inside the sheet for collapsed
+   widths — right-aligned under the links, same max width, with the row's
+   margin-left:auto reset (there's no sibling to push away from in here). */
+.site-nav-sheet-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(100%, 20rem);
+  margin-top: 1.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--hair);
+  pointer-events: auto;
+}
+
+.site-nav-sheet-controls .site-nav-livery {
+  margin-left: 0;
 }
 
 /* Page scaffold */
