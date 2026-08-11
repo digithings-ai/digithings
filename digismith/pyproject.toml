@@ -46,5 +46,18 @@ exclude = ["*.md"]
 select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.pytest.ini_options]
+# pythonpath must list the repo root plus every workspace sibling that src/digismith or
+# tests/dsm imports directly (digibase) -- not just "src". Reason: when pytest is invoked
+# with no path args from *inside* digismith/ (e.g. `cd digismith && uv run pytest -m
+# unit`), its rootdir/config search starts at cwd and stops at the first ancestor with a
+# recognized config -- this file -- so it never walks up to the repo-root pytest.ini,
+# which carries the full list (". digibase/src digillm/src digikey/src ..."). Repo root
+# is also needed directly: tests/dsm/test_metrics_endpoint.py does
+# `from tests.conftest import assert_prom_metrics_labels`. If that's the only thing
+# putting a sibling's editable install (or the repo root) on sys.path, the omission
+# silently resolves imports against whatever global site-packages another interpreter
+# has instead of the workspace's editable copy -- see digigraph's #2127 for the
+# digillm/CallPurpose ImportError this exact gap caused there. Listing them here is both
+# the fix and the safety net.
 testpaths = ["../tests/dsm"]
-pythonpath = ["src"]
+pythonpath = ["..", "src", "../digibase/src"]
