@@ -15,10 +15,10 @@ def _pick_chunker(name: str) -> Any:
     from digisearch.ingestion.chunkers.recursive import RecursiveChunker
 
     if name == "recursive":
-        return RecursiveChunker(chunk_size=512, chunk_overlap=64)
+        return RecursiveChunker()
     if name == "fixed":
         return FixedSizeChunker(chunk_size=512)
-    return RecursiveChunker(chunk_size=512, chunk_overlap=64)
+    return RecursiveChunker()
 
 
 def _sidecar_path_for(file_path: Path) -> Path:

@@ -72,7 +72,7 @@ def dry_run(index_name: str, paths: list[Path]) -> int:
         return 2
 
     registry = ParserRegistry()
-    chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64)
+    chunker = RecursiveChunker()
     total_chunks = 0
     skipped: list[tuple[Path, str]] = []
     for path in paths:

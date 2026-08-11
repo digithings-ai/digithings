@@ -10,11 +10,20 @@ from digisearch.ingestion.chunkers.base import Chunker
 
 logger = logging.getLogger(__name__)
 
+# ~512 tokens at a ~4-chars/token heuristic — the benchmarked default chunk size for
+# general RAG. Deliberately character-based: no tokenizer dependency is introduced.
+DEFAULT_CHUNK_CHARS = 2000
+DEFAULT_CHUNK_OVERLAP = 250  # ~12.5%, holding the previous 64/512 ratio
+
 
 class RecursiveChunker(Chunker):
     """Chunk by hierarchical delimiters: \\n\\n\\n, \\n\\n, \\n, space."""
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64) -> None:
+    def __init__(
+        self,
+        chunk_size: int = DEFAULT_CHUNK_CHARS,
+        chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    ) -> None:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self._separators = ["\n\n\n", "\n\n", "\n", ". ", " ", ""]

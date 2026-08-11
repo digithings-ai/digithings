@@ -662,7 +662,7 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         if req.metadata:
             merged = {**merged, **req.metadata}
         doc.metadata = merged
-        chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64)
+        chunker = RecursiveChunker()
         chunks = chunker.chunk(doc)
         merge_document_metadata_into_chunks(doc, chunks)
         doc.chunks = chunks

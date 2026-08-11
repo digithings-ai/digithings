@@ -24,3 +24,25 @@ def test_recursive_chunker() -> None:
     chunks = ch.chunk(doc)
     assert len(chunks) >= 1
     assert chunks[0].content
+
+
+@pytest.mark.unit
+def test_recursive_chunker_default_size_is_token_scaled() -> None:
+    from digisearch.ingestion.chunkers.recursive import (
+        DEFAULT_CHUNK_CHARS,
+        DEFAULT_CHUNK_OVERLAP,
+    )
+
+    assert DEFAULT_CHUNK_CHARS == 2000
+    assert DEFAULT_CHUNK_OVERLAP == 250
+    ch = RecursiveChunker()
+    assert ch.chunk_size == DEFAULT_CHUNK_CHARS
+    assert ch.chunk_overlap == DEFAULT_CHUNK_OVERLAP
+
+
+@pytest.mark.unit
+def test_recursive_chunker_respects_larger_default() -> None:
+    doc = Document(id="d2", content="word " * 600, source="x", doc_type="txt")
+    chunks = RecursiveChunker().chunk(doc)
+    assert all(len(c.content) <= 2000 for c in chunks)
+    assert len(chunks) <= 3
