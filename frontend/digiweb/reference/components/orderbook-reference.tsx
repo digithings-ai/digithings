@@ -36,7 +36,13 @@ export function OrderbookReference() {
         never jitter.
       </p>
 
-      <OrderBook asks={ASKS} bids={BIDS} mid="92.40" className="mt-[1.2rem] max-w-[380px]" />
+      <OrderBook
+        asks={ASKS}
+        bids={BIDS}
+        mid="92.40"
+        label="Order book — depth, asks over bid, mid 92.40"
+        className="mt-[1.2rem] max-w-[380px]"
+      />
     </section>
   );
 }

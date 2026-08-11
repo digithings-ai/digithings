@@ -124,9 +124,14 @@
 
   --ink:       #ECEEF0;
   --ink-soft:  #9AA0A6;
-  --ink-mute:  #7C8288; /* WCAG AA fix 2026-08-11 (was #6B7177, 3.74:1 on --surface —
-                            failed): raised luminance to clear 4.5:1 on both --surface
-                            and --bg while staying darker/more muted than --ink-soft. */
+  --ink-mute:  #7D8389; /* WCAG AA fix 2026-08-11, revised: raised luminance to clear
+                            4.5:1 against --surface (4.815:1), --bg (5.069:1), AND
+                            --surface-2 (4.555:1) — the first pass (#7C8288) only
+                            checked --surface/--bg and missed --surface-2's tighter
+                            margin (4.4936:1, still under AA), a live combination via
+                            .ts-seg-btn in finance-tearsheet.css. Was #6B7177
+                            (3.74:1/3.94:1/3.54:1, all failing). Stays darker/more
+                            muted than --ink-soft. */
 
   --accent:      #3DD6C4;
   --accent-weak: rgba(61, 214, 196, 0.14);

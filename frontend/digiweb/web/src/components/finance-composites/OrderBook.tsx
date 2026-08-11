@@ -36,6 +36,8 @@ export type OrderBookProps = {
   spreadLabel?: string;
   /** Extra classes on the board shell (margins, max-width …). */
   className?: string;
+  /** Accessible name for the depth ladder (announced as the table's name). */
+  label?: string;
 };
 
 function Row({
@@ -82,6 +84,7 @@ export function OrderBook({
   sizeLabel = "size",
   spreadLabel = "spread",
   className,
+  label = "Order book",
 }: OrderBookProps) {
   const bestAsk = asks[asks.length - 1]?.price ?? 0;
   const bestBid = bids[0]?.price ?? 0;
@@ -92,6 +95,7 @@ export function OrderBook({
   return (
     <div
       role="table"
+      aria-label={label}
       className={`rounded-[12px] border border-hair bg-surface py-2 font-mono [font-variant-numeric:tabular-nums]${
         className ? ` ${className}` : ""
       }`}
