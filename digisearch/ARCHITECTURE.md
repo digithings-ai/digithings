@@ -673,7 +673,7 @@ Hit rate degrades when:
 
 ### Chunking strategy impact on retrieval quality
 
-The default `RecursiveChunker(chunk_size=512, chunk_overlap=64)` is a safe general-purpose default. Impact considerations:
+The default `RecursiveChunker(chunk_size=2000, chunk_overlap=250)` (character-based, ≈512 tokens at ~4 chars/token — see `DEFAULT_CHUNK_CHARS`/`DEFAULT_CHUNK_OVERLAP` in `ingestion/chunkers/recursive.py`) is a safe general-purpose default. Impact considerations:
 
 - **Too small (< 128 tokens):** chunks lose context; recall suffers on paraphrase queries
 - **Too large (> 1024 tokens):** chunks dilute relevance scores; precision suffers
