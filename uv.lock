@@ -1443,8 +1443,6 @@ cli = [
 dev = [
     { name = "digifetch" },
     { name = "digillm" },
-    { name = "pytest" },
-    { name = "ruff" },
     { name = "typer" },
 ]
 ingest = [
@@ -1454,18 +1452,28 @@ llm = [
     { name = "digillm" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "digifetch", marker = "extra == 'ingest'", editable = "digifetch" },
     { name = "digillm", marker = "extra == 'llm'", editable = "digillm" },
     { name = "digiskills", extras = ["cli", "ingest", "llm"], marker = "extra == 'dev'", editable = "digiskills" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.12" },
 ]
 provides-extras = ["cli", "ingest", "llm", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digismith"
