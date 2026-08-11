@@ -228,8 +228,37 @@ function NavShellGroup({
     onClose();
   };
 
+  // Hover open/close, alongside the existing click toggle (kept for touch,
+  // which never fires hover, and for keyboard, which already opens via
+  // onTriggerKeyDown). A short close delay survives the gap between trigger
+  // and panel — .nav-shell-menu sits `margin-top` below the trigger, so a
+  // straight-line mouse path from one to the other briefly leaves the
+  // wrapper's box and would otherwise close it before the panel is reached.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current == null) return;
+    clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }, []);
+  const onMouseEnter = useCallback(() => {
+    cancelClose();
+    onOpen();
+  }, [cancelClose, onOpen]);
+  const onMouseLeave = useCallback(() => {
+    cancelClose();
+    closeTimer.current = setTimeout(onClose, 150);
+  }, [cancelClose, onClose]);
+  useEffect(() => cancelClose, [cancelClose]);
+
   return (
-    <div className="nav-shell-group" ref={wrapRef} data-open={open} onBlur={onFocusLeave}>
+    <div
+      className="nav-shell-group"
+      ref={wrapRef}
+      data-open={open}
+      onBlur={onFocusLeave}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <button
         type="button"
         ref={triggerRef}
