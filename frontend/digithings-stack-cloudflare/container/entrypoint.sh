@@ -1,7 +1,8 @@
 #!/bin/sh
 # Profile A stack entrypoint — start supervisord immediately (ports must open).
 # Cloudflare Containers probes :8000; blocking here causes error 1101 / port-not-ready.
-# OCC Chroma seed runs as a supervisord oneshot *before* digisearch (see supervisord.conf).
+# Chroma seed (digithings_docs + occ_help) runs as a supervisord oneshot *before*
+# digisearch (see supervisord.conf / seed_chroma.sh).
 #
 # CRITICAL (Firecracker): supervisord must log to files, NOT /dev/stdout — ENXIO otherwise.
 set -eu
@@ -62,7 +63,9 @@ if [ "$pem_ok" -ne 1 ]; then
   fi
 fi
 
-# Copy vault seed notes (idempotent — do not overwrite operator edits).
+# Copy vault seed notes. Files named seed-*.md are always refreshed from the
+# image (dogfood corpus). Other filenames are copied only if missing so
+# operator / docs_onboard notes are never overwritten.
 for client_dir in /seed/vault/clients/*; do
   [ -d "$client_dir" ] || continue
   client=$(basename "$client_dir")
@@ -71,9 +74,16 @@ for client_dir in /seed/vault/clients/*; do
     [ -f "$f" ] || continue
     base=$(basename "$f")
     dest="$DATA_VAULT/clients/$client/$base"
-    if [ ! -f "$dest" ]; then
-      cp "$f" "$dest"
-    fi
+    case "$base" in
+      seed-*.md|seed-*.markdown)
+        cp "$f" "$dest"
+        ;;
+      *)
+        if [ ! -f "$dest" ]; then
+          cp "$f" "$dest"
+        fi
+        ;;
+    esac
   done
 done
 

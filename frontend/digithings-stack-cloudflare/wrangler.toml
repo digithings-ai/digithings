@@ -29,7 +29,7 @@ custom_domain = true
 class_name = "DigiStackContainer"
 # Build context is monorepo root (two levels up from this package).
 image = "../../Dockerfile.digithings-stack-cloudflare"
-max_instances = 3
+max_instances = 5
 # Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
 instance_type = "standard-2"
 
@@ -80,4 +80,4 @@ DIGIVAULT_ROOT = "/data/vault"
 DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
 DIGISEARCH_INDEX = "digithings_docs"
 # Defense-in-depth corpus map (headers from digichat still win).
-DIGI_TENANT_CORPUS_MAP = "{\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"
+DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"

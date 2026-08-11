@@ -1,7 +1,8 @@
 # Online Compliance Center (OCC) — docs_onboard manifest (client #1).
 #
-# INGEST HOLD: do not run full apply (crawl + vault/search sinks) until explicit
-# sitaas / client crawl approval for help.online-compliance-center.com.
+# INGEST HOLD: lifted 2026-08-10 by owner decision (public documentation, no
+# confidentiality restriction) — NOT a written approval from the OCC client;
+# see docs/projects/online-compliance-center/GAPLOG.md for the exact record.
 # --dry-run is always allowed for local/demo validation (see GAPLOG.md).
 # Corpus is one-shot / static for the digithings.ai/chat/occ demo — re-run only
 # when help content changes. Dogfood (#2037) is merged; pipeline is approved.

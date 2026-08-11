@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tracing = ["langsmith>=0.1"]
-dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17", "langgraph-checkpoint-sqlite>=2.0"]
+dev = ["langgraph-checkpoint-sqlite>=2.0"]
 otel = ["digibase[otel]"]
 # Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which both MCP servers
 # import (see #1705). Lift the bound only together with a migration to the 2.x API.
@@ -41,6 +41,13 @@ checkpoint-postgres = ["langgraph-checkpoint-postgres>=2.0"]
 
 [project.scripts]
 digi = "digigraph.cli:main"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digigraph's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

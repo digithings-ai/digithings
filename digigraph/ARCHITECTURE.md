@@ -394,7 +394,7 @@ START
                                                                └─ optimize enabled → optimize → END
 ```
 
-When `agents.always_retrieve_tools` is set, `research_node` (document RAG path) invokes those tools **before** the LLM turn, injects `[tool_name results]…` blocks into the user message, and **strips** those tool names from `tools_for_llm` so the model cannot re-call the same retrieval tools. If no tools remain, `run_tools` runs a single streamed completion (no tool rounds).
+When `agents.always_retrieve_tools` is set, `research_node` (document RAG path) invokes those tools **before** the LLM turn, injects `[tool_name results]…` blocks into the user message, and **strips** those tool names from `tools_for_llm` so the model cannot re-call the same retrieval tools. Prefetch passes `top_k=4` for digisearch and `limit=3` for `digivault_search_notes` so a tiny seed corpus does not dump the whole index every turn. If no tools remain, `run_tools` runs a single streamed completion (no tool rounds).
 
 `agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
