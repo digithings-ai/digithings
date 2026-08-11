@@ -33,6 +33,7 @@ import {
   emit,
   readTrialUnlocked,
   resolveEmbedHost,
+  shouldChargeGateOnSettle,
   useEmbedGate,
   writeTrialUnlocked,
   writeChatAccessToken,
@@ -356,6 +357,18 @@ function EmbedChat({
    *  already released — refs, so neither triggers a render of its own. */
   const heldQuestionRef = useRef<string | null>(null);
   const sentHeldRef = useRef<string | null>(null);
+  /**
+   * Set (never incremented directly) by every gated send below, then charged
+   * by the settle effect near `chat` once the turn actually finishes. chat.send
+   * is fire-and-forget — useChat's sendMessage has no success/failure return —
+   * so a synchronous gate.increment() right after calling it charges the
+   * visitor's free-tier quota regardless of outcome. Verified live: three
+   * consecutive failed sends (backend down) fully exhausted the 3-turn quota
+   * with zero real answers delivered, permanently gating a visitor who got no
+   * value at all. See the settle effect for why chat.rawError is the correct
+   * signal to gate the charge on.
+   */
+  const pendingGateChargeRef = useRef(false);
 
   const serverGatedOrAsked = serverGated || gateRequest.requested;
   const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
@@ -391,6 +404,19 @@ function EmbedChat({
     onGated: isTrialForm ? onGated : undefined,
     getResponseLanguage,
   });
+
+  // Charge the free-tier gate only once a gated send actually settles
+  // successfully — never at send time. useChat's setStatus({status:
+  // "submitted", error: void 0}) clears the previous error synchronously
+  // before this turn's request goes out, so by the time chat.busy flips back
+  // to false, chat.rawError reflects only THIS turn's outcome, not a stale
+  // one. A failed turn (chat.rawError set) drops the pending charge instead
+  // of billing it — a visitor who got no answer keeps their free turn.
+  useEffect(() => {
+    if (chat.busy || !pendingGateChargeRef.current) return;
+    pendingGateChargeRef.current = false;
+    if (shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.increment();
+  }, [chat.busy, chat.rawError, gate]);
 
   // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).
   useEffect(() => {
@@ -430,7 +456,7 @@ function EmbedChat({
       if (held) {
         heldQuestionRef.current = null;
         void chat.send(held);
-        if (!ungated) gate.increment();
+        if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
       chat.onRetry?.();
@@ -439,7 +465,7 @@ function EmbedChat({
     if (held && !gate.locked) {
       heldQuestionRef.current = null;
       void chat.send(held);
-      if (!ungated) gate.increment();
+      if (!ungated) pendingGateChargeRef.current = true;
     }
   }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
 
@@ -570,15 +596,16 @@ function EmbedChat({
   // the effect re-runs on every chat identity change while the answer streams.
   //
   // Call chat.send (not wrappedSend) here: wrappedSend is defined below and
-  // would re-capture this effect. Increment the turn counter ourselves so the
-  // held fourth question counts the same as any other send.
+  // would re-capture this effect. Arm the deferred gate charge ourselves so
+  // the held fourth question counts the same as any other send (charged only
+  // once it settles without error — see the settle effect near `chat`).
   useEffect(() => {
     const question = heldQuestionRef.current;
     if (!trialUnlocked || !question || chat.busy) return;
     if (sentHeldRef.current === question) return;
     sentHeldRef.current = question;
     void chat.send(question);
-    if (!ungated) gate.increment();
+    if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
@@ -675,7 +702,7 @@ function EmbedChat({
         turn: gate.turns + 1,
         byok: byokIsSet,
       });
-      if (!ungated) gate.increment();
+      if (!ungated) pendingGateChargeRef.current = true;
     },
     [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess],
   );
