@@ -1061,9 +1061,6 @@ checkpoint-sqlite = [
 ]
 dev = [
     { name = "langgraph-checkpoint-sqlite" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
 ]
 mcp = [
     { name = "mcp" },
@@ -1073,6 +1070,13 @@ otel = [
 ]
 tracing = [
     { name = "langsmith" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -1097,14 +1101,18 @@ requires-dist = [
     { name = "plotly", specifier = ">=5.0" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4,<8" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "tabulate", specifier = ">=0.9" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 provides-extras = ["tracing", "dev", "otel", "mcp", "checkpoint-sqlite", "checkpoint-postgres"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "pytest-cov", specifier = ">=4,<8" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digikey"
