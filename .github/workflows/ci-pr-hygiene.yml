@@ -31,9 +31,21 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
+
+          # Bypass: develop -> main is a promotion PR. Same argument as the
+          # module umbrella below, one tier up: every commit in the range
+          # already came through a task PR that carried linkage, and
+          # ci-review-coverage.yml asserts exactly that on this same PR. Both
+          # refs are checked so a develop-headed PR into some other base is
+          # not silently exempted.
+          if [[ "$PR_BRANCH" == "develop" && "$PR_BASE" == "main" ]]; then
+            echo "OK — promotion PR (develop -> main); commits carry linkage from their task PRs"
+            exit 0
+          fi
 
           # Bypass: module/<component> -> develop is an umbrella PR; the
           # underlying task PRs already carried individual issue linkage,

@@ -204,10 +204,13 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 
 The **Check linkage** CI gate (the `Require Fixes` check) is separate from the branch-name rule. It passes on any one of these, in the order `.github/workflows/ci-pr-hygiene.yml` tests them:
 
-1. Head branch is `module/*` — umbrella PR; the underlying task PRs already carried linkage.
-2. Head branch is `docs/*` or `chore/*` — **bypassed outright**, no issue required. A `CLAUDE.md` tweak or a CI dedupe does not need a backlog item.
-3. Head branch is `task/<N>-slug` — implicit link to issue #N.
-4. A `Fixes/Closes/Resolves #N` keyword appears in the PR **body or title** (either one).
+1. Head is `develop` **and** base is `main` — promotion PR; every commit in the range came through a task PR that carried linkage, and `ci-review-coverage.yml` asserts precisely that on the same PR. Both refs are checked, so a `develop`-headed PR into any other base is not exempted.
+2. Head branch is `module/*` — umbrella PR; the underlying task PRs already carried linkage.
+3. Head branch is `docs/*` or `chore/*` — **bypassed outright**, no issue required. A `CLAUDE.md` tweak or a CI dedupe does not need a backlog item.
+4. Head branch is `task/<N>-slug` — implicit link to issue #N.
+5. A `Fixes/Closes/Resolves #N` keyword appears in the PR **body or title** (either one).
+
+Bypass 1 exists because the gate previously had no promotion case at all, which made its verdict on promotions **arbitrary**. Replaying the gate logic over all 83 merged `develop` → `main` PRs: 38 failed, and the 45 that passed did so only because their body or title happened to contain a `Fixes/Closes/Resolves` keyword (bypass 5) — same class of PR, opposite result, decided by prose wording. Nothing was ever blocked: `Require Fixes` is not a required check on `main` (only `Every commit reaching main was reviewed` is). The cost was that a red X on the repo's highest-stakes PR carried no information, which teaches everyone to ignore it. Note the keyword never auto-closed those issues either — GitHub only auto-closes on merge into the default branch, and this repo's default is `develop`, not `main`.
 
 So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that still need an explicit keyword — as are the agent namespaces (`claude/<slug>` et al.), which no rule bypasses. Prefer `task/<N>-slug` for issue-linked work, and never `Closes #N` against an umbrella tracking issue you don't want auto-closed — use `Refs #N` when the PR should not close the issue, which satisfies no gate on its own and so pairs with a `docs/`, `chore/`, or `task/` branch.
 
