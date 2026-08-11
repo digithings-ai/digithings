@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import digigraph.skills  # noqa: F401  # side effect: register built-in orchestrator tools
-
 import pytest
-
 from digigraph.orchestration import list_registered_tools_detailed, list_tool_names
 from digigraph.orchestration import registry as reg
 

@@ -1,4 +1,4 @@
-"""Export Hugging Face EDGAR-CORPUS rows to markdown + YAML sidecars for DigiSearch /ingest.
+"""Export Hugging Face EDGAR-CORPUS rows to markdown + YAML sidecars for digisearch /ingest.
 
 Corpus: https://huggingface.co/datasets/eloukas/edgar-corpus (Loukas et al., ECONLP 2021).
 SEC filings are public; use index name ``edgar_dev`` locally only.
@@ -62,7 +62,7 @@ def row_to_markdown(row: Mapping[str, Any]) -> str:
 
 
 def row_to_sidecar_metadata(row: Mapping[str, Any], stem: str) -> dict[str, Any]:
-    """Metadata block for DigiSearch YAML sidecar (under ``metadata:``)."""
+    """Metadata block for digisearch YAML sidecar (under ``metadata:``)."""
     fn = row.get("filename")
     title = str(fn).strip() if fn else stem
     year = row.get("year")

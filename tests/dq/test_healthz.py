@@ -1,4 +1,4 @@
-"""DigiQuant ``/healthz`` liveness contract.
+"""digiquant ``/healthz`` liveness contract.
 
 Contract (see AGENTS.md "Liveness vs status"):
 * returns HTTP 200 with ``{"ok": true}``
@@ -12,9 +12,8 @@ import pytest
 
 pytest.importorskip("nautilus_trader")
 
-from fastapi.testclient import TestClient  # noqa: E402
-
-from digiquant.server import app  # noqa: E402
+from digiquant.server import app
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture

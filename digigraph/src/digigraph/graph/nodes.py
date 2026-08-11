@@ -1,4 +1,4 @@
-"""Graph nodes: research (LLM), backtest (DigiQuant). Phase 1."""
+"""Graph nodes: research (LLM), backtest (digiquant). Phase 1."""
 
 from __future__ import annotations
 
@@ -7,18 +7,39 @@ import logging
 import os
 import time
 
+import httpx
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
 
 from digigraph.graph.research import _stream_callback_ctx, research_node
 from digigraph.graph.state import WorkflowState
-from digigraph.trading_profile import optimization_constraints_dict_from_profile
 from digigraph.trace_events import TraceEventV1
+from digigraph.trading_profile import optimization_constraints_dict_from_profile
 
 logger = logging.getLogger(__name__)
 
 DIGIQUANT_URL = os.environ.get("DIGIQUANT_URL", "http://127.0.0.1:8001")
 DIGIQUANT_DATA_DIR = os.environ.get("DIGIQUANT_DATA_DIR")
+
+
+def _digiquant_url_configured() -> bool:
+    """False only when DIGIQUANT_URL is explicitly blank (Profile A chat-only).
+
+    Unset env keeps the module default ``http://127.0.0.1:8001``.
+    """
+    if "DIGIQUANT_URL" not in os.environ:
+        return True
+    return bool(os.environ.get("DIGIQUANT_URL", "").strip())
+
+
+_DIGIQUANT_CLIENT_ERRORS = (
+    httpx.HTTPStatusError,
+    httpx.RequestError,
+    json.JSONDecodeError,
+    OSError,
+    TypeError,
+    ValueError,
+)
 
 __all__ = [
     "research_node",
@@ -72,7 +93,7 @@ def supervisor_node(state: WorkflowState, config: dict | None = None) -> dict:
 
 
 def strategy_validator_node(state: WorkflowState, config: dict | None = None) -> dict:
-    """Ensure quant backtest inputs exist before calling DigiQuant."""
+    """Ensure quant backtest inputs exist before calling digiquant."""
     if state.get("error"):
         return {}
     cb = _resolve_stream_callback(state, config)
@@ -110,11 +131,11 @@ def strategy_validator_node(state: WorkflowState, config: dict | None = None) ->
 
 
 def backtest_node(state: WorkflowState) -> dict:
-    """Call DigiQuant backtest; write result or error into state. Requires strategy_name and symbols.
+    """Call digiquant backtest; write result or error into state. Requires strategy_name and symbols.
 
     Prefers **POST /v1/jobs/backtest** + **GET /v1/jobs/{id}/status** polling, then
     **GET /backtest/{job_id}/result**. Otherwise uses /backtest/start + SSE progress, then
-    synchronous **POST /run_backtest** for minimal DigiQuant deployments.
+    synchronous **POST /run_backtest** for minimal digiquant deployments.
     Progress events are logged at DEBUG level.
     """
     if state.get("error"):
@@ -125,6 +146,11 @@ def backtest_node(state: WorkflowState) -> dict:
         return {
             "backtest_result": None,
             "error": "strategy_name and symbols (non-empty list) required. Research node must provide them.",
+        }
+    if not _digiquant_url_configured():
+        return {
+            "backtest_result": None,
+            "error": "digiquant is not configured for this deployment (DIGIQUANT_URL empty).",
         }
     if not DIGIQUANT_DATA_DIR:
         return {
@@ -199,8 +225,8 @@ def backtest_node(state: WorkflowState) -> dict:
                                                 "backtest_result": None,
                                                 "error": event.get("detail", "Backtest failed"),
                                             }
-                                    except Exception:
-                                        pass
+                                    except json.JSONDecodeError:
+                                        continue
                     result_r = client.get(
                         f"{base_url}/backtest/{job_id}/result",
                         timeout=10.0,
@@ -218,12 +244,12 @@ def backtest_node(state: WorkflowState) -> dict:
             )
             r.raise_for_status()
             return {"backtest_result": r.json(), "error": None}
-    except Exception as e:
+    except _DIGIQUANT_CLIENT_ERRORS as e:
         return {"backtest_result": None, "error": str(e)}
 
 
 def optimize_node(state: WorkflowState) -> dict:
-    """Call DigiQuant POST /run_optimize after a successful backtest. Requires strategy_name, symbols, DIGIQUANT_DATA_DIR."""
+    """Call digiquant POST /run_optimize after a successful backtest. Requires strategy_name, symbols, DIGIQUANT_DATA_DIR."""
     if state.get("error"):
         return {"optimize_result": None, "optimize_error": None}
     strategy_name = state.get("strategy_name")
@@ -255,5 +281,5 @@ def optimize_node(state: WorkflowState) -> dict:
             r = client.post(f"{base_url}/run_optimize", json=payload, headers=req_headers)
             r.raise_for_status()
             return {"optimize_result": r.json(), "optimize_error": None}
-    except Exception as e:
+    except _DIGIQUANT_CLIENT_ERRORS as e:
         return {"optimize_result": None, "optimize_error": str(e)}

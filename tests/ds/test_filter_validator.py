@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.filter_validator import validate_odata_filter
-
 
 # ---------------------------------------------------------------------------
 # Valid filters — must pass through unchanged

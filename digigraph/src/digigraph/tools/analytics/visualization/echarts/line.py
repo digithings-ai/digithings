@@ -20,7 +20,11 @@ def echarts_line(
     """Build ECharts line option. date_column for x-axis; value_column optional (else count)."""
     df = load_dataset(dataset_path)
     if date_column not in df.columns:
-        return {"error": f"Column {date_column!r} not found", "echarts_option": None, "data_summary": {}}
+        return {
+            "error": f"Column {date_column!r} not found",
+            "echarts_option": None,
+            "data_summary": {},
+        }
     col = df[date_column]
     if col.dtype in (pl.Utf8, pl.String):
         df = df.with_columns(pl.col(date_column).str.to_datetime(strict=False).alias("_ts"))
@@ -47,5 +51,9 @@ def echarts_line(
         "yAxis": {"type": "value", "name": "value"},
         "series": [{"type": "line", "data": y_data, "smooth": True}],
     }
-    summary = {"points": len(x_data), "x_column": date_column, "value_column": value_column or "count"}
+    summary = {
+        "points": len(x_data),
+        "x_column": date_column,
+        "value_column": value_column or "count",
+    }
     return {"echarts_option": option, "data_summary": summary}

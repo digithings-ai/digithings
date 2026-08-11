@@ -1,11 +1,10 @@
-"""Hub HTTP connectors to DigiSearch / DigiQuant composite endpoints."""
+"""Hub HTTP connectors to digisearch / digiquant composite endpoints."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from digigraph.connectors.digiquant import call_quant_workflow
 from digigraph.connectors.digisearch import call_research_turn
 

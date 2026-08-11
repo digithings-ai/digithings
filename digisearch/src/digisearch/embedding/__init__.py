@@ -1,4 +1,4 @@
-"""DigiSearch embedding providers."""
+"""digisearch embedding providers."""
 
 from digisearch.embedding.base import EmbeddingProvider
 

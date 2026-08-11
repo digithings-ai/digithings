@@ -1,11 +1,10 @@
-"""Unit tests for DigiSearch orchestrator tool schemas and DigiGraph HTTP search helpers."""
+"""Unit tests for digisearch orchestrator tool schemas and digigraph HTTP search helpers."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from digigraph.tools.digisearch import digisearch, digisearch_fetch_all
 from digisearch.orchestrator_tools import build_fetch_all_tool, build_search_tool
 

@@ -1,11 +1,11 @@
-# DigiGraph security notes
+# digigraph security notes
 
-DigiGraph is intended to run **loopback-first** alongside other DigiThings services. Harden deployments that listen on non-local interfaces.
+digigraph is intended to run **loopback-first** alongside other digithings services. Harden deployments that listen on non-local interfaces.
 
 ## Authentication
 
-- **DigiKey (required for protected routes):** Set **`DIGIKEY_JWKS_URL`** or **`DIGIKEY_PUBLIC_KEY_PEM`**. Non-exempt routes require **`Authorization: Bearer <RS256 JWT>`** with scopes per path (e.g. `digigraph:chat` for `/v1/chat/completions`, `digigraph:workflow` for `/workflow`). Without verifier configuration, protected routes return **503** `auth_not_configured`. Legacy static **`DIGI_API_KEY`** is **not** supported on DigiGraph.
-- **Per-thread secrecy**: Thread IDs are not secret tokens. Anyone who can call the API can probe `GET /threads/{id}/state` when the thread API is enabled. Do not expose DigiGraph to untrusted networks without a gateway that binds sessions to authenticated users.
+- **digikey (required for protected routes):** Set **`DIGIKEY_JWKS_URL`** or **`DIGIKEY_PUBLIC_KEY_PEM`**. Non-exempt routes require **`Authorization: Bearer <RS256 JWT>`** with scopes per path (e.g. `digigraph:chat` for `/v1/chat/completions`, `digigraph:workflow` for `/workflow`). Without verifier configuration, protected routes return **503** `auth_not_configured`. Legacy static **`DIGI_API_KEY`** is **not** supported on digigraph.
+- **Per-thread secrecy**: Thread IDs are not secret tokens. Anyone who can call the API can probe `GET /threads/{id}/state` when the thread API is enabled. Do not expose digigraph to untrusted networks without a gateway that binds sessions to authenticated users.
 
 ## Opt-in HTTP surfaces
 
@@ -30,7 +30,9 @@ Precedence: explicit request list → project config → env → unrestricted (a
 
 ## Code execution
 
-`data_engineer_agent` / `execute_python` uses `exec()` when **`DIGI_ALLOW_CODE_EXEC=true`**. This is **not** a capability sandbox; keep it off outside controlled environments.
+`data_engineer_agent` / `execute_python_on_datasets` runs user code in a **subprocess** with static rejection of `import os`, `open(`, `exec(`, etc. when **`DIGI_ALLOW_CODE_EXEC=true`**. This is not a full capability sandbox — treat as dev-only.
+
+**Policy (REM-012):** Default is **disabled** (fail closed). Production requires container isolation review in addition to subprocess. See `digigraph/tools/analytics/execute_python.py`.
 
 ## CORS
 
@@ -38,7 +40,7 @@ Precedence: explicit request list → project config → env → unrestricted (a
 
 ## Research corpus & citations
 
-- Ingest only content you are licensed to index (uploaded PDFs, open-access works, metadata from APIs such as Crossref). Do not use DigiGraph or DigiSearch to circumvent paywalls or to reproduce full text without rights.
+- Ingest only content you are licensed to index (uploaded PDFs, open-access works, metadata from APIs such as Crossref). Do not use digigraph or digisearch to circumvent paywalls or to reproduce full text without rights.
 - `ResearchBrief` must cite **tool-returned** `source_id` values; operators should treat uncited model text as non-evidence.
 
 ## Streaming implementation

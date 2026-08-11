@@ -1,0 +1,187 @@
+# Publish digithings client #0 docs corpus → Supabase public.architecture_notes
+# so digithings.ai/chat stays current when onboard sources change on main.
+#
+# Pipeline (dogfood):
+#   run_onboard.py (static + OpenAPI + monorepo docs → local vault)
+#   → sync_onboard_vault.py (service-role upsert)
+#
+# Website crawl is opt-in (workflow_dispatch) — push path filters match
+# docs/projects/digithings/sources/repo-docs.yaml + openapi.yaml (+ onboard scripts).
+# digisearch dual-sink is not applied from Actions runners (ingest needs a
+# server-visible FS path); keep docs-reindex-guide.yml / operator apply until
+# remote ingest exists. See docs/digichat/CLIENT-DOCS-ONBOARD.md.
+#
+# Prod-mutating apply runs under `production` (same CORE_SUPABASE_* secrets and
+# reviewer gate as sync-architecture-vault.yml).
+name: "Docs: onboard digithings"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Keep in sync with docs/projects/digithings/sources/repo-docs.yaml
+      - 'docs/projects/digithings/**'
+      - 'docs/openapi/**'
+      - 'docs/VISION.md'
+      - 'docs/adr/*.md'
+      - 'docs/digichat/**'
+      - 'docs/ops/**'
+      - 'README.md'
+      - 'ROADMAP.md'
+      - 'ARCHITECTURE.md'
+      - 'AGENTS.md'
+      - 'CONTRIBUTING.md'
+      - 'RELEASES.md'
+      - 'SECURITY.md'
+      - 'BRANCHING.md'
+      - 'digibase/ARCHITECTURE.md'
+      - 'digibase/AGENTS.md'
+      - 'digibase/README.md'
+      - 'digiclaw/ARCHITECTURE.md'
+      - 'digiclaw/AGENTS.md'
+      - 'digigraph/ARCHITECTURE.md'
+      - 'digigraph/AGENTS.md'
+      - 'digikey/ARCHITECTURE.md'
+      - 'digikey/AGENTS.md'
+      - 'digikey/README.md'
+      - 'digiquant/ARCHITECTURE.md'
+      - 'digiquant/AGENTS.md'
+      - 'digisearch/ARCHITECTURE.md'
+      - 'digisearch/AGENTS.md'
+      - 'digismith/ARCHITECTURE.md'
+      - 'digismith/AGENTS.md'
+      - 'digivault/ARCHITECTURE.md'
+      - 'digivault/AGENTS.md'
+      - 'digiskills/ARCHITECTURE.md'
+      - 'digiskills/AGENTS.md'
+      - 'digifetch/ARCHITECTURE.md'
+      - 'digifetch/AGENTS.md'
+      - 'digillm/ARCHITECTURE.md'
+      - 'frontend/digichat/ARCHITECTURE.md'
+      - 'frontend/digichat/AGENTS.md'
+      - 'scripts/docs_onboard/**'
+      - 'scripts/sync_onboard_vault.py'
+      - 'scripts/sync_architecture_vault.py'
+      - '.github/workflows/docs-onboard-digithings.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run validates only; apply writes vault + upserts Supabase"
+        type: choice
+        options:
+          - dry-run
+          - apply
+        default: dry-run
+      crawl:
+        description: "Also crawl digithings.ai / digiquant.io (slow; network)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-onboard-digithings
+  cancel-in-progress: true
+
+env:
+  ONBOARD_MANIFEST: docs/projects/digithings/onboard.yaml
+  ONBOARD_WORKDIR: /tmp/digithings-onboard
+  ONBOARD_VAULT: /tmp/digithings-onboard-vault
+  # scripts/docs_onboard and sync_onboard_vault import the repo-root `scripts` package
+  PYTHONPATH: .
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Onboard dry-run (static / OpenAPI / repo; no sinks)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CRAWL: ${{ github.event_name == 'workflow_dispatch' && inputs.crawl || false }}
+        run: |
+          CRAWL_FLAGS=()
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$CRAWL" = "true" ]; then
+            # Force live crawl even under --dry-run (otherwise dry-run skips crawl).
+            export DOCS_ONBOARD_DRY_RUN_CRAWL=1
+          else
+            CRAWL_FLAGS+=(--skip-crawl)
+          fi
+          uv run --frozen --no-sync python scripts/docs_onboard/run_onboard.py \
+            --manifest "$ONBOARD_MANIFEST" \
+            --workdir "$ONBOARD_WORKDIR" \
+            --dry-run \
+            "${CRAWL_FLAGS[@]}"
+
+  apply:
+    needs: dry-run
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'apply')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Require CORE_SUPABASE_* secrets
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          missing=0
+          if [ -z "$CORE_SUPABASE_URL" ]; then
+            echo "::error::CORE_SUPABASE_URL (or SUPABASE_URL) is not set in the production environment"
+            missing=1
+          fi
+          if [ -z "$CORE_SUPABASE_SERVICE_KEY" ]; then
+            echo "::error::CORE_SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) is not set in the production environment"
+            missing=1
+          fi
+          exit "$missing"
+
+      - name: Onboard apply → local vault (vault sink only)
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          CRAWL: ${{ github.event_name == 'workflow_dispatch' && inputs.crawl || false }}
+        run: |
+          mkdir -p "$ONBOARD_VAULT"
+          CRAWL_FLAGS=(--skip-crawl)
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$CRAWL" = "true" ]; then
+            CRAWL_FLAGS=()
+          fi
+          # Vault sink writes a filesystem vault; sync_onboard_vault publishes to
+          # Supabase (production digivault FTS). digisearch is intentionally
+          # omitted here — Actions runners cannot expose workdir paths to a
+          # remote digisearch /ingest endpoint.
+          uv run --frozen --no-sync python scripts/docs_onboard/run_onboard.py \
+            --manifest "$ONBOARD_MANIFEST" \
+            --workdir "$ONBOARD_WORKDIR" \
+            --vault-root "$ONBOARD_VAULT" \
+            --sinks vault \
+            "${CRAWL_FLAGS[@]}"
+
+      - name: Sync onboard vault → public.architecture_notes
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          uv run --frozen --no-sync python scripts/sync_onboard_vault.py \
+            --vault "$ONBOARD_VAULT"

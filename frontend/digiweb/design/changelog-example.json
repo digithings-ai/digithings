@@ -1,0 +1,22 @@
+[
+  {
+    "date": "2026-06-29",
+    "version": "v7.2",
+    "title": "Example release entry — replace with a CHANGELOG.md excerpt or GitHub Releases feed",
+    "href": "#",
+    "tag": "release"
+  },
+  {
+    "date": "2026-06-17",
+    "title": "Example fix entry",
+    "href": "#",
+    "tag": "fix"
+  },
+  {
+    "date": "2026-06-01",
+    "version": "v7.0",
+    "title": "Example release entry",
+    "href": "#",
+    "tag": "release"
+  }
+]

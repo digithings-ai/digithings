@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Reindex the DigiThings-guide `docs` index.
+"""Reindex the digithings-guide `docs` index.
 
 Reads the index manifest at docs/projects/digithings-guide/indexes/docs.yaml,
 expands the `sources` globs against the repo root, and either:
-  - DRY-RUN (default): parses + chunks each file in-process via the DigiSearch
+  - DRY-RUN (default): parses + chunks each file in-process via the digisearch
     stub backend and prints a chunk-count summary.
-  - APPLY (--apply): posts each file to the DigiSearch ``POST /ingest`` HTTP
+  - APPLY (--apply): posts each file to the digisearch ``POST /ingest`` HTTP
     endpoint and prints per-file progress.
 
 Exit codes:
@@ -15,7 +15,7 @@ Exit codes:
 
 Usage:
   python scripts/reindex_digithings_guide.py              # dry-run (default)
-  python scripts/reindex_digithings_guide.py --apply      # real ingest via DigiSearch HTTP API
+  python scripts/reindex_digithings_guide.py --apply      # real ingest via digisearch HTTP API
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ def resolve_sources(manifest_path: Path) -> tuple[str, list[Path]]:
 
 
 def dry_run(index_name: str, paths: list[Path]) -> int:
-    """Parse + chunk each file in-process; print a summary. Uses the DigiSearch stub backend."""
+    """Parse + chunk each file in-process; print a summary. Uses the digisearch stub backend."""
     try:
         from digisearch.ingestion.chunkers.recursive import RecursiveChunker
         from digisearch.ingestion.registry import ParserRegistry
@@ -85,7 +85,7 @@ def dry_run(index_name: str, paths: list[Path]) -> int:
             chunks = chunker.chunk(doc)
             total_chunks += len(chunks)
             print(f"  {path.relative_to(REPO_ROOT)}: {len(chunks)} chunks")
-        except Exception as exc:  # noqa: BLE001 — dry-run surfaces parser errors
+        except Exception as exc:  # dry-run surfaces parser errors
             skipped.append((path, str(exc)))
 
     print(f"\nindex={index_name} files={len(paths)} chunks={total_chunks} skipped={len(skipped)}")
@@ -95,7 +95,7 @@ def dry_run(index_name: str, paths: list[Path]) -> int:
 
 
 def ingest_live(index_name: str, paths: list[Path], digisearch_url: str) -> int:
-    """Post each file to the DigiSearch /ingest endpoint.
+    """Post each file to the digisearch /ingest endpoint.
 
     Continues on per-file errors (connection failures, non-2xx responses).
     Returns 0 if all files succeeded, 2 if any file failed.
@@ -145,7 +145,7 @@ def main() -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Post files to the DigiSearch /ingest HTTP endpoint (DIGISEARCH_URL env var).",
+        help="Post files to the digisearch /ingest HTTP endpoint (DIGISEARCH_URL env var).",
     )
     args = parser.parse_args()
 

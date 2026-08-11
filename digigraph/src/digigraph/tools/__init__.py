@@ -1,4 +1,4 @@
-"""DigiGraph tool adapters (primitives). MCP tools from DigiQuant, DigiSearch, etc.
+"""digigraph tool adapters (primitives). MCP tools from digiquant, digisearch, etc.
 
 Orchestrator tool schemas live under agents/ and are registered in digigraph.orchestration.
 """

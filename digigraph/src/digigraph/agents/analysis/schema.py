@@ -11,7 +11,10 @@ ANALYSIS_AGENT_TOOL = {
             "type": "object",
             "properties": {
                 "dataset_ref": {"type": "string", "description": "Path or ref to the dataset."},
-                "task": {"type": "string", "description": "What to compute, e.g. 'correlation matrix', 'summary stats for score and rank'."},
+                "task": {
+                    "type": "string",
+                    "description": "What to compute, e.g. 'correlation matrix', 'summary stats for score and rank'.",
+                },
                 "options": {"type": "object", "description": "Optional overrides."},
             },
             "required": ["dataset_ref", "task"],

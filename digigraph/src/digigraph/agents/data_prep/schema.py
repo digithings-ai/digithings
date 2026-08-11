@@ -11,7 +11,10 @@ DATA_PREP_AGENT_TOOL = {
             "type": "object",
             "properties": {
                 "dataset_ref": {"type": "string", "description": "Path or ref to the dataset."},
-                "task": {"type": "string", "description": "What to do, e.g. 'export as CSV', 'filter where sourceType eq EXCHANGE', 'sample 50 rows'."},
+                "task": {
+                    "type": "string",
+                    "description": "What to do, e.g. 'export as CSV', 'filter where sourceType eq EXCHANGE', 'sample 50 rows'.",
+                },
                 "options": {"type": "object", "description": "Optional overrides."},
             },
             "required": ["dataset_ref", "task"],

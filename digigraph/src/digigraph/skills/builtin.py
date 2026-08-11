@@ -11,7 +11,7 @@ def _register_builtin_skills() -> None:
         Skill(
             id="search",
             name="Search",
-            description="DigiSearch: digisearch and digisearch_fetch_all. Available when DigiSearch URL is set.",
+            description="digisearch: digisearch and digisearch_fetch_all. Available when digisearch URL is set.",
             tool_names=["digisearch", "digisearch_fetch_all"],
             when=None,  # gating is in orchestration.builtin
         )

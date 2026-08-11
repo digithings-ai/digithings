@@ -12,7 +12,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from digigraph.schemas import DIGIPROJECT_V1ALPHA1, load_schema, schema_path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

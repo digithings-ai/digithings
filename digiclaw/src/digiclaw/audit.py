@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import urllib.error
 from datetime import datetime, timezone
 from typing import Any
 from urllib.request import Request as UrlRequest
@@ -33,7 +34,7 @@ def audit_log(
 ) -> None:
     """
     Append a single audit event to the JSONL log. Secrets in payload can be redacted by key.
-    Optional DigiKey trace fields are written at the top level when non-empty.
+    Optional digikey trace fields are written at the top level when non-empty.
     """
     r_tuple = tuple(redact) if redact else None
     payload = redact_mapping(dict(payload or {}), redact=r_tuple)
@@ -69,5 +70,6 @@ def audit_log(
                 method="POST",
             )
             urlopen(req, timeout=3)
-        except Exception:
+        except (OSError, urllib.error.URLError, ValueError):
+            # AUDIT_SINK_URL is fire-and-forget — local JSONL write already succeeded.
             pass

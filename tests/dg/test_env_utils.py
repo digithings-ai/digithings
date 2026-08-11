@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import pytest
-
 from digigraph.env_utils import resolve_env_refs
-
 
 # ---------------------------------------------------------------------------
 # ${VAR} — present in environment

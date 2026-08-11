@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import polars as pl
 
 from digigraph.tools.analytics.data_manipulation._helpers import write_result
 from digigraph.tools.analytics.load import load_dataset
@@ -38,6 +39,6 @@ def merge_datasets(
         how = "inner"
     try:
         df = df_left.join(df_right, left_on=left_on, right_on=right_on, how=how)
-    except Exception as e:
+    except (pl.exceptions.PolarsError, ValueError, TypeError) as e:
         return {"error": str(e), "dataset_ref": None, "rows": 0}
     return write_result(df, session_id, output_name)

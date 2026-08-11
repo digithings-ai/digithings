@@ -1,0 +1,17 @@
+# Seed list of known parent hostnames for operators (digithings + DataTap, etc.).
+# Not baked into the GHCR image. Copy into runtime DIGICHAT_EMBED_HOSTS or rely on
+# DIGICHAT_EMBED_TENANTS host keys — see docs/digichat/INSTALL.md § Custom embed parent hosts.
+# One hostname per line; # comments ignored. No secrets.
+digithings.ai
+www.digithings.ai
+datatapstream.com
+www.datatapstream.com
+dev.datatapstream.com
+datatap.stream
+www.datatap.stream
+dev.datatap.stream
+nice-glacier-0187d6403.7.azurestaticapps.net
+nice-glacier-0187d6403-10.westeurope.7.azurestaticapps.net
+nice-glacier-0187d6403-11.westeurope.7.azurestaticapps.net
+localhost
+127.0.0.1

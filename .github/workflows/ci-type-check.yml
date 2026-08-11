@@ -1,0 +1,53 @@
+name: "CI: type check"
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "digibase/**"
+      - "digikey/**"
+      - "mypy.ini"
+      # Self-referencing so a change to this workflow is exercised by this
+      # workflow. Without it, edits here ship unverified — the component lanes
+      # already do this via scripts/ci_paths.yaml, this one had been missed.
+      - ".github/workflows/ci-type-check.yml"
+  pull_request:
+    paths:
+      - "digibase/**"
+      - "digikey/**"
+      - "mypy.ini"
+      - ".github/workflows/ci-type-check.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mypy:
+    name: mypy — digibase + digikey
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # mypy was installed bare here until #1711 bounded it and #1714 declared it
+      # in digibase/digikey [dev]. Declaring it is what made it lockable, so the
+      # version gating this check is now pinned in uv.lock (2.3.0) rather than
+      # being whatever the `>=2,<3` bound resolves to on the day.
+      #
+      # `types-PyYAML` is dropped rather than declared: it appears in no
+      # pyproject, neither checked tree imports yaml, and mypy.ini sets
+      # `ignore_missing_imports = True`, so it could not have changed this gate's
+      # result. Verified: mypy reports "no issues found in 30 source files" from
+      # the lock, the same 30 files as before.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Run mypy
+        run: |
+          uv run --frozen --no-sync mypy \
+            digibase/src/digibase/ digikey/src/digikey/ --config-file mypy.ini

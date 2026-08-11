@@ -10,7 +10,7 @@
 # Run: make find-stale
 # Apply: python3 scripts/find_stale.py --whitelist .vulture_whitelist.py
 
-# ── DigiGraph ─────────────────────────────────────────────────────────────────
+# ── digigraph ─────────────────────────────────────────────────────────────────
 
 # LangGraph TypedDict state fields — accessed by graph nodes via state["field"]
 # and serialized/deserialized by the checkpoint backend. Vulture can't see these.
@@ -27,28 +27,28 @@
 # search_tool   # registered via MCP registry
 # execute_tool  # registered via MCP registry
 
-# ── DigiSmith ────────────────────────────────────────────────────────────────
+# ── digismith ────────────────────────────────────────────────────────────────
 
 # configure_tracer is called at service startup via import side-effect in main.py
 # Vulture flags it as unused because it's not called within the library itself.
 # from digismith.tracer import configure_tracer
 # configure_tracer  # called at service startup
 
-# ── DigiSearch ────────────────────────────────────────────────────────────────
+# ── digisearch ────────────────────────────────────────────────────────────────
 
 # Backend classes are registered in the backend registry and instantiated via
 # string lookup — vulture can't see the dynamic dispatch.
 # from digisearch.backends.qdrant import QdrantBackend
 # QdrantBackend  # registered in backend registry
 
-# ── DigiKey ───────────────────────────────────────────────────────────────────
+# ── digikey ───────────────────────────────────────────────────────────────────
 
 # FastAPI route handlers decorated with @router.get / @router.post are called
 # by the ASGI framework, not from Python code directly.
 # (vulture usually handles these correctly via its FastAPI plugin;
 #  add entries here only if you see false positives)
 
-# ── DigiBase ──────────────────────────────────────────────────────────────────
+# ── digibase ──────────────────────────────────────────────────────────────────
 
 # ApiErrorEnvelope fields are serialized to JSON via .model_dump() — Pydantic
 # accesses them dynamically so vulture may flag them as unused attributes.

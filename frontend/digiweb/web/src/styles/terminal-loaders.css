@@ -1,0 +1,114 @@
+
+/* ==========================================================================
+   Terminal loaders (@digithings/web) — the `.tl-*` family behind
+   <TerminalStepCaret>, <ContainerBootLoader> and <ChatResponseLoader>.
+
+   Promoted here from the reference's `terminal.css` so product apps can ship
+   the house type-out without forking it; the class names carried over
+   unchanged, exactly as that sheet said they would. `.tl-stage` stayed behind
+   — it frames the reference specimen, not a product surface.
+
+   The caret itself is NOT drawn here — it is <ChatStreamCursor>, whose block,
+   blink and reduced-motion still live in chat-core.css. Import that sheet
+   FIRST: everything below assumes the cursor's metrics already exist.
+
+   Nothing here animates or transitions; the one motion moment is the caret.
+   Import once in the app shell:
+     @import "@digithings/web/styles/terminal-loaders.css";
+   ========================================================================== */
+
+/* ── the typed line ───────────────────────────────────────────────────── */
+
+/* The line stays INLINE flow, not flex: the caret's `vertical-align: -2px`
+   (chat-core.css) is what seats it against the baseline, and a flex container
+   would drop it and float the block high. */
+.tl-line {
+  font-family: var(--font-mono);
+}
+
+.tl-mark {
+  color: var(--accent);
+  margin-right: 0.5rem;
+}
+
+/* `pre` keeps a mid-word trailing space, so the caret never jumps back a cell
+   while typing. The line does not wrap — a wrapped caret lands in the margin —
+   so keep labels under ~30 characters, which is what the boot surface holds at
+   375px. */
+.tl-label {
+  white-space: pre;
+}
+
+/* The caret's screen-reader line. Deliberately NOT Tailwind's `.sr-only`: that
+   utility is only emitted into an app whose own source uses the class, so a
+   shared component leaning on it renders a plain visible span in any app that
+   does not — which is exactly what happened on digithings.ai, where the hidden
+   label appeared as a second copy of the word beside the typed one. A
+   component's a11y cannot depend on the consumer's build config, so the rule
+   ships here with the component that needs it. */
+.tl-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── container boot ───────────────────────────────────────────────────── */
+
+/* A terminal line caught mid-prompt, centred in the surface with its block
+   left-aligned on the mono grid. */
+
+.tl-boot {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: 100%;
+  padding: clamp(1.5rem, 6vw, 4rem);
+  background: var(--bg);
+}
+
+/* The usual mode in a product app: pinned over an app that has not rendered. */
+.tl-boot.is-fixed {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  min-height: 100dvh;
+}
+
+.tl-boot-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  width: min(34rem, 100%);
+}
+
+.tl-boot-title {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.tl-boot-rule {
+  margin: 0;
+  border: 0;
+  height: 1px;
+  background: var(--hair);
+}
+
+.tl-boot .tl-line {
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+.tl-note {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-mute);
+}

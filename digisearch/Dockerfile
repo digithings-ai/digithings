@@ -1,6 +1,6 @@
-# DigiSearch – RAG, document search for Digi ecosystem
+# digisearch – RAG, document search for Digi ecosystem
 # Build from repo root: docker compose build digisearch (context: .)
-# See digisearch/ARCHITECTURE.md. HTTP API + MCP tooling for DigiGraph.
+# See digisearch/ARCHITECTURE.md. HTTP API + MCP tooling for digigraph.
 
 FROM python:3.12-slim
 
@@ -26,7 +26,9 @@ COPY digisearch/pyproject.toml digisearch/ARCHITECTURE.md ./digisearch/
 COPY digisearch/src ./digisearch/src
 COPY digisearch/seeds ./digisearch/seeds
 WORKDIR /app/digisearch
-RUN uv pip install --system -e ".[azure,chroma]"
+# [server] = FastAPI/uvicorn/mcp/typer/digikey + json logging (base is now light);
+# [ingestion] = parser deps incl. pdfplumber for PDF ingest; [azure]+[chroma] backends.
+RUN uv pip install --system -e ".[server,ingestion,azure,chroma]"
 
 EXPOSE 8002
 CMD ["uvicorn", "digisearch.server:app", "--host", "0.0.0.0", "--port", "8002"]

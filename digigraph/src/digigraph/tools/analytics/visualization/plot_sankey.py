@@ -26,7 +26,9 @@ def plot_sankey(
         return {"error": f"Column {value_column!r} not found", "image_path": None, "summary": {}}
 
     if value_column and df[value_column].dtype in (pl.Int64, pl.Int32, pl.Float64, pl.Float32):
-        agg_df = df.group_by([source_column, target_column]).agg(pl.col(value_column).sum().alias("value"))
+        agg_df = df.group_by([source_column, target_column]).agg(
+            pl.col(value_column).sum().alias("value")
+        )
     else:
         agg_df = df.group_by([source_column, target_column]).agg(pl.len().alias("value"))
 
@@ -57,7 +59,11 @@ def plot_sankey(
     try:
         import plotly.graph_objects as go
     except ImportError:
-        return {"error": "plotly not installed", "image_path": None, "summary": {"nodes": len(labels), "flows": len(values)}}
+        return {
+            "error": "plotly not installed",
+            "image_path": None,
+            "summary": {"nodes": len(labels), "flows": len(values)},
+        }
 
     fig = go.Figure(
         data=[
@@ -72,14 +78,20 @@ def plot_sankey(
             )
         ]
     )
-    fig.update_layout(title_text=f"Sankey: {source_column} → {target_column}", font_size=10, height=500)
+    fig.update_layout(
+        title_text=f"Sankey: {source_column} → {target_column}", font_size=10, height=500
+    )
 
     out_dir = _artifacts_dir(dataset_path)
     path = _next_filename(out_dir, "sankey", "png")
     try:
         fig.write_image(path, scale=1.5)
-    except Exception as e:
-        return {"error": f"Failed to save image: {e}", "image_path": None, "summary": {"nodes": len(labels), "flows": len(values)}}
+    except (OSError, ValueError, RuntimeError) as e:
+        return {
+            "error": f"Failed to save image: {e}",
+            "image_path": None,
+            "summary": {"nodes": len(labels), "flows": len(values)},
+        }
 
     summary = {"nodes": len(labels), "flows": len(values), "total_value": sum(values)}
     return {"image_path": str(path), "summary": summary}

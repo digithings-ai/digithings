@@ -1,0 +1,103 @@
+/* ==========================================================================
+   @digithings/web — docs family structural CSS (components/docs/*).
+   Import AFTER the token bridge, in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/docs.css";
+     @source "<path-to>/digiweb/web/src/components/docs";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the docs components carry token-backed utilities, and Tailwind does not
+   scan package sources on its own.
+
+   Utilities in the components carry the clean layout/spacing/color/type.
+   This file holds only what must stay CSS: the responsive shell + sticky
+   sidebar, the native <details> disclosure marker, hover-reveal combinators,
+   table row hairlines, print hygiene, and the HTTP-method color ramp.
+   Consumers with fixed chrome set --docs-nav-h (defaults to 62px).
+   ========================================================================== */
+
+/* ── HTTP-method color ramp ────────────────────────────────────────────────
+   The four base hues are digithings-web's historical badge colors, promoted
+   from raw hex at the use site to family-scoped custom props. Each final
+   prop mixes 20% of the theme's --ink into the hue, so ONE rule is
+   theme-aware: dark ink (#ECEEF0) lifts the chip toward its near-black
+   --on-accent text (contrast ≥ 4.9:1 across the ramp); light ink (#14181B)
+   deepens the chip under its white --on-accent text (≥ 4.6:1). Badges
+   consume var(--method-*) only — never the raw hex. */
+:where(.docs-shell, .doc-endpoint) {
+  --method-hue-get: #3b82a6;
+  --method-hue-post: #3f9e74;
+  --method-hue-put: #b5832a;
+  --method-hue-delete: #c9533b;
+  --method-get: color-mix(in srgb, var(--method-hue-get) 80%, var(--ink));
+  --method-post: color-mix(in srgb, var(--method-hue-post) 80%, var(--ink));
+  --method-put: color-mix(in srgb, var(--method-hue-put) 80%, var(--ink));
+  --method-delete: color-mix(in srgb, var(--method-hue-delete) 80%, var(--ink));
+}
+
+/* ── shell: one column; the sidebar reveals sticky ≥ 860px ──────────────── */
+.docs-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: clamp(1.4rem, 3vw, 2.4rem);
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 4vw, 2rem);
+}
+.docs-side { display: none; }
+@media (min-width: 860px) {
+  .docs-shell {
+    grid-template-columns: 200px minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(2rem, 4vw, 3rem);
+  }
+  .docs-side {
+    display: block;
+    position: sticky;
+    top: calc(var(--docs-nav-h, 62px) + 1.2rem);
+    max-height: calc(100vh - var(--docs-nav-h, 62px) - 2rem);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .docs-side-mobile { display: none; }
+}
+
+/* Anchored doc sections land clear of the fixed chrome. */
+.docs-content :where([id]) {
+  scroll-margin-top: calc(var(--docs-nav-h, 62px) + 1rem);
+}
+
+/* ── mobile disclosure: the sidebar never just vanishes (canon §17) ─────── */
+.docs-side-mobile summary { list-style: none; }
+.docs-side-mobile summary::-webkit-details-marker { display: none; }
+.docs-side-mobile summary::before { content: "▸ "; color: var(--accent); }
+.docs-side-mobile[open] summary::before { content: "▾ "; }
+.docs-side-mobile[open] summary { margin-bottom: 0.5rem; }
+
+/* ── code blocks: the copy affordance reveals on hover / focus ──────────── */
+.doc-code .docs-code-copy {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease, ease);
+}
+.doc-code:hover .docs-code-copy,
+.doc-code .docs-code-copy:focus-visible { opacity: 1; }
+
+/* ── field tables: row hairlines need combinators + a two-token mix ─────── */
+.doc-fields td {
+  padding: 0.3rem 0.6rem 0.3rem 0;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, var(--hair) 60%, transparent);
+}
+.doc-fields tr:last-child td { border-bottom: 0; }
+
+/* ── print: navigation chrome drops out; content flows full-width ───────── */
+@media print {
+  .docs-side,
+  .docs-side-mobile,
+  .docs-code-copy { display: none; }
+  .docs-shell { grid-template-columns: 1fr; }
+}

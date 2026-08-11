@@ -28,6 +28,7 @@ def cluster_metadata(
         return {"error": "Fewer rows than n_clusters", "labels": [], "summary": {}}
     try:
         from sklearn.cluster import KMeans
+
         X = df.to_numpy()
         km = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
         labels = km.fit_predict(X)
@@ -44,5 +45,11 @@ def cluster_metadata(
     summary = {}
     for c in range(n_clusters):
         sub = df.filter(pl.col("_cluster") == c)
-        summary[str(c)] = {"count": len(sub), "columns": {col: {"mean": sub[col].mean(), "min": sub[col].min(), "max": sub[col].max()} for col in cols}}
+        summary[str(c)] = {
+            "count": len(sub),
+            "columns": {
+                col: {"mean": sub[col].mean(), "min": sub[col].min(), "max": sub[col].max()}
+                for col in cols
+            },
+        }
     return {"labels": labels_list, "summary": summary, "n_clusters": n_clusters}
