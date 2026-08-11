@@ -137,6 +137,8 @@ class SupabaseStore:
         server-side row cap. This pages explicitly with ``.range()`` and stops on
         the first short page.
         """
+        if page_size <= 0:
+            raise ValueError(f"page_size must be positive, got {page_size}")
         prefix = (path_prefix or "").strip().strip("/")
         out: list[dict[str, Any]] = []
         start = 0

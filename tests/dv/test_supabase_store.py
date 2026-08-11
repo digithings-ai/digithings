@@ -238,3 +238,38 @@ def test_list_notes_stops_on_short_page() -> None:
     out = store.list_notes(path_prefix="p", page_size=500)
     assert len(out) == 2
     assert len(client.range_calls) == 1
+
+
+@pytest.mark.parametrize("page_size", [0, -1])
+def test_list_notes_rejects_non_positive_page_size(page_size: int) -> None:
+    """page_size <= 0 must fail before any I/O, not loop forever (finding: unbounded loop)."""
+    client = _FakeClient([])
+    store = SupabaseStore(client)
+    with pytest.raises(ValueError, match=str(page_size)):
+        store.list_notes(path_prefix="clients/digithings", page_size=page_size)
+    assert client.range_calls == []
+
+
+def test_list_notes_prefix_excludes_hyphen_suffix_collision() -> None:
+    """`clients/digithings` must not also match `clients/digithings-archive` (multi-tenant
+    isolation). The server-side `.like()` pattern `clients/digithings%` matches both, so this
+    only passes if the client-side re-check (vault_path == prefix or startswith prefix + "/")
+    is still in place."""
+    rows = [
+        {
+            "vault_path": "clients/digithings/note1",
+            "title": "note1",
+            "frontmatter": {},
+            "body_markdown": "body",
+        },
+        {
+            "vault_path": "clients/digithings-archive/note2",
+            "title": "note2",
+            "frontmatter": {},
+            "body_markdown": "body",
+        },
+    ]
+    client = _FakeClient(rows)
+    store = SupabaseStore(client)
+    out = store.list_notes(path_prefix="clients/digithings")
+    assert [r["vault_path"] for r in out] == ["clients/digithings/note1"]
