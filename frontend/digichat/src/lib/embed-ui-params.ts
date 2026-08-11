@@ -42,6 +42,10 @@ export function readEmbedUiParams(search: string): EmbedUiParams {
         .filter(Boolean);
     }
   }
-  const wide = sp.get("wide") === "1";
+  // undefined, not false, when absent — matches every other optional field
+  // here (accent, welcome, ...): existing callers' `toEqual({...})` checks
+  // compare against an object that omits the key entirely, and `toEqual`
+  // treats `undefined`-valued keys as absent but not `false`-valued ones.
+  const wide = sp.get("wide") === "1" ? true : undefined;
   return { welcome, placeholder, suggestions, accent, accentForeground, wide };
 }
