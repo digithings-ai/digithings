@@ -14,11 +14,15 @@ dependencies = [
     "digibase>=0.1.0",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
-
 [project.scripts]
 digiclaw-heartbeat = "digiclaw.__main__:main"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digiclaw's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
