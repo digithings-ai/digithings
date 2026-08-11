@@ -31,6 +31,150 @@
 
 ---
 
+### Task 0: `MiniLMEmbedder` — a local 384-dim EmbeddingProvider
+
+**Files:**
+- Create: `digisearch/src/digisearch/embedding/providers/minilm.py`
+- Test: `tests/ds/test_minilm_embedder.py`
+
+**Interfaces:**
+- Consumes: `EmbeddingProvider` from `digisearch/src/digisearch/embedding/base.py` (abstract `embed(self, texts: list[str]) -> list[list[float]]` and abstract property `dimensions -> int`).
+- Produces: `MiniLMEmbedder()` with `embed()` and `dimensions == 384`, and module constant `MINILM_MODEL_ID = "all-MiniLM-L6-v2-384"`. Tasks 3 and 5 both depend on these exact names.
+
+**Why this task exists:** the plan originally assumed a local MiniLM provider existed. It does not — digisearch's only concrete `EmbeddingProvider` is `OpenAIEmbedder`, because the Chroma backend embeds internally via chromadb's own default function and digisearch never calls a provider on that path. Verified available and correct: `chromadb.utils.embedding_functions.ONNXMiniLM_L6_V2()` returns 384-dim vectors and is the exact model Chroma uses today, so a Vectorize index built with it matches the corpus that was validated. chromadb is already a dependency; no new package.
+
+- [ ] **Step 1: Write the failing test**
+
+Create `tests/ds/test_minilm_embedder.py`:
+
+```python
+"""Tests for the local MiniLM embedding provider."""
+
+from __future__ import annotations
+
+import pytest
+
+from digisearch.embedding.base import EmbeddingProvider
+from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
+
+
+@pytest.mark.unit
+def test_minilm_is_an_embedding_provider() -> None:
+    assert issubclass(MiniLMEmbedder, EmbeddingProvider)
+    assert MINILM_MODEL_ID == "all-MiniLM-L6-v2-384"
+
+
+@pytest.mark.unit
+def test_minilm_dimensions_are_384_without_loading_the_model() -> None:
+    assert MiniLMEmbedder().dimensions == 384
+
+
+@pytest.mark.unit
+def test_minilm_embeds_texts(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def _fake_fn(texts: list[str]) -> list[list[float]]:
+        calls.append(list(texts))
+        return [[0.25] * 384 for _ in texts]
+
+    embedder = MiniLMEmbedder(embed_fn=_fake_fn)
+    out = embedder.embed(["a", "b"])
+    assert calls == [["a", "b"]]
+    assert len(out) == 2
+    assert all(len(v) == 384 for v in out)
+
+
+@pytest.mark.unit
+def test_minilm_empty_input_returns_empty_without_calling_the_model() -> None:
+    def _boom(_texts: list[str]) -> list[list[float]]:
+        raise AssertionError("must not be called for empty input")
+
+    assert MiniLMEmbedder(embed_fn=_boom).embed([]) == []
+```
+
+Note `dimensions` must not load the ONNX model — the test asserts it works on a bare instance, and loading a model to answer a constant would make every construction slow.
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `.venv/bin/python -m pytest tests/ds/test_minilm_embedder.py -m unit -v --tb=short`
+Expected: FAIL with `ModuleNotFoundError: No module named 'digisearch.embedding.providers.minilm'`
+
+- [ ] **Step 3: Write the provider**
+
+Create `digisearch/src/digisearch/embedding/providers/minilm.py`:
+
+```python
+"""Local MiniLM embedding provider backed by chromadb's bundled ONNX model.
+
+Wraps the same model the Chroma backend embeds with internally, so an index built
+here is directly comparable to a Chroma-built one. No new dependency: chromadb is
+already required for the Chroma backend.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from digisearch.embedding.base import EmbeddingProvider
+
+#: Recorded in vector metadata so an index cannot silently mix embedding models.
+MINILM_MODEL_ID = "all-MiniLM-L6-v2-384"
+
+#: all-MiniLM-L6-v2 output width.
+MINILM_DIMENSIONS = 384
+
+EmbedFn = Callable[[list[str]], list[list[float]]]
+
+
+class MiniLMEmbedder(EmbeddingProvider):
+    """all-MiniLM-L6-v2 (384-dim) via chromadb's bundled ONNX runtime."""
+
+    def __init__(self, embed_fn: EmbedFn | None = None) -> None:
+        self._embed_fn = embed_fn
+
+    def _fn(self) -> EmbedFn:
+        if self._embed_fn is None:
+            from chromadb.utils import embedding_functions
+
+            self._embed_fn = embedding_functions.ONNXMiniLM_L6_V2()
+        return self._embed_fn
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        return [list(vector) for vector in self._fn()(list(texts))]
+
+    @property
+    def dimensions(self) -> int:
+        return MINILM_DIMENSIONS
+```
+
+The model is loaded lazily on first `embed()`, never in `__init__` or `dimensions`.
+
+- [ ] **Step 4: Run tests to verify they pass**
+
+Run: `.venv/bin/python -m pytest tests/ds/test_minilm_embedder.py -m unit -v --tb=short`
+Expected: PASS (4 passed)
+
+Run: `ruff check digisearch/src tests`
+Expected: no findings.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add digisearch/src/digisearch/embedding/providers/minilm.py tests/ds/test_minilm_embedder.py
+git commit -m "feat(digisearch): add local MiniLM embedding provider
+
+Refs #2201
+
+digisearch had no local EmbeddingProvider — only OpenAIEmbedder — because
+the Chroma backend embeds internally. Vectorize needs an explicit one for
+both upsert and query. Wraps chromadb's bundled ONNXMiniLM_L6_V2 so the
+model matches what Chroma already uses."
+```
+
+---
+
 ### Task 1: Prefix-scoped, paginated note listing on `SupabaseStore`
 
 **Files:**
@@ -539,14 +683,43 @@ def test_query_raises_on_http_error_instead_of_returning_empty() -> None:
 
 
 @pytest.mark.unit
-def test_query_requires_a_precomputed_embedding() -> None:
+def test_query_embeds_text_when_no_embedding_supplied() -> None:
     from digisearch.core.models import Query as DsQuery
 
+    class _StubProvider:
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[0.7] * 384 for _ in texts]
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
     post = _RecordingPost(body=_MATCHES)
-    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
-    with pytest.raises(ValueError, match="requires Query.embedding"):
-        backend.query(DsQuery(text="x", top_k=3))
-    assert post.calls == []
+    backend = VectorizeBackend(
+        "i", account_id="a", api_token="t", http_post=post, embedding_provider=_StubProvider()
+    )
+    backend.query(DsQuery(text="what is digikey", top_k=3))
+    assert json.loads(post.calls[0][2])["vector"] == [0.7] * 384
+
+
+@pytest.mark.unit
+def test_query_prefers_a_precomputed_embedding_over_the_provider() -> None:
+    from digisearch.core.models import Query as DsQuery
+
+    class _ShouldNotRun:
+        def embed(self, _texts: list[str]) -> list[list[float]]:
+            raise AssertionError("must not embed when Query.embedding is present")
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend(
+        "i", account_id="a", api_token="t", http_post=post, embedding_provider=_ShouldNotRun()
+    )
+    backend.query(DsQuery(text="x", top_k=3, embedding=[0.1] * 384))
+    assert json.loads(post.calls[0][2])["vector"] == [0.1] * 384
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -561,13 +734,15 @@ In `digisearch/src/digisearch/indexes/backends/vectorize.py`, replace the placeh
 ```python
     def query(self, query: Query) -> list[Result]:
         perf_start = time.perf_counter()
-        if not query.embedding:
-            raise ValueError(
-                "VectorizeBackend requires Query.embedding: the remote index cannot embed text"
-            )
+        vector = list(query.embedding or [])
+        if not vector:
+            # Chroma embeds query.text internally; a remote index cannot, so the
+            # backend does it here rather than requiring every caller to remember.
+            provider = self.embedding_provider or self._default_embedder()
+            vector = provider.embed([query.text])[0]  # type: ignore[attr-defined]
         top_k = min(max(int(query.top_k), 1), MAX_TOP_K)
         payload: dict[str, Any] = {
-            "vector": list(query.embedding),
+            "vector": vector,
             "topK": top_k,
             "returnMetadata": "all",
             "returnValues": False,
@@ -624,6 +799,15 @@ In `digisearch/src/digisearch/indexes/backends/vectorize.py`, replace the placeh
         return out
 ```
 
+Add the lazy default so the backend works with no provider injected:
+
+```python
+    def _default_embedder(self) -> object:
+        from digisearch.embedding.providers.minilm import MiniLMEmbedder
+
+        return MiniLMEmbedder()
+```
+
 Note the round-trip contract this establishes: `add()` stores `doc_id` in metadata and the sync script (Task 5) stores `content` there too, because Vectorize returns only ids, scores and metadata — there is no document store behind it.
 
 - [ ] **Step 4: Add `content` to the upsert metadata**
@@ -647,7 +831,7 @@ Update the Task 2 assertion in `test_add_posts_ndjson_multipart_to_upsert` to ma
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `.venv/bin/python -m pytest tests/ds/test_vectorize_backend.py -m unit -v --tb=short`
-Expected: PASS (9 passed)
+Expected: PASS (10 passed)
 
 Run: `ruff check digisearch/src tests`
 Expected: no findings.
@@ -956,7 +1140,7 @@ from digisearch.core.models import Chunk, Document, Segment
 
 #: Identifies the embedding model in every vector's metadata. Upsert and query must
 #: use the same model; the sync refuses to mix models within one index.
-DEFAULT_MODEL_ID = "all-MiniLM-L6-v2-384"
+DEFAULT_MODEL_ID = "all-MiniLM-L6-v2-384"  # must equal MINILM_MODEL_ID from Task 0
 
 
 class ModelMismatchError(RuntimeError):
@@ -1044,7 +1228,7 @@ def main(argv: list[str] | None = None) -> int:
 
     import os
 
-    from digisearch.embedding.local import LocalEmbedder
+    from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
     from digisearch.indexes.backends.vectorize import VectorizeBackend
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
     from digivault.supabase_store import SupabaseStore
@@ -1069,7 +1253,7 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit("VECTORIZE_ACCOUNT_ID and VECTORIZE_API_TOKEN are required")
         sink = VectorizeBackend(args.index, account_id=account_id, api_token=api_token)
 
-    total = sync_corpus(notes, SegmentAwareChunker(), LocalEmbedder(), sink)
+    total = sync_corpus(notes, SegmentAwareChunker(), MiniLMEmbedder(), sink, model_id=MINILM_MODEL_ID)
     print(f"{'would upsert' if args.dry_run else 'upserted'} {total} vectors → {args.index}")
     return 0
 
@@ -1078,12 +1262,8 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-Before implementing, confirm the local embedder's real import path and class name:
-
-```bash
-grep -rn "class .*Embedder" digisearch/src/digisearch/embedding/ | grep -v __pycache__
-```
-Use whatever that reports in the `main()` import; the tests inject `_StubEmbedder` and do not depend on it.
+`MiniLMEmbedder` and `MINILM_MODEL_ID` come from Task 0. The tests inject
+`_StubEmbedder` and do not depend on either.
 
 - [ ] **Step 4: Add the model-mismatch guard the spec requires**
 
