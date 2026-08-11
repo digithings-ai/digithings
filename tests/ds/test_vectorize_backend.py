@@ -258,3 +258,102 @@ def test_query_prefers_a_precomputed_embedding_over_the_provider() -> None:
     )
     backend.query(DsQuery(text="x", top_k=3, embedding=[0.1] * 384))
     assert json.loads(post.calls[0][2])["vector"] == [0.1] * 384
+
+
+@pytest.mark.unit
+def test_query_raises_on_http_200_application_level_failure() -> None:
+    """FINDING 1 repro: HTTP 200 with a `success: false` body must raise, not
+    silently return an empty list — the exact failure mode this backend exists
+    to prevent."""
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(
+        status=200, body='{"success": false, "result": null, "errors": [{"message": "boom"}]}'
+    )
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(RuntimeError, match="boom"):
+        backend.query(DsQuery(text="x", top_k=3, embedding=[0.0] * 384))
+
+
+@pytest.mark.unit
+def test_query_constructs_default_embedder_at_most_once() -> None:
+    """FINDING 2 repro: 3 queries with no injected provider must construct the
+    default MiniLMEmbedder exactly once, not once per query."""
+    from digisearch.core.models import Query as DsQuery
+
+    construction_count = 0
+
+    class _StubEmbedder:
+        def __init__(self) -> None:
+            nonlocal construction_count
+            construction_count += 1
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            return [[0.5] * 384 for _ in texts]
+
+        @property
+        def dimensions(self) -> int:
+            return 384
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    import digisearch.embedding.providers.minilm as minilm_module
+
+    original = minilm_module.MiniLMEmbedder
+    minilm_module.MiniLMEmbedder = _StubEmbedder  # type: ignore[misc]
+    try:
+        for _ in range(3):
+            backend.query(DsQuery(text="no embedding here", top_k=3))
+    finally:
+        minilm_module.MiniLMEmbedder = original  # type: ignore[misc]
+
+    assert construction_count == 1, f"expected 1 construction, got {construction_count}"
+
+
+@pytest.mark.unit
+def test_query_treats_non_dict_metadata_as_empty() -> None:
+    """FINDING 3 repro: a match with non-dict metadata (e.g. a string) must not
+    raise ValueError from `dict(match.get("metadata") or {})`."""
+    from digisearch.core.models import Query as DsQuery
+
+    bad_matches = json.dumps(
+        {
+            "success": True,
+            "result": {
+                "count": 1,
+                "matches": [{"id": "c1", "score": 0.5, "metadata": "not-a-dict"}],
+            },
+            "errors": [],
+        }
+    )
+    post = _RecordingPost(body=bad_matches)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    results = backend.query(DsQuery(text="x", top_k=3, embedding=[0.0] * 384))
+    assert len(results) == 1
+    assert results[0].chunk.metadata == {}
+    assert results[0].chunk.content == ""
+    assert results[0].chunk.doc_id == ""
+
+
+@pytest.mark.unit
+def test_query_treats_null_score_as_zero() -> None:
+    """FINDING 3 repro: a match with `score: null` must not raise TypeError from
+    `float(match.get("score", 0.0))` — a `.get` default only applies when the key
+    is missing, not when its value is None."""
+    from digisearch.core.models import Query as DsQuery
+
+    null_score_matches = json.dumps(
+        {
+            "success": True,
+            "result": {
+                "count": 1,
+                "matches": [{"id": "c1", "score": None, "metadata": {"doc_id": "d1"}}],
+            },
+            "errors": [],
+        }
+    )
+    post = _RecordingPost(body=null_score_matches)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    results = backend.query(DsQuery(text="x", top_k=3, embedding=[0.0] * 384))
+    assert len(results) == 1
+    assert results[0].score == 0.0

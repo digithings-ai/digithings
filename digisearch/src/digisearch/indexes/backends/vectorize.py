@@ -69,6 +69,10 @@ class VectorizeBackend(DigiIndex):
         self._api_token = api_token
         self._post = http_post or _default_http_post
         self._batch_size = batch_size
+        # Lazily constructed on first use when embedding_provider is not injected
+        # and Query.embedding is absent; memoized so the ONNX model loads at most
+        # once per backend instance rather than once per query.
+        self._lazy_default_embedder: object | None = None
 
     def _url(self, action: str) -> str:
         return f"{API_ROOT}/accounts/{self._account_id}/vectorize/v2/indexes/{self.name}/{action}"
@@ -154,9 +158,17 @@ class VectorizeBackend(DigiIndex):
         raise NotImplementedError("Vectorize is the system of record; it is not snapshotted here")
 
     def _default_embedder(self) -> object:
-        from digisearch.embedding.providers.minilm import MiniLMEmbedder
+        """Return the memoized default embedder, constructing it at most once.
 
-        return MiniLMEmbedder()
+        Not called from `__init__` — building an ONNX model eagerly would pay
+        the load cost even for backends that never hit this path (an injected
+        `embedding_provider` or a caller that always supplies `Query.embedding`).
+        """
+        if self._lazy_default_embedder is None:
+            from digisearch.embedding.providers.minilm import MiniLMEmbedder
+
+            self._lazy_default_embedder = MiniLMEmbedder()
+        return self._lazy_default_embedder
 
     def query(self, query: Query) -> list[Result]:
         perf_start = time.perf_counter()
@@ -191,12 +203,33 @@ class VectorizeBackend(DigiIndex):
             raise RuntimeError(f"vectorize query failed ({status}): {text[:500]}")
 
         body = json.loads(text) if text else {}
-        matches = ((body.get("result") or {}).get("matches")) or []
+        result = body.get("result")
+        # Vectorize can answer HTTP 200 with an application-level failure body
+        # (`success: false`, `result: null`) — the HTTP-status check above does
+        # not see this. This is the one failure mode this backend exists to
+        # surface rather than swallow, so a missing/failed result raises here too.
+        if body.get("success") is False or result is None:
+            errors = body.get("errors") or []
+            logger.error(
+                "vectorize query failed",
+                extra={
+                    "operation": "vectorize_query",
+                    "duration_ms": int((time.perf_counter() - perf_start) * 1000),
+                    "outcome": "error",
+                    "collection": self.name,
+                    "top_k": top_k,
+                    "status_code": status,
+                },
+            )
+            raise RuntimeError(f"vectorize query failed ({status}): {json.dumps(errors)[:500]}")
+        matches = (result or {}).get("matches") or []
         out: list[Result] = []
         for rank, match in enumerate(matches):
-            metadata = dict(match.get("metadata") or {})
+            raw_metadata = match.get("metadata")
+            metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
             content = str(metadata.pop("content", ""))
             doc_id = str(metadata.pop("doc_id", ""))
+            raw_score = match.get("score")
             out.append(
                 Result(
                     chunk=Chunk(
@@ -206,7 +239,7 @@ class VectorizeBackend(DigiIndex):
                         embedding=None,
                         metadata=metadata,
                     ),
-                    score=float(match.get("score", 0.0)),
+                    score=float(raw_score) if raw_score is not None else 0.0,
                     source_doc=None,
                     rank=rank,
                 )
