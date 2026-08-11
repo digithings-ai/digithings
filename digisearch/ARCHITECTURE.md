@@ -363,11 +363,27 @@ Defined in `core/evidence_metadata.py`. These keys SHOULD appear on both `Docume
 
 #### Segmentation
 
-`Document.segments` is an opt-in structural overlay. Parsers that can detect real
-boundaries populate it — `PDFParser` emits one segment per page (`page:12`), and
-`ingestion/segmenters/heading.py` splits markdown (including converted HTML and
-OpenAPI reference markdown) on `##`/`###` boundaries with a breadcrumb label.
-Everything else leaves it empty and behaves exactly as before.
+`Document.segments` is an opt-in structural overlay. `ingestion/segmenters/heading.py`
+splits markdown text at ATX heading boundaries (`#`/`##`/`###` — any level up to
+`max_split_level`, default 3) into breadcrumb-labeled `Segment`s, and returns `[]` when
+no qualifying heading is present.
+
+On digisearch's own ingest path (`ParserRegistry` → `parse()`), two parsers populate
+`Document.segments`:
+
+- `PDFParser` emits one segment per page (`page:12`).
+- `MarkdownParser` runs its content through `heading_segments()` (`heading:Title >
+  Section`).
+
+`HTMLParser` does **not** populate segments: it extracts plain text via BeautifulSoup's
+`get_text()`, which discards all tag structure, so no ATX heading markers survive for
+`heading_segments()` to find — running it over that output would always return `[]`.
+Everything else (CSV, DOCX, short plaintext, headingless markdown) also leaves
+`segments` empty and behaves exactly as before.
+
+Separately, the `scripts/docs_onboard/` vault-writing pipeline (not digisearch's ingest
+path) applies `heading_segments()` itself to `html_to_markdown()` output and to
+OpenAPI-derived markdown — see that package's own docs, not this one.
 
 `SegmentAwareChunker` chunks within segments and never across them: a segment at or
 under `DEFAULT_CHUNK_CHARS` (2000 chars ≈ 512 tokens) becomes exactly one chunk;
