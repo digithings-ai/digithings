@@ -54,9 +54,9 @@ available seam** — see "Foundry data flow" below.
 ## Data flow — digigraph backend (digithings, OCC)
 
 ```
-Dropdown (chat-shell.tsx) → React state (session-only, seeded from navigator.language)
-  → POST /api/chat  body: { ..., language: "de" }
-    → route.ts reads body.language once, validates against the curated list
+Dropdown (embed-client.tsx's LanguageSelect) → React state (session-only, seeded from navigator.language)
+  → POST /api/chat  header: X-Digi-Language: de
+    → route.ts reads the incoming X-Digi-Language header once, validates against the curated list
       → forwards header  X-Digi-Language: de   (alongside X-Digi-Corpus-Index, X-Digi-Vault-Prefix)
         → digigraph WorkflowRequest.response_language
           → WorkflowState.response_language   (declared on the TypedDict — see "Lesson from #2097" below)
@@ -88,9 +88,9 @@ recur silently a third time.
 ## Data flow — Foundry backend (DataTap)
 
 ```
-Dropdown (chat-shell.tsx) → React state (same component, same auto-detect/session-only rules)
-  → POST /api/chat  body: { ..., language: "de" }
-    → route.ts reads body.language, validates against the curated list
+Dropdown (embed-client.tsx's LanguageSelect) → React state (same component, same auto-detect/session-only rules)
+  → POST /api/chat  header: X-Digi-Language: de
+    → route.ts reads the incoming X-Digi-Language header, validates against the curated list
       → createFoundryStreamResponse({ ..., responseLanguage: "de" })
         → before calling openai.responses.create, prepend a bracketed directive
           to the input text:
@@ -123,9 +123,9 @@ no directive, `input` unchanged from today's behavior.
 
 **Frontend (`frontend/digichat/src`):**
 - `lib/embed-tenants.ts` — `EmbedTenantConfig.showLanguageSelector?: boolean`, validated like `showByok`; read as `tenant?.showLanguageSelector !== false` wherever consumed (default true unless explicitly disabled).
-- `components/chat-shell.tsx` — dropdown in the `app-topbar` header (next to the existing BYOK button), using the existing `dropdown-menu.tsx` primitive. New session-scoped React state, seeded once from `navigator.language` matched against the curated list (else `"en"`).
-- A small shared `LANGUAGES: { code: string; label: string }[]` constant (English/German/Italian/Spanish/French) used by the dropdown.
-- `app/api/chat/route.ts` — reads `language` from the request body once; branches to whichever backend-specific mechanism applies (header for digigraph, adapter option for Foundry) — this file already branches per-backend today, so this is one more thing it threads through, not a new branch point.
+- `components/language-select.tsx` — new dedicated dropdown component, rendered from `app/embed/embed-client.tsx`'s header (next to the embed's own `showByok`-gated BYOK button), gated by `uiFlags.showLanguageSelector`. New session-scoped React state on `embed-client.tsx`, seeded once from `navigator.language` matched against the curated list (else `"en"`).
+- A small shared `LANGUAGES: { code: string; label: string }[]` constant (English/German/Italian/Spanish/French) used by the dropdown, in `lib/languages.ts`.
+- `app/api/chat/route.ts` — reads the `X-Digi-Language` request header once; branches to whichever backend-specific mechanism applies (forwarded header for digigraph, adapter option for Foundry) — this file already branches per-backend today, so this is one more thing it threads through, not a new branch point.
 - `lib/adapters/digithings/stream.ts` — `createDigigraphTraceStreamResponse` gains no new logic itself; `route.ts` sets the `X-Digi-Language` header alongside the other upstream headers it already assembles.
 - `lib/adapters/foundry/stream.ts` — `createFoundryStreamResponse` gains a `responseLanguage?: string` option; directive prepended to `input` as shown above.
 
