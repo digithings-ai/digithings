@@ -82,7 +82,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 
 | Module | Status | Source |
 |--------|--------|--------|
-| Core models (`Document`, `Chunk`, `Query`, `Result`, `SearchResponse`) | Implemented | `core/models.py` |
+| Core models (`Document`, `Chunk`, `Query`, `Result`, `SearchResponse`, `Segment`) | Implemented | `core/models.py` |
 | `DigiSearchConfig` YAML/TOML loader with `${VAR}` substitution | Implemented | `core/config.py` |
 | Evidence metadata normalization + Chroma serialization | Implemented | `core/evidence_metadata.py` |
 | Standard hit normalization (`normalize_query_hit`) | Implemented | `core/standard_hits.py` |
@@ -178,7 +178,7 @@ Request:  IngestRequest { source: str, index_name: str, doc_type: str?, metadata
 Response: IngestResponse { doc_id, chunks_created, index_name, status }
 ```
 
-Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (RecursiveChunker, 512/64) → merge doc metadata into chunks → add to backend.
+Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (`SegmentAwareChunker`, falling back to `RecursiveChunker` when the parser found no segments — see §4 Segmentation) → merge doc metadata into chunks → add to backend.
 
 **Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. There is no URL-based ingest in the production path.
 
@@ -266,7 +266,8 @@ Document
 ├── source: str                # file path, URL, or identifier
 ├── doc_type: str              # "pdf", "html", "docx", "markdown", "csv", "plaintext"
 ├── metadata: dict[str, Any]   # normative evidence keys + parser-extracted fields
-└── chunks: list[Chunk]        # populated after chunking
+├── chunks: list[Chunk]        # populated after chunking
+└── segments: list[Segment]    # structural units (PDF page, md section); empty = unstructured
 ```
 
 ### `Chunk`
@@ -360,6 +361,36 @@ Defined in `core/evidence_metadata.py`. These keys SHOULD appear on both `Docume
 
 **Chroma serialization constraint:** ChromaDB only accepts `str`, `int`, `float`, `bool` in metadata. Lists are serialized as comma-joined strings at ingest by `normalize_metadata_for_chroma()`. Tag fields (`asset_class_tags`, `methodology_tags`) cannot be matched by Chroma's native `$in` — they are excluded from `chroma_where` translation and handled by `filter_apply.py` post-retrieval. This two-pass approach over-fetches and post-filters, which increases latency and may miss results if `fetch_n` is insufficient.
 
+#### Segmentation
+
+`Document.segments` is an opt-in structural overlay. `ingestion/segmenters/heading.py`
+splits markdown text at ATX heading boundaries (`#`/`##`/`###` — any level up to
+`max_split_level`, default 3) into breadcrumb-labeled `Segment`s, and returns `[]` when
+no qualifying heading is present.
+
+On digisearch's own ingest path (`ParserRegistry` → `parse()`), two parsers populate
+`Document.segments`:
+
+- `PDFParser` emits one segment per page (`page:12`).
+- `MarkdownParser` runs its content through `heading_segments()` (`heading:Title >
+  Section`).
+
+`HTMLParser` does **not** populate segments: it extracts plain text via BeautifulSoup's
+`get_text()`, which discards all tag structure, so no ATX heading markers survive for
+`heading_segments()` to find — running it over that output would always return `[]`.
+Everything else (CSV, DOCX, short plaintext, headingless markdown) also leaves
+`segments` empty and behaves exactly as before.
+
+Separately, the `scripts/docs_onboard/` vault-writing pipeline (not digisearch's ingest
+path) applies `heading_segments()` itself to `html_to_markdown()` output and to
+OpenAPI-derived markdown — see that package's own docs, not this one.
+
+`SegmentAwareChunker` chunks within segments and never across them: a segment at or
+under `DEFAULT_CHUNK_CHARS` (2000 chars ≈ 512 tokens) becomes exactly one chunk;
+only oversized segments are sub-split by the inner chunker. Every chunk carries
+`segment_label` and `segment_index` in its metadata so citations can name the page
+or section.
+
 ---
 
 ## 5. Internal Architecture
@@ -378,7 +409,7 @@ digisearch/src/digisearch/
 ├── client.py                  # digisearch Python client
 │
 ├── core/
-│   ├── models.py              # Document, Chunk, Query, Result, SearchResponse
+│   ├── models.py              # Document, Chunk, Query, Result, SearchResponse, Segment
 │   ├── config.py              # DigiSearchConfig, YAML/TOML loader, ${VAR} substitution
 │   ├── evidence_metadata.py   # Evidence tier system, Chroma normalization, sidecar loading
 │   ├── standard_hits.py       # normalize_query_hit(), STANDARD_HIT_KEYS, backend labels
@@ -443,7 +474,7 @@ attribute access via a `_LAZY = {name: module}` table:
 | Public name | Resolved from |
 |-------------|---------------|
 | `digisearch` | `digisearch.client` |
-| `Chunk`, `Document`, `Query`, `Result` | `digisearch.core.models` |
+| `Chunk`, `Document`, `Query`, `Result`, `Segment` | `digisearch.core.models` |
 
 **Contract (do not regress):**
 
@@ -673,7 +704,7 @@ Hit rate degrades when:
 
 ### Chunking strategy impact on retrieval quality
 
-The default `RecursiveChunker(chunk_size=512, chunk_overlap=64)` is a safe general-purpose default. Impact considerations:
+The default `RecursiveChunker(chunk_size=2000, chunk_overlap=250)` (character-based, ≈512 tokens at ~4 chars/token — see `DEFAULT_CHUNK_CHARS`/`DEFAULT_CHUNK_OVERLAP` in `ingestion/chunkers/recursive.py`) is a safe general-purpose default. Impact considerations:
 
 - **Too small (< 128 tokens):** chunks lose context; recall suffers on paraphrase queries
 - **Too large (> 1024 tokens):** chunks dilute relevance scores; precision suffers
