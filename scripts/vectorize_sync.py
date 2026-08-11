@@ -90,6 +90,44 @@ def _segments_for(body: str) -> list[Segment]:
     return heading_segments(body)
 
 
+#: Frontmatter keys worth carrying onto every chunk's metadata. Deliberately not a
+#: blind splat of the whole frontmatter dict (see the module docstring for the
+#: 10 KiB-per-vector Vectorize cap): everything here earns its place at retrieval
+#: or citation time --
+#:   segment_label / segment_index -- page/heading identity for a note that is
+#:     itself already one PDF page or section (the OCC child-note shape this
+#:     fixes). heading_segments() can't derive these from a headerless body, so
+#:     without this the label silently comes back None even though page
+#:     identity still survives in vault_path.
+#:   parent_doc     -- links a page-level chunk back to its multi-page source.
+#:   source_url     -- the original document URL, for citation-building.
+#:   page_class     -- retrieval-time filtering by page type (e.g. TOC vs body).
+#: Explicitly excluded: ingested_at, status, tags, content_type, client, and
+#: frontmatter's own title -- none of them help a query or a citation, and the
+#: canonical `title` stamp below already covers the title case.
+_FRONTMATTER_METADATA_KEYS = (
+    "segment_label",
+    "segment_index",
+    "parent_doc",
+    "source_url",
+    "page_class",
+)
+
+
+def _frontmatter_fields(frontmatter: Any) -> dict[str, Any]:
+    """Select the retrieval-relevant frontmatter fields to carry onto every chunk.
+
+    ``frontmatter`` may be ``None`` or a non-dict (a malformed jsonb column, or a
+    caller that bypasses ``NoteRow``'s own null-coercion validator) -- treated the
+    same as "no frontmatter" rather than raising. A key is only included when
+    actually present, so a falsy-but-meaningful value (``segment_index: 0``) is
+    still carried, and callers never see an inserted ``None``.
+    """
+    if not isinstance(frontmatter, dict):
+        return {}
+    return {key: frontmatter[key] for key in _FRONTMATTER_METADATA_KEYS if key in frontmatter}
+
+
 def sync_corpus(
     notes: list[NoteRow],
     chunker: ChunkerProtocol,
@@ -125,6 +163,7 @@ def sync_corpus(
         body = note.body_markdown
         if not vault_path or not body.strip():
             continue
+        frontmatter_fields = _frontmatter_fields(note.frontmatter)
         doc = Document(
             id=vault_path,
             content=body,
@@ -149,6 +188,22 @@ def sync_corpus(
                     doc_id=vault_path,
                     embedding=list(embedding) if embedding is not None else None,
                     metadata={
+                        # Precedence, weakest to strongest:
+                        # 1. note-level frontmatter fields (segment_label etc.) --
+                        #    the only source of page/heading identity for a note
+                        #    with no headings of its own.
+                        # 2. the chunk's own metadata from the chunker. When the
+                        #    body DOES have headings, SegmentAwareChunker's
+                        #    segment_label ("heading:...") is strictly more
+                        #    specific than the note-level one and must win --
+                        #    RecursiveChunker's fallback path never sets
+                        #    segment_label at all, so frontmatter's value survives
+                        #    untouched in that case.
+                        # 3. sync-controlled canonical stamps -- vault_path/title/
+                        #    embedding_model are never overridable by a note's own
+                        #    frontmatter, mirroring VectorizeBackend.add's doc_id/
+                        #    content guard against caller-supplied metadata.
+                        **frontmatter_fields,
                         **dict(chunk.metadata),
                         "vault_path": vault_path,
                         "title": note.title or "",

@@ -29,8 +29,13 @@ class _RecordingBackend:
         self.added.extend(chunks)
 
 
-def _note(path: str, body: str) -> NoteRow:
-    return NoteRow(vault_path=path, title=path, frontmatter={}, body_markdown=body)
+def _note(path: str, body: str, *, title: str | None = None, frontmatter: Any = None) -> NoteRow:
+    return NoteRow(
+        vault_path=path,
+        title=path if title is None else title,
+        frontmatter={} if frontmatter is None else frontmatter,
+        body_markdown=body,
+    )
 
 
 def test_sync_embeds_and_upserts_every_chunk() -> None:
@@ -322,3 +327,127 @@ def test_dry_run_makes_zero_embed_calls(
     out = capsys.readouterr().out
     assert "would upsert" in out
     assert "would upsert 0 vectors" not in out
+
+
+# --- #2226: carry frontmatter segment metadata (page identity) onto chunks ---
+
+
+def test_sync_carries_frontmatter_segment_fields_onto_chunks() -> None:
+    """OCC child-note repro: a note that is already one PDF page has no headings for
+    heading_segments() to split on, so its page identity must come from frontmatter
+    instead -- this is the metadata Vectorize was coming back with as None."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    note = _note(
+        "clients/occ/help-online-compliance-center__p001",
+        "Body text of a single already-split PDF page. No headings here at all.\n",
+        frontmatter={
+            "segment_label": "page:1",
+            "segment_index": 0,
+            "parent_doc": "help-online-compliance-center-com-images-occ",
+            "source_url": "https://example.com/occ/manual.pdf",
+            "page_class": "body",
+            # Retrieval-irrelevant fields that must NOT be carried over.
+            "ingested_at": "2026-08-10T00:00:00Z",
+            "status": "published",
+            "tags": ["occ", "manual"],
+            "content_type": "application/pdf",
+        },
+    )
+    backend = _RecordingBackend()
+    sync_corpus([note], SegmentAwareChunker(), _StubEmbedder(), backend, model_id="m")
+
+    assert len(backend.added) == 1
+    meta = backend.added[0].metadata
+    assert meta["segment_label"] == "page:1"
+    assert meta["segment_index"] == 0
+    assert meta["parent_doc"] == "help-online-compliance-center-com-images-occ"
+    assert meta["source_url"] == "https://example.com/occ/manual.pdf"
+    assert meta["page_class"] == "body"
+    assert meta["vault_path"] == "clients/occ/help-online-compliance-center__p001"
+    # No-value-for-retrieval fields must not ride along.
+    assert "ingested_at" not in meta
+    assert "status" not in meta
+    assert "tags" not in meta
+    assert "content_type" not in meta
+
+
+def test_frontmatter_cannot_override_canonical_stamps() -> None:
+    """A previous review round found caller metadata silently overriding
+    backend-controlled doc_id/content (see VectorizeBackend.add). Guard the same
+    hazard here: a note's frontmatter must never be able to overwrite the
+    sync-controlled vault_path/title/embedding_model stamps, even if it carries
+    keys with those exact names."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    note = _note(
+        "clients/occ/doc__p001",
+        "body with no headings\n",
+        title="Real Title",
+        frontmatter={
+            "vault_path": "attacker-controlled-path",
+            "title": "attacker title",
+            "embedding_model": "attacker-model",
+            "segment_label": "page:1",
+        },
+    )
+    backend = _RecordingBackend()
+    sync_corpus([note], SegmentAwareChunker(), _StubEmbedder(), backend, model_id="real-model-384")
+
+    meta = backend.added[0].metadata
+    assert meta["vault_path"] == "clients/occ/doc__p001"
+    assert meta["title"] == "Real Title"
+    assert meta["embedding_model"] == "real-model-384"
+    # The frontmatter field that ISN'T a canonical stamp still comes through.
+    assert meta["segment_label"] == "page:1"
+
+
+def test_sync_handles_frontmatter_that_is_none() -> None:
+    """NoteRow's own validator already coerces a null frontmatter column to {} --
+    but sync_corpus must not assume every caller goes through that validator."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    note = NoteRow.model_construct(
+        vault_path="clients/acme/a", title="A", frontmatter=None, body_markdown="body a\n"
+    )
+    backend = _RecordingBackend()
+    count = sync_corpus([note], SegmentAwareChunker(), _StubEmbedder(), backend, model_id="m")
+
+    assert count == 1
+    assert backend.added[0].metadata["vault_path"] == "clients/acme/a"
+
+
+def test_sync_handles_frontmatter_that_is_not_a_dict() -> None:
+    """Defensive: a non-dict frontmatter (e.g. a malformed jsonb column) must not
+    raise -- it is treated the same as no frontmatter at all."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    note = NoteRow.model_construct(
+        vault_path="clients/acme/a",
+        title="A",
+        frontmatter=["not", "a", "dict"],
+        body_markdown="body a\n",
+    )
+    backend = _RecordingBackend()
+    count = sync_corpus([note], SegmentAwareChunker(), _StubEmbedder(), backend, model_id="m")
+
+    assert count == 1
+    assert backend.added[0].metadata["vault_path"] == "clients/acme/a"
+
+
+def test_per_chunk_segment_label_wins_over_note_level_frontmatter_label() -> None:
+    """A note whose body genuinely has headings (e.g. the digithings repo docs)
+    still produces heading segments -- SegmentAwareChunker's own, more specific
+    per-chunk segment_label must win over the note-level frontmatter value, not
+    be clobbered by it."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    note = _note(
+        "clients/digithings/docs/foo",
+        "# Real Heading\n\nSome content under a real heading.\n",
+        frontmatter={"segment_label": "page:1", "segment_index": 0},
+    )
+    backend = _RecordingBackend()
+    sync_corpus([note], SegmentAwareChunker(), _StubEmbedder(), backend, model_id="m")
+
+    assert backend.added[0].metadata["segment_label"] == "heading:Real Heading"
