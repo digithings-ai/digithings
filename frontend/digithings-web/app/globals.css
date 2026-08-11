@@ -134,8 +134,8 @@ html {
    label in the theme's own ink tone, not a `.btn-primary` pill — a filled
    button read as a bright, standoffish box sitting next to the quiet GitHub
    glyph and the plain inline links either side of it. */
-.dt-nav-chat-cta { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 8px; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
-.dt-nav-chat-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.dc-nav-cta { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 8px; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
+.dc-nav-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
 
 /* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
 .dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
