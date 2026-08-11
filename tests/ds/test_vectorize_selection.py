@@ -212,3 +212,23 @@ def test_vectorize_registered_before_chroma() -> None:
     names = [fn.__name__ for fn in _stub._backends]
     assert "_vectorize_backend" in names
     assert names.index("_vectorize_backend") < names.index("_chroma_backend")
+
+
+@pytest.mark.unit
+def test_query_response_documents_vectorize_backend() -> None:
+    from digisearch.server import QueryResponse
+
+    field = QueryResponse.model_fields["backend"]
+    assert "vectorize" in str(field.description)
+
+
+@pytest.mark.unit
+def test_real_backend_check_accepts_vectorize(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digisearch.server import _require_real_search_backend
+
+    monkeypatch.delenv("CHROMA_PATH", raising=False)
+    monkeypatch.delenv("CHROMA_HOST", raising=False)
+    monkeypatch.delenv("DIGISEARCH_ALLOW_STUB", raising=False)
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "tok")
+    _require_real_search_backend()

@@ -62,7 +62,7 @@ app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisea
 
 @app.on_event("startup")
 def _require_real_search_backend() -> None:
-    """Fail startup unless Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
+    """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
         "true",
@@ -70,6 +70,11 @@ def _require_real_search_backend() -> None:
     )
     if allow_stub:
         logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
+        return
+    if (
+        os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+        and os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    ):
         return
     from digisearch.indexes.backends import azure_search as _az
 
@@ -82,7 +87,8 @@ def _require_real_search_backend() -> None:
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
-            "digisearch requires a real backend: set AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
+            "digisearch requires a real backend: set VECTORIZE_ACCOUNT_ID+VECTORIZE_API_TOKEN, "
+            "AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 
@@ -224,7 +230,7 @@ class QueryResponse(BaseModel):
     )
     backend: str | None = Field(
         default=None,
-        description="Index backend that served the query: azure_ai_search | chroma | stub",
+        description="Index backend that served the query: vectorize | azure_ai_search | chroma | stub",
     )
 
 
