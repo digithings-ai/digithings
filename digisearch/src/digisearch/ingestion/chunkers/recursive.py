@@ -98,7 +98,22 @@ class RecursiveChunker(Chunker):
                     current = overlap + (sep if sep else "") + p
                 else:
                     if len(p) > self.chunk_size:
-                        sub = self._split(p, doc_id, idx)
+                        # Guard against non-progress: str.split on a non-empty
+                        # separator that is actually present always yields parts
+                        # strictly shorter than the input, so len(p) < len(text)
+                        # here for every normal delimited split. The only way p
+                        # comes back the same length as text is the separator
+                        # search exhausting every real separator and falling
+                        # through to sep="" (parts = [text] unchanged) — i.e. a
+                        # delimiter-free run. Checking length directly (instead
+                        # of trusting the separator list) means even a future
+                        # edit to `_separators` can't reopen the infinite
+                        # recursion from issue #2180: recursing on unreduced
+                        # input is structurally impossible, not just unlikely.
+                        if len(p) < len(text):
+                            sub = self._split(p, doc_id, idx)
+                        else:
+                            sub = self._hard_split(p, doc_id, idx)
                         chunks.extend(sub)
                         idx += len(sub)
                     else:
@@ -123,4 +138,34 @@ class RecursiveChunker(Chunker):
                     metadata={"chunk_index": idx},
                 )
             )
+        return chunks
+
+    def _hard_split(self, text: str, doc_id: str, chunk_index: int) -> list[Chunk]:
+        """Force-split a delimiter-free run into fixed-size pieces at character
+        boundaries. Reached only when `text` is longer than `chunk_size` and
+        contains none of `_separators` — e.g. base64-embedded assets, minified
+        JS/CSS, long unbroken table rows or hashes, or CJK text without spaces
+        or punctuation (issue #2180). Content-aware splitting is impossible
+        here, so this slices by character count instead, iteratively (never
+        recursing into `_split`), which makes the loop's termination
+        independent of chunk_size/chunk_overlap values."""
+        step = max(1, self.chunk_size - self.chunk_overlap)
+        chunks: list[Chunk] = []
+        idx = chunk_index
+        pos = 0
+        n = len(text)
+        while pos < n:
+            piece = text[pos : pos + self.chunk_size].strip()
+            if piece:
+                chunks.append(
+                    Chunk(
+                        id=f"{doc_id}_{idx}",
+                        content=piece,
+                        doc_id=doc_id,
+                        embedding=None,
+                        metadata={"chunk_index": idx},
+                    )
+                )
+                idx += 1
+            pos += step
         return chunks
