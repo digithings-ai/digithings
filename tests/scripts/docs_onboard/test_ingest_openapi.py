@@ -260,6 +260,135 @@ def test_fenced_code_is_not_escaped_inside_balanced_fence(tmp_path: Path) -> Non
     assert "\\# This is a comment at line start" not in md
 
 
+def test_summary_bare_fence_does_not_swallow_next_operations(tmp_path: Path) -> None:
+    """Root cause repro: a value whose OWN first line is a bare fence opener defeats
+    isolated fence-tracking, because the value is interpolated INLINE after a literal
+    prefix ('**') rather than emitted as its own standalone line — a closing fence
+    appended by a multi-line sanitizer inherits the template's trailing text (e.g.
+    ``` **```), which the real segmenter then reads as a fresh, unbalanced fence
+    opener and swallows every following operation."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"summary": "```json\nunterminated"}},
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
+def test_tags_bare_fence_does_not_swallow_next_operations(tmp_path: Path) -> None:
+    """Same root-cause repro via ``tags`` (inline after 'Tags: ')."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"tags": ["```json\nunterminated"]}},
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
+def test_operation_id_bare_fence_does_not_swallow_next_operations(tmp_path: Path) -> None:
+    """Same root-cause repro via ``operationId`` (inline after 'Operation ID: `')."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"operationId": "```json\nunterminated"}},
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
+def test_parameter_name_bare_fence_does_not_swallow_next_operations(tmp_path: Path) -> None:
+    """Same root-cause repro via parameter ``name`` (inline after '- `')."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"parameters": [{"name": "```json\nunterminated", "in": "query"}]}},
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
+def test_route_bare_fence_does_not_swallow_next_operations(tmp_path: Path) -> None:
+    """Same root-cause repro via the route/path key itself (inline after '## ' and
+    'Endpoint: '). Other routes use '~'-prefixed names so they sort after the
+    poisoned route (backtick > '/' but < '~' in ASCII), keeping them positioned to
+    be swallowed if the fix regresses."""
+    spec = {
+        "paths": {
+            "```json\nunterminated": {"get": {}},
+            "~b": {"post": {}},
+            "~c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any("unterminated" in label for label in labels)
+    assert any(label.endswith("POST ~b") for label in labels)
+    assert any(label.endswith("GET ~c") for label in labels)
+
+
+def test_info_title_bare_fence_does_not_swallow_next_operations(tmp_path: Path) -> None:
+    """Same root-cause repro via ``info.title`` (inline after '# ') — the earliest
+    possible poison point, capable of swallowing the ENTIRE rest of the document."""
+    spec = {
+        "info": {"title": "```json\nunterminated"},
+        "paths": {
+            "/a": {"get": {}},
+            "/b": {"post": {}},
+        },
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 3
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+
+
+def test_response_description_bare_fence_does_not_swallow_next_operations(
+    tmp_path: Path,
+) -> None:
+    """Same root-cause repro via response ``description`` (inline after '- `{code}`: ')."""
+    spec = {
+        "paths": {
+            "/a": {"get": {"responses": {"200": {"description": "```json\nunterminated"}}}},
+            "/b": {"post": {}},
+            "/c": {"get": {}},
+        }
+    }
+    md = openapi_to_markdown(_write(tmp_path, "spec.json", spec), note_type="api_reference")
+    labels = [s.label for s in heading_segments(md)]
+    assert len(labels) == 4
+    assert any(label.endswith("GET /a") for label in labels)
+    assert any(label.endswith("POST /b") for label in labels)
+    assert any(label.endswith("GET /c") for label in labels)
+
+
 def test_array_type_schema_renders_readably(tmp_path: Path) -> None:
     """Finding 4: OpenAPI 3.1 array-type schemas (e.g. ``["string", "null"]``) must
     not render as a Python list repr."""
