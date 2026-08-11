@@ -1007,6 +1007,8 @@ dependencies = [
 browser = [
     { name = "playwright" },
 ]
+
+[package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -1017,10 +1019,14 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.40" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
 ]
-provides-extras = ["browser", "dev"]
+provides-extras = ["browser"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digigraph"
