@@ -76,6 +76,10 @@ jobs:
           fi
 
           current_version=$(jq -r .version frontend/digichat/package.json)
+          if [ -z "$current_version" ] || [ "$current_version" = "null" ]; then
+            echo "frontend/digichat/package.json has no .version field -- refusing to guess." >&2
+            exit 1
+          fi
           if git cat-file -e "$BEFORE:frontend/digichat/package.json" 2>/dev/null; then
             prev_version=$(git show "$BEFORE:frontend/digichat/package.json" | jq -r .version)
           else

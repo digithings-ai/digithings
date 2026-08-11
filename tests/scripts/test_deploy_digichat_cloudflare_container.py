@@ -194,6 +194,39 @@ def test_gate_skips_when_neither_version_nor_wrapper_changed(scratch_repo: Path)
 
 
 @pytest.mark.unit
+def test_gate_refuses_to_guess_when_version_field_is_missing(scratch_repo: Path) -> None:
+    """`jq -r .version` on a package.json missing the field yields the literal
+    string "null", which would silently read as "changed" against any real
+    prior version -- the gate must fail loudly instead of guessing."""
+    _write_version(scratch_repo, "1.0.0")
+    before = _commit(scratch_repo, "initial")
+    (scratch_repo / "frontend" / "digichat" / "package.json").write_text('{"name": "digichat"}\n')
+    _commit(scratch_repo, "oops: dropped the version field")
+
+    script = _gating_step()["run"]
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as output_file:
+        output_path = output_file.name
+    try:
+        result = subprocess.run(
+            ["bash", "-c", script],
+            cwd=scratch_repo,
+            env={
+                **os.environ,
+                "BEFORE": before,
+                "GITHUB_SHA": "HEAD",
+                "GITHUB_OUTPUT": output_path,
+            },
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert result.returncode != 0
+        assert "no .version field" in result.stderr
+    finally:
+        Path(output_path).unlink(missing_ok=True)
+
+
+@pytest.mark.unit
 def test_gate_deploys_when_the_digichat_version_bumps(scratch_repo: Path) -> None:
     _write_version(scratch_repo, "1.0.0")
     before = _commit(scratch_repo, "initial")
