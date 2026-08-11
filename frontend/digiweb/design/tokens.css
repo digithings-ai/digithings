@@ -124,7 +124,9 @@
 
   --ink:       #ECEEF0;
   --ink-soft:  #9AA0A6;
-  --ink-mute:  #6B7177;
+  --ink-mute:  #7C8288; /* WCAG AA fix 2026-08-11 (was #6B7177, 3.74:1 on --surface —
+                            failed): raised luminance to clear 4.5:1 on both --surface
+                            and --bg while staying darker/more muted than --ink-soft. */
 
   --accent:      #3DD6C4;
   --accent-weak: rgba(61, 214, 196, 0.14);
@@ -157,7 +159,10 @@
 
   --ink:       #14181B;
   --ink-soft:  #5C636A;
-  --ink-mute:  #8A9097;
+  --ink-mute:  #666C73; /* WCAG AA fix 2026-08-11 (was #8A9097, 3.22:1 on --surface —
+                            failed): darkened (lower luminance) to clear 4.5:1 on both
+                            --surface and --bg while staying lighter/more muted than
+                            --ink-soft. */
 
   --accent:      #0E8C7F;
   --accent-weak: rgba(14, 140, 127, 0.12);

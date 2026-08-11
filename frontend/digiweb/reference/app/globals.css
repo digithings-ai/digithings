@@ -244,8 +244,14 @@ html {
   transition: color 0.2s var(--ease);
 }
 
-.site-nav-theme:hover {
+.site-nav-theme:hover,
+.site-nav-theme:focus-visible {
   color: var(--ink);
+}
+
+.site-nav-theme:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .site-nav-burger {
@@ -264,8 +270,14 @@ html {
   transition: color 0.2s var(--ease);
 }
 
-.site-nav-burger:hover {
+.site-nav-burger:hover,
+.site-nav-burger:focus-visible {
   color: var(--ink);
+}
+
+.site-nav-burger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .site-nav-burger span {

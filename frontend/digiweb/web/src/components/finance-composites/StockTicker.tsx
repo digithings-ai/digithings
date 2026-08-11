@@ -2,11 +2,14 @@
  * StockTicker — the scrolling market strip promoted from the design reference
  * (finance/ticker-tape): one mono row of symbol · last · change looping
  * seamlessly (content duplicated once, track translated exactly -50%) behind
- * edge-fade masks, pause-on-hover. This is the one marquee that legitimately
- * wears the money colors — a price change IS the up/down semantic — while the
- * module accent stays out of it entirely. Pure CSS animation
- * (styles/finance-composites.css), so a plain server component; the tape is
- * fully readable with no JS and prefers-reduced-motion holds it still.
+ * edge-fade masks, pause-on-hover/focus-within/tap (the container is
+ * tabbable so touch users can tap-to-focus and keyboard users can tab to it —
+ * :focus-within mirrors the :hover rule, no JS state needed). This is the one
+ * marquee that legitimately wears the money colors — a price change IS the
+ * up/down semantic — while the module accent stays out of it entirely. Pure
+ * CSS animation (styles/finance-composites.css), so a plain server component;
+ * the tape is fully readable with no JS and prefers-reduced-motion holds it
+ * still.
  *
  * Wiring (in the consuming app):
  *   globals.css   @import "@digithings/web/styles/finance-composites.css";
@@ -32,7 +35,11 @@ export type StockTickerProps = {
 
 export function StockTicker({ items, className }: StockTickerProps) {
   return (
-    <div className={`tk${className ? ` ${className}` : ""}`}>
+    <div
+      className={`tk${className ? ` ${className}` : ""}`}
+      tabIndex={0}
+      aria-label="Price ticker, tab or tap to pause"
+    >
       <div className="tk-track">
         {[...items, ...items].map((t, i) => (
           <span
