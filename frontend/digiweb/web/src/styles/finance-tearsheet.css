@@ -617,7 +617,7 @@
     --hair-2: #cccccc;                      /* --hair-2 light = rgba(10,15,20,.18), opaque for print */
     --ink: #14181b;                         /* --ink light */
     --ink-soft: #5c636a;                    /* --ink-soft light */
-    --ink-mute: #8a9097;                    /* --ink-mute light */
+    --ink-mute: #666c73;                    /* --ink-mute light (WCAG AA fix 2026-08-11) */
     --accent: #0e8c7f;                      /* --accent light */
     --accent-weak: rgba(14, 140, 127, 0.1); /* --accent-weak light (.12 → .1 on paper) */
     --on-accent: #ffffff;                   /* --on-accent light */

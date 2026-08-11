@@ -32,7 +32,7 @@ export function PortfolioWorkspaceReference() {
           <dl className="pw-command__metrics">
             <div>
               <dt>positions</dt>
-              <dd>11</dd>
+              <dd>{POSITIONS.length}</dd>
             </div>
           </dl>
           <div className="pw-command__stamp">
@@ -54,11 +54,11 @@ export function PortfolioWorkspaceReference() {
             <table className="pw-table">
               <thead>
                 <tr>
-                  <th>ticker</th>
-                  <th>category</th>
-                  <th>current / target</th>
-                  <th>stop / target</th>
-                  <th>follow</th>
+                  <th scope="col">ticker</th>
+                  <th scope="col">category</th>
+                  <th scope="col">current / target</th>
+                  <th scope="col">stop / target</th>
+                  <th scope="col">follow</th>
                 </tr>
               </thead>
               <tbody>
