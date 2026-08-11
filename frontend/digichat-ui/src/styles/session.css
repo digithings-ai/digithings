@@ -16,6 +16,14 @@
   background: transparent;
 }
 
+/* Opt-in from a full-page embedder (?wide=1 — digithings.ai /chat, /chat/occ):
+   drop the 1080px reading-column cap so the session fills its iframe/page. Kept
+   separate from .dc-session-embed (a widget-layout concern) — this is purely a
+   width override on the same page layout. */
+.dc-session--wide {
+  max-width: none;
+}
+
 .dc-session-embed {
   flex: 1;
   min-height: 0;

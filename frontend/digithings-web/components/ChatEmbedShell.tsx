@@ -71,6 +71,9 @@ function embedSrc(origin: string, embedHost: string, theme: EmbedShellTheme): st
   url.searchParams.set("host", embedHost);
   url.searchParams.set("layout", "page");
   url.searchParams.set("theme", theme);
+  // Full-page host, not a narrow widget — drop digichat-ui's 1080px reading
+  // column so the session fills the shell (see .dc-session--wide).
+  url.searchParams.set("wide", "1");
   return url.toString();
 }
 
@@ -213,7 +216,12 @@ export function ChatEmbedShell({
 
   return (
     <div
-      className="dc-page"
+      // Not className="dc-page": that class (session.css) is digichat-ui's own
+      // standalone-page padding/min-height rule, meant for a page with no other
+      // chrome around it. The parent <main> here (chat/page.tsx, chat/occ/page.tsx)
+      // already pads for the fixed nav, so stacking .dc-page's own nav-clearing
+      // padding on top doubled it. Nothing else in the codebase reads .dc-page —
+      // it was never actually shared, just misapplied here.
       data-theme={shellTheme}
       style={{
         display: "flex",
@@ -222,9 +230,11 @@ export function ChatEmbedShell({
         height: "100%",
         minHeight: 0,
         position: "relative",
-        // Match digithings theme so the slot never flashes browser-default white
-        // while the iframe boots (or while ContainerBootLoader is up).
-        background: "var(--bg)",
+        // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
+        // z-index 0) sit behind this shell, and an opaque fill here paints a visible
+        // rectangle over them. The boot overlay below still fills solid while it's up
+        // (own z-index 1), so no browser-default white ever shows through pre-ready.
+        background: "transparent",
         colorScheme: shellTheme,
       }}
     >

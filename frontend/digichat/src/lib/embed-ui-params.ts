@@ -10,6 +10,10 @@ export type EmbedUiParams = {
    * to its own brand, same override channel as welcome/placeholder. */
   accent?: string;
   accentForeground?: string;
+  /** `?wide=1` — drop the `.dc-session` 1080px cap. Opt-in per embedder (full-page
+   * hosts like digithings.ai /chat and /chat/occ), not a tenant-config default,
+   * so narrow widget embeds elsewhere keep the readable-column width. */
+  wide?: boolean;
 };
 
 function readHexParam(sp: URLSearchParams, key: string): string | undefined {
@@ -38,5 +42,6 @@ export function readEmbedUiParams(search: string): EmbedUiParams {
         .filter(Boolean);
     }
   }
-  return { welcome, placeholder, suggestions, accent, accentForeground };
+  const wide = sp.get("wide") === "1";
+  return { welcome, placeholder, suggestions, accent, accentForeground, wide };
 }
