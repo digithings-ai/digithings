@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any  # score:allow untyped any — OpenAPI JSON nodes are open dicts
 
@@ -19,6 +20,63 @@ from scripts.docs_onboard.workspace import Workspace
 
 _HTTP_METHODS = frozenset({"get", "put", "post", "delete", "options", "head", "patch", "trace"})
 
+# An ATX heading at true line start ("#" through "######" followed by whitespace).
+# Mirrors digisearch's heading.py _HEADING split-point rule, so anything that would
+# act as a split point there is exactly what needs escaping here.
+_ATX_HEADING_START = re.compile(r"^(#{1,6})([ \t])", re.MULTILINE)
+
+# A fence opener/closer candidate: ``` or ~~~, three or more of the same character.
+# Mirrors heading.py's _FENCE rule (same-char, len >= open, to close).
+_FENCE_LINE = re.compile(r"^(`{3,}|~{3,})")
+
+
+def _sanitize_free_text(text: str) -> str:
+    """Escape markdown structure hazards in spec-author-supplied free text.
+
+    ``openapi_to_markdown`` embeds spec-author text (summary, description) verbatim
+    into a markdown document that ``heading_segments`` then parses for its own
+    section boundaries. Left unescaped, that text can hijack the document's
+    structure two ways:
+
+    - An ATX heading line (``# ...`` .. ``###### ...``) becomes a spurious split
+      point, stealing the rest of the enclosing operation's body into its own
+      segment and corrupting breadcrumbs for everything after it.
+    - An unbalanced fenced code block (``` or ~~~, any length >= 3) leaves the
+      whole document "inside a fence" from the parser's point of view, silently
+      swallowing every subsequent ``## METHOD /path`` heading.
+
+    This function neutralizes both without dropping any words: heading markers are
+    escaped in place (the line no longer starts with ``#``, but its text survives),
+    and any fence left open by the end of the text is closed.
+    """
+    if not text:
+        return text
+    escaped = _ATX_HEADING_START.sub(lambda m: "\\" + m.group(1) + m.group(2), text)
+    fence_char = ""
+    fence_len = 0
+    in_fence = False
+    for line in escaped.split("\n"):
+        stripped = line.lstrip()
+        if in_fence:
+            candidate = _FENCE_LINE.match(stripped)
+            if (
+                candidate is not None
+                and candidate.group(1)[0] == fence_char
+                and len(candidate.group(1)) >= fence_len
+            ):
+                in_fence = False
+                fence_char = ""
+                fence_len = 0
+            continue
+        opener = _FENCE_LINE.match(stripped)
+        if opener:
+            in_fence = True
+            fence_char = opener.group(1)[0]
+            fence_len = len(opener.group(1))
+    if in_fence:
+        escaped = f"{escaped}\n{fence_char * fence_len}"
+    return escaped
+
 
 def _schema_name(schema: dict[str, Any]) -> str:
     """Readable name for a schema node: the $ref tail, or its declared type."""
@@ -26,16 +84,21 @@ def _schema_name(schema: dict[str, Any]) -> str:
     if isinstance(ref, str):
         return ref.rsplit("/", 1)[-1]
     declared = schema.get("type")
+    if isinstance(declared, list):
+        return " | ".join(str(t) for t in declared) if declared else "object"
     return str(declared) if declared else "object"
 
 
 def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list[str]:
     """Markdown for one operation as its own ``##`` section."""
-    lines = [f"## {method.upper()} {route}", ""]
-    summary = str(operation.get("summary") or "").strip()
+    # The "Endpoint:" line is unconditional: it guarantees every operation section
+    # has body content beyond its heading line, so heading_segments never treats it
+    # as a contentless stub and merges it into a neighbouring operation (finding 3).
+    lines = [f"## {method.upper()} {route}", "", f"Endpoint: {method.upper()} {route}", ""]
+    summary = _sanitize_free_text(str(operation.get("summary") or "").strip())
     if summary:
         lines.extend([f"**{summary}**", ""])
-    detail = str(operation.get("description") or "").strip()
+    detail = _sanitize_free_text(str(operation.get("description") or "").strip())
     if detail:
         lines.extend([detail, ""])
     tags = operation.get("tags")
@@ -73,6 +136,7 @@ def _operation_lines(route: str, method: str, operation: dict[str, Any]) -> list
         lines.append("Responses:")
         for code, response in sorted(responses.items()):
             text = str(response.get("description") or "") if isinstance(response, dict) else ""
+            text = _sanitize_free_text(text)
             schema_note = ""
             content = response.get("content") if isinstance(response, dict) else None
             if isinstance(content, dict):
@@ -110,7 +174,7 @@ def openapi_to_markdown(path: Path, *, note_type: str) -> str:
         "",
     ]
     if description:
-        lines.extend([description.strip(), ""])
+        lines.extend([_sanitize_free_text(description.strip()), ""])
     lines.append(f"Source file: `{path.as_posix()}`")
     lines.append("Content-Type: application/openapi+json")
     lines.append("")
