@@ -68,6 +68,39 @@ def _default_http_post(
     return response.status_code, response.text
 
 
+def _parse_response_body(text: str) -> dict[str, Any]:
+    """Best-effort JSON parse of a Vectorize response body; ``{}`` on anything else.
+
+    A non-JSON body (e.g. an HTML error page on a transport-level failure) must
+    not raise out of the parser itself — the caller still needs to fall through
+    to its own status-code-based error message.
+    """
+    if not text:
+        return {}
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _raise_if_vectorize_failed(operation: str, status: int, text: str) -> dict[str, Any]:
+    """Raise ``RuntimeError`` if a Vectorize response failed; else return its body.
+
+    Checks both the HTTP status *and* the body-level ``success``/``result``
+    fields: Vectorize can answer HTTP 200 with an application-level failure
+    (``success: false``, ``result: null``), which a status-only check misses.
+    Never includes the API token — callers only pass ``status``/``text``, and
+    the token is never echoed back in a Vectorize response body.
+    """
+    body = _parse_response_body(text)
+    if status < 300 and body.get("success") is not False and body.get("result") is not None:
+        return body
+    errors = body.get("errors") or []
+    detail = json.dumps(errors)[:500] if errors else text[:500]
+    raise RuntimeError(f"vectorize {operation} failed ({status}): {detail}")
+
+
 def _multipart_ndjson(ndjson: str) -> tuple[bytes, str]:
     """Wrap NDJSON as multipart/form-data under the field name Vectorize expects."""
     boundary = f"----digisearch{uuid.uuid4().hex}"
@@ -141,7 +174,9 @@ class VectorizeBackend(DigiIndex):
             )
             body, content_type = _multipart_ndjson(ndjson)
             status, text = self._post(self._url("upsert"), self._headers(), body, content_type)
-            if status >= 300:
+            try:
+                _raise_if_vectorize_failed("upsert", status, text)
+            except RuntimeError:
                 logger.error(
                     "vectorize upsert failed",
                     extra={
@@ -153,7 +188,7 @@ class VectorizeBackend(DigiIndex):
                         "status_code": status,
                     },
                 )
-                raise RuntimeError(f"vectorize upsert failed ({status}): {text[:500]}")
+                raise
         logger.info(
             "vectorize upsert done",
             extra={
@@ -171,12 +206,26 @@ class VectorizeBackend(DigiIndex):
     def delete(self, ids: list[str]) -> None:
         if not ids:
             return
+        start = time.perf_counter()
         body = json.dumps({"ids": list(ids)}).encode()
         status, text = self._post(
             self._url("delete_by_ids"), self._headers(), body, "application/json"
         )
-        if status >= 300:
-            raise RuntimeError(f"vectorize delete failed ({status}): {text[:500]}")
+        try:
+            _raise_if_vectorize_failed("delete", status, text)
+        except RuntimeError:
+            logger.error(
+                "vectorize delete failed",
+                extra={
+                    "operation": "vectorize_delete",
+                    "duration_ms": int((time.perf_counter() - start) * 1000),
+                    "outcome": "error",
+                    "collection": self.name,
+                    "id_count": len(ids),
+                    "status_code": status,
+                },
+            )
+            raise
 
     def list_collections(self) -> list[str]:
         return [self.name]
@@ -205,7 +254,28 @@ class VectorizeBackend(DigiIndex):
             # backend does it here rather than requiring every caller to remember.
             provider = self.embedding_provider or self._default_embedder()
             vector = provider.embed([query.text])[0]  # type: ignore[attr-defined]
-        top_k = min(max(int(query.top_k), 1), MAX_TOP_K)
+        requested_top_k = max(int(query.top_k), 1)
+        top_k = min(requested_top_k, MAX_TOP_K)
+        if requested_top_k > MAX_TOP_K:
+            # I4: silent truncation here is exactly what lets a caller like
+            # `digisearch_fetch_all` believe a 50-result page is a complete result
+            # set. This does not by itself fix pagination against Vectorize (that
+            # needs the caller to know too — see `_stub.py` / `server.py`), but it
+            # makes the clamp visible in logs rather than swallowed entirely.
+            logger.warning(
+                "vectorize query top_k clamped from %d to %d (Vectorize returns at most "
+                "%d matches with metadata per query)",
+                requested_top_k,
+                top_k,
+                MAX_TOP_K,
+                extra={
+                    "operation": "vectorize_query",
+                    "outcome": "clamped",
+                    "collection": self.name,
+                    "requested_top_k": requested_top_k,
+                    "top_k": top_k,
+                },
+            )
         payload: dict[str, Any] = {
             "vector": vector,
             "topK": top_k,
@@ -215,7 +285,9 @@ class VectorizeBackend(DigiIndex):
         status, text = self._post(
             self._url("query"), self._headers(), json.dumps(payload).encode(), "application/json"
         )
-        if status >= 300:
+        try:
+            body = _raise_if_vectorize_failed("query", status, text)
+        except RuntimeError:
             logger.error(
                 "vectorize query failed",
                 extra={
@@ -227,29 +299,10 @@ class VectorizeBackend(DigiIndex):
                     "status_code": status,
                 },
             )
-            raise RuntimeError(f"vectorize query failed ({status}): {text[:500]}")
-
-        body = json.loads(text) if text else {}
-        result = body.get("result")
-        # Vectorize can answer HTTP 200 with an application-level failure body
-        # (`success: false`, `result: null`) — the HTTP-status check above does
-        # not see this. This is the one failure mode this backend exists to
-        # surface rather than swallow, so a missing/failed result raises here too.
-        if body.get("success") is False or result is None:
-            errors = body.get("errors") or []
-            logger.error(
-                "vectorize query failed",
-                extra={
-                    "operation": "vectorize_query",
-                    "duration_ms": int((time.perf_counter() - perf_start) * 1000),
-                    "outcome": "error",
-                    "collection": self.name,
-                    "top_k": top_k,
-                    "status_code": status,
-                },
-            )
-            raise RuntimeError(f"vectorize query failed ({status}): {json.dumps(errors)[:500]}")
-        matches = (result or {}).get("matches") or []
+            raise
+        # `_raise_if_vectorize_failed` already treats a missing `result` as a
+        # failure, so `result` here is always a dict.
+        matches = (body.get("result") or {}).get("matches") or []
         out: list[Result] = []
         for rank, match in enumerate(matches):
             raw_metadata = match.get("metadata")

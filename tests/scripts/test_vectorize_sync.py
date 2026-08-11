@@ -75,6 +75,60 @@ def test_sync_skips_notes_with_empty_bodies() -> None:
     assert backend.added == []
 
 
+def test_sync_batches_across_notes_into_one_upsert_call() -> None:
+    """C2 repro: N notes whose total chunk count is below batch_size must produce
+    exactly ONE sink.add() call, not one per note (the bug that turned a sync of
+    ~1,279 notes into ~1,279 HTTP POSTs and hit Cloudflare's rate limit)."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    class _CallCountingBackend(_RecordingBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.call_count = 0
+
+        def add(self, chunks: list[Any]) -> None:
+            self.call_count += 1
+            super().add(chunks)
+
+    notes = [_note(f"clients/acme/{i}", f"# Note {i}\n\nbody {i}\n") for i in range(5)]
+    backend = _CallCountingBackend()
+    total = sync_corpus(
+        notes, SegmentAwareChunker(), _StubEmbedder(), backend, model_id="minilm-384"
+    )
+    assert backend.call_count == 1
+    assert total == len(backend.added)
+    assert total > 0
+
+
+def test_sync_flushes_at_batch_boundary_and_for_the_remainder() -> None:
+    """A total chunk count that crosses the batch boundary must flush in full
+    batches plus one final partial flush -- not one call per note either."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    class _CallCountingBackend(_RecordingBackend):
+        def __init__(self) -> None:
+            super().__init__()
+            self.call_sizes: list[int] = []
+
+        def add(self, chunks: list[Any]) -> None:
+            self.call_sizes.append(len(chunks))
+            super().add(chunks)
+
+    # Each note yields exactly 1 chunk (short body, no headings to split on).
+    notes = [_note(f"clients/acme/{i}", f"body {i}\n") for i in range(7)]
+    backend = _CallCountingBackend()
+    total = sync_corpus(
+        notes,
+        SegmentAwareChunker(),
+        _StubEmbedder(),
+        backend,
+        model_id="minilm-384",
+        batch_size=3,
+    )
+    assert total == 7
+    assert backend.call_sizes == [3, 3, 1]
+
+
 def test_sync_ids_are_deterministic() -> None:
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
 
@@ -110,6 +164,54 @@ def test_sync_allows_matching_or_empty_index() -> None:
             return []
 
     assert_index_model(_EmptyBackend(), model_id="m", dimensions=384)
+
+
+def test_assert_index_model_probes_with_a_non_zero_unit_vector() -> None:
+    """I1 repro: probing with an all-zero vector is undefined for a cosine index
+    and may be rejected outright, which would make the guard never fire."""
+    from digisearch.core.models import Query as DsQuery
+
+    from scripts.vectorize_sync import assert_index_model
+
+    seen: dict[str, Any] = {}
+
+    class _RecordingProbeBackend:
+        def query(self, q: DsQuery) -> list[Any]:
+            seen["embedding"] = list(q.embedding or [])
+            return []
+
+    assert_index_model(_RecordingProbeBackend(), model_id="m", dimensions=8)
+    assert seen["embedding"] != [0.0] * 8
+    assert any(v != 0.0 for v in seen["embedding"])
+
+
+def test_assert_index_model_does_not_block_on_index_not_found() -> None:
+    """I1 repro: a brand-new index (first sync) has nothing to probe and must not
+    block the sync -- a 404 from the probe is expected, not a real problem."""
+    from scripts.vectorize_sync import assert_index_model
+
+    class _NotFoundBackend:
+        def query(self, _q: Any) -> list[Any]:
+            raise RuntimeError('vectorize query failed (404): [{"message": "index not found"}]')
+
+    assert_index_model(_NotFoundBackend(), model_id="m", dimensions=384)  # must not raise
+
+
+def test_assert_index_model_warns_but_does_not_block_on_other_probe_errors(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """I1 repro: the old bare `except Exception: return` silently swallowed every
+    probe failure, including real ones (auth, transport) -- the guard must
+    surface those as a warning instead of proceeding as if nothing happened."""
+    from scripts.vectorize_sync import assert_index_model
+
+    class _BrokenBackend:
+        def query(self, _q: Any) -> list[Any]:
+            raise RuntimeError("vectorize query failed (500): boom")
+
+    with caplog.at_level("WARNING"):
+        assert_index_model(_BrokenBackend(), model_id="m", dimensions=384)  # must not raise
+    assert any("proceeding without the guard" in record.getMessage() for record in caplog.records)
 
 
 def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.MonkeyPatch) -> None:

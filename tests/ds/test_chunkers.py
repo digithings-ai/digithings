@@ -12,7 +12,8 @@ from digisearch.ingestion.chunkers.recursive import RecursiveChunker
 
 # Multi-paragraph, multi-section document used to characterize existing chunk
 # boundaries/counts on normally-delimited text (issue #2180 regression net).
-_CHARACTERIZATION_DOC = """# Title
+_CHARACTERIZATION_DOC = (
+    """# Title
 
 Paragraph one has a few sentences. It talks about nothing in particular. This is
 just filler content meant to exercise the recursive chunker's delimiter search
@@ -36,7 +37,9 @@ one more sentence for good measure, so the paragraph is not too short.
 Paragraph five is the final paragraph in this characterization fixture. It is
 here to ensure the chunker exercises its merge-and-overlap logic across more
 than a handful of paragraphs before the document ends.
-""" * 20
+"""
+    * 20
+)
 
 
 @pytest.mark.unit
@@ -50,7 +53,9 @@ def test_fixed_chunker() -> None:
 
 @pytest.mark.unit
 def test_recursive_chunker() -> None:
-    doc = Document(id="d1", content="Para one.\n\nPara two.\n\nPara three.", source="x", doc_type="txt")
+    doc = Document(
+        id="d1", content="Para one.\n\nPara two.\n\nPara three.", source="x", doc_type="txt"
+    )
     ch = RecursiveChunker(chunk_size=512, chunk_overlap=64)
     chunks = ch.chunk(doc)
     assert len(chunks) >= 1
@@ -164,7 +169,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     sections sub-split into within-budget pieces) — and the size assertion
     pins that fixed invariant going forward. Count and hashes were
     re-recorded at 42 for #2201 (Vectorize backend docs added to
-    ARCHITECTURE.md): the chunker did not change, only the fixture content
+    ARCHITECTURE.md), then again at 43 for the #2201 final-review fixes (the
+    index-naming-coupling and fetch-all-clamp paragraphs added to the
+    Vectorize section): the chunker did not change, only the fixture content
     grew, so this fingerprint is expected to be regenerated whenever
     ARCHITECTURE.md's prose changes materially — it is not itself a
     chunker-behavior assertion beyond the ``<= 2000`` size invariant.
@@ -174,7 +181,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 42
+    assert len(chunks) == 43
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -198,10 +205,11 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "09b95dddeb54c404",
         "99ce6e6e0f28628b",
         "63a471e295e59f9a",
-        "08ca446429122866",
-        "d75709146f336e6a",
-        "b66b4d5ef3245048",
-        "e15576236dd1ba07",
+        "5828a18e573ce194",
+        "816132ebea937a9a",
+        "5b438889eafdfbb9",
+        "2181660c1f2b61f1",
+        "b36181233771c6b2",
         "f2687d4521d1e069",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",

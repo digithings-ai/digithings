@@ -591,6 +591,40 @@ Chunk text rides in vector metadata (`content`), because Vectorize returns
 only ids, scores and metadata on query — there is no document store behind
 this backend to reconstruct it from.
 
+Third, the index name is not a free choice. `_stub.py`'s `_vectorize_backend`
+passes digisearch's `index_name` straight into the Vectorize URL with no
+translation, so the Vectorize index **must be named exactly** what the
+digisearch server for that tenant is configured with — `DIGISEARCH_INDEX` /
+the `DIGI_TENANT_CORPUS_MAP` entry, both set in
+`frontend/digithings-stack-cloudflare/wrangler.toml`. Today that value is
+underscore-form (`digithings_docs`, `occ_help`) to match the hardcoded Chroma
+collection names in `container/seed_chroma.sh` — renaming either side without
+renaming the other breaks that pairing outright.
+
+**Unresolved caveat:** Cloudflare's own Vectorize documentation describes
+index names as kebab-case (lowercase ASCII letters/digits/hyphens, starting
+with a letter) and does not list `_` as a valid character
+([best-practices/create-indexes](https://developers.cloudflare.com/vectorize/best-practices/create-indexes/),
+[get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/)).
+Whether the Vectorize API actually *rejects* an underscore index name, or
+Cloudflare's docs/tooling merely recommend against it, was not verified
+against a live `wrangler vectorize create` call from this repo. If underscores
+are rejected, `digithings_docs` / `occ_help` cannot be created as Vectorize
+index names as-is, and this pairing needs a design decision (e.g. an explicit
+mapping between the corpus-map key and the actual Vectorize index name) before
+a production cutover — not a unilateral rename of either side.
+
+Fourth, `VectorizeBackend.query()` clamps `top_k` to `MAX_TOP_K` (50) and logs
+a warning when it does, but a caller paging through results with `page_size >
+50` (e.g. `digisearch_fetch_all`, see §Orchestrator dispatch pattern below)
+sees a short page and — for every other backend — correctly reads that as "no
+more results." Against Vectorize it is ambiguous: the page really might be the
+last one, or it might just be capped at 50. `api_orchestrator_invoke` sets
+`OrchestratorFetchAllData.possibly_truncated=True` when it detects this
+pattern so the caller can tell the two apart; it does not implement real
+pagination against Vectorize (that needs `Query.skip` support the backend
+does not have — a design decision, not fixed here).
+
 ### Embedding cache layer
 
 `EmbeddingCache` wraps any `EmbeddingProvider`. On each `embed()` call:

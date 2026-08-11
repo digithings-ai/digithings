@@ -244,5 +244,6 @@ npm test
 
 - digichat Container: [`frontend/digichat-cloudflare/README.md`](../digichat-cloudflare/README.md)
 - Operator runbook: [`infra/digichat-digithings/README.md`](../../infra/digichat-digithings/README.md)
+- Vectorize cutover runbook (create indexes, sync, verify before flipping traffic): [`docs/ops/vectorize-cutover.md`](../../docs/ops/vectorize-cutover.md)
 - ADR-0018: [`docs/adr/0018-digichat-path-routing.md`](../../docs/adr/0018-digichat-path-routing.md)
 - OCC: [`docs/projects/online-compliance-center/README.md`](../../docs/projects/online-compliance-center/README.md)
