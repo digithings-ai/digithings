@@ -22,7 +22,7 @@ from typing import (  # score:allow untyped any — Supabase client/response sha
 from pydantic import BaseModel, Field
 
 from digivault import frontmatter as _fm
-from digivault.models import VaultConfig
+from digivault.models import NoteRow, VaultConfig
 from digivault.vault import Vault
 
 DEFAULT_TABLE = "architecture_notes"
@@ -129,7 +129,7 @@ class SupabaseStore:
         *,
         path_prefix: str | None = None,
         page_size: int = 500,
-    ) -> list[dict[str, Any]]:
+    ) -> list[NoteRow]:
         """Every note under ``path_prefix``, paginated.
 
         ``sources()`` cannot be used for this: it selects the whole table with no
@@ -140,7 +140,7 @@ class SupabaseStore:
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
         prefix = (path_prefix or "").strip().strip("/")
-        out: list[dict[str, Any]] = []
+        out: list[NoteRow] = []
         start = 0
         while True:
             query = self._client.table(self._table).select(_SELECT)
@@ -149,12 +149,13 @@ class SupabaseStore:
             page = query.order("vault_path").range(start, start + page_size - 1).execute()
             rows = list(getattr(page, "data", None) or [])
             for row in rows:
-                vault_path = str(row.get("vault_path") or "").strip()
+                note = NoteRow.model_validate(row)
+                vault_path = note.vault_path.strip()
                 if not vault_path:
                     continue
                 if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
                     continue
-                out.append(row)
+                out.append(note)
             if len(rows) < page_size:
                 return out
             start += page_size

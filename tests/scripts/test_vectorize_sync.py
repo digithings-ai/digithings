@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any  # score:allow untyped any — recording doubles hold open dicts
 
 import pytest
+from digivault.models import NoteRow
 
 from scripts.vectorize_sync import sync_corpus
 
@@ -28,8 +29,8 @@ class _RecordingBackend:
         self.added.extend(chunks)
 
 
-def _note(path: str, body: str) -> dict[str, Any]:
-    return {"vault_path": path, "title": path, "frontmatter": {}, "body_markdown": body}
+def _note(path: str, body: str) -> NoteRow:
+    return NoteRow(vault_path=path, title=path, frontmatter={}, body_markdown=body)
 
 
 def test_sync_embeds_and_upserts_every_chunk() -> None:
@@ -251,7 +252,7 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
         def from_env(cls) -> "_FakeSupabaseStore":
             return cls()
 
-        def list_notes(self, *, path_prefix: str) -> list[dict[str, Any]]:
+        def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
             return []
 
     class _FakeVectorizeBackend:
@@ -308,7 +309,7 @@ def test_dry_run_makes_zero_embed_calls(
         def from_env(cls) -> "_FakeSupabaseStore":
             return cls()
 
-        def list_notes(self, *, path_prefix: str) -> list[dict[str, Any]]:
+        def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
             return [_note("clients/acme/a", "# A\n\nSome real body text worth chunking.\n")]
 
     monkeypatch.setattr(minilm_module, "MiniLMEmbedder", _SpyEmbedder)

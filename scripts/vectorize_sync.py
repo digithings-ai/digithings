@@ -49,9 +49,10 @@ import hashlib
 import logging
 import re
 import sys
-from typing import Any, Protocol  # score:allow untyped any — Supabase rows are open dicts
+from typing import Any, Protocol  # score:allow untyped any — Vectorize backend duck-typed
 
 from digisearch.core.models import Chunk, Document, Segment
+from digivault.models import NoteRow
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,7 @@ def _segments_for(body: str) -> list[Segment]:
 
 
 def sync_corpus(
-    notes: list[dict[str, Any]],
+    notes: list[NoteRow],
     chunker: ChunkerProtocol,
     embedder: Embedder | None,
     sink: VectorSink,
@@ -120,8 +121,8 @@ def sync_corpus(
     total = 0
     buffer: list[Chunk] = []
     for note in notes:
-        vault_path = str(note.get("vault_path") or "").strip()
-        body = str(note.get("body_markdown") or "")
+        vault_path = note.vault_path.strip()
+        body = note.body_markdown
         if not vault_path or not body.strip():
             continue
         doc = Document(
@@ -150,7 +151,7 @@ def sync_corpus(
                     metadata={
                         **dict(chunk.metadata),
                         "vault_path": vault_path,
-                        "title": str(note.get("title") or ""),
+                        "title": note.title or "",
                         "embedding_model": model_id,
                     },
                 )

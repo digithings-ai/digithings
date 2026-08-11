@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any  # score:allow untyped any — fake client mirrors the dynamic supabase client
 
 import pytest
+from digivault.models import NoteRow
 from digivault.supabase_store import SupabaseStore, SupabaseStoreError
 from digivault.vault import VaultError
 
@@ -218,7 +219,8 @@ def test_list_notes_filters_by_prefix_and_paginates() -> None:
     store = SupabaseStore(client)
     out = store.list_notes(path_prefix="clients/digithings", page_size=3)
     assert len(out) == 7
-    assert all(r["vault_path"].startswith("clients/digithings/") for r in out)
+    assert all(isinstance(r, NoteRow) for r in out)
+    assert all(r.vault_path.startswith("clients/digithings/") for r in out)
     assert len(client.range_calls) >= 3
 
 
@@ -272,4 +274,48 @@ def test_list_notes_prefix_excludes_hyphen_suffix_collision() -> None:
     client = _FakeClient(rows)
     store = SupabaseStore(client)
     out = store.list_notes(path_prefix="clients/digithings")
-    assert [r["vault_path"] for r in out] == ["clients/digithings/note1"]
+    assert [r.vault_path for r in out] == ["clients/digithings/note1"]
+
+
+def test_list_notes_returns_note_row_models() -> None:
+    """`list_notes` must return validated `NoteRow` models, not raw dicts (CodeRabbit
+    finding: field names/types were checked nowhere and consumers used `.get(...)`)."""
+    rows = [{"vault_path": "a/b", "title": "t", "frontmatter": {"k": "v"}, "body_markdown": "x"}]
+    store = SupabaseStore(_FakeClient(rows))
+    out = store.list_notes()
+    assert len(out) == 1
+    assert isinstance(out[0], NoteRow)
+    assert out[0] == NoteRow(vault_path="a/b", title="t", frontmatter={"k": "v"}, body_markdown="x")
+
+
+def test_list_notes_tolerates_extra_columns_and_null_frontmatter() -> None:
+    """A realistic full table row carries far more columns than the four this model
+    needs (slug, note_type, status, tags, summary, wikilinks, sources, timestamps),
+    and `frontmatter` (jsonb) / `body_markdown` can legitimately be SQL NULL. Neither
+    should raise -- extras are ignored, nulls normalize to this model's defaults."""
+    rows = [
+        {
+            "vault_path": "clients/acme/note1",
+            "title": "Note One",
+            "frontmatter": None,
+            "body_markdown": None,
+            "slug": "note1",
+            "note_type": "note",
+            "status": "published",
+            "tags": ["a", "b"],
+            "summary": "a summary",
+            "wikilinks": [],
+            "sources": [],
+            "updated_at": "2026-08-01T00:00:00Z",
+            "created_at": "2026-08-01T00:00:00Z",
+        }
+    ]
+    store = SupabaseStore(_FakeClient(rows))
+    out = store.list_notes()
+    assert len(out) == 1
+    note = out[0]
+    assert isinstance(note, NoteRow)
+    assert note.vault_path == "clients/acme/note1"
+    assert note.title == "Note One"
+    assert note.frontmatter == {}
+    assert note.body_markdown == ""
