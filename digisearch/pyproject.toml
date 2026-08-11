@@ -53,13 +53,20 @@ edgar-corpus = ["datasets>=3.0"]
 # dev folds in [server] + [ingestion] so every CI/dev install (and pip-audit's
 # [dev] row) exercises and audits the full shipped surface, not just the light
 # base. Keep this in sync when adding runtime/parser deps.
-dev = ["digisearch[server]", "digisearch[ingestion]", "pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17", "langgraph>=0.2"]
+dev = ["digisearch[server]", "digisearch[ingestion]", "langgraph>=0.2"]
 otel = ["digibase[otel]"]
 all = ["digisearch[server]", "digisearch[chroma]", "digisearch[embedding]", "digisearch[azure]", "digisearch[ingestion]", "digisearch[agent]"]
 
 [project.scripts]
 digisearch = "digisearch.cli:main"
 digisearch-worker = "digisearch.ingest_worker:main"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digisearch's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -87,5 +94,19 @@ exclude = ["*.md"]
 select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.pytest.ini_options]
+# Monorepo tests live at repo root tests/ds/; from digisearch/: `pytest` picks these up; or `make test-unit` from repo root.
+#
+# pythonpath must list the repo root plus every workspace sibling that src/digisearch or
+# tests/ds imports directly (digibase, digikey) -- not just "src". Reason: when pytest is
+# invoked with no path args from *inside* digisearch/ (e.g. `cd digisearch && uv run
+# pytest -m unit`), its rootdir/config search starts at cwd and stops at the first
+# ancestor with a recognized config -- this file -- so it never walks up to the
+# repo-root pytest.ini, which carries the full list (". digibase/src digillm/src
+# digikey/src ..."). If that's the only thing putting a sibling's editable install (or
+# the repo root, needed for `from tests.digi_test_jwt import ...` / `from tests.conftest
+# import ...`) on sys.path, the omission silently resolves imports against whatever
+# global site-packages is on the fallback interpreter instead of the workspace's
+# editable copy -- see digigraph's fix for the full root-cause writeup. Listing them
+# here is both the fix and the safety net.
 testpaths = ["../tests/ds"]
-pythonpath = ["src"]
+pythonpath = ["..", "src", "../digibase/src", "../digikey/src"]

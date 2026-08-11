@@ -14,11 +14,15 @@ dependencies = [
     "digibase>=0.1.0",
 ]
 
-[project.optional-dependencies]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
-
 [project.scripts]
 digiclaw-heartbeat = "digiclaw.__main__:main"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digiclaw's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -38,5 +42,19 @@ exclude = ["*.md"]
 select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.pytest.ini_options]
+# Monorepo tests live at repo root tests/dc/; from digiclaw/: `pytest` picks these up; or `make test-unit` from repo root.
+#
+# pythonpath must list the repo root plus every workspace sibling that src/digiclaw or
+# tests/dc imports directly (digibase) -- not just "src". Reason: when pytest is invoked
+# with no path args from *inside* digiclaw/ (e.g. `cd digiclaw && uv run pytest -m unit`),
+# its rootdir/config search starts at cwd and stops at the first ancestor with a
+# recognized config -- this file -- so it never walks up to the repo-root pytest.ini,
+# which carries the full list (". digibase/src digillm/src digikey/src ..."). If that's
+# the only thing putting a sibling's editable install (or the repo root, needed for
+# `from tests.digi_test_jwt import ...`) on sys.path, the omission silently resolves
+# imports against whatever global site-packages that other interpreter has instead of
+# the workspace's editable copy -- see digigraph's fix for the digillm/CallPurpose
+# ImportError this exact gap caused there. Listing them here is both the fix and the
+# safety net.
 testpaths = ["../tests/dc"]
-pythonpath = ["src"]
+pythonpath = ["..", "src", "../digibase/src"]

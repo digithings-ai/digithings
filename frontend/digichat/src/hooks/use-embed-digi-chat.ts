@@ -8,6 +8,7 @@ import { formatEmbedChatError } from "@/lib/embed-chat-error";
 import { byokRequiresModel, type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
+import { resolveLanguageCode } from "@/lib/languages";
 import {
   ACTIVITY_PART_TYPE,
   sanitizeActivitySpan,
@@ -146,6 +147,18 @@ type UseEmbedDigiChatOptions = {
   byokModel?: string;
   trialUnlocked?: boolean;
   onGated?: () => void;
+  /**
+   * Read at send time inside prepareSendMessagesRequest — same freeze reason
+   * as isEmbedTrialUnlockedAtSend/chatAccessTokenAtSend (#1339): the transport
+   * is built once in useMemo and useChat never adopts a rebuilt one, so a
+   * `responseLanguage: string` prop closed over by value would stay frozen at
+   * whatever detectBrowserLanguageCode() returned at mount forever (#2103
+   * final review, Critical finding). Unlike those two precedents, the value
+   * here must NOT be storage-backed (sessionStorage/localStorage) — the
+   * language is session-only and must reset on reload — so the caller passes
+   * a stable accessor closing over a ref instead of a storage-read helper.
+   */
+  getResponseLanguage?: () => string;
 };
 
 export function useEmbedDigiChat({
@@ -158,6 +171,7 @@ export function useEmbedDigiChat({
   byokModel,
   trialUnlocked,
   onGated,
+  getResponseLanguage,
 }: UseEmbedDigiChatOptions): DigiChatController & {
   seed: (msgs: readonly DigiChatMessage[]) => void;
   /** Raw AI SDK error — for structured code detection (quota → BYOK). */
@@ -186,6 +200,19 @@ export function useEmbedDigiChat({
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }
+          // Send-time read — same freeze reason as isEmbedTrialUnlockedAtSend/
+          // chatAccessTokenAtSend below (#1339): a language value closed over
+          // by the transport at creation time would stay frozen at whatever
+          // detectBrowserLanguageCode() returned at mount, so picking a new
+          // language in the dropdown would never reach the header (#2103
+          // final review, Critical finding). Normalize against the curated
+          // list before forwarding — defense-in-depth for a hypothetical
+          // future caller of this exported hook that doesn't already pass a
+          // curated-safe value (see #2103 final review, Fix 6).
+          const normalizedLanguage = resolveLanguageCode(getResponseLanguage?.());
+          if (normalizedLanguage !== "en") {
+            headers["X-Digi-Language"] = normalizedLanguage;
+          }
           // Send-time unlock check — transport is frozen on first render (#1339),
           // so a closed-over trialUnlocked prop stays false after datatap:unlocked.
           if (isEmbedTrialUnlockedAtSend(resolvedHost, trialUnlocked)) {
@@ -212,9 +239,24 @@ export function useEmbedDigiChat({
           };
         },
       }),
-    // trialUnlocked stays in the deps for the rare case useChat starts honoring
-    // transport identity; the send-time read is what actually unlocks today.
-    [accent, token, host, embedHost, byokKey, byokProvider, byokModel, trialUnlocked],
+    // trialUnlocked and getResponseLanguage both stay in the deps for the rare
+    // case useChat starts honoring transport identity; the send-time read
+    // (see the doc comment on getResponseLanguage above) is what actually
+    // keeps the outgoing language current today. Keeping getResponseLanguage
+    // here costs nothing — the caller builds it with useCallback(() => ...,
+    // []), so its identity never changes and the transport is never rebuilt
+    // on a language change — while satisfying react-hooks/exhaustive-deps.
+    [
+      accent,
+      token,
+      host,
+      embedHost,
+      byokKey,
+      byokProvider,
+      byokModel,
+      trialUnlocked,
+      getResponseLanguage,
+    ],
   );
 
   const { messages, sendMessage, status, error, regenerate, setMessages, stop } = useChat<UIMessage>({

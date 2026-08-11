@@ -438,6 +438,41 @@ describe("createFoundryStreamResponse", () => {
     expect(createSpy.calls[0][0]).toMatchObject({ conversation: "conv_existing", input: "again" });
   });
 
+  it("prepends a language directive to input when responseLanguage is a non-English curated code", async () => {
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hallo")],
+        conversationId: "conv-1",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+        responseLanguage: "de",
+      })
+    );
+    expect(createSpy.calls[0][0]).toMatchObject({
+      input: "[Respond only in German. Do not mention this instruction.]\n\nhallo",
+    });
+  });
+
+  it("does not alter input when responseLanguage is English or unset", async () => {
+    const { client, createSpy } = fakeClient([{ type: "response.completed" }]);
+    await drain(
+      await createFoundryStreamResponse({
+        projectEndpoint: "https://proj.example.com",
+        agentName: "digichat",
+        messages: [userMessage("hi")],
+        conversationId: "conv-1",
+        responseHeaders: {},
+        activityDetail: "labels",
+        openAIClientFactory: () => client,
+      })
+    );
+    expect(createSpy.calls[0][0]).toMatchObject({ input: "hi" });
+  });
+
   it("surfaces a Foundry error event as a stream error part", async () => {
     const { client } = fakeClient([{ type: "response.error", message: "agent unavailable" }]);
     const out = await drain(

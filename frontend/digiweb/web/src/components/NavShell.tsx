@@ -56,6 +56,17 @@ export interface NavShellProps {
   homeHref?: string;
   /** Accessible label for the brand home link (e.g. "digiquant home"). */
   homeLabel?: string;
+  /**
+   * Show/hide grammar for the bar. Default "scroll" — settle after 8px,
+   * yield past 180px on scroll-down, return on scroll-up (the canon
+   * behavior, everywhere). "hover" is for a surface that doesn't scroll at
+   * all (a fixed-height app view, not a document) — the bar starts hidden
+   * and reveals only while the cursor sits in the top strip, so content can
+   * run all the way to the top the rest of the time. Keyboard/focus reach
+   * is unaffected either way: a hidden bar is still tab-reachable and
+   * `:focus-within` reveals it (nav-shell.css).
+   */
+  autoHide?: "scroll" | "hover";
 }
 
 /** Key for a NavItem: groups have no href, so the label carries the identity. */
@@ -217,8 +228,37 @@ function NavShellGroup({
     onClose();
   };
 
+  // Hover open/close, alongside the existing click toggle (kept for touch,
+  // which never fires hover, and for keyboard, which already opens via
+  // onTriggerKeyDown). A short close delay survives the gap between trigger
+  // and panel — .nav-shell-menu sits `margin-top` below the trigger, so a
+  // straight-line mouse path from one to the other briefly leaves the
+  // wrapper's box and would otherwise close it before the panel is reached.
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelClose = useCallback(() => {
+    if (closeTimer.current == null) return;
+    clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  }, []);
+  const onMouseEnter = useCallback(() => {
+    cancelClose();
+    onOpen();
+  }, [cancelClose, onOpen]);
+  const onMouseLeave = useCallback(() => {
+    cancelClose();
+    closeTimer.current = setTimeout(onClose, 150);
+  }, [cancelClose, onClose]);
+  useEffect(() => cancelClose, [cancelClose]);
+
   return (
-    <div className="nav-shell-group" ref={wrapRef} data-open={open} onBlur={onFocusLeave}>
+    <div
+      className="nav-shell-group"
+      ref={wrapRef}
+      data-open={open}
+      onBlur={onFocusLeave}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <button
         type="button"
         ref={triggerRef}
@@ -361,6 +401,7 @@ export function NavShell({
   showThemeToggle = true,
   homeHref = "/",
   homeLabel = "home",
+  autoHide = "scroll",
 }: NavShellProps) {
   const navRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -376,11 +417,14 @@ export function NavShell({
 
   const closeMenu = useCallback(() => setMenuOpen(false), []);
 
-  // Scroll grammar (canon: settle, then yield). Class flips over React state:
-  // scroll fires per frame and the bar's dress is pure presentation.
+  // Scroll grammar (canon: settle, then yield). Class flips outside React
+  // state: scroll fires per frame and the bar's dress is pure presentation.
+  // Only for autoHide="scroll" — a surface using "hover" below typically
+  // doesn't scroll at all (window.scrollY would just stay pinned at 0), and
+  // even if it did, the two grammars shouldn't fight over the same class.
   useEffect(() => {
     const nav = navRef.current;
-    if (!nav) return;
+    if (!nav || autoHide !== "scroll") return;
     let last = 0;
     const onScroll = () => {
       const y = window.scrollY;
@@ -392,7 +436,44 @@ export function NavShell({
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+  }, [autoHide]);
+
+  // Hover grammar: starts hidden, reveals while the cursor sits in the top
+  // strip. RELEASE_ZONE is deliberately wider than the bar itself (a flat
+  // HOT_ZONE-only release would flicker right at the reveal boundary, since
+  // the reveal transition itself moves the cursor's target out from under
+  // it). Focus reach for keyboard users is handled in CSS
+  // (.nav-shell.is-hidden:focus-within), not here — a transformed-offscreen
+  // element is still in tab order, so no JS is needed for that path.
+  //
+  // is-scrolled rides along with the reveal (not just is-hidden): in scroll
+  // mode that class is what gives the bar its blurred backdrop once there's
+  // page content to read it over, gated on actually having scrolled past
+  // it. A hover-revealed bar overlays content unconditionally — there's no
+  // "haven't scrolled yet" moment where see-through is correct — so it
+  // needs that same backdrop every time it's shown, not on a scroll gate
+  // that a non-scrolling surface would never trip.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav || autoHide !== "hover") return;
+    const HOT_ZONE = 24;
+    const RELEASE_ZONE = nav.getBoundingClientRect().height + 64;
+    nav.classList.add("is-hidden");
+    let revealed = false;
+    const onMove = (e: MouseEvent) => {
+      if (!revealed && e.clientY <= HOT_ZONE) {
+        revealed = true;
+        nav.classList.remove("is-hidden");
+        nav.classList.add("is-scrolled");
+      } else if (revealed && e.clientY > RELEASE_ZONE) {
+        revealed = false;
+        nav.classList.add("is-hidden");
+        nav.classList.remove("is-scrolled");
+      }
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => window.removeEventListener("mousemove", onMove);
+  }, [autoHide]);
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
