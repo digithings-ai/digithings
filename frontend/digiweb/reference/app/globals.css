@@ -371,6 +371,17 @@ html {
   display: inline-flex;
 }
 
+/* .site-nav-livery normally starts the right-aligned trailing group via its
+   own margin-left:auto (see above) — but that rule hides livery outright
+   when collapsed, so nothing is left to absorb the row's leading space and
+   the theme toggle + hamburger fall back to sitting left-aligned right next
+   to the brand mark. Re-anchor the auto-margin on the theme toggle, the
+   first element still visible in the trailing group once collapsed, so the
+   pair stays pinned to the right edge exactly as it does at full width. */
+.site-nav.is-collapsed .site-nav-theme {
+  margin-left: auto;
+}
+
 /* Livery + type-suite pickers duplicated inside the sheet for collapsed
    widths — right-aligned under the links, same max width, with the row's
    margin-left:auto reset (there's no sibling to push away from in here). */
