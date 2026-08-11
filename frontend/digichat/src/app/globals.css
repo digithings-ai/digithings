@@ -591,6 +591,16 @@
   max-width: min(1280px, 90vw);
 }
 
+/* Same page-not-widget reasoning, for the bottom edge: .dc-form's own 0.75rem
+ * padding-bottom (session.css) is sized for a widget that's *inside*
+ * something else's page chrome, not for sitting flush against the actual
+ * bottom of a browser viewport — the textarea read as glued to the edge.
+ * Overrides just the bottom component of .dc-form's padding shorthand; still
+ * fluid (shrinks with the viewport) per the same request as the gutter above. */
+.dc-embed-shell .dc-session--wide .dc-form {
+  padding-bottom: clamp(0.75rem, 2.5vw, 1.75rem);
+}
+
 /* Same opt-out, for background: `.dc-embed-shell` and `body` both paint an
  * opaque `bg-background` by design (a lone <iframe> on an arbitrary host page
  * needs its own backdrop). digithings.ai's own /chat and /chat/occ are the
