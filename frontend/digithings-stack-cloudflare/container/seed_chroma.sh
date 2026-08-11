@@ -22,7 +22,7 @@ if [ "${DIGI_VECTORIZE_ACTIVE:-0}" = "1" ]; then
   exit 0
 fi
 
-SEED_VER="v3"
+SEED_VER="v4"
 SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_VER}"
 # Failure is NOT gated here: a failed run must retry on the next boot rather
 # than being remembered as "done/skipped" forever. Only start_digisearch.sh's
