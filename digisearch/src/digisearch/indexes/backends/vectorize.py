@@ -26,6 +26,42 @@ DEFAULT_BATCH_SIZE = 1000
 MAX_TOP_K = 50
 
 
+class VectorizeBackendError(Exception):
+    """Raised when a configured Vectorize backend fails to serve a query.
+
+    Deliberately NOT a subclass of ImportError/OSError/RuntimeError/TypeError/
+    ValueError -- `_stub.py`'s `_BACKEND_ERRORS` tuple lists exactly those, and
+    `query_index` catches that tuple to fall through to the next backend. Vectorize
+    is the authoritative remote index once configured, so its failures must
+    propagate to the caller instead of being swallowed and silently answered from
+    Chroma (a different corpus). Azure/Chroma keep falling through on failure --
+    they are optional local backends, not authoritative ones.
+    """
+
+
+#: Process-wide singleton for the default embedder, shared across every
+#: `VectorizeBackend` instance. `_vectorize_backend` in `_stub.py` constructs a
+#: fresh `VectorizeBackend` on every query (no production call site injects
+#: `embedding_provider` or populates `Query.embedding`), so per-instance
+#: memoization alone still reloads the ONNX model on every single query. The
+#: default embedder is stateless and identical for every caller, so sharing it
+#: process-wide is safe. This cache is for the *default* embedder only -- an
+#: *injected* `embedding_provider` always stays on `self.embedding_provider`
+#: (per-instance) and is never read from or written into this global.
+_default_embedder_singleton: object | None = None
+
+
+def _get_default_embedder() -> object:
+    """Return the module-level default embedder, constructing it at most once
+    per process (see `_default_embedder_singleton`)."""
+    global _default_embedder_singleton
+    if _default_embedder_singleton is None:
+        from digisearch.embedding.providers.minilm import MiniLMEmbedder
+
+        _default_embedder_singleton = MiniLMEmbedder()
+    return _default_embedder_singleton
+
+
 def _default_http_post(
     url: str, headers: dict[str, str], body: bytes, content_type: str
 ) -> tuple[int, str]:
@@ -69,10 +105,6 @@ class VectorizeBackend(DigiIndex):
         self._api_token = api_token
         self._post = http_post or _default_http_post
         self._batch_size = batch_size
-        # Lazily constructed on first use when embedding_provider is not injected
-        # and Query.embedding is absent; memoized so the ONNX model loads at most
-        # once per backend instance rather than once per query.
-        self._lazy_default_embedder: object | None = None
 
     def _url(self, action: str) -> str:
         return f"{API_ROOT}/accounts/{self._account_id}/vectorize/v2/indexes/{self.name}/{action}"
@@ -158,17 +190,17 @@ class VectorizeBackend(DigiIndex):
         raise NotImplementedError("Vectorize is the system of record; it is not snapshotted here")
 
     def _default_embedder(self) -> object:
-        """Return the memoized default embedder, constructing it at most once.
+        """Return the process-wide default embedder, constructed at most once
+        per process regardless of how many `VectorizeBackend` instances exist.
 
         Not called from `__init__` — building an ONNX model eagerly would pay
         the load cost even for backends that never hit this path (an injected
         `embedding_provider` or a caller that always supplies `Query.embedding`).
+        Module-level rather than per-instance: a fresh `VectorizeBackend` is
+        constructed on every query in production (see `_stub._vectorize_backend`),
+        so per-instance memoization alone would still reload the model every call.
         """
-        if self._lazy_default_embedder is None:
-            from digisearch.embedding.providers.minilm import MiniLMEmbedder
-
-            self._lazy_default_embedder = MiniLMEmbedder()
-        return self._lazy_default_embedder
+        return _get_default_embedder()
 
     def query(self, query: Query) -> list[Result]:
         perf_start = time.perf_counter()
