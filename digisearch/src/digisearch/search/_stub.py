@@ -13,7 +13,7 @@ import time
 from typing import Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
-from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB
+from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,20 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
     except _BACKEND_ERRORS as exc:
         logger.warning("Azure backend error: %s", exc)
         return None
+
+
+@register_backend
+def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
+    """Cloudflare Vectorize backend. Active when VECTORIZE_ACCOUNT_ID + VECTORIZE_API_TOKEN are set."""
+    account_id = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+    api_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    if not account_id or not api_token:
+        return None
+    from digisearch.indexes.backends.vectorize import VectorizeBackend
+
+    backend = VectorizeBackend(index_name, account_id=account_id, api_token=api_token)
+    results = backend.query(query)
+    return SearchResponse(results=list(results), facets=None, backend=BACKEND_VECTORIZE)
 
 
 @register_backend
@@ -178,6 +192,17 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
     """
     if not chunks:
         return None
+
+    vectorize_account = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
+    vectorize_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    if vectorize_account and vectorize_token:
+        from digisearch.indexes.backends.vectorize import VectorizeBackend
+
+        backend = VectorizeBackend(
+            index_name, account_id=vectorize_account, api_token=vectorize_token
+        )
+        backend.add(chunks)
+        return BACKEND_VECTORIZE
 
     chroma_path = os.environ.get("CHROMA_PATH")
     chroma_host = os.environ.get("CHROMA_HOST")
