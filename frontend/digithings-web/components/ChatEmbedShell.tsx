@@ -248,8 +248,9 @@ export function ChatEmbedShell({
         paddingBottom: "clamp(0.75rem, 2.5vw, 1.75rem)",
         // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
         // z-index 0) sit behind this shell, and an opaque fill here paints a visible
-        // rectangle over them. The boot overlay below still fills solid while it's up
-        // (own z-index 1), so no browser-default white ever shows through pre-ready.
+        // rectangle over them. The boot overlay below is transparent for the same
+        // reason (see its own comment) -- the iframe's opacity:0 already hides any
+        // browser-default white pre-ready, so nothing here needs a solid fill.
         background: "transparent",
         colorScheme: shellTheme,
       }}
@@ -279,13 +280,26 @@ export function ChatEmbedShell({
             position: "absolute",
             inset: 0,
             zIndex: 1,
-            background: "var(--bg)",
+            // Transparent, not var(--bg) -- same reasoning as the shell div above.
+            // This used to fill solid on the (mistaken) assumption that it was the
+            // only thing standing between a pre-ready iframe and a flash of
+            // browser-default white, but the iframe's own opacity:0 (below) already
+            // does that job. A solid fill here just painted a flat, textureless
+            // rectangle over the page's .grain/.glow the whole time this was up,
+            // then popped to the real (transparent) background on ready -- visible
+            // as a "black box that disappears" once digichat loaded.
+            background: "transparent",
           }}
         >
           <ContainerBootLoader
             title="digichat"
             note="waking the embed · first paint after digichat:ready"
             fullscreen={false}
+            // ContainerBootLoader's own .tl-boot class fills var(--bg) by default --
+            // right for its usual mode (a plain app with nothing behind it), wrong
+            // here where .grain/.glow should show through. Scoped override below,
+            // not a change to the shared component or its default styling.
+            className="dc-embed-boot"
           />
         </div>
       ) : null}
