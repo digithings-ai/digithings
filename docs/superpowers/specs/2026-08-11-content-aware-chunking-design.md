@@ -151,7 +151,7 @@ Today, every source document ingested by `scripts/docs_onboard/` and `digisearch
   under the size ceiling comes back as exactly one chunk (satisfying
   "segment = chunk when it fits"); a segment over the ceiling is sub-split
   by the same recursive logic, never crossing into a neighboring segment's
-  text. If `doc.segments` is `None`, the whole document is chunked exactly
+  text. If `doc.segments` is empty, the whole document is chunked exactly
   as today (single pass, no segment boundaries) — this is the backward-compat
   path.
 - Every resulting chunk's metadata gets its owning segment's `label` merged
