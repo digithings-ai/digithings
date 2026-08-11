@@ -285,6 +285,80 @@ describe("POST /api/chat", () => {
     );
   });
 
+  it("forwards X-Digi-Language to digigraph upstream headers", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-language": "de",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Language"]).toBe("de");
+  });
+
+  it("omits X-Digi-Language from upstream headers when the request sends English", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-language": "en",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Language"]).toBeUndefined();
+  });
+
+  it("passes responseLanguage to the Foundry adapter", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+        activityDetail: "full",
+      },
+    });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+          "x-digi-language": "fr",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      responseLanguage?: string;
+    };
+    expect(call?.responseLanguage).toBe("fr");
+  });
+
   it("returns 400 when OpenRouter BYOK missing model", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {

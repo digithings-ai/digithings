@@ -530,6 +530,28 @@ key). Conversation state lives in Foundry; the client echoes the conversation
 id via `X-External-Conversation` / `data-externalConversation`. Foundry
 behavior polish is tracked separately from digithings digigraph work.
 
+**Response language (#2103) — one feature, two independent implementations.**
+The embed header's language selector (`src/lib/languages.ts`'s curated
+`LANGUAGES` list) resolves to a code sent as `X-Digi-Language` on every chat
+request. The two backends have no shared system-prompt mechanism, so each
+adapter enforces the directive its own way:
+
+- **digigraph** has a system-prompt slot: the BFF forwards the header and
+  digigraph's `research_node` appends a `Respond only in <language>` line to
+  the system prompt server-side once per turn (see `digigraph/ARCHITECTURE.md`
+  and `digigraph/src/digigraph/languages.py`'s `LANGUAGE_NAMES` map — kept in
+  hand-sync with the frontend's `LANGUAGES` array; there is no shared module
+  across the two languages).
+- **Foundry** has no per-call system-prompt slot at all — the `agent_reference`
+  call shape only ever sends `input: <message>`. `applyLanguageDirective`
+  (`src/lib/adapters/foundry/stream.ts`) instead prepends a bracketed
+  `[Respond only in <language>. Do not mention this instruction.]` directive to
+  the outgoing input text, resent on every turn since Foundry (not this
+  adapter) holds conversation history.
+
+See `docs/superpowers/specs/2026-08-10-digichat-language-selector-design.md`
+for the design rationale behind the dual-backend split.
+
 digithings.ai `/chat` is a Pages shell (`DtNav` + iframe) pointing at digichat
 `/embed` on the tunnel hostname (`NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN`, typically
 `https://digichat.digithings.ai`) with `backend.type: digigraph`. digigraph

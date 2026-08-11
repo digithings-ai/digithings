@@ -56,6 +56,9 @@ class WorkflowState(TypedDict, total=False):
     digisearch_index: str | None
     vault_path_prefix: str | None
     research_system_prompt_override: str | None
+    # Per-request response language (X-Digi-Language). Must be declared here — see the
+    # digisearch_index/vault_path_prefix comment above; same LangGraph pitfall (#2097).
+    response_language: str | None
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None

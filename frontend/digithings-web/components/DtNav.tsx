@@ -13,12 +13,13 @@ import { NavShell, GitHubGlyph } from "@digithings/web";
 import { Brand, DT_NAV_PRIMARY } from "@/app/_nav";
 import { DigiChatMark } from "@digithings/digichat-ui";
 
-export function DtNav() {
+export function DtNav({ autoHide }: { autoHide?: "scroll" | "hover" }) {
   return (
     <NavShell
       brand={<Brand />}
       links={DT_NAV_PRIMARY}
       homeLabel="digithings home"
+      autoHide={autoHide}
       actions={
         <>
           <a
@@ -30,17 +31,21 @@ export function DtNav() {
           >
             <GitHubGlyph />
           </a>
-          {/* Desktop twin of the sheet CTA below — same destination + label,
-              compact .btn-sm dress; hides at the same 880px breakpoint where
-              the inline links yield to the hamburger, so narrow viewports keep
-              the sheet button as the only digichat entry. */}
+          {/* Desktop twin of the sheet CTA below — same destination, plain
+              wordmark-style link rather than a solid `.btn-primary` pill: next
+              to the quiet GitHub glyph and inline links, a filled button read
+              as a bright, standoffish box. `.dc-nav-cta` (globals.css) is
+              just icon + label in the theme's own ink tone, no button chrome.
+              Hides at the same 880px breakpoint where the inline links yield
+              to the hamburger, so narrow viewports keep the sheet button as
+              the only digichat entry. */}
           <Link
-            className="btn btn-primary btn-sm max-[880px]:hidden"
+            className="dc-nav-cta max-[880px]:hidden"
             href="/chat"
             aria-label="Ask digichat"
           >
             <DigiChatMark size={16} />
-            Ask digichat
+            ask digichat
           </Link>
         </>
       }

@@ -29,13 +29,19 @@ service = [
     "mcp>=1.0,<2",
     "typer>=0.12",
 ]
-dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 # Supabase-backed vault store (digivault.supabase_store). Lazily imported — the
 # core stays pydantic+pyyaml-only; this extra adds the DB read/search path.
 supabase = ["supabase>=2"]
 
 [project.scripts]
 digivault = "digivault.cli:app"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digivault's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

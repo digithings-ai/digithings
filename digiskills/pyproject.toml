@@ -27,10 +27,17 @@ ingest = ["digifetch>=0.1.0"]
 # Real LLM-backed synthesis (DigiLLMSynthesizer) via digillm.completion.
 # Lazily imported; the default TemplateSynthesizer needs no LLM/API key.
 llm = ["digillm>=0.1.0"]
-dev = ["digiskills[cli,ingest,llm]", "pytest>=8,<10", "ruff>=0.16,<0.17"]
+dev = ["digiskills[cli,ingest,llm]"]
 
 [project.scripts]
 digiskills = "digiskills.cli:app"
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digiskills's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
