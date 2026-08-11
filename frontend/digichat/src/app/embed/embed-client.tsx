@@ -215,9 +215,9 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   return (
     <>
       <style>{ACCENT_CSS}</style>
-      <div className="dc-grain" aria-hidden />
+      {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide ? "" : "bg-background"} text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
