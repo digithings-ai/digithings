@@ -37,10 +37,28 @@ def test_merge_document_metadata_into_chunks() -> None:
     doc = Document(
         id="d1",
         content="x",
-        source="/x",
+        source="/docs/alpha-guide.md",
         doc_type="md",
         metadata={"evidence_tier": "peer_reviewed", "title": "T"},
     )
     chunks = [Chunk(id="d1_0", content="a", doc_id="d1", metadata={"chunk_index": 0})]
     merge_document_metadata_into_chunks(doc, chunks)
     assert chunks[0].metadata.get("evidence_tier") == "peer_reviewed"
+    assert chunks[0].metadata.get("title") == "T"
+    assert chunks[0].metadata.get("source") == "/docs/alpha-guide.md"
+    assert chunks[0].metadata.get("path") == "/docs/alpha-guide.md"
+
+
+@pytest.mark.unit
+def test_merge_adds_provenance_when_metadata_empty() -> None:
+    doc = Document(
+        id="d2",
+        content="# Hello",
+        source="/seed/digikey-auth.md",
+        doc_type="markdown",
+        metadata={},
+    )
+    chunks = [Chunk(id="d2_0", content="a", doc_id="d2", metadata={"chunk_index": 0})]
+    merge_document_metadata_into_chunks(doc, chunks)
+    assert chunks[0].metadata["path"] == "/seed/digikey-auth.md"
+    assert chunks[0].metadata["title"] == "digikey auth"

@@ -1,8 +1,18 @@
-# OCC policies — seed stub
+# OCC policies and procedures (seed)
 
-- Keep policy documents versioned and reviewable.
-- Prefer help-center articles over ad-hoc email guidance.
-- When unsure, point operators to the official OCC help center.
+## Policies
 
-This file exists so digisearch `occ_help` has more than one chunk for smoke
-queries. Replace with onboarded PDFs/HTML after crawl approval.
+A **policy** states required behavior (what must be true). Examples: data
+retention policy, access-control policy, acceptable-use policy.
+
+## Procedures
+
+A **procedure** is the step-by-step workflow that implements a policy (how to
+comply). Examples: onboarding checklist, incident response runbook, evidence
+collection steps.
+
+## How this chat uses them
+
+Ground answers in retrieved `occ_help` / vault hits. If the corpus has no matching
+policy or procedure text, say the seed is incomplete — do not invent regulatory
+language.

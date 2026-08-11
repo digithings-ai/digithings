@@ -1,19 +1,11 @@
 # digithings documentation — seed overview
 
-This note is a **minimal** digithings.ai/chat grounding seed for the Profile A
-stack digisearch index `digithings_docs`.
+Pointer note for digisearch collection `digithings_docs`. Prefer topical siblings
+for grounded answers:
 
-## What is digisearch?
-
-digisearch is the RAG service in digithings. It indexes documents into named
-collections (Chroma) and answers retrieval queries used by digigraph tools.
-
-## What is digivault?
-
-digivault stores Obsidian-style markdown notes. digigraph exposes
-`digivault_search_notes` for full-text search over vault paths.
-
-## Chat tools
-
-Website digichat (Profile A) always retrieves via digisearch and
-digivault_search_notes before answering. Cite source paths from tool results.
+- `showcase.md` — client #0 / how digithings.ai/chat is built
+- `architecture.md` — Profile A ports and persistence paths
+- `digikey-auth.md` — JWT, RS256, JWKS, scopes
+- `digisearch-rag.md` — Chroma indexes, chunking, hybrid query
+- `digivault-notes.md` — vault prefixes, frontmatter, wikilinks
+- `chat-faq.md` — short product FAQ

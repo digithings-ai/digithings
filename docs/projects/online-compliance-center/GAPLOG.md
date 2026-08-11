@@ -6,7 +6,7 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 
 | Gap | Status | Notes |
 |-----|--------|-------|
-| **sitaas crawl approval** | **HOLD** | Manifest ingest hold remains. Do not silently crawl production help content without written approval. Local `--dry-run` is allowed; full apply waits on human sign-off (SCOPE open Q1). |
+| **sitaas crawl approval** | **Lifted by owner decision (2026-08-10)** | Owner (Chris Stefan, chrizefan) authorized the full apply directly in-session, on the basis that `help.online-compliance-center.com` is public documentation with no confidentiality restriction — **not** a written approval received from the OCC client. This is an owner override of the ingest hold, recorded honestly as such rather than represented as client sign-off. If OCC's own terms require separate client notice/approval for automated crawling, that is still outstanding and should be tracked separately. |
 | One-shot static corpus | Open | Demo expects a single onboard apply; no scheduled crawl CI. Re-run only if help content changes. |
 | Sitemap HTTP 500 | Known | BFS from seed + PDF link extraction (SCOPE). |
 | Accordion markdown quality | Open | FAQ HTML may need post-process after first dry-run review. |
@@ -37,7 +37,7 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 - Cloudflare Pages deploy of digithings-web including `/chat/occ`
 - Apply digivault Supabase migration for `path_prefix` on `search_architecture_notes` (or rely on oversample+filter / local vault seed until applied)
 - ~~`DIGI_TENANT_CORPUS_MAP` on digigraph~~ — set in Profile A stack `wrangler.toml` `[vars]` + local bundle compose default
-- Static `occ_help` seed ships in `frontend/digithings-stack-cloudflare/container/seed/`; entrypoint ingests into Chroma **before** supervisord
+- Static `digithings_docs` + `occ_help` seeds ship in `frontend/digithings-stack-cloudflare/container/seed/`; oneshot `seed_chroma` ingests both into Chroma **before** digisearch starts (vault `seed-*.md` refreshed on every boot)
 - **BLOCKER (2026-08-10):** `graph.digithings.ai` / `key.digithings.ai` custom domains are not live yet (routes commented in stack `wrangler.toml`; healthz unreachable). Do **not** retarget digichat Worker `DIGIGRAPH_INTERNAL_URL` / `DIGIKEY_URL` to those hosts (and never to Mac `*.trycloudflare.com` tunnels) until both healthz probes succeed. Until cutover, CF-hosted OCC RAG against the bundle index cannot be verified end-to-end.
 
 ## Dry-run log
@@ -45,3 +45,4 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 | Date | Command | Result |
 |------|---------|--------|
 | 2026-08-10 | `DOCS_ONBOARD_DRY_RUN_CRAWL=1 … run_onboard.py --dry-run` | `pages_seen=32`, `docs_kept=30`, `skipped=2`; workdir had **8 HTML** + **22 PDFs**. Sinks skipped (`vault_notes=0`, `search_docs=0`). Full apply still **HOLD** pending crawl approval. |
+| 2026-08-10 | Full apply, hold lifted by owner decision (see above) | Same crawl (`pages_seen=32`, `docs_kept=30`). Apply: **28 vault notes** written locally (2 fewer than `docs_kept`, no errors — not yet root-caused, likely a naming collision on write; worth checking if this recurs on re-run), **28 docs posted** to digisearch index `occ_help` (paced client-side under the ingest rate limit). Chroma `occ_help` confirmed at **629 chunks**. `sync_onboard_vault.py --apply` synced **28/28 notes** to production Supabase `architecture_notes` (verified via REST count). Production Profile A stack still ships the original 4 curated `occ_help` seed stubs — **not yet refreshed** with this corpus (see prod cutover section above). |

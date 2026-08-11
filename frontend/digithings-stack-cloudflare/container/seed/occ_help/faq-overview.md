@@ -1,23 +1,22 @@
-# Online Compliance Center — FAQ seed (static)
+# Online Compliance Center — FAQ overview (seed)
 
-This note is a **minimal** digithings.ai/chat/occ grounding seed for the
-Cloudflare Profile A stack. It is **not** a full crawl of
-help.online-compliance-center.com (ingest HOLD — see
-`docs/projects/online-compliance-center/GAPLOG.md`).
+Static grounding for digithings.ai/chat/occ. Curated seed only — not a live crawl
+of help.online-compliance-center.com until crawl approval lands.
 
-## What is OCC?
+## What OCC is
 
-Online Compliance Center (OCC) helps organizations manage compliance policies,
-procedures, and help-center documentation.
-
-## How digithings chat helps
-
-Ask questions about OCC policies and help articles. Answers are grounded on the
+Online Compliance Center helps organizations manage compliance **policies**,
+**procedures**, and related **help articles**. This chat tenant answers from the
 `occ_help` digisearch index and vault notes under
 `clients/online-compliance-center/`.
 
-## Replacing this seed
+## In scope for this seed
 
-When crawl approval lands, run `scripts/docs_onboard/run_onboard.py` against
-`docs/projects/online-compliance-center/onboard.yaml` targeting the production
-digisearch + digivault volumes (or re-seed via Container SSH).
+- Getting started expectations
+- Policies vs procedures distinction
+- Where documents / PDFs would appear after onboard
+
+## Out of scope
+
+- Pricing or capabilities not stated in these seed notes
+- digithings product architecture (use digithings.ai/chat, not /chat/occ)
