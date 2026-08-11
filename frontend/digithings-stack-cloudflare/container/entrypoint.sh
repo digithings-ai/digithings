@@ -25,9 +25,31 @@ export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}"
+# Trim whitespace with the same semantics as digisearch's Python side
+# (os.environ.get(...).strip(), see digisearch/src/digisearch/search/_stub.py)
+# so the shell's notion of "configured" can never disagree with Python's --
+# a lone space/newline from a mangled secret rollout must count as unconfigured
+# on both sides, or one side silently falls through to an also-unconfigured
+# Chroma and serves empty results with no error (see issue discussion).
+_digi_trim() {
+  printf '%s' "$1" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+}
+
+_vectorize_account_trimmed=$(_digi_trim "${VECTORIZE_ACCOUNT_ID:-}")
+_vectorize_token_trimmed=$(_digi_trim "${VECTORIZE_API_TOKEN:-}")
+if [ -n "$_vectorize_account_trimmed" ] && [ -n "$_vectorize_token_trimmed" ]; then
+  DIGI_VECTORIZE_ACTIVE=1
+else
+  DIGI_VECTORIZE_ACTIVE=0
+fi
+# Computed once here and exported so seed_chroma.sh / start_digisearch.sh
+# (both launched by supervisord below) read the same verdict instead of
+# re-deriving it and risking drift between the three scripts.
+export DIGI_VECTORIZE_ACTIVE
+
 # Vectorize is a remote index: exporting CHROMA_PATH would make _stub.py's
 # Chroma branch win and answer from an empty local index instead.
-if [ -n "${VECTORIZE_ACCOUNT_ID:-}" ] && [ -n "${VECTORIZE_API_TOKEN:-}" ]; then
+if [ "$DIGI_VECTORIZE_ACTIVE" = "1" ]; then
   unset CHROMA_PATH
   echo "digithings-stack: Vectorize configured; skipping local chroma"
 else
