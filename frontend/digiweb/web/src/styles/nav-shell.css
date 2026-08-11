@@ -366,8 +366,15 @@
   }
 }
 /* Never hide the bar on small screens: thumb-scroll jitters direction, and
-   the bar is the only route back to the menu. */
-@media (max-width: 768px) {
+   the bar is the only route back to the menu. `autoHide="hover"` reveals the
+   bar via a `mousemove` listener alone (see NavShell.tsx) -- touch input never
+   fires that event, so a touch-only device with no mouse gets the bar hidden
+   on mount with no way to bring it back. max-width alone only catches phones;
+   a touch-primary tablet in landscape (iPad ~1024px, most Android tablets)
+   is wider than 768px, has no mouse, and hits neither this rule nor a
+   mousemove event -- `(hover: none)` is the correct, width-independent way to
+   ask "can this pointer even hover", so it catches those devices too. */
+@media (max-width: 768px), (hover: none) {
   .nav-shell.is-hidden {
     transform: none;
   }
