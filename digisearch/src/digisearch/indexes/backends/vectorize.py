@@ -10,6 +10,9 @@ from collections.abc import Callable
 from typing import Any
 
 from digisearch.core.models import Chunk, Query, Result
+from digisearch.indexes.backends.vectorize_errors import (
+    VectorizeBackendError as VectorizeBackendError,
+)
 from digisearch.indexes.base import DigiIndex
 
 logger = logging.getLogger(__name__)
@@ -25,18 +28,10 @@ DEFAULT_BATCH_SIZE = 1000
 #: Vectorize returns at most 50 matches when metadata is requested.
 MAX_TOP_K = 50
 
-
-class VectorizeBackendError(Exception):
-    """Raised when a configured Vectorize backend fails to serve a query.
-
-    Deliberately NOT a subclass of ImportError/OSError/RuntimeError/TypeError/
-    ValueError -- `_stub.py`'s `_BACKEND_ERRORS` tuple lists exactly those, and
-    `query_index` catches that tuple to fall through to the next backend. Vectorize
-    is the authoritative remote index once configured, so its failures must
-    propagate to the caller instead of being swallowed and silently answered from
-    Chroma (a different corpus). Azure/Chroma keep falling through on failure --
-    they are optional local backends, not authoritative ones.
-    """
+# `VectorizeBackendError` is defined in `vectorize_errors.py`, not here, and re-exported
+# above (the redundant `as VectorizeBackendError` alias marks that deliberately, so
+# ruff's F401 doesn't flag it as unused) -- see that module's docstring for why: it
+# must stay importable even when importing *this* module fails.
 
 
 #: Process-wide singleton for the default embedder, shared across every

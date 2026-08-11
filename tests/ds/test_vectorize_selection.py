@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import builtins
+
 import pytest
 from digisearch.core.models import Query
 from digisearch.core.standard_hits import BACKEND_VECTORIZE
@@ -53,6 +55,61 @@ def test_vectorize_failure_propagates_through_query_index_not_chroma(
         _stub.query_index(query, "occ-help")
 
     assert chroma_constructed is False, "ChromaBackend must not be constructed on Vectorize failure"
+
+
+@pytest.mark.unit
+def test_vectorize_import_failure_wrapped_not_chroma_fallthrough(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """FINDING 1 (round 2) repro: an `ImportError` raised while importing
+    `VectorizeBackend` itself -- not a query/HTTP failure -- is a second path into
+    the same silent-fallthrough bug. `_BACKEND_ERRORS` includes `ImportError`, so if
+    that import is not wrapped as `VectorizeBackendError`, `query_index` swallows it
+    and falls through to Chroma, answering from a different corpus with no error.
+
+    Simulated via `builtins.__import__` (matches the reviewer's own repro) rather
+    than uninstalling a real dependency -- this repo's `vectorize.py` has no risky
+    module-level imports today, so this is defence against *any* future import
+    failure in that module, not a specific package going missing right now.
+    """
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "tok")
+    monkeypatch.setenv("CHROMA_PATH", "/tmp/should-never-be-touched")
+
+    chroma_constructed = False
+
+    class _ShouldNotConstruct:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            nonlocal chroma_constructed
+            chroma_constructed = True
+
+        def query(self, _q: Query) -> list[object]:
+            return []
+
+    monkeypatch.setattr(
+        "digisearch.indexes.backends.chroma.ChromaBackend", _ShouldNotConstruct, raising=True
+    )
+
+    # Import before blocking `__import__` -- this is the real class `_stub.py` raises,
+    # not a look-alike, and the assertion below must see the same object.
+    from digisearch.indexes.backends.vectorize import VectorizeBackendError
+
+    real_import = builtins.__import__
+
+    def _blocking_import(name: str, *args: object, **kwargs: object) -> object:
+        if name == "digisearch.indexes.backends.vectorize":
+            raise ImportError("simulated missing dependency")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", _blocking_import)
+
+    query = Query(text="hi", top_k=3, embedding=[0.0] * 384)
+    with pytest.raises(VectorizeBackendError, match="simulated missing dependency"):
+        _stub.query_index(query, "occ-help")
+
+    assert chroma_constructed is False, (
+        "ChromaBackend must not be constructed when the Vectorize import fails"
+    )
 
 
 @pytest.mark.unit

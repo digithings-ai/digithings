@@ -20,6 +20,7 @@ from typing import Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
 from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
+from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
 
 logger = logging.getLogger(__name__)
 
@@ -66,14 +67,24 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
     `_BACKEND_ERRORS`, so `query_index` cannot catch it and fall through to Chroma --
     a configured, failing remote index must never be answered from a different
     corpus with no error surfaced to the caller.
+
+    The `VectorizeBackend` import itself lives inside the `try` (not just the query
+    call) so an `ImportError` there -- a missing dependency, a broken transitive
+    import -- is wrapped the same as every other failure. `VectorizeBackendError` is
+    imported at module level from `vectorize_errors` (not from `vectorize` itself)
+    precisely so it stays available to wrap that failure: a failed
+    `from vectorize import VectorizeBackend, VectorizeBackendError` binds neither
+    name, so referencing `VectorizeBackendError` in the `except` clause would raise
+    `UnboundLocalError` instead if it were imported from the same failing module.
     """
     account_id = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
     api_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
     if not account_id or not api_token:
         return None
-    from digisearch.indexes.backends.vectorize import VectorizeBackend, VectorizeBackendError
 
     try:
+        from digisearch.indexes.backends.vectorize import VectorizeBackend
+
         backend = VectorizeBackend(index_name, account_id=account_id, api_token=api_token)
         results = backend.query(query)
     except Exception as exc:
