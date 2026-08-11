@@ -38,7 +38,7 @@ Compare-and-gap after wiring digithings.ai/chat/occ. Digi names lowercase.
 - Apply digivault Supabase migration for `path_prefix` on `search_architecture_notes` (or rely on oversample+filter / local vault seed until applied)
 - ~~`DIGI_TENANT_CORPUS_MAP` on digigraph~~ — set in Profile A stack `wrangler.toml` `[vars]` + local bundle compose default
 - Static `digithings_docs` + `occ_help` seeds ship in `frontend/digithings-stack-cloudflare/container/seed/`; oneshot `seed_chroma` ingests both into Chroma **before** digisearch starts (vault `seed-*.md` refreshed on every boot)
-- **BLOCKER (2026-08-10):** `graph.digithings.ai` / `key.digithings.ai` custom domains are not live yet (routes commented in stack `wrangler.toml`; healthz unreachable). Do **not** retarget digichat Worker `DIGIGRAPH_INTERNAL_URL` / `DIGIKEY_URL` to those hosts (and never to Mac `*.trycloudflare.com` tunnels) until both healthz probes succeed. Until cutover, CF-hosted OCC RAG against the bundle index cannot be verified end-to-end.
+- ~~**BLOCKER (2026-08-10):**~~ **RESOLVED 2026-08-11** — `graph.digithings.ai` and `key.digithings.ai` are live; both `/healthz` return 200 and the routes are active (not commented) in stack `wrangler.toml`. Original text: Do **not** retarget digichat Worker `DIGIGRAPH_INTERNAL_URL` / `DIGIKEY_URL` to those hosts (and never to Mac `*.trycloudflare.com` tunnels) until both healthz probes succeed. Until cutover, CF-hosted OCC RAG against the bundle index cannot be verified end-to-end.
 
 ## Dry-run log
 
