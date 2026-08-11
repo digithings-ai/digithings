@@ -7,6 +7,16 @@ from typing import Any
 
 
 @dataclass
+class Segment:
+    """Structural unit of a Document: a PDF page, markdown section, or API operation."""
+
+    index: int  # 0-based position within the parent Document
+    label: str  # "page:12", "heading:Auth > Rotating Keys", "operation:POST /v1/ingest"
+    text: str
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Document:
     """Document ingested into digisearch. Passed between modules (digiflow, digigraph)."""
 
@@ -16,6 +26,7 @@ class Document:
     doc_type: str  # "pdf", "html", "docx", etc.
     metadata: dict[str, Any] = field(default_factory=dict)
     chunks: list["Chunk"] = field(default_factory=list)
+    segments: list["Segment"] = field(default_factory=list)  # structural units; empty = unstructured
 
 
 @dataclass

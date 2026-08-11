@@ -30,6 +30,7 @@ _LAZY: dict[str, str] = {
     "Document": "digisearch.core.models",
     "Query": "digisearch.core.models",
     "Result": "digisearch.core.models",
+    "Segment": "digisearch.core.models",
 }
 
 __all__ = [
@@ -38,12 +39,13 @@ __all__ = [
     "Document",
     "Query",
     "Result",
+    "Segment",
     "__version__",
 ]
 
 if TYPE_CHECKING:  # static type-checkers / IDEs resolve the real symbols
     from digisearch.client import DigiSearch
-    from digisearch.core.models import Chunk, Document, Query, Result
+    from digisearch.core.models import Chunk, Document, Query, Result, Segment
 
 
 def __getattr__(name: str) -> object:

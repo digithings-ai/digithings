@@ -8,7 +8,7 @@ import os
 import uuid
 from pathlib import Path
 
-from digisearch.core.models import Document
+from digisearch.core.models import Document, Segment
 from digisearch.ingestion.base import Parser
 
 logger = logging.getLogger(__name__)
@@ -50,18 +50,27 @@ if _OCR_ENABLED:
         )
 
 
-def _extract_text_pdfplumber(raw: bytes) -> str:
+def _extract_pages_pdfplumber(raw: bytes) -> list[str]:
     import pdfplumber
 
     with pdfplumber.open(io.BytesIO(raw)) as pdf:
-        return "\n".join(p.extract_text() or "" for p in pdf.pages)
+        return [p.extract_text() or "" for p in pdf.pages]
 
 
-def _extract_text_pymupdf(raw: bytes) -> str:
+def _extract_pages_pymupdf(raw: bytes) -> list[str]:
     import pymupdf
 
     doc = pymupdf.open(stream=raw, filetype="pdf")
-    return "\n".join(p.get_text() for p in doc)
+    return [p.get_text() for p in doc]
+
+
+def _extract_pages(raw: bytes) -> list[str]:
+    """Per-page text. Page boundaries are preserved here and become Document.segments."""
+    if _PDF_IMPL == "pdfplumber":
+        return _extract_pages_pdfplumber(raw)
+    if _PDF_IMPL == "pymupdf":
+        return _extract_pages_pymupdf(raw)
+    return []
 
 
 def _extract_text_ocr(raw: bytes) -> str:
@@ -90,17 +99,16 @@ class PDFParser(Parser):
         if not _PDF_AVAILABLE:
             raise ImportError("Install pdfplumber or pymupdf for PDF parsing")
         if isinstance(source, bytes):
-            content = self._extract_bytes(source)
-            src_str = "<bytes>"
             raw = source
+            src_str = "<bytes>"
         else:
             path = Path(source)
-            if path.exists():
-                raw = path.read_bytes()
-                content = self._extract_bytes(raw)
-                src_str = str(path)
-            else:
+            if not path.exists():
                 raise FileNotFoundError(f"PDF source not found: {source}")
+            raw = path.read_bytes()
+            src_str = str(path)
+        pages = _extract_pages(raw)
+        content = "\n".join(pages)
 
         if not content.strip():
             if _OCR_AVAILABLE:
@@ -123,6 +131,20 @@ class PDFParser(Parser):
                     "[No text extracted from PDF. Set DIGISEARCH_OCR_ENABLED=true to enable OCR.]"
                 )
 
+        segments: list[Segment] = []
+        for number, page_text in enumerate(pages, start=1):
+            stripped = page_text.strip()
+            if not stripped:
+                continue
+            segments.append(
+                Segment(
+                    index=len(segments),
+                    label=f"page:{number}",
+                    text=stripped,
+                    metadata={"page": number},
+                )
+            )
+
         doc_id = str(uuid.uuid4())
         return Document(
             id=doc_id,
@@ -130,14 +152,8 @@ class PDFParser(Parser):
             source=src_str,
             doc_type="pdf",
             metadata={},
+            segments=segments,
         )
-
-    def _extract_bytes(self, raw: bytes) -> str:
-        if _PDF_IMPL == "pdfplumber":
-            return _extract_text_pdfplumber(raw)
-        if _PDF_IMPL == "pymupdf":
-            return _extract_text_pymupdf(raw)
-        return ""
 
     def can_parse(self, source: str) -> bool:
         ext = Path(source).suffix.lower() if "." in source else ""
