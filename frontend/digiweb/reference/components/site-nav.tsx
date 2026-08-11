@@ -97,6 +97,18 @@ export function SiteNav() {
     return () => ro.disconnect();
   }, []);
 
+  // Close the sheet the moment the row stops being collapsed (e.g. a device
+  // rotation or window resize widens the bar past the fit threshold while
+  // the sheet is open) — same adjust-state-during-render pattern as the
+  // pathname handling above. Without this, the sheet's own livery/type-suite
+  // selects stay mounted and visible at the same time the main row's copies
+  // reappear, giving the visitor two live controls for the same setting.
+  const [lastCollapsed, setLastCollapsed] = useState(collapsed);
+  if (lastCollapsed !== collapsed) {
+    setLastCollapsed(collapsed);
+    if (!collapsed && open) setOpen(false);
+  }
+
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
   return (

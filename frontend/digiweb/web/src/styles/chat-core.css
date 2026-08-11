@@ -289,13 +289,15 @@
 .chat-md-copy {
   /* WCAG 2.5.8 (AA): the bare "copy"/"copied" label renders well under the
      24x24px minimum touch target (~27x16px, height is the shortfall). Grow
-     the hit area with padding, then pull the flow box back with an
-     equal-and-opposite margin so the figcaption row's height and the gap to
-     the language label don't change. Nothing here — at rest or in the
-     :hover / .is-copied states below — paints a background or border, so
-     the extra padding stays invisible; only the click/tap target grows,
-     never the visible pill. min-width/min-height are a hard floor in case
-     glyph metrics ever come in smaller than assumed here.
+     the hit area with padding, then pull the flow box back with a margin
+     of the exact same magnitude on every side (6px in, 6px out) so the
+     margin-box — what actually reserves space in the figcaption's
+     `justify-content: space-between` row — nets to zero change on both
+     axes, not just vertically. Nothing here — at rest or in the :hover /
+     .is-copied states below — paints a background or border, so the extra
+     padding stays invisible; only the click/tap target grows, never the
+     visible pill. min-width/min-height are a hard floor in case glyph
+     metrics ever come in smaller than assumed here.
      */
   display: inline-flex;
   align-items: center;
@@ -303,7 +305,7 @@
   min-width: 24px;
   min-height: 24px;
   padding: 6px;
-  margin: -5px 0;
+  margin: -6px;
   border: none;
   background: transparent;
   color: var(--ink-mute);
