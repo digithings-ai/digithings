@@ -173,18 +173,22 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     index-naming-coupling and fetch-all-clamp paragraphs added to the
     Vectorize section), then hashes only (count unchanged at 43) when the
     same #2201 branch corrected the index-naming caveat from "unresolved" to
-    "verified 2026-08-11 against the live account": the chunker did not
-    change, only the fixture content changed, so this fingerprint is
-    expected to be regenerated whenever ARCHITECTURE.md's prose changes
-    materially — it is not itself a chunker-behavior assertion beyond the
-    ``<= 2000`` size invariant.
+    "verified 2026-08-11 against the live account", then to count 44 when the
+    same branch reworded that caveat again to fix a false claim about
+    Cloudflare's docs (advisory naming guidance is stated in prose, not
+    silent) — the reworded paragraph pushed the same chunk over the size
+    budget and it split into two: the chunker did not change, only the
+    fixture content changed, so this fingerprint is expected to be
+    regenerated whenever ARCHITECTURE.md's prose changes materially — it is
+    not itself a chunker-behavior assertion beyond the ``<= 2000`` size
+    invariant.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 43
+    assert len(chunks) == 44
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
@@ -208,7 +212,8 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "09b95dddeb54c404",
         "99ce6e6e0f28628b",
         "63a471e295e59f9a",
-        "fb9e30671b48d2c4",
+        "9c7c924ae7c401bb",
+        "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "5b438889eafdfbb9",
         "2181660c1f2b61f1",

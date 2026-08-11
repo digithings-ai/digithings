@@ -129,6 +129,25 @@ def test_sync_flushes_at_batch_boundary_and_for_the_remainder() -> None:
     assert backend.call_sizes == [3, 3, 1]
 
 
+def test_sync_rejects_non_positive_batch_size() -> None:
+    """A batch_size < 1 must raise, not infinite-loop: ``while len(buffer) >= 0``
+    with a zero-size slice never shrinks the buffer. Unreachable from the CLI
+    today (default 1000), but a prior task in this plan shipped a near-identical
+    unbounded loop that made ~993,000 calls -- guard it explicitly."""
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+
+    notes = [_note("clients/acme/a", "# A\n\nbody a\n")]
+    with pytest.raises(ValueError, match="batch_size"):
+        sync_corpus(
+            notes,
+            SegmentAwareChunker(),
+            _StubEmbedder(),
+            _RecordingBackend(),
+            model_id="m",
+            batch_size=0,
+        )
+
+
 def test_sync_ids_are_deterministic() -> None:
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
 

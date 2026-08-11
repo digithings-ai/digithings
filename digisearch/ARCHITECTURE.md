@@ -601,12 +601,15 @@ underscore-form (`digithings_docs`, `occ_help`) to match the hardcoded Chroma
 collection names in `container/seed_chroma.sh` — renaming either side without
 renaming the other breaks that pairing outright.
 
-**Verified 2026-08-11:** Cloudflare's own Vectorize documentation only ever
-*shows* index names in kebab-case
-([best-practices/create-indexes](https://developers.cloudflare.com/vectorize/best-practices/create-indexes/),
-[get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/))
-— that is convention, not a documented constraint, and this is not a claim
-that underscores are documented as supported. Empirically, underscore index
+**Verified 2026-08-11:** Cloudflare's docs give **advisory** naming guidance
+— [get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/)
+states in prose that "a good index name is: a combination of lowercase
+and/or numeric ASCII characters, shorter than 32 characters, starts with a
+letter, and uses dashes (-) instead of spaces" — but no enforced charset or
+regex is published, and there is a real 64-byte length cap that both
+`digithings_docs` and `occ_help` clear. This is not a claim that underscores
+are documented as supported, and it is not a claim the docs are silent on
+the matter — both would be false. Empirically, underscore index
 names are accepted: `npx wrangler vectorize create digithings_docs
 --dimensions=384 --metric=cosine` and the equivalent call for `occ_help` both
 succeeded against the live account, and `npx wrangler vectorize list` shows

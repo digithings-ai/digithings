@@ -18,11 +18,15 @@ URL with no translation -- a mismatched name means every chat query 404s against
 an index that was never populated. Today those values are underscore-form
 (``digithings_docs``, ``occ_help``), matching this script's examples below.
 
-Cloudflare's own Vectorize docs only ever *show* kebab-case index names
-(https://developers.cloudflare.com/vectorize/best-practices/create-indexes/,
-https://developers.cloudflare.com/vectorize/get-started/intro/) -- that's
-convention, not a documented constraint, and it is not a claim that underscores
-are documented as supported. Verified empirically against the live account on
+Cloudflare's docs give *advisory* naming guidance -- get-started/intro
+(https://developers.cloudflare.com/vectorize/get-started/intro/) states in
+prose that "a good index name is: a combination of lowercase and/or numeric
+ASCII characters, shorter than 32 characters, starts with a letter, and uses
+dashes (-) instead of spaces" -- but no enforced charset or regex is
+published, and there is a real 64-byte length cap that both ``digithings_docs``
+and ``occ_help`` clear. This is not a claim that underscores are documented as
+supported, and it is not a claim the docs are silent on the matter -- both
+would be false. Verified empirically against the live account on
 2026-08-11: ``npx wrangler vectorize create digithings_docs --dimensions=384
 --metric=cosine`` and the same call for ``occ_help`` both succeeded, and
 ``npx wrangler vectorize list`` shows both indexes at 384 dimensions, cosine
@@ -111,6 +115,8 @@ def sync_corpus(
     """
     if embed and embedder is None:
         raise ValueError("embedder is required when embed=True")
+    if batch_size < 1:
+        raise ValueError(f"batch_size must be >= 1, got {batch_size}")
     total = 0
     buffer: list[Chunk] = []
     for note in notes:
