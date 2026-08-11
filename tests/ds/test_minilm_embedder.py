@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+
+import numpy
 import pytest
 from digisearch.embedding.base import EmbeddingProvider
 from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
@@ -31,6 +34,26 @@ def test_minilm_embeds_texts(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls == [["a", "b"]]
     assert len(out) == 2
     assert all(len(v) == 384 for v in out)
+
+
+@pytest.mark.unit
+def test_minilm_embed_output_is_json_serializable_python_floats() -> None:
+    """chromadb's ONNXMiniLM_L6_V2 returns numpy.float32 arrays, which json.dumps
+
+    cannot serialize. embed() must convert every element to a plain Python float
+    before it reaches the Vectorize REST payload.
+    """
+
+    def _fake_fn(texts: list[str]) -> list[numpy.ndarray]:
+        return [numpy.asarray([0.1, 0.2, 0.3], dtype=numpy.float32) for _ in texts]
+
+    out = MiniLMEmbedder(embed_fn=_fake_fn).embed(["a", "b"])
+
+    for vector in out:
+        for x in vector:
+            assert type(x) is float, f"expected python float, got {type(x)!r}"
+
+    json.dumps(out)
 
 
 @pytest.mark.unit

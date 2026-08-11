@@ -36,7 +36,7 @@ class MiniLMEmbedder(EmbeddingProvider):
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        return [list(vector) for vector in self._fn()(list(texts))]
+        return [[float(x) for x in vector] for vector in self._fn()(list(texts))]
 
     @property
     def dimensions(self) -> int:
