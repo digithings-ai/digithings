@@ -129,6 +129,11 @@
   transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
 }
 
+.cw-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .cw-btn--primary {
   color: var(--surface-inverse, #06110f);
 }
