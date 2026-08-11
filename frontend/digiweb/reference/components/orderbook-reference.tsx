@@ -26,7 +26,7 @@ const BIDS: OrderBookLevel[] = [
 
 export function OrderbookReference() {
   return (
-    <section className="section-block orderbook">
+    <section className="section-block orderbook" id="order-book">
       <p className="kicker">{"// order book"}</p>
       <h2 className="title">Depth, ask over bid.</h2>
       <p className="section-copy">
