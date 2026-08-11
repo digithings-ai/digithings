@@ -25,7 +25,14 @@ export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
 export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}"
-export CHROMA_PATH="$DATA_CHROMA"
+# Vectorize is a remote index: exporting CHROMA_PATH would make _stub.py's
+# Chroma branch win and answer from an empty local index instead.
+if [ -n "${VECTORIZE_ACCOUNT_ID:-}" ] && [ -n "${VECTORIZE_API_TOKEN:-}" ]; then
+  unset CHROMA_PATH
+  echo "digithings-stack: Vectorize configured; skipping local chroma"
+else
+  export CHROMA_PATH="$DATA_CHROMA"
+fi
 export DIGIVAULT_ROOT="$DATA_VAULT"
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"

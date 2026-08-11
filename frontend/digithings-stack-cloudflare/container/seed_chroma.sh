@@ -11,6 +11,12 @@
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
+
+if [ -n "${VECTORIZE_ACCOUNT_ID:-}" ] && [ -n "${VECTORIZE_API_TOKEN:-}" ]; then
+  echo "digithings-stack: Vectorize configured; skipping chroma seed"
+  exit 0
+fi
+
 SEED_VER="v3"
 SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_VER}"
 # Failure is NOT gated here: a failed run must retry on the next boot rather

@@ -57,6 +57,8 @@ export class DigiStackContainer extends Container {
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
+    VECTORIZE_ACCOUNT_ID: env.VECTORIZE_ACCOUNT_ID ?? "",
+    VECTORIZE_API_TOKEN: env.VECTORIZE_API_TOKEN ?? "",
     DIGIVAULT_ROOT: env.DIGIVAULT_ROOT ?? "/data/vault",
     DIGISEARCH_INDEX: env.DIGISEARCH_INDEX ?? "digithings_docs",
     DIGI_TENANT_CORPUS_MAP:
@@ -124,6 +126,8 @@ export interface Env {
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
   CHROMA_PATH?: string;
+  VECTORIZE_ACCOUNT_ID?: string;
+  VECTORIZE_API_TOKEN?: string;
   DIGIVAULT_ROOT?: string;
   DIGISEARCH_INDEX?: string;
   DIGI_TENANT_CORPUS_MAP?: string;

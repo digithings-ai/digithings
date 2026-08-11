@@ -4,6 +4,12 @@
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
+
+if [ -n "${VECTORIZE_ACCOUNT_ID:-}" ] && [ -n "${VECTORIZE_API_TOKEN:-}" ]; then
+  echo "digithings-stack: Vectorize configured; starting digisearch without seed wait"
+  exec uvicorn digisearch.server:app --host 127.0.0.1 --port 8002
+fi
+
 SEED_VER="v3"
 SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_VER}"
 SEED_FAILED="${DATA_CHROMA}/.stack_chroma_seed_failed_${SEED_VER}"
