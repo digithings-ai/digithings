@@ -66,16 +66,18 @@ export function ChangelogRailReference() {
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(false);
   // .cr-track's own padding (2.2rem each side, for the edge-fade mask)
-  // combined with scroll-snap-align: start on .cr-card means the browser's
-  // natural resting scrollLeft is NOT 0, and the natural maximum is NOT
-  // scrollWidth - clientWidth either — both clamp inward by the padding
-  // amount (confirmed live: scrollTo({left: 0}) and even a negative value
-  // both settle back to ~35px; scrolling to scrollWidth settles ~35px short
-  // of the theoretical max too). Comparing against the theoretical 0/max
-  // would leave one arrow permanently enabled with nowhere further to
-  // scroll, so the true minimum is captured once on mount (before any user
-  // scrolling) and the true maximum is derived from it — the padding is
-  // symmetric, so the same inset applies to both ends.
+  // combined with scroll-snap-align: start on the FIRST .cr-card means the
+  // browser's natural resting scrollLeft is NOT 0 — confirmed live:
+  // scrollTo({left: 0}) and even a negative value both settle back to
+  // ~35px. This is a start-only effect, not a symmetric one: scroll-snap
+  // has no "align: end" card to pull the far side inward, so the true
+  // maximum IS the theoretical scrollWidth - clientWidth (confirmed live:
+  // scrollTo({left: 999999}) settles within a sub-pixel of that value, not
+  // ~35px short of it as an earlier version of this comment incorrectly
+  // claimed). Comparing the start against a hardcoded 0 would leave the
+  // left arrow permanently enabled with nowhere further to scroll, so the
+  // true minimum is captured once on mount (before any user scrolling)
+  // instead of assumed.
   const minScrollLeftRef = useRef<number | null>(null);
 
   const updateBoundaries = () => {
@@ -83,7 +85,7 @@ export function ChangelogRailReference() {
     if (!el) return;
     if (minScrollLeftRef.current === null) minScrollLeftRef.current = el.scrollLeft;
     const min = minScrollLeftRef.current;
-    const max = el.scrollWidth - el.clientWidth - min;
+    const max = el.scrollWidth - el.clientWidth;
     // Sub-pixel scroll widths make an exact equality check flaky; 1px slack.
     setAtStart(el.scrollLeft <= min + 1);
     setAtEnd(el.scrollLeft >= max - 1);
@@ -94,7 +96,16 @@ export function ChangelogRailReference() {
     const el = railRef.current;
     if (!el) return;
     el.addEventListener("scroll", updateBoundaries, { passive: true });
-    return () => el.removeEventListener("scroll", updateBoundaries);
+    // A resize (viewport, or a responsive breakpoint flip) changes
+    // clientWidth/scrollWidth without firing a scroll event, which would
+    // otherwise leave atStart/atEnd — and the arrows' disabled state —
+    // stale until the user happens to scroll again.
+    const observer = new ResizeObserver(updateBoundaries);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateBoundaries);
+      observer.disconnect();
+    };
   }, []);
 
   const nudge = (dir: 1 | -1) => {
@@ -136,7 +147,13 @@ export function ChangelogRailReference() {
       </p>
 
       <div className="cr-mask">
-        <div ref={railRef} className="cr-track" role="list" aria-label="Release notes" tabIndex={0}>
+        <div
+          ref={railRef}
+          className="cr-track"
+          role="list"
+          aria-label="Release notes, scrollable horizontally"
+          tabIndex={0}
+        >
           {RELEASES.map((rel) => (
             <article key={rel.version} className="cr-card" role="listitem" tabIndex={0}>
               <div className="flex items-center justify-between">
