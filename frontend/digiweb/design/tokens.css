@@ -97,14 +97,18 @@
    collapse to --ink under [data-theme] by design) but false for every
    per-module accent hex here: they're all light-to-medium hues in both
    themes (the [data-theme="light"] override below, added for the separate
-   WCAG 1.4.11 fix, darkens each just past 3:1 against white — still nowhere
-   near dark enough for white text on top), so the theme-scoped --on-accent
-   flips to white in light theme against a light-to-medium background —
-   near-illegible (verified pre-fix: as low as 1.81:1 for digiquant teal,
-   1.86:1 for digigraph gold, both against the original :root hex). Each of
-   these classes pins
+   WCAG 1.4.11 fix, darkens the seven that measured under 3:1 against white —
+   still nowhere near dark enough for white text on top even for those
+   seven; the other four already cleared 3:1 unmodified), so the
+   theme-scoped --on-accent flips to white in light theme against a
+   light-to-medium background — near-illegible (verified pre-fix: as low as
+   1.81:1 for digiquant teal, 1.86:1 for digigraph gold, both against the
+   original :root hex). Each of these classes pins
    --on-accent to a single dark ink that clears 4.5:1 against every one of
-   them in both themes (worst case 5.21:1, digistore) rather than letting it
+   them in both themes (worst case 4.64:1, digiquant — its own [data-theme="light"]
+   override two sections below is deliberately close to --on-accent, since
+   that override reuses --accent's own paper-contrast hex rather than a
+   fresh one picked for this 4.5:1 headroom) rather than letting it
    inherit the theme flip. .accent-atlas/-hermes/-kairos are deliberately
    NOT listed here — their accent already resolves to --ink, so they should
    keep following the theme flip like mono does. */
@@ -232,21 +236,25 @@
   /* WCAG 1.4.11 fix (2026-08-12): the per-module --accent-<module> palette
      (:root, line ~27) has no [data-theme] override and stays fixed hex
      regardless of theme — fine on the dark canvas (all clear 6.3:1+ against
-     --surface/--bg there) but several fall well under the 3:1 minimum for
-     graphical objects against THIS theme's white --surface: measured
-     digiquant 1.81:1, digigraph 1.86:1, digibase 2.62:1, digisearch 2.81:1,
-     digismith 2.82:1, digivault 2.91:1. Darkened here, light-theme only —
-     the :root values above are untouched and still serve the dark theme.
-     digiquant reuses --accent's own light hex (#0E8C7F, ruled 2026-07-03
-     above) rather than a new one, since that already IS digiquant's
-     light-theme identity; the rest are the same hue darkened just past
-     3:1 (3.60–3.63:1, a small margin over the minimum). */
+     --surface/--bg there) but seven of the eleven fall under the 3:1
+     minimum for graphical objects against THIS theme's white --surface:
+     measured digiquant 1.81:1, digigraph 1.86:1, digibase 2.62:1,
+     digisearch 2.81:1, digismith 2.82:1, digivault 2.91:1, digilink 2.98:1.
+     Darkened here, light-theme only — the :root values above are untouched
+     and still serve the dark theme. digichat (3.04:1), digikey (3.05:1),
+     digiclaw (3.62:1), and digistore (3.68:1) already clear 3:1 unmodified
+     and are deliberately left out of this block. digiquant reuses
+     --accent's own light hex (#0E8C7F, ruled 2026-07-03 above) rather than
+     a new one, since that already IS digiquant's light-theme identity; the
+     rest are the same hue darkened just past 3:1 (3.60–3.63:1, a small
+     margin over the minimum). */
   --accent-digigraph:  #B27C1E;
   --accent-digiquant:  #0E8C7F;
   --accent-digisearch: #408FB3;
   --accent-digismith:  #5C8F8F;
   --accent-digibase:   #84878D;
   --accent-digivault:  #8D7DC0;
+  --accent-digilink:   #47938C;
 }
 
 /* Shared (theme-independent) tokens for the redesign. */
