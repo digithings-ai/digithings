@@ -117,6 +117,28 @@ def test_search_notes_path_prefix_description_states_the_overwrite_as_unconditio
     assert "d1" in prefix_description
 
 
+def test_get_note_tool_path_prefix_description_states_the_overwrite_as_unconditional() -> None:
+    """Important 1 (#2240 final-branch review): this description used to say
+    'path_prefix itself is not verified against the caller's actual tenant
+    (#2265)' and instruct the model to 'use the same prefix the prior search was
+    scoped to' — both false once this branch closed #2265 by making
+    digigraph's _handle_digivault_get_note overwrite path_prefix unconditionally,
+    and the second was unfollowable regardless, since the prefix a search was
+    scoped to is injected server-side and never echoed back to the model. Pin the
+    corrected text the same way the digivault_search_notes sibling is pinned."""
+    tool = next(
+        t
+        for t in build_orchestrator_tool_manifest()
+        if t["function"]["name"] == TOOL_VAULT_GET_NOTE
+    )
+    prefix_description = tool["function"]["parameters"]["properties"]["path_prefix"][
+        "description"
+    ].lower()
+    assert "not actually under your control" in prefix_description
+    assert "2265" not in prefix_description
+    assert "use the same prefix the prior search was scoped to" not in prefix_description
+
+
 def test_get_note_tool_description_names_both_search_shapes() -> None:
     """#2239 review, Minor M3: the old copy said to take vault_path 'from that hit's
     metadata', true only for digisearch (which stamps metadata['vault_path'] for

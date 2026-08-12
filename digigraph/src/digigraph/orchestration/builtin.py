@@ -272,6 +272,31 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"digivault orchestrator invoke failed: {e}"
     if not inv.get("ok"):
+        if context.vault_path_prefix is None:
+            # Important 2 (#2240 final-branch review): digivault's own
+            # "path_prefix is required" sentence is written for a direct API
+            # caller that can just add the argument. The model can't act on it:
+            # it already supplied path_prefix (the schema marks it required),
+            # and this handler discards whatever it sent and substitutes None
+            # unconditionally (the #2265 overwrite, above) because no tenant
+            # corpus is mapped for this session. Relaying the raw sentence costs
+            # a full completions/round trip per retry — measured at 5
+            # completions / 4 digivault round-trips to produce nothing before
+            # this fix — because the model keeps retrying something outside its
+            # control. Mirrors _handle_digivault_get_note's equivalent branch.
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": (
+                        "No tenant corpus is configured for this chat session, so "
+                        "digivault_search_notes cannot search the vault here — "
+                        "this is a session configuration gap, not something you "
+                        "can fix by resupplying path_prefix. Do not retry this "
+                        "tool; answer from what digisearch already returned, or "
+                        "tell the user vault search is unavailable."
+                    ),
+                }
+            )
         return json.dumps(inv)
     data = inv.get("data")
     if not isinstance(data, dict):
@@ -380,8 +405,15 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
     if not q or not str(q).strip():
         return "No search query provided."
     args_eff = dict(args)
-    if "index_name" not in args_eff and context.index_name:
-        args_eff["index_name"] = context.index_name
+    # Security (#2265): overwrite unconditionally, never default-if-missing — a
+    # model-supplied index_name must not reach another tenant's vector corpus.
+    # index_name is not declared on the digisearch schema, but that never stopped
+    # a model from supplying one anyway: OrchestratorInvokeRequest.arguments (on
+    # the digisearch side) is dict[str, Any], never schema-validated. Mirrors the
+    # vault handlers' mandatory fix (_handle_digivault_search /
+    # _handle_digivault_get_note) — the digisearch index is the other half of
+    # the same tenant boundary #2265 closed for digivault's path_prefix.
+    args_eff["index_name"] = context.index_name
     merged = _merged_digisearch_filters(context, args_eff)
     if merged:
         args_eff["filters"] = merged

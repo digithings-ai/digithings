@@ -318,14 +318,55 @@ def test_handle_digivault_search_invoke_error() -> None:
 
 @pytest.mark.unit
 def test_handle_digivault_search_not_ok_response() -> None:
+    """Generic ok=False passthrough — distinct from the no-context-prefix case
+    below, so this uses a context that *has* a mapped tenant prefix (the
+    no-context branch is Important-2's special-cased actionable message, tested
+    separately)."""
     from digigraph.orchestration.builtin import _handle_digivault_search
 
     with patch(
         "digigraph.orchestration.builtin.invoke_digivault_tool",
         return_value={"ok": False, "error": "vault unavailable"},
     ):
-        out = _handle_digivault_search({"query": "anything"}, _ctx())
+        out = _handle_digivault_search(
+            {"query": "anything"}, _ctx(vault_path_prefix="clients/digithings")
+        )
     assert json.loads(out)["error"] == "vault unavailable"
+
+
+@pytest.mark.unit
+def test_handle_digivault_search_no_context_prefix_error_is_actionable() -> None:
+    """Important 2 (#2240 final-branch review): when there is no context prefix
+    (unmapped tenant slug — e.g. `tenantSlug: "embed"` in
+    frontend/digichat/src/lib/embed-chat-tenant.ts, absent from
+    DIGI_TENANT_CORPUS_MAP), relaying digivault's raw "path_prefix is required"
+    sentence is unactionable: the model already supplied path_prefix (the schema
+    marks it required) and this handler is the one that discarded it. Driving the
+    real tool loop before this fix cost 5 completions / 4 digivault round-trips
+    to produce nothing, because the model kept retrying something outside its
+    control. The handler must substitute an instruction the model can actually
+    follow: stop retrying, this session has no tenant corpus. Mirrors
+    _handle_digivault_get_note's equivalent no-context-prefix test."""
+    from digigraph.orchestration.builtin import _handle_digivault_search
+
+    ctx = _ctx(vault_path_prefix=None)
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={
+            "ok": False,
+            "error": "path_prefix is required when the D1 backend is configured",
+        },
+    ) as mock_invoke:
+        out = _handle_digivault_search(
+            {"query": "anything", "path_prefix": "clients/digithings"}, ctx
+        )
+
+    call_args = mock_invoke.call_args
+    assert call_args.args[2]["path_prefix"] is None
+    error = json.loads(out)["error"]
+    assert "path_prefix is required when the D1 backend is configured" not in error
+    assert "no tenant corpus" in error.lower()
+    assert "do not retry" in error.lower()
 
 
 @pytest.mark.unit

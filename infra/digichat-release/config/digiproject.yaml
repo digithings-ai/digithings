@@ -38,13 +38,14 @@ agents:
 
     Search before answering questions about the docs. Two sinks: digisearch runs
     vector search over the chunked corpus; digivault_search_notes runs keyword
-    search over the vault and is the one that returns a loadable vault note path
-    (at the hit's doc_id field). When a digivault_search_notes hit's excerpt
-    isn't enough, call digivault_get_note with that hit's doc_id as vault_path to
-    load the whole note — digisearch hits are not loadable this way. Always cite
-    source paths or help article URLs from metadata. Use lowercase digi product
-    names in prose (digichat, digigraph, digivault, digisearch, digikey,
-    digithings).
+    search over the vault and returns a loadable vault note path at the hit's
+    doc_id field. When a hit's excerpt isn't enough, call digivault_get_note to
+    load the whole note: pass a digivault_search_notes hit's doc_id, or — for a
+    digisearch hit sourced from the vault — its metadata.vault_path, as
+    vault_path. A digisearch hit with no metadata.vault_path came from a
+    non-vault source and is not loadable this way. Always cite source paths or
+    help article URLs from metadata. Use lowercase digi product names in prose
+    (digichat, digigraph, digivault, digisearch, digikey, digithings).
 
     Do not invent features, pricing, or capabilities not present in the retrieved
     sources. Do not propose trading strategies, backtests, or digiquant workflows —
