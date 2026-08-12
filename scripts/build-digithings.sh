@@ -39,6 +39,11 @@ echo "--- building digithings-web (Next.js static export) ---"
 export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN="${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-https://digithings.ai}"
 echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
+# The workspace's own `build` script passes --webpack: Turbopack (Next 16's
+# build default) production-builds this home page into an intermittent React
+# hydration error (#2244) that never reproduces under webpack -- a known,
+# unresolved class of upstream Next.js/React bug (vercel/next.js#43159), not
+# an app bug. `next dev` is untouched; it never reproduced this.
 npm --workspace frontend/digithings-web run build
 
 # Assemble dist/ from the static export (includes /design/assets/og.png for the
