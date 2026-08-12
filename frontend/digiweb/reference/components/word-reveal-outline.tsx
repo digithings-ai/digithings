@@ -71,13 +71,14 @@ export function WordRevealOutline() {
       </p>
       <div className={`wr-track${reduced ? " is-static" : ""}`} ref={trackRef}>
         <div className="wr-sticky">
-          {/* accent-digiquant: the caption below claims "the closing word
-              takes the accent" — scope locally so that claim holds under
-              the page's default monochrome livery too, where --accent would
-              otherwise collapse to --ink and the closing word would render
-              indistinguishably from the rest of the line. */}
+          {/* demo-accent (typography.css): the caption below claims "the
+              closing word takes the accent" — scope locally so that claim
+              holds under the page's default monochrome livery too (where
+              --accent would otherwise collapse to --ink) AND under light
+              theme (unlike .accent-digiquant, a flat dark-optimized hex,
+              demo-accent has its own light-theme value too). */}
           <p
-            className={`word-line wr-outline-line accent-digiquant${reduced ? " is-final" : ""}`}
+            className={`word-line wr-outline-line demo-accent${reduced ? " is-final" : ""}`}
             aria-label={TEXT}
           >
             <span aria-hidden="true">
