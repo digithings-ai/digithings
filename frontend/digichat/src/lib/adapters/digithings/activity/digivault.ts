@@ -10,11 +10,16 @@ export function mapDigivaultSearchNotes(
   payload: Record<string, unknown>
 ): ActivitySpan | null {
   const hits = payload.hits ?? payload.results ?? payload.notes;
-  if (!Array.isArray(hits) || !hits.length) {
-    const query =
-      typeof payload.query === "string" && payload.query.trim()
-        ? payload.query.trim()
-        : undefined;
+  const query =
+    typeof payload.query === "string" && payload.query.trim()
+      ? payload.query.trim()
+      : undefined;
+
+  if (!Array.isArray(hits)) {
+    // No hits/results/notes key at all — not a completed search result.
+    // Still surface an in-flight "Searching digivault…" span when one is
+    // signaled; otherwise this payload isn't a digivault_search_notes trace
+    // this mapper understands.
     if (payload.status === "started" || payload.status === "in_progress") {
       return {
         operation: "execute_tool",
@@ -50,18 +55,17 @@ export function mapDigivaultSearchNotes(
     seen.add(doc.path);
     documents.push(doc);
   }
-  if (!documents.length) return null;
-
-  const query =
-    typeof payload.query === "string" && payload.query.trim()
-      ? payload.query.trim()
-      : undefined;
+  // A zero-hit search (`hits: []`, explicitly present) reaches here too —
+  // same reasoning as mapDigisearchRagSources next door: omitting `documents`
+  // (rather than early-returning null) is what lets toDigiChatActivity's
+  // retrieve branch render the honest `count: 0` "no hits" row instead of
+  // dropping the span outright.
   return {
     operation: "retrieve",
     status: "completed",
     label: "Sources",
     toolName: "digivault",
-    documents,
+    ...(documents.length ? { documents } : {}),
     ...(query ? { query } : {}),
   };
 }
