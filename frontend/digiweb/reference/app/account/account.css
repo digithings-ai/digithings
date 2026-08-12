@@ -38,18 +38,18 @@
 
 .acct-input-error,
 .acct-input-error:focus-visible {
-  border-color: var(--down);
+  border-color: var(--danger);
 }
 
 .acct-input-error:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--down) 45%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 45%, transparent);
 }
 
 .acct-error {
   margin-top: 0.45rem;
   font-family: var(--font-mono);
   font-size: 0.68rem;
-  color: var(--down);
+  color: var(--danger);
 }
 
 /* .acct-btn-block / .acct-forgot stay as CSS: they exist to override the

@@ -26,6 +26,7 @@ export function DropdownReference() {
   const [active, setActive] = useState(0);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const current = OPTIONS.find((o) => o.id === selected) ?? OPTIONS[0];
   const filtered = OPTIONS.filter(
@@ -38,13 +39,27 @@ export function DropdownReference() {
   // Enter stay aligned even if OPTIONS is reordered to interleave groups.
   const ordered = groups.flatMap((g) => filtered.filter((o) => o.group === g));
 
+  // Closing via Enter/Escape/a definitive in-pane action (option pick, footer
+  // action) returns focus to the trigger — the focused filter <input> simply
+  // unmounts when `open` goes false, and a focused element removed from the
+  // DOM falls back to <body>, stranding a keyboard user at the top of the
+  // document instead of back where they opened the menu from.
+  const closeMenu = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
+      // Deliberately plain setOpen(false), not closeMenu(): the user clicked
+      // somewhere else on purpose, so their click target keeps focus (the
+      // browser's own default click-to-focus already handles that) rather
+      // than this yanking focus back to the trigger.
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closeMenu();
       else if (e.key === "ArrowDown") {
         e.preventDefault();
         setActive((i) => Math.min(ordered.length - 1, i + 1));
@@ -54,7 +69,7 @@ export function DropdownReference() {
       } else if (e.key === "Enter" && ordered[active]) {
         e.preventDefault();
         setSelected(ordered[active].id);
-        setOpen(false);
+        closeMenu();
       }
     };
     document.addEventListener("mousedown", onDown);
@@ -89,6 +104,7 @@ export function DropdownReference() {
 
       <div className="relative mt-[1.2rem] w-[min(100%,22rem)]" ref={wrapRef}>
         <button
+          ref={triggerRef}
           type="button"
           className={`dd-trigger${open ? " open" : ""}`}
           aria-haspopup="listbox"
@@ -145,7 +161,7 @@ export function DropdownReference() {
                             onMouseEnter={() => setActive(idx)}
                             onClick={() => {
                               setSelected(o.id);
-                              setOpen(false);
+                              closeMenu();
                             }}
                           >
                             <span className="dd-dot" aria-hidden="true" />
@@ -166,7 +182,7 @@ export function DropdownReference() {
             </div>
 
             <div className="dd-footer">
-              <button type="button" className="dd-footer-action" onClick={() => setOpen(false)}>
+              <button type="button" className="dd-footer-action" onClick={closeMenu}>
                 <span aria-hidden="true">+</span> New strategy…
               </button>
             </div>

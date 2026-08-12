@@ -104,12 +104,13 @@ export function FormFieldsReference() {
               type="button"
               role="switch"
               aria-checked={motion}
+              aria-label="Reduced-motion respect"
               className={`ff-toggle${motion ? " on" : ""}`}
               onClick={() => setMotion((v) => !v)}
             >
               <span className="ff-knob" aria-hidden="true" />
             </button>
-            <span>Reduced-motion respect</span>
+            <span aria-hidden="true">Reduced-motion respect</span>
           </label>
         </div>
       </div>

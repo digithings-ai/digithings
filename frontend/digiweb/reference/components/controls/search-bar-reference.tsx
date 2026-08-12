@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { SearchBar } from "@digithings/web";
 
@@ -25,14 +25,35 @@ const CORPUS = [
 
 export function SearchBarReference() {
   const [q, setQ] = useState("");
+  const sectionRef = useRef<HTMLElement | null>(null);
   const results = useMemo(() => {
     const t = q.trim().toLowerCase();
     if (!t) return [];
     return CORPUS.filter((c) => c.toLowerCase().includes(t)).slice(0, 5);
   }, [q]);
 
+  // The `/` keycap hint (SearchBar's own hint slot) promised a "press / to
+  // focus search" shortcut that nothing actually bound. Scoped to this
+  // component (not a global site-nav listener) since this is the only
+  // SearchBar instance on the reference site; guarded against firing while
+  // any other field already has focus so it doesn't hijack normal typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/") return;
+      const active = document.activeElement;
+      const isTyping =
+        active instanceof HTMLElement &&
+        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isTyping) return;
+      e.preventDefault();
+      sectionRef.current?.querySelector<HTMLInputElement>(".sb-input")?.focus();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <section className="section-block">
+    <section className="section-block" ref={sectionRef}>
       <p className="kicker">{"// search"}</p>
       <h2 className="title">Search, with live results.</h2>
       <p className="section-copy">
@@ -50,30 +71,38 @@ export function SearchBarReference() {
       />
 
       {q.trim() ? (
-        <div
-          className="mt-[0.5rem] w-[min(100%,26rem)] overflow-hidden rounded-[10px] border border-hair bg-surface"
-          role="listbox"
-          aria-label="Results"
-        >
-          {results.length ? (
-            results.map((r) => {
-              const [head, tail] = r.split(" — ");
-              return (
-                <div
-                  key={r}
-                  className="flex items-baseline gap-[0.6rem] border-b border-hair/55 px-[0.8rem] py-[0.5rem] font-mono last:border-b-0"
-                  role="option"
-                  aria-selected="false"
-                >
-                  <span className="text-[0.8rem] text-ink">{head}</span>
-                  {tail ? <span className="text-[0.66rem] text-ink-mute">{tail}</span> : null}
-                </div>
-              );
-            })
-          ) : (
-            <p className="p-[0.8rem] font-mono text-[0.76rem] text-ink-mute">No matches for “{q}”.</p>
-          )}
-        </div>
+        <>
+          {/* Announces the count only — not the whole listbox — so a screen
+              reader isn't re-read every option on each keystroke, just how
+              many results just changed. */}
+          <p className="sr-only" aria-live="polite">
+            {results.length ? `${results.length} result${results.length === 1 ? "" : "s"}` : "No results"}
+          </p>
+          <div
+            className="mt-[0.5rem] w-[min(100%,26rem)] overflow-hidden rounded-[10px] border border-hair bg-surface"
+            role="listbox"
+            aria-label="Results"
+          >
+            {results.length ? (
+              results.map((r) => {
+                const [head, tail] = r.split(" — ");
+                return (
+                  <div
+                    key={r}
+                    className="flex items-baseline gap-[0.6rem] border-b border-hair/55 px-[0.8rem] py-[0.5rem] font-mono last:border-b-0"
+                    role="option"
+                    aria-selected="false"
+                  >
+                    <span className="text-[0.8rem] text-ink">{head}</span>
+                    {tail ? <span className="text-[0.66rem] text-ink-mute">{tail}</span> : null}
+                  </div>
+                );
+              })
+            ) : (
+              <p className="p-[0.8rem] font-mono text-[0.76rem] text-ink-mute">No matches for “{q}”.</p>
+            )}
+          </div>
+        </>
       ) : null}
     </section>
   );
