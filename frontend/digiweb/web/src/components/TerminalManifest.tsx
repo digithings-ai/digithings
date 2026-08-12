@@ -167,8 +167,13 @@ export function TerminalManifest({
                     {/* The dot is the only running/roadmap signal (color +
                         glow), aria-hidden with no text equivalent elsewhere
                         in the row — a screen-reader user got zero indication
-                        of which services are live. */}
-                    <span className="sr-only">{off ? "On the roadmap" : "Online"}</span>
+                        of which services are live. .tm-sr (terminal-manifest.css),
+                        not Tailwind's .sr-only: this is a shared component and
+                        that utility only exists in an app whose own source
+                        happens to use the class (see .tl-sr's comment,
+                        terminal-loaders.css, for the bug that already caused
+                        once). */}
+                    <span className="tm-sr">{off ? "On the roadmap" : "Online"}</span>
                     <span className="tm-name text-[0.92rem] font-medium">
                       <RowName name={r.name} prefix={namePrefix} />
                     </span>

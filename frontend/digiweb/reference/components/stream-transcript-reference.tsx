@@ -52,13 +52,7 @@ export function StreamTranscriptReference() {
         work never opens on its own. Reduced motion shows the finished turn.
       </p>
 
-      {/* live: the answer below streams in via direct textContent mutation
-          (no React re-render per frame — see the header comment), so without
-          an aria-live region a screen-reader user gets no indication the
-          assistant's answer is arriving or what it says. Matches the pattern
-          already used elsewhere on this page (TerminalStepCaret's role=status,
-          TerminalManifest's aria-live=polite pane). */}
-      <ChatTranscript flat live className="mt-[1.2rem] max-w-[640px] text-[0.78rem] leading-[2.1]">
+      <ChatTranscript flat className="mt-[1.2rem] max-w-[640px] text-[0.78rem] leading-[2.1]">
         <ChatMessage role="user">backtest trend_xsec on ETH, last eight years</ChatMessage>
         <ChatMessage role="assistant">running it through digiquant · nautilus engine</ChatMessage>
         <div className="st-tool">
@@ -68,8 +62,22 @@ export function StreamTranscriptReference() {
           <span className="text-ink-mute">412ms</span>
         </div>
         <ChatMessage role="assistant" tone="ink">
-          <span ref={answerRef}>{ANSWER}</span>
+          {/* The visually-typed copy is aria-hidden, not announced live: a
+              plain aria-live region here would have a screen reader attempt
+              to speak every one of the ~75 rapid (22ms) growing-prefix
+              mutations ("d", "do", "don", ...) rather than the finished
+              sentence — the same class of problem this codebase already
+              diagnosed and fixed for TerminalStepCaret (see its own a11y
+              note: a live region on the typed node "would announce every
+              keystroke"). ANSWER never changes after mount, so the fix here
+              is simpler than TerminalStepCaret's role=status sibling (no
+              self-cycling script to gate) — just a plain, static, complete
+              copy for assistive tech, decoupled from the animated one. */}
+          <span ref={answerRef} aria-hidden="true">
+            {ANSWER}
+          </span>
           <ChatStreamCursor ref={caretRef} />
+          <span className="sr-only">{ANSWER}</span>
         </ChatMessage>
       </ChatTranscript>
     </section>
