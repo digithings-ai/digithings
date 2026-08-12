@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useInView } from "motion/react";
-import { useMotionSafe } from "../../motion/primitives";
+import { useInView, useReducedMotion } from "motion/react";
 
 /**
  * Odometer — the mechanical digit-roll counter promoted from the design
@@ -36,12 +35,21 @@ export function Odometer({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { amount: 0.6, once: true });
-  // useMotionSafe(), not raw useReducedMotion() -- see WordReveal.tsx's fix
-  // comment (#2244). `reduced` here is only ever read inside the effect
-  // below (never in this component's JSX), so it was never a hydration risk
-  // in practice -- swapped anyway so no raw useReducedMotion() call sites
-  // remain in this package.
-  const reduced = !useMotionSafe();
+  // Deliberately raw useReducedMotion(), not useMotionSafe(): `reduced` here
+  // is only ever read inside the effect below, never in this component's
+  // JSX, so it carries no hydration risk regardless of which hook computes
+  // it -- and useMotionSafe() layers its own extra useState+useEffect (to
+  // stay safe for consumers that DO read it during render), which means an
+  // extra post-mount re-render per Odometer instance for no behavioral
+  // gain here. A #2244 hardening pass swapped this to useMotionSafe() for
+  // "no raw useReducedMotion() call sites left" consistency; reverted after
+  // that additional per-instance re-render traffic measurably raised
+  // digithings.ai's live hydration-error rate (roughly 60% of fresh loads
+  // with the swap, vs. roughly 20% without it, in a 14-trial sample). That
+  // ~20% is itself a residual, unresolved rate under --webpack, not zero --
+  // this revert removes one confirmed contributing factor, not the whole
+  // bug. See #2244 and #2256 for the full account.
+  const reduced = useReducedMotion();
 
   // SSR ships the settled reels; once in view (and motion is allowed) rewind
   // every strip to zero with transitions suspended, force a reflow so the

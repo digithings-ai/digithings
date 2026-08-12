@@ -161,6 +161,18 @@
   --down: #E5533E;
   --warn: #E0B341;
 
+  /* Non-financial danger/error/destructive red — a distinct hue (354°,
+     magenta-leaning) from --down's (7.5°, orange-leaning) on purpose, so a
+     kill-switch button, a form-field error, and a genuine drawdown figure
+     are never visually identical on one screen (the house rule: --up/--down
+     are P&L-only). Clears AA against --bg/--surface/--surface-2 (4.62–5.15:1).
+     Named --danger, not --destructive, on purpose: shadcn's own reserved
+     --destructive/--destructive-foreground slot is a DIFFERENT variable that
+     consumers (e.g. digichat's globals.css) derive FROM canon tokens
+     (--destructive: var(--danger);) — reusing shadcn's name here would have
+     silently shadowed this token in every app that bridges shadcn vars. */
+  --danger: #E94959;
+
   --term-bg:   #08090B;
   --term-ink:  #E7EAEC;
   --term-mute: #7E858B;
@@ -196,6 +208,13 @@
   --up:   #0E8C7F;
   --down: #C9533B;
   --warn: #B5832A;
+
+  /* Non-financial danger/error/destructive red — see the dark-theme comment
+     above (named --danger, not --destructive, for the same shadcn-collision
+     reason); same distinct hue, deepened for contrast on paper the same way
+     --accent/--up/--down already are. Clears AA against --bg/--surface/
+     --surface-2 (5.30–5.84:1). */
+  --danger: #C32232;
 
   /* Terminal converts with the theme: light panel, dark ink. */
   --term-bg:   #F1F0EB;
