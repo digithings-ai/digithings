@@ -219,6 +219,14 @@ def _is_retryable_status(status: int) -> bool:
     errors that an identical second request cannot fix, so retrying would only delay
     a clear error reaching the caller — a 403 from a wrongly-scoped token must fail
     fast, not eat a retry budget first.
+
+    429 is retried with eyes open, and it is the one classification here that can
+    amplify its own cause: ``HttpPost`` returns ``(status, text)``, so ``Retry-After``
+    is structurally unavailable and the backoff is a guess. The budget makes that
+    acceptable rather than reckless — a full 1,279-note publish is 145 calls, so even
+    if every single one burned its whole retry budget that is 435 against Cloudflare's
+    1,200-per-5-minutes, about 36%. Revisit by threading response headers through
+    ``HttpPost`` if real 429s are ever observed; none have been.
     """
     return status == 401 or status == 429 or 500 <= status < 600
 
@@ -352,6 +360,11 @@ class D1Store:
         """
         import httpx
 
+        # NOTE: `start` is set once, before the retry loop, so `duration_ms` on the
+        # warning/error records below is TOTAL elapsed — every attempt plus the backoff
+        # sleeps between them — not one HTTP round trip as it was before retry existed.
+        # A failed query therefore logs ~750-900ms more than it used to for reasons that
+        # are not D1 latency; post-retry values are not comparable to pre-retry ones.
         start = time.perf_counter()
         body = json.dumps({"sql": sql, "params": params}).encode()
         for attempt in range(1, MAX_ATTEMPTS + 1):
@@ -426,7 +439,15 @@ class D1Store:
         # and every branch above either returns or raises on the last attempt — the
         # loop can never fall through to a `MAX_ATTEMPTS + 1`th iteration. Present only
         # so a type checker sees every path returning or raising.
-        raise AssertionError("d1 query retry loop exited without returning or raising")
+        #
+        # Raises D1StoreError rather than AssertionError so the type invariant is total:
+        # MAX_ATTEMPTS is a public module constant with no validation, and at 0 the
+        # `range(1, 1)` loop body never runs. An AssertionError here would escape
+        # server.py's `except D1StoreError` and surface as a 500 instead of a 503.
+        raise D1StoreError(
+            f"d1 {operation} exited its retry loop without returning or raising "
+            f"(MAX_ATTEMPTS={MAX_ATTEMPTS})"
+        )
 
     def search(
         self, query: str, *, limit: int = 7, path_prefix: str | None = None
