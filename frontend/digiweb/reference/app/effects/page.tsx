@@ -42,6 +42,26 @@ function plainLine(l: TermLine): string {
   }
 }
 
+// Jump list — this is the longest, most scroll-heavy page in the reference
+// site (ten-plus sections, several multi-viewport-height pinned demos), with
+// zero in-page wayfinding despite every section id already existing in the
+// markup below. Plain anchor links: no JS, no scroll-spy — works with
+// scripts off like the rest of this page's own content-first philosophy.
+const JUMP_SECTIONS = [
+  { id: "typed-terminal", label: "Terminal" },
+  { id: "hero-graph", label: "Reveal graph" },
+  { id: "module-graph", label: "Module graph" },
+  { id: "research-pipeline", label: "Research pipeline" },
+  { id: "pipeline", label: "Workflow" },
+  { id: "ambient-mesh", label: "Ambient mesh" },
+  { id: "section-morph", label: "Zoom-morph" },
+  { id: "stacking-panels", label: "Stacking panels" },
+  { id: "crossfade-sections", label: "Cross-fade" },
+  { id: "routing-map", label: "Routing map" },
+  { id: "rotating-prompts", label: "Rotating prompts" },
+  { id: "clip-reveal", label: "Clip-reveal" },
+];
+
 export default function EffectsPage() {
   return (
     <main className="reference-page">
@@ -58,6 +78,14 @@ export default function EffectsPage() {
           reads with scripts off.
         </p>
       </header>
+
+      <nav className="fx-jumpnav" aria-label="Jump to a demo">
+        {JUMP_SECTIONS.map((s) => (
+          <a key={s.id} href={`#${s.id}`}>
+            {s.label}
+          </a>
+        ))}
+      </nav>
 
       <section className="section-block" id="typed-terminal">
         <p className="kicker">{"// typed module terminal"}</p>

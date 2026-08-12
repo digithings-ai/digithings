@@ -102,6 +102,23 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Each node's screen-reader-only run-status text. Deliberately NOT
+     Tailwind's `.sr-only`: that utility is only emitted into an app whose
+     own source uses the class, so a shared component leaning on it renders
+     a plain visible span in any app that does not (see .tl-sr/.tm-sr for
+     the same fix, and the bug it fixed once already). */
+  .pl-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
   .pl-conn {
     flex-shrink: 0;
     padding: 0 0.4rem;
@@ -201,6 +218,20 @@
 .pl-node:hover {
   transform: translateY(-1px);
   border-color: color-mix(in srgb, var(--ink) 30%, var(--hair));
+}
+
+/* .pl-flow (the horizontally-scrolling node row) computes overflow-x AND
+   overflow-y as auto once either axis is non-visible (CSS Overflow spec),
+   with only ~1.6px of horizontal padding — not enough clearance for the
+   global :focus-visible rule's positive outline-offset (3px) + width (2px)
+   on the first/last node in the row. Same fix as .ts-seg-btn
+   (finance-tearsheet.css): an inset ring draws entirely inside the node's
+   own border box, so it can never be clipped regardless of available
+   external clearance. */
+.pl-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 6px;
 }
 
 .pl-node.is-sel {
@@ -308,6 +339,31 @@
     align-self: center;
     animation: prompt-blink 1.1s steps(1) infinite;
   }
+
+  /* WCAG 2.2.2 pause control — borderless icon button, same resting/hover
+     tone as the house's other chrome icon buttons (theme toggle, nav
+     burger). */
+  .prompt-pause {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    /* WCAG 2.5.8: 24x24 CSS px minimum touch target. The 13px icon + 0.2rem
+       padding alone only reach ~19.4px; this pads the hit area out to the
+       floor without changing the icon's own visual size. */
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+    padding: 0.2rem;
+    border: none;
+    background: transparent;
+    color: var(--ink-mute);
+    cursor: pointer;
+    transition: color 0.18s var(--ease);
+  }
+}
+
+.prompt-pause:hover {
+  color: var(--ink);
 }
 
 @keyframes prompt-blink {
