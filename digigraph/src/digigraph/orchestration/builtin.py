@@ -514,6 +514,17 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
         "tags": data.get("tags"),
         "body_markdown": data.get("body_markdown"),
     }
+    # Segment identity (#2306). Most of this corpus is not whole documents: 1190 of 1279
+    # digithings notes and 300 of 328 OCC notes are one page or section of a larger
+    # source, so "load the whole note" routinely hands the model one page of forty with
+    # nothing saying so. That is the same wrong-answer shape as the excerpt bug one layer
+    # down — a table continuing onto the next page reads as a complete table — and it is
+    # also what makes the tool description's "search for the neighbouring page" rule
+    # actionable. Emitted only when present, so a whole-document note is unchanged.
+    for key in ("parent_doc", "segment_index", "segment_label"):
+        value = data.get(key)
+        if value is not None:
+            payload_for_llm[key] = value
     return {
         "content": json.dumps(payload_for_llm),
         "results": [result],

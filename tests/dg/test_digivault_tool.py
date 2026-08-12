@@ -674,3 +674,64 @@ def test_handle_digivault_search_does_not_mark_untruncated_excerpts() -> None:
     assert "excerpts_truncated" not in payload
     assert "next_step" not in payload
     assert "truncated" not in payload["preview"][0]
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_surfaces_segment_identity() -> None:
+    """#2306, one layer down: most of this corpus is not whole documents.
+
+    1190/1279 digithings notes and 300/328 OCC notes are one page or section of a larger
+    source. Loading "the whole note" therefore routinely hands the model one page of
+    forty with nothing saying so, and a table continuing onto the next page reads as a
+    complete table — the same wrong-answer shape as the excerpt bug. Surface the segment
+    identity so the model can tell, and so "go read the neighbouring page" is actionable.
+    """
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    note = {
+        "vault_path": "clients/online-compliance-center/handbook__p013",
+        "title": "Handbook",
+        "summary": "Page 13",
+        "tags": ["occ"],
+        "body_markdown": "| step | action |\n| 1 | begin |",
+        "parent_doc": "clients/online-compliance-center/handbook",
+        "segment_index": 13,
+        "segment_label": "p013",
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": note},
+    ):
+        out = _handle_digivault_get_note({"vault_path": note["vault_path"]}, _ctx())
+
+    payload = json.loads(out["content"])
+    assert payload["parent_doc"] == "clients/online-compliance-center/handbook"
+    assert payload["segment_index"] == 13
+    assert payload["segment_label"] == "p013"
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_omits_segment_keys_for_whole_documents() -> None:
+    """A note that is a whole document must not gain empty segment keys — their presence
+    is the signal, so emitting them as null would make every note look like a fragment."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    note = {
+        "vault_path": "clients/digithings/readme",
+        "title": "Readme",
+        "summary": "",
+        "tags": [],
+        "body_markdown": "Whole document.",
+        "parent_doc": None,
+        "segment_index": None,
+        "segment_label": None,
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": note},
+    ):
+        out = _handle_digivault_get_note({"vault_path": note["vault_path"]}, _ctx())
+
+    payload = json.loads(out["content"])
+    for key in ("parent_doc", "segment_index", "segment_label"):
+        assert key not in payload
