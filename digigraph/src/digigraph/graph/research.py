@@ -262,29 +262,7 @@ def _plan_result_preview(result: str | dict) -> str:
     return s[:400] + "..." if len(s) > 400 else s
 
 
-def _format_prefetch_context(tool_name: str, result: str | dict) -> str:
-    """Format a prefetched tool result for injection into the user/LLM message."""
-    max_chars = int(os.environ.get("DIGI_TOOL_MESSAGE_MAX_CHARS", "12000"))
-    if isinstance(result, dict):
-        body = result.get("content")
-        if not isinstance(body, str) or not body.strip():
-            # Prefer compact JSON of retrieval payload (results / rag_sources / notes).
-            slim: dict[str, Any] = {}
-            for key in ("results", "rag_sources", "notes", "hits", "error", "content"):
-                if key in result:
-                    slim[key] = result[key]
-            body = json.dumps(slim or result, default=str)
-    else:
-        body = str(result)
-    if len(body) > max_chars:
-        body = (
-            body[: max_chars - 80].rstrip()
-            + "\n...[truncated for LLM context; full tool payload retained upstream]"
-        )
-    return f"[{tool_name} results]\n{body}"
-
-
-def _tool_definition_name(tool: dict[str, Any] | str) -> str | None:
+def _tool_name(tool: dict[str, Any] | str) -> str | None:
     """Extract the orchestrator tool name from an OpenAI tool dict or SUMMARY string."""
     if isinstance(tool, str):
         return tool.split(":", 1)[0].strip() or None
@@ -299,22 +277,6 @@ def _tool_definition_name(tool: dict[str, Any] | str) -> str | None:
     if isinstance(name, str) and name.strip():
         return name.strip()
     return None
-
-
-def _strip_tools_by_name(
-    tools: list[dict[str, Any]] | list[str],
-    names: set[str],
-) -> list[dict[str, Any]] | list[str]:
-    """Remove tool defs whose names are in ``names`` (after always_retrieve prefetch)."""
-    if not names or not tools:
-        return tools
-    kept: list[Any] = []
-    for tool in tools:
-        tname = _tool_definition_name(tool)
-        if tname is not None and tname in names:
-            continue
-        kept.append(tool)
-    return kept  # type: ignore[return-value]
 
 
 def _run_document_rag_path(
@@ -351,10 +313,19 @@ def _run_document_rag_path(
     _allowed_names = frozenset(_raw_allowed) if _raw_allowed else None
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
+    # Normalize before constructing ToolContext (#2295 review): an empty or
+    # whitespace-only DIGISEARCH_INDEX (e.g. `DIGISEARCH_INDEX=""` in the
+    # environment) flows straight through `_load_research_settings()` into
+    # `index_name` here unstripped. digisearch happens to fall back to "default"
+    # server-side, but `ToolContext.index_name` should never carry an empty
+    # value — it is now written unconditionally into every digisearch call's
+    # args (`_handle_digisearch`'s #2265 fix), so an empty value here is no
+    # longer harmlessly absent.
+    _resolved_index_name = str(index_name).strip() or "default"
     context = ToolContext(
         session_id=state.get("session_id"),
         run_data_dir=run_data_dir,
-        index_name=index_name,
+        index_name=_resolved_index_name,
         index_config=index_config,
         state=state,
         allowed_tool_names=_allowed_names,
@@ -377,6 +348,15 @@ def _run_document_rag_path(
                 collected_stored[p["ref"]] = p
         if isinstance(result, dict) and result.get("rag_sources"):
             merge_rag_sources_accumulator(collected_rag, result["rag_sources"])
+        # Make every tool call visible in the activity UI, including zero-hit
+        # searches: without hit_count, "searched and found nothing" and "never
+        # searched" look identical downstream. setdefault so a tool that already
+        # sets these (e.g. a future handler) is not clobbered.
+        if isinstance(result, dict):
+            result.setdefault("hit_count", len(result.get("rag_sources") or []))
+            query_arg = args.get("query") or args.get("vault_path")
+            if query_arg:
+                result.setdefault("query", str(query_arg))
         return result
 
     raw_callback = None
@@ -397,36 +377,6 @@ def _run_document_rag_path(
         ):
             data = {**data, "index_name": index_display_name}
         raw_callback(event_type, data)
-
-    from digigraph.orchestration.registry import has_tool
-
-    prefetch_names = cfg.get_always_retrieve_tools() if cfg else []
-    prefetch_blocks: list[str] = []
-    prefetched: set[str] = set()
-    if prefetch_names and str(prompt).strip():
-        q = str(prompt).strip()
-        for tool_name in prefetch_names:
-            if not has_tool(tool_name):
-                continue
-            if _allowed_names is not None and tool_name not in _allowed_names:
-                continue
-            # Bound prefetch recall so a tiny seed corpus does not dump the whole
-            # index into every turn (default digisearch top_k=10 / vault limit=7).
-            args: dict[str, Any] = {"query": q}
-            if tool_name in ("digisearch", "digisearch_fetch_all"):
-                args["top_k"] = 4
-            elif tool_name == "digivault_search_notes":
-                args["limit"] = 3
-            stream_callback("tool_call", {"name": tool_name, "arguments": args})
-            result = execute_search(tool_name, args)
-            payload = (
-                {**result, "name": tool_name}
-                if isinstance(result, dict)
-                else {"name": tool_name, "content": result}
-            )
-            stream_callback("tool_result", payload)
-            prefetch_blocks.append(_format_prefetch_context(tool_name, result))
-            prefetched.add(tool_name)
 
     user_content = str(prompt)
 
@@ -466,19 +416,13 @@ def _run_document_rag_path(
                 + user_content
             )
 
-    if prefetch_blocks:
-        user_content = (
-            "Retrieved context (already fetched — do not re-call these tools):\n\n"
-            + "\n\n".join(prefetch_blocks)
-            + "\n\nUser question:\n"
-            + user_content
-        )
-
-    # Prefetch already ran; strip those tools so the model cannot re-search.
-    if prefetched:
-        tools_for_llm = _strip_tools_by_name(tools_for_llm, prefetched)
-
-    # Empty tools_for_llm → single streamed completion (no tool rounds).
+    # The model drives retrieval: it chooses whether to search, writes its own query,
+    # and may follow a digisearch hit with digivault_get_note to read the whole note.
+    # 4 rounds is enough for locate -> load -> answer with one retry. This bounds
+    # tool-calling rounds, not the completion count outright: run_tools fires one
+    # extra tool-free completion when the round budget is exhausted with no final
+    # content (digillm/src/digillm/client.py:2138-2147), so a fully-exhausted budget
+    # costs up to 5 completions per turn (this used to be exactly 1).
     content = run_tools(
         model=get_model_for_mode(),
         messages=[
@@ -487,6 +431,7 @@ def _run_document_rag_path(
         ],
         tools=tools_for_llm,
         execute_tool=execute_search,
+        max_tool_rounds=4,
         on_tool_step=stream_callback,
     )
 

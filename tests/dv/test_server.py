@@ -1158,11 +1158,12 @@ def test_orchestrator_invoke_get_note_missing_vault_path_is_ok_false(
 def test_orchestrator_invoke_get_note_missing_path_prefix_is_ok_false_not_unscoped(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The production gap this dispatch branch must not paper over: digigraph's
-    builtin.py has no handler that injects the caller's tenant context into
-    `digivault_get_note`'s arguments (only `_handle_digivault_search` does that, and
-    only for `digivault_search_notes`) — so `path_prefix` is absent on every real
-    call today. Defaulting to an unscoped read here (resolve_path_prefix(None) means
+    """The production gap this dispatch branch must not paper over: even now that
+    digigraph's `_handle_digivault_get_note` injects the caller's tenant context
+    (mirroring `_handle_digivault_search`'s `digivault_search_notes` handling,
+    #2240), a session with no mapped tenant corpus still gets `path_prefix=None`
+    passed through unconditionally — digigraph has no unscoped default to fall
+    back to. Defaulting to an unscoped read here (resolve_path_prefix(None) means
     "no scoping requested") would be exactly the cross-tenant fail-open the by-path
     route's required path_prefix field exists to prevent. Must refuse instead."""
 

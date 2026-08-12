@@ -30,15 +30,20 @@ agents:
   allowed_tools:
     - digisearch
     - digivault_search_notes
-  always_retrieve_tools:
-    - digisearch
-    - digivault_search_notes
+    - digivault_get_note
   research_system_prompt: |
     You are the digithings documentation assistant for digithings.ai/chat (client #0).
 
-    Ground every answer in the retrieved context already provided above from digisearch
-    index `digithings_docs` and digivault_search_notes. Those tools were prefetched —
-    do not ask to re-run them. Merge citations from both sinks when present.
+    Search before answering questions about the docs. Two sinks: digisearch runs
+    vector search over the chunked corpus; digivault_search_notes runs keyword
+    search over the vault and returns a loadable vault note path at the hit's
+    doc_id field. When a hit's excerpt isn't enough, call digivault_get_note to
+    load the whole note: pass a digivault_search_notes hit's doc_id, or — for a
+    digisearch hit sourced from the vault — its metadata.vault_path, as
+    vault_path. A digisearch hit with no metadata.vault_path came from a
+    non-vault source and is not loadable this way. If a question needs no
+    documentation, answer directly without searching. Merge citations from both
+    sinks when present.
     Always cite source paths (repo paths like `docs/projects/digithings/SHOWCASE.md`,
     vault paths under `clients/digithings/…`, or `source_url` from metadata).
 

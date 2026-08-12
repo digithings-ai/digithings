@@ -167,11 +167,15 @@ only queries.
 
 - **Removing Chroma.** It remains the local-dev and test backend, and the
   `seed_chroma.sh` path stays functional for offline work.
-- **Migrating digivault.** Keyword/vault search continues to read Supabase
-  (`architecture_notes`); this spec covers the vector half only. Note that
-  digivault's Supabase path has its own three production blockers (missing
-  `supabase` extra in the image, `entrypoint.sh` re-defaulting an empty
-  `DIGIVAULT_ROOT`, and the same `envVars` whitelist gap) — tracked separately.
+- **Migrating digivault.** *(Superseded — true when written, false since #2239.)*
+  This spec covered the vector half only, on the assumption that keyword/vault
+  search would keep reading Supabase (`architecture_notes`) indefinitely.
+  That is no longer the case: `docs/superpowers/specs/2026-08-12-agentic-chat-and-digivault-on-d1-design.md`
+  gave digivault its own Cloudflare D1-backed corpus, and `digivault_search_notes`
+  now prefers D1 when configured, falls back to the local filesystem vault when
+  `DIGIVAULT_ROOT` is set, and only reaches Supabase as the last resort (see
+  digivault/ARCHITECTURE.md's search-precedence section). This spec's vector-index
+  decisions above are unaffected; only this non-goal's premise is superseded.
 - **Workers AI embeddings.** Reconsider only if the local model becomes a
   cold-boot cost worth removing.
 - **Auth for hosted Chroma.** `ChromaBackend` still cannot send auth headers;

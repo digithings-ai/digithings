@@ -190,18 +190,49 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
     }
 
 
-def _schema_from_digivault_manifest(ctx: ToolContext) -> dict[str, Any]:
+def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[str, Any]:
     try:
         by_name = fetch_digivault_tool_dicts(
             _digivault_service_base(),
             _digi_bearer_from_context(ctx),
             ctx.request_id,
         )
-        t = by_name.get("digivault_search_notes")
+        t = by_name.get(tool_name)
         if t:
             return t
     except _ORCHESTRATOR_CLIENT_ERRORS as exc:
-        logger.warning("digivault manifest fetch failed for digivault_search_notes: %s", exc)
+        logger.warning("digivault manifest fetch failed for %s: %s", tool_name, exc)
+    if tool_name == "digivault_get_note":
+        return {
+            "type": "function",
+            "function": {
+                "name": "digivault_get_note",
+                "description": (
+                    "Load one vault note in full, instead of reasoning from its excerpt. "
+                    "The vault_path argument is copied from a prior digivault_search_notes "
+                    "hit's doc_id field (that hit's JSON has no field literally named "
+                    "vault_path). Do not use a digisearch hit's doc_id here — digisearch's "
+                    "doc_id is a repo path, not a vault path, and this tool will refuse or "
+                    "404 on it. D1-only: requires DIGIVAULT_URL, POST /v1/orchestrator_tools, "
+                    "and a D1-backed digivault deployment."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "vault_path": {
+                            "type": "string",
+                            "description": (
+                                "Copy this from a digivault_search_notes hit's doc_id "
+                                "field — not from a digisearch hit's doc_id, which is a "
+                                "repo path this tool cannot load."
+                            ),
+                        },
+                        "path_prefix": {"type": "string"},
+                    },
+                    "required": ["vault_path", "path_prefix"],
+                },
+            },
+        }
     return {
         "type": "function",
         "function": {
@@ -219,13 +250,30 @@ def _schema_from_digivault_manifest(ctx: ToolContext) -> dict[str, Any]:
     }
 
 
+# Literal error strings digivault's own orchestrator_invoke handler returns when a
+# request reaches it with no path_prefix (digivault/src/digivault/server.py's
+# "path_prefix is required when the D1 backend is configured" / "path_prefix is
+# required for digivault_get_note" branches). The "no tenant corpus" substitution
+# below must key on *this* — the actual error digivault returned — not on
+# `context.vault_path_prefix is None`: a digivault outage, an expired D1 token, or a
+# malformed D1_DATABASE_MAP can also produce ok=False while vault_path_prefix happens
+# to be None, and those must surface their own error, not get mislabeled as a session
+# configuration gap (#2295 review).
+_DIGIVAULT_SEARCH_NO_PREFIX_ERROR = "path_prefix is required when the D1 backend is configured"
+_DIGIVAULT_GET_NOTE_NO_PREFIX_ERROR = "path_prefix is required for digivault_get_note"
+
+
 def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
     args_eff = dict(args)
-    if "path_prefix" not in args_eff and context.vault_path_prefix:
-        args_eff["path_prefix"] = context.vault_path_prefix
+    # Security (#2265): overwrite unconditionally, never default-if-missing — a
+    # model-supplied path_prefix must not reach another tenant's corpus. Mirrors
+    # _handle_digivault_get_note's mandatory fix; extended to match rather than
+    # left on the old conditional-default (see #2265 and the digivault_get_note
+    # commit on this branch, #2240).
+    args_eff["path_prefix"] = context.vault_path_prefix
     try:
         inv = invoke_digivault_tool(
             _digivault_service_base(),
@@ -237,13 +285,52 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"digivault orchestrator invoke failed: {e}"
     if not inv.get("ok"):
+        if inv.get("error") == _DIGIVAULT_SEARCH_NO_PREFIX_ERROR:
+            # Important 2 (#2240 final-branch review): digivault's own
+            # "path_prefix is required" sentence is written for a direct API
+            # caller that can just add the argument. The model can't act on it:
+            # it already supplied path_prefix (the schema marks it required),
+            # and this handler discards whatever it sent and substitutes None
+            # unconditionally (the #2265 overwrite, above) because no tenant
+            # corpus is mapped for this session. Relaying the raw sentence costs
+            # a full completions/round trip per retry — measured at 5
+            # completions / 4 digivault round-trips to produce nothing before
+            # this fix — because the model keeps retrying something outside its
+            # control. Mirrors _handle_digivault_get_note's equivalent branch.
+            #
+            # Keyed on digivault's actual returned error (#2295 review), not on
+            # `context.vault_path_prefix is None`: that session-state check would
+            # also catch a digivault outage, an expired D1 token, or a malformed
+            # D1_DATABASE_MAP that happens to fire while vault_path_prefix is
+            # None, mislabeling a real infra failure as a session config gap.
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": (
+                        "No tenant corpus is configured for this chat session, so "
+                        "digivault_search_notes cannot search the vault here — "
+                        "this is a session configuration gap, not something you "
+                        "can fix by resupplying path_prefix. Do not retry this "
+                        "tool; answer from what digisearch already returned, or "
+                        "tell the user vault search is unavailable."
+                    ),
+                }
+            )
         return json.dumps(inv)
     data = inv.get("data")
     if not isinstance(data, dict):
-        return "No results found."
+        # A completed (ok=True) search with no usable payload is a zero-hit search,
+        # not a "never searched" — return a dict (not a bare string) so execute_search
+        # (research.py) can attach hit_count=0/query for the activity trace. The
+        # "content" string is unchanged, so the model still reads the same text.
+        return {"content": "No results found.", "results": [], "rag_sources": []}
     hits = data.get("hits", [])
     if not hits:
-        return "No matching documentation was found in the digivault for that query."
+        return {
+            "content": "No matching documentation was found in the digivault for that query.",
+            "results": [],
+            "rag_sources": [],
+        }
     results = [
         {
             "content": h.get("body_markdown"),
@@ -262,13 +349,96 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
     }
 
 
+def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
+    """Load one vault note in full by vault_path (the locate-then-load follow-up to
+    digivault_search_notes, which only returns a short excerpt per hit)."""
+    vault_path = args.get("vault_path", "")
+    if not vault_path or not str(vault_path).strip():
+        return "vault_path is required."
+    args_eff = dict(args)
+    # Security: overwrite unconditionally, never default-if-missing. A model that
+    # supplies its own path_prefix must not be able to select another tenant's corpus.
+    # If context has no prefix (unmapped tenant slug), this passes None through — we do
+    # not fall back to an unscoped read; digivault's own handler refuses that with
+    # ok=False rather than serving the whole vault.
+    args_eff["path_prefix"] = context.vault_path_prefix
+    try:
+        inv = invoke_digivault_tool(
+            _digivault_service_base(),
+            "digivault_get_note",
+            args_eff,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return f"digivault orchestrator invoke failed: {e}"
+    if not inv.get("ok"):
+        if inv.get("error") == _DIGIVAULT_GET_NOTE_NO_PREFIX_ERROR:
+            # digivault's own "path_prefix is required" sentence is written for a
+            # direct API caller that can just add the argument. The model can't act
+            # on it: it already supplied path_prefix (the schema marks it required),
+            # and this handler discards whatever it sent and substitutes None
+            # unconditionally (the #2265 overwrite, above) because no tenant corpus
+            # is mapped for this session. Telling it to do something outside its
+            # control just burns retries against the 4-round tool budget — give it
+            # an instruction it can actually follow instead.
+            #
+            # Keyed on digivault's actual returned error (#2295 review), not on
+            # `context.vault_path_prefix is None`: that session-state check would
+            # also catch a digivault outage, an expired D1 token, or a malformed
+            # D1_DATABASE_MAP that happens to fire while vault_path_prefix is
+            # None, mislabeling a real infra failure as a session config gap.
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": (
+                        "No tenant corpus is configured for this chat session, so "
+                        "digivault_get_note cannot look up a vault note here — this "
+                        "is a session configuration gap, not something you can fix "
+                        "by resupplying path_prefix. Do not retry this tool; answer "
+                        "from what digisearch or digivault_search_notes already "
+                        "returned, or tell the user vault lookup is unavailable."
+                    ),
+                }
+            )
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return "Note not found."
+    result = {
+        "content": data.get("body_markdown", ""),
+        "score": None,
+        "doc_id": data.get("vault_path"),
+        "metadata": {"title": data.get("title"), "tags": data.get("tags")},
+    }
+    payload_for_llm = {
+        "vault_path": data.get("vault_path"),
+        "title": data.get("title"),
+        "summary": data.get("summary"),
+        "tags": data.get("tags"),
+        "body_markdown": data.get("body_markdown"),
+    }
+    return {
+        "content": json.dumps(payload_for_llm),
+        "results": [result],
+        "rag_sources": rag_sources_from_results([result]),
+    }
+
+
 def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     q = args.get("query", "")
     if not q or not str(q).strip():
         return "No search query provided."
     args_eff = dict(args)
-    if "index_name" not in args_eff and context.index_name:
-        args_eff["index_name"] = context.index_name
+    # Security (#2265): overwrite unconditionally, never default-if-missing — a
+    # model-supplied index_name must not reach another tenant's vector corpus.
+    # index_name is not declared on the digisearch schema, but that never stopped
+    # a model from supplying one anyway: OrchestratorInvokeRequest.arguments (on
+    # the digisearch side) is dict[str, Any], never schema-validated. Mirrors the
+    # vault handlers' mandatory fix (_handle_digivault_search /
+    # _handle_digivault_get_note) — the digisearch index is the other half of
+    # the same tenant boundary #2265 closed for digivault's path_prefix.
+    args_eff["index_name"] = context.index_name
     merged = _merged_digisearch_filters(context, args_eff)
     if merged:
         args_eff["filters"] = merged
@@ -287,7 +457,11 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
         return json.dumps(inv)
     data = inv.get("data")
     if not isinstance(data, dict):
-        return "No results found."
+        # A completed (ok=True) search with no usable payload is a zero-hit search,
+        # not a "never searched" — return a dict (not a bare string) so execute_search
+        # (research.py) can attach hit_count=0/query for the activity trace. The
+        # "content" string is unchanged, so the model still reads the same text.
+        return {"content": "No results found.", "results": [], "rag_sources": []}
     results = data.get("results", [])
     summary = data.get("summary")
     total = data.get("total", len(results))
@@ -306,7 +480,9 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
         except _STORE_ERRORS as exc:
             logger.warning("write_search_results failed: %s", exc)
     if not results and not summary:
-        return "No results found."
+        # Real zero-hit case: the search ran, dig(i)search answered, nothing matched.
+        # Dict (not a bare string) so execute_search can attach hit_count=0/query.
+        return {"content": "No results found.", "results": [], "rag_sources": []}
     payload_for_llm = _search_payload_for_llm(
         results, total, dataset_ref=dataset_ref, summary=summary
     )
@@ -330,8 +506,12 @@ def _handle_digisearch_fetch_all(
     if not q or not str(q).strip():
         return "No search query provided."
     args_eff = dict(args)
-    if "index_name" not in args_eff and context.index_name:
-        args_eff["index_name"] = context.index_name
+    # Security (#2265): same unconditional overwrite as _handle_digisearch. Not
+    # reachable from the production allowlist today (digisearch_fetch_all is not in
+    # infra/digichat-release/config/digiproject.yaml's allowed_tools), but leaving one
+    # half of the tenant boundary on the old default-if-missing pattern is how it comes
+    # back the moment this tool is allowlisted.
+    args_eff["index_name"] = context.index_name
     merged = _merged_digisearch_filters(context, args_eff)
     if merged:
         args_eff["filters"] = merged
@@ -646,8 +826,10 @@ def _handle_digisearch_research_delegate(
         return {"content": "user_message is required."}
     args_eff = dict(args)
     args_eff["user_message"] = msg
-    if "index_name" not in args_eff and context.index_name:
-        args_eff["index_name"] = context.index_name
+    # Security (#2265): same unconditional overwrite as _handle_digisearch. Gated behind
+    # federated_hub_enabled() and not in any production allowlist today, but the tenant
+    # boundary should not have a third shape.
+    args_eff["index_name"] = context.index_name
     merged = _merged_digisearch_filters(context, args_eff)
     if merged:
         args_eff["filters"] = merged
@@ -759,7 +941,13 @@ def _register_tools() -> None:
         "digivault_search_notes",
         None,
         _handle_digivault_search,
-        schema_factory=_schema_from_digivault_manifest,
+        schema_factory=lambda ctx: _schema_from_digivault_manifest(ctx, "digivault_search_notes"),
+    )
+    register_tool(
+        "digivault_get_note",
+        None,
+        _handle_digivault_get_note,
+        schema_factory=lambda ctx: _schema_from_digivault_manifest(ctx, "digivault_get_note"),
     )
     register_tool(
         "visualization_agent",
@@ -860,7 +1048,7 @@ def _register_skills() -> None:
     )
     register_skill(
         "digivault",
-        ["digivault_search_notes"],
+        ["digivault_search_notes", "digivault_get_note"],
         when=lambda ctx: _digivault_available(ctx),
     )
 
