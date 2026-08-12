@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { GitHubGlyph } from "@digithings/web";
 
 export const DIGIQUANT_GITHUB_ROOT = "https://github.com/digithings-ai/digithings";
@@ -11,21 +11,36 @@ type CopyStatus = "idle" | "copied" | "failed";
 
 export function CloneRepoButton({ className = "btn btn-ghost" }: { className?: string }) {
   const [status, setStatus] = useState<CopyStatus>("idle");
+  // Tracks the one pending "reset to idle" timer so a second click's status
+  // cannot be cut short by the FIRST click's still-scheduled timeout (review
+  // finding on PR #2283: two untracked setTimeout calls raced, letting an
+  // earlier click force status back to idle while a later click's message
+  // was still supposed to be showing).
+  const resetTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimer.current != null) window.clearTimeout(resetTimer.current);
+  }, []);
+
+  const scheduleReset = useCallback((ms: number) => {
+    if (resetTimer.current != null) window.clearTimeout(resetTimer.current);
+    resetTimer.current = window.setTimeout(() => setStatus("idle"), ms);
+  }, []);
 
   const onCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(DIGIQUANT_CLONE_CMD);
       setStatus("copied");
-      window.setTimeout(() => setStatus("idle"), 2200);
+      scheduleReset(2200);
     } catch {
       // Clipboard blocked (permission denied, insecure context, unsupported
       // browser) -- surface it instead of failing silently (full-UI-suite
       // critique, digiquant-web target, P3); the adjacent GitHub link is
       // the fallback the button now points to.
       setStatus("failed");
-      window.setTimeout(() => setStatus("idle"), 3200);
+      scheduleReset(3200);
     }
-  }, []);
+  }, [scheduleReset]);
 
   return (
     <div className="flex w-full justify-start gap-[0.5rem]">
