@@ -269,7 +269,7 @@ export default function SecurityPage() {
     <>
       <DtNav />
 
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" className="pt-[var(--dq-nav-h)]">
         <PageHead
           kicker={"// security"}
           title={

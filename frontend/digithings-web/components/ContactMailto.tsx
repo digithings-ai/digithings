@@ -1,0 +1,110 @@
+"use client";
+
+import { useCallback, useEffect, useRef } from "react";
+import type { MouseEvent, ReactNode } from "react";
+import { DT_CONTACT_EMAIL } from "@/app/_nav";
+
+/**
+ * A `mailto:` link to DT_CONTACT_EMAIL, assigned client-side after mount
+ * instead of baked into server-rendered HTML (#2220).
+ *
+ * Cloudflare's Email Address Obfuscation (Scrape Shield, on for this zone)
+ * rewrites any literal `mailto:` href — and any literal email address in
+ * visible text — in the HTML it actually serves: `mailto:x@y.com` becomes
+ * `/cdn-cgi/l/email-protection#...`, and a bare `x@y.com` text node gets
+ * wrapped in a `<span class="__cf_email__" data-cfemail="...">`. This site's
+ * static export bakes the plain mailto: href (and, where the address is
+ * shown as the link text, the plain address) into server-rendered HTML, so
+ * React's hydration payload disagrees with what Cloudflare actually served
+ * — a hydration-mismatch error on every page with a contact link, live-
+ * verified by diffing this site's CDN-served HTML against an identical
+ * build served without Cloudflare in front of it.
+ *
+ * Rendering with no literal mailto: string or bare address in the initial
+ * HTML at all — an inert `href="#"` server-side, the real href (and,
+ * for `showAddress`, the address text) assigned after mount — gives
+ * Cloudflare's rewriter nothing to rewrite, so server and client agree.
+ * Real users with JS still get a working mailto: link; without JS the link
+ * is inert, the same tradeoff any client-only-assigned href accepts.
+ *
+ * `showAddress` callers must still pass `children` — a non-address fallback
+ * ("Email us", "us", …) that server-renders as the link's visible text and
+ * accessible name, swapped for the real address once mounted. Server-
+ * rendering `showAddress` with no children at all leaves the link visibly
+ * empty and unlabeled until JS runs — a discernible-text regression, not
+ * the documented "inert without JS" tradeoff above.
+ *
+ * WCAG 1 fix (full-UI-suite critique, digithings-web target): the inert
+ * pre-mount state looked IDENTICAL to a working link — a click before the
+ * effect below runs (slow connection, or permanently for a no-JS visitor)
+ * silently jumped to "#", on the page's only conversion mechanism (every
+ * "Email us"/"Enterprise"/"Or email us directly" CTA routes through this
+ * component). The pending look (dimmed, aria-disabled) is baked into the
+ * JSX unconditionally, in token-backed Tailwind utilities, and cleared by
+ * mutating the mounted DOM node directly in the same effect that already
+ * assigns the real href two lines below — the same pattern already applied
+ * to frontend/digiquant-web's copy of this component, PR #2283.
+ */
+
+/** Pure so the query-string assembly is unit-testable without rendering. */
+export function buildMailtoHref(email: string, subject?: string): string {
+  const query = subject ? `?subject=${subject}` : "";
+  return `mailto:${email}${query}`;
+}
+
+// Baked into the JSX unconditionally rather than a new app-local CSS class —
+// the frontend canon guard's family census (#1421) rejects a new class in a
+// census app's stylesheet; token-backed Tailwind utilities are not scanned.
+const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
+
+export function ContactMailto({
+  subject,
+  className,
+  ariaLabel,
+  showAddress = false,
+  children,
+}: {
+  /** Appended as `?subject=<subject>` verbatim — callers pass it already
+   *  URL-encoded (matching how every call site names its subject today). */
+  subject?: string;
+  className?: string;
+  ariaLabel?: string;
+  /** Swap `children` for DT_CONTACT_EMAIL itself once mounted, rather than
+   *  passing the address as `children` directly (which would bake the bare
+   *  address into the server-rendered text node — the same problem this
+   *  component exists to avoid). `children` is still required: it's the
+   *  server-rendered fallback text and accessible name until the swap. */
+  showAddress?: boolean;
+  children?: ReactNode;
+}) {
+  const ref = useRef<HTMLAnchorElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.href = buildMailtoHref(DT_CONTACT_EMAIL, subject);
+    if (showAddress) el.textContent = DT_CONTACT_EMAIL;
+    el.classList.remove(...PENDING_CLASSES);
+    el.removeAttribute("aria-disabled");
+  }, [subject, showAddress]);
+
+  // Reads the live DOM rather than component state, so it keeps swallowing
+  // clicks exactly until the effect above clears aria-disabled -- no state
+  // to fall out of sync with the imperative DOM mutation.
+  const onClick = useCallback((e: MouseEvent<HTMLAnchorElement>) => {
+    if (ref.current?.getAttribute("aria-disabled") === "true") e.preventDefault();
+  }, []);
+
+  return (
+    <a
+      ref={ref}
+      href="#"
+      className={[className, ...PENDING_CLASSES].filter(Boolean).join(" ")}
+      aria-label={ariaLabel}
+      aria-disabled="true"
+      onClick={onClick}
+    >
+      {children}
+    </a>
+  );
+}

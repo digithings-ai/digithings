@@ -154,6 +154,25 @@ export type EmbedGate = {
 };
 
 /**
+ * Whether a gated send that has just settled (its chat hook's busy/streaming
+ * state flipped back to false) should actually charge one free-tier turn.
+ *
+ * `increment()` above is documented "call after a successful user turn" —
+ * this is that contract, made an explicit, independently-testable predicate.
+ * embed-client.tsx's chat.send() is fire-and-forget (useChat's sendMessage
+ * has no success/failure return), so the caller can only know the outcome
+ * once busy goes false again; at that point `hasError` (from the same chat
+ * hook) is the only signal distinguishing a real answer from a failed turn.
+ * Without this check, a failed send still spent one of the visitor's 3 free
+ * turns — confirmed live: 3 consecutive backend failures fully exhausted the
+ * quota with zero real answers delivered, permanently gating a visitor who
+ * got no value at all.
+ */
+export function shouldChargeGateOnSettle(hasError: boolean): boolean {
+  return !hasError;
+}
+
+/**
  * Hook: free-tier gate counter.
  *
  * @param byokUnlocked - when true, `locked` is always false regardless of count.

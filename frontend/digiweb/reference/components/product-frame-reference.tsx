@@ -11,35 +11,54 @@
  */
 export { ProductFrame } from "@digithings/web";
 
-/** A mock atlas tearsheet crop — stand-in for a real product screenshot. */
-export function MockTearsheet() {
+export type MockTearsheetProps = {
+  title?: string;
+  cagr?: string;
+  maxDd?: string;
+  profitFactor?: string;
+  /** SVG polyline points — override so each crop's chart shape actually differs. */
+  points?: string;
+};
+
+/**
+ * A mock atlas tearsheet crop — stand-in for a real product screenshot.
+ * Every field defaults to the original demo values so existing call sites
+ * keep working unchanged, but every ProductFrame consumer on
+ * /layout-patterns now passes its own distinct values — before this, all
+ * three (feature-cell "research", feature-cell "execution", and this page's
+ * standalone demo) rendered byte-identical stats/chart despite different
+ * narrative tags, quietly undercutting the section's own "copy leads, the
+ * product proves it" claim.
+ */
+export function MockTearsheet({
+  title = "trend_xsec · ETH-USD",
+  cagr = "+44.9%",
+  maxDd = "-54.1%",
+  profitFactor = "2.31",
+  points = "0,150 60,140 120,146 180,110 240,120 300,84 360,92 420,54 480,64 560,24",
+}: MockTearsheetProps) {
   return (
     <div className="pf-mock">
       <div className="pf-mock-head">
-        <span className="pf-mock-title">trend_xsec · ETH-USD</span>
+        <span className="pf-mock-title">{title}</span>
       </div>
       <div className="pf-mock-chart" aria-hidden="true">
         <svg viewBox="0 0 560 180" preserveAspectRatio="none">
-          <polyline
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            points="0,150 60,140 120,146 180,110 240,120 300,84 360,92 420,54 480,64 560,24"
-          />
+          <polyline fill="none" stroke="currentColor" strokeWidth="2" points={points} />
         </svg>
       </div>
       <dl className="pf-mock-stats">
         <div>
           <dt>CAGR</dt>
-          <dd className="up">+44.9%</dd>
+          <dd className="up">{cagr}</dd>
         </div>
         <div>
           <dt>MAX DD</dt>
-          <dd className="down">-54.1%</dd>
+          <dd className="down">{maxDd}</dd>
         </div>
         <div>
           <dt>PROFIT FACTOR</dt>
-          <dd>2.31</dd>
+          <dd>{profitFactor}</dd>
         </div>
       </dl>
     </div>

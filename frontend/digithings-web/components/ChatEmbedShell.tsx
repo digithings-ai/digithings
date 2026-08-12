@@ -71,6 +71,9 @@ function embedSrc(origin: string, embedHost: string, theme: EmbedShellTheme): st
   url.searchParams.set("host", embedHost);
   url.searchParams.set("layout", "page");
   url.searchParams.set("theme", theme);
+  // Full-page host, not a narrow widget — drop digichat-ui's 1080px reading
+  // column so the session fills the shell (see .dc-session--wide).
+  url.searchParams.set("wide", "1");
   return url.toString();
 }
 
@@ -213,7 +216,12 @@ export function ChatEmbedShell({
 
   return (
     <div
-      className="dc-page"
+      // Not className="dc-page": that class (session.css) is digichat-ui's own
+      // standalone-page padding/min-height rule, meant for a page with no other
+      // chrome around it. The parent <main> here (chat/page.tsx, chat/occ/page.tsx)
+      // already pads for the fixed nav, so stacking .dc-page's own nav-clearing
+      // padding on top doubled it. Nothing else in the codebase reads .dc-page —
+      // it was never actually shared, just misapplied here.
       data-theme={shellTheme}
       style={{
         display: "flex",
@@ -222,9 +230,28 @@ export function ChatEmbedShell({
         height: "100%",
         minHeight: 0,
         position: "relative",
-        // Match digithings theme so the slot never flashes browser-default white
-        // while the iframe boots (or while ContainerBootLoader is up).
-        background: "var(--bg)",
+        // The proportioned-page look (gutters, breathing room off the floor)
+        // belongs to this host page, not the guest iframe — the iframe just
+        // fills whatever box it's given, edge-to-edge (digichat's own
+        // .dc-session--wide does the same: no internal cap once `wide=1`).
+        // Sizing it here instead of inside digichat also means it responds
+        // to this page's own breakpoints, not a copy of them maintained on
+        // the other side of the iframe boundary.
+        width: "100%",
+        maxWidth: "min(1280px, 90vw)",
+        marginInline: "auto",
+        // Symmetric with paddingBottom: the parent <main> no longer reserves
+        // --dq-nav-h up top (DtNav is autoHide="hover" now, overlaying rather
+        // than pushing content down), so without this the chat sat flush
+        // against the very top while keeping its bottom gap — lopsided.
+        paddingTop: "clamp(0.75rem, 2.5vw, 1.75rem)",
+        paddingBottom: "clamp(0.75rem, 2.5vw, 1.75rem)",
+        // Transparent, not var(--bg): the page's fixed .grain/.glow layers (site.css,
+        // z-index 0) sit behind this shell, and an opaque fill here paints a visible
+        // rectangle over them. The boot overlay below is transparent for the same
+        // reason (see its own comment) -- the iframe's opacity:0 already hides any
+        // browser-default white pre-ready, so nothing here needs a solid fill.
+        background: "transparent",
         colorScheme: shellTheme,
       }}
     >
@@ -253,13 +280,26 @@ export function ChatEmbedShell({
             position: "absolute",
             inset: 0,
             zIndex: 1,
-            background: "var(--bg)",
+            // Transparent, not var(--bg) -- same reasoning as the shell div above.
+            // This used to fill solid on the (mistaken) assumption that it was the
+            // only thing standing between a pre-ready iframe and a flash of
+            // browser-default white, but the iframe's own opacity:0 (below) already
+            // does that job. A solid fill here just painted a flat, textureless
+            // rectangle over the page's .grain/.glow the whole time this was up,
+            // then popped to the real (transparent) background on ready -- visible
+            // as a "black box that disappears" once digichat loaded.
+            background: "transparent",
           }}
         >
           <ContainerBootLoader
             title="digichat"
             note="waking the embed · first paint after digichat:ready"
             fullscreen={false}
+            // ContainerBootLoader's own .tl-boot class fills var(--bg) by default --
+            // right for its usual mode (a plain app with nothing behind it), wrong
+            // here where .grain/.glow should show through. Scoped override below,
+            // not a change to the shared component or its default styling.
+            className="dc-embed-boot"
           />
         </div>
       ) : null}

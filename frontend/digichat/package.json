@@ -1,6 +1,6 @@
 {
   "name": "digichat",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
@@ -32,8 +32,8 @@
     "next": "16.2.4",
     "next-auth": "^5.0.0-beta.30",
     "postgres": "^3.4.8",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "shadcn": "^4.3.0",
@@ -42,6 +42,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -50,6 +53,7 @@
     "esbuild": "^0.27.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "happy-dom": "^20.11.1",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "typescript": "^5",

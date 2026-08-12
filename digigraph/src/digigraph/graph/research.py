@@ -12,6 +12,7 @@ from typing import Any
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
+from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
@@ -658,6 +659,10 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
     if override_prompt and str(override_prompt).strip():
         system_prompt = str(override_prompt).strip()
     is_document_mode = system_prompt != RESEARCH_SYSTEM
+
+    language_directive = resolve_language_directive(state.get("response_language"))
+    if language_directive:
+        system_prompt = f"{system_prompt}\n\n{language_directive}"
 
     if is_document_mode and _digisearch_available():
         try:

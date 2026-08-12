@@ -58,6 +58,7 @@ export function PortfolioReference() {
               ).map(([label, align]) => (
                 <th
                   key={label}
+                  scope="col"
                   className={`border-b border-hair px-4 py-[0.7rem] text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute ${align}`}
                 >
                   {label}
@@ -68,9 +69,12 @@ export function PortfolioReference() {
           <tbody>
             {POSITIONS.map((p) => (
               <tr key={p.sym}>
-                <td className="border-b border-hair/55 px-4 py-[0.62rem] text-left text-ink">
+                <th
+                  scope="row"
+                  className="border-b border-hair/55 px-4 py-[0.62rem] text-left font-normal text-ink"
+                >
                   {p.sym}
-                </td>
+                </th>
                 <td className="border-b border-hair/55 px-4 py-[0.62rem] text-ink-soft">
                   <span className={`pos-side pos-side--${p.side}`}>{p.side}</span>
                 </td>
@@ -89,7 +93,7 @@ export function PortfolioReference() {
                   }`}
                 >
                   {money(p.pnl)}{" "}
-                  <span className="text-[0.72rem] opacity-75">{pctf(p.pct)}</span>
+                  <span className="text-[0.72rem]">{pctf(p.pct)}</span>
                 </td>
               </tr>
             ))}

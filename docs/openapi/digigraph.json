@@ -320,6 +320,18 @@
             "description": "Optional research system prompt from DIGI_TENANT_CORPUS_MAP.",
             "title": "Research System Prompt Override"
           },
+          "response_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-request response language code (X-Digi-Language). One of the curated codes in digigraph.languages.LANGUAGE_NAMES; unrecognized values are ignored.",
+            "title": "Response Language"
+          },
           "session_id": {
             "anyOf": [
               {

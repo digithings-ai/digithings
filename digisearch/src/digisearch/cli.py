@@ -12,13 +12,13 @@ app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 def _pick_chunker(name: str) -> Any:
     from digisearch.ingestion.chunkers.fixed import FixedSizeChunker
-    from digisearch.ingestion.chunkers.recursive import RecursiveChunker
+    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
 
     if name == "recursive":
-        return RecursiveChunker(chunk_size=512, chunk_overlap=64)
+        return SegmentAwareChunker()
     if name == "fixed":
         return FixedSizeChunker(chunk_size=512)
-    return RecursiveChunker(chunk_size=512, chunk_overlap=64)
+    return SegmentAwareChunker()
 
 
 def _sidecar_path_for(file_path: Path) -> Path:

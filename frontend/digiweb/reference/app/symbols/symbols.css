@@ -56,6 +56,16 @@
   color: var(--ink);
 }
 
+/* Opt-in for a livery-scoped specimen (same pattern as .sym-mark--accent
+   below): HairlineWordmark itself strokes in currentColor correctly, but an
+   .accent-<module> ancestor only exposes --accent as a custom property — it
+   never sets `color` — so the digiquant specimen needs this explicit
+   override to actually demonstrate the accent instead of silently staying
+   ink. */
+.sym-hairline--accent {
+  color: var(--accent);
+}
+
 .sym-label {
   font-family: var(--font-mono);
   font-size: 0.62rem;
@@ -63,6 +73,17 @@
   text-transform: uppercase;
   color: var(--ink-mute);
   overflow-wrap: anywhere;
+}
+
+/* Inline aside nested in a .sym-label figcaption — explanatory prose (e.g. a
+   sub-fidelity floor note), not another label, so it drops the uppercase/
+   tracking it would otherwise inherit. No opacity here on purpose: --ink-mute
+   (inherited from .sym-label) is already tuned to clear 4.5:1 against
+   --surface/--bg (see its own comment in tokens.css); fading it further would
+   drop this normal-size text below that minimum. */
+.sym-note {
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* Brand marks — the wordmark grammar shared with the footer colophon (mono

@@ -87,21 +87,45 @@
 
 /* Convenience scoping classes so markup can opt into a module's accent
    without writing inline styles. Any component inside will resolve
-   var(--accent) to the module color. */
-.accent-digigraph  { --accent: var(--accent-digigraph); }
-.accent-digiquant  { --accent: var(--accent-digiquant); }
+   var(--accent) to the module color.
+
+   --on-accent (the text/foreground color for anything painted on top of
+   --accent, e.g. .btn-primary) is declared theme-scoped only, below
+   (:root[data-theme="dark|light"]): white on dark, near-black on light. That
+   pairing is only correct for accents that flip light/dark WITH the theme —
+   which is true of --ink (mono livery, and atlas/hermes/kairos, which
+   collapse to --ink under [data-theme] by design) but false for every
+   per-module accent hex here: they're all light-to-medium hues in both
+   themes (the [data-theme="light"] override below, added for the separate
+   WCAG 1.4.11 fix, darkens the seven that measured under 3:1 against white —
+   still nowhere near dark enough for white text on top even for those
+   seven; the other four already cleared 3:1 unmodified), so the
+   theme-scoped --on-accent flips to white in light theme against a
+   light-to-medium background — near-illegible (verified pre-fix: as low as
+   1.81:1 for digiquant teal, 1.86:1 for digigraph gold, both against the
+   original :root hex). Each of these classes pins
+   --on-accent to a single dark ink that clears 4.5:1 against every one of
+   them in both themes (worst case 4.64:1, digiquant — its own [data-theme="light"]
+   override two sections below is deliberately close to --on-accent, since
+   that override reuses --accent's own paper-contrast hex rather than a
+   fresh one picked for this 4.5:1 headroom) rather than letting it
+   inherit the theme flip. .accent-atlas/-hermes/-kairos are deliberately
+   NOT listed here — their accent already resolves to --ink, so they should
+   keep following the theme flip like mono does. */
+.accent-digigraph  { --accent: var(--accent-digigraph);  --on-accent: #06110f; }
+.accent-digiquant  { --accent: var(--accent-digiquant);  --on-accent: #06110f; }
 .accent-atlas      { --accent: var(--accent-atlas); }
 .accent-hermes     { --accent: var(--accent-hermes); }
 .accent-kairos     { --accent: var(--accent-kairos); }
-.accent-digisearch { --accent: var(--accent-digisearch); }
-.accent-digichat   { --accent: var(--accent-digichat); }
-.accent-digikey    { --accent: var(--accent-digikey); }
-.accent-digismith  { --accent: var(--accent-digismith); }
-.accent-digiclaw   { --accent: var(--accent-digiclaw); }
-.accent-digibase   { --accent: var(--accent-digibase); }
-.accent-digistore  { --accent: var(--accent-digistore); }
-.accent-digilink   { --accent: var(--accent-digilink); }
-.accent-digivault  { --accent: var(--accent-digivault); }
+.accent-digisearch { --accent: var(--accent-digisearch); --on-accent: #06110f; }
+.accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
+.accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
+.accent-digismith  { --accent: var(--accent-digismith);  --on-accent: #06110f; }
+.accent-digiclaw   { --accent: var(--accent-digiclaw);   --on-accent: #06110f; }
+.accent-digibase   { --accent: var(--accent-digibase);   --on-accent: #06110f; }
+.accent-digistore  { --accent: var(--accent-digistore);  --on-accent: #06110f; }
+.accent-digilink   { --accent: var(--accent-digilink);   --on-accent: #06110f; }
+.accent-digivault  { --accent: var(--accent-digivault);  --on-accent: #06110f; }
 
 /* ==========================================================================
    Redesign theme layer (v2) — semantic, light + dark, terminal-phosphor cyan
@@ -124,7 +148,14 @@
 
   --ink:       #ECEEF0;
   --ink-soft:  #9AA0A6;
-  --ink-mute:  #6B7177;
+  --ink-mute:  #7D8389; /* WCAG AA fix 2026-08-11, revised: raised luminance to clear
+                            4.5:1 against --surface (4.815:1), --bg (5.069:1), AND
+                            --surface-2 (4.555:1) — the first pass (#7C8288) only
+                            checked --surface/--bg and missed --surface-2's tighter
+                            margin (4.4936:1, still under AA), a live combination via
+                            .ts-seg-btn in finance-tearsheet.css. Was #6B7177
+                            (3.74:1/3.94:1/3.54:1, all failing). Stays darker/more
+                            muted than --ink-soft. */
 
   --accent:      #3DD6C4;
   --accent-weak: rgba(61, 214, 196, 0.14);
@@ -136,6 +167,18 @@
   --up:   var(--accent-digiquant);
   --down: #E5533E;
   --warn: #E0B341;
+
+  /* Non-financial danger/error/destructive red — a distinct hue (354°,
+     magenta-leaning) from --down's (7.5°, orange-leaning) on purpose, so a
+     kill-switch button, a form-field error, and a genuine drawdown figure
+     are never visually identical on one screen (the house rule: --up/--down
+     are P&L-only). Clears AA against --bg/--surface/--surface-2 (4.62–5.15:1).
+     Named --danger, not --destructive, on purpose: shadcn's own reserved
+     --destructive/--destructive-foreground slot is a DIFFERENT variable that
+     consumers (e.g. digichat's globals.css) derive FROM canon tokens
+     (--destructive: var(--danger);) — reusing shadcn's name here would have
+     silently shadowed this token in every app that bridges shadcn vars. */
+  --danger: #E94959;
 
   --term-bg:   #08090B;
   --term-ink:  #E7EAEC;
@@ -157,7 +200,10 @@
 
   --ink:       #14181B;
   --ink-soft:  #5C636A;
-  --ink-mute:  #8A9097;
+  --ink-mute:  #666C73; /* WCAG AA fix 2026-08-11 (was #8A9097, 3.22:1 on --surface —
+                            failed): darkened (lower luminance) to clear 4.5:1 on both
+                            --surface and --bg while staying lighter/more muted than
+                            --ink-soft. */
 
   --accent:      #0E8C7F;
   --accent-weak: rgba(14, 140, 127, 0.12);
@@ -170,6 +216,13 @@
   --down: #C9533B;
   --warn: #B5832A;
 
+  /* Non-financial danger/error/destructive red — see the dark-theme comment
+     above (named --danger, not --destructive, for the same shadcn-collision
+     reason); same distinct hue, deepened for contrast on paper the same way
+     --accent/--up/--down already are. Clears AA against --bg/--surface/
+     --surface-2 (5.30–5.84:1). */
+  --danger: #C32232;
+
   /* Terminal converts with the theme: light panel, dark ink. */
   --term-bg:   #F1F0EB;
   --term-ink:  #1A1E22;
@@ -179,6 +232,29 @@
 
   --grain-opacity: 0.045;
   --grain-blend: multiply;
+
+  /* WCAG 1.4.11 fix (2026-08-12): the per-module --accent-<module> palette
+     (:root, line ~27) has no [data-theme] override and stays fixed hex
+     regardless of theme — fine on the dark canvas (all clear 6.3:1+ against
+     --surface/--bg there) but seven of the eleven fall under the 3:1
+     minimum for graphical objects against THIS theme's white --surface:
+     measured digiquant 1.81:1, digigraph 1.86:1, digibase 2.62:1,
+     digisearch 2.81:1, digismith 2.82:1, digivault 2.91:1, digilink 2.98:1.
+     Darkened here, light-theme only — the :root values above are untouched
+     and still serve the dark theme. digichat (3.04:1), digikey (3.05:1),
+     digiclaw (3.62:1), and digistore (3.68:1) already clear 3:1 unmodified
+     and are deliberately left out of this block. digiquant reuses
+     --accent's own light hex (#0E8C7F, ruled 2026-07-03 above) rather than
+     a new one, since that already IS digiquant's light-theme identity; the
+     rest are the same hue darkened just past 3:1 (3.60–3.63:1, a small
+     margin over the minimum). */
+  --accent-digigraph:  #B27C1E;
+  --accent-digiquant:  #0E8C7F;
+  --accent-digisearch: #408FB3;
+  --accent-digismith:  #5C8F8F;
+  --accent-digibase:   #84878D;
+  --accent-digivault:  #8D7DC0;
+  --accent-digilink:   #47938C;
 }
 
 /* Shared (theme-independent) tokens for the redesign. */
