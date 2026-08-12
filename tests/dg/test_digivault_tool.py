@@ -370,6 +370,28 @@ def test_handle_digivault_search_no_context_prefix_error_is_actionable() -> None
 
 
 @pytest.mark.unit
+def test_handle_digivault_search_no_context_prefix_but_different_error_passes_through() -> None:
+    """#2295 review: the "no tenant corpus" substitution must key on digivault's
+    actual returned error, not on `context.vault_path_prefix is None` alone — a
+    digivault outage, an expired D1 token, or a malformed D1_DATABASE_MAP can also
+    return ok=False while vault_path_prefix happens to be None (an unmapped tenant
+    session hitting a broken backend). That must surface its own error so whoever
+    debugs it isn't misdirected toward "add a tenant mapping" for an infra fault."""
+    from digigraph.orchestration.builtin import _handle_digivault_search
+
+    ctx = _ctx(vault_path_prefix=None)
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": False, "error": "d1 search failed (503): upstream timeout"},
+    ):
+        out = _handle_digivault_search({"query": "anything"}, ctx)
+
+    error = json.loads(out)["error"]
+    assert error == "d1 search failed (503): upstream timeout"
+    assert "no tenant corpus" not in error.lower()
+
+
+@pytest.mark.unit
 def test_invoke_digivault_tool_ok_false_message_survives_the_http_hop() -> None:
     """#2239 second review: `invoke_digivault_tool` calls `raise_for_status()`, and
     `str(httpx.HTTPStatusError)` drops the response body — so a *raised* 400 from
@@ -508,10 +530,13 @@ def test_handle_digivault_get_note_not_ok_response() -> None:
 
 @pytest.mark.unit
 def test_handle_digivault_get_note_overwrites_model_supplied_path_prefix() -> None:
-    """Security: a model-supplied path_prefix must never reach digivault. Unlike
-    `_handle_digivault_search`, which only *defaults* the prefix when the model omits
-    it (leaving a model-supplied value free to cross tenants), this handler must
-    overwrite unconditionally so a model cannot pick its own tenant scope."""
+    """Security: a model-supplied path_prefix must never reach digivault. Like
+    `_handle_digivault_search` (see
+    `test_handle_digivault_search_overwrites_model_supplied_path_prefix`), this
+    handler overwrites path_prefix unconditionally from
+    `context.vault_path_prefix` so a model cannot pick its own tenant scope —
+    #2240 extended the search handler to match this handler's mandatory
+    overwrite, replacing its earlier default-if-missing behavior."""
     from digigraph.orchestration.builtin import _handle_digivault_get_note
 
     ctx = _ctx(vault_path_prefix="clients/digithings")
@@ -562,3 +587,25 @@ def test_handle_digivault_get_note_no_context_prefix_does_not_fall_back_unscoped
     assert "path_prefix is required for digivault_get_note" not in error
     assert "no tenant corpus" in error.lower()
     assert "do not retry" in error.lower()
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_no_context_prefix_but_different_error_passes_through() -> None:
+    """#2295 review: the "no tenant corpus" substitution must key on digivault's
+    actual returned error, not on `context.vault_path_prefix is None` alone — a
+    digivault outage, an expired D1 token, or a malformed D1_DATABASE_MAP can also
+    return ok=False while vault_path_prefix happens to be None (an unmapped tenant
+    session hitting a broken backend). That must surface its own error so whoever
+    debugs it isn't misdirected toward "add a tenant mapping" for an infra fault."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    ctx = _ctx(vault_path_prefix=None)
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": False, "error": "d1 query failed (503): upstream timeout"},
+    ):
+        out = _handle_digivault_get_note({"vault_path": "digigraph/ARCHITECTURE.md"}, ctx)
+
+    error = json.loads(out)["error"]
+    assert error == "d1 query failed (503): upstream timeout"
+    assert "no tenant corpus" not in error.lower()

@@ -250,6 +250,19 @@ def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[st
     }
 
 
+# Literal error strings digivault's own orchestrator_invoke handler returns when a
+# request reaches it with no path_prefix (digivault/src/digivault/server.py's
+# "path_prefix is required when the D1 backend is configured" / "path_prefix is
+# required for digivault_get_note" branches). The "no tenant corpus" substitution
+# below must key on *this* — the actual error digivault returned — not on
+# `context.vault_path_prefix is None`: a digivault outage, an expired D1 token, or a
+# malformed D1_DATABASE_MAP can also produce ok=False while vault_path_prefix happens
+# to be None, and those must surface their own error, not get mislabeled as a session
+# configuration gap (#2295 review).
+_DIGIVAULT_SEARCH_NO_PREFIX_ERROR = "path_prefix is required when the D1 backend is configured"
+_DIGIVAULT_GET_NOTE_NO_PREFIX_ERROR = "path_prefix is required for digivault_get_note"
+
+
 def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
     q = args.get("query", "")
     if not q or not str(q).strip():
@@ -272,7 +285,7 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"digivault orchestrator invoke failed: {e}"
     if not inv.get("ok"):
-        if context.vault_path_prefix is None:
+        if inv.get("error") == _DIGIVAULT_SEARCH_NO_PREFIX_ERROR:
             # Important 2 (#2240 final-branch review): digivault's own
             # "path_prefix is required" sentence is written for a direct API
             # caller that can just add the argument. The model can't act on it:
@@ -284,6 +297,12 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
             # completions / 4 digivault round-trips to produce nothing before
             # this fix — because the model keeps retrying something outside its
             # control. Mirrors _handle_digivault_get_note's equivalent branch.
+            #
+            # Keyed on digivault's actual returned error (#2295 review), not on
+            # `context.vault_path_prefix is None`: that session-state check would
+            # also catch a digivault outage, an expired D1 token, or a malformed
+            # D1_DATABASE_MAP that happens to fire while vault_path_prefix is
+            # None, mislabeling a real infra failure as a session config gap.
             return json.dumps(
                 {
                     "ok": False,
@@ -354,7 +373,7 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"digivault orchestrator invoke failed: {e}"
     if not inv.get("ok"):
-        if context.vault_path_prefix is None:
+        if inv.get("error") == _DIGIVAULT_GET_NOTE_NO_PREFIX_ERROR:
             # digivault's own "path_prefix is required" sentence is written for a
             # direct API caller that can just add the argument. The model can't act
             # on it: it already supplied path_prefix (the schema marks it required),
@@ -363,6 +382,12 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
             # is mapped for this session. Telling it to do something outside its
             # control just burns retries against the 4-round tool budget — give it
             # an instruction it can actually follow instead.
+            #
+            # Keyed on digivault's actual returned error (#2295 review), not on
+            # `context.vault_path_prefix is None`: that session-state check would
+            # also catch a digivault outage, an expired D1 token, or a malformed
+            # D1_DATABASE_MAP that happens to fire while vault_path_prefix is
+            # None, mislabeling a real infra failure as a session config gap.
             return json.dumps(
                 {
                     "ok": False,

@@ -228,6 +228,59 @@ class TestResearchNode:
             {"results": [], "rag_sources": [], "hit_count": 0, "query": "jwt"},
         ) in events
 
+    def test_run_document_rag_path_normalizes_empty_index_name(self) -> None:
+        """#2295 review: an empty or whitespace-only index_name (e.g. a blank
+        DIGISEARCH_INDEX env var) must not reach ToolContext.index_name
+        unnormalized. index_name is now written unconditionally into every
+        digisearch call's args (builtin.py's _handle_digisearch #2265 fix), so
+        an empty ToolContext.index_name is no longer harmlessly absent —
+        digisearch's own "default" fallback never gets a chance to apply."""
+        from digigraph.graph.research import _run_document_rag_path
+
+        captured: dict[str, str] = {}
+
+        def fake_get_tools_for_skills(skill_ids: list, context: object) -> list:
+            captured["index_name"] = context.index_name
+            return []
+
+        with patch("digigraph.skills.get_tools_for_skills", side_effect=fake_get_tools_for_skills):
+            with patch("digigraph.graph.research.run_tools", return_value="Summary."):
+                _run_document_rag_path(
+                    state={"prompt": "hi"},
+                    config=None,
+                    cfg=None,
+                    system_prompt="sys",
+                    index_name="   ",
+                    index_display_name="   ",
+                    prompt="hi",
+                )
+
+        assert captured["index_name"] == "default"
+
+    def test_run_document_rag_path_normalizes_truly_empty_index_name(self) -> None:
+        """Same as above for the plain-empty-string case (not just whitespace)."""
+        from digigraph.graph.research import _run_document_rag_path
+
+        captured: dict[str, str] = {}
+
+        def fake_get_tools_for_skills(skill_ids: list, context: object) -> list:
+            captured["index_name"] = context.index_name
+            return []
+
+        with patch("digigraph.skills.get_tools_for_skills", side_effect=fake_get_tools_for_skills):
+            with patch("digigraph.graph.research.run_tools", return_value="Summary."):
+                _run_document_rag_path(
+                    state={"prompt": "hi"},
+                    config=None,
+                    cfg=None,
+                    system_prompt="sys",
+                    index_name="",
+                    index_display_name="",
+                    prompt="hi",
+                )
+
+        assert captured["index_name"] == "default"
+
 
 @pytest.mark.unit
 class TestBacktestNode:

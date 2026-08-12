@@ -313,10 +313,19 @@ def _run_document_rag_path(
     _allowed_names = frozenset(_raw_allowed) if _raw_allowed else None
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
+    # Normalize before constructing ToolContext (#2295 review): an empty or
+    # whitespace-only DIGISEARCH_INDEX (e.g. `DIGISEARCH_INDEX=""` in the
+    # environment) flows straight through `_load_research_settings()` into
+    # `index_name` here unstripped. digisearch happens to fall back to "default"
+    # server-side, but `ToolContext.index_name` should never carry an empty
+    # value — it is now written unconditionally into every digisearch call's
+    # args (`_handle_digisearch`'s #2265 fix), so an empty value here is no
+    # longer harmlessly absent.
+    _resolved_index_name = str(index_name).strip() or "default"
     context = ToolContext(
         session_id=state.get("session_id"),
         run_data_dir=run_data_dir,
-        index_name=index_name,
+        index_name=_resolved_index_name,
         index_config=index_config,
         state=state,
         allowed_tool_names=_allowed_names,
