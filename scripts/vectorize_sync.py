@@ -327,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
     from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
     from digisearch.indexes.backends.vectorize import DEFAULT_BATCH_SIZE, VectorizeBackend
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+    from digivault.d1_errors import D1StoreError
     from digivault.d1_store import D1Store
 
     try:
@@ -335,12 +336,15 @@ def main(argv: list[str] | None = None) -> int:
             account_id=os.environ.get("D1_ACCOUNT_ID", ""),
             api_token=os.environ.get("D1_API_TOKEN", ""),
         ).list_notes(path_prefix=args.prefix)
-    except ValueError as exc:
-        # resolve_path_prefix (digivault.d1_store) raises ValueError for a
-        # non-None prefix that normalizes to empty (e.g. "--prefix /") -- fail
-        # closed with a clean CLI error instead of silently syncing every note in
-        # the database, and instead of an unhandled traceback. Mirrors
-        # d1_sync.py's own handling of the same call.
+    except (ValueError, D1StoreError) as exc:
+        # ValueError: resolve_path_prefix (digivault.d1_store) rejects a non-None
+        # prefix that normalizes to empty (e.g. "--prefix /") -- fail closed rather
+        # than silently syncing every note in the database.
+        # D1StoreError: unset/typo'd D1_ACCOUNT_ID or D1_API_TOKEN, a wrong database
+        # id, or a transport blip. This script has no credential preflight (the
+        # sibling VECTORIZE_* check at the bottom of main() does), so without this
+        # arm a missing token surfaced as an unhandled traceback after a wasted
+        # round-trip to Cloudflare. Both give the clean CLI error d1_sync.py gives.
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"{len(notes)} notes under {args.prefix!r}", file=sys.stderr)

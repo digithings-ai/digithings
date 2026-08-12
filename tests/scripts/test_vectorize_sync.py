@@ -515,3 +515,34 @@ def test_per_chunk_segment_label_wins_over_note_level_frontmatter_label() -> Non
     sync_corpus([note], SegmentAwareChunker(), _StubEmbedder(), backend, model_id="m")
 
     assert backend.added[0].metadata["segment_label"] == "heading:Real Heading"
+
+
+@pytest.mark.unit
+def test_d1_store_error_is_a_clean_cli_error_not_a_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A missing D1 token must exit 1 with a readable message, not raise.
+
+    This script has no D1 credential preflight (the sibling VECTORIZE_* check does),
+    so an unset or typo'd D1_API_TOKEN reaches Cloudflare, comes back 401, and is
+    wrapped as D1StoreError -- a RuntimeError subclass that an `except ValueError`
+    arm does not catch. Without this the operator got an unhandled traceback after a
+    wasted round-trip.
+    """
+    from digivault.d1_errors import D1StoreError
+
+    import scripts.vectorize_sync as vectorize_sync
+
+    class _FailingD1:
+        def __init__(self, *a: object, **k: object) -> None:
+            pass
+
+        def list_notes(self, *, path_prefix: str | None = None) -> list:
+            raise D1StoreError("d1 list_notes failed (401): authentication error")
+
+    monkeypatch.setattr("digivault.d1_store.D1Store", _FailingD1)
+    rc = vectorize_sync.main(
+        ["--prefix", "clients/x", "--index", "x_docs", "--database", "db-1", "--dry-run"]
+    )
+    assert rc == 1
+    assert "authentication error" in capsys.readouterr().err
