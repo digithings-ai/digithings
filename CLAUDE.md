@@ -89,6 +89,32 @@ roughly $1.00–$1.50 a run, so a review on every push is a real monthly cost. T
 Copilot request job was removed from `ci.yml` when that subscription lapsed
 (#1894) — it had been reporting success while attaching no reviewer.
 
+**CodeRabbit reviews automatically, but only on branches it is told about.** It
+auto-reviews the default branch (`develop`) plus whatever `base_branches` lists
+in [`.coderabbit.yaml`](.coderabbit.yaml) — currently `main`, `module/*` and
+`release/*`. Before that file existed it reviewed **only** `develop`, and said so
+only in a small "Review skipped" comment, so two classes of PR were silently
+unreviewed: every two-hop task PR (`task/<N>-slug` → `module/<component>`), which
+is precisely where this section argues review belongs, and every promotion PR
+into `main` (verified on #2231, #2232, #2242 — skip notice, zero reviews).
+
+So, in practice:
+
+| PR | automatic CodeRabbit review? |
+|----|------------------------------|
+| anything → `develop` | yes (default branch) |
+| `task/<N>-slug` → `module/<component>` | yes, via `.coderabbit.yaml` |
+| `develop` → `main` (promotion) | yes, via `.coderabbit.yaml` |
+| anything → an unlisted base | **no** — force it with `@coderabbitai review` |
+
+`@coderabbitai review` forces a review on any PR regardless, and
+`@coderabbitai configuration` prints the resolved config annotated with which
+layer supplied each setting — use it rather than guessing, since an organization
+Global Override outranks the repo file. A **passing CodeRabbit status check is
+not the same as an approving review**: it can sit alongside a blocking
+`CHANGES_REQUESTED`, so check `gh pr view --json reviewDecision`, not just checks,
+before merging.
+
 Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
 of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
 review Cursor will quote and the least actionable, since a finding needs a fresh
