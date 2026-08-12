@@ -65,8 +65,9 @@ export default function SymbolsPage() {
         </h1>
         <p>
           The complete symbol library across digithings.ai, digiquant.io, and the apps: module
-          emblems, brand marks, favicon tiles, vendor logos, and the utility glyph set — all drawn in
-          currentColor so every mark inherits ink or accent from its livery scope.
+          emblems, brand marks, favicon tiles, vendor logos, and the utility glyph set — nearly all
+          drawn in currentColor so a mark inherits ink or accent from its livery scope (the terminal
+          cut is the deliberate exception — see brand marks below).
         </p>
       </header>
 
@@ -106,8 +107,15 @@ export default function SymbolsPage() {
           that is a ~1036px rendered width before the stroke reaches one device pixel — the
           colophon&apos;s own scale. The specimen below is deliberately the widest cell on the page
           and is <em>still</em>{" "}
-          narrower than that, so treat it as a lockup check, not a fidelity one. The olympus mark
-          is ported from the dashboard&apos;s loader, four strokes in currentColor.
+          narrower than that, so treat it as a lockup check, not a fidelity one (each caption below
+          repeats this so it reads next to the artifact, not just up here). The olympus mark is
+          ported from the dashboard&apos;s loader, four strokes in currentColor. One exception to
+          the currentColor rule: the <strong>terminal</strong> mark and wordmark are deliberately{" "}
+          <strong>one tone</strong> — plain <code>--ink</code>, never <code>--accent</code>, even
+          under a livery scope, because they read as a real shell prompt and{" "}
+          <code>.term-body</code> itself never recolors by module. The specimen below wears{" "}
+          <code>.accent-digiquant</code> anyway, on purpose, to show that side-by-side against the{" "}
+          <strong>hairline</strong> cut, which genuinely does follow the scope.
         </p>
         <div className="sym-grid sym-grid--marks">
           <figure className="sym-cell sym-cell--mark">
@@ -128,7 +136,10 @@ export default function SymbolsPage() {
           </figure>
           <figure className="sym-cell sym-cell--mark accent-digiquant">
             <TerminalWordmark suffix="quant" />
-            <figcaption className="sym-label">terminal wordmark · digiquant</figcaption>
+            <figcaption className="sym-label">
+              terminal wordmark · digiquant
+              <span className="sym-note"> — one tone by design, ignores this scope</span>
+            </figcaption>
           </figure>
           <figure className="sym-cell sym-cell--mark">
             <Wordmark suffix="things" />
@@ -150,11 +161,23 @@ export default function SymbolsPage() {
           </figure>
           <figure className="sym-cell sym-cell--wide">
             <HairlineWordmark word="things" className="sym-hairline" />
-            <figcaption className="sym-label">hairline wordmark · display only</figcaption>
+            <figcaption className="sym-label">
+              hairline wordmark · display only
+              <span className="sym-note">
+                {" "}
+                — below its ~1036px floor here; a lockup check, not a fidelity one
+              </span>
+            </figcaption>
           </figure>
           <figure className="sym-cell sym-cell--wide accent-digiquant">
-            <HairlineWordmark word="quant" className="sym-hairline" />
-            <figcaption className="sym-label">hairline wordmark · digiquant</figcaption>
+            <HairlineWordmark word="quant" className="sym-hairline sym-hairline--accent" />
+            <figcaption className="sym-label">
+              hairline wordmark · digiquant
+              <span className="sym-note">
+                {" "}
+                — below its ~933px floor here; a lockup check, not a fidelity one
+              </span>
+            </figcaption>
           </figure>
         </div>
       </section>
