@@ -112,12 +112,12 @@
 
 .ctl-btn-ref--danger {
   background: transparent;
-  color: var(--down);
-  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--hair));
 }
 
 .ctl-btn-ref--danger:hover {
-  background: color-mix(in srgb, var(--down) 10%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 /* the borderless glyph button — the nav-shell tail-cluster grammar
@@ -206,8 +206,8 @@
   }
 
   .ctl-btn-chat--destructive {
-    background: color-mix(in oklab, var(--destructive, var(--down)) 10%, transparent);
-    color: var(--destructive, var(--down));
+    background: color-mix(in oklab, var(--danger) 10%, transparent);
+    color: var(--danger);
   }
 
   .ctl-btn-chat--link {
@@ -232,13 +232,13 @@
 }
 
 .ctl-btn-chat[aria-invalid="true"] {
-  border-color: var(--destructive, var(--down));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
 }
 
 [data-theme="dark"] .ctl-btn-chat[aria-invalid="true"] {
-  border-color: color-mix(in oklab, var(--destructive, var(--down)) 50%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+  border-color: color-mix(in oklab, var(--danger) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 40%, transparent);
 }
 
 .ctl-btn-chat svg {
@@ -272,16 +272,16 @@
 }
 
 .ctl-btn-chat--destructive:focus-visible {
-  border-color: color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  border-color: color-mix(in oklab, var(--danger) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
 }
 
 [data-theme="dark"] .ctl-btn-chat--destructive {
-  background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  background: color-mix(in oklab, var(--danger) 20%, transparent);
 }
 
 [data-theme="dark"] .ctl-btn-chat--destructive:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 40%, transparent);
 }
 
 @media (hover: hover) {
@@ -312,11 +312,11 @@
   }
 
   .ctl-btn-chat--destructive:hover {
-    background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+    background: color-mix(in oklab, var(--danger) 20%, transparent);
   }
 
   [data-theme="dark"] .ctl-btn-chat--destructive:hover {
-    background: color-mix(in oklab, var(--destructive, var(--down)) 30%, transparent);
+    background: color-mix(in oklab, var(--danger) 30%, transparent);
   }
 
   .ctl-btn-chat--link:hover {
@@ -501,8 +501,8 @@
   }
 
   .ctl-badge-chat--destructive {
-    background: color-mix(in oklab, var(--destructive, var(--down)) 10%, transparent);
-    color: var(--destructive, var(--down));
+    background: color-mix(in oklab, var(--danger) 10%, transparent);
+    color: var(--danger);
   }
 
   .ctl-badge-chat--outline {
@@ -530,15 +530,15 @@
 }
 
 .ctl-badge-chat[aria-invalid="true"] {
-  border-color: var(--destructive, var(--down));
+  border-color: var(--danger);
 }
 
 .ctl-badge-chat[aria-invalid="true"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
 }
 
 [data-theme="dark"] .ctl-badge-chat[aria-invalid="true"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 40%, transparent);
 }
 
 .ctl-badge-chat > svg {
@@ -548,15 +548,15 @@
 }
 
 .ctl-badge-chat--destructive:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
 }
 
 [data-theme="dark"] .ctl-badge-chat--destructive {
-  background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  background: color-mix(in oklab, var(--danger) 20%, transparent);
 }
 
 [data-theme="dark"] .ctl-badge-chat--destructive:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 40%, transparent);
 }
 
 @media (hover: hover) {
@@ -569,7 +569,7 @@
   }
 
   a.ctl-badge-chat--destructive:hover {
-    background: color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+    background: color-mix(in oklab, var(--danger) 20%, transparent);
   }
 
   a.ctl-badge-chat--outline:hover {
@@ -795,11 +795,11 @@
 }
 
 .ctl-input-ref[aria-invalid="true"] {
-  border-color: color-mix(in srgb, var(--down) 60%, var(--hair));
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--hair));
 }
 
 .ctl-input-ref[aria-invalid="true"]:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--down) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
 }
 
 .ctl-input-ref:disabled {
@@ -866,8 +866,8 @@
 }
 
 .ctl-input-chat[aria-invalid="true"] {
-  border-color: var(--destructive, var(--down));
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 20%, transparent);
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 20%, transparent);
 }
 
 [data-theme="dark"] .ctl-input-chat {
@@ -879,8 +879,8 @@
 }
 
 [data-theme="dark"] .ctl-input-chat[aria-invalid="true"] {
-  border-color: color-mix(in oklab, var(--destructive, var(--down)) 50%, transparent);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive, var(--down)) 40%, transparent);
+  border-color: color-mix(in oklab, var(--danger) 50%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--danger) 40%, transparent);
 }
 
 /* ── Label — reference dress (the form-fields mono micro-caps grammar) ──── */
@@ -1203,10 +1203,9 @@
   }
 }
 
-/* the error state is the only one that spends the down color */
 .ctl-empty--error .ctl-empty-glyph {
-  background: color-mix(in oklab, var(--down) 12%, transparent);
-  color: var(--down);
+  background: color-mix(in oklab, var(--danger) 12%, transparent);
+  color: var(--danger);
 }
 
 /* ── EmptyState glass dresses (#1548 olympus adoption) — the app's shipped

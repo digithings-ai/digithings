@@ -79,14 +79,14 @@ export function ChatWidgetFrame({
 export type ChatWidgetButtonTone = "primary" | "ghost" | "danger";
 
 export type ChatWidgetButtonProps = ComponentPropsWithoutRef<"button"> & {
-  /** primary = accent fill, ghost = hairline, danger = down-toned hairline. */
+  /** primary = accent fill, ghost = hairline, danger = danger-toned hairline. */
   tone?: ChatWidgetButtonTone;
 };
 
 const TONES: Record<ChatWidgetButtonTone, string> = {
   primary: "cw-btn--primary border-transparent bg-accent",
   ghost: "cw-btn--ghost border-hair bg-transparent text-ink",
-  danger: "cw-btn--danger bg-transparent text-down",
+  danger: "cw-btn--danger bg-transparent text-danger",
 };
 
 export function ChatWidgetButton({
