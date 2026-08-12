@@ -772,6 +772,15 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "description": "path_prefix normalizes to an empty prefix (e.g. '/', '.md')"
+          },
+          "403": {
+            "description": "vault_path is outside the caller's path_prefix"
+          },
+          "404": {
+            "description": "no note at that vault_path in the resolved corpus"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -781,6 +790,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "503": {
+            "description": "D1 misconfigured, no database for the prefix, or a D1 failure"
           }
         },
         "summary": "Get Note By Path"

@@ -450,7 +450,16 @@ def list_notes() -> NoteList:
 # route is kept ahead of a parametrized one on principle, and a test
 # (test_by_path_route_is_not_shadowed_by_the_name_route) pins that both resolve
 # correctly regardless of registration order.
-@app.post("/v1/notes/by-path", response_model=NoteDetail)
+@app.post(
+    "/v1/notes/by-path",
+    response_model=NoteDetail,
+    responses={
+        400: {"description": "path_prefix normalizes to an empty prefix (e.g. '/', '.md')"},
+        403: {"description": "vault_path is outside the caller's path_prefix"},
+        404: {"description": "no note at that vault_path in the resolved corpus"},
+        503: {"description": "D1 misconfigured, no database for the prefix, or a D1 failure"},
+    },
+)
 def get_note_by_path(req: NoteByPathRequest) -> NoteDetail:
     """Load one note whole (body + frontmatter), addressed by ``vault_path``. D1-only.
 

@@ -12,8 +12,14 @@
 # remote ingest exists. See docs/digichat/CLIENT-DOCS-ONBOARD.md.
 #
 # Prod-mutating apply runs under `production` (CLOUDFLARE_ACCOUNT_ID /
-# CLOUDFLARE_API_TOKEN -- or the legacy D1_ACCOUNT_ID / D1_API_TOKEN -- plus
-# D1_DATABASE_MAP secrets; reviewer gate on the `production` environment).
+# CLOUDFLARE_API_TOKEN -- or the legacy VECTORIZE_ACCOUNT_ID / VECTORIZE_API_TOKEN,
+# or D1_ACCOUNT_ID / D1_API_TOKEN -- plus D1_DATABASE_MAP secrets; reviewer gate on
+# the `production` environment). This 3-way fallback matches the container's and
+# scripts' own runtime resolution (`digivault.supabase_store._first_env`) exactly,
+# so a legacy environment that set only VECTORIZE_* GitHub secrets clears this
+# workflow's guard the same way it clears the deployed container's (#2239 review —
+# a workflow offering fewer aliases than the runtime it drives passes the
+# documented cutover and then fails here anyway).
 # D1_DATABASE_MAP is the same {"clients/...": "<id>"} JSON the Worker holds
 # (frontend/digithings-stack-cloudflare/wrangler.toml) -- one secret, one source
 # of truth, so CI and the container can never read different databases for the
@@ -155,17 +161,17 @@ jobs:
           # one isn't defined for this environment yet (an undefined secret evaluates
           # to "", which is falsy) -- zero-downtime, no secret rotation required
           # before this ships.
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.D1_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.D1_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.VECTORIZE_ACCOUNT_ID || secrets.D1_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.VECTORIZE_API_TOKEN || secrets.D1_API_TOKEN }}
           D1_DATABASE_MAP: ${{ secrets.D1_DATABASE_MAP }}
         run: |
           missing=0
           if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
-            echo "::error::CLOUDFLARE_ACCOUNT_ID is not set in the production environment (legacy D1_ACCOUNT_ID fallback also unset)"
+            echo "::error::CLOUDFLARE_ACCOUNT_ID is not set in the production environment (legacy VECTORIZE_ACCOUNT_ID / D1_ACCOUNT_ID fallbacks also unset)"
             missing=1
           fi
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::error::CLOUDFLARE_API_TOKEN is not set in the production environment (legacy D1_API_TOKEN fallback also unset)"
+            echo "::error::CLOUDFLARE_API_TOKEN is not set in the production environment (legacy VECTORIZE_API_TOKEN / D1_API_TOKEN fallbacks also unset)"
             missing=1
           fi
           if [ -z "$D1_DATABASE_MAP" ]; then
@@ -200,8 +206,8 @@ jobs:
 
       - name: Publish onboard vault → D1
         env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.D1_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.D1_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || secrets.VECTORIZE_ACCOUNT_ID || secrets.D1_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN || secrets.VECTORIZE_API_TOKEN || secrets.D1_API_TOKEN }}
           D1_DATABASE_MAP: ${{ secrets.D1_DATABASE_MAP }}
         run: |
           # Derive the database id from the same map the container reads, so a

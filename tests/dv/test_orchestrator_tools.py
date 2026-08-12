@@ -27,10 +27,26 @@ def test_get_note_tool_is_in_the_manifest_with_a_vault_path_argument() -> None:
     )
     params = tool["function"]["parameters"]
     assert "vault_path" in params["properties"]
-    assert params["required"] == ["vault_path"]
+    assert "path_prefix" in params["properties"]
+    assert params["required"] == ["vault_path", "path_prefix"]
     # The description must tell the model where a vault_path comes from, or it will
     # invent one instead of reading it off a digisearch hit.
     assert "digisearch" in tool["function"]["description"].lower()
+
+
+def test_get_note_tool_path_prefix_description_does_not_claim_enforced_isolation() -> None:
+    """Same guard as `digivault_search_notes`'s equivalent test: declaring the
+    argument (#2239 review) must not overstate it into a tenant-isolation
+    guarantee the server does not provide (#2265)."""
+    tool = next(
+        t
+        for t in build_orchestrator_tool_manifest()
+        if t["function"]["name"] == TOOL_VAULT_GET_NOTE
+    )
+    prefix_description = tool["function"]["parameters"]["properties"]["path_prefix"][
+        "description"
+    ].lower()
+    assert "isolat" not in prefix_description
 
 
 def test_get_note_tool_description_warns_against_guessing_the_path() -> None:
@@ -119,7 +135,7 @@ def test_get_note_tool_description_names_both_search_shapes() -> None:
         "description"
     ].lower()
     for text in (description, param_description):
-        assert "metadata.vault_path" in text or "metadata" in text
+        assert "metadata.vault_path" in text
         assert "doc_id" in text
 
 

@@ -15,11 +15,6 @@ dependencies = [
     # dependency (digisearch, config loaders); kept here as a direct, flat dep so
     # the core library installs without monorepo-sibling ordering.
     "pyyaml>=6",
-    # d1_store's default HTTP transport (Cloudflare D1 REST API), lazily imported so
-    # `import digivault` never pays for it. Matches digisearch's VectorizeBackend,
-    # which is core (not gated behind an extra) for the same reason: a REST-backed
-    # store needs no Worker binding, just an HTTP client.
-    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
@@ -33,6 +28,18 @@ service = [
     # (#1711). Lift only together with a migration to the 2.x API.
     "mcp>=1.0,<2",
     "typer>=0.12",
+    # d1_store's default HTTP transport (Cloudflare D1 REST API). Per
+    # digivault/AGENTS.md's "no new hard dependency on the core library without a
+    # human gate" rule: d1_store.py imports httpx LAZILY (inside function bodies,
+    # never at module top), exactly like supabase_store.py imports the `supabase`
+    # package inside `from_env()` — so `import digivault.d1_store` never needs it,
+    # only an actual live request does. That means an extra costs nothing at the
+    # only in-package call site (server.py, already gated behind [service]) and
+    # nothing in this monorepo's own usage: the production image already installs
+    # `digivault[service]` (Dockerfile.digithings-stack-cloudflare:53), and CI
+    # installs `uv sync --all-extras`. It only matters for a bare `pip install
+    # digivault` outside this repo, which is exactly the case the rule protects.
+    "httpx>=0.27",
 ]
 # Supabase-backed vault store (digivault.supabase_store). Lazily imported — the
 # core stays pydantic+pyyaml-only; this extra adds the DB read/search path.

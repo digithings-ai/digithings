@@ -51,22 +51,31 @@ sync landed before traffic depends on it.
 
 ## 0. Prerequisites for running the sync script locally
 
-`scripts/vectorize_sync.py` imports `digivault`, which is not on `sys.path`
+**Source: Cloudflare D1, not Supabase (#2239).** `scripts/vectorize_sync.py` reads
+notes from D1 via `scripts/d1_sync.py`'s `D1Store.list_notes()` — the notes and the
+vectors have to describe the same corpus, so `--database` must be the **same** D1
+database `d1_sync.py --prefix <p>` published that prefix into. `CORE_SUPABASE_*` is
+not read anywhere on this path any more.
+
+`scripts/vectorize_sync.py` also imports `digivault`, which is not on `sys.path`
 from a plain `python3 scripts/vectorize_sync.py` invocation in a clean
 checkout — that fails with `ModuleNotFoundError: No module named 'digivault'`.
-Set `PYTHONPATH=digivault/src`. The apply pass (no `--dry-run`) also
-constructs `MiniLMEmbedder`, which lazily imports `chromadb` on first
-`embed()` call — install digisearch's `[chroma]` extra (or use a venv that
-already has it) or that call fails too. From the repo root, with the
-Supabase env vars set:
+Set `PYTHONPATH=digivault/src`, or use `uv run` from the repo root (the monorepo
+workspace already resolves it). The apply pass (no `--dry-run`) also constructs
+`MiniLMEmbedder`, which lazily imports `chromadb` on first `embed()` call — install
+digisearch's `[chroma]` extra (or use a venv that already has it) or that call
+fails too.
 
 ```bash
-PYTHONPATH=digivault/src python3 scripts/vectorize_sync.py \
-  --prefix clients/digithings --index digithings_docs --dry-run
+uv run python scripts/vectorize_sync.py \
+  --prefix clients/digithings --index digithings_docs \
+  --database <d1-database-id-for-clients/digithings> --dry-run
 ```
 
-This is the exact form used in the steps below — repeat `PYTHONPATH=digivault/src`
-on every invocation, dry-run or apply.
+This is the exact form used in the steps below. `--database` and `--index` are two
+different Cloudflare products (D1 vs Vectorize) and are **not** interchangeable —
+get either one wrong and the sync reads or writes a different corpus than the one
+being cut over.
 
 ## 1. Create the indexes
 
@@ -99,25 +108,37 @@ non-empty (canonical or legacy) and skips the Chroma seed entirely from then on.
 ## 3. Sync each corpus — dry-run first, then apply
 
 Run from an operator machine or CI, never inside the Container (the Container
-only queries). One prefix per tenant, matching `DIGI_TENANT_CORPUS_MAP`:
+only queries). One prefix per tenant, matching `DIGI_TENANT_CORPUS_MAP`, reading
+from the **same D1 database** `d1_sync.py` published that prefix into (see
+`docs/superpowers/plans/2026-08-12-agentic-chat-and-digivault-on-d1.md` Task 7 for
+the current database ids — `9f1431bf-e79a-4b0f-a67a-bcd040506d87` for
+`clients/digithings` and `f587fad6-0a26-4bf4-bdf7-740eac549acd` for
+`clients/online-compliance-center` as of the 2026-08-12 backfill):
 
 ```bash
 # digithings tenant
-CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… PYTHONPATH=digivault/src \
-  python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs --dry-run
+CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… \
+  uv run python scripts/vectorize_sync.py --prefix clients/digithings \
+  --index digithings_docs --database 9f1431bf-e79a-4b0f-a67a-bcd040506d87 --dry-run
 
-CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \
-  CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… PYTHONPATH=digivault/src \
-  python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs
+CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… \
+  uv run python scripts/vectorize_sync.py --prefix clients/digithings \
+  --index digithings_docs --database 9f1431bf-e79a-4b0f-a67a-bcd040506d87
 
 # occ tenant
-CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… PYTHONPATH=digivault/src \
-  python3 scripts/vectorize_sync.py --prefix clients/online-compliance-center --index occ_help --dry-run
+CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… \
+  uv run python scripts/vectorize_sync.py --prefix clients/online-compliance-center \
+  --index occ_help --database f587fad6-0a26-4bf4-bdf7-740eac549acd --dry-run
 
-CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \
-  CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… PYTHONPATH=digivault/src \
-  python3 scripts/vectorize_sync.py --prefix clients/online-compliance-center --index occ_help
+CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… \
+  uv run python scripts/vectorize_sync.py --prefix clients/online-compliance-center \
+  --index occ_help --database f587fad6-0a26-4bf4-bdf7-740eac549acd
 ```
+
+`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` authorize **both** the D1 read and
+the Vectorize write with one credential pair (#2239 credential rename) — the
+legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN` and `D1_ACCOUNT_ID`/
+`D1_API_TOKEN` names still work as a fallback, in that order.
 
 The `--dry-run` pass reads and chunks the real notes and reports the vector
 count that *would* be upserted — no ONNX inference, no model download, no

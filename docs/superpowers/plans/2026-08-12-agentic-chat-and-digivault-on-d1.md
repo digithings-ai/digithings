@@ -83,14 +83,13 @@ frontmatter JSON at query time. This is a deliberate, documented widening of the
 - Create: `digivault/src/digivault/d1_store.py`
 - Test: `tests/dv/test_d1_store.py`
 
-> **Pre-flight correction (2026-08-12).** `VaultSearchHit` is defined in
-> `digivault/src/digivault/supabase_store.py:36`, **not** in `models.py`. Importing it
-> from there would make the D1 path depend on the Supabase module — the opposite of this
-> spec's goal. **Move `VaultSearchHit` to `digivault/src/digivault/models.py`** and
-> re-export it from `supabase_store.py` (`from digivault.models import VaultSearchHit as
-> VaultSearchHit`) so existing importers keep working. `d1_store.py` then imports it
-> from `models`. There is an existing test importing it from `supabase_store`; the
-> re-export must keep that green.
+> **Pre-flight correction (2026-08-12), completed in Task 1.** `VaultSearchHit` was
+> defined in `digivault/src/digivault/supabase_store.py:36`, not in `models.py`.
+> Importing it from there would have made the D1 path depend on the Supabase module —
+> the opposite of this spec's goal. It now lives in `digivault/src/digivault/models.py`,
+> re-exported from `supabase_store.py` (`from digivault.models import VaultSearchHit as
+> VaultSearchHit`) so the pre-existing importer in `tests/dv/test_supabase_store.py`
+> stays green. `d1_store.py` imports it from `models`.
 
 **Interfaces:**
 - Consumes: `VaultSearchHit` (moved to `models` — see above) and `NoteRow`.

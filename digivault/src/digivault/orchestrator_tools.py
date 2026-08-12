@@ -171,9 +171,32 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                             ".md suffix. Never invent this value — only pass one "
                             "copied from a prior search hit."
                         ),
-                    }
+                    },
+                    "path_prefix": {
+                        "type": "string",
+                        "description": (
+                            # Declared (not omitted) because the server handler
+                            # requires it — `args.get("path_prefix")` normalizing to
+                            # empty returns `ok=False, error="path_prefix is
+                            # required for digivault_get_note"` — and
+                            # `OrchestratorInvokeRequest.arguments` is
+                            # `dict[str, Any]`, so omitting the schema property never
+                            # stopped a model from supplying one anyway (#2265); it
+                            # only left the requirement undiscoverable, which made
+                            # every call fail once nothing else injects this
+                            # argument (#2239 review).
+                            "Corpus prefix to fetch from (e.g. "
+                            "clients/online-compliance-center). Required — this "
+                            "tool has no unscoped mode; a call without it always "
+                            "fails. The server rejects a vault_path outside this "
+                            "prefix, but path_prefix itself is not verified "
+                            "against the caller's actual tenant (#2265) — use the "
+                            "same prefix the prior search was scoped to, never a "
+                            "different corpus's."
+                        ),
+                    },
                 },
-                "required": ["vault_path"],
+                "required": ["vault_path", "path_prefix"],
             },
         ),
     ]

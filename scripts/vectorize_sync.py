@@ -334,24 +334,35 @@ def main(argv: list[str] | None = None) -> int:
     from digivault.supabase_store import _first_env
 
     # Canonical-first, legacy-fallback (#2239 credential rename): D1 and Vectorize
-    # now share one Cloudflare account + token, so both reads below try
-    # CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN first, then the legacy
-    # VECTORIZE_*/D1_* names -- whichever the operator still has set.
+    # now share one Cloudflare account + token, so this single resolution feeds both
+    # the D1 read below and the Vectorize sink further down -- CLOUDFLARE_ACCOUNT_ID/
+    # CLOUDFLARE_API_TOKEN first, then the legacy VECTORIZE_*/D1_* names, whichever
+    # the operator still has set.
+    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    if not account_id or not api_token:
+        # Checked before the D1 read below, not only before the Vectorize write
+        # further down: D1 is read on every invocation, `--dry-run` included, so
+        # without this an entirely-unset credential pair still reached Cloudflare as
+        # an unauthenticated request, came back 401, and -- 401 being retryable, see
+        # `_is_retryable_status` -- burned the full retry budget's backoff delay
+        # before `D1StoreError` finally surfaced below. This up-front check skips
+        # that wasted, slow round-trip entirely (#2239 review).
+        raise SystemExit("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required")
+
     try:
         notes = D1Store(
             args.database,
-            account_id=_first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID"),
-            api_token=_first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"),
+            account_id=account_id,
+            api_token=api_token,
         ).list_notes(path_prefix=args.prefix)
     except (ValueError, D1StoreError) as exc:
         # ValueError: resolve_path_prefix (digivault.d1_store) rejects a non-None
         # prefix that normalizes to empty (e.g. "--prefix /") -- fail closed rather
         # than silently syncing every note in the database.
-        # D1StoreError: unset/typo'd credentials, a wrong database id, or a transport
-        # blip. This script has no credential preflight (the sibling check at the
-        # bottom of main() does), so without this arm a missing token surfaced as an
-        # unhandled traceback after a wasted round-trip to Cloudflare. Both give the
-        # clean CLI error d1_sync.py gives.
+        # D1StoreError: a wrong database id, a malformed-but-non-empty token, or a
+        # transport blip -- the presence check above only catches an entirely absent
+        # credential, never a wrong one. Both give the clean CLI error d1_sync.py gives.
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"{len(notes)} notes under {args.prefix!r}", file=sys.stderr)
@@ -367,10 +378,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         sink = _CountingSink()
     else:
-        account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
-        api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
-        if not account_id or not api_token:
-            raise SystemExit("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required")
         sink = VectorizeBackend(args.index, account_id=account_id, api_token=api_token)
 
     if not args.dry_run:
