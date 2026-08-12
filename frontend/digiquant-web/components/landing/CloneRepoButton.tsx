@@ -17,6 +17,13 @@ export function CloneRepoButton({ className = "btn btn-ghost" }: { className?: s
   // earlier click force status back to idle while a later click's message
   // was still supposed to be showing).
   const resetTimer = useRef<number | null>(null);
+  // Attempt token (CodeRabbit review, PR #2283): navigator.clipboard.writeText
+  // is async, so two rapid clicks fire two promises that are not guaranteed
+  // to settle in call order (e.g. one hits a permission prompt). Each attempt
+  // captures its own token; a result only applies if it is still the LATEST
+  // attempt, so a stale, out-of-order completion cannot overwrite a newer
+  // click's status.
+  const attemptId = useRef(0);
 
   useEffect(() => () => {
     if (resetTimer.current != null) window.clearTimeout(resetTimer.current);
@@ -28,11 +35,14 @@ export function CloneRepoButton({ className = "btn btn-ghost" }: { className?: s
   }, []);
 
   const onCopy = useCallback(async () => {
+    const attempt = ++attemptId.current;
     try {
       await navigator.clipboard.writeText(DIGIQUANT_CLONE_CMD);
+      if (attemptId.current !== attempt) return;
       setStatus("copied");
       scheduleReset(2200);
     } catch {
+      if (attemptId.current !== attempt) return;
       // Clipboard blocked (permission denied, insecure context, unsupported
       // browser) -- surface it instead of failing silently (full-UI-suite
       // critique, digiquant-web target, P3); the adjacent GitHub link is
