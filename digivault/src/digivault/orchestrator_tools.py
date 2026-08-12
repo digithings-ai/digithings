@@ -31,6 +31,7 @@ TOOL_VAULT_BACKLINKS = "digivault_backlinks"
 TOOL_VAULT_LINT = "digivault_lint"
 TOOL_VAULT_CREATE_NOTE = "digivault_create_note"
 TOOL_VAULT_SEARCH_NOTES = "digivault_search_notes"
+TOOL_VAULT_GET_NOTE = "digivault_get_note"
 
 ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -39,6 +40,7 @@ ORCHESTRATOR_TOOL_NAMES: frozenset[str] = frozenset(
         TOOL_VAULT_LINT,
         TOOL_VAULT_CREATE_NOTE,
         TOOL_VAULT_SEARCH_NOTES,
+        TOOL_VAULT_GET_NOTE,
     }
 )
 
@@ -93,9 +95,10 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
         ),
         _fn(
             TOOL_VAULT_SEARCH_NOTES,
-            "Search vault notes by relevance across title and body. When DIGIVAULT_ROOT "
-            "is set, searches that local filesystem vault (Profile A / client volumes). "
-            "Otherwise uses Supabase FTS when CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY "
+            "Search vault notes by relevance across title and body. Backend precedence: "
+            "Cloudflare D1 (FTS5) when configured, ahead of everything else; else the "
+            "local filesystem vault when DIGIVAULT_ROOT is set (Profile A / client "
+            "volumes); else Supabase FTS when CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY "
             "are configured (digithings architecture vault: digigraph, digiquant, "
             "digisearch, digichat, digikey, digismith, digivault, digiclaw, digibase, "
             "and roadmap modules). Use for questions about vault contents, modules, "
@@ -114,13 +117,45 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                     "path_prefix": {
                         "type": "string",
                         "description": (
-                            "Optional vault_path prefix filter (e.g. "
-                            "clients/online-compliance-center). Isolates multi-tenant "
-                            "corpora in the shared architecture_notes table."
+                            # Not an enforced boundary: the caller fills this in only
+                            # when the model omits it (digigraph's builtin.py
+                            # _handle_digivault_search); a model-supplied value passes
+                            # straight through to whichever corpus it names, unchecked
+                            # against the caller's own scope (digigraph #2265). Omit
+                            # this argument rather than guessing a value.
+                            "Optional vault_path prefix that scopes the search to one "
+                            "corpus (e.g. clients/online-compliance-center). This is a "
+                            "search filter, not an access-control boundary — omit it "
+                            "and the caller's own corpus prefix is filled in for you; "
+                            "do not supply a different corpus's prefix on the caller's "
+                            "behalf."
                         ),
                     },
                 },
                 "required": ["query"],
+            },
+        ),
+        _fn(
+            TOOL_VAULT_GET_NOTE,
+            "Load one vault note in full by its vault_path. Use this after digisearch "
+            "returns a promising chunk: take the vault_path from that hit's metadata "
+            "and call this to read the whole note — a complete page or document "
+            "section — instead of reasoning from the excerpt. Do not guess a "
+            "vault_path; only use one returned by a search.",
+            {
+                "type": "object",
+                "properties": {
+                    "vault_path": {
+                        "type": "string",
+                        "description": (
+                            "Canonical note path from a digisearch hit's metadata, e.g. "
+                            "clients/digithings/security__p003. No .md suffix. Never "
+                            "invent this value — only pass one copied from a prior "
+                            "search hit."
+                        ),
+                    }
+                },
+                "required": ["vault_path"],
             },
         ),
     ]
