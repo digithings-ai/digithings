@@ -27,14 +27,18 @@ import type { MouseEvent, ReactNode } from "react";
  * link looked IDENTICAL to a working one — a click before the effect below
  * runs (slow connection, or permanently for a no-JS visitor) silently
  * scrolled to "#" with zero feedback, on the page's two actual revenue CTAs.
- * The pending look (dimmed, aria-disabled, "cm-pending") is baked into the
- * JSX below unconditionally rather than driven by state — the effect clears
- * it by mutating the mounted DOM node directly, the same imperative-after-
- * mount escape hatch already used for `href` two lines below. That keeps
- * this a single render with no state to resync: since the JSX always
+ * The pending look (dimmed, aria-disabled) is baked into the JSX below
+ * unconditionally, in token-backed Tailwind utilities rather than a new
+ * app-local CSS class (the frontend canon guard's family census, #1421,
+ * rejects a hand-rolled class in a census app's stylesheet) — the effect
+ * clears it by mutating the mounted DOM node directly, the same imperative-
+ * after-mount escape hatch already used for `href` two lines below. That
+ * keeps this a single render with no state to resync: since the JSX always
  * describes the SAME initial (pending) attributes, React never re-applies
  * them on a later reconciliation and the imperative clear-out sticks.
  */
+const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
+
 export function ContactMailto({
   href,
   className,
@@ -53,7 +57,7 @@ export function ContactMailto({
     const el = ref.current;
     if (!el) return;
     el.href = href;
-    el.classList.remove("cm-pending");
+    el.classList.remove(...PENDING_CLASSES);
     el.removeAttribute("aria-disabled");
   }, [href]);
 
@@ -68,7 +72,7 @@ export function ContactMailto({
     <a
       ref={ref}
       href="#"
-      className={[className, "cm-pending"].filter(Boolean).join(" ")}
+      className={[className, ...PENDING_CLASSES].filter(Boolean).join(" ")}
       aria-label={ariaLabel}
       aria-disabled="true"
       onClick={onClick}

@@ -143,13 +143,6 @@ html {
 .dq-title { font-family: var(--serif); font-weight: 400; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.01em; line-height: 1.12; color: var(--ink); margin-top: 0.6rem; }
 .dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
 
-/* ContactMailto's pre-wired state (components/ContactMailto.tsx) — the real
-   mailto: href lands after mount (Cloudflare's Email Address Obfuscation
-   rewrites any literal one server-side, #2226), so a click before then, or
-   permanently for a no-JS visitor, must not look identical to a working
-   link on the page's two actual revenue CTAs. */
-.cm-pending { opacity: 0.55; cursor: default; }
-
 /* ---- nav dress (the bar itself is the shared NavShell — see SiteNav.tsx) ----
    The brand mark needs no dress: it is one inline SVG in currentColor
    (TerminalMark, _nav.tsx), so it follows ink through [data-theme] without a
