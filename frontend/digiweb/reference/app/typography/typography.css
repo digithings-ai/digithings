@@ -184,12 +184,15 @@
    teal), since the flat hex has no light-theme adjustment the way the
    theme's own --accent does. So .demo-accent instead restores literally
    what --accent already equals in each theme absent any livery override
-   (tokens.css lines ~153/201, digiquant's own identity hue) — opting these
-   two demos out of the mono override, not adopting a different color. */
+   (tokens.css lines ~153/218, digiquant's own identity hue) — opting these
+   two demos out of the mono override, not adopting a different color.
+   Kept in sync with tokens.css's own light value by hand (a literal, not
+   var(--accent), same reason tokens.css's own --up avoids the live
+   reference) — last matched 2026-08-12 (#2280's contrast fix). */
 .demo-accent {
   --accent: #3dd6c4;
 }
 
 :root[data-theme="light"] .demo-accent {
-  --accent: #0e8c7f;
+  --accent: #0c7c71;
 }
