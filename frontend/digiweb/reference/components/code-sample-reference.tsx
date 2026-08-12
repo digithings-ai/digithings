@@ -73,7 +73,13 @@ export function CodeSampleReference() {
               role="tab"
               id={tabId("Install method", t.id)}
               aria-selected={t.id === tab}
-              aria-controls={tabPanelId("Install method", t.id)}
+              // Every tab controls the SAME single panel below (its content
+              // swaps rather than one mounted panel per tab), so aria-controls
+              // must track whichever panel id is actually rendered right now
+              // (tab, the active id) — not each button's own t.id, which
+              // would reference a panel id that never exists in the DOM for
+              // any tab besides the active one.
+              aria-controls={tabPanelId("Install method", tab)}
               className={`cs-tab${t.id === tab ? " on" : ""}`}
               onClick={() => setTab(t.id)}
             >
