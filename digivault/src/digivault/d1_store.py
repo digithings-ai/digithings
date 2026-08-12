@@ -334,15 +334,25 @@ class D1Store:
         if not rows:
             return None
         r = rows[0]
+        frontmatter = _json_obj(r.get("frontmatter"))
+        # segment_label has no column of its own (unlike segment_index) — it is
+        # written into a chunked note's frontmatter at ingestion time
+        # (scripts/vectorize_sync.py) and lives in the `frontmatter` jsonb blob
+        # already parsed above. Mirrored onto its own field so a consumer of the
+        # brief's documented shape (vault_path, title, body_markdown, frontmatter,
+        # segment_label) finds it without having to know it is also nested inside
+        # `frontmatter`.
+        segment_label = frontmatter.get("segment_label")
         return NoteDetail(
             vault_path=str(r.get("vault_path") or ""),
             title=str(r.get("title") or ""),
             note_type=str(r.get("note_type") or ""),
             summary=str(r.get("summary") or ""),
             body_markdown=str(r.get("body") or ""),
-            frontmatter=_json_obj(r.get("frontmatter")),
+            frontmatter=frontmatter,
             tags=_json_list(r.get("tags")),
             wikilinks=_json_list(r.get("wikilinks")),
+            segment_label=(str(segment_label) if segment_label is not None else None),
             parent_doc=(str(r["parent_doc"]) if r.get("parent_doc") else None),
             segment_index=(int(r["segment_index"]) if r.get("segment_index") is not None else None),
         )

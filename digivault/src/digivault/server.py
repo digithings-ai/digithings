@@ -579,7 +579,23 @@ def orchestrator_invoke(
         if not vault_path:
             return OrchestratorInvokeResponse(ok=False, tool=tool, error="vault_path is required")
         path_prefix_arg = args.get("path_prefix")
-        if path_prefix_arg is None:
+        # Normalize before deciding "missing" — `vault_path` two lines up already
+        # treats a blank value the same as an absent key (`str(... or "").strip()`);
+        # `path_prefix` must follow the same convention rather than only checking
+        # `is None`. A caller/model that sends "", "/", "   ", or ".md" is not
+        # supplying a real scope any more than one that omits the key outright, but
+        # unlike `None` those values survive an `is None` check and fall through to
+        # `_fetch_note_by_path`, whose `resolve_path_prefix` call raises `ValueError`
+        # for exactly this "present but normalizes to empty" case (wrapped there as
+        # `HTTPException(400)`). A raised 400 reaches the model only as a bare
+        # "Client error '400 Bad Request'" — `raise_for_status()` drops the response
+        # body on digigraph's side — so every input that resolves to "no real prefix"
+        # must produce the same readable `ok=False` the fully-omitted case already
+        # gets below, not a mid-request exception (#2239 review).
+        normalized_prefix = (
+            normalize_vault_path(str(path_prefix_arg)) if path_prefix_arg is not None else ""
+        )
+        if not normalized_prefix:
             # Unlike `digivault_search_notes`, nothing in digigraph's `builtin.py`
             # injects the caller's tenant context into this tool's arguments today —
             # only `_handle_digivault_search` does that, and only for
@@ -600,7 +616,7 @@ def orchestrator_invoke(
                 tool=tool,
                 error="path_prefix is required for digivault_get_note",
             )
-        note = _fetch_note_by_path(vault_path, str(path_prefix_arg))
+        note = _fetch_note_by_path(vault_path, normalized_prefix)
         if note is None:
             # A stale or mistyped vault_path is an expected, recoverable outcome (the
             # model should try a different path or re-search), not a tool failure —

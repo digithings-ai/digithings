@@ -147,6 +147,32 @@ def test_orchestrator_tools_manifest() -> None:
     assert names == ORCHESTRATOR_TOOL_NAMES
 
 
+@pytest.mark.parametrize("tool_name", sorted(ORCHESTRATOR_TOOL_NAMES))
+def test_every_advertised_orchestrator_tool_actually_dispatches(
+    tool_name: str, vault_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#2239 review, Minor M6: `test_orchestrator_tools_manifest` above only asserts
+    that the *names* advertised by `POST /v1/orchestrator_tools` equal
+    `ORCHESTRATOR_TOOL_NAMES` — it says nothing about whether `orchestrator_invoke`
+    actually has a dispatch branch for each one. Commit cf61b673d shipped
+    `digivault_get_note` in the manifest with no dispatch branch at all, and that test
+    still passed happily; every real call to that tool 400'd with "Unknown
+    orchestrator tool". Call every advertised tool with no arguments and assert none
+    of them falls through to that specific `else` branch — any other outcome (ok=True,
+    ok=False from a missing-argument check, even a raised HTTPException for some other
+    reason) proves the tool was recognized; only that one message proves it was not."""
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    try:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(tool=tool_name, arguments={}),
+            _fake_request(scopes=[SCOPE_READ, SCOPE_WRITE]),
+        )
+    except HTTPException as exc:
+        assert "Unknown orchestrator tool" not in str(exc.detail)
+
+
 def test_orchestrator_invoke_search_tag(vault_dir: Path) -> None:
     resp = server.orchestrator_invoke(
         server.OrchestratorInvokeRequest(tool="digivault_search_tag", arguments={"tag": "doc"}),
@@ -820,6 +846,34 @@ def test_get_note_by_path_rejects_prefix_that_normalizes_to_empty(
     assert exc.value.status_code == 400
 
 
+def test_get_note_by_path_rejects_sibling_corpus_sharing_a_string_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Minor M5: the boundary check is
+    `path != prefix and not path.startswith(prefix + "/")` — the `+ "/"` is load
+    bearing. Weaken it to `not path.startswith(prefix)` (drop the separator) and
+    `clients/digithings-archive/x` under prefix `clients/digithings` would pass,
+    because the string "clients/digithings-archive/x" does start with the string
+    "clients/digithings" even though the archive corpus is not a child of it. No
+    existing test used two corpora that share a literal string prefix like this —
+    every existing cross-corpus test used names with no common prefix at all
+    (`clients/online-compliance-center` vs `clients/digithings`), so the classic
+    string-prefix bug could be reintroduced without any test noticing."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for a sibling-corpus path")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings-archive/x", path_prefix="clients/digithings"
+            )
+        )
+    assert exc.value.status_code == 403
+
+
 def test_get_note_by_path_wraps_runtime_d1_error_as_503(monkeypatch: pytest.MonkeyPatch) -> None:
     """#2239 review, Important finding: a D1StoreError raised from *inside*
     `.get_note()` (transport failure, or Cloudflare's real 403 on an expired
@@ -950,6 +1004,35 @@ def test_orchestrator_invoke_get_note_missing_path_prefix_is_ok_false_not_unscop
     assert resp.error == "path_prefix is required for digivault_get_note"
 
 
+@pytest.mark.parametrize("blank_prefix", ["", "/", "///", "   ", ".md"])
+def test_orchestrator_invoke_get_note_blank_path_prefix_is_ok_false_not_a_raised_400(
+    monkeypatch: pytest.MonkeyPatch, blank_prefix: str
+) -> None:
+    """#2239 review, Minor M1: `path_prefix_arg is None` was the only condition that
+    produced the readable `ok=False` refusal; a *present but blank* value ("", "/",
+    "   ", ".md") survived that check and fell through to `_fetch_note_by_path`,
+    whose `resolve_path_prefix` raises `ValueError` for exactly this case (wrapped as
+    `HTTPException(400)`) — reaching a real digigraph caller only as a bare
+    "Client error '400 Bad Request'" once `raise_for_status()` drops the body.
+    `vault_path` two lines above already treats blank the same as absent; `path_prefix`
+    must match that convention and produce the same message as the omitted case."""
+
+    def _boom(prefix: str | None) -> None:
+        raise AssertionError("must not open a store — path_prefix is blank, not scoped")
+
+    monkeypatch.setattr(server, "_open_d1_store", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={"vault_path": "clients/digithings/arch", "path_prefix": blank_prefix},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required for digivault_get_note"
+
+
 def test_orchestrator_invoke_get_note_refuses_cross_corpus_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -994,6 +1077,36 @@ def test_orchestrator_invoke_get_note_refuses_cross_corpus_path(
         _fake_request(),
     )
     assert resp.ok is True
+
+
+def test_orchestrator_invoke_get_note_refuses_sibling_corpus_sharing_a_string_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Minor M5 (tool-branch surface): same string-prefix regression as
+    `test_get_note_by_path_rejects_sibling_corpus_sharing_a_string_prefix`, exercised
+    through `orchestrator_invoke` rather than the route directly — both surfaces must
+    catch `clients/digithings-archive/x` escaping a `clients/digithings` scope, not
+    just the route (they currently share `_fetch_note_by_path`, but this pins the
+    public tool-call contract independently of that implementation detail)."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for a sibling-corpus path")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/digithings-archive/x",
+                    "path_prefix": "clients/digithings",
+                },
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 403
 
 
 def test_orchestrator_invoke_get_note_not_found_is_clean_ok_false(

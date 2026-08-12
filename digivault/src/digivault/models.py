@@ -130,6 +130,19 @@ class NoteDetail(BaseModel):
     wikilinks: tuple[str, ...] = Field(default=())
     parent_doc: str | None = None
     segment_index: int | None = None
+    segment_label: str | None = Field(
+        default=None,
+        description=(
+            "Page/heading identity for a note that is one segment of a larger source "
+            "document (set by scripts/vectorize_sync.py / the ingestion chunker at "
+            "frontmatter['segment_label']). Surfaced here as a top-level field too — "
+            "not only inside `frontmatter` — because the original task brief for "
+            "`digivault_get_note` specified this exact returned shape "
+            "(`{vault_path, title, body_markdown, frontmatter, segment_label}`); a "
+            "consumer that trusted that shape and read `data['segment_label']` "
+            "directly got nothing before this field existed."
+        ),
+    )
 
 
 class ValidationIssue(BaseModel):

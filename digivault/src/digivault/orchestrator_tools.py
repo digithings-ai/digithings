@@ -118,16 +118,25 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                         "type": "string",
                         "description": (
                             # Not an enforced boundary: the caller fills this in only
-                            # when the model omits it (digigraph's builtin.py
-                            # _handle_digivault_search); a model-supplied value passes
-                            # straight through to whichever corpus it names, unchecked
-                            # against the caller's own scope (digigraph #2265). Omit
-                            # this argument rather than guessing a value.
-                            "Optional vault_path prefix that scopes the search to one "
-                            "corpus (e.g. clients/online-compliance-center). This is a "
-                            "search filter, not an access-control boundary — omit it "
-                            "and the caller's own corpus prefix is filled in for you; "
-                            "do not supply a different corpus's prefix on the caller's "
+                            # when it has a corpus context AND the model omits this key
+                            # (digigraph's builtin.py _handle_digivault_search, guarded
+                            # on `context.vault_path_prefix`, which defaults to None and
+                            # is populated only by corpus routing) — with no corpus
+                            # context, omitting this argument fills in nothing. A
+                            # model-supplied value passes straight through to whichever
+                            # corpus it names, unchecked against the caller's own scope
+                            # (digigraph #2265). Listed as an optional schema property,
+                            # but on a Cloudflare D1 deployment it is functionally
+                            # required: D1 has no unscoped-search mode, so a resolved
+                            # prefix (from either source) must exist or the call fails.
+                            "Vault_path prefix that scopes the search to one corpus "
+                            "(e.g. clients/online-compliance-center). This is a search "
+                            "filter, not an access-control boundary. If the caller has "
+                            "a corpus context, omitting this argument lets that context "
+                            "fill it in for you; with no such context, omitting it "
+                            "fills in nothing, and on a Cloudflare D1 deployment the "
+                            "search then fails outright (D1 has no unscoped mode). Do "
+                            "not supply a different corpus's prefix on the caller's "
                             "behalf."
                         ),
                     },
@@ -137,21 +146,30 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
         ),
         _fn(
             TOOL_VAULT_GET_NOTE,
-            "Load one vault note in full by its vault_path. Use this after digisearch "
-            "returns a promising chunk: take the vault_path from that hit's metadata "
-            "and call this to read the whole note — a complete page or document "
-            "section — instead of reasoning from the excerpt. Do not guess a "
-            "vault_path; only use one returned by a search.",
+            "Load one vault note in full by its vault_path. D1-only: unlike "
+            "digivault_search_notes, this tool has no filesystem or Supabase "
+            "fallback, so on a deployment without Cloudflare D1 configured every "
+            "call fails. Use it after a search returns a promising hit, but the "
+            "vault_path lives in a different field depending on which search you "
+            "used: a digisearch hit for content ingested from this vault carries it "
+            "at metadata.vault_path; a digivault_search_notes hit carries it at "
+            "doc_id instead — that tool's metadata holds only title/tags, never "
+            "vault_path. Call this to read the whole note — a complete page or "
+            "document section — instead of reasoning from the excerpt. Do not "
+            "guess a vault_path; only use one copied from a prior search hit.",
             {
                 "type": "object",
                 "properties": {
                     "vault_path": {
                         "type": "string",
                         "description": (
-                            "Canonical note path from a digisearch hit's metadata, e.g. "
-                            "clients/digithings/security__p003. No .md suffix. Never "
-                            "invent this value — only pass one copied from a prior "
-                            "search hit."
+                            "Canonical note path from a prior search hit. From a "
+                            "digisearch hit, read hit.metadata.vault_path; from a "
+                            "digivault_search_notes hit, read hit.doc_id instead "
+                            "(that tool's metadata carries only title/tags, never "
+                            "vault_path). E.g. clients/digithings/security__p003. No "
+                            ".md suffix. Never invent this value — only pass one "
+                            "copied from a prior search hit."
                         ),
                     }
                 },

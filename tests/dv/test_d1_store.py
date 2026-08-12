@@ -200,6 +200,42 @@ def test_get_note_returns_none_on_empty_result_and_parses_json_columns() -> None
     assert note.frontmatter == {"page_class": "pdf_page"}
     assert note.tags == ("t",)
     assert note.segment_index == 13
+    assert note.segment_label is None  # not present in this row's frontmatter
+
+
+@pytest.mark.unit
+def test_get_note_surfaces_segment_label_from_frontmatter_at_the_top_level() -> None:
+    """#2239 review, Minor M2: the original task brief for `digivault_get_note`
+    promised the shape `{vault_path, title, body_markdown, frontmatter,
+    segment_label}`. There is no `segment_label` D1 column (unlike `segment_index`) —
+    it is written into a chunked note's `frontmatter` at ingestion time
+    (scripts/vectorize_sync.py). A consumer reading `data["segment_label"]` per the
+    brief's documented shape must find it there, not only nested inside
+    `data["frontmatter"]["segment_label"]`."""
+    store, _ = _store(
+        [
+            _ok(
+                [
+                    {
+                        "vault_path": "clients/x/a__p003",
+                        "title": "A",
+                        "note_type": "page",
+                        "summary": "s",
+                        "body": "# hi",
+                        "frontmatter": '{"segment_label": "page 3"}',
+                        "tags": "[]",
+                        "wikilinks": "[]",
+                        "parent_doc": "doc-1",
+                        "segment_index": 3,
+                    }
+                ]
+            )
+        ]
+    )
+    note = store.get_note("clients/x/a__p003")
+    assert note is not None
+    assert note.segment_label == "page 3"
+    assert note.frontmatter["segment_label"] == "page 3"
 
 
 @pytest.mark.unit
