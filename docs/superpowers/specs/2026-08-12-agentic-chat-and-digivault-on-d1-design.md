@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-12
 **Status:** Draft for review
-**Supersedes:** the Supabase-switch approach in [#2239](https://github.com/digithings-ai/digithings/issues/2239)
+**Supersedes:** the Supabase-switch approach in [#2239](https://github.com/digithings-ai/digithings/issues/2239), and the
+`architecture_notes`-as-corpus-store arrangement for the two chat corpora
 **Related:** [Vectorize remote index design](2026-08-11-vectorize-remote-index-design.md)
 
 ## Why these are one spec
@@ -138,17 +139,65 @@ translation hazard, not a hypothetical; normalising at one boundary retires it.
 
 ### Ingest
 
-New `scripts/d1_sync.py`, a sibling of `scripts/vectorize_sync.py`: same source
-(Supabase `architecture_notes`), same `vault_path` prefix filters, same
-operator-side execution. Batched `INSERT OR REPLACE` inside the 100 KB
-statement / 100 bound-parameter caps.
+**D1 replaces Supabase as the durable note store for the chat corpora.** Owner
+direction, 2026-08-12: *"I want to move everything into Cloudflare storage for all
+the search and vault storage to minimize dependencies for the chat."* So Supabase
+leaves the chat path entirely — not just the runtime read path, but the publish
+path too.
 
-**Supabase remains the authoring store; Cloudflare becomes the serving tier.** The
-onboarding pipeline continues to write Supabase, and two publishers
-(`vectorize_sync.py`, `d1_sync.py`) push to Cloudflare. This keeps the change
-bounded and mirrors what Vectorize already does. *Flagged for the owner:* if the
-intent is that Supabase leaves the picture entirely, that is a larger change to
-`sync_onboard_vault.py` and should be its own spec.
+The pipeline keeps its current shape with D1 substituted 1:1 for Supabase:
+
+```
+run_onboard.py → vault (ephemeral workdir)
+                   └→ d1_sync.py        → D1        (durable note store)
+                                            └→ vectorize_sync.py → Vectorize
+```
+
+`vectorize_sync.py` is repointed to read **D1** rather than Supabase. Keeping a
+durable store as the vector source (rather than embedding straight from the
+ephemeral workdir) preserves today's most useful property: re-embedding the corpus
+does not require re-crawling a client's site.
+
+New `scripts/d1_sync.py`, a sibling of `vectorize_sync.py`: reads the onboard
+vault, writes D1, batched `INSERT OR REPLACE` inside the 100 KB statement / 100
+bound-parameter caps.
+
+### What stays in Supabase, and why it is not a chat dependency
+
+`architecture_notes` holds three populations, counted live on 2026-08-12:
+
+| population | rows | serves the chat? |
+|---|---|---|
+| `clients/digithings/` | 1,279 | yes → **moves to D1** |
+| `clients/online-compliance-center/` | 328 | yes → **moves to D1** |
+| root notes (`api/*`, module names) | 29 | **no** |
+
+The 29 root notes are the legacy repo architecture vault written by
+`scripts/sync_architecture_vault.py` + `scripts/gen-api-vault.ts` via
+`.github/workflows/sync-architecture-vault.yml`. They are unreachable from the
+chat: `DIGI_TENANT_CORPUS_MAP` (`wrangler.toml:85`) scopes both tenants to
+`clients/digithings` and `clients/online-compliance-center`, and no tenant maps to
+the root. That script is already on the GAPLOG retirement list, so it is left
+alone here rather than migrated — moving it would expand this change without
+removing a chat dependency.
+
+`SupabaseStore` also stays in the digivault codebase as a local/dev backend. This
+spec removes Supabase from the **chat's** dependency graph; it does not delete
+working code.
+
+### Cutover
+
+1. Create the two D1 databases and apply the schema.
+2. One-time backfill: 1,607 notes Supabase → D1 (a `--source supabase` mode on
+   `d1_sync.py`, used once and then unused).
+3. Verify counts and a sampled body/frontmatter round-trip per corpus.
+4. Repoint `vectorize_sync.py` to D1; re-run and confirm vector counts unchanged.
+5. Switch `docs-onboard-digithings.yml` from `CORE_SUPABASE_*` to `D1_*` secrets
+   and from `sync_onboard_vault.py` to `d1_sync.py`.
+6. Configure `D1_*` in the container and confirm digivault serves real notes.
+
+Steps 1–4 are reversible; the chat keeps reading Supabase-free Vectorize
+throughout, and digivault keeps serving seed stubs until step 6.
 
 ### Container wiring
 
@@ -239,13 +288,43 @@ corrected on the issue.
 - **Profile A** (multi-image, no digisearch) never enters `_run_document_rag_path`.
   Declared **out of scope**; it keeps today's behaviour.
 
+## The dependency graph this produces
+
+The point of the change, stated plainly. **Before**, a chat turn's storage path
+touched two vendors:
+
+```
+chat → digisearch → Vectorize        (Cloudflare)
+     → digivault  → /data/vault      (baked seed stubs — the #2239 bug)
+                    …intended: Supabase
+publish: vault → Supabase → Vectorize
+```
+
+**After**, one vendor, and one credential pair:
+
+```
+chat → digisearch → Vectorize        (Cloudflare)
+     → digivault  → D1               (Cloudflare)
+publish: vault → D1 → Vectorize
+```
+
+Supabase, `psycopg`/`supabase-py`, the `[supabase]` extra, the `CORE_SUPABASE_*`
+secrets, and migration 068's RPC all leave the chat's path. The container reaches
+both stores the same way — HTTPS + `Authorization: Bearer` — so there is one auth
+story, one failure mode, and one place to look when retrieval misbehaves.
+
 ## Non-goals
 
-- Removing `SupabaseStore` or the filesystem vault — both remain for local/dev.
-- A whole-document fetch tool (see above).
-- Moving the onboarding pipeline off Supabase.
-- Vector and keyword search sharing one query planner — they stay independent tools
-  the model composes.
+- **Deleting `SupabaseStore` or the filesystem vault.** Both remain as digivault
+  backends for local/dev and offline work. This removes Supabase from the chat's
+  dependency graph, not from the codebase.
+- **Migrating the 29 legacy root architecture notes.** They serve no tenant and are
+  already flagged for retirement; moving them would grow this change without
+  removing a chat dependency.
+- **A whole-document fetch tool.** `get_note` only; the `notes_parent` index leaves
+  the door open.
+- **Vector and keyword search sharing one query planner** — they stay independent
+  tools the model composes.
 
 ## Acceptance
 
