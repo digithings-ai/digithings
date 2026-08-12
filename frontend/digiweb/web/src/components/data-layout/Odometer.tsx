@@ -43,10 +43,12 @@ export function Odometer({
   // extra post-mount re-render per Odometer instance for no behavioral
   // gain here. A #2244 hardening pass swapped this to useMotionSafe() for
   // "no raw useReducedMotion() call sites left" consistency; reverted after
-  // that additional per-instance re-render traffic measurably regressed
-  // digithings.ai's home page from 0/9+ clean loads back up to roughly a
-  // 60% hydration-error rate live in production. Consistency lost to a
-  // confirmed regression -- see #2244 for the full account.
+  // that additional per-instance re-render traffic measurably raised
+  // digithings.ai's live hydration-error rate (roughly 60% of fresh loads
+  // with the swap, vs. roughly 20% without it, in a 14-trial sample). That
+  // ~20% is itself a residual, unresolved rate under --webpack, not zero --
+  // this revert removes one confirmed contributing factor, not the whole
+  // bug. See #2244 and #2256 for the full account.
   const reduced = useReducedMotion();
 
   // SSR ships the settled reels; once in view (and motion is allowed) rewind
