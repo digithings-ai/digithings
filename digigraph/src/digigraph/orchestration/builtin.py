@@ -190,18 +190,39 @@ def _schema_from_digisearch_manifest(ctx: ToolContext, tool_name: str) -> dict[s
     }
 
 
-def _schema_from_digivault_manifest(ctx: ToolContext) -> dict[str, Any]:
+def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[str, Any]:
     try:
         by_name = fetch_digivault_tool_dicts(
             _digivault_service_base(),
             _digi_bearer_from_context(ctx),
             ctx.request_id,
         )
-        t = by_name.get("digivault_search_notes")
+        t = by_name.get(tool_name)
         if t:
             return t
     except _ORCHESTRATOR_CLIENT_ERRORS as exc:
-        logger.warning("digivault manifest fetch failed for digivault_search_notes: %s", exc)
+        logger.warning("digivault manifest fetch failed for %s: %s", tool_name, exc)
+    if tool_name == "digivault_get_note":
+        return {
+            "type": "function",
+            "function": {
+                "name": "digivault_get_note",
+                "description": (
+                    "Load one vault note in full by its vault_path (from a "
+                    "digivault_search_notes hit), instead of reasoning from its excerpt. "
+                    "D1-only: requires DIGIVAULT_URL, POST /v1/orchestrator_tools, and a "
+                    "D1-backed digivault deployment."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "vault_path": {"type": "string"},
+                        "path_prefix": {"type": "string"},
+                    },
+                    "required": ["vault_path", "path_prefix"],
+                },
+            },
+        }
     return {
         "type": "function",
         "function": {
@@ -224,8 +245,11 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
     if not q or not str(q).strip():
         return "No search query provided."
     args_eff = dict(args)
-    if "path_prefix" not in args_eff and context.vault_path_prefix:
-        args_eff["path_prefix"] = context.vault_path_prefix
+    # Security (#2265): overwrite unconditionally, never default-if-missing — a
+    # model-supplied path_prefix must not reach another tenant's corpus. Mirrors
+    # _handle_digivault_get_note's mandatory fix; see the report for why this one
+    # was extended to match rather than left on the old conditional-default.
+    args_eff["path_prefix"] = context.vault_path_prefix
     try:
         inv = invoke_digivault_tool(
             _digivault_service_base(),
@@ -259,6 +283,54 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
         "content": json.dumps(payload_for_llm),
         "results": results,
         "rag_sources": rag_sources_from_results(results),
+    }
+
+
+def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
+    """Load one vault note in full by vault_path (the locate-then-load follow-up to
+    digivault_search_notes, which only returns a short excerpt per hit)."""
+    vault_path = args.get("vault_path", "")
+    if not vault_path or not str(vault_path).strip():
+        return "vault_path is required."
+    args_eff = dict(args)
+    # Security: overwrite unconditionally, never default-if-missing. A model that
+    # supplies its own path_prefix must not be able to select another tenant's corpus.
+    # If context has no prefix (unmapped tenant slug), this passes None through — we do
+    # not fall back to an unscoped read; digivault's own handler refuses that with
+    # ok=False rather than serving the whole vault.
+    args_eff["path_prefix"] = context.vault_path_prefix
+    try:
+        inv = invoke_digivault_tool(
+            _digivault_service_base(),
+            "digivault_get_note",
+            args_eff,
+            bearer_token=_digi_bearer_from_context(context),
+            request_id=context.request_id,
+        )
+    except _ORCHESTRATOR_CLIENT_ERRORS as e:
+        return f"digivault orchestrator invoke failed: {e}"
+    if not inv.get("ok"):
+        return json.dumps(inv)
+    data = inv.get("data")
+    if not isinstance(data, dict):
+        return "Note not found."
+    result = {
+        "content": data.get("body_markdown", ""),
+        "score": None,
+        "doc_id": data.get("vault_path"),
+        "metadata": {"title": data.get("title"), "tags": data.get("tags")},
+    }
+    payload_for_llm = {
+        "vault_path": data.get("vault_path"),
+        "title": data.get("title"),
+        "summary": data.get("summary"),
+        "tags": data.get("tags"),
+        "body_markdown": data.get("body_markdown"),
+    }
+    return {
+        "content": json.dumps(payload_for_llm),
+        "results": [result],
+        "rag_sources": rag_sources_from_results([result]),
     }
 
 
@@ -759,7 +831,13 @@ def _register_tools() -> None:
         "digivault_search_notes",
         None,
         _handle_digivault_search,
-        schema_factory=_schema_from_digivault_manifest,
+        schema_factory=lambda ctx: _schema_from_digivault_manifest(ctx, "digivault_search_notes"),
+    )
+    register_tool(
+        "digivault_get_note",
+        None,
+        _handle_digivault_get_note,
+        schema_factory=lambda ctx: _schema_from_digivault_manifest(ctx, "digivault_get_note"),
     )
     register_tool(
         "visualization_agent",
@@ -860,7 +938,7 @@ def _register_skills() -> None:
     )
     register_skill(
         "digivault",
-        ["digivault_search_notes"],
+        ["digivault_search_notes", "digivault_get_note"],
         when=lambda ctx: _digivault_available(ctx),
     )
 

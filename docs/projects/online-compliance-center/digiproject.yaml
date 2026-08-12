@@ -24,6 +24,7 @@ agents:
   allowed_tools:
     - digisearch
     - digivault_search_notes
+    - digivault_get_note
   research_system_prompt: |
     You are the Online Compliance Center (OCC) help assistant for digithings.ai/chat/occ.
 

@@ -32,9 +32,7 @@ agents:
   allowed_tools:
     - digisearch
     - digivault_search_notes
-  always_retrieve_tools:
-    - digisearch
-    - digivault_search_notes
+    - digivault_get_note
   research_system_prompt: |
     You are a documentation and help assistant powered by digigraph.
 
