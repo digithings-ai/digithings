@@ -83,8 +83,16 @@ frontmatter JSON at query time. This is a deliberate, documented widening of the
 - Create: `digivault/src/digivault/d1_store.py`
 - Test: `tests/dv/test_d1_store.py`
 
+> **Pre-flight correction (2026-08-12), completed in Task 1.** `VaultSearchHit` was
+> defined in `digivault/src/digivault/supabase_store.py:36`, not in `models.py`.
+> Importing it from there would have made the D1 path depend on the Supabase module —
+> the opposite of this spec's goal. It now lives in `digivault/src/digivault/models.py`,
+> re-exported from `supabase_store.py` (`from digivault.models import VaultSearchHit as
+> VaultSearchHit`) so the pre-existing importer in `tests/dv/test_supabase_store.py`
+> stays green. `d1_store.py` imports it from `models`.
+
 **Interfaces:**
-- Consumes: `VaultSearchHit` and `NoteRow` (existing, unchanged).
+- Consumes: `VaultSearchHit` (moved to `models` — see above) and `NoteRow`.
 - Produces: `D1Store(database_id, *, account_id, api_token, http_post=None)`;
   `.search(query: str, *, limit: int = 7, path_prefix: str | None = None) -> list[VaultSearchHit]`;
   `.get_note(vault_path: str) -> NoteDetail | None`;
@@ -281,8 +289,7 @@ from collections.abc import Callable
 from typing import Any
 
 from digivault.d1_errors import D1StoreError as D1StoreError
-from digivault.models import NoteDetail, NoteRow
-from digivault.supabase_store import VaultSearchHit
+from digivault.models import NoteDetail, NoteRow, VaultSearchHit
 
 logger = logging.getLogger(__name__)
 
@@ -725,56 +732,83 @@ git commit -m "feat(digivault): serve D1 ahead of the seed vault, add enforced b
 **Interfaces:**
 - Produces: orchestrator tool `digivault_get_note`, argument `vault_path: str` (required); returns `{vault_path, title, body_markdown, frontmatter, segment_label}`.
 
+> **Pre-flight correction (2026-08-12).** An earlier draft of this task invented a
+> `TOOLS` list and a `ToolSpec` class. **Neither exists.** The real module uses
+> `TOOL_VAULT_*` string constants, an `ORCHESTRATOR_TOOL_NAMES: frozenset[str]`, a
+> private `_fn(name, description, params) -> OpenAIToolDict` helper, and
+> `build_orchestrator_tool_manifest() -> list[OpenAIToolDict]`. The code below matches
+> the real module. Verify against `digivault/src/digivault/orchestrator_tools.py:29-55`
+> before writing.
+
 - [ ] **Step 1: Write the failing test**
 
 ```python
 @pytest.mark.unit
-def test_get_note_tool_is_registered_with_a_vault_path_argument() -> None:
-    from digivault.orchestrator_tools import TOOLS
+def test_get_note_tool_is_in_the_manifest_with_a_vault_path_argument() -> None:
+    from digivault.orchestrator_tools import (
+        ORCHESTRATOR_TOOL_NAMES,
+        TOOL_VAULT_GET_NOTE,
+        build_orchestrator_tool_manifest,
+    )
 
-    tool = next(t for t in TOOLS if t.name == "digivault_get_note")
-    assert "vault_path" in tool.schema["properties"]
-    assert tool.schema["required"] == ["vault_path"]
+    assert TOOL_VAULT_GET_NOTE in ORCHESTRATOR_TOOL_NAMES
+    tool = next(
+        t
+        for t in build_orchestrator_tool_manifest()
+        if t["function"]["name"] == TOOL_VAULT_GET_NOTE
+    )
+    params = tool["function"]["parameters"]
+    assert "vault_path" in params["properties"]
+    assert params["required"] == ["vault_path"]
     # The description must tell the model where a vault_path comes from, or it will
     # invent one instead of reading it off a digisearch hit.
-    assert "digisearch" in tool.description.lower()
+    assert "digisearch" in tool["function"]["description"].lower()
 ```
 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `uv run pytest tests/dv/test_orchestrator_tools.py -k get_note -v`
-Expected: FAIL — `StopIteration`
+Expected: FAIL — `ImportError: cannot import name 'TOOL_VAULT_GET_NOTE'`
 
-- [ ] **Step 3: Add the manifest entry**
+- [ ] **Step 3: Add the constant, register it, and add the manifest entry**
 
-Copy the shape of the existing `digivault_search_notes` entry
-(`digivault/src/digivault/orchestrator_tools.py:94`) and add:
+Add the constant beside the others (after `TOOL_VAULT_SEARCH_NOTES`, line 33):
 
 ```python
-    ToolSpec(
-        name="digivault_get_note",
-        description=(
-            "Load one vault note in full by its vault_path. Use this after digisearch "
-            "returns a promising chunk: take the vault_path from that hit and call this "
-            "to read the whole note (a full PDF page or document section) instead of "
-            "reasoning from the excerpt. Do not guess a vault_path."
-        ),
-        schema={
-            "type": "object",
-            "properties": {
-                "vault_path": {
-                    "type": "string",
-                    "description": (
-                        "Canonical note path from a digisearch hit's metadata, "
-                        "e.g. clients/digithings/security__p003. No .md suffix."
-                    ),
-                }
-            },
-            "required": ["vault_path"],
-        },
-        fn=_fn("/v1/notes/by-path"),
-    ),
+TOOL_VAULT_GET_NOTE = "digivault_get_note"
 ```
+
+Add it to the `ORCHESTRATOR_TOOL_NAMES` frozenset, then append this `_fn(...)` entry to
+the list returned by `build_orchestrator_tool_manifest()`:
+
+```python
+        _fn(
+            TOOL_VAULT_GET_NOTE,
+            "Load one vault note in full by its vault_path. Use this after digisearch "
+            "returns a promising chunk: take the vault_path from that hit's metadata "
+            "and call this to read the whole note — a complete PDF page or document "
+            "section — instead of reasoning from the excerpt. Do not guess a "
+            "vault_path; only use one returned by a search.",
+            {
+                "type": "object",
+                "properties": {
+                    "vault_path": {
+                        "type": "string",
+                        "description": (
+                            "Canonical note path from a digisearch hit, e.g. "
+                            "clients/digithings/security__p003. No .md suffix."
+                        ),
+                    }
+                },
+                "required": ["vault_path"],
+            },
+        ),
+```
+
+Also update the `TOOL_VAULT_SEARCH_NOTES` description: it currently claims the search
+"uses Supabase FTS when CORE_SUPABASE_URL / CORE_SUPABASE_ANON_KEY are configured",
+which is no longer the production path. State D1 first, then Supabase, then the local
+filesystem vault — matching the precedence from Task 2.
 
 - [ ] **Step 4: Run tests**
 
@@ -1225,8 +1259,18 @@ Record each returned `database_id`.
 
 - [ ] **Step 2: Apply schema and backfill from Supabase**
 
+`--from-supabase` needs more than the `D1_*` pair below: it reads the *existing*
+corpus out of Supabase before it can write it into D1, so it also needs the
+`digivault[supabase]` extra installed (`uv pip install -e 'digivault[supabase]'` or
+equivalent) **and** `CORE_SUPABASE_URL` plus a key (`CORE_SUPABASE_ANON_KEY` or
+`CORE_SUPABASE_SERVICE_KEY`) exported. Without them this now fails fast with a clean
+`error: Supabase not configured: ...` and exit 1 — before this task's fix it raised an
+unhandled `SupabaseStoreError` traceback, which is what an operator following just the
+`D1_*` exports below would have hit first.
+
 ```bash
 export D1_ACCOUNT_ID=... D1_API_TOKEN=...
+export CORE_SUPABASE_URL=... CORE_SUPABASE_SERVICE_KEY=...
 uv run python scripts/d1_sync.py --prefix clients/digithings --database <id> --init --from-supabase
 uv run python scripts/d1_sync.py --prefix clients/online-compliance-center --database <id> --init --from-supabase
 ```
@@ -1263,10 +1307,41 @@ uv run python scripts/vectorize_sync.py --prefix clients/online-compliance-cente
 
 ```bash
 cd frontend/digithings-stack-cloudflare
-npx wrangler secret put D1_ACCOUNT_ID
-npx wrangler secret put D1_API_TOKEN
-npx wrangler secret put D1_DATABASE_MAP   # {"clients/digithings":"<id>","clients/online-compliance-center":"<id>"}
-npx wrangler deploy
+val() { grep -E "^$1=" ../../.env | head -1 | cut -d= -f2- | tr -d '"'"'"'; }
+
+printf '%s' "$(val CLOUDFLARE_ACCOUNT_ID)" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+printf '%s' "$(val CLOUDFLARE_API_TOKEN)"  | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put CLOUDFLARE_API_TOKEN
+printf '%s' '{"clients/digithings":"<id>","clients/online-compliance-center":"<id>"}' | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put D1_DATABASE_MAP
+env -u CLOUDFLARE_API_TOKEN npx wrangler deploy
+```
+
+**The `env -u CLOUDFLARE_API_TOKEN` is load-bearing, not decoration.** That variable
+is *also* wrangler's own authentication variable. If it is exported — which sourcing
+`.env` does — wrangler abandons your `wrangler login` OAuth session and authenticates
+as that token instead. It carries Vectorize and D1 permissions but not Workers, so
+every command above fails with `Authentication error [code: 10000]` against
+`/workers/scripts/...`, which reads like a broken token but is actually the wrong
+identity. Observed live on 2026-08-12. Piping the value on stdin keeps it reaching
+wrangler while the environment stays clean. Leave `CLOUDFLARE_ACCOUNT_ID` exported —
+wrangler uses it to pick the account, and the fallback lookup needs a
+`User -> Memberships` scope this token does not have.
+
+**Do not delete the legacy `VECTORIZE_*` Worker secrets until after this deploy is
+verified.** They serve vector search today; the fallback makes every ordering safe
+except removing them first.
+
+These are **Worker** secrets — a separate store from GitHub Actions. The
+`.github/workflows/docs-onboard-digithings.yml` `apply` job also reads
+`D1_ACCOUNT_ID` / `D1_API_TOKEN` / `D1_DATABASE_MAP` from the repo's `production`
+**environment secrets**, and must hold the *same* `D1_DATABASE_MAP` value as the
+Worker (it derives `--database` from `map["clients/digithings"]`) — one map, so
+CI publishing and the container reading can never point at different databases
+for the same prefix:
+
+```bash
+gh secret set D1_ACCOUNT_ID --env production
+gh secret set D1_API_TOKEN --env production
+gh secret set D1_DATABASE_MAP --env production   # same JSON map as the Worker secret above
 ```
 
 - [ ] **Step 6: Confirm the #2239 acceptance criterion**
