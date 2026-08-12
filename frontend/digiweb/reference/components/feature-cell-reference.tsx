@@ -4,7 +4,7 @@
  * <ProductFrame/> primitives from @digithings/web. Static layout template.
  */
 import { FeatureCell, ProductFrame } from "@digithings/web";
-import { MockTearsheet } from "@/components/product-frame-reference";
+import { MockTearsheet, type MockTearsheetProps } from "@/components/product-frame-reference";
 
 type Cell = {
   eyebrow: string;
@@ -36,13 +36,17 @@ const CELLS: Cell[] = [
 
 // Distinct MockTearsheet stats per cell (see product-frame-reference.tsx) —
 // same demo-data values already used elsewhere on the reference site
-// (sortable-table-reference.tsx's carry strategy), so this isn't a fresh
-// invented number, just reused for cross-page consistency.
-const MOCKS: Record<string, { title: string; cagr: string; maxDd: string; profitFactor: string; points: string }> = {
+// (sortable-table-reference.tsx's trend_xsec and carry strategies), so this
+// isn't a fresh invented number, just reused for cross-page consistency.
+// Typed against MockTearsheet's own (all-optional) prop type rather than a
+// locally-required one: cell.eyebrow is a plain string with no shared literal
+// union tying it to these keys, so a future eyebrow that doesn't match a key
+// here must fall through to MockTearsheet's defaults, not crash the render.
+const MOCKS: Record<string, MockTearsheetProps> = {
   research: {
     title: "trend_xsec · ETH-USD",
     cagr: "+44.9%",
-    maxDd: "-54.1%",
+    maxDd: "-18.4%",
     profitFactor: "2.31",
     points: "0,150 60,140 120,146 180,110 240,120 300,84 360,92 420,54 480,64 560,24",
   },
@@ -68,7 +72,10 @@ export function FeatureCellReference() {
 
       <div className="mt-[1.2rem] grid gap-[1.2rem]">
         {CELLS.map((cell) => {
-          const mock = MOCKS[cell.eyebrow];
+          // Falls back to {} (not a crash) if a future cell's eyebrow has no
+          // matching entry above — every MockTearsheet prop is optional, so
+          // an empty object just renders its built-in defaults.
+          const mock = MOCKS[cell.eyebrow] ?? {};
           return (
             <FeatureCell
               key={cell.tag}
