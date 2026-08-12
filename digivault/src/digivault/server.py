@@ -37,6 +37,7 @@ from digivault.orchestrator_tools import (
     DEFAULT_SEARCH_NOTES_LIMIT,
     TOOL_VAULT_BACKLINKS,
     TOOL_VAULT_CREATE_NOTE,
+    TOOL_VAULT_GET_NOTE,
     TOOL_VAULT_LINT,
     TOOL_VAULT_SEARCH_NOTES,
     TOOL_VAULT_SEARCH_TAG,
@@ -233,6 +234,41 @@ def _open_d1_store_or_503(path_prefix: str | None) -> D1Store:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+def _fetch_note_by_path(vault_path: str, path_prefix: str) -> NoteDetail | None:
+    """Enforced by-path fetch shared by ``POST /v1/notes/by-path`` and the
+    ``digivault_get_note`` orchestrator tool. ``None`` means "no such note" (a clean,
+    recoverable outcome); everything else that can go wrong raises ``HTTPException``.
+
+    Defined once, called from both surfaces, so the authorization boundary — a caller
+    scoped to one ``path_prefix`` cannot read another corpus's notes by guessing a
+    ``vault_path`` — cannot drift between them. Duplicating this check per call site is
+    exactly the kind of thing a #2239-style review keeps finding reimplemented (and
+    wrong) at the second location; see ``resolve_path_prefix``'s own docstring for the
+    precedent (the by-path route used to reimplement its semantics with a plain ``if
+    prefix and ...`` check that failed open).
+
+    ``path_prefix`` is a required ``str`` here, not ``str | None`` — the caller decides
+    what "no prefix supplied" means for its own surface (a required pydantic field for
+    the route; an explicit ok=False refusal, never an unscoped read, for the
+    orchestrator tool) before ever reaching this function.
+    """
+    path = normalize_vault_path(vault_path)
+    try:
+        prefix = resolve_path_prefix(path_prefix)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if prefix and path != prefix and not path.startswith(prefix + "/"):
+        raise HTTPException(status_code=403, detail="vault_path is outside the caller's prefix")
+    store = _open_d1_store_or_503(prefix or None)
+    try:
+        return store.get_note(path)
+    except D1StoreError as exc:
+        # Runtime failure inside the store call itself (transport error, an expired
+        # D1_API_TOKEN surfacing as Cloudflare's 403) — `_open_d1_store_or_503` only
+        # converts a *construction*-time D1StoreError into 503, not this call.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 def _require_tool_scope(request: Request, tool: str) -> None:
     """Enforce SCOPE_WRITE for mutating tools dispatched via /v1/orchestrator_invoke.
 
@@ -379,26 +415,17 @@ def get_note_by_path(req: NoteByPathRequest) -> NoteDetail:
     omitted) for the same underlying reason: ``D1_DATABASE_MAP`` may never carry a
     ``""`` entry, so an omitted ``path_prefix`` could never resolve to a corpus and
     would only ever ``503`` at request time — rejected up front instead (#2239 review).
+
+    The authorization check itself (prefix resolution, the 403 boundary, opening and
+    querying the store) lives in ``_fetch_note_by_path`` — shared with the
+    ``digivault_get_note`` orchestrator tool dispatched from ``orchestrator_invoke``
+    below, so both surfaces enforce the same boundary from one place (#2239).
     """
-    path = normalize_vault_path(req.vault_path)
-    try:
-        prefix = resolve_path_prefix(req.path_prefix)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if prefix and path != prefix and not path.startswith(prefix + "/"):
-        raise HTTPException(status_code=403, detail="vault_path is outside the caller's prefix")
-    store = _open_d1_store_or_503(prefix or None)
-    try:
-        note = store.get_note(path)
-    except D1StoreError as exc:
-        # `_open_d1_store_or_503` only converts a *construction*-time D1StoreError
-        # (bad config, no database for this prefix) into 503 — this call is itself
-        # outside that wrapper's try/except, so a runtime failure (transport error,
-        # an expired D1_API_TOKEN surfacing as Cloudflare's 403) would otherwise
-        # propagate as a raw D1StoreError and become an unhandled 500. See #2239 review.
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    note = _fetch_note_by_path(req.vault_path, req.path_prefix)
     if note is None:
-        raise HTTPException(status_code=404, detail=f"note not found: {path}")
+        raise HTTPException(
+            status_code=404, detail=f"note not found: {normalize_vault_path(req.vault_path)}"
+        )
     return note
 
 
@@ -543,6 +570,47 @@ def orchestrator_invoke(
             hits = _open_supabase_store().search(query, limit=limit, path_prefix=path_prefix)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
         return OrchestratorInvokeResponse(ok=True, tool=tool, data=data)
+
+    if tool == TOOL_VAULT_GET_NOTE:
+        # D1-only, same as `POST /v1/notes/by-path` — a by-path fetch only makes sense
+        # against the corpus that owns the path, so there is no local-vault/Supabase
+        # fallback here (mirrors that route's own docstring).
+        vault_path = str(args.get("vault_path") or "").strip()
+        if not vault_path:
+            return OrchestratorInvokeResponse(ok=False, tool=tool, error="vault_path is required")
+        path_prefix_arg = args.get("path_prefix")
+        if path_prefix_arg is None:
+            # Unlike `digivault_search_notes`, nothing in digigraph's `builtin.py`
+            # injects the caller's tenant context into this tool's arguments today —
+            # only `_handle_digivault_search` does that, and only for
+            # `digivault_search_notes` (builtin.py:227). So `path_prefix` will be
+            # absent on every real call until digigraph grows an equivalent handler
+            # for this tool. `resolve_path_prefix(None)` treats a missing prefix as
+            # "no scoping requested" (by design, for callers that legitimately want
+            # that) — silently taking that path here would turn "the caller forgot to
+            # scope this" into an unscoped cross-tenant read, exactly the fail-open
+            # the by-path route's required `path_prefix` field exists to close.
+            # Refuse instead, `ok=False` (not a raised 400): digigraph's
+            # `invoke_digivault_tool` calls `raise_for_status()`, and
+            # `str(httpx.HTTPStatusError)` drops the response body, so a raised 400
+            # would reach the model as a bare status code rather than this sentence —
+            # same reasoning as the `digivault_search_notes` D1 branch above (#2239).
+            return OrchestratorInvokeResponse(
+                ok=False,
+                tool=tool,
+                error="path_prefix is required for digivault_get_note",
+            )
+        note = _fetch_note_by_path(vault_path, str(path_prefix_arg))
+        if note is None:
+            # A stale or mistyped vault_path is an expected, recoverable outcome (the
+            # model should try a different path or re-search), not a tool failure —
+            # mirrors the `digivault_backlinks` "No such note" convention below.
+            return OrchestratorInvokeResponse(
+                ok=False,
+                tool=tool,
+                error=f"note not found: {normalize_vault_path(vault_path)}",
+            )
+        return OrchestratorInvokeResponse(ok=True, tool=tool, data=note.model_dump(mode="json"))
 
     vault = _open_vault()
     try:

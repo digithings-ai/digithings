@@ -854,6 +854,194 @@ def test_note_by_path_carve_out_is_method_aware() -> None:
     assert server.digivault_path_scopes("PUT", "/v1/notes/by-path") == [SCOPE_WRITE]
 
 
+# ── digivault_get_note orchestrator tool (#2239 Task 3 gap) ─────────────────────
+def test_orchestrator_invoke_get_note_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Full round trip through the shared `_fetch_note_by_path` helper — the note
+    body must come back in `data`, not just a bare ok flag."""
+    note = NoteDetail(
+        vault_path="clients/digithings/arch", title="Arch", body_markdown="hello world"
+    )
+    called: dict = {}
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            called["vault_path"] = vault_path
+            return note
+
+    def _open(prefix: str | None) -> _FakeD1:
+        called["prefix"] = prefix
+        return _FakeD1()
+
+    monkeypatch.setattr(server, "_open_d1_store", _open)
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/digithings/arch",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert resp.data["vault_path"] == "clients/digithings/arch"
+    assert resp.data["body_markdown"] == "hello world"
+    assert called["prefix"] == "clients/digithings"
+    assert called["vault_path"] == "clients/digithings/arch"
+
+
+def test_orchestrator_invoke_get_note_missing_vault_path_is_ok_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing/blank vault_path is an argument-level error: ok=False, not a raised
+    HTTP error — the same convention digivault_search_notes uses for `query`, so the
+    reason survives digigraph's `raise_for_status()` hop (`str(httpx.HTTPStatusError)`
+    drops the body — see the search_notes tests above)."""
+
+    def _boom(prefix: str | None) -> None:
+        raise AssertionError("must not open a store when vault_path is missing")
+
+    monkeypatch.setattr(server, "_open_d1_store", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note", arguments={"path_prefix": "clients/digithings"}
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "vault_path is required"
+
+    resp_blank = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={"vault_path": "   ", "path_prefix": "clients/digithings"},
+        ),
+        _fake_request(),
+    )
+    assert resp_blank.ok is False
+    assert resp_blank.error == "vault_path is required"
+
+
+def test_orchestrator_invoke_get_note_missing_path_prefix_is_ok_false_not_unscoped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production gap this dispatch branch must not paper over: digigraph's
+    builtin.py has no handler that injects the caller's tenant context into
+    `digivault_get_note`'s arguments (only `_handle_digivault_search` does that, and
+    only for `digivault_search_notes`) — so `path_prefix` is absent on every real
+    call today. Defaulting to an unscoped read here (resolve_path_prefix(None) means
+    "no scoping requested") would be exactly the cross-tenant fail-open the by-path
+    route's required path_prefix field exists to prevent. Must refuse instead."""
+
+    def _boom(prefix: str | None) -> None:
+        raise AssertionError("must not open a store — path_prefix is absent")
+
+    monkeypatch.setattr(server, "_open_d1_store", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note", arguments={"vault_path": "clients/digithings/arch"}
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required for digivault_get_note"
+
+
+def test_orchestrator_invoke_get_note_refuses_cross_corpus_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller scoped to `clients/digithings` must not read the OCC corpus by
+    passing an arbitrary vault_path through the orchestrator tool — same 403 the
+    `POST /v1/notes/by-path` route raises for the identical inputs, because both
+    go through the same `_fetch_note_by_path` helper."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for an out-of-scope path")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/online-compliance-center/x",
+                    "path_prefix": "clients/digithings",
+                },
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 403
+
+    # Prove the refusal is the authorization check, not an accident of the fake: with
+    # the check removed (a store that would happily answer for any prefix), the same
+    # cross-corpus call must succeed — pinning that the 403 above depends on
+    # `_fetch_note_by_path`'s prefix enforcement actually running.
+    note = NoteDetail(vault_path="clients/online-compliance-center/x", title="x", body_markdown="")
+    monkeypatch.setattr(server, "_fetch_note_by_path", lambda vault_path, path_prefix: note)
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/online-compliance-center/x",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+
+
+def test_orchestrator_invoke_get_note_not_found_is_clean_ok_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale or mistyped vault_path must read as a recoverable 'not found', not an
+    exception — the model should be able to retry with a different path."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> None:
+            return None
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/digithings/nope",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "note not found: clients/digithings/nope"
+
+
+def test_orchestrator_invoke_get_note_d1_unconfigured_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/digithings/arch",
+                    "path_prefix": "clients/digithings",
+                },
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+
+
 def test_by_path_route_is_not_shadowed_by_the_name_route(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
