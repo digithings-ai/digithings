@@ -160,7 +160,7 @@ services:
       DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}
       DIGI_WORKFLOW_PROFILE: ${DIGI_WORKFLOW_PROFILE:-research_rag}
       # Multi-image Profile A has digivault only (no digisearch service).
-      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digivault_search_notes}
+      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes,digivault_get_note}
       DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
       DIGI_ENABLE_DEBUG_ENDPOINTS: ${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
       DIGI_ENABLE_THREAD_API: ${DIGI_ENABLE_THREAD_API:-0}
