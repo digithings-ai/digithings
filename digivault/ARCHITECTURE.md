@@ -27,15 +27,17 @@ extra.
 
 | Module | Responsibility |
 |--------|----------------|
-| `digivault/models.py` | Pydantic v2 result models: `Note`, `LinkRef`, `ValidationIssue`, `LintReport`, `VaultConfig`, `NoteRow` (validated Supabase notes-table row; used by `SupabaseStore.list_notes` and `scripts/vectorize_sync.py` — not the same shape as `Note`, hence the distinct name). |
+| `digivault/models.py` | Pydantic v2 result models: `Note`, `LinkRef`, `ValidationIssue`, `LintReport`, `VaultConfig`, `NoteRow` (validated Supabase notes-table row; used by `SupabaseStore.list_notes` and `scripts/vectorize_sync.py` — not the same shape as `Note`, hence the distinct name), `VaultSearchHit` (shared ranked-hit shape for both `SupabaseStore.search` and `D1Store.search`), `NoteDetail` (one note whole: body + frontmatter together — what a by-path fetch returns). |
 | `digivault/frontmatter.py` | Round-trip-safe YAML frontmatter `split` / `dump` / `set_keys` (PyYAML). `split(dump(fm, body)) == (fm, body)`. |
 | `digivault/wikilinks.py` | Parse `[[note]]`/`[[note#h\|alias]]`/`![[embed]]`; `rewrite_target` / `map_targets` rewrite links while skipping code spans/blocks. |
 | `digivault/vault.py` | `Vault` — load a directory (or any store via `Vault.from_sources`), build the note index + link graph + backlinks + tag index; maintenance ops (`create_note`, `write_note(..., overwrite=True)` for idempotent upserts, `rename` with inbound-link rewrite, `set_frontmatter`, `reindex`, `lint`). |
 | `digivault/local_search.py` | Filesystem keyword search for `digivault_search_notes` when `DIGIVAULT_ROOT` is set (Profile A / client vaults). Optional `path_prefix` filter for multi-tenant corpora. Query tokens drop common English stopwords so full-prompt prefetch does not score every note. Returns `VaultSearchHit` rows; no network. |
 | `digivault/supabase_store.py` | `SupabaseStore` — read a vault out of Supabase (`architecture_notes`/`knowledge_notes`) and reconstruct it via `Vault.from_sources`; FTS `search` via the `search_architecture_notes` RPC (optional `path_prefix`; migration 068). Optional `[supabase]` extra, lazily imported. |
-| `digivault/path_scopes.py` | digikey scope policy: reads need `digivault:read`, writes `digivault:write`. |
-| `digivault/orchestrator_tools.py` | OpenAI-style tool manifest fetched by digigraph via `POST /v1/orchestrator_tools`: tag search, backlinks, lint, create-note, and `digivault_search_notes` (local vault when `DIGIVAULT_ROOT` set; else Supabase FTS). |
-| `digivault/server.py` | FastAPI app: `/healthz`, `/v1/status`, note CRUD, lint, backlinks, tags, orchestrator endpoints (`digivault_search_notes` prefers local filesystem search when `DIGIVAULT_ROOT` is set; otherwise `SupabaseStore.search`). |
+| `digivault/d1_errors.py` | `D1StoreError(RuntimeError)` — isolated in its own module so it stays importable even if importing `d1_store.py` fails (mirrors `digisearch`'s `vectorize_errors.py`). |
+| `digivault/d1_store.py` | `D1Store` — read-only Cloudflare D1 REST-API client for one corpus's note database: FTS5 `search`, `get_note` (by exact `vault_path`), paginated `list_notes`. One database per corpus, so `path_prefix` isolation for `search`/`list_notes` is a SQL filter, while a by-path fetch is scoped by which database `server.py` opens at all (see `_open_d1_store`). `normalize_vault_path` and `build_fts_match` also live here. Credentials are constructor args, never read from the environment inside this class — `server.py` reads env. |
+| `digivault/path_scopes.py` | digikey scope policy: reads need `digivault:read`, writes `digivault:write`. `POST /v1/notes/by-path` is scoped `digivault:read` despite being POST — it's a read (body carries `vault_path`/`path_prefix`), not a mutation. |
+| `digivault/orchestrator_tools.py` | OpenAI-style tool manifest fetched by digigraph via `POST /v1/orchestrator_tools`: tag search, backlinks, lint, create-note, and `digivault_search_notes` (D1 when configured; else local vault when `DIGIVAULT_ROOT` set; else Supabase FTS). |
+| `digivault/server.py` | FastAPI app: `/healthz`, `/v1/status`, note CRUD, lint, backlinks, tags, orchestrator endpoints, `POST /v1/notes/by-path` (`digivault_search_notes` and the by-path fetch prefer D1 when `D1_ACCOUNT_ID`/`D1_API_TOKEN`/`D1_DATABASE_MAP` are set — D1 wins even when `DIGIVAULT_ROOT` is also set, see below — otherwise `digivault_search_notes` falls back to local filesystem search, then `SupabaseStore.search`). |
 | `digivault/mcp_server.py` | `python -m digivault.mcp_server` — vault tools over MCP (streamable HTTP, default `127.0.0.1:8766`). |
 | `digivault/cli.py` | `digivault init|lint|reindex|new-note`. |
 
@@ -76,6 +78,14 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   `frontmatter`) so docs_onboard can idempotently upsert via
   `Vault.write_note(..., overwrite=True)`. Default `overwrite: false` preserves
   create-only behavior.
+- **By-path fetch:** `POST /v1/notes/by-path` loads one note whole (body +
+  frontmatter, as `NoteDetail`) by its exact `vault_path`, from D1 only — there
+  is no filesystem/Supabase fallback for this route. `path_prefix` in the
+  request body is an **enforced authorization boundary**, not an advisory
+  filter: with two client corpora sharing this deployment, a caller scoped to
+  one prefix gets `403` if `vault_path` falls outside it, and `404` if the note
+  doesn't exist. Returns `503` if D1 isn't configured for the resolved prefix.
+  Scoped `digivault:read` (see `path_scopes.py`) even though it's a POST.
 - **Hub:** digigraph discovers tools via `POST /v1/orchestrator_tools` and
   executes via `POST /v1/orchestrator_invoke`.
 - **Rate limiting:** per-IP sliding window (in-process `deque` + lock), mirrors
@@ -86,17 +96,31 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   exempt so the unit suite doesn't need the env var. Exceeding the limit returns
   429 with `code: rate_limit_exceeded` and a `Retry-After` header.
 - **`digivault_search_notes` search precedence:**
-  1. If `DIGIVAULT_ROOT` is set → filesystem keyword search via
+  1. If D1 is configured (`D1_ACCOUNT_ID` + `D1_API_TOKEN` +
+     `D1_DATABASE_MAP` all set) → `D1Store.search` (FTS5, Cloudflare D1 REST
+     API). **D1 wins even when `DIGIVAULT_ROOT` is also set** — this is the
+     #2239 fix: production sets `DIGIVAULT_ROOT=/data/vault` pointing at baked
+     seed stubs, and those stubs must never shadow the real D1-backed corpus.
+     `path_prefix` selects which corpus's database `_open_d1_store` opens (via
+     `D1_DATABASE_MAP`, a JSON object of `{"<vault-prefix>": "<database id>"}`);
+     a prefix with no matching entry is `503`, not an unscoped search across
+     every corpus — one prefix, one database, by construction.
+  2. Else if `DIGIVAULT_ROOT` is set → filesystem keyword search via
      `local_search.search_local_vault` over that vault (Profile A / client
      volumes; no Supabase required). Optional `path_prefix` isolates client
      subdirs (e.g. `clients/online-compliance-center`).
-  2. Else → Supabase FTS via `SupabaseStore.search` (the
+  3. Else → Supabase FTS via `SupabaseStore.search` (the
      `search_architecture_notes` RPC — always the 3-arg form from migration
      068, with `path_prefix` null when unset; anon-key, read-only); returns
      503 only if
      `CORE_SUPABASE_URL`/`CORE_SUPABASE_ANON_KEY` are unset.
-  `limit` is clamped to `[1, 50]` regardless of caller input. The Supabase path
-  is the same RPC the digithings.ai chat widget calls directly today
+  `limit` is clamped to `[1, 50]` regardless of caller input. An empty-ish
+  caller-supplied `path_prefix` (`""`, `"/"`, ...) is coalesced to `None`
+  ("no prefix") before it reaches any backend — `D1Store.search` deliberately
+  raises `ValueError` for a non-`None` prefix that normalizes to empty (a
+  caller bug, not an isolation boundary to skip), so this coalescing is load-
+  bearing for the D1 path, not just cosmetic. The Supabase path is the same
+  RPC the digithings.ai chat widget calls directly today
   ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — wiring
   it into digivault's own orchestrator surface lets digigraph reproduce that
   grounding once the widget is cut over to the digichat gateway. Verified live
@@ -132,7 +156,8 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
 | `DIGIVAULT_MCP_HOST` | MCP bind host (default `127.0.0.1`). |
 | `DIGIKEY_JWKS_URL` / `DIGIKEY_ISSUER` / `DIGIKEY_AUDIENCE` / `DIGIKEY_PUBLIC_KEY_PEM` | digikey JWT verification (shared convention). |
 | `DIGI_DISABLE_RATE_LIMIT` | `1`/`true`/`yes` disables the per-IP rate limiter (shared convention with digisearch/digigraph; tests only). |
-| `CORE_SUPABASE_URL` (or `SUPABASE_URL`) + `CORE_SUPABASE_ANON_KEY` (or `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`) | Required for `digivault_search_notes` only when `DIGIVAULT_ROOT` is unset — `SupabaseStore.from_env` credentials (ADR-0022 naming). Requires the `digivault[supabase]` extra installed. |
+| `CORE_SUPABASE_URL` (or `SUPABASE_URL`) + `CORE_SUPABASE_ANON_KEY` (or `CORE_SUPABASE_SERVICE_KEY` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY`) | Fallback for `digivault_search_notes` only when neither D1 nor `DIGIVAULT_ROOT` is configured — `SupabaseStore.from_env` credentials (ADR-0022 naming). Requires the `digivault[supabase]` extra installed. |
+| `D1_ACCOUNT_ID` + `D1_API_TOKEN` + `D1_DATABASE_MAP` | Cloudflare account id, API token, and a JSON object `{"<vault-prefix>": "<database id>"}` mapping each corpus's vault prefix to its D1 database. All three must be set for `_d1_configured()` to be true. When configured, D1 is authoritative for both `digivault_search_notes` and `POST /v1/notes/by-path` — it wins over `DIGIVAULT_ROOT` (the #2239 fix). Read only in `server.py` (`_open_d1_store`), never inside `D1Store`. |
 
 ## Testing
 
@@ -141,11 +166,17 @@ Core tests (frontmatter, wikilinks, vault) need only `pydantic` + `pyyaml`.
 Service and CLI tests `pytest.importorskip` their extras so the suite stays green
 without `digivault[service]` installed. CI (`.github/workflows/test-digivault.yml`)
 installs `digibase` + `digikey` + `digivault[service]` and runs the full set.
-`digivault_search_notes` tests cover both paths: local-root searches exercise
-`local_search` against a `tmp_path` vault; Supabase-path tests fake
-`SupabaseStore` directly (constructor takes any `SupabaseClientProtocol`) — the
-real `supabase` package (`[supabase]` extra) is never required to run the suite,
-matching `test_supabase_store.py`'s convention.
+`digivault_search_notes` tests cover all three paths: D1-path tests fake
+`_open_d1_store`; local-root searches exercise `local_search` against a
+`tmp_path` vault; Supabase-path tests fake `SupabaseStore` directly
+(constructor takes any `SupabaseClientProtocol`) — the real `supabase` package
+(`[supabase]` extra) is never required to run the suite, matching
+`test_supabase_store.py`'s convention. `test_d1_store.py` runs `D1Store`'s real
+SQL against an in-memory SQLite/FTS5 connection rather than canned fixtures, so
+a regression in the SQL text itself fails the test. `POST /v1/notes/by-path`
+tests cover the 403 (out-of-prefix), 404 (absent note), 503 (D1 unconfigured)
+and 200 paths, plus a `TestClient` request proving the route isn't shadowed by
+`GET /v1/notes/{name}`.
 
 ## Monorepo integration
 

@@ -12,14 +12,18 @@ pytest.importorskip("fastapi")
 pytest.importorskip("digikey")
 pytest.importorskip("digibase")
 
+from digivault.d1_errors import D1StoreError
+from digivault.d1_store import D1Store
+from digivault.models import NoteDetail
 from digivault.orchestrator_tools import ORCHESTRATOR_TOOL_NAMES
-from digivault.path_scopes import SCOPE_WRITE
+from digivault.path_scopes import SCOPE_READ, SCOPE_WRITE
 from digivault.supabase_store import SupabaseStore
 from digivault.vault import Vault
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from digivault import server
+from tests.digi_test_jwt import auth_headers
 
 pytestmark = pytest.mark.unit
 
@@ -443,3 +447,275 @@ def test_orchestrator_invoke_search_notes_without_credentials(
             _fake_request(),
         )
     assert excinfo.value.status_code == 503
+
+
+# ── D1 backend precedence (#2239) ────────────────────────────────────────────
+def _set_d1_env(monkeypatch: pytest.MonkeyPatch, database_map: str) -> None:
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", database_map)
+
+
+def test_open_d1_store_raises_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store("clients/digithings")
+    assert "D1_ACCOUNT_ID" in str(exc.value)
+
+
+def test_open_d1_store_raises_when_prefix_has_no_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store("clients/other")
+    assert "clients/other" in str(exc.value)
+
+
+def test_open_d1_store_builds_store_scoped_to_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    store = server._open_d1_store("clients/digithings")
+    assert isinstance(store, D1Store)
+    assert store.database_id == "db-1"
+
+
+def test_open_d1_store_treats_no_prefix_as_the_empty_map_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_d1_env(monkeypatch, '{"": "db-unscoped"}')
+    store = server._open_d1_store(None)
+    assert store.database_id == "db-unscoped"
+
+
+def test_open_d1_store_rejects_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, "{not json")
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store("clients/digithings")
+    assert "not valid JSON" in str(exc.value)
+
+
+def test_open_d1_store_rejects_non_object_database_map(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D1_DATABASE_MAP must be a JSON object; a list must not crash with AttributeError."""
+    _set_d1_env(monkeypatch, '["clients/digithings"]')
+    with pytest.raises(D1StoreError):
+        server._open_d1_store("clients/digithings")
+
+
+def test_open_d1_store_or_503_converts_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        server._open_d1_store_or_503("clients/digithings")
+    assert exc.value.status_code == 503
+
+
+def test_orchestrator_invoke_search_notes_prefers_d1_even_with_digivault_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D1 must win even when DIGIVAULT_ROOT is set — the #2239 production bug: prod's
+    baked /data/vault seed stubs must never shadow the real D1-backed corpus."""
+    monkeypatch.setenv("DIGIVAULT_ROOT", "/data/vault")  # must NOT win
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    called: dict = {}
+
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            called["args"] = (query, limit, path_prefix)
+            return []
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "jwt", "limit": 3, "path_prefix": "clients/digithings"},
+        ),
+        _fake_request(),
+    )
+    assert called["args"] == ("jwt", 3, "clients/digithings")
+    assert resp.ok is True
+    assert resp.data == {"hits": []}
+
+
+def test_orchestrator_invoke_search_notes_empty_path_prefix_stays_unscoped_for_d1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task 1 review: D1Store.search raises ValueError for path_prefix="" (distinct from
+    None). server.py's existing `... or None` coalescing must survive unmodified, or an
+    empty caller-supplied path_prefix starts returning HTTP 500 through the D1 path too."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    called: dict = {}
+
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            called["path_prefix"] = path_prefix
+            return []
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "jwt", "path_prefix": ""},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert called["path_prefix"] is None
+
+
+def test_orchestrator_invoke_search_notes_d1_misconfigured_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D1 configured but the requested prefix has no database -> 503, not a raw 500."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "jwt", "path_prefix": "clients/other"},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+
+
+# ── by-path note fetch (#2239) ───────────────────────────────────────────────
+def test_get_note_by_path_returns_404_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> None:
+            return None
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/nope"))
+    assert exc.value.status_code == 404
+
+
+def test_get_note_by_path_enforces_the_caller_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller scoped to digithings must not read the OCC corpus by guessing a path."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/online-compliance-center/x",
+                path_prefix="clients/digithings",
+            )
+        )
+    assert exc.value.status_code == 403
+
+
+def test_get_note_by_path_allows_exact_prefix_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    """vault_path == path_prefix is in-scope, not just paths strictly under it."""
+    note = NoteDetail(vault_path="clients/digithings", title="root", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            return note if vault_path == "clients/digithings" else None
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    result = server.get_note_by_path(
+        server.NoteByPathRequest(vault_path="clients/digithings", path_prefix="clients/digithings")
+    )
+    assert result is note
+
+
+def test_get_note_by_path_returns_note_scoped_to_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+    called: dict = {}
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            called["vault_path"] = vault_path
+            return note
+
+    def _open(prefix: str | None) -> _FakeD1:
+        called["prefix"] = prefix
+        return _FakeD1()
+
+    monkeypatch.setattr(server, "_open_d1_store", _open)
+    result = server.get_note_by_path(
+        server.NoteByPathRequest(
+            vault_path="clients/digithings/arch", path_prefix="clients/digithings"
+        )
+    )
+    assert result is note
+    assert called["prefix"] == "clients/digithings"
+    assert called["vault_path"] == "clients/digithings/arch"
+
+
+def test_get_note_by_path_without_prefix_opens_store_with_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: dict = {}
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> None:
+            return None
+
+    def _open(prefix: str | None) -> _FakeD1:
+        called["prefix"] = prefix
+        return _FakeD1()
+
+    monkeypatch.setattr(server, "_open_d1_store", _open)
+    with pytest.raises(HTTPException):
+        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/nope"))
+    assert called["prefix"] is None
+
+
+def test_get_note_by_path_returns_503_when_d1_unconfigured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/x"))
+    assert exc.value.status_code == 503
+
+
+def test_note_by_path_route_is_read_scoped_despite_being_post() -> None:
+    """POST /v1/notes/by-path is a read (fetch), not a mutation — must not require write."""
+    assert server.digivault_path_scopes("POST", "/v1/notes/by-path") == [SCOPE_READ]
+
+
+def test_by_path_route_is_not_shadowed_by_the_name_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A POST to /v1/notes/by-path must reach the new handler, not GET /v1/notes/{name}."""
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            return note
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    client = TestClient(server.app)
+
+    posted = client.post(
+        "/v1/notes/by-path",
+        json={"vault_path": "clients/digithings/arch"},
+        headers=auth_headers(scopes=[SCOPE_READ]),
+    )
+    assert posted.status_code == 200
+    assert posted.json()["vault_path"] == "clients/digithings/arch"
+
+    # GET on the same literal path must still resolve to the {name} route (name="by-path",
+    # via _open_vault -> DIGIVAULT_ROOT), proving the two routes coexist rather than one
+    # shadowing the other. Its 503 message is distinct from the D1-store-unconfigured
+    # message the by-path POST handler would raise, so this pins *which* handler answered.
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    got = client.get("/v1/notes/by-path", headers=auth_headers(scopes=[SCOPE_READ]))
+    assert got.status_code == 503
+    assert got.json()["error"]["message"] == "DIGIVAULT_ROOT is not configured"

@@ -7,6 +7,7 @@ caching), so there is no index to fall out of sync.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import time as _time
@@ -28,8 +29,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from digivault import __version__
+from digivault.d1_errors import D1StoreError
+from digivault.d1_store import D1Store, normalize_vault_path
 from digivault.local_search import search_local_vault
-from digivault.models import LintReport, Note
+from digivault.models import LintReport, Note, NoteDetail
 from digivault.orchestrator_tools import (
     DEFAULT_SEARCH_NOTES_LIMIT,
     TOOL_VAULT_BACKLINKS,
@@ -143,6 +146,58 @@ def _open_supabase_store() -> SupabaseStore:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+def _d1_configured() -> bool:
+    """True when D1 credentials and a database map are all present in the environment.
+
+    Env is read here, at the call site — never inside ``D1Store``, whose constructor
+    takes credentials as plain arguments (same convention as ``_open_supabase_store``
+    reading Supabase env only in ``SupabaseStore.from_env``).
+    """
+    return bool(
+        (os.environ.get("D1_ACCOUNT_ID") or "").strip()
+        and (os.environ.get("D1_API_TOKEN") or "").strip()
+        and (os.environ.get("D1_DATABASE_MAP") or "").strip()
+    )
+
+
+def _open_d1_store(path_prefix: str | None) -> D1Store:
+    """Build a D1Store for the corpus owning ``path_prefix``.
+
+    Each corpus is a separate D1 database (``D1_DATABASE_MAP`` maps a vault prefix to
+    a database id), so tenant isolation is structural: a caller scoped to one prefix
+    cannot even address another corpus's database, let alone its rows.
+
+    Raises ``D1StoreError`` — not ``HTTPException`` — so this stays a plain, directly
+    testable function; request handlers go through :func:`_open_d1_store_or_503`.
+    """
+    account_id = (os.environ.get("D1_ACCOUNT_ID") or "").strip()
+    api_token = (os.environ.get("D1_API_TOKEN") or "").strip()
+    raw_map = (os.environ.get("D1_DATABASE_MAP") or "").strip()
+    if not account_id or not api_token or not raw_map:
+        raise D1StoreError(
+            "D1 not configured: set D1_ACCOUNT_ID, D1_API_TOKEN and D1_DATABASE_MAP."
+        )
+    try:
+        database_map = json.loads(raw_map)
+    except ValueError as exc:
+        raise D1StoreError("D1_DATABASE_MAP is not valid JSON") from exc
+    if not isinstance(database_map, dict):
+        raise D1StoreError("D1_DATABASE_MAP must be a JSON object of prefix -> database id")
+    prefix = normalize_vault_path(path_prefix or "")
+    database_id = database_map.get(prefix)
+    if not database_id:
+        raise D1StoreError(f"no D1 database configured for vault prefix {prefix!r}")
+    return D1Store(str(database_id), account_id=account_id, api_token=api_token)
+
+
+def _open_d1_store_or_503(path_prefix: str | None) -> D1Store:
+    """``_open_d1_store``, converting a config failure into HTTP 503 for request handlers."""
+    try:
+        return _open_d1_store(path_prefix)
+    except D1StoreError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 def _require_tool_scope(request: Request, tool: str) -> None:
     """Enforce SCOPE_WRITE for mutating tools dispatched via /v1/orchestrator_invoke.
 
@@ -189,6 +244,21 @@ class RenameRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     new_name: str = Field(..., min_length=1)
+
+
+class NoteByPathRequest(BaseModel):
+    """Body for ``POST /v1/notes/by-path``: fetch one note whole by its exact vault path."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    vault_path: str = Field(..., min_length=1, description="Exact vault_path to fetch")
+    path_prefix: str | None = Field(
+        default=None,
+        description=(
+            "Enforced authorization boundary: vault_path must equal or fall under this "
+            "prefix, or the request is rejected with 403."
+        ),
+    )
 
 
 class NoteList(BaseModel):
@@ -242,6 +312,31 @@ def status() -> dict[str, Any]:
 def list_notes() -> NoteList:
     """List every note in the vault with its tags, links, and backlinks."""
     return NoteList(notes=_open_vault().list_notes())
+
+
+# Literal path registered ahead of the `{name}` routes below — POST already makes it
+# unambiguous (no GET/POST collision exists for "/v1/notes/{name}"), but a literal
+# route is kept ahead of a parametrized one on principle, and a test
+# (test_by_path_route_is_not_shadowed_by_the_name_route) pins that both resolve
+# correctly regardless of registration order.
+@app.post("/v1/notes/by-path", response_model=NoteDetail)
+def get_note_by_path(req: NoteByPathRequest) -> NoteDetail:
+    """Load one note whole (body + frontmatter), addressed by ``vault_path``. D1-only.
+
+    ``path_prefix`` is an enforced authorization boundary, not an advisory filter: two
+    client corpora can share this deployment, and without this check a caller scoped to
+    one prefix could read another client's notes just by passing an arbitrary
+    ``vault_path``. There is no filesystem/Supabase fallback here — a by-path fetch
+    only makes sense against the corpus that owns the path (#2239).
+    """
+    path = normalize_vault_path(req.vault_path)
+    prefix = normalize_vault_path(req.path_prefix or "")
+    if prefix and path != prefix and not path.startswith(prefix + "/"):
+        raise HTTPException(status_code=403, detail="vault_path is outside the caller's prefix")
+    note = _open_d1_store_or_503(prefix or None).get_note(path)
+    if note is None:
+        raise HTTPException(status_code=404, detail=f"note not found: {path}")
+    return note
 
 
 @app.get("/v1/notes/{name}", response_model=Note)
@@ -322,8 +417,9 @@ def orchestrator_invoke(
     args = req.arguments if isinstance(req.arguments, dict) else {}
     _require_tool_scope(request, tool)
 
-    # Search precedence: local filesystem vault when DIGIVAULT_ROOT is set
-    # (Profile A / client volumes); otherwise Supabase FTS when credentials exist.
+    # Search precedence: D1 when configured (wins even over DIGIVAULT_ROOT — see the
+    # branch below); else local filesystem vault when DIGIVAULT_ROOT is set (Profile A
+    # / client volumes); else Supabase FTS when credentials exist.
     if tool == TOOL_VAULT_SEARCH_NOTES:
         query = str(args.get("query") or "").strip()
         if not query:
@@ -338,8 +434,14 @@ def orchestrator_invoke(
             str(path_prefix_raw).strip().strip("/") if path_prefix_raw is not None else None
         ) or None
 
-        root_env = (os.environ.get("DIGIVAULT_ROOT") or "").strip()
-        if root_env:
+        # D1 first: when the remote corpus is configured it is authoritative, and the
+        # baked /data/vault seed must not shadow it (the #2239 production bug — prod
+        # sets DIGIVAULT_ROOT to a stub vault that must never win over the real corpus).
+        if _d1_configured():
+            hits = _open_d1_store_or_503(path_prefix).search(
+                query, limit=limit, path_prefix=path_prefix
+            )
+        elif (os.environ.get("DIGIVAULT_ROOT") or "").strip():
             hits = search_local_vault(_open_vault(), query, limit=limit, path_prefix=path_prefix)
         else:
             hits = _open_supabase_store().search(query, limit=limit, path_prefix=path_prefix)
