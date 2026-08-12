@@ -65,7 +65,7 @@ export default function TeamPage() {
     <>
       <DtNav />
 
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" className="pt-[var(--dq-nav-h)]">
         <PageHead
           kicker={"// team"}
           title={
