@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 import re
 import time
 from collections.abc import Callable
@@ -24,6 +25,11 @@ API_ROOT = "https://api.cloudflare.com/client/v4"
 #: (url, headers, body, content_type) -> (status_code, response_text)
 HttpPost = Callable[[str, dict[str, str], bytes, str], tuple[int, str]]
 
+#: (seconds) -> None. Injected the same way as `HttpPost` above so a unit test can
+#: record requested backoff durations instead of `query()` actually blocking on
+#: `time.sleep` between retries.
+SleepFn = Callable[[float], None]
+
 _FTS_TERM = re.compile(r"\w+")
 
 #: Safety cap on `list_notes` pagination. A backend that keeps returning full pages
@@ -33,6 +39,22 @@ _FTS_TERM = re.compile(r"\w+")
 #: 250k rows, comfortably above any real client-vault corpus (see CLAUDE.md's target
 #: market: small/personal vaults, not institutional scale).
 MAX_LIST_PAGES = 500
+
+#: Bounded retry policy for `D1Store.query()` (#2239 follow-up M6). `query()` is the
+#: synchronous read path a chat turn blocks on, so the bound stays modest: 3 total
+#: attempts (2 retries) with exponential backoff starting at a quarter second. See
+#: `_is_retryable_status` for exactly which failures this applies to.
+MAX_ATTEMPTS = 3
+INITIAL_BACKOFF_SECONDS = 0.25
+BACKOFF_MULTIPLIER = 2.0
+#: Kept strictly below `BACKOFF_MULTIPLIER - 1`. A jittered delay for attempt N is at
+#: most `base(N) * (1 + RETRY_JITTER_FRACTION)`; the un-jittered floor for attempt
+#: N + 1 is `base(N) * BACKOFF_MULTIPLIER`. Because 1 + RETRY_JITTER_FRACTION <
+#: BACKOFF_MULTIPLIER, the jittered delay for N can never reach N + 1's floor —
+#: backoff durations are strictly increasing across retries regardless of the random
+#: draw, which is what lets a test assert growth without controlling or injecting the
+#: random source itself.
+RETRY_JITTER_FRACTION = 0.2
 
 # WHERE clause has 3 placeholders: `? = ''` skips the prefix filter entirely when
 # the caller passed no prefix, `vault_path = ?` matches the prefix note itself, and
@@ -173,6 +195,45 @@ def _default_http_post(
     return response.status_code, response.text
 
 
+def _default_sleep(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _is_retryable_status(status: int) -> bool:
+    """Transient-looking HTTP statuses worth a bounded retry.
+
+    429 and 5xx are the uncontroversial cases. 401 is deliberately included even
+    though a genuinely wrong or revoked token also 401s deterministically and a
+    retry will not fix that: verified in production (#2239) — a live D1 cutover hit
+    three transient 401s in one session (once at row 54 of a 145-call backfill,
+    twice during `get_note` loops), almost certainly because an operator was editing
+    the API token in the Cloudflare dashboard, which briefly invalidates it across
+    the edge. 20/20 and then 60/60 sequential queries succeeded cleanly immediately
+    before and after, so the failures were genuinely transient rather than a wrong
+    token surfacing deterministically. A bounded retry costs at most one extra
+    backoff step (~1-2s) in the genuinely-wrong-token case, and the final error still
+    carries its real status and detail — this is a deliberate bet that the observed
+    transient case is common enough on this path to be worth that cost.
+
+    400, 403, 404, 422, and any other 4xx are excluded: they are deterministic client
+    errors that an identical second request cannot fix, so retrying would only delay
+    a clear error reaching the caller — a 403 from a wrongly-scoped token must fail
+    fast, not eat a retry budget first.
+    """
+    return status == 401 or status == 429 or 500 <= status < 600
+
+
+def _backoff_seconds(attempt: int) -> float:
+    """Delay before the retry following ``attempt`` (1-indexed: the attempt that just failed).
+
+    Exponential (``INITIAL_BACKOFF_SECONDS * BACKOFF_MULTIPLIER ** (attempt - 1)``)
+    plus jitter bounded by ``RETRY_JITTER_FRACTION`` — see that constant's comment for
+    why growth across attempts stays monotonic despite the jitter.
+    """
+    base = INITIAL_BACKOFF_SECONDS * (BACKOFF_MULTIPLIER ** (attempt - 1))
+    return base + base * random.random() * RETRY_JITTER_FRACTION
+
+
 def _parse_response_body(text: str) -> dict[str, Any]:
     """Best-effort JSON parse of a D1 response body; ``{}`` on anything else.
 
@@ -238,11 +299,13 @@ class D1Store:
         account_id: str,
         api_token: str,
         http_post: HttpPost | None = None,
+        sleep: SleepFn | None = None,
     ) -> None:
         self.database_id = database_id
         self._account_id = account_id
         self._api_token = api_token
         self._post = http_post or _default_http_post
+        self._sleep = sleep or _default_sleep
 
     def _url(self) -> str:
         return f"{API_ROOT}/accounts/{self._account_id}/d1/database/{self.database_id}/query"
@@ -253,52 +316,117 @@ class D1Store:
     def query(self, sql: str, params: list[Any], *, operation: str) -> list[dict[str, Any]]:
         """Execute one statement and return its rows. Raises ``D1StoreError`` on failure.
 
-        Also wraps transport-layer failures (connect/timeout/DNS — the most common
-        failure mode in production, unlike an application-level failure, which D1
-        answers over a normal HTTP response) in ``D1StoreError``, so a caller checking
-        ``isinstance(e, D1StoreError)`` (as ``server.py``'s 503 handler does) actually
-        catches them instead of letting a raw ``httpx`` exception surface as a 500.
-        Deliberately builds the message from ``str(exc)`` and never touches
-        ``exc.request`` — httpx attaches the original request, headers included, to its
-        transport exceptions, and that request carries this store's
-        ``Authorization: Bearer <token>`` header; referencing it here would leak the
-        credential into any log line or error response built from the raised error.
-        Only ``httpx.HTTPError`` is caught, not a bare ``Exception`` — a programming
-        error inside an injected ``http_post`` (e.g. a ``TypeError``) must still
-        propagate as itself, not get relabelled as a transport failure.
+        Retries up to ``MAX_ATTEMPTS`` total attempts (see that constant) when the
+        failure looks transient: a transport error (``httpx.HTTPError`` — connect,
+        read timeout, DNS, remote protocol) or a status ``_is_retryable_status``
+        accepts (429, 5xx, and 401 — see that function's docstring for why 401 is
+        included). Every other failure — 400, 403, 404, 422, any other 4xx, or a 2xx
+        response carrying an application-level ``success: false`` — raises on the
+        first attempt: retrying a deterministic client error would only delay a clear
+        message the caller could otherwise act on immediately. Backoff between
+        retries is exponential with jitter (``_backoff_seconds``); the delay is passed
+        to the injected ``sleep`` (constructor arg, defaults to ``time.sleep``) so
+        tests can assert on requested durations without actually waiting. Each retry
+        is logged at ``warning`` before sleeping, so an operator sees the retries
+        happening rather than only their eventual outcome.
+
+        This also retries writes, not just reads — ``scripts/d1_sync.py`` calls this
+        same method for schema init, the notes upsert, and the FTS rebuild. That is
+        safe because all three are idempotent by construction: ``d1_schema.sql``'s DDL
+        is ``CREATE ... IF NOT EXISTS``, the upsert is
+        ``... ON CONFLICT(vault_path) DO UPDATE`` (updates in place rather than
+        delete-and-reinsert), and ``INSERT INTO notes_fts(notes_fts) VALUES('rebuild')``
+        fully rebuilds the FTS index from ``notes`` rather than appending to it — none
+        of the three can duplicate rows or corrupt state if D1 actually applied a call
+        whose response this store never saw before retrying it.
+
+        The final raised error is identical in shape to what a non-retrying call would
+        have raised: still ``D1StoreError``, built the same way (``_rows_or_raise``, or
+        the transport-failure message below) regardless of how many attempts preceded
+        it, and the API token is never referenced when building it (see the transport
+        branch's own note on ``exc.request`` below). Only ``httpx.HTTPError`` is
+        treated as a retryable transport failure, not a bare ``Exception`` — a
+        programming error inside an injected ``http_post`` (e.g. a ``TypeError``) must
+        still propagate as itself on the first attempt, not get relabelled or retried
+        as a transport failure.
         """
         import httpx
 
         start = time.perf_counter()
         body = json.dumps({"sql": sql, "params": params}).encode()
-        try:
-            status, text = self._post(self._url(), self._headers(), body, "application/json")
-        except httpx.HTTPError as exc:
-            logger.error(
-                "d1 query transport failure",
-                extra={
-                    "operation": f"d1_{operation}",
-                    "duration_ms": int((time.perf_counter() - start) * 1000),
-                    "outcome": "error",
-                    "database_id": self.database_id,
-                    "error_type": type(exc).__name__,
-                },
-            )
-            raise D1StoreError(f"d1 {operation} transport failure: {exc}") from exc
-        try:
-            return _rows_or_raise(operation, status, text)
-        except D1StoreError:
-            logger.error(
-                "d1 query failed",
-                extra={
-                    "operation": f"d1_{operation}",
-                    "duration_ms": int((time.perf_counter() - start) * 1000),
-                    "outcome": "error",
-                    "database_id": self.database_id,
-                    "status_code": status,
-                },
-            )
-            raise
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            is_last_attempt = attempt == MAX_ATTEMPTS
+            try:
+                status, text = self._post(self._url(), self._headers(), body, "application/json")
+            except httpx.HTTPError as exc:
+                # Deliberately builds the message from `str(exc)` and never touches
+                # `exc.request` — httpx attaches the original request, headers
+                # included, to its transport exceptions, and that request carries
+                # this store's `Authorization: Bearer <token>` header; referencing it
+                # here would leak the credential into any log line or error response
+                # built from the raised error.
+                if not is_last_attempt:
+                    logger.warning(
+                        "d1 query transport failure, retrying",
+                        extra={
+                            "operation": f"d1_{operation}",
+                            "duration_ms": int((time.perf_counter() - start) * 1000),
+                            "outcome": "retry",
+                            "database_id": self.database_id,
+                            "status_code": None,
+                            "attempt": attempt,
+                            "error_type": type(exc).__name__,
+                        },
+                    )
+                    self._sleep(_backoff_seconds(attempt))
+                    continue
+                logger.error(
+                    "d1 query transport failure",
+                    extra={
+                        "operation": f"d1_{operation}",
+                        "duration_ms": int((time.perf_counter() - start) * 1000),
+                        "outcome": "error",
+                        "database_id": self.database_id,
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                raise D1StoreError(f"d1 {operation} transport failure: {exc}") from exc
+
+            if _is_retryable_status(status) and not is_last_attempt:
+                logger.warning(
+                    "d1 query failed, retrying",
+                    extra={
+                        "operation": f"d1_{operation}",
+                        "duration_ms": int((time.perf_counter() - start) * 1000),
+                        "outcome": "retry",
+                        "database_id": self.database_id,
+                        "status_code": status,
+                        "attempt": attempt,
+                    },
+                )
+                self._sleep(_backoff_seconds(attempt))
+                continue
+
+            try:
+                return _rows_or_raise(operation, status, text)
+            except D1StoreError:
+                logger.error(
+                    "d1 query failed",
+                    extra={
+                        "operation": f"d1_{operation}",
+                        "duration_ms": int((time.perf_counter() - start) * 1000),
+                        "outcome": "error",
+                        "database_id": self.database_id,
+                        "status_code": status,
+                    },
+                )
+                raise
+
+        # Unreachable: `is_last_attempt` is True exactly when `attempt == MAX_ATTEMPTS`,
+        # and every branch above either returns or raises on the last attempt — the
+        # loop can never fall through to a `MAX_ATTEMPTS + 1`th iteration. Present only
+        # so a type checker sees every path returning or raising.
+        raise AssertionError("d1 query retry loop exited without returning or raising")
 
     def search(
         self, query: str, *, limit: int = 7, path_prefix: str | None = None

@@ -80,13 +80,20 @@ def _d1_sqlite_post(conn: sqlite3.Connection):
     return _post
 
 
-def _store_factory(post: Any):
+def _store_factory(post: Any, *, sleep: Any = None):
     """Matches ``D1Store(database_id, *, account_id, api_token)`` -- ``main()``'s call
     shape -- but binds a fixed injected transport, so monkeypatching
-    ``d1_sync.D1Store`` with this makes ``main()`` hit no network."""
+    ``d1_sync.D1Store`` with this makes ``main()`` hit no network.
+
+    ``sleep`` is forwarded to ``D1Store`` too (default ``None`` -- real ``time.sleep``,
+    fine for every test here that never exercises a retryable status/transport
+    failure) so a test that does can inject a no-op and avoid a real backoff delay.
+    """
 
     def factory(database_id: str, *, account_id: str, api_token: str) -> D1Store:
-        return D1Store(database_id, account_id=account_id, api_token=api_token, http_post=post)
+        return D1Store(
+            database_id, account_id=account_id, api_token=api_token, http_post=post, sleep=sleep
+        )
 
     return factory
 
@@ -717,13 +724,20 @@ def test_search_survives_a_resync_even_when_the_fts_rebuild_fails(
     """`vault_path` is a TEXT PRIMARY KEY, not a rowid alias, so `INSERT OR REPLACE`
     deletes-and-reinserts on conflict, assigning the row a *new* rowid.
     `D1Store`'s `_SEARCH_SQL` joins `n.rowid = notes_fts.rowid`; if a rebuild then
-    fails (a transient D1 500, simulated here) after a re-sync that churned rowids,
-    the external-content FTS index is left pointing rowids nowhere and search on
-    every previously-indexed note goes dark until some later sync reaches a
-    successful rebuild. Fix under test: `ON CONFLICT(vault_path) DO UPDATE`
-    preserves the rowid across the re-sync, so the FTS mapping stays valid (worst
-    case ranked on stale text) even when the rebuild that would refresh that text
-    outright fails.
+    fails (a D1 500 that persists across `D1Store.query()`'s bounded retry, simulated
+    here) after a re-sync that churned rowids, the external-content FTS index is left
+    pointing rowids nowhere and search on every previously-indexed note goes dark
+    until some later sync reaches a successful rebuild. Fix under test: `ON
+    CONFLICT(vault_path) DO UPDATE` preserves the rowid across the re-sync, so the
+    FTS mapping stays valid (worst case ranked on stale text) even when the rebuild
+    that would refresh that text outright fails.
+
+    A single 500 no longer fails the run outright -- `query()` retries a 500 up to
+    `MAX_ATTEMPTS` times, and since the FTS rebuild is idempotent (a full rebuild from
+    `notes`, not an append), the retry recovers transparently. So the second sync's
+    rebuild must fail on *every* attempt within that call's retry budget to still
+    reach `main()` as an error, which is what this simulates -- not a lone transient
+    blip, but a failure that outlasts the retry.
     """
     conn = sqlite3.connect(":memory:")
     base_post = _d1_sqlite_post(conn)
@@ -734,11 +748,11 @@ def test_search_survives_a_resync_even_when_the_fts_rebuild_fails(
         payload = json.loads(body)
         if payload["sql"] == REBUILD_FTS_SQL:
             rebuild_calls += 1
-            if rebuild_calls == 2:  # fail only the second sync's rebuild
+            if rebuild_calls >= 2:  # fail the second sync's rebuild on every attempt
                 return 500, json.dumps({"success": False, "errors": [{"message": "boom"}]})
         return base_post(url, headers, body, content_type)
 
-    monkeypatch.setattr(d1_sync, "D1Store", _store_factory(flaky_post))
+    monkeypatch.setattr(d1_sync, "D1Store", _store_factory(flaky_post, sleep=lambda seconds: None))
     monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
     monkeypatch.setenv("D1_API_TOKEN", "tok")
 

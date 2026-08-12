@@ -12,11 +12,18 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
 from digivault.d1_errors import D1StoreError
-from digivault.d1_store import MAX_LIST_PAGES, D1Store, build_fts_match, normalize_vault_path
+from digivault.d1_store import (
+    MAX_ATTEMPTS,
+    MAX_LIST_PAGES,
+    D1Store,
+    build_fts_match,
+    normalize_vault_path,
+)
 from digivault.models import NoteRow
 
 from digivault import d1_store as d1_store_module
@@ -38,13 +45,40 @@ class _RecordingPost:
         return self._responses.pop(0)
 
 
+class _RecordingSleep:
+    """Injected sleep: records requested durations instead of actually sleeping."""
+
+    def __init__(self) -> None:
+        self.durations: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        self.durations.append(seconds)
+
+
 def _ok(rows: list[dict]) -> tuple[int, str]:
     return 200, json.dumps({"success": True, "errors": [], "result": [{"results": rows}]})
 
 
-def _store(responses: list[tuple[int, str]]) -> tuple[D1Store, _RecordingPost]:
+def _unauthorized() -> tuple[int, str]:
+    # "credential", not "token" — the assertions below check the literal API token
+    # value ("tok", this module's fixture credential) never leaks into the error
+    # message; the *word* "token" appearing in a Cloudflare error body is unrelated
+    # and must not make that assertion a false positive.
+    return 401, json.dumps(
+        {"success": False, "errors": [{"code": 10001, "message": "invalid credential"}]}
+    )
+
+
+def _forbidden() -> tuple[int, str]:
+    return 403, json.dumps({"success": False, "errors": [{"code": 10000, "message": "forbidden"}]})
+
+
+def _store(
+    responses: list[tuple[int, str]], *, sleep: Callable[[float], None] | None = None
+) -> tuple[D1Store, _RecordingPost]:
     post = _RecordingPost(responses)
-    return D1Store("db-123", account_id="acct-1", api_token="tok", http_post=post), post
+    store = D1Store("db-123", account_id="acct-1", api_token="tok", http_post=post, sleep=sleep)
+    return store, post
 
 
 def _sqlite_conn_with_schema() -> sqlite3.Connection:
@@ -405,6 +439,10 @@ def test_transport_failure_is_wrapped_without_leaking_the_token() -> None:
     D1StoreError) would let a connect/timeout/DNS failure surface as an unhandled 500.
     Also verified the escaping exception's exc.request.headers carries the bearer
     token — the fix must build its message from str(exc), never exc.request.
+
+    A dead port never recovers, so this also exercises the full retry bound (every
+    attempt fails the same way) — the injected no-op sleep keeps that from adding
+    real wall-clock delay to the suite.
     """
     import httpx
 
@@ -414,7 +452,10 @@ def test_transport_failure_is_wrapped_without_leaking_the_token() -> None:
         request = httpx.Request("POST", url, headers=headers)
         raise httpx.ConnectError("Connection refused", request=request)
 
-    store = D1Store("db-123", account_id="acct-1", api_token="tok", http_post=_raise_connect_error)
+    sleep = _RecordingSleep()
+    store = D1Store(
+        "db-123", account_id="acct-1", api_token="tok", http_post=_raise_connect_error, sleep=sleep
+    )
     with pytest.raises(D1StoreError) as exc:
         store.search("hello")
     assert "tok" not in str(exc.value)
@@ -484,3 +525,87 @@ def test_search_finds_a_note_via_accented_terms_against_real_fts5() -> None:
 
     hits = store.search("café Müller")
     assert [h.vault_path for h in hits] == ["clients/x/cafe"]
+
+
+# --- New: bounded retry with backoff on transient D1 failures (#2239 follow-up M6) -
+#
+# A live cutover hit three transient HTTP 401s in one session (see `_is_retryable_status`
+# in d1_store.py for the full reasoning) — these guard the retry policy that responds.
+
+
+@pytest.mark.unit
+def test_query_retries_once_after_a_401_then_succeeds() -> None:
+    sleep = _RecordingSleep()
+    store, post = _store([_unauthorized(), _ok([{"vault_path": "clients/x/a"}])], sleep=sleep)
+
+    rows = store.query("SELECT 1", [], operation="get_note")
+
+    assert rows == [{"vault_path": "clients/x/a"}]
+    assert len(post.calls) == 2
+    assert len(sleep.durations) == 1
+
+
+@pytest.mark.unit
+def test_query_raises_after_max_attempts_of_401_without_leaking_the_token() -> None:
+    sleep = _RecordingSleep()
+    store, post = _store([_unauthorized(), _unauthorized(), _unauthorized()], sleep=sleep)
+
+    with pytest.raises(D1StoreError) as exc:
+        store.query("SELECT 1", [], operation="get_note")
+
+    assert "tok" not in str(exc.value)
+    assert "(401)" in str(exc.value)
+    assert len(post.calls) == MAX_ATTEMPTS
+    assert len(sleep.durations) == MAX_ATTEMPTS - 1
+
+
+@pytest.mark.unit
+def test_query_403_fails_fast_with_a_single_attempt() -> None:
+    """Proves a deterministic client error (a wrongly-scoped token) is never retried —
+    only 401/429/5xx and transport errors are."""
+    sleep = _RecordingSleep()
+    store, post = _store([_forbidden()], sleep=sleep)
+
+    with pytest.raises(D1StoreError) as exc:
+        store.query("SELECT 1", [], operation="get_note")
+
+    assert "tok" not in str(exc.value)
+    assert "(403)" in str(exc.value)
+    assert len(post.calls) == 1
+    assert sleep.durations == []
+
+
+@pytest.mark.unit
+def test_query_retries_a_connect_error_then_succeeds() -> None:
+    import httpx
+
+    calls: list[str] = []
+
+    def _flaky(
+        url: str, headers: dict[str, str], body: bytes, content_type: str
+    ) -> tuple[int, str]:
+        calls.append(url)
+        if len(calls) == 1:
+            raise httpx.ConnectError("boom", request=httpx.Request("POST", url, headers=headers))
+        return _ok([{"vault_path": "clients/x/a"}])
+
+    sleep = _RecordingSleep()
+    store = D1Store("db-123", account_id="acct-1", api_token="tok", http_post=_flaky, sleep=sleep)
+
+    rows = store.query("SELECT 1", [], operation="get_note")
+
+    assert rows == [{"vault_path": "clients/x/a"}]
+    assert len(calls) == 2
+    assert len(sleep.durations) == 1
+
+
+@pytest.mark.unit
+def test_query_backoff_grows_between_retries() -> None:
+    sleep = _RecordingSleep()
+    store, post = _store([_unauthorized(), _unauthorized(), _unauthorized()], sleep=sleep)
+
+    with pytest.raises(D1StoreError):
+        store.query("SELECT 1", [], operation="get_note")
+
+    assert len(sleep.durations) == 2
+    assert sleep.durations[1] > sleep.durations[0]
