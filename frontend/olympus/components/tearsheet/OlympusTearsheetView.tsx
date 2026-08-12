@@ -243,6 +243,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
           onChange={setActiveTab}
           label={TAB_LABEL}
           variant="underline"
+          sharedPanel
         />
       </div>
 
