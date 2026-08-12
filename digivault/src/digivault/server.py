@@ -30,7 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from digivault import __version__
 from digivault.d1_errors import D1StoreError
-from digivault.d1_store import D1Store, normalize_vault_path
+from digivault.d1_store import D1Store, normalize_vault_path, resolve_path_prefix
 from digivault.local_search import search_local_vault
 from digivault.models import LintReport, Note, NoteDetail
 from digivault.orchestrator_tools import (
@@ -168,7 +168,11 @@ def _open_d1_store(path_prefix: str | None) -> D1Store:
     cannot even address another corpus's database, let alone its rows.
 
     Raises ``D1StoreError`` — not ``HTTPException`` — so this stays a plain, directly
-    testable function; request handlers go through :func:`_open_d1_store_or_503`.
+    testable function. The by-path route goes through :func:`_open_d1_store_or_503` to
+    convert that into a 503; the search branch in ``orchestrator_invoke`` calls this
+    directly because it needs to inspect ``path_prefix`` itself to choose 400 vs. 503
+    (see its own try/except), and because it must also catch a ``D1StoreError`` raised
+    by the subsequent ``.search()`` call, not just by this construction step.
     """
     account_id = (os.environ.get("D1_ACCOUNT_ID") or "").strip()
     api_token = (os.environ.get("D1_API_TOKEN") or "").strip()
@@ -183,6 +187,21 @@ def _open_d1_store(path_prefix: str | None) -> D1Store:
         raise D1StoreError("D1_DATABASE_MAP is not valid JSON") from exc
     if not isinstance(database_map, dict):
         raise D1StoreError("D1_DATABASE_MAP must be a JSON object of prefix -> database id")
+    # Refuse an empty-string key outright, at config-read time, rather than let an
+    # operator "fix" the unscoped-search 503 (see the caller-side 400 in
+    # orchestrator_invoke below) by adding one. A "" entry would map every prefix
+    # that normalizes to empty — None, "", "/", "///", "   ", ".md" — to a real
+    # database, arming the exact cross-tenant fail-open the by-path route's
+    # `resolve_path_prefix` check (and this function's own callers) are built to
+    # refuse. Fail loudly here instead of silently accepting the config that makes
+    # it possible (#2239 review).
+    if "" in database_map:
+        raise D1StoreError(
+            "D1_DATABASE_MAP must not map the empty string '' to a database id: doing "
+            "so lets any prefix that normalizes to empty resolve to a real corpus, "
+            "which turns 'no path_prefix was scoped' into an unscoped cross-tenant "
+            "read. Configure a real per-tenant prefix for every entry instead."
+        )
     prefix = normalize_vault_path(path_prefix or "")
     database_id = database_map.get(prefix)
     if not database_id:
@@ -328,12 +347,35 @@ def get_note_by_path(req: NoteByPathRequest) -> NoteDetail:
     one prefix could read another client's notes just by passing an arbitrary
     ``vault_path``. There is no filesystem/Supabase fallback here — a by-path fetch
     only makes sense against the corpus that owns the path (#2239).
+
+    ``path_prefix`` resolution goes through ``resolve_path_prefix`` (shared with
+    ``D1Store.search``/``list_notes``) rather than a local ``prefix and ...`` check —
+    a #2239 review found the local check treated "a prefix was given but normalizes
+    to empty" (``""``, ``"/"``, ``"///"``, ``"   "``, ``".md"``) the same as "no
+    scoping requested," which fails open: with a ``""`` key present in
+    ``D1_DATABASE_MAP`` every one of those inputs returned another corpus's note
+    body with HTTP 200. ``resolve_path_prefix`` raises for exactly that case, which
+    this handler turns into ``400`` — a caller/config error, not a scope this route
+    can silently ignore. ``None`` (no ``path_prefix`` field at all) still means
+    "unscoped" and is unaffected.
     """
     path = normalize_vault_path(req.vault_path)
-    prefix = normalize_vault_path(req.path_prefix or "")
+    try:
+        prefix = resolve_path_prefix(req.path_prefix)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if prefix and path != prefix and not path.startswith(prefix + "/"):
         raise HTTPException(status_code=403, detail="vault_path is outside the caller's prefix")
-    note = _open_d1_store_or_503(prefix or None).get_note(path)
+    store = _open_d1_store_or_503(prefix or None)
+    try:
+        note = store.get_note(path)
+    except D1StoreError as exc:
+        # `_open_d1_store_or_503` only converts a *construction*-time D1StoreError
+        # (bad config, no database for this prefix) into 503 — this call is itself
+        # outside that wrapper's try/except, so a runtime failure (transport error,
+        # an expired D1_API_TOKEN surfacing as Cloudflare's 403) would otherwise
+        # propagate as a raw D1StoreError and become an unhandled 500. See #2239 review.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     if note is None:
         raise HTTPException(status_code=404, detail=f"note not found: {path}")
     return note
@@ -438,9 +480,32 @@ def orchestrator_invoke(
         # baked /data/vault seed must not shadow it (the #2239 production bug — prod
         # sets DIGIVAULT_ROOT to a stub vault that must never win over the real corpus).
         if _d1_configured():
-            hits = _open_d1_store_or_503(path_prefix).search(
-                query, limit=limit, path_prefix=path_prefix
-            )
+            try:
+                # Wraps the *call*, not just `_open_d1_store`'s construction — a
+                # runtime D1 failure (transport error, an expired D1_API_TOKEN
+                # surfacing as Cloudflare's 403) raised from inside `.search()`
+                # would otherwise propagate as a raw D1StoreError and become an
+                # unhandled 500 (#2239 review).
+                hits = _open_d1_store(path_prefix).search(
+                    query, limit=limit, path_prefix=path_prefix
+                )
+            except D1StoreError as exc:
+                if path_prefix is None:
+                    # `digivault_search_notes` fires with no `path_prefix` on every
+                    # chat turn (`always_retrieve_tools`, #2265) — with D1 configured
+                    # there is no "search across every corpus" mode (one prefix, one
+                    # database, by construction), so this is a certainty, not an edge
+                    # case. Say so plainly instead of surfacing D1Store's config-lookup
+                    # message ("no D1 database configured for vault prefix ''"), which
+                    # reads as a missing map entry an operator could "fix" by adding a
+                    # ``""`` key — that fix is refused at config-read time (see the
+                    # guard in `_open_d1_store`) because it re-opens the by-path
+                    # route's cross-tenant fail-open.
+                    raise HTTPException(
+                        status_code=400,
+                        detail="path_prefix is required when the D1 backend is configured",
+                    ) from exc
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
         elif (os.environ.get("DIGIVAULT_ROOT") or "").strip():
             hits = search_local_vault(_open_vault(), query, limit=limit, path_prefix=path_prefix)
         else:

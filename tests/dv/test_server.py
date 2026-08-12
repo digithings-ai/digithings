@@ -481,12 +481,18 @@ def test_open_d1_store_builds_store_scoped_to_prefix(monkeypatch: pytest.MonkeyP
     assert store.database_id == "db-1"
 
 
-def test_open_d1_store_treats_no_prefix_as_the_empty_map_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _set_d1_env(monkeypatch, '{"": "db-unscoped"}')
-    store = server._open_d1_store(None)
-    assert store.database_id == "db-unscoped"
+def test_open_d1_store_rejects_empty_string_map_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#2239 review, Critical finding: a "" entry in D1_DATABASE_MAP would map every
+    prefix that normalizes to empty (None, "", "/", "///", "   ", ".md") to a real
+    database, arming the by-path route's cross-tenant fail-open. Refused at
+    config-read time regardless of which prefix was requested."""
+    _set_d1_env(monkeypatch, '{"": "db-unscoped", "clients/digithings": "db-1"}')
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store(None)
+    assert "D1_DATABASE_MAP" in str(exc.value)
+    # The guard fires for every call, not just the one requesting the "" prefix.
+    with pytest.raises(D1StoreError):
+        server._open_d1_store("clients/digithings")
 
 
 def test_open_d1_store_rejects_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -584,6 +590,56 @@ def test_orchestrator_invoke_search_notes_d1_misconfigured_returns_503(
             _fake_request(),
         )
     assert exc.value.status_code == 503
+
+
+def test_orchestrator_invoke_search_notes_d1_unscoped_returns_400(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Important finding: `always_retrieve_tools` fires
+    `digivault_search_notes` with no `path_prefix` on every chat turn (#2265). With D1
+    configured there is no "search every corpus" mode, so this must be an actionable
+    400 telling the caller `path_prefix` is required — not a 503 that reads like a
+    missing config entry an operator could "fix" with a `""` map key (refused
+    separately by `_open_d1_store`'s own guard)."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes", arguments={"query": "jwt"}
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 400
+    assert "path_prefix is required" in str(exc.value.detail)
+
+
+def test_orchestrator_invoke_search_notes_d1_runtime_failure_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Important finding: a D1StoreError raised from *inside* `.search()`
+    (transport failure, expired token) must still become 503, not an unhandled 500 —
+    `_open_d1_store_or_503` only wrapped construction, not this call."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            raise D1StoreError("d1 search transport failure: boom")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "jwt", "path_prefix": "clients/digithings"},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+    assert "transport failure" in str(exc.value.detail)
 
 
 # ── by-path note fetch (#2239) ───────────────────────────────────────────────
@@ -685,9 +741,59 @@ def test_get_note_by_path_returns_503_when_d1_unconfigured(
     assert exc.value.status_code == 503
 
 
+@pytest.mark.parametrize("bad_prefix", ["", "/", "///", "   ", ".md"])
+def test_get_note_by_path_rejects_prefix_that_normalizes_to_empty(
+    monkeypatch: pytest.MonkeyPatch, bad_prefix: str
+) -> None:
+    """Critical #2239 review finding: `if prefix and ...` treated "a prefix was given
+    but normalizes to empty" as "no scoping requested" — fail-open. The reviewer
+    demonstrated that with a "" key present in D1_DATABASE_MAP, every one of these
+    inputs returned another corpus's note body with HTTP 200. Now rejected with 400
+    before the store is even opened (`_open_d1_store` is never called — asserted via
+    the fake store raising if it is), mirroring `resolve_path_prefix`'s semantics."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for an empty-ish prefix")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/other-corpus/secret", path_prefix=bad_prefix
+            )
+        )
+    assert exc.value.status_code == 400
+
+
+def test_get_note_by_path_wraps_runtime_d1_error_as_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#2239 review, Important finding: a D1StoreError raised from *inside*
+    `.get_note()` (transport failure, or Cloudflare's real 403 on an expired
+    D1_API_TOKEN) must become 503, not an unhandled 500 — `_open_d1_store_or_503`
+    only wrapped construction, not this call."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise D1StoreError("d1 get_note failed (403): Authentication error")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/x"))
+    assert exc.value.status_code == 503
+    assert "Authentication error" in str(exc.value.detail)
+
+
 def test_note_by_path_route_is_read_scoped_despite_being_post() -> None:
     """POST /v1/notes/by-path is a read (fetch), not a mutation — must not require write."""
     assert server.digivault_path_scopes("POST", "/v1/notes/by-path") == [SCOPE_READ]
+
+
+def test_note_by_path_carve_out_is_method_aware() -> None:
+    """Minor #2239 review finding: the carve-out matched on path alone, ignoring
+    method — only POST is registered today (everything else 405s), but a bare path
+    match would silently read-scope a future DELETE/PUT on the same literal path."""
+    assert server.digivault_path_scopes("DELETE", "/v1/notes/by-path") == [SCOPE_WRITE]
+    assert server.digivault_path_scopes("PUT", "/v1/notes/by-path") == [SCOPE_WRITE]
 
 
 def test_by_path_route_is_not_shadowed_by_the_name_route(

@@ -128,16 +128,27 @@ def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
-def _resolve_path_prefix(path_prefix: str | None) -> str:
+def resolve_path_prefix(path_prefix: str | None) -> str:
     """Normalize ``path_prefix``, keeping "no prefix" distinct from "empty prefix".
 
-    ``None`` means the caller deliberately wants no filtering, and every row is a
-    legitimate match. Any other value is a prefix the caller *does* intend to scope
-    results to; if it normalizes to the empty string (``"/"``, ``".md"``, ``"   "``,
-    ``"///"``, ...) the SQL's ``? = ''`` branch would otherwise match every row too —
-    but here that is a caller bug, not an isolation boundary anyone asked to skip, and
-    on a multi-tenant read path fail-open is the wrong default. Raise instead: pass
-    ``None`` explicitly to search without a prefix.
+    Public (no leading underscore) because it is shared across a module boundary:
+    this module's own ``search``/``list_notes`` use it for the SQL ``? = ''`` filter
+    below, and ``server.py``'s ``POST /v1/notes/by-path`` route uses this same
+    function to decide whether a caller-supplied prefix counts as "no scoping
+    requested," before doing its own (non-SQL) startswith check. Sharing one
+    function means the two enforcement points cannot drift apart on what "empty"
+    means — the #2239 review found the by-path route had reimplemented (and gotten
+    wrong) exactly this semantics with a plain ``if prefix and ...`` check that
+    fails open on a non-``None`` prefix normalizing to empty.
+
+    ``None`` means the caller deliberately wants no filtering, and every row (or,
+    on the by-path route, every path) is a legitimate match. Any other value is a
+    prefix the caller *does* intend to scope to; if it normalizes to the empty
+    string (``"/"``, ``".md"``, ``"   "``, ``"///"``, ...) the SQL's ``? = ''``
+    branch would otherwise match every row too — but here that is a caller bug, not
+    an isolation boundary anyone asked to skip, and on a multi-tenant read path
+    fail-open is the wrong default. Raise instead: pass ``None`` explicitly to opt
+    out of prefix scoping.
     """
     if path_prefix is None:
         return ""
@@ -145,8 +156,8 @@ def _resolve_path_prefix(path_prefix: str | None) -> str:
     if not normalized:
         raise ValueError(
             f"path_prefix {path_prefix!r} normalizes to an empty prefix, which would "
-            "match every row instead of scoping the search; pass path_prefix=None to "
-            "search without a prefix filter"
+            "silently disable prefix scoping instead of enforcing it; pass "
+            "path_prefix=None explicitly to opt out of scoping"
         )
     return normalized
 
@@ -295,7 +306,7 @@ class D1Store:
         match = build_fts_match(query)
         if not match:
             return []
-        prefix = _resolve_path_prefix(path_prefix)
+        prefix = resolve_path_prefix(path_prefix)
         rows = self.query(
             _SEARCH_SQL,
             [match, prefix, prefix, f"{_escape_like(prefix)}/%", limit],
@@ -339,7 +350,7 @@ class D1Store:
     def list_notes(self, *, path_prefix: str | None = None, page_size: int = 500) -> list[NoteRow]:
         if page_size <= 0:
             raise ValueError(f"page_size must be positive, got {page_size}")
-        prefix = _resolve_path_prefix(path_prefix)
+        prefix = resolve_path_prefix(path_prefix)
         escaped_prefix = _escape_like(prefix)
         out: list[NoteRow] = []
         offset = 0
