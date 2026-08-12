@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import {
-  Activity,
   AlertTriangle,
   BookOpen,
   ChartNoAxesCombined,
@@ -243,11 +242,16 @@ export function DailyBriefWorkspace({
             <span className="text-[10px] font-bold uppercase tracking-widest text-accent">
               Morning brief
             </span>
-            <span className="truncate text-xs text-ink-soft">{regime}</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <AsOfBadge date={digestDate} />
             {runType ? <Badge variant="default">{runType}</Badge> : null}
+            {/* Raw `regime` dropped here (full-UI-suite critique, P3): it was
+                rendered twice in this header (here, and again in the sub-line
+                below next to confidence) plus once more as this styled Badge
+                -- three renderings of one signal. The sub-line keeps the raw
+                string paired with confidence; the command bar keeps only the
+                styled, tone-colored read. */}
             <Badge variant={regimeLabel === 'bearish' || regimeLabel === 'caution' ? 'amber' : 'default'}>
               {regimeLabel}
             </Badge>
@@ -291,10 +295,18 @@ export function DailyBriefWorkspace({
               className="group px-5 py-4 transition-colors hover:bg-ink/[0.03] sm:px-6"
             >
               <div className="flex items-center justify-between gap-3">
+                {/* "Pipeline health", not "System state" (full-UI-suite
+                    critique, P1): the sidebar's own nav (lib/nav.ts) pairs
+                    the label "System" with this exact Activity icon and
+                    points it at /system -- a different section. This tile
+                    links to /pipeline, so it now reuses GitBranch, the same
+                    icon this file's own footer link already uses for
+                    Pipeline (line ~192), instead of colliding with a label
+                    and icon users have learned means somewhere else. */}
                 <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                  System state
+                  Pipeline health
                 </p>
-                <Activity size={14} className={toneClass(pipeline.tone)} />
+                <GitBranch size={14} className={toneClass(pipeline.tone)} />
               </div>
               <p className={`mt-1 text-sm font-semibold ${toneClass(pipeline.tone)}`}>
                 {pipeline.label}
@@ -444,43 +456,58 @@ export function DailyBriefWorkspace({
             )}
           </div>
 
-          <div className="overflow-x-auto py-2 lg:pl-5">
+          <div className="relative overflow-x-auto py-2 lg:pl-5">
             {held.length === 0 ? (
               <p className="py-3 text-sm text-ink-mute">No positions held; the book is all cash.</p>
             ) : (
-              <table className="w-full min-w-[34rem] border-collapse text-left">
-                <thead>
-                  <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                    <th className="py-2 pr-3 font-bold">Holding</th>
-                    <th className="px-3 py-2 text-right font-bold">Weight</th>
-                    <th className="px-3 py-2 text-right font-bold">Change</th>
-                    <th className="py-2 pl-3 text-right font-bold">Day</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-hair/70">
-                  {held.slice(0, 6).map((position) => {
-                    const dayTone = metricTone(position.day_change_pct ?? null);
-                    const deltaTone = metricTone(position.normalizedDelta ?? null);
-                    return (
-                      <tr key={position.ticker} className="text-xs">
-                        <td className="py-2.5 pr-3">
-                          <span className="font-mono font-bold text-ink">{position.ticker}</span>
-                          <span className="ml-2 text-ink-mute">{position.name}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
-                          {position.normalizedWeight.toFixed(1)}%
-                        </td>
-                        <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
-                          {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
-                        </td>
-                        <td className={`py-2.5 pl-3 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
-                          {signedPct(position.day_change_pct ?? null)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <>
+                <table className="w-full min-w-[34rem] border-collapse text-left">
+                  <thead>
+                    <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+                      <th className="py-2 pr-3 font-bold">Holding</th>
+                      <th className="px-3 py-2 text-right font-bold">Weight</th>
+                      <th className="px-3 py-2 text-right font-bold">Change</th>
+                      <th className="py-2 pl-3 text-right font-bold">Day</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-hair/70">
+                    {held.slice(0, 6).map((position) => {
+                      const dayTone = metricTone(position.day_change_pct ?? null);
+                      const deltaTone = metricTone(position.normalizedDelta ?? null);
+                      return (
+                        <tr key={position.ticker} className="text-xs">
+                          <td className="py-2.5 pr-3">
+                            <span className="font-mono font-bold text-ink">{position.ticker}</span>
+                            <span className="ml-2 text-ink-mute">{position.name}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
+                            {position.normalizedWeight.toFixed(1)}%
+                          </td>
+                          <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
+                            {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
+                          </td>
+                          <td className={`py-2.5 pl-3 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
+                            {signedPct(position.day_change_pct ?? null)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {/* Scroll-edge cue (full-UI-suite critique, P2): the table's
+                    min-w-[34rem] (544px) forces horizontal scroll on any
+                    viewport under ~560px -- every phone -- with nothing
+                    previously signaling the Change/Day columns run off-
+                    screen. A static fade, pinned to the scroll container's
+                    own viewport (not the scrolling content), reads as
+                    "more here" when the table overflows and is
+                    imperceptible against the same bg-surface when it
+                    does not. */}
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
+                />
+              </>
             )}
           </div>
         </div>

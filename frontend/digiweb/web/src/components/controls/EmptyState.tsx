@@ -83,6 +83,16 @@ export function EmptyState({
   // The olympus glass dresses ship without a glyph disc; an explicit `icon`
   // still renders one. The reference dress always wears its variant glyph.
   const glyphless = dress !== "reference" && icon == null;
+  // WCAG 4.1.3 fix (full-UI-suite critique, olympus Brief target): "error" is
+  // the one variant that can appear or replace prior content asynchronously
+  // (a data fetch failing after the page has already loaded and the user has
+  // moved focus elsewhere) -- with no role/aria-live, a screen reader user
+  // gets no announcement that anything changed. Scoped to variant="error"
+  // only: "no-results"/"first-run" are expected, non-urgent outcomes of a
+  // user's own action (a search, an empty list on first load), not
+  // unannounced state changes, so an assertive interrupt there would be
+  // noise rather than signal.
+  const live = variant === "error" ? ({ role: "alert" as const }) : {};
   return (
     <article
       data-slot="empty-state"
@@ -93,6 +103,7 @@ export function EmptyState({
         variant === "error" && "ctl-empty--error",
         className,
       )}
+      {...live}
       {...props}
     >
       {glyphless ? null : (
