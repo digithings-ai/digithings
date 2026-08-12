@@ -51,6 +51,14 @@ dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# d1_schema.sql (applied by scripts/d1_sync.py --init) is data, not a .py module —
+# setuptools does not package non-.py files under [tool.setuptools.packages.find]
+# by default, so a non-editable install (a real `pip install digivault` or
+# `python -m build --wheel`, as opposed to this monorepo's editable dev install)
+# silently drops it, breaking --init at import time with no local clue why.
+digivault = ["*.sql"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"
