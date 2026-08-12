@@ -295,7 +295,13 @@ def test_handle_digivault_search_no_hits() -> None:
         return_value={"ok": True, "data": {"hits": []}},
     ):
         out = _handle_digivault_search({"query": "nonexistent topic"}, _ctx())
-    assert out == "No matching documentation was found in the digivault for that query."
+    # Zero-hit case is a dict (not a bare string) so execute_search can attach
+    # hit_count=0/query for the activity trace; the model-facing text is unchanged.
+    assert out == {
+        "content": "No matching documentation was found in the digivault for that query.",
+        "results": [],
+        "rag_sources": [],
+    }
 
 
 @pytest.mark.unit

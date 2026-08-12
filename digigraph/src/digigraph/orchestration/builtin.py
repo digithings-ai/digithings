@@ -275,10 +275,18 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
         return json.dumps(inv)
     data = inv.get("data")
     if not isinstance(data, dict):
-        return "No results found."
+        # A completed (ok=True) search with no usable payload is a zero-hit search,
+        # not a "never searched" — return a dict (not a bare string) so execute_search
+        # (research.py) can attach hit_count=0/query for the activity trace. The
+        # "content" string is unchanged, so the model still reads the same text.
+        return {"content": "No results found.", "results": [], "rag_sources": []}
     hits = data.get("hits", [])
     if not hits:
-        return "No matching documentation was found in the digivault for that query."
+        return {
+            "content": "No matching documentation was found in the digivault for that query.",
+            "results": [],
+            "rag_sources": [],
+        }
     results = [
         {
             "content": h.get("body_markdown"),
@@ -392,7 +400,11 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
         return json.dumps(inv)
     data = inv.get("data")
     if not isinstance(data, dict):
-        return "No results found."
+        # A completed (ok=True) search with no usable payload is a zero-hit search,
+        # not a "never searched" — return a dict (not a bare string) so execute_search
+        # (research.py) can attach hit_count=0/query for the activity trace. The
+        # "content" string is unchanged, so the model still reads the same text.
+        return {"content": "No results found.", "results": [], "rag_sources": []}
     results = data.get("results", [])
     summary = data.get("summary")
     total = data.get("total", len(results))
@@ -411,7 +423,9 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
         except _STORE_ERRORS as exc:
             logger.warning("write_search_results failed: %s", exc)
     if not results and not summary:
-        return "No results found."
+        # Real zero-hit case: the search ran, dig(i)search answered, nothing matched.
+        # Dict (not a bare string) so execute_search can attach hit_count=0/query.
+        return {"content": "No results found.", "results": [], "rag_sources": []}
     payload_for_llm = _search_payload_for_llm(
         results, total, dataset_ref=dataset_ref, summary=summary
     )
