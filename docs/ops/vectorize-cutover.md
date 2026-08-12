@@ -82,13 +82,19 @@ Container):
 
 ```bash
 cd frontend/digithings-stack-cloudflare
-npx wrangler secret put VECTORIZE_ACCOUNT_ID
-npx wrangler secret put VECTORIZE_API_TOKEN
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+npx wrangler secret put CLOUDFLARE_API_TOKEN
 ```
 
+`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` are the canonical names (#2239
+credential rename) — the same account + token also authorizes D1, so a
+deployment that already set the legacy `VECTORIZE_ACCOUNT_ID`/
+`VECTORIZE_API_TOKEN` (or `D1_ACCOUNT_ID`/`D1_API_TOKEN`) keeps working via
+fallback; set the canonical pair and retire the legacy secrets once verified.
+
 Setting both is what flips the container from Chroma to Vectorize on the next
-boot — `entrypoint.sh` computes `DIGI_VECTORIZE_ACTIVE=1` once both are
-non-empty and skips the Chroma seed entirely from then on.
+boot — `entrypoint.sh` computes `DIGI_VECTORIZE_ACTIVE=1` once both resolve to
+non-empty (canonical or legacy) and skips the Chroma seed entirely from then on.
 
 ## 3. Sync each corpus — dry-run first, then apply
 
@@ -101,7 +107,7 @@ CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… PYTHONPATH=digivault/src \
   python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs --dry-run
 
 CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \
-  VECTORIZE_ACCOUNT_ID=… VECTORIZE_API_TOKEN=… PYTHONPATH=digivault/src \
+  CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… PYTHONPATH=digivault/src \
   python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs
 
 # occ tenant
@@ -109,7 +115,7 @@ CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… PYTHONPATH=digivault/src \
   python3 scripts/vectorize_sync.py --prefix clients/online-compliance-center --index occ_help --dry-run
 
 CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \
-  VECTORIZE_ACCOUNT_ID=… VECTORIZE_API_TOKEN=… PYTHONPATH=digivault/src \
+  CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… PYTHONPATH=digivault/src \
   python3 scripts/vectorize_sync.py --prefix clients/online-compliance-center --index occ_help
 ```
 

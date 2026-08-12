@@ -8,8 +8,8 @@ existing corpus. Writes are batched under D1's 100-bound-parameter cap and its
 inside the Cloudflare Container -- production only ever reads (``digivault.d1_store``).
 
 ``--dry-run`` still reads and counts -- that's the only way to get an accurate
-preview -- but needs no ``D1_ACCOUNT_ID``/``D1_API_TOKEN`` and makes zero D1 calls:
-no schema init, no upsert, no FTS rebuild.
+preview -- but needs no credentials and makes zero D1 calls: no schema init, no
+upsert, no FTS rebuild.
 
 The printed summary's ``d1_notes`` is a ``SELECT COUNT(*)`` against the table
 itself, read back after the FTS rebuild -- unlike ``notes``/``written``, which are
@@ -21,16 +21,21 @@ operator to act on.
 
 Apply::
 
-    D1_ACCOUNT_ID=… D1_API_TOKEN=… \\
+    CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… \\
       python3 scripts/d1_sync.py --prefix clients/digithings --database <id> --vault /data/vault
+
+``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` are canonical (#2239 credential
+rename; same pair Vectorize now uses); the legacy ``D1_ACCOUNT_ID``/``D1_API_TOKEN``
+names still work as a fallback (see ``_first_env`` below).
 
 One-time backfill (see the #2239 runbook for the expected counts to verify against).
 ``--from-supabase`` needs the ``digivault[supabase]`` extra installed and
 ``CORE_SUPABASE_URL`` plus a key (``CORE_SUPABASE_ANON_KEY`` or
-``CORE_SUPABASE_SERVICE_KEY``) set, on top of the ``D1_ACCOUNT_ID``/``D1_API_TOKEN``
-every mode needs::
+``CORE_SUPABASE_SERVICE_KEY``) set, on top of the ``CLOUDFLARE_ACCOUNT_ID``/
+``CLOUDFLARE_API_TOKEN`` every mode needs::
 
-    D1_ACCOUNT_ID=… D1_API_TOKEN=… CORE_SUPABASE_URL=… CORE_SUPABASE_SERVICE_KEY=… \\
+    CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… CORE_SUPABASE_URL=… \\
+    CORE_SUPABASE_SERVICE_KEY=… \\
       python3 scripts/d1_sync.py --prefix clients/digithings --database <id> --init --from-supabase
 """
 
@@ -38,7 +43,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -46,7 +50,7 @@ from typing import Any  # score:allow untyped any -- row params are heterogeneou
 
 from digivault.d1_errors import D1StoreError
 from digivault.d1_store import D1Store, normalize_vault_path, resolve_path_prefix
-from digivault.supabase_store import SupabaseStoreError
+from digivault.supabase_store import SupabaseStoreError, _first_env
 from digivault.vault import _normalize_tags
 
 #: notes table column count -- keep in step with digivault/src/digivault/d1_schema.sql
@@ -367,7 +371,8 @@ def main(argv: list[str] | None = None) -> int:
             "one-time backfill: read architecture_notes instead of a vault directory. "
             "Needs the digivault[supabase] extra installed AND CORE_SUPABASE_URL plus "
             "a key (CORE_SUPABASE_ANON_KEY or CORE_SUPABASE_SERVICE_KEY) set -- on top "
-            "of D1_ACCOUNT_ID/D1_API_TOKEN, which every mode needs."
+            "of CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN (or legacy D1_ACCOUNT_ID/"
+            "D1_API_TOKEN), which every mode needs."
         ),
     )
     parser.add_argument("--init", action="store_true", help="apply d1_schema.sql first")
@@ -431,10 +436,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"prefix": prefix, "notes": len(rows), "written": 0}))
         return 0
 
-    account_id = os.environ.get("D1_ACCOUNT_ID", "").strip()
-    api_token = os.environ.get("D1_API_TOKEN", "").strip()
+    # Canonical-first, legacy-fallback (#2239 credential rename): the same
+    # Cloudflare account + token now authorizes both D1 and Vectorize.
+    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if not account_id or not api_token:
-        print("error: D1_ACCOUNT_ID and D1_API_TOKEN are required", file=sys.stderr)
+        print("error: CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required", file=sys.stderr)
         return 1
     store = D1Store(args.database, account_id=account_id, api_token=api_token)
 

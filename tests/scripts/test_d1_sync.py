@@ -433,6 +433,81 @@ def test_main_requires_credentials_for_a_real_run(
     assert exit_code == 1
 
 
+# ── canonical CLOUDFLARE_*/legacy VECTORIZE_*/D1_* credential fallback (#2239
+# credential rename) ─────────────────────────────────────────────────────────
+def _capturing_store_factory(captured: dict[str, str]):
+    """Matches ``D1Store(database_id, *, account_id, api_token)`` -- ``main()``'s call
+    shape -- capturing the resolved credentials instead of hitting the network."""
+
+    def factory(database_id: str, *, account_id: str, api_token: str) -> Any:
+        captured["account_id"] = account_id
+        captured["api_token"] = api_token
+
+        class _Stub:
+            def query(self, sql: str, params: list[Any], *, operation: str) -> list[Any]:
+                return [{"count": 1}] if operation == "count" else []
+
+        return _Stub()
+
+    return factory
+
+
+def test_main_accepts_canonical_cloudflare_vars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN alone must drive a real publish --
+    no legacy D1_*/VECTORIZE_* name needs to be set at all."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "tok")
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(d1_sync, "D1Store", _capturing_store_factory(captured))
+    _write_note(tmp_path, "clients/x/a.md", frontmatter={"title": "A"}, body="hello\n")
+
+    exit_code = main(["--prefix", "clients/x", "--database", "db", "--vault", str(tmp_path)])
+
+    assert exit_code == 0
+    assert captured == {"account_id": "acct", "api_token": "tok"}
+
+
+def test_main_accepts_legacy_vectorize_vars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Zero-downtime property: the legacy VECTORIZE_ACCOUNT_ID/VECTORIZE_API_TOKEN
+    names (same account + token as D1, per #2239) must keep driving a real publish
+    with no CLOUDFLARE_*/D1_* name set at all."""
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "tok")
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(d1_sync, "D1Store", _capturing_store_factory(captured))
+    _write_note(tmp_path, "clients/x/a.md", frontmatter={"title": "A"}, body="hello\n")
+
+    exit_code = main(["--prefix", "clients/x", "--database", "db", "--vault", str(tmp_path)])
+
+    assert exit_code == 0
+    assert captured == {"account_id": "acct", "api_token": "tok"}
+
+
+def test_main_canonical_wins_over_legacy_values(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When multiple names in the fallback chain are set to *different* values, the
+    canonical CLOUDFLARE_* pair must win over both legacy VECTORIZE_* and D1_*."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "canonical-acct")
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "legacy-vectorize-acct")
+    monkeypatch.setenv("D1_ACCOUNT_ID", "legacy-d1-acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "canonical-tok")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "legacy-vectorize-tok")
+    monkeypatch.setenv("D1_API_TOKEN", "legacy-d1-tok")
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(d1_sync, "D1Store", _capturing_store_factory(captured))
+    _write_note(tmp_path, "clients/x/a.md", frontmatter={"title": "A"}, body="hello\n")
+
+    exit_code = main(["--prefix", "clients/x", "--database", "db", "--vault", str(tmp_path)])
+
+    assert exit_code == 0
+    assert captured == {"account_id": "canonical-acct", "api_token": "canonical-tok"}
+
+
 def test_main_exits_nonzero_when_the_vault_read_finds_zero_notes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -498,9 +498,63 @@ def test_d1_configured_true_when_all_three_vars_set(monkeypatch: pytest.MonkeyPa
     assert server._d1_configured() is True
 
 
-@pytest.mark.parametrize("missing_var", ["D1_ACCOUNT_ID", "D1_API_TOKEN", "D1_DATABASE_MAP"])
+# ── canonical CLOUDFLARE_*/legacy VECTORIZE_*/D1_* credential fallback (#2239
+# credential rename) ─────────────────────────────────────────────────────────
+def test_d1_configured_true_with_canonical_cloudflare_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The canonical (wrangler-conventional) names alone must configure D1 -- no
+    legacy VECTORIZE_*/D1_* name needs to be set at all."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", '{"clients/digithings": "db-1"}')
+    assert server._d1_configured() is True
+
+
+def test_d1_configured_true_with_legacy_vectorize_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero-downtime property: the deployed Worker's live VECTORIZE_ACCOUNT_ID/
+    VECTORIZE_API_TOKEN secrets (same account + token as D1, per #2239) must keep
+    activating D1 with no CLOUDFLARE_*/D1_* name set at all."""
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", '{"clients/digithings": "db-1"}')
+    assert server._d1_configured() is True
+
+
+def test_open_d1_store_canonical_wins_over_legacy_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When multiple names in the fallback chain are set to *different* values, the
+    canonical CLOUDFLARE_* pair must win over both legacy VECTORIZE_* and D1_*."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "canonical-acct")
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "legacy-vectorize-acct")
+    monkeypatch.setenv("D1_ACCOUNT_ID", "legacy-d1-acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "canonical-tok")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "legacy-vectorize-tok")
+    monkeypatch.setenv("D1_API_TOKEN", "legacy-d1-tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", '{"clients/digithings": "db-1"}')
+
+    captured: dict[str, str] = {}
+
+    class _CapturingD1Store(D1Store):
+        def __init__(self, database_id: str, *, account_id: str, api_token: str) -> None:
+            captured["account_id"] = account_id
+            captured["api_token"] = api_token
+            super().__init__(database_id, account_id=account_id, api_token=api_token)
+
+    monkeypatch.setattr(server, "D1Store", _CapturingD1Store)
+
+    server._open_d1_store("clients/digithings")
+
+    assert captured == {"account_id": "canonical-acct", "api_token": "canonical-tok"}
+
+
+@pytest.mark.parametrize(
+    ("missing_legacy_var", "expected_canonical_name"),
+    [
+        ("D1_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID"),
+        ("D1_API_TOKEN", "CLOUDFLARE_API_TOKEN"),
+        ("D1_DATABASE_MAP", "D1_DATABASE_MAP"),
+    ],
+)
 def test_d1_configured_raises_when_exactly_one_var_missing(
-    monkeypatch: pytest.MonkeyPatch, missing_var: str
+    monkeypatch: pytest.MonkeyPatch, missing_legacy_var: str, expected_canonical_name: str
 ) -> None:
     """#2239 second review, Important finding: with any two of three D1 vars set,
     `_d1_configured` used to return False -- indistinguishable from the legitimate
@@ -509,25 +563,42 @@ def test_d1_configured_raises_when_exactly_one_var_missing(
     seed. That silently served seed stubs instead of the real corpus: HTTP 200,
     `ok: true`, nothing logged, reachable from a single typo'd secret name during
     cutover (`wrangler secret put D1_API_TOKN` -> `D1_API_TOKEN` undefined). Partial
-    config has no legitimate reading, so this must raise, naming what's missing."""
+    config has no legitimate reading, so this must raise, naming what's missing.
+
+    Post-#2239-rename: the error names the *canonical* var (`CLOUDFLARE_ACCOUNT_ID`/
+    `CLOUDFLARE_API_TOKEN`), not whichever legacy alias (`D1_ACCOUNT_ID`/
+    `D1_API_TOKEN`) was actually deleted here -- the credential is resolved to one
+    value by `_d1_credentials` before this guard ever runs, so "missing" always
+    means "nothing in the fallback chain resolved," and the message must point the
+    operator at the name to set going forward."""
     _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
-    monkeypatch.delenv(missing_var, raising=False)
+    monkeypatch.delenv(missing_legacy_var, raising=False)
     with pytest.raises(D1StoreError) as exc:
         server._d1_configured()
-    assert missing_var in str(exc.value)
+    assert expected_canonical_name in str(exc.value)
 
 
-@pytest.mark.parametrize("missing_var", ["D1_ACCOUNT_ID", "D1_API_TOKEN", "D1_DATABASE_MAP"])
+@pytest.mark.parametrize(
+    ("missing_legacy_var", "expected_canonical_name"),
+    [
+        ("D1_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID"),
+        ("D1_API_TOKEN", "CLOUDFLARE_API_TOKEN"),
+        ("D1_DATABASE_MAP", "D1_DATABASE_MAP"),
+    ],
+)
 def test_orchestrator_invoke_search_notes_partial_d1_config_503s_not_seed_hits(
-    monkeypatch: pytest.MonkeyPatch, vault_dir: Path, missing_var: str
+    monkeypatch: pytest.MonkeyPatch,
+    vault_dir: Path,
+    missing_legacy_var: str,
+    expected_canonical_name: str,
 ) -> None:
     """Reproduces the reviewer's exact repro against a real seed vault
     (`vault_dir` sets DIGIVAULT_ROOT, same as production's baked stub): with D1
     missing exactly one of its three vars, this must 503 -- naming the missing
-    var -- rather than silently falling through to DIGIVAULT_ROOT and returning
-    HTTP 200 with hits from the seed vault (#2239's precise symptom)."""
+    (canonical) var -- rather than silently falling through to DIGIVAULT_ROOT and
+    returning HTTP 200 with hits from the seed vault (#2239's precise symptom)."""
     _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
-    monkeypatch.delenv(missing_var, raising=False)
+    monkeypatch.delenv(missing_legacy_var, raising=False)
 
     with pytest.raises(HTTPException) as exc:
         server.orchestrator_invoke(
@@ -537,7 +608,7 @@ def test_orchestrator_invoke_search_notes_partial_d1_config_503s_not_seed_hits(
             _fake_request(),
         )
     assert exc.value.status_code == 503
-    assert missing_var in str(exc.value.detail)
+    assert expected_canonical_name in str(exc.value.detail)
 
 
 def test_orchestrator_invoke_search_notes_partial_d1_config_503s_via_http(
@@ -556,7 +627,7 @@ def test_orchestrator_invoke_search_notes_partial_d1_config_503s_via_http(
         headers=auth_headers(scopes=[SCOPE_READ]),
     )
     assert resp.status_code == 503
-    assert "D1_API_TOKEN" in resp.json()["error"]["message"]
+    assert "CLOUDFLARE_API_TOKEN" in resp.json()["error"]["message"]
 
 
 def test_status_reports_d1_configured_true(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -595,7 +666,7 @@ def test_open_d1_store_raises_when_unconfigured(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
     with pytest.raises(D1StoreError) as exc:
         server._open_d1_store("clients/digithings")
-    assert "D1_ACCOUNT_ID" in str(exc.value)
+    assert "CLOUDFLARE_ACCOUNT_ID" in str(exc.value)
 
 
 def test_open_d1_store_raises_when_prefix_has_no_database(

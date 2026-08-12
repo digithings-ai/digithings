@@ -290,6 +290,131 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
     assert seen["guard"] == seen["sync"] == "temporarily-different-id"
 
 
+# ── canonical CLOUDFLARE_*/legacy VECTORIZE_*/D1_* credential fallback (#2239
+# credential rename) ─────────────────────────────────────────────────────────
+def _credential_capturing_main(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict[str, str]]:
+    """Wires ``main()`` so a real (non-dry-run) call reaches both credential reads --
+    the D1 notes read and the Vectorize sink construction -- capturing what each
+    resolved to instead of hitting the network. Returns the ``captured`` dict, keyed
+    ``"d1"``/``"vectorize"``.
+    """
+    import digisearch.embedding.providers.minilm as minilm_module
+    import digisearch.indexes.backends.vectorize as vectorize_module
+    import digivault.d1_store as d1_store_module
+
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    captured: dict[str, dict[str, str]] = {}
+
+    class _FakeD1Store:
+        def __init__(self, database_id: str, *, account_id: str, api_token: str) -> None:
+            captured["d1"] = {"account_id": account_id, "api_token": api_token}
+
+        def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
+            return []
+
+    class _FakeVectorizeBackend:
+        def __init__(self, index_name: str, *, account_id: str, api_token: str) -> None:
+            captured["vectorize"] = {"account_id": account_id, "api_token": api_token}
+
+    monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
+    monkeypatch.setattr(vectorize_module, "VectorizeBackend", _FakeVectorizeBackend)
+    monkeypatch.setattr(
+        vectorize_sync_module, "assert_index_model", lambda backend, *, model_id, dimensions: None
+    )
+    monkeypatch.setattr(
+        vectorize_sync_module,
+        "sync_corpus",
+        lambda notes, chunker, embedder, sink, *, model_id, **kwargs: 0,
+    )
+    monkeypatch.setattr(minilm_module, "MiniLMEmbedder", lambda: object())
+    return captured
+
+
+def test_main_accepts_canonical_cloudflare_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN alone must drive both the D1 read
+    and the Vectorize write -- no legacy VECTORIZE_*/D1_* name needs to be set."""
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    captured = _credential_capturing_main(monkeypatch)
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "tok")
+
+    exit_code = vectorize_sync_module.main(
+        ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
+    )
+
+    assert exit_code == 0
+    assert captured["d1"] == {"account_id": "acct", "api_token": "tok"}
+    assert captured["vectorize"] == {"account_id": "acct", "api_token": "tok"}
+
+
+def test_main_accepts_legacy_d1_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero-downtime property: the legacy D1_ACCOUNT_ID/D1_API_TOKEN names (same
+    account + token as Vectorize, per #2239) must keep driving both reads with no
+    CLOUDFLARE_*/VECTORIZE_* name set at all."""
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    captured = _credential_capturing_main(monkeypatch)
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+
+    exit_code = vectorize_sync_module.main(
+        ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
+    )
+
+    assert exit_code == 0
+    assert captured["d1"] == {"account_id": "acct", "api_token": "tok"}
+    assert captured["vectorize"] == {"account_id": "acct", "api_token": "tok"}
+
+
+def test_main_canonical_wins_over_legacy_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When multiple names in the fallback chain are set to *different* values, the
+    canonical CLOUDFLARE_* pair must win over both legacy VECTORIZE_* and D1_* for
+    both the D1 read and the Vectorize write."""
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    captured = _credential_capturing_main(monkeypatch)
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "canonical-acct")
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "legacy-vectorize-acct")
+    monkeypatch.setenv("D1_ACCOUNT_ID", "legacy-d1-acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "canonical-tok")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "legacy-vectorize-tok")
+    monkeypatch.setenv("D1_API_TOKEN", "legacy-d1-tok")
+
+    exit_code = vectorize_sync_module.main(
+        ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
+    )
+
+    assert exit_code == 0
+    assert captured["d1"] == {"account_id": "canonical-acct", "api_token": "canonical-tok"}
+    assert captured["vectorize"] == {"account_id": "canonical-acct", "api_token": "canonical-tok"}
+
+
+def test_main_requires_cloudflare_credentials_for_a_real_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no name in the fallback chain set, a real (non-dry-run) run must exit
+    cleanly rather than reach the network -- mirrors d1_sync.py's own guard."""
+    import digivault.d1_store as d1_store_module
+
+    import scripts.vectorize_sync as vectorize_sync_module
+
+    class _FakeD1Store:
+        def __init__(self, database_id: str, *, account_id: str, api_token: str) -> None:
+            pass
+
+        def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
+            return [_note("clients/acme/a", "# A\n\nbody\n")]
+
+    monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
+
+    with pytest.raises(SystemExit):
+        vectorize_sync_module.main(
+            ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
+        )
+
+
 def test_dry_run_makes_zero_embed_calls(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

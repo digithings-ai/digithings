@@ -45,7 +45,7 @@ from digivault.orchestrator_tools import (
     build_orchestrator_tool_manifest,
 )
 from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
-from digivault.supabase_store import SupabaseStore, SupabaseStoreError
+from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _first_env
 from digivault.vault import Vault, VaultError
 
 # /v1/orchestrator_invoke is gated at SCOPE_READ (most tools are reads); the one
@@ -147,15 +147,34 @@ def _open_supabase_store() -> SupabaseStore:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+def _d1_credentials() -> tuple[str, str]:
+    """Resolve the account id / API token pair D1 (and Vectorize) share.
+
+    Canonical-first, legacy-fallback precedence (#2239 credential rename): the same
+    Cloudflare account and token now authorize both Vectorize and D1, so
+    ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` (wrangler's own conventional
+    names) are read first, falling back to the legacy ``VECTORIZE_*`` then ``D1_*``
+    names when the canonical ones are unset. This keeps the rename zero-downtime: the
+    deployed Worker's live ``VECTORIZE_ACCOUNT_ID``/``VECTORIZE_API_TOKEN`` secrets
+    keep working the moment this ships, with no coordinated secret-rotation required
+    before deploy. Reuses ``supabase_store._first_env``'s multi-name lookup shape.
+    """
+    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    return account_id, api_token
+
+
 def _d1_configured() -> bool:
-    """True when all three D1 env vars are present; False when none are; raises
+    """True when the account id, API token (see ``_d1_credentials``) and
+    ``D1_DATABASE_MAP`` are all present; False when none are; raises
     ``D1StoreError`` when only some are — naming exactly which are missing.
 
     Zero vars set is a legitimate profile (local dev, self-hosted, Profile A) and must
     keep falling through to ``DIGIVAULT_ROOT``/Supabase below. But *some* set and
     *not all* has no legitimate reading — it is unambiguously an operator error (a
     typo'd secret name at cutover, e.g. ``wrangler secret put D1_API_TOKN`` leaving
-    ``D1_API_TOKEN`` unset). Before this guard, partial config made this function
+    ``D1_API_TOKEN`` unset — or, post-rename, a ``CLOUDFLARE_API_TOKN`` typo with no
+    legacy fallback set either). Before this guard, partial config made this function
     return ``False`` like the zero-vars case, and callers fell through to
     ``DIGIVAULT_ROOT`` — which production always sets to the baked ``/data/vault``
     seed — so a single missing var silently served seed stubs instead of the real
@@ -163,13 +182,21 @@ def _d1_configured() -> bool:
     reachable from exactly the kind of secret-store typo a cutover risks (#2239
     review, Important finding).
 
+    The error names the *canonical* var (``CLOUDFLARE_ACCOUNT_ID``/
+    ``CLOUDFLARE_API_TOKEN``), not whichever legacy name happened to be set —
+    the credential is resolved to one value per ``_d1_credentials`` before this
+    guard ever runs, so "missing" always means "no name in the fallback chain
+    resolved," and the message should point the operator at the name to set going
+    forward, not at whichever alias they happened to leave unset.
+
     Env is read here, at the call site — never inside ``D1Store``, whose constructor
     takes credentials as plain arguments (same convention as ``_open_supabase_store``
     reading Supabase env only in ``SupabaseStore.from_env``).
     """
+    account_id, api_token = _d1_credentials()
     values = {
-        "D1_ACCOUNT_ID": (os.environ.get("D1_ACCOUNT_ID") or "").strip(),
-        "D1_API_TOKEN": (os.environ.get("D1_API_TOKEN") or "").strip(),
+        "CLOUDFLARE_ACCOUNT_ID": account_id,
+        "CLOUDFLARE_API_TOKEN": api_token,
         "D1_DATABASE_MAP": (os.environ.get("D1_DATABASE_MAP") or "").strip(),
     }
     present = [bool(v) for v in values.values()]
@@ -177,7 +204,7 @@ def _d1_configured() -> bool:
         missing = ", ".join(name for name, val in values.items() if not val)
         raise D1StoreError(
             f"D1 partially configured: missing {missing}. Set all three of "
-            "D1_ACCOUNT_ID, D1_API_TOKEN and D1_DATABASE_MAP, or none of them."
+            "CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN and D1_DATABASE_MAP, or none of them."
         )
     return all(present)
 
@@ -195,12 +222,12 @@ def _load_d1_database_map() -> tuple[dict[str, Any], str, str]:
     every one of those distinct config errors collapsed into the same caller-blaming
     400 instead of its own 503 (#2239 review).
     """
-    account_id = (os.environ.get("D1_ACCOUNT_ID") or "").strip()
-    api_token = (os.environ.get("D1_API_TOKEN") or "").strip()
+    account_id, api_token = _d1_credentials()
     raw_map = (os.environ.get("D1_DATABASE_MAP") or "").strip()
     if not account_id or not api_token or not raw_map:
         raise D1StoreError(
-            "D1 not configured: set D1_ACCOUNT_ID, D1_API_TOKEN and D1_DATABASE_MAP."
+            "D1 not configured: set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN "
+            "and D1_DATABASE_MAP."
         )
     try:
         database_map = json.loads(raw_map)
@@ -285,8 +312,8 @@ def _fetch_note_by_path(vault_path: str, path_prefix: str) -> NoteDetail | None:
         return store.get_note(path)
     except D1StoreError as exc:
         # Runtime failure inside the store call itself (transport error, an expired
-        # D1_API_TOKEN surfacing as Cloudflare's 403) — `_open_d1_store_or_503` only
-        # converts a *construction*-time D1StoreError into 503, not this call.
+        # CLOUDFLARE_API_TOKEN surfacing as Cloudflare's 403) — `_open_d1_store_or_503`
+        # only converts a *construction*-time D1StoreError into 503, not this call.
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -593,7 +620,7 @@ def orchestrator_invoke(
                 )
             try:
                 # Wraps the *call*, not just `_open_d1_store`'s construction — a
-                # runtime D1 failure (transport error, an expired D1_API_TOKEN
+                # runtime D1 failure (transport error, an expired CLOUDFLARE_API_TOKEN
                 # surfacing as Cloudflare's 403) raised from inside `.search()`
                 # would otherwise propagate as a raw D1StoreError and become an
                 # unhandled 500 (#2239 review).

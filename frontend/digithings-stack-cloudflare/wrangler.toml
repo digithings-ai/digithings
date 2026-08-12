@@ -52,14 +52,26 @@ new_sqlite_classes = ["DigiStackContainer"]
 #   DIGIKEY_ADMIN_TOKEN       # optional; for key issue / ops
 #   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
-#   VECTORIZE_ACCOUNT_ID      # Cloudflare account id owning the Vectorize indexes
-#   VECTORIZE_API_TOKEN       # Vectorize access; prefer a read-scoped token if available
-#   D1_ACCOUNT_ID             # Cloudflare account id owning the D1 databases
-#   D1_API_TOKEN              # D1 access for D1Store.query() (POST .../d1/database/{id}/query,
-#                             # digivault/src/digivault/d1_store.py) -- confirm the read-only
-#                             # scope actually authorizes that POST before relying on it; if
-#                             # not, use a token with D1 write/edit scope instead
+#   CLOUDFLARE_ACCOUNT_ID     # Cloudflare account id owning both the Vectorize indexes and
+#                             # the D1 databases -- canonical name (wrangler's own convention,
+#                             # #2239 credential rename: Vectorize and D1 share one account).
+#   CLOUDFLARE_API_TOKEN      # Token for both Vectorize and D1 access (same account, same
+#                             # token). For D1 access via D1Store.query() (POST
+#                             # .../d1/database/{id}/query, digivault/src/digivault/d1_store.py)
+#                             # -- confirm the token's scope actually authorizes that POST
+#                             # before relying on it; if not, use a token with D1 write/edit
+#                             # scope instead.
 #   D1_DATABASE_MAP           # {"clients/digithings":"<id>","clients/online-compliance-center":"<id>"}
+#
+# Legacy (still read as a fallback by the container's Python side -- see
+# digivault/src/digivault/server.py's _d1_credentials and
+# digisearch/src/digisearch/search/_stub.py's _first_env -- so this rename is
+# zero-downtime; safe to delete once CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN
+# are set and verified working):
+#   VECTORIZE_ACCOUNT_ID
+#   VECTORIZE_API_TOKEN
+#   D1_ACCOUNT_ID
+#   D1_API_TOKEN
 #
 # After deploy, retarget digichat Worker secrets:
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
