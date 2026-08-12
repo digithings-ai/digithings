@@ -30,10 +30,29 @@ const EVENT = "dr-livery-change";
 
 /** Apply a livery by overriding --accent inline on <html>. Inline style beats
  *  the theme's `:root[data-theme]` --accent declaration (which sits on the same
- *  element), and works pre-paint since documentElement exists in <head>. */
+ *  element), and works pre-paint since documentElement exists in <head>.
+ *
+ *  --on-accent needs the same inline override, and for the same reason: it's
+ *  the text color painted on top of --accent (.btn-primary etc.), declared
+ *  theme-scoped only in tokens.css (white on dark, near-black on light) — a
+ *  pairing that's only correct when --accent flips light/dark WITH the theme,
+ *  which is true for mono (--accent: var(--ink)) but false for every
+ *  per-module hex here: they're fixed, light-to-medium colors in both themes,
+ *  so the theme-scoped --on-accent goes white-on-light-accent in light theme
+ *  (near-illegible — the same .accent-<module> scoped-class bug tokens.css's
+ *  own comment on those classes documents). Every id here except "mono" pins
+ *  --on-accent to the same #06110f those classes use (verified ≥5.21:1
+ *  against every module hex in LIVERY_OPTIONS); "mono" clears the inline
+ *  override so --on-accent falls back to the theme's own flip, which is
+ *  correct for --ink. */
 export function applyLivery(id: string) {
   const el = document.documentElement;
   el.style.setProperty("--accent", id === "mono" ? "var(--ink)" : `var(--accent-${id})`);
+  if (id === "mono") {
+    el.style.removeProperty("--on-accent");
+  } else {
+    el.style.setProperty("--on-accent", "#06110f");
+  }
   try {
     localStorage.setItem(KEY, id);
   } catch {
@@ -63,5 +82,6 @@ export function getLiveryServerSnapshot() {
 }
 
 /** Pre-paint init: applies the stored livery before first paint (no flash).
- *  Monochrome is the default, so a missing/legacy value resolves to ink. */
-export const liveryInitScript = `(function(){try{var v=localStorage.getItem('${KEY}');if(v==='default')v=null;v=v||'mono';var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')')}catch(e){}})();`;
+ *  Monochrome is the default, so a missing/legacy value resolves to ink.
+ *  Mirrors applyLivery()'s --on-accent handling — see its doc comment. */
+export const liveryInitScript = `(function(){try{var v=localStorage.getItem('${KEY}');if(v==='default')v=null;v=v||'mono';var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')');if(v==='mono'){el.style.removeProperty('--on-accent')}else{el.style.setProperty('--on-accent','#06110f')}}catch(e){}})();`;
