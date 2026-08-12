@@ -54,6 +54,9 @@ new_sqlite_classes = ["DigiStackContainer"]
 #   LITELLM_PROXY_API_KEY     # optional shared proxy key
 #   VECTORIZE_ACCOUNT_ID      # Cloudflare account id owning the Vectorize indexes
 #   VECTORIZE_API_TOKEN       # Vectorize access; prefer a read-scoped token if available
+#   D1_ACCOUNT_ID             # Cloudflare account id owning the D1 databases
+#   D1_API_TOKEN              # D1 access; prefer a read-scoped token if available
+#   D1_DATABASE_MAP           # {"clients/digithings":"<id>","clients/online-compliance-center":"<id>"}
 #
 # After deploy, retarget digichat Worker secrets:
 #   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai

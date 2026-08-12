@@ -66,6 +66,11 @@ else
   export CHROMA_PATH="$DATA_CHROMA"
 fi
 export DIGIVAULT_ROOT="$DATA_VAULT"
+# D1 is selected by presence (digivault/src/digivault/server.py) -- all three
+# must be non-empty for the D1 backend to be preferred over DIGIVAULT_ROOT.
+export D1_ACCOUNT_ID="${D1_ACCOUNT_ID:-}"
+export D1_API_TOKEN="${D1_API_TOKEN:-}"
+export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
 export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"

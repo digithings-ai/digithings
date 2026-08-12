@@ -59,6 +59,9 @@ export class DigiStackContainer extends Container {
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
     VECTORIZE_ACCOUNT_ID: env.VECTORIZE_ACCOUNT_ID ?? "",
     VECTORIZE_API_TOKEN: env.VECTORIZE_API_TOKEN ?? "",
+    D1_ACCOUNT_ID: env.D1_ACCOUNT_ID ?? "",
+    D1_API_TOKEN: env.D1_API_TOKEN ?? "",
+    D1_DATABASE_MAP: env.D1_DATABASE_MAP ?? "",
     DIGIVAULT_ROOT: env.DIGIVAULT_ROOT ?? "/data/vault",
     DIGISEARCH_INDEX: env.DIGISEARCH_INDEX ?? "digithings_docs",
     DIGI_TENANT_CORPUS_MAP:
@@ -128,6 +131,9 @@ export interface Env {
   CHROMA_PATH?: string;
   VECTORIZE_ACCOUNT_ID?: string;
   VECTORIZE_API_TOKEN?: string;
+  D1_ACCOUNT_ID?: string;
+  D1_API_TOKEN?: string;
+  D1_DATABASE_MAP?: string;
   DIGIVAULT_ROOT?: string;
   DIGISEARCH_INDEX?: string;
   DIGI_TENANT_CORPUS_MAP?: string;

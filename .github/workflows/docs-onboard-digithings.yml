@@ -1,9 +1,9 @@
-# Publish digithings client #0 docs corpus → Supabase public.architecture_notes
+# Publish digithings client #0 docs corpus → Cloudflare D1 (clients/digithings)
 # so digithings.ai/chat stays current when onboard sources change on main.
 #
 # Pipeline (dogfood):
 #   run_onboard.py (static + OpenAPI + monorepo docs → local vault)
-#   → sync_onboard_vault.py (service-role upsert)
+#   → d1_sync.py (D1 upsert + FTS rebuild)
 #
 # Website crawl is opt-in (workflow_dispatch) — push path filters match
 # docs/projects/digithings/sources/repo-docs.yaml + openapi.yaml (+ onboard scripts).
@@ -11,8 +11,9 @@
 # server-visible FS path); keep docs-reindex-guide.yml / operator apply until
 # remote ingest exists. See docs/digichat/CLIENT-DOCS-ONBOARD.md.
 #
-# Prod-mutating apply runs under `production` (same CORE_SUPABASE_* secrets and
-# reviewer gate as sync-architecture-vault.yml).
+# Prod-mutating apply runs under `production` (D1_ACCOUNT_ID / D1_API_TOKEN /
+# D1_DATABASE_DIGITHINGS secrets, reviewer gate on the `production` environment).
+# digithings only — the online-compliance-center corpus has its own onboarding path.
 name: "Docs: onboard digithings"
 
 on:
@@ -60,13 +61,13 @@ on:
       - 'frontend/digichat/ARCHITECTURE.md'
       - 'frontend/digichat/AGENTS.md'
       - 'scripts/docs_onboard/**'
-      - 'scripts/sync_onboard_vault.py'
+      - 'scripts/d1_sync.py'
       - 'scripts/sync_architecture_vault.py'
       - '.github/workflows/docs-onboard-digithings.yml'
   workflow_dispatch:
     inputs:
       mode:
-        description: "dry-run validates only; apply writes vault + upserts Supabase"
+        description: "dry-run validates only; apply writes vault + publishes to D1"
         type: choice
         options:
           - dry-run
@@ -88,7 +89,7 @@ env:
   ONBOARD_MANIFEST: docs/projects/digithings/onboard.yaml
   ONBOARD_WORKDIR: /tmp/digithings-onboard
   ONBOARD_VAULT: /tmp/digithings-onboard-vault
-  # scripts/docs_onboard and sync_onboard_vault import the repo-root `scripts` package
+  # scripts/docs_onboard imports the repo-root `scripts` package (d1_sync.py does not)
   PYTHONPATH: .
 
 jobs:
@@ -141,18 +142,23 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --all-packages --all-extras
 
-      - name: Require CORE_SUPABASE_* secrets
+      - name: Require D1 secrets
         env:
-          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          D1_ACCOUNT_ID: ${{ secrets.D1_ACCOUNT_ID }}
+          D1_API_TOKEN: ${{ secrets.D1_API_TOKEN }}
+          D1_DATABASE_DIGITHINGS: ${{ secrets.D1_DATABASE_DIGITHINGS }}
         run: |
           missing=0
-          if [ -z "$CORE_SUPABASE_URL" ]; then
-            echo "::error::CORE_SUPABASE_URL (or SUPABASE_URL) is not set in the production environment"
+          if [ -z "$D1_ACCOUNT_ID" ]; then
+            echo "::error::D1_ACCOUNT_ID is not set in the production environment"
             missing=1
           fi
-          if [ -z "$CORE_SUPABASE_SERVICE_KEY" ]; then
-            echo "::error::CORE_SUPABASE_SERVICE_KEY (or SUPABASE_SERVICE_ROLE_KEY) is not set in the production environment"
+          if [ -z "$D1_API_TOKEN" ]; then
+            echo "::error::D1_API_TOKEN is not set in the production environment"
+            missing=1
+          fi
+          if [ -z "$D1_DATABASE_DIGITHINGS" ]; then
+            echo "::error::D1_DATABASE_DIGITHINGS is not set in the production environment"
             missing=1
           fi
           exit "$missing"
@@ -167,8 +173,8 @@ jobs:
           if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$CRAWL" = "true" ]; then
             CRAWL_FLAGS=()
           fi
-          # Vault sink writes a filesystem vault; sync_onboard_vault publishes to
-          # Supabase (production digivault FTS). digisearch is intentionally
+          # Vault sink writes a filesystem vault; d1_sync.py (next step) publishes
+          # it to D1 (production digivault FTS). digisearch is intentionally
           # omitted here — Actions runners cannot expose workdir paths to a
           # remote digisearch /ingest endpoint.
           uv run --frozen --no-sync python scripts/docs_onboard/run_onboard.py \
@@ -178,10 +184,13 @@ jobs:
             --sinks vault \
             "${CRAWL_FLAGS[@]}"
 
-      - name: Sync onboard vault → public.architecture_notes
+      - name: Publish onboard vault → D1
         env:
-          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
-          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          D1_ACCOUNT_ID: ${{ secrets.D1_ACCOUNT_ID }}
+          D1_API_TOKEN: ${{ secrets.D1_API_TOKEN }}
+          D1_DATABASE_DIGITHINGS: ${{ secrets.D1_DATABASE_DIGITHINGS }}
         run: |
-          uv run --frozen --no-sync python scripts/sync_onboard_vault.py \
+          uv run --frozen --no-sync python scripts/d1_sync.py \
+            --prefix clients/digithings \
+            --database "$D1_DATABASE_DIGITHINGS" \
             --vault "$ONBOARD_VAULT"
