@@ -7,6 +7,7 @@ tests/dg/test_digivault_tool.py for the vault-handler equivalents this mirrors.
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -81,3 +82,54 @@ def test_handle_digisearch_no_hits_still_dict_for_trace() -> None:
         out = _handle_digisearch({"query": "q", "index_name": "occ_help"}, ctx)
 
     assert out == {"content": "No results found.", "results": [], "rag_sources": []}
+
+
+@pytest.mark.unit
+def test_search_payload_keeps_metadata_addressable_as_json() -> None:
+    """#2306: metadata must reach the model as an object, not a Python repr.
+
+    digivault_get_note's description tells the model to read a digisearch hit's
+    metadata.vault_path. str(dict) renders single-quoted Python repr, which is not
+    addressable as JSON — and the 300-char clip is then applied to that repr. Realistic
+    digisearch metadata measures 302 chars with vault_path serialized last, so the exact
+    key the model was told to read was the first thing truncated, producing a half-path
+    that 404s against digivault.
+    """
+    from digigraph.orchestration.builtin import _search_payload_for_llm
+
+    vault_path = "clients/digithings/digithings-security-md__security-threat-model-stride-table"
+    metadata = {
+        "title": "Security",
+        "section": "Threat model > STRIDE table",
+        "source": "SECURITY.md",
+        "tags": ["security", "threat-model"],
+        "ingested_at": "2026-08-01T00:00:00Z",
+        "chunk_index": 3,
+        "doc_type": "markdown",
+        "vault_path": vault_path,
+    }
+    payload = _search_payload_for_llm([{"content": "x", "metadata": metadata}], 1)
+
+    row = payload["preview"][0]
+    assert isinstance(row["metadata"], dict), "metadata must stay an object, not str(dict)"
+    assert row["metadata"]["vault_path"] == vault_path, "the full path must survive intact"
+    # And it must survive a JSON round trip, since this payload is json.dumps'd for the LLM.
+    assert json.loads(json.dumps(payload))["preview"][0]["metadata"]["vault_path"] == vault_path
+
+
+@pytest.mark.unit
+def test_search_payload_clips_oversized_metadata_as_json_not_python_repr() -> None:
+    """An oversized structured value still has to be bounded for context, but bounding it
+    must not cost the addressability of its other keys."""
+    from digigraph.orchestration.builtin import _LLM_SEARCH_PREVIEW_CHARS, _search_payload_for_llm
+
+    huge = {"note": "y" * (_LLM_SEARCH_PREVIEW_CHARS * 2), "vault_path": "clients/x/y"}
+    payload = _search_payload_for_llm([{"content": "x", "metadata": huge}], 1)
+
+    row = payload["preview"][0]
+    # The object survives; only the oversized VALUE is clipped, so a short critical key
+    # sitting next to a huge one is still addressable.
+    assert isinstance(row["metadata"], dict)
+    assert row["metadata"]["vault_path"] == "clients/x/y"
+    assert row["metadata"]["note"].endswith("...")
+    assert len(row["metadata"]["note"]) < len(huge["note"])

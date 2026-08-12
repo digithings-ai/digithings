@@ -609,3 +609,68 @@ def test_handle_digivault_get_note_no_context_prefix_but_different_error_passes_
     error = json.loads(out)["error"]
     assert error == "d1 query failed (503): upstream timeout"
     assert "no tenant corpus" not in error.lower()
+
+
+@pytest.mark.unit
+def test_handle_digivault_search_marks_truncated_excerpts() -> None:
+    """#2306: a clipped excerpt must be labelled as data, not implied by a trailing
+    "...". In production the model got the right note back, saw its body cut at 300
+    chars immediately before the STRIDE table's first row, judged the excerpt
+    sufficient, never called digivault_get_note, and answered wrong. The ellipsis is
+    the only signal the old payload carried and it is indistinguishable from ordinary
+    prose punctuation, so a model cannot act on it."""
+    from digigraph.orchestration.builtin import _LLM_SEARCH_PREVIEW_CHARS, _handle_digivault_search
+
+    long_body = "### STRIDE table\n\n" + ("x" * (_LLM_SEARCH_PREVIEW_CHARS + 500))
+    hit = {
+        "vault_path": "clients/digithings/security__stride",
+        "title": "Security",
+        "body_markdown": long_body,
+        "tags": ["security"],
+        "rank": 0.9,
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": {"hits": [hit]}},
+    ):
+        out = _handle_digivault_search({"query": "stride table"}, _ctx())
+
+    assert isinstance(out, dict)
+    payload = json.loads(out["content"])
+    assert payload["excerpts_truncated"] is True
+    # The row the model reads must carry the flag, next to the doc_id it needs to pass.
+    row = payload["preview"][0]
+    assert row["truncated"] is True
+    assert row["doc_id"] == "clients/digithings/security__stride"
+    # And the payload must name the required follow-up action explicitly.
+    assert "digivault_get_note" in payload["next_step"]
+    assert "doc_id" in payload["next_step"]
+    # results/ rag_sources keep the FULL body -- only the LLM preview is clipped.
+    assert out["results"][0]["content"] == long_body
+
+
+@pytest.mark.unit
+def test_handle_digivault_search_does_not_mark_untruncated_excerpts() -> None:
+    """The truncation signal must not cry wolf: a note that fits inside the preview
+    budget is complete, and flagging it would push the model into a pointless second
+    round on every short note, burning its 4-round budget."""
+    from digigraph.orchestration.builtin import _handle_digivault_search
+
+    hit = {
+        "vault_path": "digigraph",
+        "title": "digigraph",
+        "body_markdown": "LangGraph-based workflow engine.",
+        "tags": ["core"],
+        "rank": 0.8,
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": {"hits": [hit]}},
+    ):
+        out = _handle_digivault_search({"query": "what does digigraph orchestrate"}, _ctx())
+
+    assert isinstance(out, dict)
+    payload = json.loads(out["content"])
+    assert "excerpts_truncated" not in payload
+    assert "next_step" not in payload
+    assert "truncated" not in payload["preview"][0]
