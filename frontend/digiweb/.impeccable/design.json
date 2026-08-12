@@ -59,7 +59,7 @@
       "refersTo": "button-primary",
       "description": "The single solid-fill accent action allowed per viewport.",
       "html": "<button class=\"ds-btn-primary\">Deploy strategy</button>",
-      "css": ".ds-btn-primary { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; background: var(--accent); color: #06110f; border: 1px solid var(--accent); border-radius: 999px; padding: 0.62rem 1.3rem; cursor: pointer; } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
+      "css": ".ds-btn-primary { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0.62rem 1.3rem; cursor: pointer; } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
     },
     {
       "name": "Ghost Button",

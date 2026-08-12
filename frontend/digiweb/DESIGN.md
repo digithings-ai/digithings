@@ -221,7 +221,7 @@ Borders are uniformly 1px hairline; the only thicker strokes are decorative chev
 
 ### Buttons
 - **Shape:** pill (`border-radius: 999px`), 1px border baseline, `0.62rem 1.3rem` padding.
-- **Primary:** solid `--accent` fill, dark label color (falls through to a hardcoded `#06110F`-equivalent fallback rather than a properly declared on-accent token in the reference implementation — see Don'ts). No hover treatment exists on the plain primary button; only a "magnetic," pointer-following variant gets motion feedback, framed in the codebase as "the one earned exception to the one-motion-moment law."
+- **Primary:** solid `--accent` fill, label color from `--on-accent` — livery-aware (`.accent-<module>` scopes and the page-level livery picker both pin it to a legible dark ink; only mono/atlas/hermes/kairos, whose accent already collapses to `--ink`, follow the theme's own light/dark flip). No hover treatment exists on the plain primary button; only a "magnetic," pointer-following variant gets motion feedback, framed in the codebase as "the one earned exception to the one-motion-moment law."
 - **Ghost:** transparent, hairline border, hover tints the border toward accent — the default choice for any non-primary action.
 - **Quiet:** transparent, no border, reads as a low-emphasis text link (`ink-mute` → `ink` on hover).
 - **Danger:** transparent, loss-tinted text and border, hover fills a faint loss-tinted wash.
