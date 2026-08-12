@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "../../lib/useBodyScrollLock";
 
 /**
  * CommandPalette — the ⌘K command bar shell promoted from the design
@@ -163,14 +164,11 @@ export function CommandPalette({
 
   useEffect(() => setMounted(true), []);
 
-  // Lock body scroll while the dialog is open — same pattern as NavShell's
-  // own menu overlay (frontend/digiweb/web/src/components/NavShell.tsx).
-  useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [open]);
+  // Lock body scroll while the dialog is open — reference-counted (see
+  // useBodyScrollLock) so this coordinates safely with any other overlay
+  // (e.g. NavShell's own menu) that may be locked at the same time,
+  // regardless of open/close order.
+  useBodyScrollLock(open);
 
   const resolvedGroups = typeof groups === "function" ? groups(query) : groups;
   const flat = resolvedGroups.flatMap((g) => g.items);
