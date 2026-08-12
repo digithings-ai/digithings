@@ -434,7 +434,11 @@ export function ChartLegend({
   items: { kind: "line" | "bar-up" | "bar-down" | "bar-open" | "marker-buy" | "marker-sell"; label: string }[];
 }) {
   return (
-    <div className="ts-chart-legend" aria-hidden="true">
+    // Not aria-hidden: these labels ("long"/"short"/"Realized %"/etc.) are
+    // the one place the chart's visual encoding is spelled out in words —
+    // hiding them left the charts' role="img" panes with no way for a
+    // screen-reader user to learn what a line/bar/marker color means.
+    <div className="ts-chart-legend">
       {items.map((it) => (
         <span className="ts-chart-legend-item" key={it.label}>
           <span className={`ts-chart-legend-swatch ts-chart-legend-${it.kind}`} />
@@ -562,7 +566,11 @@ interface ViewControl {
   padRight: number;
   /** wheel zoom, centred on cursor clientX, against the chart's own width. */
   onWheel: (clientX: number, deltaY: number, target: Element) => void;
-  onMouseDown: (e: React.MouseEvent<SVGSVGElement>) => void;
+  /** Drag-pan start — Pointer Events (not mouse-only), so a single-finger
+   *  touch drag pans the same as a mouse drag. Pinch-zoom has no wheel
+   *  equivalent and is not implemented (see the P2 note in charts.tsx's
+   *  header comment). */
+  onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => void;
   onDoubleClick: () => void;
 }
 
@@ -592,13 +600,21 @@ function viewHandlers(
     onView(clampView(nlo, nhi));
   };
 
-  const onMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+  // Pointer Events (not mouse-only): the same handler drives mouse drag AND
+  // single-finger touch drag, so drag-pan works on the mobile breakpoint
+  // this family's own CSS already ships for these panes. setPointerCapture
+  // keeps move/up routed to this element even if the finger/cursor leaves
+  // its bounds mid-drag (load-bearing for touch, where a real finger drifts
+  // off the SVG far more easily than a mouse does).
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
     const startX = e.clientX;
     const span = hi - lo;
     const rect = e.currentTarget.getBoundingClientRect();
     const plotPxW = rect.width * ((vbW - pad.left - pad.right) / vbW);
-    const move = (me: MouseEvent) => {
+    const move = (me: PointerEvent) => {
+      if (me.pointerId !== e.pointerId) return;
       if (plotPxW === 0) return;
       // Drag right ⇒ window shifts left (content follows the cursor). Clamp the
       // shift so the window TRANSLATES (keeps its width) against the [0,1] edges
@@ -607,17 +623,20 @@ function viewHandlers(
       dFrac = Math.max(hi - 1, Math.min(lo, dFrac));
       onView(clampView(lo - dFrac, hi - dFrac));
     };
-    const up = () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
+    const up = (ue: PointerEvent) => {
+      if (ue.pointerId !== e.pointerId) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
     };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
   };
 
   const onDoubleClick = () => onView(resetView);
 
-  return { padRight: pad.right, onWheel, onMouseDown, onDoubleClick };
+  return { padRight: pad.right, onWheel, onPointerDown, onDoubleClick };
 }
 
 function makeScale(kind: ChartScale) {
@@ -710,6 +729,7 @@ function Svg({
   onMouseMove,
   onMouseLeave,
   preserveAspectRatio = "none",
+  ariaLabel,
 }: {
   height: number;
   vbW?: number;
@@ -718,6 +738,9 @@ function Svg({
   onMouseMove?: (e: React.MouseEvent<SVGSVGElement>) => void;
   onMouseLeave?: (e: React.MouseEvent<SVGSVGElement>) => void;
   preserveAspectRatio?: string;
+  /** role="img" needs an accessible name or it announces as a bare, unnamed
+   *  image — every chart consumer must pass one describing the series. */
+  ariaLabel?: string;
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const controlRef = useRef(control);
@@ -773,7 +796,8 @@ function Svg({
       preserveAspectRatio={preserveAspectRatio}
       className={"ts-svg" + (control ? " is-interactive" : "")}
       role="img"
-      onMouseDown={control ? control.onMouseDown : undefined}
+      aria-label={ariaLabel}
+      onPointerDown={control ? control.onPointerDown : undefined}
       onDoubleClick={control ? control.onDoubleClick : undefined}
       onMouseMove={onMouseMove}
       onMouseLeave={onMouseLeave}
@@ -785,7 +809,7 @@ function Svg({
 
 function Empty({ height, msg, vbW = W }: { height: number; msg: string; vbW?: number }) {
   return (
-    <Svg height={height} vbW={vbW}>
+    <Svg height={height} vbW={vbW} ariaLabel={msg}>
       <text x={vbW / 2} y={height / 2} textAnchor="middle" className="ts-svg-empty">
         {msg}
       </text>
@@ -812,6 +836,10 @@ export interface TimeSeriesProps {
   resetView?: ViewWindow;
   /** When false, omit hover tooltips (static print-first panes). */
   interactive?: boolean;
+  /** Accessible name for the chart (role="img" has none without it) — should
+   *  summarize the series, e.g. "Equity curve, percent return, linear scale,
+   *  Jan 2023 to Feb 2025". */
+  ariaLabel?: string;
 }
 
 /**
@@ -905,6 +933,10 @@ export interface CandlestickChartProps {
   interactive?: boolean;
   /** Tighter plot padding for compact preview cards. */
   compact?: boolean;
+  /** Accessible name for the chart (role="img" has none without it) — should
+   *  summarize the series, e.g. "BTC-USD candlestick price, linear scale,
+   *  with trade entry/exit markers, Jan 2023 to Feb 2025". */
+  ariaLabel?: string;
 }
 
 /**
@@ -928,6 +960,7 @@ function CandlestickChartBody({
   resetView,
   interactive = true,
   compact = false,
+  ariaLabel,
 }: CandlestickChartProps & { bars: TearsheetOhlcBar[]; height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
@@ -1106,6 +1139,7 @@ function CandlestickChartBody({
         control={control}
         onMouseMove={interactive ? onChartMouseMove : undefined}
         onMouseLeave={interactive ? onChartMouseLeave : undefined}
+        ariaLabel={ariaLabel}
       >
       <defs>
         <clipPath id="ts-candle-clip">
@@ -1148,6 +1182,7 @@ function TimeSeriesBody({
   fullSpan,
   resetView,
   interactive = true,
+  ariaLabel,
 }: TimeSeriesProps & { points: TearsheetSeriesPoint[]; height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
@@ -1237,6 +1272,7 @@ function TimeSeriesBody({
         control={control}
         onMouseMove={interactive ? onChartMouseMove : undefined}
         onMouseLeave={interactive ? onChartMouseLeave : undefined}
+        ariaLabel={ariaLabel}
       >
       <defs>
         <clipPath id="ts-series-clip">
@@ -1265,10 +1301,12 @@ export interface SignedBarsProps {
   values: number[];
   height?: number;
   fmt?: (v: number) => string;
+  /** Accessible name for the chart (role="img" has none without it). */
+  ariaLabel?: string;
 }
 
 /** Per-item signed bar chart (gains var(--up), losses var(--down)). */
-export function SignedBars({ values, height = 220, fmt = fmtCompact }: SignedBarsProps) {
+export function SignedBars({ values, height = 220, fmt = fmtCompact, ariaLabel }: SignedBarsProps) {
   if (!values || values.length === 0) return <Empty height={height} msg="no trades" />;
 
   const plotW = W - PAD.left - PAD.right;
@@ -1300,7 +1338,7 @@ export function SignedBars({ values, height = 220, fmt = fmtCompact }: SignedBar
   const bw = Math.max(0.6, Math.min(slot * 0.7, 16));
 
   return (
-    <Svg height={height}>
+    <Svg height={height} ariaLabel={ariaLabel}>
       {gridEls}
       {values.map((v, i) => {
         const x = PAD.left + i * slot + (slot - bw) / 2;
@@ -1329,6 +1367,9 @@ export interface ContributionReturnChartProps {
   height?: number;
   interactive?: boolean;
   benchmark?: { label: string; values: number[] };
+  /** Accessible name for the chart (role="img" has none without it) — should
+   *  summarize the series, e.g. "Portfolio return contribution by factor". */
+  ariaLabel?: string;
 }
 
 /** Signed cumulative contribution stacks with the exact portfolio return overlaid. */
@@ -1338,6 +1379,7 @@ export function ContributionReturnChart({
   height = 360,
   interactive = true,
   benchmark,
+  ariaLabel,
 }: ContributionReturnChartProps) {
   if (points.length < 2) return <Empty height={height} msg="not enough history" />;
   return (
@@ -1347,6 +1389,7 @@ export function ContributionReturnChart({
       height={height}
       interactive={interactive}
       benchmark={benchmark}
+      ariaLabel={ariaLabel}
     />
   );
 }
@@ -1357,6 +1400,7 @@ function ContributionReturnChartBody({
   height,
   interactive,
   benchmark,
+  ariaLabel,
 }: ContributionReturnChartProps & { height: number; interactive: boolean }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
@@ -1442,6 +1486,7 @@ function ContributionReturnChartBody({
         vbW={vbW}
         onMouseMove={interactive ? onChartMouseMove : undefined}
         onMouseLeave={interactive ? () => setHover(null) : undefined}
+        ariaLabel={ariaLabel}
       >
         <defs>
           <clipPath id="ts-contribution-return-clip">
@@ -1516,6 +1561,10 @@ export interface TradeReturnChartProps {
   resetView?: ViewWindow;
   /** When false, omit hover tooltips (static print-first panes). */
   interactive?: boolean;
+  /** Accessible name for the chart (role="img" has none without it) — should
+   *  summarize the series, e.g. "Per-trade profit and loss, realized and
+   *  open trades, Jan 2023 to Feb 2025". */
+  ariaLabel?: string;
 }
 
 function sliceTradeBarsByView(
@@ -1564,6 +1613,7 @@ function TradeReturnChartBody({
   onView,
   resetView,
   interactive = true,
+  ariaLabel,
 }: TradeReturnChartProps & { bars: TradeReturnBar[]; height: number }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<ChartHoverTip | null>(null);
@@ -1647,6 +1697,7 @@ function TradeReturnChartBody({
         control={control}
         onMouseMove={interactive ? onChartMouseMove : undefined}
         onMouseLeave={interactive ? onChartMouseLeave : undefined}
+        ariaLabel={ariaLabel}
       >
       <defs>
         <clipPath id="ts-pnl-clip">
