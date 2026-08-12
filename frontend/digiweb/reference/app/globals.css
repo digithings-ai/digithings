@@ -78,7 +78,7 @@ html {
   padding: 0.5rem 0.9rem;
   border-radius: 8px;
   background: var(--accent);
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   text-decoration: none;
@@ -497,7 +497,7 @@ html {
 
 .btn-primary {
   background: var(--accent);
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -520,8 +520,8 @@ html {
   width: 11px;
   height: 11px;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--surface-inverse, #06110f) 30%, transparent);
-  border-top-color: var(--surface-inverse, #06110f);
+  border: 2px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
+  border-top-color: var(--on-accent);
   animation: btn-spin 0.7s linear infinite;
 }
 

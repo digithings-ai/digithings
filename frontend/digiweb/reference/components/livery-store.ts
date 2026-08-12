@@ -28,12 +28,46 @@ export const LIVERY_OPTIONS: LiveryOption[] = [
 const KEY = "dr-livery";
 const EVENT = "dr-livery-change";
 
+/**
+ * Liveries whose --accent already resolves to --ink (so it flips light/dark
+ * WITH the theme, same as the theme's own on-accent pairing). LIVERY_OPTIONS
+ * only ever offers "mono" — atlas/hermes/kairos aren't selectable liveries —
+ * but applyLivery()'s `id` parameter is a plain string, not narrowed to
+ * LIVERY_OPTIONS' ids, and tokens.css's matching .accent-atlas/-hermes/-kairos
+ * classes exclude themselves from the --on-accent override for the same
+ * reason (see tokens.css). Keeping both lists in agreement here means a
+ * future caller passing one of these three ids can't reintroduce the
+ * white-on-light-accent bug --on-accent's fix (below) exists to prevent.
+ */
+function isInkCollapsingLivery(id: string): boolean {
+  return id === "mono" || id === "atlas" || id === "hermes" || id === "kairos";
+}
+
 /** Apply a livery by overriding --accent inline on <html>. Inline style beats
  *  the theme's `:root[data-theme]` --accent declaration (which sits on the same
- *  element), and works pre-paint since documentElement exists in <head>. */
+ *  element), and works pre-paint since documentElement exists in <head>.
+ *
+ *  --on-accent needs the same inline override, and for the same reason: it's
+ *  the text color painted on top of --accent (.btn-primary etc.), declared
+ *  theme-scoped only in tokens.css (white on dark, near-black on light) — a
+ *  pairing that's only correct when --accent flips light/dark WITH the theme,
+ *  which is true for mono/atlas/hermes/kairos (--accent: var(--ink)) but
+ *  false for every per-module hex here: they're fixed, light-to-medium colors
+ *  in both themes, so the theme-scoped --on-accent goes white-on-light-accent
+ *  in light theme (near-illegible — the same .accent-<module> scoped-class
+ *  bug tokens.css's own comment on those classes documents). Every
+ *  non-ink-collapsing id pins --on-accent to the same #06110f those classes
+ *  use (verified ≥5.21:1 against every module hex in LIVERY_OPTIONS); an
+ *  ink-collapsing id clears the inline override so --on-accent falls back to
+ *  the theme's own flip, which is correct for --ink. */
 export function applyLivery(id: string) {
   const el = document.documentElement;
   el.style.setProperty("--accent", id === "mono" ? "var(--ink)" : `var(--accent-${id})`);
+  if (isInkCollapsingLivery(id)) {
+    el.style.removeProperty("--on-accent");
+  } else {
+    el.style.setProperty("--on-accent", "#06110f");
+  }
   try {
     localStorage.setItem(KEY, id);
   } catch {
@@ -63,5 +97,9 @@ export function getLiveryServerSnapshot() {
 }
 
 /** Pre-paint init: applies the stored livery before first paint (no flash).
- *  Monochrome is the default, so a missing/legacy value resolves to ink. */
-export const liveryInitScript = `(function(){try{var v=localStorage.getItem('${KEY}');if(v==='default')v=null;v=v||'mono';var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')')}catch(e){}})();`;
+ *  Monochrome is the default, so a missing/legacy value resolves to ink.
+ *  Mirrors applyLivery()'s --on-accent handling (including
+ *  isInkCollapsingLivery's mono/atlas/hermes/kairos list — inlined here
+ *  since this runs as a raw pre-hydration <script>, not compiled TS) — see
+ *  its doc comment. */
+export const liveryInitScript = `(function(){try{var v=localStorage.getItem('${KEY}');if(v==='default')v=null;v=v||'mono';var ink=(v==='mono'||v==='atlas'||v==='hermes'||v==='kairos');var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')');if(ink){el.style.removeProperty('--on-accent')}else{el.style.setProperty('--on-accent','#06110f')}}catch(e){}})();`;

@@ -296,7 +296,7 @@
   align-items: center;
   justify-content: center;
   font-size: 0.62rem;
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
 }
 
 .ff-check input:focus-visible + .ff-box,

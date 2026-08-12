@@ -225,7 +225,7 @@
 
 .acct-toggle[aria-pressed="true"] .acct-toggle-knob {
   transform: translateX(16px);
-  background: var(--surface-inverse, #06110f);
+  background: var(--on-accent);
 }
 
 .acct-segment {
