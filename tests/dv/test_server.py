@@ -21,6 +21,7 @@ from digivault.supabase_store import SupabaseStore
 from digivault.vault import Vault
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from digivault import server
 from tests.digi_test_jwt import auth_headers
@@ -546,12 +547,16 @@ def test_orchestrator_invoke_search_notes_prefers_d1_even_with_digivault_root(
     assert resp.data == {"hits": []}
 
 
-def test_orchestrator_invoke_search_notes_empty_path_prefix_stays_unscoped_for_d1(
+def test_orchestrator_invoke_search_notes_empty_path_prefix_still_requires_prefix_for_d1(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Task 1 review: D1Store.search raises ValueError for path_prefix="" (distinct from
-    None). server.py's existing `... or None` coalescing must survive unmodified, or an
-    empty caller-supplied path_prefix starts returning HTTP 500 through the D1 path too."""
+    """#2239 second review, Important finding (row 1 of the 5-row matrix): a healthy
+    `D1_DATABASE_MAP` plus an empty-ish caller-supplied `path_prefix` (`""`, coalesced
+    to `None` by server.py's `... or None` handling) must still be treated exactly like
+    an omitted `path_prefix` — `ok=False` with the actionable message, short-circuiting
+    before the store is even opened. This used to succeed unscoped whenever the fake
+    store happened not to raise, because the check only fired reactively inside an
+    `except D1StoreError` — the hoisted check now fires unconditionally."""
     monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
     _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
     called: dict = {}
@@ -570,8 +575,9 @@ def test_orchestrator_invoke_search_notes_empty_path_prefix_stays_unscoped_for_d
         ),
         _fake_request(),
     )
-    assert resp.ok is True
-    assert called["path_prefix"] is None
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required when the D1 backend is configured"
+    assert called == {}  # _open_d1_store must never be reached
 
 
 def test_orchestrator_invoke_search_notes_d1_misconfigured_returns_503(
@@ -592,17 +598,46 @@ def test_orchestrator_invoke_search_notes_d1_misconfigured_returns_503(
     assert exc.value.status_code == 503
 
 
-def test_orchestrator_invoke_search_notes_d1_unscoped_returns_400(
+def test_orchestrator_invoke_search_notes_d1_unscoped_returns_ok_false(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """#2239 review, Important finding: `always_retrieve_tools` fires
+    """#2239 review, Important finding (row 1): `always_retrieve_tools` fires
     `digivault_search_notes` with no `path_prefix` on every chat turn (#2265). With D1
     configured there is no "search every corpus" mode, so this must be an actionable
-    400 telling the caller `path_prefix` is required — not a 503 that reads like a
-    missing config entry an operator could "fix" with a `""` map key (refused
-    separately by `_open_d1_store`'s own guard)."""
+    `ok=False` telling the caller `path_prefix` is required — returned as
+    `OrchestratorInvokeResponse`, HTTP 200, not raised as an HTTPException: a raised
+    400 would reach digigraph's `invoke_digivault_tool` via `raise_for_status()`, whose
+    `str(httpx.HTTPStatusError)` drops the response body, so the model would only ever
+    see a bare status code, not this sentence (second #2239 review)."""
     monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
     _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(tool="digivault_search_notes", arguments={"query": "jwt"}),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required when the D1 backend is configured"
+
+
+@pytest.mark.parametrize(
+    "database_map",
+    ["{not json", '["clients/digithings"]', '{"": "db-unscoped", "clients/digithings": "db-1"}'],
+    ids=["invalid_json", "non_object", "empty_string_key"],
+)
+def test_orchestrator_invoke_search_notes_d1_config_error_returns_503_even_without_prefix(
+    monkeypatch: pytest.MonkeyPatch, database_map: str
+) -> None:
+    """#2239 second review, Important finding (rows 2-4 of the 5-row matrix): before
+    this fix, the handler checked `path_prefix is None` *inside* the `except
+    D1StoreError`, so any D1StoreError raised while `path_prefix` happened to be `None`
+    — invalid JSON, a non-object map, or the forbidden `""` key — was overwritten with
+    the generic "path_prefix is required" message. An operator who saw that 400 and
+    "fixed" it by adding a `""` key would retry and see the *identical* message, with
+    no signal their edit was rejected. Config errors must surface as their own 503
+    regardless of whether `path_prefix` was also omitted."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, database_map)
 
     with pytest.raises(HTTPException) as exc:
         server.orchestrator_invoke(
@@ -611,8 +646,28 @@ def test_orchestrator_invoke_search_notes_d1_unscoped_returns_400(
             ),
             _fake_request(),
         )
-    assert exc.value.status_code == 400
-    assert "path_prefix is required" in str(exc.value.detail)
+    assert exc.value.status_code == 503
+    assert "path_prefix is required" not in str(exc.value.detail)
+
+
+def test_orchestrator_invoke_search_notes_d1_invalid_json_with_real_prefix_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Row 5 of the 5-row matrix, unaffected by the fix: a real `path_prefix` already
+    took the 503 branch before this fix and must keep doing so."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, "{not json")
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "jwt", "path_prefix": "clients/digithings"},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+    assert "not valid JSON" in str(exc.value.detail)
 
 
 def test_orchestrator_invoke_search_notes_d1_runtime_failure_returns_503(
@@ -650,7 +705,11 @@ def test_get_note_by_path_returns_404_when_absent(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
     with pytest.raises(HTTPException) as exc:
-        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/nope"))
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings/nope", path_prefix="clients/digithings"
+            )
+        )
     assert exc.value.status_code == 404
 
 
@@ -711,23 +770,14 @@ def test_get_note_by_path_returns_note_scoped_to_prefix(monkeypatch: pytest.Monk
     assert called["vault_path"] == "clients/digithings/arch"
 
 
-def test_get_note_by_path_without_prefix_opens_store_with_none(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    called: dict = {}
-
-    class _FakeD1:
-        def get_note(self, vault_path: str) -> None:
-            return None
-
-    def _open(prefix: str | None) -> _FakeD1:
-        called["prefix"] = prefix
-        return _FakeD1()
-
-    monkeypatch.setattr(server, "_open_d1_store", _open)
-    with pytest.raises(HTTPException):
-        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/nope"))
-    assert called["prefix"] is None
+def test_note_by_path_requires_path_prefix() -> None:
+    """Minor #2239 second review finding: `path_prefix` is now a required field —
+    `D1_DATABASE_MAP` may never carry a `""` entry (see `_load_d1_database_map`'s
+    guard), so an omitted `path_prefix` could never resolve to a corpus and would
+    only ever 503 at request time. Rejected up front at the schema boundary (422)
+    instead of documenting a third "unscoped" state that no longer exists."""
+    with pytest.raises(ValidationError):
+        server.NoteByPathRequest(vault_path="clients/digithings/nope")
 
 
 def test_get_note_by_path_returns_503_when_d1_unconfigured(
@@ -737,7 +787,11 @@ def test_get_note_by_path_returns_503_when_d1_unconfigured(
     monkeypatch.delenv("D1_API_TOKEN", raising=False)
     monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
     with pytest.raises(HTTPException) as exc:
-        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/x"))
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings/x", path_prefix="clients/digithings"
+            )
+        )
     assert exc.value.status_code == 503
 
 
@@ -778,7 +832,11 @@ def test_get_note_by_path_wraps_runtime_d1_error_as_503(monkeypatch: pytest.Monk
 
     monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
     with pytest.raises(HTTPException) as exc:
-        server.get_note_by_path(server.NoteByPathRequest(vault_path="clients/digithings/x"))
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings/x", path_prefix="clients/digithings"
+            )
+        )
     assert exc.value.status_code == 503
     assert "Authentication error" in str(exc.value.detail)
 
@@ -811,7 +869,7 @@ def test_by_path_route_is_not_shadowed_by_the_name_route(
 
     posted = client.post(
         "/v1/notes/by-path",
-        json={"vault_path": "clients/digithings/arch"},
+        json={"vault_path": "clients/digithings/arch", "path_prefix": "clients/digithings"},
         headers=auth_headers(scopes=[SCOPE_READ]),
     )
     assert posted.status_code == 200

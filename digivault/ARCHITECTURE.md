@@ -89,8 +89,12 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   a #2239 review found the original check (`if prefix and ...`) failed open on
   exactly this input, and demonstrated that with a `""` key present in
   `D1_DATABASE_MAP` (now refused outright, see the env var table below) every
-  one of those inputs returned another corpus's note with `200`. Omitting
-  `path_prefix` entirely still means "unscoped." Returns `503` if D1 isn't
+  one of those inputs returned another corpus's note with `200`. `path_prefix`
+  is a **required** field (`422` if omitted) for the same underlying reason:
+  with the `""` key forbidden, an omitted `path_prefix` can never resolve to a
+  corpus, so "omitting it means unscoped" is not a real third state — it would
+  only ever `503` at request time. Rejected up front at the schema boundary
+  instead (#2239 review). Returns `503` if D1 isn't
   configured for the resolved prefix, or if D1 itself fails at query time
   (transport error, expired token) — that failure is caught around the
   `get_note` call itself, not just around opening the store, so it surfaces as
@@ -117,14 +121,19 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
      there is no "search across every corpus" mode — one prefix, one database,
      by construction, and `D1_DATABASE_MAP` may not carry a `""` entry to fake
      one (`_open_d1_store` refuses it at config-read time; see the env var
-     table below). A prefix with no matching entry is `503`. No `path_prefix`
-     at all (the common case: `always_retrieve_tools` calls this tool on every
-     chat turn with none, #2265) is `400` — "`path_prefix` is required when the
-     D1 backend is configured" — not the `503` a missing-map-entry read as
-     before this was made explicit; a `D1StoreError` raised from inside the
-     `.search()` call itself (transport failure, expired token) is also `503`,
-     not an unhandled `500` — both distinctions live in `orchestrator_invoke`'s
-     own `except D1StoreError`, not inside `D1Store`.
+     table below — `orchestrator_invoke` validates the map's shape via
+     `_load_d1_database_map` unconditionally, before even looking at
+     `path_prefix`, so a malformed map is always `503`, never masked by the
+     no-`path_prefix` case below). A prefix with no matching entry is `503`.
+     No `path_prefix` at all (the common case: `always_retrieve_tools` calls
+     this tool on every chat turn with none, #2265) returns
+     `OrchestratorInvokeResponse(ok=False, error="path_prefix is required when
+     the D1 backend is configured")` — HTTP `200`, not a raised `400`: digigraph's
+     `invoke_digivault_tool` calls `raise_for_status()`, whose `str()` drops the
+     response body, so a raised `400` would reach the model as a bare status
+     code instead of this sentence — mirrors the `query is required` case just
+     above it. A `D1StoreError` raised from inside the `.search()` call itself
+     (transport failure, expired token) is `503`, not an unhandled `500`.
   2. Else if `DIGIVAULT_ROOT` is set → filesystem keyword search via
      `local_search.search_local_vault` over that vault (Profile A / client
      volumes; no Supabase required). Optional `path_prefix` isolates client
@@ -148,7 +157,7 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   chooses. Tenant isolation for search depends entirely on whoever calls this
   tool (digigraph) always attaching the right prefix — #2265 tracks that
   digigraph's `always_retrieve_tools` currently attaches none. digivault's own
-  half of that is only to fail honestly (`400`, above) rather than silently
+  half of that is only to fail honestly (`ok=False`, above) rather than silently
   search unscoped; it cannot itself authenticate a `path_prefix` it did not
   choose. The Supabase path is the same
   RPC the digithings.ai chat widget calls directly today
@@ -211,9 +220,12 @@ a runtime `D1StoreError` from `.get_note()` itself, e.g. a transport failure),
 `"/"`, `"///"`, `"   "`, `".md"`, each asserting the fake store is never even
 opened), and 200 paths, plus a `TestClient` request proving the route isn't
 shadowed by `GET /v1/notes/{name}`. `digivault_search_notes`'s D1 branch has
-its own 400 (no `path_prefix` while D1 is configured) and 503 (misconfigured
-prefix, or a runtime `D1StoreError` from `.search()` itself) tests, and
-`_open_d1_store` has a dedicated test for the `D1_DATABASE_MAP` `""`-key guard.
+its own `ok=False` (no `path_prefix` while D1 is configured, with a well-formed
+map) and 503 (malformed `D1_DATABASE_MAP` regardless of `path_prefix`,
+misconfigured prefix, or a runtime `D1StoreError` from `.search()` itself) tests,
+and `_load_d1_database_map`/`_open_d1_store` have dedicated tests for the
+`D1_DATABASE_MAP` `""`-key guard. `POST /v1/notes/by-path`'s `path_prefix` being a
+required field is covered by a `pydantic.ValidationError` test (422 boundary).
 
 ## Monorepo integration
 
