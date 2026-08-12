@@ -481,8 +481,12 @@ def _handle_digisearch_fetch_all(
     if not q or not str(q).strip():
         return "No search query provided."
     args_eff = dict(args)
-    if "index_name" not in args_eff and context.index_name:
-        args_eff["index_name"] = context.index_name
+    # Security (#2265): same unconditional overwrite as _handle_digisearch. Not
+    # reachable from the production allowlist today (digisearch_fetch_all is not in
+    # infra/digichat-release/config/digiproject.yaml's allowed_tools), but leaving one
+    # half of the tenant boundary on the old default-if-missing pattern is how it comes
+    # back the moment this tool is allowlisted.
+    args_eff["index_name"] = context.index_name
     merged = _merged_digisearch_filters(context, args_eff)
     if merged:
         args_eff["filters"] = merged
@@ -797,8 +801,10 @@ def _handle_digisearch_research_delegate(
         return {"content": "user_message is required."}
     args_eff = dict(args)
     args_eff["user_message"] = msg
-    if "index_name" not in args_eff and context.index_name:
-        args_eff["index_name"] = context.index_name
+    # Security (#2265): same unconditional overwrite as _handle_digisearch. Gated behind
+    # federated_hub_enabled() and not in any production allowlist today, but the tenant
+    # boundary should not have a third shape.
+    args_eff["index_name"] = context.index_name
     merged = _merged_digisearch_filters(context, args_eff)
     if merged:
         args_eff["filters"] = merged
