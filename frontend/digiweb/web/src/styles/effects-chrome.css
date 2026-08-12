@@ -599,6 +599,30 @@
     color: var(--ink-mute);
   }
 
+  /* the optional one-click recovery control (ToastItem.action) — a plain
+     text button, not tone-colored (unlike the border/icon, which do ride
+     --up/--down per this file's own money-read convention above): the
+     action is "the thing you can click", independent of the toast's
+     success/error semantics. */
+  .toast-action {
+    display: inline-block;
+    margin: 0.35rem 0 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+    transition: color 0.2s var(--ease);
+  }
+
+  .toast-action:hover {
+    color: var(--ink);
+  }
+
   .toast-close {
     display: inline-flex;
     padding: 0.15rem;
