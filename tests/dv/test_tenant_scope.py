@@ -12,7 +12,11 @@ import pytest
 
 pytest.importorskip("fastapi")
 
-from digivault.tenant_scope import _load_tenant_prefix_map, enforce_tenant_path_prefix
+from digivault.tenant_scope import (
+    TenantCorpusMapError,
+    _load_tenant_prefix_map,
+    enforce_tenant_path_prefix,
+)
 from fastapi import HTTPException
 
 _MAP = (
@@ -58,10 +62,22 @@ def test_load_tenant_prefix_map_normalizes_slashes() -> None:
         '{"digithings": {}}',
     ],
 )
-def test_load_tenant_prefix_map_tolerates_malformed_input(raw: str) -> None:
-    """Malformed config must never raise — a typo for one tenant must not take down
-    every other tenant's requests, and this must never crash a request or startup."""
-    _load_tenant_prefix_map(raw)  # must not raise
+def test_load_tenant_prefix_map_raises_when_set_but_unusable(raw: str) -> None:
+    """CodeRabbit review of PR #2298 (this module's own PR): a *non-empty* env var
+    that produces zero usable entries must not quietly collapse to the same `{}` a
+    genuinely-unset one returns — that would let an operator believe multi-tenant
+    enforcement is on when a config typo silently turned it off. Each of these is
+    "set but broken", not "unset", so each must raise."""
+    with pytest.raises(TenantCorpusMapError):
+        _load_tenant_prefix_map(raw)
+
+
+def test_load_tenant_prefix_map_keeps_usable_entries_despite_one_bad_sibling() -> None:
+    """The opposite of the above: a config typo for ONE tenant must not take down
+    every other tenant's requests — only entries that individually fail to parse are
+    dropped (with a warning), and the function only raises when NOTHING survives."""
+    raw = '{"digithings": {"vaultPathPrefix": "clients/digithings"}, "broken": {}}'
+    assert _load_tenant_prefix_map(raw) == {"digithings": "clients/digithings"}
 
 
 def test_load_tenant_prefix_map_lowercases_the_slug_key() -> None:
@@ -116,3 +132,12 @@ def test_enforce_refuses_when_tenant_slug_is_none_but_map_is_configured() -> Non
     with pytest.raises(HTTPException) as exc:
         enforce_tenant_path_prefix(None, "clients/digithings", raw_map=_MAP)
     assert exc.value.status_code == 403
+
+
+def test_enforce_returns_503_when_map_is_set_but_unusable() -> None:
+    """A broken (not merely unset) DIGI_TENANT_CORPUS_MAP must surface as a loud 503
+    at the enforcement boundary, same as this service's own D1_DATABASE_MAP config
+    errors — never silently pass every request through as if unscoped."""
+    with pytest.raises(HTTPException) as exc:
+        enforce_tenant_path_prefix("digithings", "clients/digithings", raw_map="{not json")
+    assert exc.value.status_code == 503
