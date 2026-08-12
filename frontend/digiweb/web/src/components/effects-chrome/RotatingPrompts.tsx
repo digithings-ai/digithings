@@ -72,9 +72,16 @@ export function RotatingPrompts({ prompts, intervalMs = 3200, className }: Rotat
           type="button"
           className="prompt-pause ml-auto"
           // Consumers "typically wrap the shell in a link into the live
-          // product" (see the header comment) — stopPropagation so a click
-          // meant to pause never also fires an ancestor link's navigation.
+          // product" (see the header comment). stopPropagation alone does
+          // NOT stop an ancestor <a>'s native navigation — only
+          // preventDefault does (the anchor's default action is checked
+          // once against the event's defaultPrevented flag after the full
+          // bubble phase, regardless of where propagation was stopped) — so
+          // both are needed: preventDefault so a click meant to pause never
+          // also navigates away, stopPropagation so it never also fires some
+          // other ancestor's own click handler.
           onClick={(e) => {
+            e.preventDefault();
             e.stopPropagation();
             setPaused((p) => !p);
           }}
