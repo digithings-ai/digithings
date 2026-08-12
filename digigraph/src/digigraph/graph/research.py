@@ -339,6 +339,15 @@ def _run_document_rag_path(
                 collected_stored[p["ref"]] = p
         if isinstance(result, dict) and result.get("rag_sources"):
             merge_rag_sources_accumulator(collected_rag, result["rag_sources"])
+        # Make every tool call visible in the activity UI, including zero-hit
+        # searches: without hit_count, "searched and found nothing" and "never
+        # searched" look identical downstream. setdefault so a tool that already
+        # sets these (e.g. a future handler) is not clobbered.
+        if isinstance(result, dict):
+            result.setdefault("hit_count", len(result.get("rag_sources") or []))
+            query_arg = args.get("query") or args.get("vault_path")
+            if query_arg:
+                result.setdefault("query", str(query_arg))
         return result
 
     raw_callback = None
