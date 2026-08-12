@@ -26,6 +26,12 @@ export type FeatureCellProps = {
   href?: string;
   /** Link copy. */
   linkLabel?: string;
+  /** Overrides the link's accessible name — set this when two cells on the
+   *  same page would otherwise share identical link text (and, as in the
+   *  reference demo, an identical href): screen readers announce links by
+   *  their accessible name, so two indistinguishable "Learn more" links
+   *  read as one ambiguous link repeated. */
+  linkAriaLabel?: string;
   /** Optional module livery scope — suffix of an `accent-<module>` class. */
   livery?: string;
   className?: string;
@@ -39,6 +45,7 @@ export function FeatureCell({
   mechanism,
   href,
   linkLabel = "Learn more",
+  linkAriaLabel,
   livery,
   className,
   children,
@@ -61,6 +68,7 @@ export function FeatureCell({
           <a
             className="fc-link mt-[0.9rem] inline-block font-mono text-[0.72rem] text-accent no-underline"
             href={href}
+            aria-label={linkAriaLabel}
           >
             {linkLabel} <span aria-hidden="true">→</span>
           </a>

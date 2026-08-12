@@ -34,6 +34,27 @@ const CELLS: Cell[] = [
   },
 ];
 
+// Distinct MockTearsheet stats per cell (see product-frame-reference.tsx) —
+// same demo-data values already used elsewhere on the reference site
+// (sortable-table-reference.tsx's carry strategy), so this isn't a fresh
+// invented number, just reused for cross-page consistency.
+const MOCKS: Record<string, { title: string; cagr: string; maxDd: string; profitFactor: string; points: string }> = {
+  research: {
+    title: "trend_xsec · ETH-USD",
+    cagr: "+44.9%",
+    maxDd: "-54.1%",
+    profitFactor: "2.31",
+    points: "0,150 60,140 120,146 180,110 240,120 300,84 360,92 420,54 480,64 560,24",
+  },
+  execution: {
+    title: "carry · BTC-USD",
+    cagr: "+31.2%",
+    maxDd: "-12.1%",
+    profitFactor: "3.02",
+    points: "0,120 60,115 120,118 180,100 240,105 300,90 360,95 420,78 480,82 560,60",
+  },
+};
+
 export function FeatureCellReference() {
   return (
     <section className="section-block feature-cells" id="feature-cell">
@@ -46,20 +67,36 @@ export function FeatureCellReference() {
       </p>
 
       <div className="mt-[1.2rem] grid gap-[1.2rem]">
-        {CELLS.map((cell) => (
-          <FeatureCell
-            key={cell.tag}
-            eyebrow={cell.eyebrow}
-            outcome={cell.outcome}
-            mechanism={cell.mechanism}
-            href="#feature-cell"
-            livery={cell.accent}
-          >
-            <ProductFrame tag={cell.tag}>
-              <MockTearsheet />
-            </ProductFrame>
-          </FeatureCell>
-        ))}
+        {CELLS.map((cell) => {
+          const mock = MOCKS[cell.eyebrow];
+          return (
+            <FeatureCell
+              key={cell.tag}
+              eyebrow={cell.eyebrow}
+              outcome={cell.outcome}
+              mechanism={cell.mechanism}
+              href="#feature-cell"
+              // Both cells otherwise share identical link text AND an
+              // identical, self-referencing href — two adjacent "Learn
+              // more" links a screen reader announces with no way to tell
+              // them apart. A real instance should give each its own
+              // destination; this demo has none, so an aria-label at least
+              // disambiguates the accessible name.
+              linkAriaLabel={`Learn more about ${cell.eyebrow}`}
+              livery={cell.accent}
+            >
+              <ProductFrame tag={cell.tag}>
+                <MockTearsheet
+                  title={mock.title}
+                  cagr={mock.cagr}
+                  maxDd={mock.maxDd}
+                  profitFactor={mock.profitFactor}
+                  points={mock.points}
+                />
+              </ProductFrame>
+            </FeatureCell>
+          );
+        })}
       </div>
     </section>
   );
