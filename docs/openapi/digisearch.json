@@ -160,6 +160,12 @@
             "title": "Index Name",
             "type": "string"
           },
+          "possibly_truncated": {
+            "default": false,
+            "description": "True when a page came back capped at the Vectorize backend's per-query match limit before this tool's own total/max_results check ended pagination -- `total` above may undercount the actual number of matches. Chroma/Azure pages never set this; only Vectorize's fixed per-query cap can trigger it.",
+            "title": "Possibly Truncated",
+            "type": "boolean"
+          },
           "query": {
             "title": "Query",
             "type": "string"
@@ -540,7 +546,7 @@
                 "type": "null"
               }
             ],
-            "description": "Index backend that served the query: azure_ai_search | chroma | stub",
+            "description": "Index backend that served the query: vectorize | azure_ai_search | chroma | stub",
             "title": "Backend"
           },
           "facets": {

@@ -31,6 +31,7 @@ import {
 import { createPortal } from "react-dom";
 import { ThemeToggle } from "./ThemeProvider";
 import { isNavGroup, type NavGroup, type NavItem, type NavLink } from "./chrome";
+import { useBodyScrollLock } from "../lib/useBodyScrollLock";
 
 // Mount gate: server + first (hydration) client render read `false`; the client
 // re-reads `true` post-hydration. Keeps the portal out of the SSR/hydration tree
@@ -475,12 +476,12 @@ export function NavShell({
     return () => window.removeEventListener("mousemove", onMove);
   }, [autoHide]);
 
-  useEffect(() => {
-    document.body.style.overflow = menuOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [menuOpen]);
+  // Reference-counted (see useBodyScrollLock) so this coordinates safely
+  // with any other overlay locked at the same time (e.g. CommandPalette),
+  // regardless of open/close order — a plain per-component overflow toggle
+  // here previously clobbered any other overlay's lock the moment either
+  // one closed (confirmed in the in-session review on PR #2269).
+  useBodyScrollLock(menuOpen);
 
   useEffect(() => {
     if (!menuOpen) return;

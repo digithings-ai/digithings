@@ -10,6 +10,34 @@
   margin-top: 1.6rem;
 }
 
+/* ── jump nav — wayfinding for this page's ten-plus demo sections ────── */
+
+.fx-jumpnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1.6rem;
+  padding-bottom: 1.6rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.fx-jumpnav a {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.02em;
+  color: var(--ink-soft);
+  text-decoration: none;
+  border: 1px solid var(--hair);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+.fx-jumpnav a:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
 .fx-term-demo {
   max-width: 720px;
 }
@@ -79,12 +107,18 @@ html.no-js .dg-rail {
   box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .dqpipe-track-fill {
-  position: absolute; top: 0; left: 0; width: 100%; height: 0%;
+  /* Fixed-height box, drawn by scaling from the top — height itself never
+     changes, so scroll-driven progress updates (syncFill in
+     research-pipeline.tsx) only ever composite a transform, never trigger
+     layout/reflow the way animating height would on every scroll event. */
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  transform: scaleY(0);
+  transform-origin: top;
   border-radius: 999px;
   background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 45%, transparent));
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
-  transition: height 0.15s linear;
-  will-change: height;
+  transition: transform 0.15s linear;
+  will-change: transform;
 }
 .dqpipe-step {
   position: relative; display: flex; justify-content: flex-start; width: 50%;
@@ -98,12 +132,15 @@ html.no-js .dg-rail {
   transform: translateX(52px) translateY(8px);
 }
 .dqpipe-step.is-visible { opacity: 1; transform: none; }
-.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-left: 2px solid var(--accent); border-radius: var(--r-md); padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 24px 48px -36px color-mix(in srgb, var(--accent) 35%, transparent); }
+/* Plain hairline border, not a colored side-tab stripe — the accent identity
+   already reads from the connecting rail dot (.dqpipe-rail) and the ambient
+   box-shadow tint below; a thick colored edge on one side of the card added
+   nothing the rail doesn't already say and is a recognizable AI-generated-UI
+   tell (impeccable detector: side-tab). */
+.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 24px 48px -36px color-mix(in srgb, var(--accent) 35%, transparent); }
 .dqpipe-card h3 { font-size: 1.15rem; font-weight: 600; letter-spacing: -0.02em; }
 .dqpipe-card p { font-size: 0.9rem; color: var(--ink-soft); line-height: 1.55; }
-.dqpipe-step.is-right .dqpipe-card { border-left: 1px solid var(--hair); border-right: 2px solid var(--accent); }
-.dqpipe-step.is-exec .dqpipe-card { border-left-color: var(--up); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
-.dqpipe-step.is-exec.is-right .dqpipe-card { border-right-color: var(--up); }
+.dqpipe-step.is-exec .dqpipe-card { background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
 .dqpipe-step.is-exec .dq-flow-n { color: var(--up); }
 .dqpipe-rail {
   position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
@@ -125,14 +162,13 @@ html.no-js .dg-rail {
   }
   .dqpipe-step.is-right { transform: translateX(-36px) translateY(8px); }
   .dqpipe-step.is-visible { transform: none; }
-  .dqpipe-step.is-right .dqpipe-card { border-left: 2px solid var(--accent); border-right: 1px solid var(--hair); }
   .dqpipe-rail { left: 4px !important; right: auto !important; }
 }
 
 /* No JS: the slide-in classes are only ever added by the observer, so show
    the assembled state (digiquant-web relies on the same html.no-js pattern). */
 html.no-js .dqpipe-step { opacity: 1; transform: none; }
-html.no-js .dqpipe-track-fill { height: 100%; }
+html.no-js .dqpipe-track-fill { transform: scaleY(1); }
 
 /* ── ambient mesh (contained demo panel) ────────────────────────────────
    Base .dq-ambient rule copied verbatim from

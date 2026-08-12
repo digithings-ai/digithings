@@ -19,10 +19,14 @@ from typing import (  # score:allow untyped any — Supabase client/response sha
     Protocol,
 )
 
-from pydantic import BaseModel, Field
-
 from digivault import frontmatter as _fm
 from digivault.models import NoteRow, VaultConfig
+
+# `VaultSearchHit` now lives in `models.py` (shared with the D1 store) and is
+# re-exported here so existing `from digivault.supabase_store import VaultSearchHit`
+# imports (e.g. `local_search.py`) keep working. The redundant `as VaultSearchHit`
+# marks the re-export deliberate so ruff's F401 doesn't flag it as unused.
+from digivault.models import VaultSearchHit as VaultSearchHit
 from digivault.vault import Vault
 
 DEFAULT_TABLE = "architecture_notes"
@@ -31,19 +35,6 @@ DEFAULT_SEARCH_RPC = "search_architecture_notes"
 # Columns needed to reconstruct a note. body+frontmatter round-trip via
 # dump_frontmatter; the Vault re-parses them so tags/wikilinks/backlinks match disk.
 _SELECT = "vault_path,title,frontmatter,body_markdown"
-
-
-class VaultSearchHit(BaseModel):
-    """A ranked full-text hit from the ``search_architecture_notes`` RPC (migration 068)."""
-
-    vault_path: str
-    title: str
-    note_type: str
-    summary: str
-    body_markdown: str
-    tags: tuple[str, ...] = Field(default=())
-    wikilinks: tuple[str, ...] = Field(default=())
-    rank: float
 
 
 class SupabaseClientProtocol(Protocol):
@@ -156,6 +147,51 @@ class SupabaseStore:
                 if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
                     continue
                 out.append(note)
+            if len(rows) < page_size:
+                return out
+            start += page_size
+
+    def list_raw(
+        self,
+        *,
+        select: str,
+        path_prefix: str | None = None,
+        page_size: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Every row under ``path_prefix``, paginated, as raw dicts -- for callers
+        needing table columns beyond ``NoteRow``'s four (``vault_path``, ``title``,
+        ``frontmatter``, ``body_markdown``).
+
+        ``list_notes`` validates every row through ``NoteRow``, which ignores any
+        column outside those four (see its docstring's "extras are ignored" note) --
+        a caller needing e.g. ``architecture_notes``'s top-level ``summary``/
+        ``wikilinks``/``note_type`` columns (the D1 backfill, ``scripts/d1_sync.py``
+        -- #2239 review, Important I2: those three are top-level columns there, not
+        frontmatter keys, and reading through ``list_notes``/``NoteRow`` silently
+        dropped all three for every backfilled note) cannot get them back out of a
+        ``NoteRow``. This mirrors ``list_notes``'s pagination loop but skips the
+        ``NoteRow`` step, so a caller passing its own ``select`` gets back exactly
+        the columns it asked for. Does not read or change ``_SELECT``/``NoteRow``/
+        ``list_notes`` at all -- existing callers of those are unaffected.
+        """
+        if page_size <= 0:
+            raise ValueError(f"page_size must be positive, got {page_size}")
+        prefix = (path_prefix or "").strip().strip("/")
+        out: list[dict[str, Any]] = []
+        start = 0
+        while True:
+            query = self._client.table(self._table).select(select)
+            if prefix:
+                query = query.like("vault_path", f"{prefix}%")
+            page = query.order("vault_path").range(start, start + page_size - 1).execute()
+            rows = list(getattr(page, "data", None) or [])
+            for row in rows:
+                vault_path = str(row.get("vault_path") or "").strip()
+                if not vault_path:
+                    continue
+                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                    continue
+                out.append(row)
             if len(rows) < page_size:
                 return out
             start += page_size

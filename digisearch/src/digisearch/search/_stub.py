@@ -30,6 +30,25 @@ _backends: list[_BackendFn] = []
 _BACKEND_ERRORS = (ImportError, OSError, RuntimeError, TypeError, ValueError)
 
 
+def _first_env(*names: str) -> str:
+    """Return the first non-empty, stripped env var among ``names``.
+
+    Canonical-first, legacy-fallback precedence (#2239 credential rename): Vectorize
+    and D1 now share one Cloudflare account + token, so every credential read here
+    tries ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` (wrangler's own
+    conventional names) first, then the legacy ``VECTORIZE_*``/``D1_*`` names — kept
+    working so the deployed Worker's live secrets need no coordinated rotation before
+    this ships (zero-downtime rename). Same shape as
+    ``digivault.supabase_store._first_env``; duplicated locally rather than imported
+    across the digisearch/digivault package boundary.
+    """
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
 def register_backend(fn: _BackendFn) -> _BackendFn:
     """Register a search backend. Backends are tried in registration order."""
     _backends.append(fn)
@@ -59,7 +78,8 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
 
 @register_backend
 def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
-    """Cloudflare Vectorize backend. Active when VECTORIZE_ACCOUNT_ID + VECTORIZE_API_TOKEN are set.
+    """Cloudflare Vectorize backend. Active when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
+    are set (falls back to the legacy VECTORIZE_*, then D1_*, names -- see `_first_env`).
 
     Vectorize is the authoritative remote index once configured: any failure here
     (HTTP error, application-level failure, missing dependency) is wrapped as
@@ -77,8 +97,8 @@ def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
     name, so referencing `VectorizeBackendError` in the `except` clause would raise
     `UnboundLocalError` instead if it were imported from the same failing module.
     """
-    account_id = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
-    api_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if not account_id or not api_token:
         return None
 
@@ -226,8 +246,8 @@ def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
     if not chunks:
         return None
 
-    vectorize_account = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
-    vectorize_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    vectorize_account = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    vectorize_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
     if vectorize_account and vectorize_token:
         from digisearch.indexes.backends.vectorize import VectorizeBackend
 

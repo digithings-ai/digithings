@@ -12,14 +12,19 @@ pytest.importorskip("fastapi")
 pytest.importorskip("digikey")
 pytest.importorskip("digibase")
 
+from digivault.d1_errors import D1StoreError
+from digivault.d1_store import D1Store
+from digivault.models import NoteDetail
 from digivault.orchestrator_tools import ORCHESTRATOR_TOOL_NAMES
-from digivault.path_scopes import SCOPE_WRITE
+from digivault.path_scopes import SCOPE_READ, SCOPE_WRITE
 from digivault.supabase_store import SupabaseStore
 from digivault.vault import Vault
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from digivault import server
+from tests.digi_test_jwt import auth_headers
 
 pytestmark = pytest.mark.unit
 
@@ -140,6 +145,32 @@ def test_orchestrator_tools_manifest() -> None:
     resp = server.orchestrator_tools()
     names = {t["function"]["name"] for t in resp.tools}
     assert names == ORCHESTRATOR_TOOL_NAMES
+
+
+@pytest.mark.parametrize("tool_name", sorted(ORCHESTRATOR_TOOL_NAMES))
+def test_every_advertised_orchestrator_tool_actually_dispatches(
+    tool_name: str, vault_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#2239 review, Minor M6: `test_orchestrator_tools_manifest` above only asserts
+    that the *names* advertised by `POST /v1/orchestrator_tools` equal
+    `ORCHESTRATOR_TOOL_NAMES` — it says nothing about whether `orchestrator_invoke`
+    actually has a dispatch branch for each one. Commit cf61b673d shipped
+    `digivault_get_note` in the manifest with no dispatch branch at all, and that test
+    still passed happily; every real call to that tool 400'd with "Unknown
+    orchestrator tool". Call every advertised tool with no arguments and assert none
+    of them falls through to that specific `else` branch — any other outcome (ok=True,
+    ok=False from a missing-argument check, even a raised HTTPException for some other
+    reason) proves the tool was recognized; only that one message proves it was not."""
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    try:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(tool=tool_name, arguments={}),
+            _fake_request(scopes=[SCOPE_READ, SCOPE_WRITE]),
+        )
+    except HTTPException as exc:
+        assert "Unknown orchestrator tool" not in str(exc.detail)
 
 
 def test_orchestrator_invoke_search_tag(vault_dir: Path) -> None:
@@ -443,3 +474,890 @@ def test_orchestrator_invoke_search_notes_without_credentials(
             _fake_request(),
         )
     assert excinfo.value.status_code == 503
+
+
+# ── D1 backend precedence (#2239) ────────────────────────────────────────────
+def _set_d1_env(monkeypatch: pytest.MonkeyPatch, database_map: str) -> None:
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", database_map)
+
+
+# ── D1 partial-configuration guard (#2239 second review, Important finding) ─────
+def test_d1_configured_false_when_all_three_vars_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero D1 vars set is a legitimate profile (local dev, self-hosted, Profile A)
+    and must keep returning False, not raise."""
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    assert server._d1_configured() is False
+
+
+def test_d1_configured_true_when_all_three_vars_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    assert server._d1_configured() is True
+
+
+# ── canonical CLOUDFLARE_*/legacy VECTORIZE_*/D1_* credential fallback (#2239
+# credential rename) ─────────────────────────────────────────────────────────
+def test_d1_configured_true_with_canonical_cloudflare_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The canonical (wrangler-conventional) names alone must configure D1 -- no
+    legacy VECTORIZE_*/D1_* name needs to be set at all."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", '{"clients/digithings": "db-1"}')
+    assert server._d1_configured() is True
+
+
+def test_d1_configured_true_with_legacy_vectorize_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero-downtime property: the deployed Worker's live VECTORIZE_ACCOUNT_ID/
+    VECTORIZE_API_TOKEN secrets (same account + token as D1, per #2239) must keep
+    activating D1 with no CLOUDFLARE_*/D1_* name set at all."""
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", '{"clients/digithings": "db-1"}')
+    assert server._d1_configured() is True
+
+
+def test_open_d1_store_canonical_wins_over_legacy_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When multiple names in the fallback chain are set to *different* values, the
+    canonical CLOUDFLARE_* pair must win over both legacy VECTORIZE_* and D1_*."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "canonical-acct")
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "legacy-vectorize-acct")
+    monkeypatch.setenv("D1_ACCOUNT_ID", "legacy-d1-acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "canonical-tok")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "legacy-vectorize-tok")
+    monkeypatch.setenv("D1_API_TOKEN", "legacy-d1-tok")
+    monkeypatch.setenv("D1_DATABASE_MAP", '{"clients/digithings": "db-1"}')
+
+    captured: dict[str, str] = {}
+
+    class _CapturingD1Store(D1Store):
+        def __init__(self, database_id: str, *, account_id: str, api_token: str) -> None:
+            captured["account_id"] = account_id
+            captured["api_token"] = api_token
+            super().__init__(database_id, account_id=account_id, api_token=api_token)
+
+    monkeypatch.setattr(server, "D1Store", _CapturingD1Store)
+
+    server._open_d1_store("clients/digithings")
+
+    assert captured == {"account_id": "canonical-acct", "api_token": "canonical-tok"}
+
+
+@pytest.mark.parametrize(
+    ("missing_legacy_var", "expected_canonical_name"),
+    [
+        ("D1_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID"),
+        ("D1_API_TOKEN", "CLOUDFLARE_API_TOKEN"),
+        ("D1_DATABASE_MAP", "D1_DATABASE_MAP"),
+    ],
+)
+def test_d1_configured_raises_when_exactly_one_var_missing(
+    monkeypatch: pytest.MonkeyPatch, missing_legacy_var: str, expected_canonical_name: str
+) -> None:
+    """#2239 second review, Important finding: with any two of three D1 vars set,
+    `_d1_configured` used to return False -- indistinguishable from the legitimate
+    zero-vars case -- and `orchestrator_invoke` fell through to the `elif
+    DIGIVAULT_ROOT` branch, which production always sets to the baked /data/vault
+    seed. That silently served seed stubs instead of the real corpus: HTTP 200,
+    `ok: true`, nothing logged, reachable from a single typo'd secret name during
+    cutover (`wrangler secret put D1_API_TOKN` -> `D1_API_TOKEN` undefined). Partial
+    config has no legitimate reading, so this must raise, naming what's missing.
+
+    Post-#2239-rename: the error names the *canonical* var (`CLOUDFLARE_ACCOUNT_ID`/
+    `CLOUDFLARE_API_TOKEN`), not whichever legacy alias (`D1_ACCOUNT_ID`/
+    `D1_API_TOKEN`) was actually deleted here -- the credential is resolved to one
+    value by `_d1_credentials` before this guard ever runs, so "missing" always
+    means "nothing in the fallback chain resolved," and the message must point the
+    operator at the name to set going forward."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv(missing_legacy_var, raising=False)
+    with pytest.raises(D1StoreError) as exc:
+        server._d1_configured()
+    assert expected_canonical_name in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    ("missing_legacy_var", "expected_canonical_name"),
+    [
+        ("D1_ACCOUNT_ID", "CLOUDFLARE_ACCOUNT_ID"),
+        ("D1_API_TOKEN", "CLOUDFLARE_API_TOKEN"),
+        ("D1_DATABASE_MAP", "D1_DATABASE_MAP"),
+    ],
+)
+def test_orchestrator_invoke_search_notes_partial_d1_config_503s_not_seed_hits(
+    monkeypatch: pytest.MonkeyPatch,
+    vault_dir: Path,
+    missing_legacy_var: str,
+    expected_canonical_name: str,
+) -> None:
+    """Reproduces the reviewer's exact repro against a real seed vault
+    (`vault_dir` sets DIGIVAULT_ROOT, same as production's baked stub): with D1
+    missing exactly one of its three vars, this must 503 -- naming the missing
+    (canonical) var -- rather than silently falling through to DIGIVAULT_ROOT and
+    returning HTTP 200 with hits from the seed vault (#2239's precise symptom)."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv(missing_legacy_var, raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes", arguments={"query": "links"}
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+    assert expected_canonical_name in str(exc.value.detail)
+
+
+def test_orchestrator_invoke_search_notes_partial_d1_config_503s_via_http(
+    monkeypatch: pytest.MonkeyPatch, vault_dir: Path
+) -> None:
+    """HTTP-level version of the same repro, through the actual TestClient/route --
+    matching how the reviewer reproduced it -- rather than calling the handler
+    function directly."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+
+    client = TestClient(server.app)
+    resp = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digivault_search_notes", "arguments": {"query": "links"}},
+        headers=auth_headers(scopes=[SCOPE_READ]),
+    )
+    assert resp.status_code == 503
+    assert "CLOUDFLARE_API_TOKEN" in resp.json()["error"]["message"]
+
+
+def test_status_reports_d1_configured_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    resp = TestClient(server.app).get("/v1/status")
+    assert resp.status_code == 200
+    assert resp.json()["d1_configured"] is True
+
+
+def test_status_reports_d1_configured_false_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    resp = TestClient(server.app).get("/v1/status")
+    assert resp.status_code == 200
+    assert resp.json()["d1_configured"] is False
+
+
+@pytest.mark.parametrize("missing_var", ["D1_ACCOUNT_ID", "D1_API_TOKEN", "D1_DATABASE_MAP"])
+def test_status_reports_d1_configured_false_on_partial_config_not_503(
+    monkeypatch: pytest.MonkeyPatch, missing_var: str
+) -> None:
+    """The diagnostic route itself must never 503 on a partial D1 config -- that
+    would defeat the point of letting an operator see backend state without
+    asking the chat a question."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv(missing_var, raising=False)
+    resp = TestClient(server.app).get("/v1/status")
+    assert resp.status_code == 200
+    assert resp.json()["d1_configured"] is False
+
+
+def test_open_d1_store_raises_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store("clients/digithings")
+    assert "CLOUDFLARE_ACCOUNT_ID" in str(exc.value)
+
+
+def test_open_d1_store_raises_when_prefix_has_no_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store("clients/other")
+    assert "clients/other" in str(exc.value)
+
+
+def test_open_d1_store_builds_store_scoped_to_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    store = server._open_d1_store("clients/digithings")
+    assert isinstance(store, D1Store)
+    assert store.database_id == "db-1"
+
+
+def test_open_d1_store_rejects_empty_string_map_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#2239 review, Critical finding: a "" entry in D1_DATABASE_MAP would map every
+    prefix that normalizes to empty (None, "", "/", "///", "   ", ".md") to a real
+    database, arming the by-path route's cross-tenant fail-open. Refused at
+    config-read time regardless of which prefix was requested."""
+    _set_d1_env(monkeypatch, '{"": "db-unscoped", "clients/digithings": "db-1"}')
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store(None)
+    assert "D1_DATABASE_MAP" in str(exc.value)
+    # The guard fires for every call, not just the one requesting the "" prefix.
+    with pytest.raises(D1StoreError):
+        server._open_d1_store("clients/digithings")
+
+
+def test_open_d1_store_rejects_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, "{not json")
+    with pytest.raises(D1StoreError) as exc:
+        server._open_d1_store("clients/digithings")
+    assert "not valid JSON" in str(exc.value)
+
+
+def test_open_d1_store_rejects_non_object_database_map(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D1_DATABASE_MAP must be a JSON object; a list must not crash with AttributeError."""
+    _set_d1_env(monkeypatch, '["clients/digithings"]')
+    with pytest.raises(D1StoreError):
+        server._open_d1_store("clients/digithings")
+
+
+def test_open_d1_store_or_503_converts_config_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        server._open_d1_store_or_503("clients/digithings")
+    assert exc.value.status_code == 503
+
+
+def test_orchestrator_invoke_search_notes_prefers_d1_even_with_digivault_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D1 must win even when DIGIVAULT_ROOT is set — the #2239 production bug: prod's
+    baked /data/vault seed stubs must never shadow the real D1-backed corpus."""
+    monkeypatch.setenv("DIGIVAULT_ROOT", "/data/vault")  # must NOT win
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    called: dict = {}
+
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            called["args"] = (query, limit, path_prefix)
+            return []
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "jwt", "limit": 3, "path_prefix": "clients/digithings"},
+        ),
+        _fake_request(),
+    )
+    assert called["args"] == ("jwt", 3, "clients/digithings")
+    assert resp.ok is True
+    assert resp.data == {"hits": []}
+
+
+def test_orchestrator_invoke_search_notes_empty_path_prefix_still_requires_prefix_for_d1(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 second review, Important finding (row 1 of the 5-row matrix): a healthy
+    `D1_DATABASE_MAP` plus an empty-ish caller-supplied `path_prefix` (`""`, coalesced
+    to `None` by server.py's `... or None` handling) must still be treated exactly like
+    an omitted `path_prefix` — `ok=False` with the actionable message, short-circuiting
+    before the store is even opened. This used to succeed unscoped whenever the fake
+    store happened not to raise, because the check only fired reactively inside an
+    `except D1StoreError` — the hoisted check now fires unconditionally."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    called: dict = {}
+
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            called["path_prefix"] = path_prefix
+            return []
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "jwt", "path_prefix": ""},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required when the D1 backend is configured"
+    assert called == {}  # _open_d1_store must never be reached
+
+
+def test_orchestrator_invoke_search_notes_d1_misconfigured_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D1 configured but the requested prefix has no database -> 503, not a raw 500."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "jwt", "path_prefix": "clients/other"},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+
+
+def test_orchestrator_invoke_search_notes_d1_unscoped_returns_ok_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Important finding (row 1): `always_retrieve_tools` fires
+    `digivault_search_notes` with no `path_prefix` on every chat turn (#2265). With D1
+    configured there is no "search every corpus" mode, so this must be an actionable
+    `ok=False` telling the caller `path_prefix` is required — returned as
+    `OrchestratorInvokeResponse`, HTTP 200, not raised as an HTTPException: a raised
+    400 would reach digigraph's `invoke_digivault_tool` via `raise_for_status()`, whose
+    `str(httpx.HTTPStatusError)` drops the response body, so the model would only ever
+    see a bare status code, not this sentence (second #2239 review)."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(tool="digivault_search_notes", arguments={"query": "jwt"}),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required when the D1 backend is configured"
+
+
+@pytest.mark.parametrize(
+    "database_map",
+    ["{not json", '["clients/digithings"]', '{"": "db-unscoped", "clients/digithings": "db-1"}'],
+    ids=["invalid_json", "non_object", "empty_string_key"],
+)
+def test_orchestrator_invoke_search_notes_d1_config_error_returns_503_even_without_prefix(
+    monkeypatch: pytest.MonkeyPatch, database_map: str
+) -> None:
+    """#2239 second review, Important finding (rows 2-4 of the 5-row matrix): before
+    this fix, the handler checked `path_prefix is None` *inside* the `except
+    D1StoreError`, so any D1StoreError raised while `path_prefix` happened to be `None`
+    — invalid JSON, a non-object map, or the forbidden `""` key — was overwritten with
+    the generic "path_prefix is required" message. An operator who saw that 400 and
+    "fixed" it by adding a `""` key would retry and see the *identical* message, with
+    no signal their edit was rejected. Config errors must surface as their own 503
+    regardless of whether `path_prefix` was also omitted."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, database_map)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes", arguments={"query": "jwt"}
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+    assert "path_prefix is required" not in str(exc.value.detail)
+
+
+def test_orchestrator_invoke_search_notes_d1_invalid_json_with_real_prefix_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Row 5 of the 5-row matrix, unaffected by the fix: a real `path_prefix` already
+    took the 503 branch before this fix and must keep doing so."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, "{not json")
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "jwt", "path_prefix": "clients/digithings"},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+    assert "not valid JSON" in str(exc.value.detail)
+
+
+def test_orchestrator_invoke_search_notes_d1_runtime_failure_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Important finding: a D1StoreError raised from *inside* `.search()`
+    (transport failure, expired token) must still become 503, not an unhandled 500 —
+    `_open_d1_store_or_503` only wrapped construction, not this call."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            raise D1StoreError("d1 search transport failure: boom")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "jwt", "path_prefix": "clients/digithings"},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+    assert "transport failure" in str(exc.value.detail)
+
+
+# ── by-path note fetch (#2239) ───────────────────────────────────────────────
+def test_get_note_by_path_returns_404_when_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> None:
+            return None
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings/nope", path_prefix="clients/digithings"
+            )
+        )
+    assert exc.value.status_code == 404
+
+
+def test_get_note_by_path_enforces_the_caller_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A caller scoped to digithings must not read the OCC corpus by guessing a path."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/online-compliance-center/x",
+                path_prefix="clients/digithings",
+            )
+        )
+    assert exc.value.status_code == 403
+
+
+def test_get_note_by_path_allows_exact_prefix_match(monkeypatch: pytest.MonkeyPatch) -> None:
+    """vault_path == path_prefix is in-scope, not just paths strictly under it."""
+    note = NoteDetail(vault_path="clients/digithings", title="root", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            return note if vault_path == "clients/digithings" else None
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    result = server.get_note_by_path(
+        server.NoteByPathRequest(vault_path="clients/digithings", path_prefix="clients/digithings")
+    )
+    assert result is note
+
+
+def test_get_note_by_path_returns_note_scoped_to_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+    called: dict = {}
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            called["vault_path"] = vault_path
+            return note
+
+    def _open(prefix: str | None) -> _FakeD1:
+        called["prefix"] = prefix
+        return _FakeD1()
+
+    monkeypatch.setattr(server, "_open_d1_store", _open)
+    result = server.get_note_by_path(
+        server.NoteByPathRequest(
+            vault_path="clients/digithings/arch", path_prefix="clients/digithings"
+        )
+    )
+    assert result is note
+    assert called["prefix"] == "clients/digithings"
+    assert called["vault_path"] == "clients/digithings/arch"
+
+
+def test_note_by_path_requires_path_prefix() -> None:
+    """Minor #2239 second review finding: `path_prefix` is now a required field —
+    `D1_DATABASE_MAP` may never carry a `""` entry (see `_load_d1_database_map`'s
+    guard), so an omitted `path_prefix` could never resolve to a corpus and would
+    only ever 503 at request time. Rejected up front at the schema boundary (422)
+    instead of documenting a third "unscoped" state that no longer exists."""
+    with pytest.raises(ValidationError):
+        server.NoteByPathRequest(vault_path="clients/digithings/nope")
+
+
+def test_get_note_by_path_returns_503_when_d1_unconfigured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings/x", path_prefix="clients/digithings"
+            )
+        )
+    assert exc.value.status_code == 503
+
+
+@pytest.mark.parametrize("bad_prefix", ["", "/", "///", "   ", ".md"])
+def test_get_note_by_path_rejects_prefix_that_normalizes_to_empty(
+    monkeypatch: pytest.MonkeyPatch, bad_prefix: str
+) -> None:
+    """Critical #2239 review finding: `if prefix and ...` treated "a prefix was given
+    but normalizes to empty" as "no scoping requested" — fail-open. The reviewer
+    demonstrated that with a "" key present in D1_DATABASE_MAP, every one of these
+    inputs returned another corpus's note body with HTTP 200. Now rejected with 400
+    before the store is even opened (`_open_d1_store` is never called — asserted via
+    the fake store raising if it is), mirroring `resolve_path_prefix`'s semantics."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for an empty-ish prefix")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/other-corpus/secret", path_prefix=bad_prefix
+            )
+        )
+    assert exc.value.status_code == 400
+
+
+def test_get_note_by_path_rejects_sibling_corpus_sharing_a_string_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Minor M5: the boundary check is
+    `path != prefix and not path.startswith(prefix + "/")` — the `+ "/"` is load
+    bearing. Weaken it to `not path.startswith(prefix)` (drop the separator) and
+    `clients/digithings-archive/x` under prefix `clients/digithings` would pass,
+    because the string "clients/digithings-archive/x" does start with the string
+    "clients/digithings" even though the archive corpus is not a child of it. No
+    existing test used two corpora that share a literal string prefix like this —
+    every existing cross-corpus test used names with no common prefix at all
+    (`clients/online-compliance-center` vs `clients/digithings`), so the classic
+    string-prefix bug could be reintroduced without any test noticing."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for a sibling-corpus path")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings-archive/x", path_prefix="clients/digithings"
+            )
+        )
+    assert exc.value.status_code == 403
+
+
+def test_get_note_by_path_wraps_runtime_d1_error_as_503(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#2239 review, Important finding: a D1StoreError raised from *inside*
+    `.get_note()` (transport failure, or Cloudflare's real 403 on an expired
+    D1_API_TOKEN) must become 503, not an unhandled 500 — `_open_d1_store_or_503`
+    only wrapped construction, not this call."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise D1StoreError("d1 get_note failed (403): Authentication error")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings/x", path_prefix="clients/digithings"
+            )
+        )
+    assert exc.value.status_code == 503
+    assert "Authentication error" in str(exc.value.detail)
+
+
+def test_note_by_path_route_is_read_scoped_despite_being_post() -> None:
+    """POST /v1/notes/by-path is a read (fetch), not a mutation — must not require write."""
+    assert server.digivault_path_scopes("POST", "/v1/notes/by-path") == [SCOPE_READ]
+
+
+def test_note_by_path_carve_out_is_method_aware() -> None:
+    """Minor #2239 review finding: the carve-out matched on path alone, ignoring
+    method — only POST is registered today (everything else 405s), but a bare path
+    match would silently read-scope a future DELETE/PUT on the same literal path."""
+    assert server.digivault_path_scopes("DELETE", "/v1/notes/by-path") == [SCOPE_WRITE]
+    assert server.digivault_path_scopes("PUT", "/v1/notes/by-path") == [SCOPE_WRITE]
+
+
+# ── digivault_get_note orchestrator tool (#2239 Task 3 gap) ─────────────────────
+def test_orchestrator_invoke_get_note_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Full round trip through the shared `_fetch_note_by_path` helper — the note
+    body must come back in `data`, not just a bare ok flag."""
+    note = NoteDetail(
+        vault_path="clients/digithings/arch", title="Arch", body_markdown="hello world"
+    )
+    called: dict = {}
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            called["vault_path"] = vault_path
+            return note
+
+    def _open(prefix: str | None) -> _FakeD1:
+        called["prefix"] = prefix
+        return _FakeD1()
+
+    monkeypatch.setattr(server, "_open_d1_store", _open)
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/digithings/arch",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert resp.data["vault_path"] == "clients/digithings/arch"
+    assert resp.data["body_markdown"] == "hello world"
+    assert called["prefix"] == "clients/digithings"
+    assert called["vault_path"] == "clients/digithings/arch"
+
+
+def test_orchestrator_invoke_get_note_missing_vault_path_is_ok_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A missing/blank vault_path is an argument-level error: ok=False, not a raised
+    HTTP error — the same convention digivault_search_notes uses for `query`, so the
+    reason survives digigraph's `raise_for_status()` hop (`str(httpx.HTTPStatusError)`
+    drops the body — see the search_notes tests above)."""
+
+    def _boom(prefix: str | None) -> None:
+        raise AssertionError("must not open a store when vault_path is missing")
+
+    monkeypatch.setattr(server, "_open_d1_store", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note", arguments={"path_prefix": "clients/digithings"}
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "vault_path is required"
+
+    resp_blank = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={"vault_path": "   ", "path_prefix": "clients/digithings"},
+        ),
+        _fake_request(),
+    )
+    assert resp_blank.ok is False
+    assert resp_blank.error == "vault_path is required"
+
+
+def test_orchestrator_invoke_get_note_missing_path_prefix_is_ok_false_not_unscoped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The production gap this dispatch branch must not paper over: digigraph's
+    builtin.py has no handler that injects the caller's tenant context into
+    `digivault_get_note`'s arguments (only `_handle_digivault_search` does that, and
+    only for `digivault_search_notes`) — so `path_prefix` is absent on every real
+    call today. Defaulting to an unscoped read here (resolve_path_prefix(None) means
+    "no scoping requested") would be exactly the cross-tenant fail-open the by-path
+    route's required path_prefix field exists to prevent. Must refuse instead."""
+
+    def _boom(prefix: str | None) -> None:
+        raise AssertionError("must not open a store — path_prefix is absent")
+
+    monkeypatch.setattr(server, "_open_d1_store", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note", arguments={"vault_path": "clients/digithings/arch"}
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required for digivault_get_note"
+
+
+@pytest.mark.parametrize("blank_prefix", ["", "/", "///", "   ", ".md"])
+def test_orchestrator_invoke_get_note_blank_path_prefix_is_ok_false_not_a_raised_400(
+    monkeypatch: pytest.MonkeyPatch, blank_prefix: str
+) -> None:
+    """#2239 review, Minor M1: `path_prefix_arg is None` was the only condition that
+    produced the readable `ok=False` refusal; a *present but blank* value ("", "/",
+    "   ", ".md") survived that check and fell through to `_fetch_note_by_path`,
+    whose `resolve_path_prefix` raises `ValueError` for exactly this case (wrapped as
+    `HTTPException(400)`) — reaching a real digigraph caller only as a bare
+    "Client error '400 Bad Request'" once `raise_for_status()` drops the body.
+    `vault_path` two lines above already treats blank the same as absent; `path_prefix`
+    must match that convention and produce the same message as the omitted case."""
+
+    def _boom(prefix: str | None) -> None:
+        raise AssertionError("must not open a store — path_prefix is blank, not scoped")
+
+    monkeypatch.setattr(server, "_open_d1_store", _boom)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={"vault_path": "clients/digithings/arch", "path_prefix": blank_prefix},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "path_prefix is required for digivault_get_note"
+
+
+def test_orchestrator_invoke_get_note_refuses_cross_corpus_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A caller scoped to `clients/digithings` must not read the OCC corpus by
+    passing an arbitrary vault_path through the orchestrator tool — same 403 the
+    `POST /v1/notes/by-path` route raises for the identical inputs, because both
+    go through the same `_fetch_note_by_path` helper."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for an out-of-scope path")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/online-compliance-center/x",
+                    "path_prefix": "clients/digithings",
+                },
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 403
+
+    # Prove the refusal is the authorization check, not an accident of the fake: with
+    # the check removed (a store that would happily answer for any prefix), the same
+    # cross-corpus call must succeed — pinning that the 403 above depends on
+    # `_fetch_note_by_path`'s prefix enforcement actually running.
+    note = NoteDetail(vault_path="clients/online-compliance-center/x", title="x", body_markdown="")
+    monkeypatch.setattr(server, "_fetch_note_by_path", lambda vault_path, path_prefix: note)
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/online-compliance-center/x",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+
+
+def test_orchestrator_invoke_get_note_refuses_sibling_corpus_sharing_a_string_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review, Minor M5 (tool-branch surface): same string-prefix regression as
+    `test_get_note_by_path_rejects_sibling_corpus_sharing_a_string_prefix`, exercised
+    through `orchestrator_invoke` rather than the route directly — both surfaces must
+    catch `clients/digithings-archive/x` escaping a `clients/digithings` scope, not
+    just the route (they currently share `_fetch_note_by_path`, but this pins the
+    public tool-call contract independently of that implementation detail)."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for a sibling-corpus path")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/digithings-archive/x",
+                    "path_prefix": "clients/digithings",
+                },
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_orchestrator_invoke_get_note_not_found_is_clean_ok_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stale or mistyped vault_path must read as a recoverable 'not found', not an
+    exception — the model should be able to retry with a different path."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> None:
+            return None
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/digithings/nope",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "note not found: clients/digithings/nope"
+
+
+def test_orchestrator_invoke_get_note_d1_unconfigured_returns_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/digithings/arch",
+                    "path_prefix": "clients/digithings",
+                },
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+
+
+def test_by_path_route_is_not_shadowed_by_the_name_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A POST to /v1/notes/by-path must reach the new handler, not GET /v1/notes/{name}."""
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            return note
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    client = TestClient(server.app)
+
+    posted = client.post(
+        "/v1/notes/by-path",
+        json={"vault_path": "clients/digithings/arch", "path_prefix": "clients/digithings"},
+        headers=auth_headers(scopes=[SCOPE_READ]),
+    )
+    assert posted.status_code == 200
+    assert posted.json()["vault_path"] == "clients/digithings/arch"
+
+    # GET on the same literal path must still resolve to the {name} route (name="by-path",
+    # via _open_vault -> DIGIVAULT_ROOT), proving the two routes coexist rather than one
+    # shadowing the other. Its 503 message is distinct from the D1-store-unconfigured
+    # message the by-path POST handler would raise, so this pins *which* handler answered.
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    got = client.get("/v1/notes/by-path", headers=auth_headers(scopes=[SCOPE_READ]))
+    assert got.status_code == 503
+    assert got.json()["error"]["message"] == "DIGIVAULT_ROOT is not configured"

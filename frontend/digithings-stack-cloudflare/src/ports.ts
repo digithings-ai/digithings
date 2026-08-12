@@ -8,7 +8,7 @@ export const DIGIKEY_PORT = 8005;
  * Bump the suffix when a deploy must force a new Firecracker instance
  * (old DO can keep a stale image until sleepAfter expires).
  */
-export const SHARED_STACK_CONTAINER_ID = "shared-v11";
+export const SHARED_STACK_CONTAINER_ID = "shared-v12";
 
 /**
  * Map public hostname → container port.

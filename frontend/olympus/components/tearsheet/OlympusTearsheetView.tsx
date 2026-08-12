@@ -243,6 +243,13 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
           onChange={setActiveTab}
           label={TAB_LABEL}
           variant="underline"
+          // Only true outside of printing (CodeRabbit, PR #2290): the
+          // printing branch below renders BOTH HoldingsPanels at once (real
+          // ids "current" and "historical" both exist), so sharedPanel's
+          // single-active-id assumption would be wrong there — fall back to
+          // one aria-controls per tab, which is correct while both panels
+          // are genuinely mounted.
+          sharedPanel={!printing}
         />
       </div>
 

@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Activity,
   AlertTriangle,
   BookOpen,
   ChartNoAxesCombined,
@@ -231,6 +231,43 @@ export function DailyBriefWorkspace({
     .find(Boolean);
   const digestHref = buildPipelineHref({ date: digestDate, stage: 'synthesis', node: 'digest' });
 
+  // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
+  // CodeRabbit on PR #2287): only shown while the table genuinely overflows
+  // its container AND the user has not already scrolled to the end -- a
+  // static, always-on cue would keep signaling "more here" even once
+  // there is nothing left to reveal. Watches the TABLE's own width (a
+  // ResizeObserver on the scroll container alone would miss content
+  // getting wider without the container itself resizing).
+  const bookScrollRef = useRef<HTMLDivElement>(null);
+  const bookTableRef = useRef<HTMLTableElement>(null);
+  const [showBookFade, setShowBookFade] = useState(false);
+
+  useEffect(() => {
+    const container = bookScrollRef.current;
+    const table = bookTableRef.current;
+    if (!container || !table) {
+      setShowBookFade(false);
+      return;
+    }
+
+    const EPSILON = 1; // sub-pixel rounding slack
+    const update = () => {
+      const overflowing = container.scrollWidth > container.clientWidth + EPSILON;
+      const atEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - EPSILON;
+      setShowBookFade(overflowing && !atEnd);
+    };
+
+    update();
+    container.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(table);
+    ro.observe(container);
+    return () => {
+      container.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [held.length]);
+
   return (
     <section
       data-testid="daily-brief-workspace"
@@ -243,11 +280,16 @@ export function DailyBriefWorkspace({
             <span className="text-[10px] font-bold uppercase tracking-widest text-accent">
               Morning brief
             </span>
-            <span className="truncate text-xs text-ink-soft">{regime}</span>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <AsOfBadge date={digestDate} />
             {runType ? <Badge variant="default">{runType}</Badge> : null}
+            {/* Raw `regime` dropped here (full-UI-suite critique, P3): it was
+                rendered twice in this header (here, and again in the sub-line
+                below next to confidence) plus once more as this styled Badge
+                -- three renderings of one signal. The sub-line keeps the raw
+                string paired with confidence; the command bar keeps only the
+                styled, tone-colored read. */}
             <Badge variant={regimeLabel === 'bearish' || regimeLabel === 'caution' ? 'amber' : 'default'}>
               {regimeLabel}
             </Badge>
@@ -291,10 +333,18 @@ export function DailyBriefWorkspace({
               className="group px-5 py-4 transition-colors hover:bg-ink/[0.03] sm:px-6"
             >
               <div className="flex items-center justify-between gap-3">
+                {/* "Pipeline health", not "System state" (full-UI-suite
+                    critique, P1): the sidebar's own nav (lib/nav.ts) pairs
+                    the label "System" with this exact Activity icon and
+                    points it at /system -- a different section. This tile
+                    links to /pipeline, so it now reuses GitBranch, the same
+                    icon this file's own footer link already uses for
+                    Pipeline (line ~192), instead of colliding with a label
+                    and icon users have learned means somewhere else. */}
                 <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                  System state
+                  Pipeline health
                 </p>
-                <Activity size={14} className={toneClass(pipeline.tone)} />
+                <GitBranch size={14} className={toneClass(pipeline.tone)} />
               </div>
               <p className={`mt-1 text-sm font-semibold ${toneClass(pipeline.tone)}`}>
                 {pipeline.label}
@@ -444,43 +494,66 @@ export function DailyBriefWorkspace({
             )}
           </div>
 
-          <div className="overflow-x-auto py-2 lg:pl-5">
+          <div ref={bookScrollRef} className="relative overflow-x-auto py-2 lg:pl-5">
             {held.length === 0 ? (
               <p className="py-3 text-sm text-ink-mute">No positions held; the book is all cash.</p>
             ) : (
-              <table className="w-full min-w-[34rem] border-collapse text-left">
-                <thead>
-                  <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                    <th className="py-2 pr-3 font-bold">Holding</th>
-                    <th className="px-3 py-2 text-right font-bold">Weight</th>
-                    <th className="px-3 py-2 text-right font-bold">Change</th>
-                    <th className="py-2 pl-3 text-right font-bold">Day</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-hair/70">
-                  {held.slice(0, 6).map((position) => {
-                    const dayTone = metricTone(position.day_change_pct ?? null);
-                    const deltaTone = metricTone(position.normalizedDelta ?? null);
-                    return (
-                      <tr key={position.ticker} className="text-xs">
-                        <td className="py-2.5 pr-3">
-                          <span className="font-mono font-bold text-ink">{position.ticker}</span>
-                          <span className="ml-2 text-ink-mute">{position.name}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
-                          {position.normalizedWeight.toFixed(1)}%
-                        </td>
-                        <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
-                          {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
-                        </td>
-                        <td className={`py-2.5 pl-3 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
-                          {signedPct(position.day_change_pct ?? null)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              <>
+                <table ref={bookTableRef} className="w-full min-w-[34rem] border-collapse text-left">
+                  <thead>
+                    <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+                      <th className="py-2 pr-3 font-bold">Holding</th>
+                      <th className="px-3 py-2 text-right font-bold">Weight</th>
+                      <th className="px-3 py-2 text-right font-bold">Change</th>
+                      {/* pr-4, not pl-3 alone (CodeRabbit, PR #2287): the fade
+                          below sits flush against this column's own right
+                          edge, so its values need clearance to stay legible
+                          under it rather than running all the way to the
+                          most-opaque part of the gradient. */}
+                      <th className="py-2 pl-3 pr-4 text-right font-bold">Day</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-hair/70">
+                    {held.slice(0, 6).map((position) => {
+                      const dayTone = metricTone(position.day_change_pct ?? null);
+                      const deltaTone = metricTone(position.normalizedDelta ?? null);
+                      return (
+                        <tr key={position.ticker} className="text-xs">
+                          <td className="py-2.5 pr-3">
+                            <span className="font-mono font-bold text-ink">{position.ticker}</span>
+                            <span className="ml-2 text-ink-mute">{position.name}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
+                            {position.normalizedWeight.toFixed(1)}%
+                          </td>
+                          <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
+                            {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
+                          </td>
+                          <td className={`py-2.5 pl-3 pr-4 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
+                            {signedPct(position.day_change_pct ?? null)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {/* Scroll-edge cue (full-UI-suite critique, P2; refined per
+                    CodeRabbit on PR #2287): the table's min-w-[34rem] (544px)
+                    forces horizontal scroll on any viewport under ~560px --
+                    every phone -- with nothing previously signaling the
+                    Change/Day columns run off-screen. Shown only while
+                    showBookFade is true (genuinely overflowing AND not
+                    already scrolled to the end, tracked above), so it never
+                    sits over content once there is nothing left to reveal --
+                    and the Day column's own pr-4 keeps its values clear of
+                    the fade's most-opaque edge on the trip there. */}
+                {showBookFade ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
+                  />
+                ) : null}
+              </>
             )}
           </div>
         </div>

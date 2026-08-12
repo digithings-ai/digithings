@@ -179,6 +179,7 @@ export default function AttributionWorkspace({
             onChange={(index) => setView(VIEWS[index].id)}
             label="Attribution workspace"
             variant="underline"
+            sharedPanel
           />
         </div>
       </header>

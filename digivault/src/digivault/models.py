@@ -91,6 +91,60 @@ class NoteRow(BaseModel):
         return data
 
 
+class VaultSearchHit(BaseModel):
+    """A ranked full-text search hit.
+
+    Returned by both :meth:`SupabaseStore.search` (the ``search_architecture_notes``
+    RPC, migration 068) and :meth:`D1Store.search` (FTS5 over Cloudflare D1) — the two
+    stores share this result shape rather than each defining their own. Lives here,
+    not in ``supabase_store.py``, so the D1 path never imports the Supabase module;
+    ``supabase_store.py`` re-exports it for existing importers.
+    """
+
+    vault_path: str
+    title: str
+    note_type: str
+    summary: str
+    body_markdown: str
+    tags: tuple[str, ...] = Field(default=())
+    wikilinks: tuple[str, ...] = Field(default=())
+    rank: float
+
+
+class NoteDetail(BaseModel):
+    """One note, whole: body and frontmatter together.
+
+    ``Note`` has frontmatter but no body; ``NoteRow``/``VaultSearchHit`` have a body but
+    no frontmatter. ``digivault_get_note`` needs both, so this model exists.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    vault_path: str
+    title: str = ""
+    note_type: str = ""
+    summary: str = ""
+    body_markdown: str = ""
+    frontmatter: dict = Field(default_factory=dict)
+    tags: tuple[str, ...] = Field(default=())
+    wikilinks: tuple[str, ...] = Field(default=())
+    parent_doc: str | None = None
+    segment_index: int | None = None
+    segment_label: str | None = Field(
+        default=None,
+        description=(
+            "Page/heading identity for a note that is one segment of a larger source "
+            "document (set by scripts/vectorize_sync.py / the ingestion chunker at "
+            "frontmatter['segment_label']). Surfaced here as a top-level field too — "
+            "not only inside `frontmatter` — because the original task brief for "
+            "`digivault_get_note` specified this exact returned shape "
+            "(`{vault_path, title, body_markdown, frontmatter, segment_label}`); a "
+            "consumer that trusted that shape and read `data['segment_label']` "
+            "directly got nothing before this field existed."
+        ),
+    )
+
+
 class ValidationIssue(BaseModel):
     """One problem found by ``Vault.lint``."""
 

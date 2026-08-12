@@ -288,6 +288,65 @@ def test_list_notes_returns_note_row_models() -> None:
     assert out[0] == NoteRow(vault_path="a/b", title="t", frontmatter={"k": "v"}, body_markdown="x")
 
 
+def test_list_raw_returns_columns_outside_note_row_as_plain_dicts() -> None:
+    """#2239 review Important I2: `list_notes` validates through `NoteRow`, which
+    only carries four columns and ignores everything else -- a caller needing
+    `architecture_notes`'s top-level `note_type`/`summary`/`wikilinks` columns
+    (`scripts/d1_sync.py`'s D1 backfill) cannot get them back out of a `NoteRow`.
+    `list_raw` skips that validation step and hands back exactly the columns its
+    `select` asked for."""
+    rows = [
+        {
+            "vault_path": "clients/x/a",
+            "title": "A",
+            "frontmatter": {},
+            "body_markdown": "body",
+            "note_type": "reference",
+            "summary": "a summary",
+            "wikilinks": ["b"],
+        }
+    ]
+    store = SupabaseStore(_FakeClient(rows))
+    out = store.list_raw(
+        select="vault_path,title,frontmatter,body_markdown,note_type,summary,wikilinks"
+    )
+    assert out == rows
+
+
+def test_list_raw_filters_by_prefix_and_paginates() -> None:
+    rows = [
+        {"vault_path": f"clients/digithings/n{i}", "note_type": "reference"} for i in range(7)
+    ] + [{"vault_path": "clients/other/x", "note_type": "reference"}]
+    client = _FakeClient(rows)
+    store = SupabaseStore(client)
+    out = store.list_raw(
+        select="vault_path,note_type", path_prefix="clients/digithings", page_size=3
+    )
+    assert len(out) == 7
+    assert all(r["vault_path"].startswith("clients/digithings/") for r in out)
+    assert len(client.range_calls) >= 3
+
+
+def test_list_raw_prefix_excludes_hyphen_suffix_collision() -> None:
+    """Same client-side re-check as `list_notes` -- `clients/digithings` must not
+    also match `clients/digithings-archive`."""
+    rows = [
+        {"vault_path": "clients/digithings/note1", "note_type": "reference"},
+        {"vault_path": "clients/digithings-archive/note2", "note_type": "reference"},
+    ]
+    store = SupabaseStore(_FakeClient(rows))
+    out = store.list_raw(select="vault_path,note_type", path_prefix="clients/digithings")
+    assert [r["vault_path"] for r in out] == ["clients/digithings/note1"]
+
+
+def test_list_raw_rejects_non_positive_page_size() -> None:
+    client = _FakeClient([])
+    store = SupabaseStore(client)
+    with pytest.raises(ValueError, match="0"):
+        store.list_raw(select="vault_path", page_size=0)
+    assert client.range_calls == []
+
+
 def test_list_notes_tolerates_extra_columns_and_null_frontmatter() -> None:
     """A realistic full table row carries far more columns than the four this model
     needs (slug, note_type, status, tags, summary, wikilinks, sources, timestamps),
