@@ -418,7 +418,15 @@ jobs:
         run: |
           set -euo pipefail
           url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
-          curl -fsSL -o /tmp/shellcheck.tar.xz "$url"
+          # Retry flags are load-bearing -- see the matching comment in
+          # security-gitleaks.yml for the full reasoning. Short version: this
+          # download flaked twice on 2026-08-12, killing the job before
+          # actionlint ever ran; --retry alone would not have caught it because
+          # a connection reset (exit 56) is not in curl's "transient error" set,
+          # hence --retry-all-errors. Safe here because it is an idempotent GET
+          # of an immutable asset that is checksum-verified below.
+          curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 -o /tmp/shellcheck.tar.xz "$url"
           actual="$(sha256sum /tmp/shellcheck.tar.xz | awk '{print $1}')"
           if [ "$actual" != "$SHELLCHECK_SHA256" ]; then
             echo "checksum mismatch: expected $SHELLCHECK_SHA256 got $actual" >&2
