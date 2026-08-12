@@ -187,3 +187,44 @@ def test_handle_digivault_search_not_ok_response() -> None:
     ):
         out = _handle_digivault_search({"query": "anything"}, _ctx())
     assert json.loads(out)["error"] == "vault unavailable"
+
+
+@pytest.mark.unit
+def test_invoke_digivault_tool_ok_false_message_survives_the_http_hop() -> None:
+    """#2239 second review: `invoke_digivault_tool` calls `raise_for_status()`, and
+    `str(httpx.HTTPStatusError)` drops the response body — so a *raised* 400 from
+    digivault's `path_prefix is required` case would reach the model as a bare status
+    code, never the actionable sentence (see `_handle_digivault_search`'s
+    `except _ORCHESTRATOR_CLIENT_ERRORS` branch, which only has `str(e)` to work
+    with). This exercises the real `httpx` call — via `MockTransport`, not a mock of
+    `invoke_digivault_tool` itself — to prove digivault's `ok=False`-over-HTTP-200
+    convention is what actually gets the reason string through this hop: 200 never
+    triggers `raise_for_status()`, so the JSON body (and its `error` string) survives
+    intact."""
+    from digigraph.vertical_orchestrator import digivault_hub
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "ok": False,
+                "service": "digivault",
+                "tool": "digivault_search_notes",
+                "error": "path_prefix is required when the D1 backend is configured",
+            },
+        )
+
+    def fake_sync_client(**kwargs: object) -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(handler))
+
+    with patch.object(digivault_hub, "sync_client", fake_sync_client):
+        result = digivault_hub.invoke_digivault_tool(
+            "http://digivault:8004",
+            "digivault_search_notes",
+            {"query": "jwt"},
+            bearer_token=None,
+            request_id="rid-1",
+        )
+
+    assert result["ok"] is False
+    assert result["error"] == "path_prefix is required when the D1 backend is configured"

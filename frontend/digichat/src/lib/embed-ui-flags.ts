@@ -32,9 +32,11 @@ export function resolveAttributionPlacement(args: {
 export function resolveEmbedUiFlags(cfg: EmbedTenantClientConfig): {
   showByok: boolean;
   layout: "page" | "embed";
+  showLanguageSelector: boolean;
 } {
   return {
     showByok: cfg.showByok === true,
     layout: cfg.layout === "page" ? "page" : "embed",
+    showLanguageSelector: cfg.showLanguageSelector === true,
   };
 }

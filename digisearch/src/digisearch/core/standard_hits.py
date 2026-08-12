@@ -14,6 +14,7 @@ from digisearch.core.models import Result
 # Provenance labels for ``SearchResponse.backend`` and ``QueryResponse.backend``.
 BACKEND_AZURE_AI_SEARCH: Final[str] = "azure_ai_search"
 BACKEND_CHROMA: Final[str] = "chroma"
+BACKEND_VECTORIZE: Final[str] = "vectorize"
 BACKEND_STUB: Final[str] = "stub"
 
 # Every hit dict from ``POST /query`` includes these keys (null/Omit only where noted).

@@ -142,11 +142,20 @@ export function TearsheetChartsReference() {
 
   return (
     <div>
-      <div className="mb-[1rem] flex items-center justify-between gap-[1rem]">
+      <div className="mb-[1rem] flex flex-wrap items-center gap-[0.7rem]">
         <span className="ts-panel-label">{D.symbol} · {D.periodStart} → {D.periodEnd}</span>
+        {/* The KPI figures below are a deterministic random walk (demo-data.ts),
+            not a real backtest — an implausible number like a 92.62 profit
+            factor could otherwise read as a live bug rather than known-synthetic
+            filler. Same tag this reference site already uses elsewhere for
+            placeholder data (testimonial-wall-reference.tsx, docs-layout-
+            reference.tsx, terminal-budget-reference.tsx). */}
+        <span className="inline-block rounded-full border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+          Example data · not live
+        </span>
         <button
           type="button"
-          className="ts-reset"
+          className="ts-reset ml-auto"
           onClick={() =>
             runTearsheetPrint({
               documentTitle: "finance-tearsheet specimen — digiweb",
@@ -180,6 +189,7 @@ export function TearsheetChartsReference() {
               Momentum: "var(--warn)",
               Hedges: "var(--down)",
             }}
+            ariaLabel="Portfolio return contribution by factor: Quality, Momentum, and Hedges, over the trailing 18 periods, with the exact portfolio return overlaid"
           />
         </div>
       </section>
@@ -262,21 +272,22 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
+                ariaLabel={`${D.symbol} candlestick price chart, ${chartScale} scale, with long and short trade entry and exit markers, ${D.periodStart} to ${D.periodEnd}`}
               />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "equity"}>
             <div className="ts-chart">
               {chartScale === "log" ? (
-                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve in dollars, log scale, ${D.periodStart} to ${D.periodEnd}`} />
               ) : (
-                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve, percent return, linear scale, ${D.periodStart} to ${D.periodEnd}`} />
               )}
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "drawdown"}>
             <div className="ts-chart">
-              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Drawdown, percent below peak equity, ${D.periodStart} to ${D.periodEnd}`} />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
@@ -288,6 +299,7 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
+                ariaLabel={`Per-trade profit and loss, percent, realized and open trades, ${D.periodStart} to ${D.periodEnd}`}
               />
             </div>
           </div>

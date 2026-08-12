@@ -162,6 +162,21 @@ describe("EmptyState", () => {
     expect(html).toContain("ctl-empty ctl-empty--error");
   });
 
+  it("only the error variant announces itself as a live region", () => {
+    // "error" is the one variant that can appear/replace content
+    // asynchronously (a fetch failing after the page already loaded), so it
+    // alone gets role="alert" -- "no-results"/"first-run" are expected
+    // outcomes of a user's own action, not an unannounced state change.
+    const error = renderToStaticMarkup(<EmptyState variant="error" title="Couldn't load" />);
+    expect(error).toContain('role="alert"');
+
+    const noResults = renderToStaticMarkup(<EmptyState title="No matches" />);
+    expect(noResults).not.toContain('role="alert"');
+
+    const firstRun = renderToStaticMarkup(<EmptyState variant="first-run" title="Nothing yet" />);
+    expect(firstRun).not.toContain('role="alert"');
+  });
+
   it("glass dresses drop the default glyph and render the note slot", () => {
     const html = renderToStaticMarkup(
       <EmptyState

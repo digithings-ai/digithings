@@ -43,7 +43,8 @@
 }
 
 /* state/motion rules — unlayered on purpose */
-.tk:hover .tk-track {
+.tk:hover .tk-track,
+.tk:focus-within .tk-track {
   animation-play-state: paused;
 }
 

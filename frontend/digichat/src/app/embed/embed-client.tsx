@@ -19,6 +19,7 @@ import { DigiChatSession } from "@digithings/digichat-ui";
 import { Key, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ByokCliFlow } from "@/components/byok-cli-flow";
+import { ContactMailto } from "@/components/ContactMailto";
 import {
   useBYOKKey,
   type BYOKProvider,
@@ -32,6 +33,7 @@ import {
   emit,
   readTrialUnlocked,
   resolveEmbedHost,
+  shouldChargeGateOnSettle,
   useEmbedGate,
   writeTrialUnlocked,
   writeChatAccessToken,
@@ -54,6 +56,8 @@ import {
   type EmbedTenantClientConfig,
 } from "@/hooks/use-embed-tenant-config";
 import { resolveAttributionPlacement, resolveEmbedUiFlags } from "@/lib/embed-ui-flags";
+import { LanguageSelect } from "@/components/language-select";
+import { detectBrowserLanguageCode } from "@/lib/languages";
 import { applyEmbedSeed } from "@/lib/embed-seed-apply";
 import {
   READY_MESSAGE,
@@ -199,12 +203,23 @@ function EmbedPageInner({ initialTenantCfg }: { initialTenantCfg: EmbedTenantCli
   // style is the sole --accent source (DataTap terracotta regression).
   const brandAccentActive = accentStyle != null;
 
+  // ?wide=1 also means "the embedder wants to show its own page background
+  // through" (digithings.ai /chat, /chat/occ — see ChatEmbedShell). The shell
+  // (embed/layout.tsx) and body both paint an opaque bg-background by design,
+  // for the common case of embedding on an arbitrary host page; there's no
+  // prop path from this client tree up to that server-rendered ancestor, so
+  // flag it via a DOM attribute + `:has()` in globals.css (same pattern as the
+  // [data-theme] sync above, just targeting an ancestor instead of <html>).
+  useEffect(() => {
+    document.querySelector(".dc-embed-shell")?.setAttribute("data-wide", urlColors.wide ? "1" : "0");
+  }, [urlColors.wide]);
+
   return (
     <>
       <style>{ACCENT_CSS}</style>
-      <div className="dc-grain" aria-hidden />
+      {urlColors.wide ? null : <div className="dc-grain" aria-hidden />}
       <div
-        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col bg-background text-foreground`}
+        className={`${effectiveTheme === "light" ? "light" : "dark"} ${brandAccentActive ? "" : `accent-${accent}`} relative z-10 flex min-h-0 flex-1 flex-col ${urlColors.wide ? "" : "bg-background"} text-foreground`}
         style={accentStyle}
       >
         <EmbedChat
@@ -244,6 +259,28 @@ function EmbedChat({
   const isTrialForm = tenantCfg.gateMode === "trial_form";
   const llmAccess = tenantCfg.llmAccess;
   const uiFlags = resolveEmbedUiFlags(tenantCfg);
+  const [language, setLanguage] = useState(() => detectBrowserLanguageCode());
+  // useEmbedDigiChat's transport is frozen on first render (#1339) — a
+  // `language` value passed by plain value would stay stuck at whatever
+  // detectBrowserLanguageCode() returned at mount, so picking a language in
+  // the dropdown would never reach the outgoing header (#2103 final review,
+  // Critical finding). Mutate the ref directly in the render body (the
+  // "useLatest" idiom) rather than in a useEffect — an effect would lag one
+  // render behind and could race a fast pick-then-send. The value is
+  // deliberately NOT persisted anywhere (no localStorage/sessionStorage): the
+  // approved design is session-only, resetting to a fresh browser-locale
+  // auto-detect on every reload.
+  const languageRef = useRef(language);
+  // Deliberate "useLatest" escape hatch: mutating .current here (not in an
+  // effect) is what makes send-time reads see the value from the render that
+  // just committed, with zero lag. useEffectEvent can't replace this — its
+  // returned function may only be called from an Effect/Effect Event in the
+  // SAME component and may not be passed down, but getResponseLanguage is
+  // deliberately passed down into useEmbedDigiChat and invoked later from
+  // prepareSendMessagesRequest.
+  // eslint-disable-next-line react-hooks/refs -- see comment above
+  languageRef.current = language;
+  const getResponseLanguage = useCallback(() => languageRef.current, []);
   // trial_form still hides BYOK until parent unlock — product rule for DataTap only
   // backend_only never shows BYOK even if misconfigured showByok
   const showByok =
@@ -320,6 +357,18 @@ function EmbedChat({
    *  already released — refs, so neither triggers a render of its own. */
   const heldQuestionRef = useRef<string | null>(null);
   const sentHeldRef = useRef<string | null>(null);
+  /**
+   * Set (never incremented directly) by every gated send below, then charged
+   * by the settle effect near `chat` once the turn actually finishes. chat.send
+   * is fire-and-forget — useChat's sendMessage has no success/failure return —
+   * so a synchronous gate.increment() right after calling it charges the
+   * visitor's free-tier quota regardless of outcome. Verified live: three
+   * consecutive failed sends (backend down) fully exhausted the 3-turn quota
+   * with zero real answers delivered, permanently gating a visitor who got no
+   * value at all. See the settle effect for why chat.rawError is the correct
+   * signal to gate the charge on.
+   */
+  const pendingGateChargeRef = useRef(false);
 
   const serverGatedOrAsked = serverGated || gateRequest.requested;
   const trialLocked = isTrialForm && !trialUnlocked && serverGatedOrAsked;
@@ -353,7 +402,21 @@ function EmbedChat({
     byokModel,
     trialUnlocked,
     onGated: isTrialForm ? onGated : undefined,
+    getResponseLanguage,
   });
+
+  // Charge the free-tier gate only once a gated send actually settles
+  // successfully — never at send time. useChat's setStatus({status:
+  // "submitted", error: void 0}) clears the previous error synchronously
+  // before this turn's request goes out, so by the time chat.busy flips back
+  // to false, chat.rawError reflects only THIS turn's outcome, not a stale
+  // one. A failed turn (chat.rawError set) drops the pending charge instead
+  // of billing it — a visitor who got no answer keeps their free turn.
+  useEffect(() => {
+    if (chat.busy || !pendingGateChargeRef.current) return;
+    pendingGateChargeRef.current = false;
+    if (shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.increment();
+  }, [chat.busy, chat.rawError, gate]);
 
   // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).
   useEffect(() => {
@@ -393,7 +456,7 @@ function EmbedChat({
       if (held) {
         heldQuestionRef.current = null;
         void chat.send(held);
-        if (!ungated) gate.increment();
+        if (!ungated) pendingGateChargeRef.current = true;
         return;
       }
       chat.onRetry?.();
@@ -402,7 +465,7 @@ function EmbedChat({
     if (held && !gate.locked) {
       heldQuestionRef.current = null;
       void chat.send(held);
-      if (!ungated) gate.increment();
+      if (!ungated) pendingGateChargeRef.current = true;
     }
   }, [byokIsSet, byokKey, byokProvider, byokModel, chat.busy, chat.onRetry, chat.send, ungated, gate]);
 
@@ -533,15 +596,16 @@ function EmbedChat({
   // the effect re-runs on every chat identity change while the answer streams.
   //
   // Call chat.send (not wrappedSend) here: wrappedSend is defined below and
-  // would re-capture this effect. Increment the turn counter ourselves so the
-  // held fourth question counts the same as any other send.
+  // would re-capture this effect. Arm the deferred gate charge ourselves so
+  // the held fourth question counts the same as any other send (charged only
+  // once it settles without error — see the settle effect near `chat`).
   useEffect(() => {
     const question = heldQuestionRef.current;
     if (!trialUnlocked || !question || chat.busy) return;
     if (sentHeldRef.current === question) return;
     sentHeldRef.current = question;
     void chat.send(question);
-    if (!ungated) gate.increment();
+    if (!ungated) pendingGateChargeRef.current = true;
     emit("embed_turn_submitted", {
       accent,
       turn: gate.turns + 1,
@@ -638,7 +702,7 @@ function EmbedChat({
         turn: gate.turns + 1,
         byok: byokIsSet,
       });
-      if (!ungated) gate.increment();
+      if (!ungated) pendingGateChargeRef.current = true;
     },
     [chat, gate, trialLocked, ungated, accent, byokIsSet, llmAccess],
   );
@@ -651,9 +715,9 @@ function EmbedChat({
   const footerAttribution = attributionAt === "footer";
   const headerAttribution = attributionAt === "header";
 
-  const headerSlot = headerTitle ? (
+  const headerSlot = headerTitle || uiFlags.showLanguageSelector ? (
     <header className="dc-brand">
-      <span>{headerTitle}</span>
+      {headerTitle ? <span>{headerTitle}</span> : null}
       {headerAttribution ? (
         <span className="dc-brand-by">
           (
@@ -667,6 +731,9 @@ function EmbedChat({
           </a>
           )
         </span>
+      ) : null}
+      {uiFlags.showLanguageSelector ? (
+        <LanguageSelect value={language} onChange={setLanguage} />
       ) : null}
     </header>
   ) : null;
@@ -757,6 +824,7 @@ function EmbedChat({
       }
       showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
       ariaLabel={headerTitle ?? "digichat embed"}
+      className={uiParams.wide ? "dc-session--wide" : undefined}
     />
   );
 }
@@ -785,13 +853,11 @@ function PaywallCard({
         </p>
         <p className="text-xs text-muted-foreground">
           For more, get in touch at{" "}
-          <a
-            href={`mailto:${lockedContact}`}
+          <ContactMailto
+            email={lockedContact}
             className="font-medium underline"
             style={{ color: "var(--accent)" }}
-          >
-            {lockedContact}
-          </a>
+          />
           .
         </p>
       </div>

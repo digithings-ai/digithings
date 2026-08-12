@@ -17,6 +17,13 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
  * the dress="glass-display" cut, which reproduces the shipped look exactly
  * (font-display 2xl title, relaxed body, accent Retry). The `.glass-card`
  * surface stays a call-site class so the app's motion-reveal hook keeps firing.
+ *
+ * Copy fix (full-UI-suite critique, P2): this used to say "It'll reconnect
+ * automatically", but dbStatus (lib/dashboard-context.tsx) is set once from a
+ * single fetch on mount and never polled or retried in the background — the
+ * claim was false, and it contradicted the only visible recovery affordance
+ * (a manual Retry). Softened to describe what actually happens: reload, or
+ * check back.
  */
 export default function DbUnavailable() {
   return (
@@ -28,8 +35,8 @@ export default function DbUnavailable() {
         title="Live data is temporarily unavailable"
         body={
           <>
-            The dashboard can&rsquo;t reach its data right now. It&rsquo;ll reconnect
-            automatically.
+            The dashboard can&rsquo;t reach its data right now. Try reloading, or check back
+            shortly.
           </>
         }
         action={

@@ -11,7 +11,18 @@
 set -eu
 
 DATA_CHROMA="${CHROMA_PATH:-/data/chroma}"
-SEED_VER="v3"
+
+# DIGI_VECTORIZE_ACTIVE is computed once in entrypoint.sh (delegated to
+# python3 so it agrees with digisearch's own os.environ.get(...).strip()
+# check byte-for-byte) and exported before supervisord starts this oneshot;
+# default to unconfigured (0) under set -u if it were ever missing, which
+# reproduces today's behaviour of running the full seed.
+if [ "${DIGI_VECTORIZE_ACTIVE:-0}" = "1" ]; then
+  echo "digithings-stack: Vectorize configured; skipping chroma seed"
+  exit 0
+fi
+
+SEED_VER="v4"
 SEED_MARKER="${DATA_CHROMA}/.stack_chroma_seeded_${SEED_VER}"
 # Failure is NOT gated here: a failed run must retry on the next boot rather
 # than being remembered as "done/skipped" forever. Only start_digisearch.sh's

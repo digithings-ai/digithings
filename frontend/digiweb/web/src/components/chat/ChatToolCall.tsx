@@ -45,7 +45,7 @@ export type ChatToolCallProps = {
 const MARKS: Record<ChatToolCallStatus, { glyph: string; cls: string }> = {
   running: { glyph: "…", cls: "tc-run text-term-mute" },
   ok: { glyph: "✓", cls: "text-up" },
-  error: { glyph: "✕", cls: "text-down" },
+  error: { glyph: "✕", cls: "text-danger" },
 };
 
 const HEAD_CLS =

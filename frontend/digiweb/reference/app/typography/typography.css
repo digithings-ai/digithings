@@ -167,3 +167,29 @@
 .spec-mono p {
   margin: 0;
 }
+
+/* ── demo-accent: theme-aware --accent for direct-text demo captions ──────
+   Used by .spec-italic (above) and .wr-outline-line's accent word — both
+   paint var(--accent) straight onto the page surface as foreground text to
+   back a specific color claim ("money-colored", "takes the accent"), so
+   they need --accent to keep resolving under the page's default monochrome
+   livery too (which otherwise collapses --accent: var(--ink) on <html> —
+   see livery-store.ts).
+
+   This is NOT .accent-digiquant (tokens.css): that class pins a single
+   flat, dark-optimized hex meant to pair with --on-accent for BACKGROUND
+   fills (e.g. .btn-primary) — reusing it here for direct foreground text
+   read fine in dark theme but rendered at ~1.81:1 in light theme (tokens.css
+   already documents this exact ratio as "near-illegible" for digiquant
+   teal), since the flat hex has no light-theme adjustment the way the
+   theme's own --accent does. So .demo-accent instead restores literally
+   what --accent already equals in each theme absent any livery override
+   (tokens.css lines ~153/201, digiquant's own identity hue) — opting these
+   two demos out of the mono override, not adopting a different color. */
+.demo-accent {
+  --accent: #3dd6c4;
+}
+
+:root[data-theme="light"] .demo-accent {
+  --accent: #0e8c7f;
+}

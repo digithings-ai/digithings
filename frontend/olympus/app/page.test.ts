@@ -79,7 +79,7 @@ describe('Today (Overview) page', () => {
     expect(html.match(/Mixed signals persist as tech leads equities and USD strengthens\./g)).toHaveLength(1);
     expect(html).toContain('Latest decision');
     expect(html).toContain('1 allocation change');
-    expect(html).toContain('System state');
+    expect(html).toContain('Pipeline health');
     expect(html).toContain('Checking pipeline status');
     expect(html).toContain('Since inception');
     expect(html).toContain('Max drawdown');

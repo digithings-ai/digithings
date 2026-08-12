@@ -30,7 +30,7 @@
 }
 
 .tc--err {
-  border-left-color: color-mix(in srgb, var(--down) 55%, var(--term-hair));
+  border-left-color: color-mix(in srgb, var(--danger) 55%, var(--term-hair));
 }
 
 /* a live (running) call breathes its status mark */
@@ -129,8 +129,13 @@
   transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
 }
 
+.cw-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .cw-btn--primary {
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
 }
 
 .cw-btn--ghost:hover {
@@ -138,11 +143,11 @@
 }
 
 .cw-btn--danger {
-  border-color: color-mix(in srgb, var(--down) 40%, var(--hair));
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--hair));
 }
 
 .cw-btn--danger:hover {
-  background: color-mix(in srgb, var(--down) 10%, transparent);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
 
 /* ── reduced motion ─────────────────────────────────────────────────── */

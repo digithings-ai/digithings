@@ -938,11 +938,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "ruff" },
-]
 otel = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp" },
@@ -953,22 +948,33 @@ supabase = [
     { name = "supabase" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=2,<3" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.24.0" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'otel'", specifier = ">=1.24.0" },
     { name = "opentelemetry-instrumentation-fastapi", marker = "extra == 'otel'", specifier = ">=0.45b0" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.24.0" },
     { name = "prometheus-client", specifier = ">=0.20" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "supabase", marker = "extra == 'supabase'", specifier = ">=2" },
 ]
-provides-extras = ["supabase", "otel", "dev"]
+provides-extras = ["supabase", "otel"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=2,<3" },
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digiclaw"
@@ -979,7 +985,7 @@ dependencies = [
     { name = "httpx" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -989,10 +995,13 @@ dev = [
 requires-dist = [
     { name = "digibase", editable = "digibase" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
 ]
-provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digifetch"
@@ -1007,6 +1016,8 @@ dependencies = [
 browser = [
     { name = "playwright" },
 ]
+
+[package.dev-dependencies]
 dev = [
     { name = "pytest" },
     { name = "ruff" },
@@ -1017,10 +1028,14 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.40" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
 ]
-provides-extras = ["browser", "dev"]
+provides-extras = ["browser"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digigraph"
@@ -1129,6 +1144,10 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "fakeredis" },
+]
+
+[package.dev-dependencies]
+dev = [
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
@@ -1142,17 +1161,21 @@ requires-dist = [
     { name = "fakeredis", marker = "extra == 'dev'", specifier = ">=2.20" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=2,<3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
     { name = "pydantic", specifier = ">=2" },
     { name = "pyjwt", specifier = ">=2.8" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "redis", specifier = ">=5" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "sqlalchemy", specifier = ">=2.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "mypy", specifier = ">=2,<3" },
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digillm"
@@ -1226,11 +1249,8 @@ dev = [
     { name = "httpx" },
     { name = "jsonschema" },
     { name = "numpy" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "ruff" },
     { name = "statsmodels" },
     { name = "supabase" },
     { name = "yfinance" },
@@ -1270,6 +1290,13 @@ visualization = [
     { name = "plotly" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8" },
@@ -1296,15 +1323,12 @@ requires-dist = [
     { name = "polars", specifier = ">=1.0" },
     { name = "pyarrow", marker = "extra == 'prices'", specifier = ">=15" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4,<8" },
     { name = "python-dotenv", marker = "extra == 'atlas'", specifier = ">=1" },
     { name = "python-dotenv", marker = "extra == 'prices'", specifier = ">=1" },
     { name = "pyyaml", marker = "extra == 'atlas'", specifier = ">=6" },
     { name = "pyyaml", marker = "extra == 'prices'", specifier = ">=6" },
     { name = "requests", marker = "extra == 'nautilus'", specifier = ">=2.28" },
     { name = "requests", marker = "extra == 'prices'", specifier = ">=2.28" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "statsmodels", marker = "extra == 'indicators'", specifier = ">=0.14" },
     { name = "statsmodels", marker = "extra == 'nautilus'", specifier = ">=0.14" },
     { name = "supabase", marker = "extra == 'atlas'", specifier = ">=2.0" },
@@ -1315,6 +1339,13 @@ requires-dist = [
     { name = "yfinance", marker = "extra == 'prices'", specifier = ">=0.2" },
 ]
 provides-extras = ["nautilus", "indicators", "visualization", "data", "prices", "atlas", "optimize", "m2", "all", "dev", "mcp", "otel"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "pytest-cov", specifier = ">=4,<8" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digisearch"
@@ -1364,11 +1395,8 @@ dev = [
     { name = "langgraph" },
     { name = "mcp" },
     { name = "pdfplumber" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
     { name = "python-docx" },
     { name = "python-json-logger" },
-    { name = "ruff" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1394,6 +1422,13 @@ server = [
     { name = "python-json-logger" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -1424,16 +1459,20 @@ requires-dist = [
     { name = "pdfplumber", marker = "extra == 'ingestion'", specifier = ">=0.10" },
     { name = "polars", specifier = ">=1.0" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4,<8" },
     { name = "python-docx", marker = "extra == 'ingestion'", specifier = ">=1.0" },
     { name = "python-json-logger", marker = "extra == 'server'", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "typer", marker = "extra == 'server'", specifier = ">=0.12" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'server'", specifier = ">=0.30" },
 ]
 provides-extras = ["server", "chroma", "embedding", "azure", "ingestion", "agent", "edgar-corpus", "dev", "otel", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "pytest-cov", specifier = ">=4,<8" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digiskills"
@@ -1451,8 +1490,6 @@ cli = [
 dev = [
     { name = "digifetch" },
     { name = "digillm" },
-    { name = "pytest" },
-    { name = "ruff" },
     { name = "typer" },
 ]
 ingest = [
@@ -1462,18 +1499,28 @@ llm = [
     { name = "digillm" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "digifetch", marker = "extra == 'ingest'", editable = "digifetch" },
     { name = "digillm", marker = "extra == 'llm'", editable = "digillm" },
     { name = "digiskills", extras = ["cli", "ingest", "llm"], marker = "extra == 'dev'", editable = "digiskills" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.12" },
 ]
 provides-extras = ["cli", "ingest", "llm", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digismith"
@@ -1489,15 +1536,19 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "httpx" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
 ]
 langsmith = [
     { name = "langsmith" },
 ]
 otel = [
     { name = "digibase", extra = ["otel"] },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -1508,12 +1559,16 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },
     { name = "langsmith", marker = "extra == 'langsmith'", specifier = ">=0.1" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4,<8" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 provides-extras = ["langsmith", "otel", "dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "pytest-cov", specifier = ">=4,<8" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "digithings-workspace"
@@ -1530,12 +1585,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "ruff" },
-]
 service = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "mcp" },
     { name = "typer" },
     { name = "uvicorn" },
@@ -1544,19 +1596,30 @@ supabase = [
     { name = "supabase" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "ruff" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "fastapi", marker = "extra == 'service'", specifier = ">=0.110" },
+    { name = "httpx", marker = "extra == 'service'", specifier = ">=0.27" },
     { name = "mcp", marker = "extra == 'service'", specifier = ">=1.0,<2" },
     { name = "pydantic", specifier = ">=2" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8,<10" },
     { name = "pyyaml", specifier = ">=6" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
     { name = "supabase", marker = "extra == 'supabase'", specifier = ">=2" },
     { name = "typer", marker = "extra == 'service'", specifier = ">=0.12" },
     { name = "uvicorn", marker = "extra == 'service'", specifier = ">=0.29" },
 ]
-provides-extras = ["service", "dev", "supabase"]
+provides-extras = ["service", "supabase"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8,<10" },
+    { name = "ruff", specifier = ">=0.16,<0.17" },
+]
 
 [[package]]
 name = "dill"

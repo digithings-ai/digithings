@@ -31,9 +31,31 @@ jobs:
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
+
+          # Bypass: develop -> main is a promotion PR. A promotion re-delivers
+          # commits that already faced THIS gate at their own PR into develop —
+          # each one either carried linkage or was explicitly exempted here (a
+          # docs/* or chore/* head needs no issue). So re-asking at the
+          # promotion tier cannot add information; it can only ask the promotion
+          # author to invent a keyword. Note this is a linkage claim only:
+          # whether those commits were *reviewed* is a different invariant,
+          # asserted separately by ci-review-coverage.yml.
+          #
+          # Three things are checked, not one. head.ref is the bare branch name
+          # in the HEAD repository and every fork inherits a branch named
+          # develop, so the head repo is verified too; and the base is verified
+          # so a develop-headed PR into some other base is not exempted.
+          if [[ "${PR_BRANCH:-}" == "develop" && "${PR_BASE:-}" == "main" \
+                && -n "${THIS_REPO:-}" && "${PR_HEAD_REPO:-}" == "${THIS_REPO}" ]]; then
+            echo "OK — promotion PR (develop -> main); each commit already faced this gate at its own PR"
+            exit 0
+          fi
 
           # Bypass: module/<component> -> develop is an umbrella PR; the
           # underlying task PRs already carried individual issue linkage,

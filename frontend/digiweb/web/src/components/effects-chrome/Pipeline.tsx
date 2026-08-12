@@ -112,6 +112,16 @@ export function Pipeline({ columns, summary, defaultSelectedId, onSelect, classN
                   <span className="pl-node-head">
                     <span className="pl-pip" aria-hidden="true" />
                     <span className="pl-node-label">{n.label}</span>
+                    {/* The pip dot (aria-hidden) and the pl-node--${status}
+                        class are the only place a node's done/running/queued
+                        state renders — a screen reader gets aria-pressed
+                        (selection) but nothing for run status unless this
+                        node happens to be the one currently open in the
+                        detail panel below. .pl-sr, not Tailwind's sr-only:
+                        this is a shared component (see the .tl-sr/.tm-sr
+                        precedent in terminal-loaders.css/terminal-manifest.css
+                        for why). */}
+                    <span className="pl-sr">{n.status}</span>
                   </span>
                   <span className="pl-node-diag">
                     <span>{n.ms}</span>
