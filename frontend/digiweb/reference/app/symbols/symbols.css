@@ -77,11 +77,13 @@
 
 /* Inline aside nested in a .sym-label figcaption — explanatory prose (e.g. a
    sub-fidelity floor note), not another label, so it drops the uppercase/
-   tracking it would otherwise inherit. */
+   tracking it would otherwise inherit. No opacity here on purpose: --ink-mute
+   (inherited from .sym-label) is already tuned to clear 4.5:1 against
+   --surface/--bg (see its own comment in tokens.css); fading it further would
+   drop this normal-size text below that minimum. */
 .sym-note {
   text-transform: none;
   letter-spacing: 0;
-  opacity: 0.8;
 }
 
 /* Brand marks — the wordmark grammar shared with the footer colophon (mono
