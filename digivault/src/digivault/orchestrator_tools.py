@@ -117,27 +117,33 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                     "path_prefix": {
                         "type": "string",
                         "description": (
-                            # Not an enforced boundary: the caller fills this in only
-                            # when it has a corpus context AND the model omits this key
-                            # (digigraph's builtin.py _handle_digivault_search, guarded
-                            # on `context.vault_path_prefix`, which defaults to None and
-                            # is populated only by corpus routing) — with no corpus
-                            # context, omitting this argument fills in nothing. A
-                            # model-supplied value passes straight through to whichever
-                            # corpus it names, unchecked against the caller's own scope
-                            # (digigraph #2265). Listed as an optional schema property,
-                            # but on a Cloudflare D1 deployment it is functionally
-                            # required: D1 has no unscoped-search mode, so a resolved
-                            # prefix (from either source) must exist or the call fails.
+                            # digigraph's own corpus-routing context (`context.vault_
+                            # path_prefix`, populated by `resolve_corpus_override`, which
+                            # defaults to None) fills this in only when it has a corpus
+                            # context AND the model omits this key — with no corpus
+                            # context, omitting this argument fills in nothing. Listed as
+                            # an optional schema property, but on a Cloudflare D1
+                            # deployment it is functionally required: D1 has no
+                            # unscoped-search mode, so a resolved prefix (from either
+                            # source) must exist or the call fails.
+                            #
+                            # A model-supplied value is no longer trusted unchecked: once
+                            # DIGI_TENANT_CORPUS_MAP is configured, digivault's own server
+                            # (tenant_scope.py, #2298) rejects any path_prefix that does
+                            # not match the caller's authenticated tenant, regardless of
+                            # what digigraph's own builtin.py does or doesn't overwrite
+                            # (#2265) — that fix, where merged, is a second, independent
+                            # layer, not the only one.
                             "Vault_path prefix that scopes the search to one corpus "
-                            "(e.g. clients/online-compliance-center). This is a search "
-                            "filter, not an access-control boundary. If the caller has "
+                            "(e.g. clients/online-compliance-center). If the caller has "
                             "a corpus context, omitting this argument lets that context "
                             "fill it in for you; with no such context, omitting it "
                             "fills in nothing, and on a Cloudflare D1 deployment the "
                             "search then fails outright (D1 has no unscoped mode). Do "
                             "not supply a different corpus's prefix on the caller's "
-                            "behalf."
+                            "behalf — on a multi-tenant deployment the server will "
+                            "reject a mismatched prefix outright, not just ignore this "
+                            "instruction."
                         ),
                     },
                 },
@@ -184,15 +190,18 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                             # stopped a model from supplying one anyway (#2265); it
                             # only left the requirement undiscoverable, which made
                             # every call fail once nothing else injects this
-                            # argument (#2239 review).
+                            # argument (#2239 review). Once DIGI_TENANT_CORPUS_MAP is
+                            # configured, digivault's own server (tenant_scope.py,
+                            # #2298) now also rejects a path_prefix that doesn't match
+                            # the caller's authenticated tenant.
                             "Corpus prefix to fetch from (e.g. "
                             "clients/online-compliance-center). Required — this "
                             "tool has no unscoped mode; a call without it always "
                             "fails. The server rejects a vault_path outside this "
-                            "prefix, but path_prefix itself is not verified "
-                            "against the caller's actual tenant (#2265) — use the "
-                            "same prefix the prior search was scoped to, never a "
-                            "different corpus's."
+                            "prefix, and on a multi-tenant deployment rejects a "
+                            "path_prefix that isn't the caller's own corpus outright "
+                            "— use the same prefix the prior search was scoped to, "
+                            "never a different corpus's."
                         ),
                     },
                 },

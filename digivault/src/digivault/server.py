@@ -46,6 +46,7 @@ from digivault.orchestrator_tools import (
 )
 from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
 from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _first_env
+from digivault.tenant_scope import enforce_tenant_path_prefix
 from digivault.vault import Vault, VaultError
 
 # /v1/orchestrator_invoke is gated at SCOPE_READ (most tools are reads); the one
@@ -282,7 +283,9 @@ def _open_d1_store_or_503(path_prefix: str | None) -> D1Store:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-def _fetch_note_by_path(vault_path: str, path_prefix: str) -> NoteDetail | None:
+def _fetch_note_by_path(
+    vault_path: str, path_prefix: str, *, tenant_slug: str | None = None
+) -> NoteDetail | None:
     """Enforced by-path fetch shared by ``POST /v1/notes/by-path`` and the
     ``digivault_get_note`` orchestrator tool. ``None`` means "no such note" (a clean,
     recoverable outcome); everything else that can go wrong raises ``HTTPException``.
@@ -299,12 +302,29 @@ def _fetch_note_by_path(vault_path: str, path_prefix: str) -> NoteDetail | None:
     what "no prefix supplied" means for its own surface (a required pydantic field for
     the route; an explicit ok=False refusal, never an unscoped read, for the
     orchestrator tool) before ever reaching this function.
+
+    ``tenant_slug`` (from the caller's verified ``request.state.digi_auth``, see
+    ``_tenant_slug``) is checked against ``path_prefix`` via
+    ``enforce_tenant_path_prefix`` *before* the vault_path/prefix containment check
+    below — a caller must be entitled to the prefix it named at all before whether a
+    specific path falls under it is even relevant. This is the second, independent
+    enforcement point CodeRabbit's review of PR #2293 found missing: the boundary
+    above only proves ``vault_path`` matches whatever ``path_prefix`` the *same
+    request* supplied, never that the caller was entitled to name that prefix in the
+    first place. digigraph's own #2265 fix, once merged, will independently protect
+    the model -> digigraph leg — but as of this function's own PR (#2298), that fix
+    has not yet landed on ``develop``, so this function is currently the *only*
+    enforcement point for a caller going through digigraph too, not merely a backstop
+    for a caller bypassing it. ``tenant_slug`` itself is only as trustworthy as
+    ``digi_auth`` makes it — see ``tenant_scope.py``'s module docstring for a known,
+    tracked residual dependency on that.
     """
     path = normalize_vault_path(vault_path)
     try:
         prefix = resolve_path_prefix(path_prefix)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    enforce_tenant_path_prefix(tenant_slug, prefix)
     if prefix and path != prefix and not path.startswith(prefix + "/"):
         raise HTTPException(status_code=403, detail="vault_path is outside the caller's prefix")
     store = _open_d1_store_or_503(prefix or None)
@@ -332,6 +352,16 @@ def _require_tool_scope(request: Request, tool: str) -> None:
             status_code=403,
             detail=f"insufficient_scope: {required} required for {tool!r}",
         )
+
+
+def _tenant_slug(request: Request) -> str | None:
+    """The authenticated caller's tenant, from the same verified claim
+    ``_require_tool_scope`` reads ``.scopes`` off of. ``None`` for a request with no
+    ``digi_auth`` at all (shouldn't happen past ``DigiAuthMiddleware`` in production,
+    but this stays defensive rather than raising) or an auth context with no
+    ``tenant_slug`` populated."""
+    auth = getattr(request.state, "digi_auth", None)
+    return getattr(auth, "tenant_slug", None) if auth is not None else None
 
 
 # ── request/response models ────────────────────────────────────────────────
@@ -460,7 +490,7 @@ def list_notes() -> NoteList:
         503: {"description": "D1 misconfigured, no database for the prefix, or a D1 failure"},
     },
 )
-def get_note_by_path(req: NoteByPathRequest) -> NoteDetail:
+def get_note_by_path(req: NoteByPathRequest, request: Request) -> NoteDetail:
     """Load one note whole (body + frontmatter), addressed by ``vault_path``. D1-only.
 
     ``path_prefix`` is an enforced authorization boundary, not an advisory filter: two
@@ -468,6 +498,12 @@ def get_note_by_path(req: NoteByPathRequest) -> NoteDetail:
     one prefix could read another client's notes just by passing an arbitrary
     ``vault_path``. There is no filesystem/Supabase fallback here — a by-path fetch
     only makes sense against the corpus that owns the path (#2239).
+
+    ``path_prefix`` itself is also now checked against the caller's authenticated
+    tenant (``_fetch_note_by_path``'s ``tenant_slug`` param) when
+    ``DIGI_TENANT_CORPUS_MAP`` is configured — closing the gap where ``digivault:read``
+    alone let any caller name *any* prefix, not just their own corpus's (found in
+    CodeRabbit's review of PR #2293; see ``tenant_scope.py``).
 
     ``path_prefix`` resolution goes through ``resolve_path_prefix`` (shared with
     ``D1Store.search``/``list_notes``) rather than a local ``prefix and ...`` check —
@@ -487,7 +523,7 @@ def get_note_by_path(req: NoteByPathRequest) -> NoteDetail:
     ``digivault_get_note`` orchestrator tool dispatched from ``orchestrator_invoke``
     below, so both surfaces enforce the same boundary from one place (#2239).
     """
-    note = _fetch_note_by_path(req.vault_path, req.path_prefix)
+    note = _fetch_note_by_path(req.vault_path, req.path_prefix, tenant_slug=_tenant_slug(request))
     if note is None:
         raise HTTPException(
             status_code=404, detail=f"note not found: {normalize_vault_path(req.vault_path)}"
@@ -590,6 +626,20 @@ def orchestrator_invoke(
             str(path_prefix_raw).strip().strip("/") if path_prefix_raw is not None else None
         ) or None
 
+        # Security (CodeRabbit review of PR #2293, and its own follow-up review of PR
+        # #2298): checked once, here, before the backend-precedence branch below, so
+        # it applies uniformly to D1, local-vault, and Supabase — not just whichever
+        # backend happens to be configured today. `path_prefix` reaching this point is
+        # caller/model-supplied; a caller hitting this endpoint directly with a bare
+        # `digivault:read` token has never been protected by anything digigraph does
+        # (its own #2265 fix, where merged, only covers the model -> digigraph leg —
+        # see tenant_scope.py's module docstring for exactly what state that fix is in
+        # on `develop` as of this comment, and this function's own residual dependency
+        # on `_tenant_slug` actually being trustworthy). No-op when `path_prefix` is
+        # `None` (nothing to check yet — each backend's own "prefix required" handling
+        # still applies) or when `DIGI_TENANT_CORPUS_MAP` is unset.
+        enforce_tenant_path_prefix(_tenant_slug(request), path_prefix)
+
         # D1 first: when the remote corpus is configured it is authoritative, and the
         # baked /data/vault seed must not shadow it (the #2239 production bug — prod
         # sets DIGIVAULT_ROOT to a stub vault that must never win over the real corpus).
@@ -690,7 +740,7 @@ def orchestrator_invoke(
                 tool=tool,
                 error="path_prefix is required for digivault_get_note",
             )
-        note = _fetch_note_by_path(vault_path, normalized_prefix)
+        note = _fetch_note_by_path(vault_path, normalized_prefix, tenant_slug=_tenant_slug(request))
         if note is None:
             # A stale or mistyped vault_path is an expected, recoverable outcome (the
             # model should try a different path or re-search), not a tool failure —
