@@ -59,7 +59,7 @@
       "refersTo": "button-primary",
       "description": "The single solid-fill accent action allowed per viewport.",
       "html": "<button class=\"ds-btn-primary\">Deploy strategy</button>",
-      "css": ".ds-btn-primary { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; background: var(--accent); color: #06110f; border: 1px solid var(--accent); border-radius: 999px; padding: 0.62rem 1.3rem; cursor: pointer; } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
+      "css": ".ds-btn-primary { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.02em; background: var(--accent); color: var(--on-accent); border: 1px solid var(--accent); border-radius: 999px; padding: 0.62rem 1.3rem; cursor: pointer; } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
     },
     {
       "name": "Ghost Button",
@@ -150,7 +150,7 @@
       "Don't let atlas, hermes, or kairos render as colored products on a redesigned surface — they name backend LangGraph sub-graphs and must collapse to plain ink.",
       "Don't reuse the diff palette (--rv-add/--rv-del) for anything except unified-diff review UI, and don't reuse money colors for a non-financial positive/negative read.",
       "Don't put a message in a bubble or box inside the chat transcript — plain turns are grid rows; only rich embedded objects earn a frame.",
-      "Don't carry forward the reference implementation's known gaps (undeclared --surface-inverse fallback, missing :disabled styling on ghost/quiet/danger buttons, digichat's light-theme accent contrast failure) as if they were intentional patterns."
+      "Don't carry forward the reference implementation's remaining known gaps (missing :disabled styling on ghost/quiet/danger buttons, digichat's light-theme accent contrast failure) as if they were intentional patterns. (The undeclared --surface-inverse fallback was fixed — every consumer now routes through the already-correct --on-accent token.)"
     ]
   }
 }

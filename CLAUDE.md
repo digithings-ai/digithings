@@ -204,10 +204,21 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 
 The **Check linkage** CI gate (the `Require Fixes` check) is separate from the branch-name rule. It passes on any one of these, in the order `.github/workflows/ci-pr-hygiene.yml` tests them:
 
-1. Head branch is `module/*` — umbrella PR; the underlying task PRs already carried linkage.
-2. Head branch is `docs/*` or `chore/*` — **bypassed outright**, no issue required. A `CLAUDE.md` tweak or a CI dedupe does not need a backlog item.
-3. Head branch is `task/<N>-slug` — implicit link to issue #N.
-4. A `Fixes/Closes/Resolves #N` keyword appears in the PR **body or title** (either one).
+1. Head is `develop`, base is `main`, **and the head repo is this repo** — promotion PR; every commit in the range already faced this same gate at its own PR into `develop`, where it either carried linkage or was exempted by rule 3. All three are checked: a `develop`-headed PR into another base is not exempted, and since `head.ref` is the bare branch name in the *head* repository — and every fork inherits a branch named `develop` — a fork's `develop` does not qualify.
+2. Head branch is `module/*` — umbrella PR; the underlying task PRs already carried linkage.
+3. Head branch is `docs/*` or `chore/*` — **bypassed outright**, no issue required. A `CLAUDE.md` tweak or a CI dedupe does not need a backlog item.
+4. Head branch is `task/<N>-slug` — implicit link to issue #N.
+5. A `Fixes/Closes/Resolves #N` keyword appears in the PR **body or title** (either one).
+
+Bypass 1 exists because the same act — promoting `develop` to `main` — got a different verdict depending on how the PR was opened. Of 142 PRs merged into `main`, 50 were promotions opened from a `chore/promote-develop-to-main-*` head and passed automatically via rule 3, while 83 were opened from `develop` directly. Replaying the gate over those 83: **38 failed, 45 passed** — 35 of the 45 by a deliberate standalone `Fixes #N` line and 10 by a keyword that merely appeared somewhere in the prose. So the gate was not blind to promotions; it was inconsistent about them, and a bare `develop` head was the case it had no rule for.
+
+Nothing was ever blocked by this: `Require Fixes` is not a required check on `main` (only `Every commit reaching main was reviewed` is). The cost was a red X on the repo's highest-stakes PR that carried no information, which teaches everyone to ignore it.
+
+Two things this bypass does **not** claim. It does not claim every promoted commit carries an issue link — rule 3 exempts `docs/*` and `chore/*` outright, so `develop` genuinely does accumulate unlinked commits, and they reach `main`. And it does not borrow authority from `ci-review-coverage.yml`: that gate asserts every commit was *reviewed*, which is a different invariant from linkage and cannot stand in for it. The bypass rests only on the narrower claim that each commit already received this gate's own verdict at its own PR.
+
+Not covered: `develop` → `module/*` sync PRs, which fail the gate for the same structural reason. Use the `chore/sync-*` head that the branching section already prescribes — it clears via rule 3.
+
+Note a `Fixes #N` on a promotion never auto-closed anything either: GitHub auto-closes only on merge into the default branch, and this repo's default is `develop`, not `main`.
 
 So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that still need an explicit keyword — as are the agent namespaces (`claude/<slug>` et al.), which no rule bypasses. Prefer `task/<N>-slug` for issue-linked work, and never `Closes #N` against an umbrella tracking issue you don't want auto-closed — use `Refs #N` when the PR should not close the issue, which satisfies no gate on its own and so pairs with a `docs/`, `chore/`, or `task/` branch.
 

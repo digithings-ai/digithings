@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useInView, useReducedMotion } from "motion/react";
+import { useInView } from "motion/react";
+import { useMotionSafe } from "../../motion/primitives";
 
 /**
  * Odometer — the mechanical digit-roll counter promoted from the design
@@ -35,7 +36,12 @@ export function Odometer({
 }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { amount: 0.6, once: true });
-  const reduced = useReducedMotion();
+  // useMotionSafe(), not raw useReducedMotion() -- see WordReveal.tsx's fix
+  // comment (#2244). `reduced` here is only ever read inside the effect
+  // below (never in this component's JSX), so it was never a hydration risk
+  // in practice -- swapped anyway so no raw useReducedMotion() call sites
+  // remain in this package.
+  const reduced = !useMotionSafe();
 
   // SSR ships the settled reels; once in view (and motion is allowed) rewind
   // every strip to zero with transitions suspended, force a reflow so the

@@ -135,7 +135,7 @@
 }
 
 .cw-btn--primary {
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
 }
 
 .cw-btn--ghost:hover {

@@ -87,21 +87,38 @@
 
 /* Convenience scoping classes so markup can opt into a module's accent
    without writing inline styles. Any component inside will resolve
-   var(--accent) to the module color. */
-.accent-digigraph  { --accent: var(--accent-digigraph); }
-.accent-digiquant  { --accent: var(--accent-digiquant); }
+   var(--accent) to the module color.
+
+   --on-accent (the text/foreground color for anything painted on top of
+   --accent, e.g. .btn-primary) is declared theme-scoped only, below
+   (:root[data-theme="dark|light"]): white on dark, near-black on light. That
+   pairing is only correct for accents that flip light/dark WITH the theme —
+   which is true of --ink (mono livery, and atlas/hermes/kairos, which
+   collapse to --ink under [data-theme] by design) but false for every
+   per-module accent hex here: they're all fixed, light-to-medium hues
+   regardless of theme (--accent-digiquant/etc. have no [data-theme] override),
+   so the theme-scoped --on-accent flips to white in light theme against a
+   light-to-medium background — near-illegible (verified: as low as 1.81:1 for
+   digiquant teal, 1.86:1 for digigraph gold). Each of these classes pins
+   --on-accent to a single dark ink that clears 4.5:1 against every one of
+   them in both themes (worst case 5.21:1, digistore) rather than letting it
+   inherit the theme flip. .accent-atlas/-hermes/-kairos are deliberately
+   NOT listed here — their accent already resolves to --ink, so they should
+   keep following the theme flip like mono does. */
+.accent-digigraph  { --accent: var(--accent-digigraph);  --on-accent: #06110f; }
+.accent-digiquant  { --accent: var(--accent-digiquant);  --on-accent: #06110f; }
 .accent-atlas      { --accent: var(--accent-atlas); }
 .accent-hermes     { --accent: var(--accent-hermes); }
 .accent-kairos     { --accent: var(--accent-kairos); }
-.accent-digisearch { --accent: var(--accent-digisearch); }
-.accent-digichat   { --accent: var(--accent-digichat); }
-.accent-digikey    { --accent: var(--accent-digikey); }
-.accent-digismith  { --accent: var(--accent-digismith); }
-.accent-digiclaw   { --accent: var(--accent-digiclaw); }
-.accent-digibase   { --accent: var(--accent-digibase); }
-.accent-digistore  { --accent: var(--accent-digistore); }
-.accent-digilink   { --accent: var(--accent-digilink); }
-.accent-digivault  { --accent: var(--accent-digivault); }
+.accent-digisearch { --accent: var(--accent-digisearch); --on-accent: #06110f; }
+.accent-digichat   { --accent: var(--accent-digichat);   --on-accent: #06110f; }
+.accent-digikey    { --accent: var(--accent-digikey);    --on-accent: #06110f; }
+.accent-digismith  { --accent: var(--accent-digismith);  --on-accent: #06110f; }
+.accent-digiclaw   { --accent: var(--accent-digiclaw);   --on-accent: #06110f; }
+.accent-digibase   { --accent: var(--accent-digibase);   --on-accent: #06110f; }
+.accent-digistore  { --accent: var(--accent-digistore);  --on-accent: #06110f; }
+.accent-digilink   { --accent: var(--accent-digilink);   --on-accent: #06110f; }
+.accent-digivault  { --accent: var(--accent-digivault);  --on-accent: #06110f; }
 
 /* ==========================================================================
    Redesign theme layer (v2) — semantic, light + dark, terminal-phosphor cyan

@@ -615,6 +615,20 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   animation: dqss-skel 1.2s ease-in-out infinite;
 }
 @keyframes dqss-skel { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+/* Card-level placeholder shown before the strategy index itself has loaded
+   (StrategyCardSkeleton, #2244) -- same shimmer as .dqss-chart-skeleton
+   above, sized per element instead of duplicated per class. */
+.dqss-logo-skeleton, .dqss-meta-skeleton, .dqss-kpi-skeleton, .dqss-full-skeleton {
+  display: inline-block;
+  border-radius: 4px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hair) 55%, transparent) 0%, color-mix(in srgb, var(--hair) 25%, transparent) 50%, color-mix(in srgb, var(--hair) 55%, transparent) 100%);
+  background-size: 200% 100%;
+  animation: dqss-skel 1.2s ease-in-out infinite;
+}
+.dqss-logo-skeleton { width: 28px; height: 28px; border-radius: 50%; }
+.dqss-meta-skeleton { width: 8rem; height: 0.9rem; }
+.dqss-kpi-skeleton { width: 3.2rem; height: 1em; }
+.dqss-full-skeleton { width: 7rem; height: 0.9rem; }
 .dqss-chart-empty {
   display: flex;
   align-items: center;
@@ -647,7 +661,9 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
      (deck.css) and DeckStack gates its recede transform off under reduced
      motion; every card is always fully rendered in flow (no-JS included,
      law 06). */
-  .dqss-chart-skeleton { animation: none; }
+  .dqss-chart-skeleton, .dqss-logo-skeleton, .dqss-meta-skeleton, .dqss-kpi-skeleton, .dqss-full-skeleton {
+    animation: none;
+  }
 }
 
 /* ---- subsystem poster (canon §12) ----
