@@ -107,7 +107,7 @@ export interface PricingProps {
 export function Pricing({ tiers, footnote, variant = "compact", className }: PricingProps) {
   return (
     <>
-      <div className={cx("grid grid-cols-2 gap-[0.9rem]", className)}>
+      <div className={cx("grid grid-cols-2 gap-[0.9rem] max-[640px]:grid-cols-1", className)}>
         {tiers.map((tier, i) => (
           <PricingTierCard key={i} variant={variant} {...tier} />
         ))}

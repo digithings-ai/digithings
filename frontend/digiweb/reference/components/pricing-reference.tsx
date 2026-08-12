@@ -40,7 +40,13 @@ export function PricingReference() {
           {
             name: "Managed",
             accent: true,
-            description: "Onboarding, custom limits, SSO, audit log, SLA-backed uptime.",
+            description: (
+              <>
+                Onboarding, custom limits, SSO, audit log, SLA-backed uptime.
+                <br />
+                Free for your first 30 days — no credit card, synced with your GitHub account.
+              </>
+            ),
             cta: (
               <button type="button" className="btn-primary">
                 Contact sales
@@ -48,7 +54,6 @@ export function PricingReference() {
             ),
           },
         ]}
-        footnote="Free for your first 30 days. No credit card required. Synced with your GitHub account."
       />
 
       <PrecisionTable
