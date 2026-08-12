@@ -613,12 +613,17 @@ def orchestrator_invoke(
             except D1StoreError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
             if path_prefix is None:
-                # `digivault_search_notes` fires with no `path_prefix` on every chat
-                # turn (`always_retrieve_tools`, #2265) — with D1 configured there is
-                # no "search across every corpus" mode (one prefix, one database, by
-                # construction), so this is a certainty, not an edge case. `ok=False`
-                # (HTTP 200), not a raised 400: digigraph's `invoke_digivault_tool`
-                # calls `raise_for_status()`, and `str(httpx.HTTPStatusError)` drops
+                # Reached only when the caller has no mapped tenant corpus: digigraph's
+                # `_handle_digivault_search` (builtin.py) now overwrites `path_prefix`
+                # from `ToolContext.vault_path_prefix` unconditionally before invoking
+                # (#2265, closed on the digigraph side by #2240), so this is no longer
+                # "every chat turn" — it is reached only for an unmapped tenant slug,
+                # the same as the analogous branch in `digivault_get_note` below. With
+                # D1 configured there is no "search across every corpus" mode (one
+                # prefix, one database, by construction), so this branch still refuses
+                # rather than falling back to an unscoped read. `ok=False` (HTTP 200),
+                # not a raised 400: digigraph's `invoke_digivault_tool` calls
+                # `raise_for_status()`, and `str(httpx.HTTPStatusError)` drops
                 # the response body, so a raised 400 here would reach the model as a
                 # bare status code instead of this sentence (#2239 review). Mirrors the
                 # existing `query is required` convention just above.
