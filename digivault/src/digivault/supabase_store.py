@@ -19,10 +19,14 @@ from typing import (  # score:allow untyped any — Supabase client/response sha
     Protocol,
 )
 
-from pydantic import BaseModel, Field
-
 from digivault import frontmatter as _fm
 from digivault.models import NoteRow, VaultConfig
+
+# `VaultSearchHit` now lives in `models.py` (shared with the D1 store) and is
+# re-exported here so existing `from digivault.supabase_store import VaultSearchHit`
+# imports (e.g. `local_search.py`) keep working. The redundant `as VaultSearchHit`
+# marks the re-export deliberate so ruff's F401 doesn't flag it as unused.
+from digivault.models import VaultSearchHit as VaultSearchHit
 from digivault.vault import Vault
 
 DEFAULT_TABLE = "architecture_notes"
@@ -31,19 +35,6 @@ DEFAULT_SEARCH_RPC = "search_architecture_notes"
 # Columns needed to reconstruct a note. body+frontmatter round-trip via
 # dump_frontmatter; the Vault re-parses them so tags/wikilinks/backlinks match disk.
 _SELECT = "vault_path,title,frontmatter,body_markdown"
-
-
-class VaultSearchHit(BaseModel):
-    """A ranked full-text hit from the ``search_architecture_notes`` RPC (migration 068)."""
-
-    vault_path: str
-    title: str
-    note_type: str
-    summary: str
-    body_markdown: str
-    tags: tuple[str, ...] = Field(default=())
-    wikilinks: tuple[str, ...] = Field(default=())
-    rank: float
 
 
 class SupabaseClientProtocol(Protocol):
