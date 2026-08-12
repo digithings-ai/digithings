@@ -345,7 +345,14 @@
      burger). */
   .prompt-pause {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     align-self: center;
+    /* WCAG 2.5.8: 24x24 CSS px minimum touch target. The 13px icon + 0.2rem
+       padding alone only reach ~19.4px; this pads the hit area out to the
+       floor without changing the icon's own visual size. */
+    min-width: 1.5rem;
+    min-height: 1.5rem;
     padding: 0.2rem;
     border: none;
     background: transparent;
