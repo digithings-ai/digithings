@@ -22,18 +22,35 @@ export function mapDigisearchRagSources(
     seen.add(doc.path);
     documents.push(doc);
   }
-  if (!documents.length) return null;
   const toolName = ragToolDisplayName(payload.tool);
   const query =
     typeof payload.query === "string" && payload.query.trim()
       ? payload.query.trim()
       : undefined;
+  // A zero-hit search (`sources: []`) reaches here too — digigraph now emits
+  // this trace on every completed retrieval, hit or miss (workflow.py's
+  // `"rag_sources" in data` gate, not `data.get("rag_sources")`), so it must
+  // render as a visible "searched, found nothing" row rather than being
+  // dropped, or a user cannot tell that apart from "the model never
+  // searched". Omitting `documents` (rather than early-returning null) is
+  // enough: toDigiChatActivity's retrieve branch already turns a
+  // documents-less completed retrieve span into a `tool_result` with
+  // `count: 0`, which the shared UI's `outcomeMeta` renders as the literal
+  // "no hits" string — the same outcome a genuinely-empty search gets today
+  // via the trailing settle pass, just reached directly instead of via a
+  // started/completed execute_tool pair (digisearch/digivault never emit
+  // one).
+  //
+  // `hit_count` rides along on this payload too (see digigraph's
+  // workflow.py) but is deliberately not read here: `documents.length` after
+  // de-duplication is the number that actually reaches the screen, so it is
+  // the authoritative count. Nothing in this package consumes `hit_count`.
   return {
     operation: "retrieve",
     status: "completed",
     label: "Sources",
     toolName,
-    documents,
+    ...(documents.length ? { documents } : {}),
     ...(query ? { query } : {}),
   };
 }

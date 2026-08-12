@@ -117,27 +117,28 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                     "path_prefix": {
                         "type": "string",
                         "description": (
-                            # Not an enforced boundary: the caller fills this in only
-                            # when it has a corpus context AND the model omits this key
-                            # (digigraph's builtin.py _handle_digivault_search, guarded
-                            # on `context.vault_path_prefix`, which defaults to None and
-                            # is populated only by corpus routing) — with no corpus
-                            # context, omitting this argument fills in nothing. A
-                            # model-supplied value passes straight through to whichever
-                            # corpus it names, unchecked against the caller's own scope
-                            # (digigraph #2265). Listed as an optional schema property,
+                            # Not an enforced boundary at this server, but it is no
+                            # longer a mere default-if-missing at the caller either:
+                            # digigraph's builtin.py _handle_digivault_search
+                            # overwrites this argument unconditionally with the
+                            # caller's own session tenant scope
+                            # (context.vault_path_prefix) before the request ever
+                            # reaches here — whatever the model supplies is discarded,
+                            # not merely filled in when absent (digigraph #2265,
+                            # closed by #2240). Listed as an optional schema property,
                             # but on a Cloudflare D1 deployment it is functionally
                             # required: D1 has no unscoped-search mode, so a resolved
-                            # prefix (from either source) must exist or the call fails.
+                            # prefix (from the session's own tenant context) must
+                            # exist or the call fails.
                             "Vault_path prefix that scopes the search to one corpus "
                             "(e.g. clients/online-compliance-center). This is a search "
-                            "filter, not an access-control boundary. If the caller has "
-                            "a corpus context, omitting this argument lets that context "
-                            "fill it in for you; with no such context, omitting it "
-                            "fills in nothing, and on a Cloudflare D1 deployment the "
-                            "search then fails outright (D1 has no unscoped mode). Do "
-                            "not supply a different corpus's prefix on the caller's "
-                            "behalf."
+                            "filter, not an access-control boundary — and, when called "
+                            "through digigraph, not actually under your control: "
+                            "digigraph replaces whatever you pass here with the "
+                            "caller's own session tenant scope before this tool ever "
+                            "sees it, whether you supply a value or not. Omit it; on a "
+                            "Cloudflare D1 deployment the search fails outright if no "
+                            "tenant scope is resolved (D1 has no unscoped mode)."
                         ),
                     },
                 },
@@ -181,18 +182,29 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                             # required for digivault_get_note"` — and
                             # `OrchestratorInvokeRequest.arguments` is
                             # `dict[str, Any]`, so omitting the schema property never
-                            # stopped a model from supplying one anyway (#2265); it
-                            # only left the requirement undiscoverable, which made
-                            # every call fail once nothing else injects this
-                            # argument (#2239 review).
+                            # stopped a model from supplying one anyway; it only
+                            # left the requirement undiscoverable, which made every
+                            # call fail once nothing else injects this argument
+                            # (#2239 review). digigraph's builtin.py
+                            # _handle_digivault_get_note now overwrites this
+                            # argument unconditionally with the caller's own
+                            # session tenant scope (context.vault_path_prefix)
+                            # before the request ever reaches here — whatever the
+                            # model supplies is discarded, not merely filled in
+                            # when absent (#2265, closed by #2240). Mirrors
+                            # digivault_search_notes's equivalent comment above.
                             "Corpus prefix to fetch from (e.g. "
                             "clients/online-compliance-center). Required — this "
                             "tool has no unscoped mode; a call without it always "
                             "fails. The server rejects a vault_path outside this "
-                            "prefix, but path_prefix itself is not verified "
-                            "against the caller's actual tenant (#2265) — use the "
-                            "same prefix the prior search was scoped to, never a "
-                            "different corpus's."
+                            "prefix, but path_prefix itself is a search filter, "
+                            "not an access-control boundary — and, when called "
+                            "through digigraph, not actually under your control: "
+                            "digigraph replaces whatever you pass here with the "
+                            "caller's own session tenant scope before this tool "
+                            "ever sees it, whether you supply a value or not. "
+                            "Omit it, or pass any placeholder — it makes no "
+                            "difference to the outcome."
                         ),
                     },
                 },

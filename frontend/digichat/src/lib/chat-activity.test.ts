@@ -221,6 +221,20 @@ describe("toDigiChatActivity", () => {
     ]);
   });
 
+  // digisearch/digivault (via digigraph) never emit a preceding execute_tool
+  // started/completed pair — a zero-hit search reaches here as a single
+  // completed `retrieve` span with no `documents` field (see
+  // mapDigisearchRagSources/mapDigivaultSearchNotes). It must render the same
+  // honest "no hits" result as the settle-pass case above, distinct from both
+  // a real hit (has documents) and the tool never running (no span at all).
+  it("renders a lone zero-hit retrieve span (no preceding execute_tool) as a no-hits result", () => {
+    expect(
+      toDigiChatActivity([
+        { operation: "retrieve", toolName: "digisearch", query: "jwt", status: "completed", label: "Sources" },
+      ])
+    ).toEqual([{ kind: "tool_result", name: "digisearch", query: "jwt", hits: [], count: 0 }]);
+  });
+
   it("keeps a completed search as a running tool_call until the turn settles", () => {
     expect(
       toDigiChatActivity([started("file_search"), finished("file_search", "auth")], {
