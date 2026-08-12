@@ -1,15 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { m, useReducedMotion } from "motion/react";
 import { modules } from "@digithings/web";
-
-/** Reads --accent-<id> off <html> — "" during SSR, where computed styles
- *  don't exist. */
-function readAccentHex(id: string): string {
-  if (typeof document === "undefined") return "";
-  return getComputedStyle(document.documentElement).getPropertyValue(`--accent-${id}`).trim();
-}
 
 /**
  * Livery switcher — a self-contained swatch strip demoing the per-module accent
@@ -30,21 +23,24 @@ const LIVERIES = modules
 
 export function LiverySwitcher() {
   const [active, setActive] = useState<(typeof LIVERIES)[number]["id"]>("digiquant");
+  const [activeHex, setActiveHex] = useState("");
   const reduceMotion = useReducedMotion();
   const activeLivery = LIVERIES.find((l) => l.id === active) ?? LIVERIES[0];
 
-  // Adjust during render when `active` changes, rather than in an effect
-  // (react-hooks/set-state-in-effect) — the same "resetting state when a
-  // prop changes" idiom used elsewhere in this codebase (e.g. site-nav.tsx's
-  // pathname handler, useEmbedGate's host handler).
-  const [activeHexFor, setActiveHexFor] = useState(() => ({
-    id: active,
-    hex: readAccentHex(active),
-  }));
-  if (activeHexFor.id !== active) {
-    setActiveHexFor({ id: active, hex: readAccentHex(active) });
-  }
-  const activeHex = activeHexFor.hex;
+  // Starts "" (SSR-safe — no computed styles exist server-side, and starting
+  // with any client-only guess here would mismatch the server-rendered HTML
+  // the moment hydration ran the same computation with a real DOM available).
+  // Reading --accent-<id> off <html> is exactly what effects are for per
+  // React's own docs (sync from an external system — the CSSOM), so the
+  // unconditional setState is intentional here, same pattern as
+  // TerminalManifest.tsx's typing-effect state.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setActiveHex(
+      getComputedStyle(document.documentElement).getPropertyValue(`--accent-${active}`).trim(),
+    );
+  }, [active]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <section className={`section-block livery-switcher accent-${active}`}>

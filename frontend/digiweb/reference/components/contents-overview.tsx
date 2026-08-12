@@ -29,7 +29,12 @@ const FAMILIES = [
 
 export function ContentsOverview() {
   const pathname = usePathname();
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  // Boundary-checked, not a bare startsWith: /data would otherwise also
+  // read "current" on a hypothetical /data-v2 route (or any other sibling
+  // sharing the prefix) — match only the exact path or a path continuing
+  // after a "/".
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <section className="section-block contents-overview">

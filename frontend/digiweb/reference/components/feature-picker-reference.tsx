@@ -55,12 +55,14 @@ export function FeaturePickerReference() {
         {TOUR.map((mod, i) => (
           <button
             key={mod.id}
+            id={`fp-tab-${mod.id}`}
             ref={(el) => {
               tabRefs.current[i] = el;
             }}
             type="button"
             role="tab"
             aria-selected={mod.id === active}
+            aria-controls="fp-panel"
             tabIndex={mod.id === active ? 0 : -1}
             className={`fp-tab accent-${mod.id}${mod.id === active ? " on" : ""}`}
             onClick={() => setActive(mod.id)}
@@ -74,8 +76,10 @@ export function FeaturePickerReference() {
 
       <m.div
         key={reduced ? "static" : current.id}
+        id="fp-panel"
         className="fp-panel"
         role="tabpanel"
+        aria-labelledby={`fp-tab-${current.id}`}
         initial={reduced ? false : { opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
