@@ -35,12 +35,15 @@ def test_document_rag_hands_tools_to_the_model_and_does_not_prefetch(
     """The model must choose retrieval itself: no prefetch call before run_tools,
     no injected "already fetched" context, and an explicit 4-round budget.
 
-    ``always_retrieve_tools`` is still set here (matching production digiproject.yaml
-    configs) precisely so that, against the old prefetch code, this reproduces the
-    exact regression: ``execute`` would be called for "digisearch" before the model
-    ever asked. ``research_node`` itself swallows that AssertionError in its broad
-    except-Exception wrapper, so this calls ``_run_document_rag_path`` directly
-    (as the tests it replaces already did) to let the assertion surface.
+    ``always_retrieve_tools`` is set here to exercise the regression this test
+    guards, not because production still sets it: this diff (#2240) dropped that
+    key from every committed digiproject.yaml — it no longer appears anywhere the
+    stack actually deploys from. Setting it locally reproduces the exact old-code
+    failure mode against the prefetch this test proves is gone: ``execute`` would
+    be called for "digisearch" before the model ever asked. ``research_node``
+    itself swallows that AssertionError in its broad except-Exception wrapper, so
+    this calls ``_run_document_rag_path`` directly (as the tests it replaces
+    already did) to let the assertion surface.
     """
     monkeypatch.delenv("DIGI_RESEARCH_BRIEF", raising=False)
     cfg = DigiProjectConfig(

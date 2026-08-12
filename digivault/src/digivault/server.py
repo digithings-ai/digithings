@@ -670,21 +670,25 @@ def orchestrator_invoke(
             normalize_vault_path(str(path_prefix_arg)) if path_prefix_arg is not None else ""
         )
         if not normalized_prefix:
-            # Unlike `digivault_search_notes`, nothing in digigraph's `builtin.py`
-            # injects the caller's tenant context into this tool's arguments today —
-            # only `_handle_digivault_search` does that, and only for
-            # `digivault_search_notes` (builtin.py:227). So `path_prefix` will be
-            # absent on every real call until digigraph grows an equivalent handler
-            # for this tool. `resolve_path_prefix(None)` treats a missing prefix as
-            # "no scoping requested" (by design, for callers that legitimately want
-            # that) — silently taking that path here would turn "the caller forgot to
-            # scope this" into an unscoped cross-tenant read, exactly the fail-open
-            # the by-path route's required `path_prefix` field exists to close.
-            # Refuse instead, `ok=False` (not a raised 400): digigraph's
-            # `invoke_digivault_tool` calls `raise_for_status()`, and
-            # `str(httpx.HTTPStatusError)` drops the response body, so a raised 400
-            # would reach the model as a bare status code rather than this sentence —
-            # same reasoning as the `digivault_search_notes` D1 branch above (#2239).
+            # digigraph's `_handle_digivault_get_note` (builtin.py:~300) now injects
+            # the caller's tenant context here too, the same as
+            # `_handle_digivault_search` (builtin.py:~252) does for
+            # `digivault_search_notes` — both overwrite `path_prefix` from
+            # `ToolContext.vault_path_prefix` unconditionally (#2265, closed on the
+            # digigraph side by #2240). So this branch is no longer "absent on every
+            # real call": it is reached only when the session has no mapped tenant
+            # (an unmapped corpus slug), in which case digigraph passes `None`
+            # through rather than inventing a prefix. `resolve_path_prefix(None)`
+            # treats a missing prefix as "no scoping requested" (by design, for
+            # callers that legitimately want that) — silently taking that path here
+            # would turn "no tenant is mapped for this session" into an unscoped
+            # cross-tenant read, exactly the fail-open the by-path route's required
+            # `path_prefix` field exists to close. Refuse instead, `ok=False` (not a
+            # raised 400): digigraph's `invoke_digivault_tool` calls
+            # `raise_for_status()`, and `str(httpx.HTTPStatusError)` drops the
+            # response body, so a raised 400 would reach the model as a bare status
+            # code rather than this sentence — same reasoning as the
+            # `digivault_search_notes` D1 branch above (#2239).
             return OrchestratorInvokeResponse(
                 ok=False,
                 tool=tool,

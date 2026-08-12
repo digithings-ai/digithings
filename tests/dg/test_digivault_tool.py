@@ -127,6 +127,11 @@ def test_digivault_get_note_is_registered() -> None:
 
 @pytest.mark.unit
 def test_schema_from_digivault_manifest_get_note_falls_back_on_error() -> None:
+    """Important 1 (#2265 review): the fallback description must name the field the
+    model actually receives from a digivault_search_notes hit (doc_id — see
+    test_handle_digivault_search_success, whose payload never contains a literal
+    "vault_path" key), and must warn off a digisearch hit's doc_id (a repo path,
+    not a vault path) so digisearch results don't look loadable when they aren't."""
     from digigraph.orchestration.builtin import _schema_from_digivault_manifest
 
     with patch(
@@ -136,6 +141,9 @@ def test_schema_from_digivault_manifest_get_note_falls_back_on_error() -> None:
         schema = _schema_from_digivault_manifest(_ctx(), "digivault_get_note")
     assert schema["function"]["name"] == "digivault_get_note"
     assert schema["function"]["parameters"]["required"] == ["vault_path", "path_prefix"]
+    description = schema["function"]["description"]
+    assert "doc_id" in description
+    assert "digisearch" in description  # warns the model off digisearch's doc_id
 
 
 @pytest.mark.unit
@@ -181,6 +189,65 @@ def test_handle_digivault_search_success() -> None:
         "query": "what does digigraph orchestrate",
         "path_prefix": None,
     }
+
+
+@pytest.mark.unit
+def test_search_hit_doc_id_feeds_get_note_vault_path_argument_shape() -> None:
+    """Important 1 (#2265 review): the locate-then-load handoff, exercised end to
+    end. The literal key "vault_path" never appears in what _handle_digivault_search
+    returns to the LLM (confirmed below) — the model is expected to copy the hit's
+    doc_id into digivault_get_note's vault_path argument instead (per the corrected
+    tool description). Prove that value actually round-trips: a real
+    _handle_digivault_search result's doc_id, fed straight into
+    _handle_digivault_get_note's argument shape, produces a working call."""
+    from digigraph.orchestration.builtin import (
+        _handle_digivault_get_note,
+        _handle_digivault_search,
+    )
+
+    hit = {
+        "vault_path": "digigraph/ARCHITECTURE.md",
+        "title": "digigraph architecture",
+        "body_markdown": "Excerpt only, not the full note.",
+        "tags": ["core"],
+        "rank": 0.9,
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": {"hits": [hit]}},
+    ):
+        search_out = _handle_digivault_search({"query": "digigraph architecture"}, _ctx())
+
+    assert isinstance(search_out, dict)
+    preview = json.loads(search_out["content"])["preview"]
+    assert "vault_path" not in preview[0]  # the literal key the model is NOT given
+    doc_id = search_out["results"][0]["doc_id"]
+    assert doc_id == "digigraph/ARCHITECTURE.md"
+
+    note = {
+        "vault_path": doc_id,
+        "title": "digigraph architecture",
+        "summary": "Orchestration layer overview.",
+        "body_markdown": "# digigraph\n\nFull note body, not an excerpt.",
+        "tags": ["core"],
+    }
+    ctx = _ctx(vault_path_prefix="clients/digithings")
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": note},
+    ) as mock_invoke:
+        # This is the argument shape the model builds from a search hit: doc_id
+        # copied verbatim into vault_path.
+        get_out = _handle_digivault_get_note({"vault_path": doc_id}, ctx)
+
+    assert isinstance(get_out, dict)
+    call_args = mock_invoke.call_args
+    assert call_args.args[1] == "digivault_get_note"
+    assert call_args.args[2]["vault_path"] == "digigraph/ARCHITECTURE.md"
+    assert (
+        json.loads(get_out["content"])["body_markdown"]
+        == "# digigraph\n\nFull note body, not an excerpt."
+    )
 
 
 @pytest.mark.unit
@@ -375,14 +442,21 @@ def test_handle_digivault_get_note_invoke_error() -> None:
 
 @pytest.mark.unit
 def test_handle_digivault_get_note_not_ok_response() -> None:
+    """Generic ok=False passthrough — distinct from the no-context-prefix case
+    below, so this uses a context that *has* a mapped tenant prefix (the
+    no-context branch is Minor-7's special-cased actionable message, tested
+    separately)."""
     from digigraph.orchestration.builtin import _handle_digivault_get_note
 
     with patch(
         "digigraph.orchestration.builtin.invoke_digivault_tool",
-        return_value={"ok": False, "error": "path_prefix is required for digivault_get_note"},
+        return_value={"ok": False, "error": "vault unavailable"},
     ):
-        out = _handle_digivault_get_note({"vault_path": "digigraph/ARCHITECTURE.md"}, _ctx())
-    assert json.loads(out)["error"] == "path_prefix is required for digivault_get_note"
+        out = _handle_digivault_get_note(
+            {"vault_path": "digigraph/ARCHITECTURE.md"},
+            _ctx(vault_path_prefix="clients/digithings"),
+        )
+    assert json.loads(out)["error"] == "vault unavailable"
 
 
 @pytest.mark.unit
@@ -415,7 +489,14 @@ def test_handle_digivault_get_note_no_context_prefix_does_not_fall_back_unscoped
     """When there is no context prefix (unmapped tenant slug), the handler must still
     overwrite — passing None through — rather than leaving a model-supplied prefix in
     place or inventing an unscoped default. digivault's own handler is the one that
-    refuses the read (ok=False), not a client-side fallback."""
+    refuses the read (ok=False), not a client-side fallback.
+
+    Minor 7 (#2265 review): digivault's own "path_prefix is required" sentence is
+    unactionable here — the model *did* supply path_prefix (the schema marks it
+    required); this handler is the one that discarded it. Relaying that sentence
+    verbatim would make the model retry against something it cannot control,
+    burning the 4-round tool budget. The handler must substitute an instruction the
+    model can actually follow: stop trying, this session has no tenant corpus."""
     from digigraph.orchestration.builtin import _handle_digivault_get_note
 
     ctx = _ctx(vault_path_prefix=None)
@@ -430,4 +511,7 @@ def test_handle_digivault_get_note_no_context_prefix_does_not_fall_back_unscoped
 
     call_args = mock_invoke.call_args
     assert call_args.args[2]["path_prefix"] is None
-    assert json.loads(out)["error"] == "path_prefix is required for digivault_get_note"
+    error = json.loads(out)["error"]
+    assert "path_prefix is required for digivault_get_note" not in error
+    assert "no tenant corpus" in error.lower()
+    assert "do not retry" in error.lower()

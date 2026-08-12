@@ -208,15 +208,25 @@ def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[st
             "function": {
                 "name": "digivault_get_note",
                 "description": (
-                    "Load one vault note in full by its vault_path (from a "
-                    "digivault_search_notes hit), instead of reasoning from its excerpt. "
-                    "D1-only: requires DIGIVAULT_URL, POST /v1/orchestrator_tools, and a "
-                    "D1-backed digivault deployment."
+                    "Load one vault note in full, instead of reasoning from its excerpt. "
+                    "The vault_path argument is copied from a prior digivault_search_notes "
+                    "hit's doc_id field (that hit's JSON has no field literally named "
+                    "vault_path). Do not use a digisearch hit's doc_id here — digisearch's "
+                    "doc_id is a repo path, not a vault path, and this tool will refuse or "
+                    "404 on it. D1-only: requires DIGIVAULT_URL, POST /v1/orchestrator_tools, "
+                    "and a D1-backed digivault deployment."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "vault_path": {"type": "string"},
+                        "vault_path": {
+                            "type": "string",
+                            "description": (
+                                "Copy this from a digivault_search_notes hit's doc_id "
+                                "field — not from a digisearch hit's doc_id, which is a "
+                                "repo path this tool cannot load."
+                            ),
+                        },
                         "path_prefix": {"type": "string"},
                     },
                     "required": ["vault_path", "path_prefix"],
@@ -247,8 +257,9 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
     args_eff = dict(args)
     # Security (#2265): overwrite unconditionally, never default-if-missing — a
     # model-supplied path_prefix must not reach another tenant's corpus. Mirrors
-    # _handle_digivault_get_note's mandatory fix; see the report for why this one
-    # was extended to match rather than left on the old conditional-default.
+    # _handle_digivault_get_note's mandatory fix; extended to match rather than
+    # left on the old conditional-default (see #2265 and the digivault_get_note
+    # commit on this branch, #2240).
     args_eff["path_prefix"] = context.vault_path_prefix
     try:
         inv = invoke_digivault_tool(
@@ -310,6 +321,28 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
     except _ORCHESTRATOR_CLIENT_ERRORS as e:
         return f"digivault orchestrator invoke failed: {e}"
     if not inv.get("ok"):
+        if context.vault_path_prefix is None:
+            # digivault's own "path_prefix is required" sentence is written for a
+            # direct API caller that can just add the argument. The model can't act
+            # on it: it already supplied path_prefix (the schema marks it required),
+            # and this handler discards whatever it sent and substitutes None
+            # unconditionally (the #2265 overwrite, above) because no tenant corpus
+            # is mapped for this session. Telling it to do something outside its
+            # control just burns retries against the 4-round tool budget — give it
+            # an instruction it can actually follow instead.
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": (
+                        "No tenant corpus is configured for this chat session, so "
+                        "digivault_get_note cannot look up a vault note here — this "
+                        "is a session configuration gap, not something you can fix "
+                        "by resupplying path_prefix. Do not retry this tool; answer "
+                        "from what digisearch or digivault_search_notes already "
+                        "returned, or tell the user vault lookup is unavailable."
+                    ),
+                }
+            )
         return json.dumps(inv)
     data = inv.get("data")
     if not isinstance(data, dict):

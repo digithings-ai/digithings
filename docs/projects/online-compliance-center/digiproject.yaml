@@ -11,6 +11,11 @@ project:
 graph:
   workflow_profile: research_rag
 
+skills:
+  enabled:
+    - search
+    - digivault
+
 agents:
   enabled:
     - research

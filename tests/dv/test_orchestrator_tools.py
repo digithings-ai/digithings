@@ -95,15 +95,16 @@ def test_search_notes_path_prefix_description_does_not_claim_enforced_isolation(
     assert "isolat" not in prefix_description
 
 
-def test_search_notes_path_prefix_description_states_the_fill_in_as_conditional() -> None:
-    """#2239 review, Minor M4: the old copy said 'omit it and the caller's own corpus
-    prefix is filled in for you' unconditionally, but
-    digigraph/src/digigraph/orchestration/builtin.py:227 only does that when
-    `context.vault_path_prefix` is truthy (it defaults to `None`). With no corpus
-    context, omitting the argument fills in nothing and, on a D1 deployment, the
-    search then fails. The description must say so, not promise an unconditional
-    fill-in — and must not call the argument merely 'Optional' with no caveat, since a
-    D1 deployment hard-refuses without a resolved prefix."""
+def test_search_notes_path_prefix_description_states_the_overwrite_as_unconditional() -> None:
+    """Minor 5 (#2265 review, task 9): the #2239-era copy said 'omit it and the
+    caller's own corpus prefix is filled in for you', true only when
+    digigraph/src/digigraph/orchestration/builtin.py's `_handle_digivault_search`
+    merely defaulted a missing argument. That handler now overwrites `path_prefix`
+    unconditionally (#2265, closed on the digigraph side by #2240) — whatever the
+    model supplies is discarded whether present or absent, not just filled in when
+    missing. The description must say the value is not under the model's control at
+    all when called through digigraph, and must still flag the D1 deployment's
+    functionally-required (D1 has no unscoped mode) nature."""
     tool = next(
         t
         for t in build_orchestrator_tool_manifest()
@@ -112,7 +113,7 @@ def test_search_notes_path_prefix_description_states_the_fill_in_as_conditional(
     prefix_description = tool["function"]["parameters"]["properties"]["path_prefix"][
         "description"
     ].lower()
-    assert "corpus context" in prefix_description
+    assert "not actually under your control" in prefix_description
     assert "d1" in prefix_description
 
 
