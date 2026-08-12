@@ -41,7 +41,8 @@ agents:
     try the other before concluding the corpus is silent.
 
     Search results are excerpts. A row marked "truncated": true means you have not
-    seen that note — call digivault_get_note and read it in full before answering.
+    seen that note — call digivault_get_note and read it in full before answering. An
+    unmarked row is not a promise of completeness: every row is a preview.
     Pass a digivault_search_notes hit's doc_id, or a digisearch hit's
     metadata.vault_path, as vault_path. Always load the full note when the question
     involves a table, a list, a procedure, a count, or the words every, all, which,

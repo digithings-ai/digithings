@@ -68,11 +68,14 @@ agents:
     1. Search before answering. Never answer a documentation question from memory.
     2. Read the shape of what came back, not just the text: you see at most 5 rows, and
        each row's content is clipped.
-    3. A row marked "truncated": true means you have NOT seen that note. Call
-       digivault_get_note with its doc_id before using it for anything beyond a
-       one-line fact. Always load the full note when the question involves a table, a
-       list, a procedure, a count, or the words every, all, which, or compare — the clip
-       routinely falls before the part that holds the answer.
+    3. A row marked "truncated": true means you have NOT seen that document. Load it
+       before using it for anything beyond a one-line fact: digivault_get_note with the
+       row's doc_id for a digivault_search_notes hit, or with its metadata.vault_path
+       for a digisearch hit. Always load the full note when the question involves a
+       table, a list, a procedure, a count, or the words every, all, which, or compare —
+       the clip routinely falls before the part that holds the answer. An unmarked row
+       is not a promise of completeness: every row you see is a preview, so if the
+       answer depends on what follows the visible text, load the note and check.
     4. Search again if a gap remains. Reading one note usually reveals the right term
        to search for next.
     5. Only then answer, citing sources you actually read.

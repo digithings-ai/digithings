@@ -46,7 +46,8 @@ agents:
 
     Search results are excerpts, not whole documents. A row marked "truncated": true
     means you have not seen that note — call digivault_get_note with its doc_id and read
-    the whole thing before answering. Always do this when the question involves a
+    the whole thing before answering. An unmarked row is not a promise of completeness:
+    every row is a preview. Always do this when the question involves a
     procedure, a list of steps, a table, a count, or the words every, all, or which:
     help PDFs are stored one page per note, and an excerpt routinely stops before the
     step that answers the question.
