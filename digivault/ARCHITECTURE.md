@@ -179,19 +179,20 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   digigraph's own overwrite ran first. Layer 2 reads
   `request.state.digi_auth.tenant_slug` (the same verified claim
   `_require_tool_scope` already reads `.scopes` off of — `digikey` populates
-  it on every token its own `/v1/oauth/token` issues) and checks it against
-  `DIGI_TENANT_CORPUS_MAP` (the same env var digigraph's own
-  `corpus_routing.py` reads, parsed independently here so digivault stays
-  installable standalone). It is a no-op when that map is genuinely unset —
-  single-tenant deployments (local dev, a self-hosted single-vault install)
-  see no behavior change — and fails closed once it is set: a tenant absent
-  from the map, or a `path_prefix` that doesn't match the map's entry for
-  that tenant, is refused with `403`. Checked once, before the
-  D1/local-vault/Supabase precedence branch below — not only on the D1
-  path (a second CodeRabbit finding on this same fix's own PR #2298: the
-  first version left the other two backends unchecked) — so it applies
-  uniformly regardless of which backend a given deployment actually uses.
-  **Unset is not the same as broken**: a *non-empty* but unparseable or
+  it on every token its own `/v1/oauth/token` issues; see `tenant_scope.py`'s
+  module docstring for a known, tracked residual dependency on that claim's
+  trustworthiness, #2303) and checks it against `DIGI_TENANT_CORPUS_MAP`
+  (the same env var digigraph's own `corpus_routing.py` reads, parsed
+  independently here so digivault stays installable standalone). It is a
+  no-op when that map is genuinely unset — single-tenant deployments (local
+  dev, a self-hosted single-vault install) see no behavior change — and fails
+  closed once it is set: a tenant absent from the map, or a `path_prefix`
+  that doesn't match the map's entry for that tenant, is refused with `403`.
+  Checked once, before the D1/local-vault/Supabase precedence branch below —
+  not only on the D1 path (a second CodeRabbit finding on this same fix's own
+  PR #2298: the first version left the other two backends unchecked) — so it
+  applies uniformly regardless of which backend a given deployment actually
+  uses. **Unset is not the same as broken**: a *non-empty* but unparseable or
   entirely-empty-after-filtering `DIGI_TENANT_CORPUS_MAP` raises
   `TenantCorpusMapError`, surfaced as `503` rather than silently falling
   back to the "map unset, no enforcement" no-op — otherwise an operator who

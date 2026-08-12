@@ -141,3 +141,26 @@ def test_enforce_returns_503_when_map_is_set_but_unusable() -> None:
     with pytest.raises(HTTPException) as exc:
         enforce_tenant_path_prefix("digithings", "clients/digithings", raw_map="{not json")
     assert exc.value.status_code == 503
+
+
+def test_enforce_refuses_empty_string_tenant_slug_same_as_none() -> None:
+    """In-session review of PR #2298: DigiAuthContext.tenant_slug defaults to `""`,
+    not `None` (digikey/src/digikey/models.py) — every existing "claimless caller"
+    test here used `None`, which happens to collapse to the same refusal via `(tenant_
+    slug or "").strip().lower()`, but that equivalence was never pinned on its own."""
+    with pytest.raises(HTTPException) as exc:
+        enforce_tenant_path_prefix("", "clients/digithings", raw_map=_MAP)
+    assert exc.value.status_code == 403
+
+
+def test_enforce_uses_the_same_md_stripping_normalization_as_the_rest_of_the_service() -> None:
+    """CodeRabbit review of PR #2298: an earlier version compared with only
+    `strip().strip("/")`, not the shared `normalize_vault_path` (which also strips one
+    trailing `.md`). A stray `.md` in the *stored* map entry (an operator typo) would
+    then wrongly 403 a caller supplying the correct, already-`.md`-stripped prefix,
+    since `resolve_path_prefix` normalizes the caller's own value before it ever
+    reaches this comparison. Both sides must use identical normalization."""
+    raw = '{"digithings": {"vaultPathPrefix": "clients/digithings.md"}}'
+    # The caller's own value, as it would arrive already-normalized by
+    # resolve_path_prefix (server.py always passes the resolved, not raw, prefix).
+    enforce_tenant_path_prefix("digithings", "clients/digithings", raw_map=raw)

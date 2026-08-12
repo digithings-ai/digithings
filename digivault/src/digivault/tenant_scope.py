@@ -5,13 +5,22 @@ caller may use these routes at all — the scope carries no tenant identity.
 Without this module, ``path_prefix`` is whatever the request body or
 orchestrator-tool arguments say, so any caller holding a valid scope can pick
 *any* prefix present in ``D1_DATABASE_MAP``, not just the corpus their own
-token was issued for. digigraph's own #2265 fix (``orchestration/builtin.py``)
-now overwrites a model-supplied ``path_prefix`` unconditionally before it ever
-reaches this service — but that only protects the model -> digigraph ->
-digivault leg. A caller that talks to digivault directly (any holder of a
-``digivault:read``-scoped JWT hitting ``/v1/orchestrator_invoke`` or
-``/v1/notes/by-path`` itself, bypassing digigraph entirely) is unaffected by
-digigraph's fix. This module closes exactly that residual gap, server-side.
+token was issued for.
+
+A parallel fix for #2265 exists in digigraph's own ``orchestration/builtin.py``
+(on a separate, not-yet-merged branch as of this module's own PR #2298) that
+will overwrite a model-supplied ``path_prefix`` unconditionally before it ever
+reaches this service. Even once merged, that only protects the model ->
+digigraph -> digivault leg — a caller that talks to digivault directly (any
+holder of a ``digivault:read``-scoped JWT hitting ``/v1/orchestrator_invoke``
+or ``/v1/notes/by-path`` itself, bypassing digigraph entirely) is unaffected
+by it, regardless of which fix lands first. This module closes that leg,
+server-side, independent of digigraph's own state. (On ``develop`` today,
+digigraph's own handler is still the older, conditional-default version — see
+that module's own ``_handle_digivault_search`` — so this module is currently
+the *only* enforcement for a caller going through digigraph too, not just a
+defense-in-depth backstop; verify digigraph's actual merged state before
+treating its half as done.)
 
 ``DIGI_TENANT_CORPUS_MAP`` is the same env var digigraph's own
 ``corpus_routing.py`` already reads (mapping ``tenant_slug`` to
@@ -39,6 +48,26 @@ applies here: a non-empty ``DIGI_TENANT_CORPUS_MAP`` that fails to produce at
 least one usable tenant -> prefix mapping raises ``TenantCorpusMapError``,
 which ``enforce_tenant_path_prefix`` turns into a loud ``503`` rather than a
 silent pass-through.
+
+**Known residual dependency, not closed by this module.** ``tenant_slug`` is
+only as trustworthy as ``request.state.digi_auth`` makes it. Today, digikey's
+``DigiAuthMiddleware`` (``service_middleware.py``) falls back to the
+caller-supplied, unsigned ``X-Digi-Tenant``/``X-Digichat-Tenant`` header
+whenever the JWT's own ``tenant_slug`` claim is empty, with no signal on
+``DigiAuthContext`` distinguishing a verified claim from a header override —
+a caller holding *any* credential with an empty ``tenant_slug`` and
+``digivault:read`` could set that header and defeat this module's check
+entirely. Verified this is not reachable through digikey's own issuance API
+today (both ``/v1/oauth/token`` grant types require a non-empty
+``tenant_slug`` to mint a token at all — see ``digikey/src/digikey/server.py``
+lines ~213-234 and ~127) — the one path found is an operator issuing a CLI key
+with an empty ``--tenant`` (``digikey/src/digikey/cli.py``), not something an
+external caller can trigger. So this is a latent single point of failure, not
+an active bypass of any normally-issued credential, but it means digivault's
+enforcement is only as strong as an invariant digivault itself cannot see or
+verify. Found in the in-session review of this module's own PR #2298; tracked
+as #2303 rather than fixed here, since a JWT/auth-trust change is its own
+Human Gate item (see CLAUDE.md) independent of this PR's scope.
 """
 
 from __future__ import annotations
@@ -48,6 +77,8 @@ import logging
 import os
 
 from fastapi import HTTPException
+
+from digivault.d1_store import normalize_vault_path
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +124,7 @@ def _load_tenant_prefix_map(raw: str | None = None) -> dict[str, str]:
         if not prefix:
             logger.warning("%s: entry %r has no vaultPathPrefix", _ENV_VAR, slug)
             continue
-        out[slug.strip().lower()] = str(prefix).strip().strip("/")
+        out[slug.strip().lower()] = normalize_vault_path(str(prefix))
     if not out:
         raise TenantCorpusMapError(
             f"{_ENV_VAR} is set but produced no usable tenant -> prefix mappings"
@@ -124,10 +155,18 @@ def enforce_tenant_path_prefix(
     - the map's prefix for ``tenant_slug`` differs from ``requested_prefix`` —
       refused.
 
-    Comparison is on each side's normalized form (``strip().strip("/")``) so
+    Comparison is on each side's ``normalize_vault_path`` form (trimmed, no
+    leading/trailing slash, at most one trailing ``.md`` stripped) so
     ``"clients/digithings/"`` and ``"clients/digithings"`` count as the same
-    prefix, matching ``resolve_path_prefix``'s own normalization elsewhere in
-    this service.
+    prefix. This must be the *same* normalization `resolve_path_prefix` (used
+    downstream on the caller's own value) applies — a review of PR #2298 found
+    an earlier version of this function used only ``strip().strip("/")`` here,
+    which would 403 a legitimate caller whose *stored* map entry carried a
+    stray trailing ``.md`` (an operator typo) even though the caller's own,
+    correctly-formed request would already have had that same ``.md`` stripped
+    by `resolve_path_prefix` before ever reaching this comparison — a
+    confusing false refusal, not a bypass, but avoidable by normalizing both
+    sides identically.
     """
     if not requested_prefix:
         return
@@ -138,7 +177,7 @@ def enforce_tenant_path_prefix(
     if not table:
         return
     authorized = table.get((tenant_slug or "").strip().lower())
-    if authorized is None or authorized != requested_prefix.strip().strip("/"):
+    if authorized is None or authorized != normalize_vault_path(requested_prefix):
         raise HTTPException(
             status_code=403,
             detail="path_prefix does not match the authenticated tenant's corpus",
