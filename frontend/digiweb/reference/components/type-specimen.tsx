@@ -36,7 +36,12 @@ export function TypeSpecimen() {
               <p className="m-0 font-display text-[clamp(1.5rem,3.4vw,2.4rem)] font-normal leading-[1.1] tracking-[-0.015em] text-ink">
                 Research that ends in an order.
               </p>
-              <p className="spec-italic m-0 font-display text-[clamp(1.5rem,3.4vw,2.4rem)] font-normal leading-[1.1] tracking-[-0.015em] text-ink">
+              {/* accent-digiquant: this line's caption is a specific visual
+                  claim ("money-colored") — scope it locally so the claim
+                  holds regardless of the page's global livery choice
+                  (default is monochrome, where --accent collapses to
+                  --ink and the color would otherwise be invisible). */}
+              <p className="spec-italic accent-digiquant m-0 font-display text-[clamp(1.5rem,3.4vw,2.4rem)] font-normal leading-[1.1] tracking-[-0.015em] text-ink">
                 <em>Money-colored, glance-readable.</em>
               </p>
             </div>

@@ -9,8 +9,13 @@ const WORDS = TEXT.split(" ");
 /** The closing word fills with the accent, per the house .colo-word pattern. */
 const ACCENT_INDEX = WORDS.length - 1;
 
-/** Same hold contract as the other variants: done by 70%, held for the last 30%. */
-const REVEAL_END = 0.7;
+/** Shorter hold than the promoted full-drama variant (0.7): this is one of
+ *  two reference-only variants stacked back-to-back on the same page, each
+ *  riding its own pinned track — three consecutive 30%-of-track dead-scroll
+ *  holds compound into a noticeable "did scrolling stop working" stretch
+ *  reading top to bottom, so these two trade some of that finished-state
+ *  pause for less total dead scroll. Done by 85%, held for the last 15%. */
+const REVEAL_END = 0.85;
 const WORD_SPAN = 0.18;
 
 function wordWindow(index: number, total: number): [number, number] {
@@ -66,8 +71,13 @@ export function WordRevealOutline() {
       </p>
       <div className={`wr-track${reduced ? " is-static" : ""}`} ref={trackRef}>
         <div className="wr-sticky">
+          {/* accent-digiquant: the caption below claims "the closing word
+              takes the accent" — scope locally so that claim holds under
+              the page's default monochrome livery too, where --accent would
+              otherwise collapse to --ink and the closing word would render
+              indistinguishably from the rest of the line. */}
           <p
-            className={`word-line wr-outline-line${reduced ? " is-final" : ""}`}
+            className={`word-line wr-outline-line accent-digiquant${reduced ? " is-final" : ""}`}
             aria-label={TEXT}
           >
             <span aria-hidden="true">
