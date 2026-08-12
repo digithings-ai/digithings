@@ -40,9 +40,16 @@ def _fake_rl_request(
     )
 
 
-def _fake_request(scopes: list[str] | None = None) -> SimpleNamespace:
-    """Stand-in for FastAPI's Request — only `.state.digi_auth.scopes` is read."""
-    return SimpleNamespace(state=SimpleNamespace(digi_auth=SimpleNamespace(scopes=scopes or [])))
+def _fake_request(
+    scopes: list[str] | None = None, tenant_slug: str | None = None
+) -> SimpleNamespace:
+    """Stand-in for FastAPI's Request — only `.state.digi_auth.scopes`/`.tenant_slug`
+    are read (by `_require_tool_scope`/`_tenant_slug` respectively)."""
+    return SimpleNamespace(
+        state=SimpleNamespace(
+            digi_auth=SimpleNamespace(scopes=scopes or [], tenant_slug=tenant_slug)
+        )
+    )
 
 
 class _FakeSearchResponse:
@@ -911,7 +918,8 @@ def test_get_note_by_path_returns_404_when_absent(monkeypatch: pytest.MonkeyPatc
         server.get_note_by_path(
             server.NoteByPathRequest(
                 vault_path="clients/digithings/nope", path_prefix="clients/digithings"
-            )
+            ),
+            _fake_request(),
         )
     assert exc.value.status_code == 404
 
@@ -929,7 +937,8 @@ def test_get_note_by_path_enforces_the_caller_prefix(monkeypatch: pytest.MonkeyP
             server.NoteByPathRequest(
                 vault_path="clients/online-compliance-center/x",
                 path_prefix="clients/digithings",
-            )
+            ),
+            _fake_request(),
         )
     assert exc.value.status_code == 403
 
@@ -944,7 +953,8 @@ def test_get_note_by_path_allows_exact_prefix_match(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
     result = server.get_note_by_path(
-        server.NoteByPathRequest(vault_path="clients/digithings", path_prefix="clients/digithings")
+        server.NoteByPathRequest(vault_path="clients/digithings", path_prefix="clients/digithings"),
+        _fake_request(),
     )
     assert result is note
 
@@ -966,7 +976,8 @@ def test_get_note_by_path_returns_note_scoped_to_prefix(monkeypatch: pytest.Monk
     result = server.get_note_by_path(
         server.NoteByPathRequest(
             vault_path="clients/digithings/arch", path_prefix="clients/digithings"
-        )
+        ),
+        _fake_request(),
     )
     assert result is note
     assert called["prefix"] == "clients/digithings"
@@ -993,7 +1004,8 @@ def test_get_note_by_path_returns_503_when_d1_unconfigured(
         server.get_note_by_path(
             server.NoteByPathRequest(
                 vault_path="clients/digithings/x", path_prefix="clients/digithings"
-            )
+            ),
+            _fake_request(),
         )
     assert exc.value.status_code == 503
 
@@ -1018,7 +1030,8 @@ def test_get_note_by_path_rejects_prefix_that_normalizes_to_empty(
         server.get_note_by_path(
             server.NoteByPathRequest(
                 vault_path="clients/other-corpus/secret", path_prefix=bad_prefix
-            )
+            ),
+            _fake_request(),
         )
     assert exc.value.status_code == 400
 
@@ -1046,7 +1059,8 @@ def test_get_note_by_path_rejects_sibling_corpus_sharing_a_string_prefix(
         server.get_note_by_path(
             server.NoteByPathRequest(
                 vault_path="clients/digithings-archive/x", path_prefix="clients/digithings"
-            )
+            ),
+            _fake_request(),
         )
     assert exc.value.status_code == 403
 
@@ -1066,7 +1080,8 @@ def test_get_note_by_path_wraps_runtime_d1_error_as_503(monkeypatch: pytest.Monk
         server.get_note_by_path(
             server.NoteByPathRequest(
                 vault_path="clients/digithings/x", path_prefix="clients/digithings"
-            )
+            ),
+            _fake_request(),
         )
     assert exc.value.status_code == 503
     assert "Authentication error" in str(exc.value.detail)
@@ -1083,6 +1098,312 @@ def test_note_by_path_carve_out_is_method_aware() -> None:
     match would silently read-scope a future DELETE/PUT on the same literal path."""
     assert server.digivault_path_scopes("DELETE", "/v1/notes/by-path") == [SCOPE_WRITE]
     assert server.digivault_path_scopes("PUT", "/v1/notes/by-path") == [SCOPE_WRITE]
+
+
+# ── tenant-bound path_prefix (CodeRabbit review of promotion PR #2293) ──────────
+# `digivault:read` alone lets any caller name any path_prefix — up to this point, the
+# only boundary was "does vault_path fall under the *same request's* path_prefix",
+# never "is this caller entitled to that path_prefix at all". These tests exercise
+# the fix through the real `get_note_by_path`/`orchestrator_invoke` entry points
+# (tests/dv/test_tenant_scope.py already covers `enforce_tenant_path_prefix` itself
+# in isolation).
+_TENANT_MAP = (
+    '{"digithings": {"vaultPathPrefix": "clients/digithings"},'
+    ' "occ": {"vaultPathPrefix": "clients/online-compliance-center"}}'
+)
+
+
+def test_get_note_by_path_refuses_a_prefix_outside_the_authenticated_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The exact gap CodeRabbit flagged: a digithings-tenant caller naming the occ
+    corpus's own prefix (not merely escaping via vault_path — the prefix itself)."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store")
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/online-compliance-center/x",
+                path_prefix="clients/online-compliance-center",
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+    assert "tenant" in str(exc.value.detail)
+
+
+def test_get_note_by_path_allows_the_authenticated_tenants_own_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            return note
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    result = server.get_note_by_path(
+        server.NoteByPathRequest(
+            vault_path="clients/digithings/arch", path_prefix="clients/digithings"
+        ),
+        _fake_request(tenant_slug="digithings"),
+    )
+    assert result is note
+
+
+def test_orchestrator_invoke_get_note_refuses_a_prefix_outside_the_authenticated_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In-session review of PR #2298: the by-path route and `digivault_search_notes`
+    each had a dedicated cross-tenant test, but `digivault_get_note` — dispatched
+    through `orchestrator_invoke`, a genuinely separate code path from the route even
+    though both call the shared `_fetch_note_by_path` — did not. Both surfaces sharing
+    a helper is exactly the kind of thing a future refactor could quietly break for
+    only one of them; pin the tool-dispatch surface independently."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store")
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/online-compliance-center/x",
+                    "path_prefix": "clients/online-compliance-center",
+                },
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_orchestrator_invoke_get_note_allows_the_authenticated_tenants_own_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            return note
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/digithings/arch",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(tenant_slug="digithings"),
+    )
+    assert resp.ok is True
+
+
+def test_get_note_by_path_refuses_an_unmapped_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Once DIGI_TENANT_CORPUS_MAP is configured at all, a tenant slug absent from it
+    has no authorized prefix — this must not fall back to "unscoped, allow"."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store")
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.get_note_by_path(
+            server.NoteByPathRequest(
+                vault_path="clients/digithings/arch", path_prefix="clients/digithings"
+            ),
+            _fake_request(tenant_slug="some-unrelated-tenant"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_get_note_by_path_is_unaffected_when_tenant_map_is_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Backward-compatibility guarantee: single-tenant deployments (this is the state
+    of every other test in this file) never set DIGI_TENANT_CORPUS_MAP and must see
+    no behavior change, even for a request whose tenant_slug doesn't match its own
+    path_prefix in name (there is nothing to check it against)."""
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            return note
+
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    result = server.get_note_by_path(
+        server.NoteByPathRequest(
+            vault_path="clients/digithings/arch", path_prefix="clients/digithings"
+        ),
+        _fake_request(tenant_slug="totally-unrelated"),
+    )
+    assert result is note
+
+
+def test_orchestrator_invoke_search_refuses_a_prefix_outside_the_authenticated_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same gap, exercised through `digivault_search_notes` rather than the by-path
+    route/`digivault_get_note` — this is the tool digigraph proxies for every chat
+    turn today (unlike `digivault_get_note`, not yet wired up in digigraph's
+    builtin.py on `develop`), so it is the one actually reachable in production."""
+
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            raise AssertionError("must not reach the store")
+
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(
+        monkeypatch, '{"clients/digithings": "db-1", "clients/online-compliance-center": "db-2"}'
+    )
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={
+                    "query": "policies",
+                    "path_prefix": "clients/online-compliance-center",
+                },
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_orchestrator_invoke_search_allows_the_authenticated_tenants_own_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeD1:
+        def search(self, query: str, *, limit: int, path_prefix: str | None) -> list:
+            return []
+
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    _set_d1_env(
+        monkeypatch, '{"clients/digithings": "db-1", "clients/online-compliance-center": "db-2"}'
+    )
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "policies", "path_prefix": "clients/digithings"},
+        ),
+        _fake_request(tenant_slug="digithings"),
+    )
+    assert resp.ok is True
+
+
+def test_orchestrator_invoke_search_refuses_cross_tenant_prefix_on_local_vault_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CodeRabbit review of PR #2298: the first version of this fix only checked
+    `path_prefix` on the D1 branch — the local-vault fallback (DIGIVAULT_ROOT set, no
+    D1 credentials) read the same tenant-supplied prefix with no check at all. Tenant
+    binding must apply uniformly across every backend, not just whichever one a given
+    deployment happens to use."""
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    Vault(vault_root).create_note(
+        "faq", subdir="clients/online-compliance-center", body="OCC help."
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(vault_root))
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={
+                    "query": "help",
+                    "path_prefix": "clients/online-compliance-center",
+                },
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_orchestrator_invoke_search_refuses_cross_tenant_prefix_on_supabase_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same gap, third backend: no DIGIVAULT_ROOT and no D1 credentials falls through
+    to Supabase FTS, which must be equally bound to the caller's tenant."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+
+    def _boom() -> SupabaseStore:
+        raise AssertionError("must not reach Supabase for a refused cross-tenant prefix")
+
+    monkeypatch.setattr(server.SupabaseStore, "from_env", _boom)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={
+                    "query": "help",
+                    "path_prefix": "clients/online-compliance-center",
+                },
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_by_path_route_end_to_end_refuses_cross_tenant_prefix_via_real_jwt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Full stack, not fakes: a real signed JWT (tenant_slug="digithings", minted by
+    tests/digi_test_jwt.py exactly as production's DigiAuthMiddleware would verify
+    it) hitting the real HTTP route via TestClient, requesting the occ corpus's own
+    prefix. Proves the DigiAuthMiddleware -> request.state.digi_auth -> _tenant_slug
+    -> enforce_tenant_path_prefix wiring end to end, not just the unit-level pieces."""
+
+    class _RefusingD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for the mismatched prefix")
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _RefusingD1())
+    client = TestClient(server.app)
+
+    resp = client.post(
+        "/v1/notes/by-path",
+        json={
+            "vault_path": "clients/online-compliance-center/x",
+            "path_prefix": "clients/online-compliance-center",
+        },
+        headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings"),
+    )
+    assert resp.status_code == 403
+
+    note = NoteDetail(vault_path="clients/digithings/x", title="x", body_markdown="hi")
+    monkeypatch.setattr(
+        server, "_open_d1_store", lambda prefix: SimpleNamespace(get_note=lambda p: note)
+    )
+    ok = client.post(
+        "/v1/notes/by-path",
+        json={"vault_path": "clients/digithings/x", "path_prefix": "clients/digithings"},
+        headers=auth_headers(scopes=[SCOPE_READ], tenant_slug="digithings"),
+    )
+    assert ok.status_code == 200
 
 
 # ── digivault_get_note orchestrator tool (#2239 Task 3 gap) ─────────────────────
@@ -1243,7 +1564,7 @@ def test_orchestrator_invoke_get_note_refuses_cross_corpus_path(
     # cross-corpus call must succeed — pinning that the 403 above depends on
     # `_fetch_note_by_path`'s prefix enforcement actually running.
     note = NoteDetail(vault_path="clients/online-compliance-center/x", title="x", body_markdown="")
-    monkeypatch.setattr(server, "_fetch_note_by_path", lambda vault_path, path_prefix: note)
+    monkeypatch.setattr(server, "_fetch_note_by_path", lambda vault_path, path_prefix, **_kw: note)
     resp = server.orchestrator_invoke(
         server.OrchestratorInvokeRequest(
             tool="digivault_get_note",
