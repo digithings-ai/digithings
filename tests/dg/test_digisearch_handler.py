@@ -146,8 +146,11 @@ def test_digisearch_rows_are_marked_truncated_too() -> None:
     (its 500-char preview cap) before digigraph clips again to 300, so either signal must
     mark the row.
     """
-    from digigraph.orchestration.builtin import _LLM_SEARCH_PREVIEW_CHARS, _mark_truncated_excerpts
-    from digigraph.orchestration.builtin import _search_payload_for_llm
+    from digigraph.orchestration.builtin import (
+        _LLM_SEARCH_PREVIEW_CHARS,
+        _mark_truncated_excerpts,
+        _search_payload_for_llm,
+    )
 
     results = [
         # Clipped by digigraph's own 300-char budget.
