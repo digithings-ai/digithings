@@ -11,19 +11,21 @@ text, so a regression in the SQL itself fails the test, not a canned fixture.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any  # score:allow untyped any -- row params are heterogeneous SQL values
 
 import pytest
 from digivault.d1_store import D1Store
-from digivault.models import NoteRow
 
 from scripts import d1_sync
 from scripts.d1_sync import (
     MAX_BOUND_PARAMS,
     MAX_ROW_BYTES,
+    PARAMS_PER_ROW,
     REBUILD_FTS_SQL,
+    UPSERT_CONFLICT_SUFFIX,
     UPSERT_PREFIX,
     _assert_rows_within_byte_cap,
     _ensure_unique_vault_paths,
@@ -88,20 +90,45 @@ def _store_factory(post: Any):
     return factory
 
 
-def _fake_supabase_store_class(notes: list[NoteRow]):
+def _fake_supabase_store_class(rows: list[dict[str, Any]]):
+    """Fakes ``SupabaseStore`` as ``_read_supabase`` actually uses it: via
+    ``list_raw`` (a select list local to the backfill path, #2239 review Important
+    I2), not ``list_notes``/``NoteRow`` -- so the fake's raw dict rows can carry
+    ``note_type``/``summary``/``wikilinks`` as top-level keys the way
+    ``architecture_notes`` itself does."""
+
     class _FakeSupabaseStore:
         @classmethod
         def from_env(cls) -> "_FakeSupabaseStore":
             return cls()
 
-        def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
-            return notes
+        def list_raw(self, *, select: str, path_prefix: str) -> list[dict[str, Any]]:
+            return rows
 
     return _FakeSupabaseStore
 
 
-def _note(path: str, body: str = "body", *, frontmatter: dict[str, Any] | None = None) -> NoteRow:
-    return NoteRow(vault_path=path, title=path, frontmatter=frontmatter or {}, body_markdown=body)
+def _supabase_row(
+    path: str,
+    body: str = "body",
+    *,
+    frontmatter: dict[str, Any] | None = None,
+    note_type: str | None = None,
+    summary: str | None = None,
+    wikilinks: list[str] | None = None,
+) -> dict[str, Any]:
+    """A raw ``architecture_notes`` row shape -- ``note_type``/``summary``/
+    ``wikilinks`` are top-level columns there (``scripts/sync_architecture_vault.py``),
+    not frontmatter keys, unlike the on-disk vault's ``_write_note`` shape below."""
+    return {
+        "vault_path": path,
+        "title": path,
+        "frontmatter": frontmatter or {},
+        "body_markdown": body,
+        "note_type": note_type,
+        "summary": summary,
+        "wikilinks": wikilinks,
+    }
 
 
 def _write_note(vault_dir: Path, rel_path: str, *, frontmatter: dict[str, Any], body: str) -> None:
@@ -124,8 +151,16 @@ def test_batches_respect_the_100_bound_parameter_cap() -> None:
     assert sum(len(b) for b in batches) == 50
 
 
-def test_upsert_sql_uses_insert_or_replace_and_rebuilds_the_fts_index() -> None:
-    assert UPSERT_PREFIX.startswith("INSERT OR REPLACE INTO notes")
+def test_upsert_sql_conflict_updates_in_place_and_rebuilds_the_fts_index() -> None:
+    """#2239 review Important I1: this replaces the brief's original assertion that
+    UPSERT_PREFIX started with `INSERT OR REPLACE INTO notes` -- REPLACE deletes and
+    reinserts the conflicting row on a TEXT PRIMARY KEY, assigning it a *new* rowid,
+    which dangles the FTS index's `n.rowid = notes_fts.rowid` join. `ON
+    CONFLICT(vault_path) DO UPDATE` updates the row in place instead, preserving its
+    rowid (see test_search_survives_a_resync_even_when_the_fts_rebuild_fails for the
+    end-to-end proof this fixes)."""
+    assert UPSERT_PREFIX.startswith("INSERT INTO notes")
+    assert "ON CONFLICT(vault_path) DO UPDATE SET" in UPSERT_CONFLICT_SUFFIX
     # External-content FTS5 does not self-populate; 'rebuild' is the canonical refresh.
     assert REBUILD_FTS_SQL == "INSERT INTO notes_fts(notes_fts) VALUES('rebuild')"
 
@@ -199,6 +234,32 @@ def test_assert_rows_within_byte_cap_raises_for_an_oversized_row() -> None:
 def test_assert_rows_within_byte_cap_allows_normal_rows() -> None:
     normal = row_params(vault_path="x/normal", title="t", frontmatter={}, body="short body")
     _assert_rows_within_byte_cap([normal])  # must not raise
+
+
+def test_assert_rows_within_byte_cap_raises_for_a_row_between_the_statement_and_row_caps() -> None:
+    """#2239 review Minor M1: a single row between the 100,000-byte statement cap
+    and the 2,000,000-byte row cap used to pass this pre-flight check (well under
+    2 MB) and then pass through ``_split_to_fit``'s single-row base case
+    unconditionally, reaching D1 as a lone-row statement over the 100 KB statement
+    cap -- failing mid-run with any earlier batches already committed. 150,000
+    bytes of body text alone, plus the UPSERT SQL text and JSON envelope,
+    comfortably clears the 100,000-byte statement cap while staying far under the
+    2,000,000-byte row cap.
+    """
+    outlier = row_params(vault_path="x/outlier", title="t", frontmatter={}, body="x" * 150_000)
+    with pytest.raises(ValueError, match="x/outlier"):
+        _assert_rows_within_byte_cap([outlier])
+
+
+def test_assert_rows_within_byte_cap_allows_a_multi_row_batch_under_both_caps() -> None:
+    """The pre-flight check is per-row (as it would be sent alone), not per-batch --
+    a batch of several small rows that together exceed the statement cap is still
+    fine here; ``_split_to_fit`` is what reduces an over-cap multi-row batch."""
+    rows = [
+        row_params(vault_path=f"x/{i}", title="t", frontmatter={}, body="x" * 5_000)
+        for i in range(9)
+    ]
+    _assert_rows_within_byte_cap(rows)  # must not raise
 
 
 # --- Duplication guard (#2138 signature) --------------------------------------------
@@ -320,6 +381,45 @@ def test_main_requires_credentials_for_a_real_run(
     assert exit_code == 1
 
 
+def test_main_exits_nonzero_when_the_vault_read_finds_zero_notes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#2239 review Important I3: ``Path.rglob`` on a missing/empty directory yields
+    nothing rather than raising, so a typo'd ``--vault`` (or a ``--prefix`` that
+    matches nothing) used to be a clean exit 0 reporting `written: 0` -- a green CI
+    run that published nothing, with no D1 credentials needed to trigger it. Matches
+    the guard ``scripts/sync_onboard_vault.py`` already has for the same mistake on
+    its sibling read path.
+    """
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    missing = tmp_path / "does-not-exist"
+
+    exit_code = main(["--prefix", "clients/x", "--database", "db", "--vault", str(missing)])
+
+    assert exit_code == 1
+
+
+def test_main_exits_nonzero_when_the_supabase_read_finds_zero_notes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same guard (#2239 review Important I3), exercised on the ``--from-supabase``
+    read path: an empty/wrong-prefix result set must also refuse to publish
+    nothing, before any D1 call."""
+    post = _RecordingPost()
+    monkeypatch.setattr(d1_sync, "D1Store", _store_factory(post))
+    import digivault.supabase_store as supabase_store_module
+
+    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class([]))
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+
+    exit_code = main(["--prefix", "clients/x", "--database", "db", "--from-supabase"])
+
+    assert exit_code == 1
+    assert post.calls == []
+
+
 # --- End-to-end against real SQLite/FTS5: publish, then search must actually work --
 
 
@@ -388,11 +488,43 @@ def test_running_sync_twice_leaves_the_same_row_count_not_doubled(
     assert first == 0
     assert second == 0
     count = conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
-    assert count == 2  # not 4 -- INSERT OR REPLACE on the vault_path primary key
+    assert count == 2  # not 4 -- ON CONFLICT(vault_path) DO UPDATE on the primary key
 
     store = D1Store("db", account_id="acct", api_token="tok", http_post=post)
     hits = store.search("hello", path_prefix="clients/x")
     assert [h.vault_path for h in hits] == ["clients/x/a"]  # exactly one, not duplicated
+
+
+def test_d1_notes_readback_surfaces_an_orphaned_row_the_source_no_longer_has(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """#2239 review Minor M3: ``written``/``notes`` are both source-side (rows this
+    run read and sent) and were never read back from D1 -- so a note deleted from
+    the vault (or renamed by a re-chunk that changes segment slugs, the #2138
+    accumulation shape one level down) leaves an orphaned row that neither number
+    can ever surface. ``d1_notes`` is a real ``SELECT COUNT(*)`` against the table
+    after the rebuild, so a runbook's "halt unless exactly N" check means something.
+    This does not delete the orphan -- it only makes the discrepancy visible.
+    """
+    conn = sqlite3.connect(":memory:")
+    post = _d1_sqlite_post(conn)
+    monkeypatch.setattr(d1_sync, "D1Store", _store_factory(post))
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+    _write_note(tmp_path, "clients/x/a.md", frontmatter={"title": "A"}, body="alpha\n")
+    _write_note(tmp_path, "clients/x/b.md", frontmatter={"title": "B"}, body="beta\n")
+    main(["--prefix", "clients/x", "--database", "db", "--vault", str(tmp_path), "--init"])
+    capsys.readouterr()  # discard the first run's stdout
+
+    (tmp_path / "clients" / "x" / "b.md").unlink()  # b is gone from the source now
+    exit_code = main(["--prefix", "clients/x", "--database", "db", "--vault", str(tmp_path)])
+
+    assert exit_code == 0
+    out = json.loads(capsys.readouterr().out)
+    # notes/written correctly reflect this run's one-note source; d1_notes reveals
+    # the orphaned row from the first run that this run's source no longer has.
+    assert out == {"prefix": "clients/x", "notes": 1, "written": 1, "d1_notes": 2}
+    assert conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 2
 
 
 # --- --from-supabase: exact counts, parent_doc/segment_index from frontmatter -------
@@ -401,13 +533,13 @@ def test_running_sync_twice_leaves_the_same_row_count_not_doubled(
 def test_from_supabase_reports_exact_matching_notes_and_written_counts(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    notes = [_note(f"clients/x/n{i}") for i in range(5)]
+    rows = [_supabase_row(f"clients/x/n{i}") for i in range(5)]
     conn = sqlite3.connect(":memory:")
     post = _d1_sqlite_post(conn)
     monkeypatch.setattr(d1_sync, "D1Store", _store_factory(post))
     import digivault.supabase_store as supabase_store_module
 
-    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class(notes))
+    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class(rows))
     monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
     monkeypatch.setenv("D1_API_TOKEN", "tok")
 
@@ -415,15 +547,15 @@ def test_from_supabase_reports_exact_matching_notes_and_written_counts(
 
     assert exit_code == 0
     out = json.loads(capsys.readouterr().out)
-    assert out == {"prefix": "clients/x", "notes": 5, "written": 5}
+    assert out == {"prefix": "clients/x", "notes": 5, "written": 5, "d1_notes": 5}
     assert conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 5
 
 
 def test_from_supabase_extracts_parent_doc_and_segment_index_from_frontmatter(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    notes = [
-        _note(
+    rows = [
+        _supabase_row(
             "clients/x/doc__p001",
             "page one body",
             frontmatter={"parent_doc": "doc", "segment_index": 1, "type": "page"},
@@ -434,7 +566,7 @@ def test_from_supabase_extracts_parent_doc_and_segment_index_from_frontmatter(
     monkeypatch.setattr(d1_sync, "D1Store", _store_factory(post))
     import digivault.supabase_store as supabase_store_module
 
-    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class(notes))
+    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class(rows))
     monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
     monkeypatch.setenv("D1_API_TOKEN", "tok")
 
@@ -444,17 +576,55 @@ def test_from_supabase_extracts_parent_doc_and_segment_index_from_frontmatter(
     assert row == ("doc", 1)
 
 
+def test_from_supabase_carries_top_level_summary_wikilinks_and_note_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#2239 review Important I2: ``architecture_notes`` stores ``summary``,
+    ``wikilinks`` and ``note_type`` as top-level table columns
+    (``scripts/sync_architecture_vault.py``'s ``build_rows``), not frontmatter keys.
+    ``SupabaseStore.list_notes``/``NoteRow`` only carry the four columns on-disk-
+    vault-shaped callers need, so reading the backfill through them silently
+    dropped all three -- ``wikilinks`` would be ``[]`` for 100% of backfilled notes.
+    Frontmatter here deliberately has none of the three keys, so this only passes
+    if the top-level columns are the ones actually read.
+    """
+    row = _supabase_row(
+        "clients/x/a",
+        "The full body.",
+        frontmatter={},
+        note_type="reference",
+        summary="The tagline summary.",
+        wikilinks=["other-note"],
+    )
+    conn = sqlite3.connect(":memory:")
+    post = _d1_sqlite_post(conn)
+    monkeypatch.setattr(d1_sync, "D1Store", _store_factory(post))
+    import digivault.supabase_store as supabase_store_module
+
+    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class([row]))
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+
+    main(["--prefix", "clients/x", "--database", "db", "--from-supabase", "--init"])
+
+    stored = conn.execute("SELECT note_type, summary, wikilinks FROM notes").fetchone()
+    assert stored[0] == "reference"
+    assert stored[1] == "The tagline summary."
+    assert json.loads(stored[2]) == ["other-note"]
+
+
 def test_from_supabase_duplication_is_rejected_before_any_d1_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression shape of #2138: a source read that yields the same vault_path
-    twice must abort loudly rather than let INSERT OR REPLACE mask it."""
-    notes = [_note("clients/x/a"), _note("clients/x/a")]
+    twice must abort loudly rather than let the upsert's ON CONFLICT DO UPDATE
+    mask it."""
+    rows = [_supabase_row("clients/x/a"), _supabase_row("clients/x/a")]
     post = _RecordingPost()
     monkeypatch.setattr(d1_sync, "D1Store", _store_factory(post))
     import digivault.supabase_store as supabase_store_module
 
-    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class(notes))
+    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _fake_supabase_store_class(rows))
     monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
     monkeypatch.setenv("D1_API_TOKEN", "tok")
 
@@ -462,3 +632,88 @@ def test_from_supabase_duplication_is_rejected_before_any_d1_call(
 
     assert exit_code == 1
     assert post.calls == []
+
+
+# --- #2239 review, Important I1: INSERT OR REPLACE churns rowids, dangling the FTS index --
+
+
+def test_search_survives_a_resync_even_when_the_fts_rebuild_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`vault_path` is a TEXT PRIMARY KEY, not a rowid alias, so `INSERT OR REPLACE`
+    deletes-and-reinserts on conflict, assigning the row a *new* rowid.
+    `D1Store`'s `_SEARCH_SQL` joins `n.rowid = notes_fts.rowid`; if a rebuild then
+    fails (a transient D1 500, simulated here) after a re-sync that churned rowids,
+    the external-content FTS index is left pointing rowids nowhere and search on
+    every previously-indexed note goes dark until some later sync reaches a
+    successful rebuild. Fix under test: `ON CONFLICT(vault_path) DO UPDATE`
+    preserves the rowid across the re-sync, so the FTS mapping stays valid (worst
+    case ranked on stale text) even when the rebuild that would refresh that text
+    outright fails.
+    """
+    conn = sqlite3.connect(":memory:")
+    base_post = _d1_sqlite_post(conn)
+    rebuild_calls = 0
+
+    def flaky_post(url: str, headers: dict[str, str], body: bytes, content_type: str):
+        nonlocal rebuild_calls
+        payload = json.loads(body)
+        if payload["sql"] == REBUILD_FTS_SQL:
+            rebuild_calls += 1
+            if rebuild_calls == 2:  # fail only the second sync's rebuild
+                return 500, json.dumps({"success": False, "errors": [{"message": "boom"}]})
+        return base_post(url, headers, body, content_type)
+
+    monkeypatch.setattr(d1_sync, "D1Store", _store_factory(flaky_post))
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+
+    _write_note(tmp_path, "clients/x/a.md", frontmatter={"title": "A"}, body="unicorn\n")
+    _write_note(tmp_path, "clients/x/b.md", frontmatter={"title": "B"}, body="zebra\n")
+    first = main(["--prefix", "clients/x", "--database", "db", "--vault", str(tmp_path), "--init"])
+    assert first == 0
+
+    store = D1Store("db", account_id="acct", api_token="tok", http_post=flaky_post)
+    assert [h.vault_path for h in store.search("unicorn", path_prefix="clients/x")] == [
+        "clients/x/a"
+    ]
+    assert [h.vault_path for h in store.search("zebra", path_prefix="clients/x")] == ["clients/x/b"]
+
+    # Edit both notes (still containing their original searched-for term), then
+    # re-sync -- this run's rebuild is the one rigged to fail.
+    _write_note(tmp_path, "clients/x/a.md", frontmatter={"title": "A"}, body="unicorn v2\n")
+    _write_note(tmp_path, "clients/x/b.md", frontmatter={"title": "B"}, body="zebra v2\n")
+    second = main(["--prefix", "clients/x", "--database", "db", "--vault", str(tmp_path)])
+    assert second == 1  # the rebuild failure is still surfaced as an error
+
+    # Search must still resolve to the correct (still-existing) notes -- not [] --
+    # because the rowid the FTS index maps each term to was never churned.
+    assert [h.vault_path for h in store.search("unicorn", path_prefix="clients/x")] == [
+        "clients/x/a"
+    ]
+    assert [h.vault_path for h in store.search("zebra", path_prefix="clients/x")] == ["clients/x/b"]
+
+
+# --- #2239 review, Minor M2: PARAMS_PER_ROW has nothing tying it to the schema -----
+
+
+def _upsert_prefix_column_count(prefix: str) -> int:
+    """Parse the column list out of ``UPSERT_PREFIX``'s ``INSERT ... (a, b, c) VALUES``
+    text -- the ground truth ``PARAMS_PER_ROW`` must never silently drift from."""
+    match = re.search(r"\((.*?)\)", prefix)
+    assert match is not None, f"no column list found in {prefix!r}"
+    return len(match.group(1).split(","))
+
+
+def test_params_per_row_matches_upsert_prefix_columns_and_row_params_length() -> None:
+    """PARAMS_PER_ROW is a hand-maintained literal with nothing tying it to the
+    schema. Simulating a 12th column while leaving the constant at 11 produced 108
+    bound params against D1's 100-param cap -- unguarded by anything, since it only
+    failed loudly because the column/value counts also happened to mismatch. Ties
+    PARAMS_PER_ROW to two things that must never drift from it: the actual column
+    list parsed out of UPSERT_PREFIX's SQL text, and the length of a real
+    row_params() call.
+    """
+    assert _upsert_prefix_column_count(UPSERT_PREFIX) == PARAMS_PER_ROW
+    params = row_params(vault_path="x/a", title="A", frontmatter={}, body="b")
+    assert len(params) == PARAMS_PER_ROW

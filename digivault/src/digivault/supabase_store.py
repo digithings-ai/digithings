@@ -151,6 +151,51 @@ class SupabaseStore:
                 return out
             start += page_size
 
+    def list_raw(
+        self,
+        *,
+        select: str,
+        path_prefix: str | None = None,
+        page_size: int = 500,
+    ) -> list[dict[str, Any]]:
+        """Every row under ``path_prefix``, paginated, as raw dicts -- for callers
+        needing table columns beyond ``NoteRow``'s four (``vault_path``, ``title``,
+        ``frontmatter``, ``body_markdown``).
+
+        ``list_notes`` validates every row through ``NoteRow``, which ignores any
+        column outside those four (see its docstring's "extras are ignored" note) --
+        a caller needing e.g. ``architecture_notes``'s top-level ``summary``/
+        ``wikilinks``/``note_type`` columns (the D1 backfill, ``scripts/d1_sync.py``
+        -- #2239 review, Important I2: those three are top-level columns there, not
+        frontmatter keys, and reading through ``list_notes``/``NoteRow`` silently
+        dropped all three for every backfilled note) cannot get them back out of a
+        ``NoteRow``. This mirrors ``list_notes``'s pagination loop but skips the
+        ``NoteRow`` step, so a caller passing its own ``select`` gets back exactly
+        the columns it asked for. Does not read or change ``_SELECT``/``NoteRow``/
+        ``list_notes`` at all -- existing callers of those are unaffected.
+        """
+        if page_size <= 0:
+            raise ValueError(f"page_size must be positive, got {page_size}")
+        prefix = (path_prefix or "").strip().strip("/")
+        out: list[dict[str, Any]] = []
+        start = 0
+        while True:
+            query = self._client.table(self._table).select(select)
+            if prefix:
+                query = query.like("vault_path", f"{prefix}%")
+            page = query.order("vault_path").range(start, start + page_size - 1).execute()
+            rows = list(getattr(page, "data", None) or [])
+            for row in rows:
+                vault_path = str(row.get("vault_path") or "").strip()
+                if not vault_path:
+                    continue
+                if prefix and vault_path != prefix and not vault_path.startswith(prefix + "/"):
+                    continue
+                out.append(row)
+            if len(rows) < page_size:
+                return out
+            start += page_size
+
     def load_vault(self, *, config: VaultConfig | None = None) -> Vault:
         """Materialize a read-only :class:`Vault` from the table."""
         return Vault.from_sources(self.sources(), config=config)
