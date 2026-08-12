@@ -575,6 +575,20 @@ interface ViewControl {
 }
 
 /**
+ * Which pointerId currently owns an active drag on a given chart <svg> —
+ * keyed by the DOM element itself (not module-global) so independent chart
+ * instances never contend with each other, and a re-render's fresh
+ * viewHandlers() closure still sees a drag its previous closure started.
+ * A single mouse can never produce two concurrent "down" states, but a
+ * touchscreen can (two fingers, or a fast second tap while the first is
+ * still held) — without this guard a second pointerdown starts a SECOND
+ * independent drag session with its own startX/lo/hi snapshot, and the two
+ * sessions' onView(...) calls overwrite each other every other frame,
+ * visibly thrashing the shared view.
+ */
+const activeDragPointer = new WeakMap<Element, number>();
+
+/**
  * Build the shared wheel / drag / double-click control for a ViewWindow. Returns
  * null (static chart) when not view-controlled, so the same component renders
  * statically wherever `view`/`onView` are omitted.
@@ -607,11 +621,17 @@ function viewHandlers(
   // its bounds mid-drag (load-bearing for touch, where a real finger drifts
   // off the SVG far more easily than a mouse does).
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    const el = e.currentTarget;
+    // A drag is already active on this chart (a second finger, or a fast
+    // second tap while the first is still held) — ignore it rather than
+    // starting a competing session against the same shared view.
+    if (activeDragPointer.has(el)) return;
     e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    activeDragPointer.set(el, e.pointerId);
+    el.setPointerCapture(e.pointerId);
     const startX = e.clientX;
     const span = hi - lo;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
     const plotPxW = rect.width * ((vbW - pad.left - pad.right) / vbW);
     const move = (me: PointerEvent) => {
       if (me.pointerId !== e.pointerId) return;
@@ -625,6 +645,7 @@ function viewHandlers(
     };
     const up = (ue: PointerEvent) => {
       if (ue.pointerId !== e.pointerId) return;
+      activeDragPointer.delete(el);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
