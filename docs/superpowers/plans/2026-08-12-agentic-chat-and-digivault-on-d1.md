@@ -1304,6 +1304,20 @@ npx wrangler secret put D1_DATABASE_MAP   # {"clients/digithings":"<id>","client
 npx wrangler deploy
 ```
 
+These are **Worker** secrets — a separate store from GitHub Actions. The
+`.github/workflows/docs-onboard-digithings.yml` `apply` job also reads
+`D1_ACCOUNT_ID` / `D1_API_TOKEN` / `D1_DATABASE_MAP` from the repo's `production`
+**environment secrets**, and must hold the *same* `D1_DATABASE_MAP` value as the
+Worker (it derives `--database` from `map["clients/digithings"]`) — one map, so
+CI publishing and the container reading can never point at different databases
+for the same prefix:
+
+```bash
+gh secret set D1_ACCOUNT_ID --env production
+gh secret set D1_API_TOKEN --env production
+gh secret set D1_DATABASE_MAP --env production   # same JSON map as the Worker secret above
+```
+
 - [ ] **Step 6: Confirm the #2239 acceptance criterion**
 
 Ask the OCC chat a question whose answer lives in the corpus. Vault citations must be

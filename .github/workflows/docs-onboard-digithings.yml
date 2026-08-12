@@ -12,7 +12,11 @@
 # remote ingest exists. See docs/digichat/CLIENT-DOCS-ONBOARD.md.
 #
 # Prod-mutating apply runs under `production` (D1_ACCOUNT_ID / D1_API_TOKEN /
-# D1_DATABASE_DIGITHINGS secrets, reviewer gate on the `production` environment).
+# D1_DATABASE_MAP secrets, reviewer gate on the `production` environment).
+# D1_DATABASE_MAP is the same {"clients/...": "<id>"} JSON the Worker holds
+# (frontend/digithings-stack-cloudflare/wrangler.toml) -- one secret, one source
+# of truth, so CI and the container can never read different databases for the
+# same prefix. --database is derived from map["clients/digithings"] below.
 # digithings only — the online-compliance-center corpus has its own onboarding path.
 name: "Docs: onboard digithings"
 
@@ -146,7 +150,7 @@ jobs:
         env:
           D1_ACCOUNT_ID: ${{ secrets.D1_ACCOUNT_ID }}
           D1_API_TOKEN: ${{ secrets.D1_API_TOKEN }}
-          D1_DATABASE_DIGITHINGS: ${{ secrets.D1_DATABASE_DIGITHINGS }}
+          D1_DATABASE_MAP: ${{ secrets.D1_DATABASE_MAP }}
         run: |
           missing=0
           if [ -z "$D1_ACCOUNT_ID" ]; then
@@ -157,8 +161,11 @@ jobs:
             echo "::error::D1_API_TOKEN is not set in the production environment"
             missing=1
           fi
-          if [ -z "$D1_DATABASE_DIGITHINGS" ]; then
-            echo "::error::D1_DATABASE_DIGITHINGS is not set in the production environment"
+          if [ -z "$D1_DATABASE_MAP" ]; then
+            echo "::error::D1_DATABASE_MAP is not set in the production environment"
+            missing=1
+          elif ! python3 -c 'import json, os; json.loads(os.environ["D1_DATABASE_MAP"])["clients/digithings"]' 2>/dev/null; then
+            echo "::error::D1_DATABASE_MAP is not valid JSON, or has no \"clients/digithings\" entry"
             missing=1
           fi
           exit "$missing"
@@ -188,9 +195,13 @@ jobs:
         env:
           D1_ACCOUNT_ID: ${{ secrets.D1_ACCOUNT_ID }}
           D1_API_TOKEN: ${{ secrets.D1_API_TOKEN }}
-          D1_DATABASE_DIGITHINGS: ${{ secrets.D1_DATABASE_DIGITHINGS }}
+          D1_DATABASE_MAP: ${{ secrets.D1_DATABASE_MAP }}
         run: |
+          # Derive the database id from the same map the container reads, so a
+          # mismatch between "what CI publishes to" and "what digivault serves"
+          # is structurally impossible rather than merely detected.
+          DATABASE_ID=$(python3 -c 'import json, os; print(json.loads(os.environ["D1_DATABASE_MAP"])["clients/digithings"])')
           uv run --frozen --no-sync python scripts/d1_sync.py \
             --prefix clients/digithings \
-            --database "$D1_DATABASE_DIGITHINGS" \
+            --database "$DATABASE_ID" \
             --vault "$ONBOARD_VAULT"
