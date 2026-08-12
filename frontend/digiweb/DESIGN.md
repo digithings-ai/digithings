@@ -119,7 +119,7 @@ digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue grad
 The palette is intentionally narrow: three neutrals for text, three surfaces for depth, one accent, and two small semantic sets (money, diff) that are deliberately fenced off from the accent system so a scoped livery can never repaint a gain, a loss, or a code change.
 
 ### Primary
-- **Phosphor Teal** (`#3DD6C4` dark / `#0E8C7F` light): the system's default accent — code-commented in the tokens file as "the terminal phosphor," it is digiquant's identity color and the monochrome livery's fallback. Used for focus rings, the single primary CTA, selected-state fills, chart identity lines, and anything reading "this is the live/default module." Spent sparingly by rule, never as a background wash.
+- **Phosphor Teal** (`#3DD6C4` dark / `#0C7C71` light): the system's default accent — code-commented in the tokens file as "the terminal phosphor," it is digiquant's identity color and the monochrome livery's fallback. Used for focus rings, the single primary CTA, selected-state fills, chart identity lines, and anything reading "this is the live/default module." Spent sparingly by rule, never as a background wash. The light value was darkened from `#0E8C7F` on 2026-08-12 (WCAG 1.4.3): the lighter hex cleared only 4.14:1 for text/`--on-accent` use, under the 4.5:1 minimum. The per-module token `--accent-digiquant` deliberately stayed at the original `#0E8C7F`, since it is consumed as a *background* under a fixed dark `--on-accent`, a pairing that needs the opposite direction.
 
 ### Secondary — Module Liveries (opt-in, one at a time)
 - **Amber Gold** — digigraph (`#E5B765`)
@@ -132,7 +132,7 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 **The One-Livery Rule.** Exactly one module accent is active at a time, set via a global livery switcher or a local `.accent-<module>` scope class — never two module hues visible in the same view. `atlas`, `hermes`, and `kairos` are backend LangGraph sub-graph names, not colored products: their accents collapse to plain `--ink` on any redesigned surface by explicit ruling, so they never appear in the livery switcher.
 
 ### Tertiary — Money (fenced off from livery, never scoped)
-- **Gain** (`#3DD6C4` dark / `#0E8C7F` light): positive P&L and returns only.
+- **Gain** (`#3DD6C4` dark / `#0C7C71` light): positive P&L and returns only. Light value darkened alongside Phosphor Teal above (2026-08-12, WCAG 1.4.3) — `--up` is a literal, kept in sync with `--accent`'s light hex by convention, not a live reference.
 - **Loss** (`#E5533E` dark / `#C9533B` light): negative P&L and returns only.
 - **Caution** (`#E0B341` dark / `#B5832A` light): warnings and non-P&L "bearish sentiment" reads that must not borrow money color.
 

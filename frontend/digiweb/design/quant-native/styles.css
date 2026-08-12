@@ -19,6 +19,19 @@
 .qn-up   { color: var(--accent-digiquant); }
 .qn-down { color: var(--accent-digiclaw); }
 
+/* WCAG 1.4.3 fix (2026-08-12, #2280): --accent-digiquant/--accent-digiclaw's
+   light-theme values (#0E8C7F, #b87840) are tuned to stay LIGHT ENOUGH to
+   serve as a background under .accent-<module>'s pinned dark --on-accent
+   text (tokens.css) — the opposite of what .qn-up/.qn-down need here, where
+   the token is read as literal TEXT color on the page's own light surface
+   (4.14:1/3.62:1 as measured, both under the 4.5:1 minimum for normal text).
+   Darkened locally rather than in the shared tokens: darkening the tokens
+   themselves would break their background role (see tokens.css's own
+   comment on --accent-digiquant). Same hues, deepened for paper the same
+   way --accent/--up/--down already are (tokens.css line ~208). */
+:root[data-theme="light"] .qn-up   { color: #0C7C71; }
+:root[data-theme="light"] .qn-down { color: #976235; }
+
 /* --- Metric (tabular numerics) ----------------------------------------- */
 .qn-metric {
   font-family: var(--font-family-mono);
