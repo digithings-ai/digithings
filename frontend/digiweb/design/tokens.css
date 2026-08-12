@@ -109,8 +109,10 @@
    --on-accent to a single dark ink that clears 4.5:1 against every one of
    them in both themes (worst case 4.64:1, digiquant — its own [data-theme="light"]
    override two sections below is deliberately close to --on-accent, since
-   that override reuses --accent's own paper-contrast hex rather than a
-   fresh one picked for this 4.5:1 headroom) rather than letting it
+   that override reuses --accent's PRE-#2280 paper-contrast hex rather than a
+   fresh one picked for this 4.5:1 headroom — it deliberately did NOT follow
+   --accent's own #2280 darkening below, precisely to protect this 4.64:1
+   pairing; see that override's own comment) rather than letting it
    inherit the theme flip. .accent-atlas/-hermes/-kairos are deliberately
    NOT listed here — their accent already resolves to --ink, so they should
    keep following the theme flip like mono does. */
