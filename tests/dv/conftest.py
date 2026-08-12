@@ -25,6 +25,13 @@ _CLOUDFLARE_CREDENTIAL_ENV_VARS = (
     "D1_ACCOUNT_ID",
     "D1_API_TOKEN",
     "D1_DATABASE_MAP",
+    # Same leakage concern as the vars above: a developer working on the digigraph
+    # corpus-routing feature in this same repo could plausibly have this exported in
+    # their shell. digivault.tenant_scope reads it (added alongside the #2265/PR #2293
+    # tenant-prefix-binding fix) -- cleared here so only a test that explicitly
+    # `monkeypatch.setenv`s it exercises tenant binding, never one that assumes
+    # single-tenant (map-unset) behavior.
+    "DIGI_TENANT_CORPUS_MAP",
 )
 
 

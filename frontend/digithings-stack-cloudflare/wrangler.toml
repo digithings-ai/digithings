@@ -111,7 +111,11 @@ DIGI_CONFIG_PATH = "/app/config"
 DIGI_PROJECT_CONFIG = "/app/config/digiproject.yaml"
 # Belt-and-suspenders with digiproject.yaml (research_rag, no backtest agent).
 DIGI_WORKFLOW_PROFILE = "research_rag"
-DIGI_ALLOWED_TOOLS = "digisearch,digivault_search_notes"
+# Fallback only: tool_policy.py prefers agents.allowed_tools from the baked
+# digiproject.yaml and reads this ONLY when that config fails to load. Keep the
+# two in sync anyway -- a stale value here silently drops a tool on the one path
+# where nothing else can, and the model gets a refusal mid-loop (#2295).
+DIGI_ALLOWED_TOOLS = "digisearch,digivault_search_notes,digivault_get_note"
 DIGI_LLM_MODE = "test"
 CHROMA_PATH = "/data/chroma"
 DIGIVAULT_ROOT = "/data/vault"
