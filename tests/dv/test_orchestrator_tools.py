@@ -50,13 +50,18 @@ def test_get_note_tool_path_prefix_description_does_not_claim_enforced_isolation
 
 
 def test_get_note_tool_description_warns_against_guessing_the_path() -> None:
+    """The description must forbid inventing a vault_path and say where a real one comes
+    from. Wording is free (#2306 rephrased "do not guess" to "never invented"); the
+    requirement is that both halves of the instruction survive any rewrite."""
     tool = next(
         t
         for t in build_orchestrator_tool_manifest()
         if t["function"]["name"] == TOOL_VAULT_GET_NOTE
     )
     description = tool["function"]["description"].lower()
-    assert "do not guess" in description or "not guess" in description
+    forbids = any(p in description for p in ("not guess", "never invent", "is never invented"))
+    assert forbids, "description must forbid inventing a vault_path"
+    assert "prior search hit" in description, "and must say where a real one comes from"
 
 
 def test_search_notes_description_does_not_claim_supabase_is_the_primary_backend() -> None:

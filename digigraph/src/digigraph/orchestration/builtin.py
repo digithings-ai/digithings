@@ -74,6 +74,44 @@ def _merged_digisearch_filters(
 # Max size of search result payload sent to the LLM (avoids context explosion).
 _LLM_SEARCH_PREVIEW_ROWS = 5
 _LLM_SEARCH_PREVIEW_CHARS = 300
+# Per-value budget for non-content fields, and caps on structured values. These bound a
+# metadata object without collapsing it to a string — see _preview_field (#2306).
+_LLM_PREVIEW_FIELD_CHARS = 200
+_LLM_PREVIEW_LIST_ITEMS = 20
+_LLM_PREVIEW_DICT_KEYS = 24
+
+
+def _preview_field(value: Any) -> Any:
+    """Shrink one non-content field for the LLM preview without destroying its shape.
+
+    The previous implementation was ``str(value)`` clipped to _LLM_SEARCH_PREVIEW_CHARS,
+    which had two failure modes for the dicts that actually matter here (#2306):
+
+    * A dict became a Python repr — single-quoted, not JSON — so a model told to read
+      ``metadata.vault_path`` received an opaque string to parse rather than a field it
+      could address.
+    * The clip was then applied to that repr. Realistic digisearch metadata serializes to
+      just over the budget with ``vault_path`` last, so the one key the model was told to
+      read was the first thing cut, and it would pass a half-path to digivault_get_note
+      and get a 404 — a failure that looks like a bad path, not a truncated payload.
+
+    Clipping long *values* while keeping every key addressable fixes both: the object
+    stays JSON, and short-but-critical keys survive regardless of what else is present.
+    """
+    if isinstance(value, dict):
+        return {
+            str(k): _preview_field(v)
+            for k, v in list(value.items())[:_LLM_PREVIEW_DICT_KEYS]
+            if v is not None
+        }
+    if isinstance(value, list):
+        return [_preview_field(v) for v in value[:_LLM_PREVIEW_LIST_ITEMS]]
+    if isinstance(value, bool | int | float):
+        return value
+    text = value if isinstance(value, str) else str(value)
+    if len(text) > _LLM_PREVIEW_FIELD_CHARS:
+        return text[:_LLM_PREVIEW_FIELD_CHARS] + "..."
+    return text
 
 
 def _search_payload_for_llm(
@@ -104,10 +142,7 @@ def _search_payload_for_llm(
                         "..." if len(v) > _LLM_SEARCH_PREVIEW_CHARS else ""
                     )
                 elif k != "content" and v is not None:
-                    s = str(v)
-                    row[k] = s[:_LLM_SEARCH_PREVIEW_CHARS] + (
-                        "..." if len(s) > _LLM_SEARCH_PREVIEW_CHARS else ""
-                    )
+                    row[k] = _preview_field(v)
             preview.append(row)
         payload["preview"] = preview
     return payload
@@ -342,11 +377,72 @@ def _handle_digivault_search(args: dict[str, Any], context: ToolContext) -> str 
         if isinstance(h, dict)
     ]
     payload_for_llm = _search_payload_for_llm(results, len(results))
+    _mark_truncated_excerpts(payload_for_llm, results, load_hint="that row's doc_id")
     return {
         "content": json.dumps(payload_for_llm),
         "results": results,
         "rag_sources": rag_sources_from_results(results),
     }
+
+
+def _mark_truncated_excerpts(
+    payload: dict[str, Any],
+    results: list[dict[str, Any]],
+    *,
+    load_hint: str,
+) -> None:
+    """Label clipped excerpts as data the model can branch on (#2306).
+
+    _search_payload_for_llm clips each body to _LLM_SEARCH_PREVIEW_CHARS and appends a
+    bare "...", which is indistinguishable from ordinary prose punctuation. In production
+    the model received exactly the right note, clipped immediately before the first row
+    of the table it was asked about, judged the excerpt sufficient, never called
+    digivault_get_note, and answered wrong — then closed with a completeness claim ("no
+    other X was found") that its own truncated input could not support.
+
+    Nothing mechanical prevented the second round: the tool was registered, allowed, and
+    described, doc_id was in the payload, and run_tools permits four rounds. The missing
+    piece was that "is this excerpt enough" is unanswerable for a model that cannot tell
+    an excerpt from a whole note. So state which rows are incomplete, and name the exact
+    follow-up call rather than leaving it to judgment.
+
+    Applied to BOTH search sinks on purpose. Marking only digivault rows would make the
+    flag's absence on a digisearch row read as "this one is complete" — the same wrong
+    inference #2306 is about, reintroduced on the sink that returns most hits. digisearch
+    rows carry their own upstream ``content_truncated`` (its 500-char preview cap, see
+    digisearch/core/standard_hits.py) before digigraph clips again to 300, so either
+    signal marks the row.
+
+    *load_hint* names the field this sink puts the loadable path in — they differ, and
+    naming the wrong one sends the model to a 404.
+
+    Only rows that actually reached the preview are marked — `results` may be longer than
+    _LLM_SEARCH_PREVIEW_ROWS, and claiming a count the model cannot see would be its own
+    inaccuracy.
+    """
+    preview = payload.get("preview") or []
+    # Positional pairing mirrors how _search_payload_for_llm builds preview: in order,
+    # over dict rows only. Keying on doc_id instead would silently skip digisearch rows,
+    # whose doc_id is a repo path shared across chunks of the same document.
+    sources = [r for r in results if isinstance(r, dict)][: len(preview)]
+    marked = 0
+    for row, src in zip(preview, sources, strict=False):
+        body = src.get("content")
+        clipped_here = isinstance(body, str) and len(body) > _LLM_SEARCH_PREVIEW_CHARS
+        if clipped_here or src.get("content_truncated") is True:
+            row["truncated"] = True
+            marked += 1
+    if not marked:
+        return
+    payload["excerpts_truncated"] = True
+    payload["next_step"] = (
+        f"{marked} of the excerpts above are cut off and are NOT the whole document. "
+        "Before answering anything that depends on content past the cut — a table, a "
+        "list, a procedure, a count, or any 'every/all' question — call "
+        f"digivault_get_note with {load_hint} and answer from the full note it returns. "
+        "Never say something is absent from a document whose excerpt is truncated; you "
+        "have not seen the rest of it."
+    )
 
 
 def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
@@ -418,6 +514,17 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
         "tags": data.get("tags"),
         "body_markdown": data.get("body_markdown"),
     }
+    # Segment identity (#2306). Most of this corpus is not whole documents: 1190 of 1279
+    # digithings notes and 300 of 328 OCC notes are one page or section of a larger
+    # source, so "load the whole note" routinely hands the model one page of forty with
+    # nothing saying so. That is the same wrong-answer shape as the excerpt bug one layer
+    # down — a table continuing onto the next page reads as a complete table — and it is
+    # also what makes the tool description's "search for the neighbouring page" rule
+    # actionable. Emitted only when present, so a whole-document note is unchanged.
+    for key in ("parent_doc", "segment_index", "segment_label"):
+        value = data.get(key)
+        if value is not None:
+            payload_for_llm[key] = value
     return {
         "content": json.dumps(payload_for_llm),
         "results": [result],
@@ -485,6 +592,13 @@ def _handle_digisearch(args: dict[str, Any], context: ToolContext) -> str | dict
         return {"content": "No results found.", "results": [], "rag_sources": []}
     payload_for_llm = _search_payload_for_llm(
         results, total, dataset_ref=dataset_ref, summary=summary
+    )
+    # Vault-sourced digisearch chunks are loadable, but via metadata.vault_path -- this
+    # sink's doc_id is a repo path digivault_get_note cannot resolve (#2306).
+    _mark_truncated_excerpts(
+        payload_for_llm,
+        results,
+        load_hint="that row's metadata.vault_path (only rows that carry one are loadable)",
     )
     out: dict[str, Any] = {
         "content": json.dumps(payload_for_llm),
