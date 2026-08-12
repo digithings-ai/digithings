@@ -49,6 +49,26 @@ export function DropdownReference() {
     triggerRef.current?.focus();
   };
 
+  // While open, Escape/Enter are caught by a DOCUMENT-level listener (below)
+  // so they work no matter which row/field inside the pane has focus. That
+  // only stays correct as long as focus is actually still somewhere inside
+  // the pane: if a keyboard user Tabs past the footer action onto later page
+  // content (nothing else here closes the menu on tab-out) — or another
+  // widget's own shortcut steals focus away, e.g. SearchBarReference's `/`
+  // hotkey — `open` stays true and a later, unrelated Escape/Enter keypress
+  // elsewhere on the page would still hit this pane's handler, including
+  // closeMenu()'s forced refocus back onto the trigger. Auto-closing the
+  // instant focus actually leaves the wrapper removes that stale-armed
+  // state. Same pattern as NavShell.tsx's onFocusLeave (React's onBlur is
+  // focusout, so it bubbles from children; relatedTarget is the element
+  // gaining focus, so this only fires once focus has genuinely left the
+  // pane). Plain setOpen, not closeMenu: focus already moved somewhere else
+  // on purpose, so it isn't yanked back to the trigger.
+  const onWrapperBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (wrapRef.current?.contains(e.relatedTarget as Node | null)) return;
+    setOpen(false);
+  };
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -102,7 +122,7 @@ export function DropdownReference() {
         arrow-keys to move, Enter to choose, click-outside or Escape to close.
       </p>
 
-      <div className="relative mt-[1.2rem] w-[min(100%,22rem)]" ref={wrapRef}>
+      <div className="relative mt-[1.2rem] w-[min(100%,22rem)]" ref={wrapRef} onBlur={onWrapperBlur}>
         <button
           ref={triggerRef}
           type="button"

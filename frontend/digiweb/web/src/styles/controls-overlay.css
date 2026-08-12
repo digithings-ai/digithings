@@ -135,20 +135,20 @@
   }
 
   .ctl-menu-item[data-variant="destructive"] {
-    color: var(--down);
+    color: var(--danger);
   }
 
   .ctl-menu-item[data-variant="destructive"]:focus {
-    background: color-mix(in oklab, var(--down) 10%, transparent);
-    color: var(--down);
+    background: color-mix(in oklab, var(--danger) 10%, transparent);
+    color: var(--danger);
   }
 
   [data-theme="dark"] .ctl-menu-item[data-variant="destructive"]:focus {
-    background: color-mix(in oklab, var(--down) 20%, transparent);
+    background: color-mix(in oklab, var(--danger) 20%, transparent);
   }
 
   .ctl-menu-item[data-variant="destructive"] svg {
-    color: var(--down);
+    color: var(--danger);
   }
 
   .ctl-menu-item svg {

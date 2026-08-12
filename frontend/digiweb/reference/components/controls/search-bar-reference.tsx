@@ -43,7 +43,10 @@ export function SearchBarReference() {
       const active = document.activeElement;
       const isTyping =
         active instanceof HTMLElement &&
-        (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.tagName === "SELECT" ||
+          active.isContentEditable);
       if (isTyping) return;
       e.preventDefault();
       sectionRef.current?.querySelector<HTMLInputElement>(".sb-input")?.focus();

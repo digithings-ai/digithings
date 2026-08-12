@@ -40,7 +40,7 @@ export function FormFieldsReference() {
         <label className="ff-field is-error flex flex-col gap-[0.35rem]">
           <span className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-ink-mute">API key</span>
           <input className="ff-input" type="text" defaultValue="dk_live_9f2…" aria-invalid="true" />
-          <span className="font-mono text-[0.62rem] text-down">Key is revoked — issue a new one.</span>
+          <span className="font-mono text-[0.62rem] text-danger">Key is revoked — issue a new one.</span>
         </label>
 
         <label className="ff-field is-disabled flex flex-col gap-[0.35rem]">
