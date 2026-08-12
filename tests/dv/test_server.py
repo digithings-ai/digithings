@@ -483,6 +483,112 @@ def _set_d1_env(monkeypatch: pytest.MonkeyPatch, database_map: str) -> None:
     monkeypatch.setenv("D1_DATABASE_MAP", database_map)
 
 
+# ── D1 partial-configuration guard (#2239 second review, Important finding) ─────
+def test_d1_configured_false_when_all_three_vars_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero D1 vars set is a legitimate profile (local dev, self-hosted, Profile A)
+    and must keep returning False, not raise."""
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    assert server._d1_configured() is False
+
+
+def test_d1_configured_true_when_all_three_vars_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    assert server._d1_configured() is True
+
+
+@pytest.mark.parametrize("missing_var", ["D1_ACCOUNT_ID", "D1_API_TOKEN", "D1_DATABASE_MAP"])
+def test_d1_configured_raises_when_exactly_one_var_missing(
+    monkeypatch: pytest.MonkeyPatch, missing_var: str
+) -> None:
+    """#2239 second review, Important finding: with any two of three D1 vars set,
+    `_d1_configured` used to return False -- indistinguishable from the legitimate
+    zero-vars case -- and `orchestrator_invoke` fell through to the `elif
+    DIGIVAULT_ROOT` branch, which production always sets to the baked /data/vault
+    seed. That silently served seed stubs instead of the real corpus: HTTP 200,
+    `ok: true`, nothing logged, reachable from a single typo'd secret name during
+    cutover (`wrangler secret put D1_API_TOKN` -> `D1_API_TOKEN` undefined). Partial
+    config has no legitimate reading, so this must raise, naming what's missing."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv(missing_var, raising=False)
+    with pytest.raises(D1StoreError) as exc:
+        server._d1_configured()
+    assert missing_var in str(exc.value)
+
+
+@pytest.mark.parametrize("missing_var", ["D1_ACCOUNT_ID", "D1_API_TOKEN", "D1_DATABASE_MAP"])
+def test_orchestrator_invoke_search_notes_partial_d1_config_503s_not_seed_hits(
+    monkeypatch: pytest.MonkeyPatch, vault_dir: Path, missing_var: str
+) -> None:
+    """Reproduces the reviewer's exact repro against a real seed vault
+    (`vault_dir` sets DIGIVAULT_ROOT, same as production's baked stub): with D1
+    missing exactly one of its three vars, this must 503 -- naming the missing
+    var -- rather than silently falling through to DIGIVAULT_ROOT and returning
+    HTTP 200 with hits from the seed vault (#2239's precise symptom)."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv(missing_var, raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes", arguments={"query": "links"}
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 503
+    assert missing_var in str(exc.value.detail)
+
+
+def test_orchestrator_invoke_search_notes_partial_d1_config_503s_via_http(
+    monkeypatch: pytest.MonkeyPatch, vault_dir: Path
+) -> None:
+    """HTTP-level version of the same repro, through the actual TestClient/route --
+    matching how the reviewer reproduced it -- rather than calling the handler
+    function directly."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+
+    client = TestClient(server.app)
+    resp = client.post(
+        "/v1/orchestrator_invoke",
+        json={"tool": "digivault_search_notes", "arguments": {"query": "links"}},
+        headers=auth_headers(scopes=[SCOPE_READ]),
+    )
+    assert resp.status_code == 503
+    assert "D1_API_TOKEN" in resp.json()["error"]["message"]
+
+
+def test_status_reports_d1_configured_true(monkeypatch: pytest.MonkeyPatch) -> None:
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    resp = TestClient(server.app).get("/v1/status")
+    assert resp.status_code == 200
+    assert resp.json()["d1_configured"] is True
+
+
+def test_status_reports_d1_configured_false_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
+    monkeypatch.delenv("D1_API_TOKEN", raising=False)
+    monkeypatch.delenv("D1_DATABASE_MAP", raising=False)
+    resp = TestClient(server.app).get("/v1/status")
+    assert resp.status_code == 200
+    assert resp.json()["d1_configured"] is False
+
+
+@pytest.mark.parametrize("missing_var", ["D1_ACCOUNT_ID", "D1_API_TOKEN", "D1_DATABASE_MAP"])
+def test_status_reports_d1_configured_false_on_partial_config_not_503(
+    monkeypatch: pytest.MonkeyPatch, missing_var: str
+) -> None:
+    """The diagnostic route itself must never 503 on a partial D1 config -- that
+    would defeat the point of letting an operator see backend state without
+    asking the chat a question."""
+    _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
+    monkeypatch.delenv(missing_var, raising=False)
+    resp = TestClient(server.app).get("/v1/status")
+    assert resp.status_code == 200
+    assert resp.json()["d1_configured"] is False
+
+
 def test_open_d1_store_raises_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("D1_ACCOUNT_ID", raising=False)
     monkeypatch.delenv("D1_API_TOKEN", raising=False)

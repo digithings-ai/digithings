@@ -148,17 +148,38 @@ def _open_supabase_store() -> SupabaseStore:
 
 
 def _d1_configured() -> bool:
-    """True when D1 credentials and a database map are all present in the environment.
+    """True when all three D1 env vars are present; False when none are; raises
+    ``D1StoreError`` when only some are — naming exactly which are missing.
+
+    Zero vars set is a legitimate profile (local dev, self-hosted, Profile A) and must
+    keep falling through to ``DIGIVAULT_ROOT``/Supabase below. But *some* set and
+    *not all* has no legitimate reading — it is unambiguously an operator error (a
+    typo'd secret name at cutover, e.g. ``wrangler secret put D1_API_TOKN`` leaving
+    ``D1_API_TOKEN`` unset). Before this guard, partial config made this function
+    return ``False`` like the zero-vars case, and callers fell through to
+    ``DIGIVAULT_ROOT`` — which production always sets to the baked ``/data/vault``
+    seed — so a single missing var silently served seed stubs instead of the real
+    corpus, HTTP 200, `ok: true`, nothing logged. That is #2239's precise symptom,
+    reachable from exactly the kind of secret-store typo a cutover risks (#2239
+    review, Important finding).
 
     Env is read here, at the call site — never inside ``D1Store``, whose constructor
     takes credentials as plain arguments (same convention as ``_open_supabase_store``
     reading Supabase env only in ``SupabaseStore.from_env``).
     """
-    return bool(
-        (os.environ.get("D1_ACCOUNT_ID") or "").strip()
-        and (os.environ.get("D1_API_TOKEN") or "").strip()
-        and (os.environ.get("D1_DATABASE_MAP") or "").strip()
-    )
+    values = {
+        "D1_ACCOUNT_ID": (os.environ.get("D1_ACCOUNT_ID") or "").strip(),
+        "D1_API_TOKEN": (os.environ.get("D1_API_TOKEN") or "").strip(),
+        "D1_DATABASE_MAP": (os.environ.get("D1_DATABASE_MAP") or "").strip(),
+    }
+    present = [bool(v) for v in values.values()]
+    if any(present) and not all(present):
+        missing = ", ".join(name for name, val in values.items() if not val)
+        raise D1StoreError(
+            f"D1 partially configured: missing {missing}. Set all three of "
+            "D1_ACCOUNT_ID, D1_API_TOKEN and D1_DATABASE_MAP, or none of them."
+        )
+    return all(present)
 
 
 def _load_d1_database_map() -> tuple[dict[str, Any], str, str]:
@@ -374,10 +395,19 @@ def healthz() -> dict[str, bool]:
 @app.get("/v1/status")
 def status() -> dict[str, Any]:
     """Operator diagnostic. Reports config presence only — never secrets."""
+    try:
+        d1_configured = _d1_configured()
+    except D1StoreError:
+        # Partial D1 config (some but not all of the three vars set) isn't a working
+        # backend either way, and this diagnostic route must never itself 503 — that
+        # would defeat the point of letting an operator see backend state without
+        # asking the chat a question (#2239 review).
+        d1_configured = False
     return {
         "service": "digivault",
         "version": __version__,
         "vault_configured": bool((os.environ.get("DIGIVAULT_ROOT") or "").strip()),
+        "d1_configured": d1_configured,
     }
 
 
@@ -527,7 +557,15 @@ def orchestrator_invoke(
         # D1 first: when the remote corpus is configured it is authoritative, and the
         # baked /data/vault seed must not shadow it (the #2239 production bug — prod
         # sets DIGIVAULT_ROOT to a stub vault that must never win over the real corpus).
-        if _d1_configured():
+        # `_d1_configured` itself raises D1StoreError for a partial config (some but
+        # not all of the three vars set) — that must become a loud 503 here, never a
+        # silent fall-through to the `elif DIGIVAULT_ROOT` branch below (#2239 review,
+        # Important finding).
+        try:
+            d1_is_configured = _d1_configured()
+        except D1StoreError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        if d1_is_configured:
             # Validate D1_DATABASE_MAP's shape (JSON, object, no "" key) unconditionally,
             # before ever looking at path_prefix. A config error here is always a real
             # 503, regardless of what the caller passed — hoisted out of

@@ -52,11 +52,18 @@ dev = ["pytest>=8,<10", "ruff>=0.16,<0.17"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-# d1_schema.sql (applied by scripts/d1_sync.py --init) is data, not a .py module —
-# setuptools does not package non-.py files under [tool.setuptools.packages.find]
-# by default, so a non-editable install (a real `pip install digivault` or
-# `python -m build --wheel`, as opposed to this monorepo's editable dev install)
-# silently drops it, breaking --init at import time with no local clue why.
+# d1_schema.sql is data, not a .py module — setuptools does not package non-.py
+# files under [tool.setuptools.packages.find] by default, so a non-editable
+# install (a real `pip install digivault` or `python -m build --wheel`, as
+# opposed to this monorepo's editable dev install) would silently drop it.
+# NOT the reason scripts/d1_sync.py's --init keeps working either way: its
+# _apply_schema resolves the file repo-relatively from scripts/, never through
+# the installed digivault package, so a missing package-data entry wouldn't
+# touch it. What actually depends on this entry is the schema being packaged
+# next to the installed digivault.d1_store module — tests/dv/test_d1_store.py:24
+# reads it via `Path(d1_store.__file__).with_name("d1_schema.sql")`, which would
+# 404 against a non-editable install without this line (#2239 review, Minor
+# finding: this comment previously misstated --init as the load-bearing reason).
 digivault = ["*.sql"]
 
 [tool.ruff]

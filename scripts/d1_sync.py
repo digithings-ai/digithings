@@ -24,9 +24,13 @@ Apply::
     D1_ACCOUNT_ID=… D1_API_TOKEN=… \\
       python3 scripts/d1_sync.py --prefix clients/digithings --database <id> --vault /data/vault
 
-One-time backfill (see the #2239 runbook for the expected counts to verify against)::
+One-time backfill (see the #2239 runbook for the expected counts to verify against).
+``--from-supabase`` needs the ``digivault[supabase]`` extra installed and
+``CORE_SUPABASE_URL`` plus a key (``CORE_SUPABASE_ANON_KEY`` or
+``CORE_SUPABASE_SERVICE_KEY``) set, on top of the ``D1_ACCOUNT_ID``/``D1_API_TOKEN``
+every mode needs::
 
-    D1_ACCOUNT_ID=… D1_API_TOKEN=… \\
+    D1_ACCOUNT_ID=… D1_API_TOKEN=… CORE_SUPABASE_URL=… CORE_SUPABASE_SERVICE_KEY=… \\
       python3 scripts/d1_sync.py --prefix clients/digithings --database <id> --init --from-supabase
 """
 
@@ -42,6 +46,8 @@ from typing import Any  # score:allow untyped any -- row params are heterogeneou
 
 from digivault.d1_errors import D1StoreError
 from digivault.d1_store import D1Store, normalize_vault_path, resolve_path_prefix
+from digivault.supabase_store import SupabaseStoreError
+from digivault.vault import _normalize_tags
 
 #: notes table column count -- keep in step with digivault/src/digivault/d1_schema.sql
 PARAMS_PER_ROW = 11
@@ -224,6 +230,18 @@ def row_params(
     (``scripts/sync_architecture_vault.py``), not frontmatter keys, and defaulting
     to ``frontmatter.get(...)`` there silently dropped all three for every
     backfilled note (#2239 review, Important I2).
+
+    ``tags`` has no such explicit parameter -- unlike its three siblings above, it
+    **is** in ``_SUPABASE_BACKFILL_SELECT`` behind ``frontmatter`` (the raw YAML
+    round-trips into that JSON blob's own ``tags`` key), so both read paths do land
+    on the same underlying value; there is no #2239-I2-style row loss here. But
+    that raw value is whatever a hand-edited note's YAML actually contains -- a
+    comma/space-separated string (``tags: arch, graph``), a ``#``-prefixed list
+    entry, or a proper list -- and ``Vault`` itself never stores ``tags`` un-
+    normalised; every other reader goes through ``_normalize_tags``
+    (``digivault.vault``). Doing the same here, rather than ``list(...)`` over
+    whatever frontmatter happens to hold, avoids silently exploding a string value
+    into one row per character (#2239 review, Minor finding).
     """
     segment_index = frontmatter.get("segment_index")
     resolved_note_type = note_type if note_type is not None else str(frontmatter.get("type") or "")
@@ -238,7 +256,7 @@ def row_params(
         str(resolved_summary),
         body or "",
         json.dumps(frontmatter, sort_keys=True, default=str),
-        json.dumps(list(frontmatter.get("tags") or [])),
+        json.dumps(list(_normalize_tags(frontmatter.get("tags")))),
         json.dumps(resolved_wikilinks),
         (str(frontmatter["parent_doc"]) if frontmatter.get("parent_doc") else None),
         (int(segment_index) if isinstance(segment_index, int) else None),
@@ -247,8 +265,23 @@ def row_params(
 
 
 def _read_vault(vault_root: Path, prefix: str) -> list[list[Any]]:
-    """Read every note under ``prefix`` from an on-disk vault directory."""
+    """Read every note under ``prefix`` from an on-disk vault directory.
+
+    ``summary``/``wikilinks`` are derived from ``body`` here -- the same way
+    ``sync_architecture_vault.py``'s ``build_rows`` derives them for the Supabase
+    publisher this read path replaces (``_summary_from_body``; wikilink targets via
+    ``digivault.wikilinks.parse_links``, matching ``Vault``'s own outlink computation)
+    -- rather than left to ``row_params``'s frontmatter-key fallback. That fallback is
+    always empty here: the onboard writer (``scripts/docs_onboard/write_vault_notes.py``)
+    never puts either key in frontmatter, so every note synced through the ongoing CI
+    publish path (``--vault``, not the one-time ``--from-supabase`` backfill) would
+    write empty ``summary``/``wikilinks`` on its first push to ``main`` -- undoing the
+    backfill's restored values (#2239 review, Minor finding).
+    """
+    from digivault.wikilinks import parse_links
+
     from digivault import frontmatter as fm
+    from scripts.sync_architecture_vault import _summary_from_body
 
     out: list[list[Any]] = []
     for path in sorted(vault_root.rglob("*.md")):
@@ -258,7 +291,12 @@ def _read_vault(vault_root: Path, prefix: str) -> list[list[Any]]:
         meta, body = fm.split_frontmatter(path.read_text(encoding="utf-8"))
         out.append(
             row_params(
-                vault_path=rel, title=str(meta.get("title") or ""), frontmatter=meta, body=body
+                vault_path=rel,
+                title=str(meta.get("title") or ""),
+                frontmatter=meta,
+                body=body,
+                summary=_summary_from_body(body),
+                wikilinks=sorted({link.target for link in parse_links(body)}),
             )
         )
     return out
@@ -325,7 +363,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--from-supabase",
         action="store_true",
-        help="one-time backfill: read architecture_notes instead of a vault directory",
+        help=(
+            "one-time backfill: read architecture_notes instead of a vault directory. "
+            "Needs the digivault[supabase] extra installed AND CORE_SUPABASE_URL plus "
+            "a key (CORE_SUPABASE_ANON_KEY or CORE_SUPABASE_SERVICE_KEY) set -- on top "
+            "of D1_ACCOUNT_ID/D1_API_TOKEN, which every mode needs."
+        ),
     )
     parser.add_argument("--init", action="store_true", help="apply d1_schema.sql first")
     parser.add_argument(
@@ -344,7 +387,23 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
-    rows = _read_supabase(prefix) if args.from_supabase else _read_vault(Path(args.vault), prefix)
+    try:
+        rows = (
+            _read_supabase(prefix) if args.from_supabase else _read_vault(Path(args.vault), prefix)
+        )
+    except SupabaseStoreError as exc:
+        # `_read_supabase` (--from-supabase only) calls `SupabaseStore.from_env()`,
+        # which raises this bare-RuntimeError subclass when CORE_SUPABASE_URL + a key
+        # aren't set -- previously unhandled, so this was the first unhandled
+        # traceback the imminent cutover would hit: the runbook's credential step
+        # exports only D1_ACCOUNT_ID/D1_API_TOKEN, and neither it nor --from-supabase's
+        # own help text mentioned Supabase creds were also needed. Every sibling error
+        # path in this script (empty-corpus guard above, the D1StoreError arm below)
+        # prints `error: ...` and returns 1; this class of failure gets the same
+        # clean CLI error instead of a traceback (#2239 review, Important finding;
+        # mirrors vectorize_sync.py's D1StoreError handling for the same class).
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if not rows:
         # `Path.rglob` on a missing/empty directory yields nothing rather than
         # raising, and an empty Supabase page under a wrong prefix is

@@ -29,6 +29,7 @@ from scripts.d1_sync import (
     UPSERT_PREFIX,
     _assert_rows_within_byte_cap,
     _ensure_unique_vault_paths,
+    _read_vault,
     _split_to_fit,
     chunk_statements,
     main,
@@ -319,6 +320,50 @@ def test_dry_run_reads_vault_and_reports_canonical_counts_with_no_credentials(
     assert out == {"prefix": "clients/x", "notes": 2, "written": 0}
 
 
+def test_read_vault_derives_summary_and_wikilinks_from_body(tmp_path: Path) -> None:
+    """#2239 review, Minor finding: the onboard writer
+    (``scripts/docs_onboard/write_vault_notes.py``) never puts ``summary``/
+    ``wikilinks`` in frontmatter, so ``row_params``'s frontmatter-key fallback for
+    those two columns is always empty on this read path -- silently undoing the
+    one-time backfill's restored values on the ongoing CI publish's first push to
+    ``main``. ``_read_vault`` must derive both from the body itself, the same way
+    ``sync_architecture_vault.py``'s Supabase publisher did (``_summary_from_body``;
+    wikilink targets via ``parse_links``, matching ``Vault``'s own outlink
+    computation)."""
+    _write_note(
+        tmp_path,
+        "clients/x/a.md",
+        frontmatter={"title": "A"},
+        body="# A\n\n> The tagline.\n\nSee [[b]] and [[c]].\n",
+    )
+
+    rows = _read_vault(tmp_path, "clients/x")
+
+    assert len(rows) == 1
+    summary, wikilinks = rows[0][3], json.loads(rows[0][7])
+    assert summary == "The tagline."
+    assert wikilinks == ["b", "c"]
+
+
+def test_row_params_normalizes_string_form_tags() -> None:
+    """#2239 review, Minor finding: ``tags`` is read straight from frontmatter via a
+    bare ``list(...)`` while its siblings (``note_type``/``summary``/``wikilinks``)
+    now go through an explicit parameter -- latent because the live corpus has zero
+    string-form tags, but a hand-edited note's YAML ``tags: arch, graph`` (a string,
+    not a list) would explode via ``list("arch, graph")`` into one row per character.
+    Must go through ``_normalize_tags`` instead, the same normalization ``Vault``
+    itself applies to frontmatter tags."""
+    params = row_params(vault_path="x/a", title="t", frontmatter={"tags": "arch, graph"}, body="b")
+    assert json.loads(params[6]) == ["arch", "graph"]
+
+
+def test_row_params_strips_hash_prefixed_list_tags() -> None:
+    params = row_params(
+        vault_path="x/a", title="t", frontmatter={"tags": ["#arch", "graph"]}, body="b"
+    )
+    assert json.loads(params[6]) == ["arch", "graph"]
+
+
 def test_dry_run_makes_zero_d1_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """#2239 review lesson from a sibling script: --dry-run must not perform the
     writes it promises to skip. Assert zero calls against the injected transport,
@@ -398,6 +443,35 @@ def test_main_exits_nonzero_when_the_vault_read_finds_zero_notes(
     exit_code = main(["--prefix", "clients/x", "--database", "db", "--vault", str(missing)])
 
     assert exit_code == 1
+
+
+def test_main_gives_a_clean_error_when_supabase_is_unconfigured(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """#2239 review, Important finding: ``--from-supabase`` calls ``_read_supabase``
+    (which calls ``SupabaseStore.from_env()``) outside any ``try``, and
+    ``SupabaseStoreError`` is a bare ``RuntimeError`` nothing caught -- an unhandled
+    traceback, the first thing the imminent cutover would hit if an operator followed
+    the runbook's Step 2 (which exports only ``D1_ACCOUNT_ID``/``D1_API_TOKEN``) without
+    also setting ``CORE_SUPABASE_URL``/a key. Every sibling error path in this script
+    prints ``error: ...`` and returns 1; this must match, not raise past ``main()``."""
+    monkeypatch.delenv("CORE_SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    for key_var in (
+        "CORE_SUPABASE_ANON_KEY",
+        "CORE_SUPABASE_SERVICE_KEY",
+        "SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+    ):
+        monkeypatch.delenv(key_var, raising=False)
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+
+    exit_code = main(["--prefix", "clients/x", "--database", "db", "--from-supabase"])
+
+    assert exit_code == 1
+    captured = capsys.readouterr()
+    assert "error: Supabase not configured" in captured.err
 
 
 def test_main_exits_nonzero_when_the_supabase_read_finds_zero_notes(

@@ -1260,8 +1260,18 @@ Record each returned `database_id`.
 
 - [ ] **Step 2: Apply schema and backfill from Supabase**
 
+`--from-supabase` needs more than the `D1_*` pair below: it reads the *existing*
+corpus out of Supabase before it can write it into D1, so it also needs the
+`digivault[supabase]` extra installed (`uv pip install -e 'digivault[supabase]'` or
+equivalent) **and** `CORE_SUPABASE_URL` plus a key (`CORE_SUPABASE_ANON_KEY` or
+`CORE_SUPABASE_SERVICE_KEY`) exported. Without them this now fails fast with a clean
+`error: Supabase not configured: ...` and exit 1 — before this task's fix it raised an
+unhandled `SupabaseStoreError` traceback, which is what an operator following just the
+`D1_*` exports below would have hit first.
+
 ```bash
 export D1_ACCOUNT_ID=... D1_API_TOKEN=...
+export CORE_SUPABASE_URL=... CORE_SUPABASE_SERVICE_KEY=...
 uv run python scripts/d1_sync.py --prefix clients/digithings --database <id> --init --from-supabase
 uv run python scripts/d1_sync.py --prefix clients/online-compliance-center --database <id> --init --from-supabase
 ```
