@@ -33,7 +33,12 @@ export function RoadmapGanttReference() {
         decoration (canon §13). A hairline &ldquo;now&rdquo; marker cuts the timeline.
       </p>
 
-      <div className="mt-[1.2rem] overflow-x-auto">
+      <div
+        className="mt-[1.2rem] overflow-x-auto"
+        tabIndex={0}
+        role="region"
+        aria-label="Roadmap timeline, scrollable horizontally"
+      >
         <div className="rg" style={{ ["--rg-cols" as string]: MONTHS.length }}>
           <div className="rg-head">
             <span className="rg-corner" aria-hidden="true" />
