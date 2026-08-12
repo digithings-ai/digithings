@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Sync onboard notes from Supabase ``architecture_notes`` into Cloudflare Vectorize.
+"""Sync notes from Cloudflare D1 into Cloudflare Vectorize.
 
 Runs on an operator machine or in CI — never inside the Cloudflare Container, which
 only ever queries. Chunking goes through the same SegmentAwareChunker path production
 retrieval assumes, so the index matches the pipeline that was validated.
 
-``--dry-run`` still reads notes from Supabase and chunks them — that's the only way
-to get an accurate count — but skips both the embedder and the Vectorize upsert, so
-it costs no ONNX inference, no model download, and no network write. The reported
-count is the number of vectors that *would* be upserted.
+``--database`` MUST be the same D1 database ``scripts/d1_sync.py`` published
+``--prefix`` into — digisearch's Vectorize hits carry a ``vault_path``, and
+``digivault_get_note`` resolves that path against D1, not Vectorize. Point this at a
+different database than digivault serves the same prefix from and every hit the
+model tries to load 404s: the vectors and the notes have to describe the same corpus.
+
+``--dry-run`` still reads notes from D1 and chunks them — that's the only way to get
+an accurate count — but skips both the embedder and the Vectorize upsert, so it costs
+no ONNX inference, no model download, and no network write. The reported count is
+the number of vectors that *would* be upserted.
 
 ``--index`` is NOT a free choice: it must equal the ``DIGISEARCH_INDEX`` /
 ``DIGI_TENANT_CORPUS_MAP`` entry the digisearch server for that tenant is
@@ -37,9 +43,10 @@ single canonical name on both sides of the pairing.
 
 Apply::
 
-    CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \\
+    D1_ACCOUNT_ID=… D1_API_TOKEN=… \\
     VECTORIZE_ACCOUNT_ID=… VECTORIZE_API_TOKEN=… \\
-      python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs
+      python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs \\
+        --database <d1-database-id>
 """
 
 from __future__ import annotations
@@ -297,10 +304,19 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--database",
+        required=True,
+        help=(
+            "D1 database id holding this corpus' notes — the same id d1_sync.py wrote "
+            "to for --prefix. Vectors are derived from D1, so a mismatch silently "
+            "embeds a different corpus than digivault serves."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
-            "Read notes from Supabase, chunk, and report the vector count — skip "
+            "Read notes from D1, chunk, and report the vector count — skip "
             "embedding and the Vectorize upsert entirely."
         ),
     )
@@ -311,9 +327,22 @@ def main(argv: list[str] | None = None) -> int:
     from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
     from digisearch.indexes.backends.vectorize import DEFAULT_BATCH_SIZE, VectorizeBackend
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
-    from digivault.supabase_store import SupabaseStore
+    from digivault.d1_store import D1Store
 
-    notes = SupabaseStore.from_env().list_notes(path_prefix=args.prefix)
+    try:
+        notes = D1Store(
+            args.database,
+            account_id=os.environ.get("D1_ACCOUNT_ID", ""),
+            api_token=os.environ.get("D1_API_TOKEN", ""),
+        ).list_notes(path_prefix=args.prefix)
+    except ValueError as exc:
+        # resolve_path_prefix (digivault.d1_store) raises ValueError for a
+        # non-None prefix that normalizes to empty (e.g. "--prefix /") -- fail
+        # closed with a clean CLI error instead of silently syncing every note in
+        # the database, and instead of an unhandled traceback. Mirrors
+        # d1_sync.py's own handling of the same call.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     print(f"{len(notes)} notes under {args.prefix!r}", file=sys.stderr)
 
     class _CountingSink:

@@ -1,4 +1,4 @@
-"""Tests for the Supabase -> Vectorize sync."""
+"""Tests for the D1 -> Vectorize sync."""
 
 from __future__ import annotations
 
@@ -248,14 +248,13 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
     """
     import digisearch.embedding.providers.minilm as minilm_module
     import digisearch.indexes.backends.vectorize as vectorize_module
-    import digivault.supabase_store as supabase_store_module
+    import digivault.d1_store as d1_store_module
 
     import scripts.vectorize_sync as vectorize_sync_module
 
-    class _FakeSupabaseStore:
-        @classmethod
-        def from_env(cls) -> "_FakeSupabaseStore":
-            return cls()
+    class _FakeD1Store:
+        def __init__(self, database_id: str, **kwargs: Any) -> None:
+            pass
 
         def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
             return []
@@ -275,7 +274,7 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
         seen["sync"] = model_id
         return 0
 
-    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _FakeSupabaseStore)
+    monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
     monkeypatch.setattr(vectorize_module, "VectorizeBackend", _FakeVectorizeBackend)
     # Simulate a model upgrade: the guard and the stamp must track this together.
     monkeypatch.setattr(minilm_module, "MINILM_MODEL_ID", "temporarily-different-id")
@@ -284,7 +283,9 @@ def test_main_guards_and_syncs_with_the_same_model_id(monkeypatch: pytest.Monkey
     monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
     monkeypatch.setenv("VECTORIZE_API_TOKEN", "token")
 
-    vectorize_sync_module.main(["--prefix", "clients/acme", "--index", "acme-docs"])
+    vectorize_sync_module.main(
+        ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
+    )
 
     assert seen["guard"] == seen["sync"] == "temporarily-different-id"
 
@@ -294,7 +295,7 @@ def test_dry_run_makes_zero_embed_calls(
 ) -> None:
     """--dry-run must not construct or call the embedder — chunk-and-count only."""
     import digisearch.embedding.providers.minilm as minilm_module
-    import digivault.supabase_store as supabase_store_module
+    import digivault.d1_store as d1_store_module
 
     from scripts.vectorize_sync import main
 
@@ -309,24 +310,87 @@ def test_dry_run_makes_zero_embed_calls(
         def dimensions(self) -> int:
             return 384
 
-    class _FakeSupabaseStore:
-        @classmethod
-        def from_env(cls) -> "_FakeSupabaseStore":
-            return cls()
+    class _FakeD1Store:
+        def __init__(self, database_id: str, **kwargs: Any) -> None:
+            pass
 
         def list_notes(self, *, path_prefix: str) -> list[NoteRow]:
             return [_note("clients/acme/a", "# A\n\nSome real body text worth chunking.\n")]
 
     monkeypatch.setattr(minilm_module, "MiniLMEmbedder", _SpyEmbedder)
-    monkeypatch.setattr(supabase_store_module, "SupabaseStore", _FakeSupabaseStore)
+    monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
 
-    exit_code = main(["--prefix", "clients/acme", "--index", "acme-docs", "--dry-run"])
+    exit_code = main(
+        ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1", "--dry-run"]
+    )
 
     assert exit_code == 0
     assert embed_calls == []
     out = capsys.readouterr().out
     assert "would upsert" in out
     assert "would upsert 0 vectors" not in out
+
+
+# --- #2239: vectorize_sync reads notes from D1, not Supabase ---------------------
+
+
+@pytest.mark.unit
+def test_reads_notes_from_d1_not_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The CLI must read notes from D1 via `--database`, never touch Supabase.
+
+    `SupabaseStore.from_env` is monkeypatched to raise if called at all -- a
+    stronger guard than merely not asserting it was called, so a future
+    reintroduction of the Supabase import fails loudly rather than silently.
+    """
+    import scripts.vectorize_sync as vectorize_sync
+
+    seen: dict = {}
+
+    class _FakeD1:
+        def __init__(self, database_id, **kw):
+            seen["database_id"] = database_id
+
+        def list_notes(self, *, path_prefix):
+            seen["prefix"] = path_prefix
+            return []
+
+    monkeypatch.setattr("digivault.d1_store.D1Store", _FakeD1)
+    monkeypatch.setattr(
+        "digivault.supabase_store.SupabaseStore.from_env",
+        lambda: (_ for _ in ()).throw(AssertionError("Supabase must not be read")),
+    )
+    rc = vectorize_sync.main(
+        ["--prefix", "clients/x", "--index", "x_docs", "--database", "db-9", "--dry-run"]
+    )
+    assert rc == 0
+    assert seen == {"database_id": "db-9", "prefix": "clients/x"}
+
+
+@pytest.mark.unit
+def test_prefix_that_normalizes_to_empty_fails_closed_instead_of_syncing_everything(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--prefix /` (or any prefix `resolve_path_prefix` normalizes to '') must not
+    silently become an unscoped sync of every note in the database -- the real
+    `D1Store.list_notes` raises `ValueError` for exactly this case (its own
+    `resolve_path_prefix` guard, called before any HTTP request is built), and
+    `main` must surface that as a clean CLI error (exit 1) rather than an
+    unhandled traceback or, worse, swallowing it and proceeding as if no prefix
+    were given at all."""
+    import scripts.vectorize_sync as vectorize_sync
+
+    def _post_must_not_be_called(*args: Any, **kwargs: Any) -> tuple[int, str]:
+        raise AssertionError("resolve_path_prefix must raise before any HTTP call")
+
+    # The real D1Store (not a fake) so the real resolve_path_prefix guard runs --
+    # this is a property of that function, not something a stub would exercise.
+    # http_post would raise if ever reached, proving the ValueError fires first.
+    monkeypatch.setattr("digivault.d1_store._default_http_post", _post_must_not_be_called)
+
+    rc = vectorize_sync.main(
+        ["--prefix", "/", "--index", "x_docs", "--database", "db-9", "--dry-run"]
+    )
+    assert rc == 1
 
 
 # --- #2226: carry frontmatter segment metadata (page identity) onto chunks ---
