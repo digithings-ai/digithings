@@ -1256,6 +1256,63 @@ def test_orchestrator_invoke_search_allows_the_authenticated_tenants_own_prefix(
     assert resp.ok is True
 
 
+def test_orchestrator_invoke_search_refuses_cross_tenant_prefix_on_local_vault_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """CodeRabbit review of PR #2298: the first version of this fix only checked
+    `path_prefix` on the D1 branch — the local-vault fallback (DIGIVAULT_ROOT set, no
+    D1 credentials) read the same tenant-supplied prefix with no check at all. Tenant
+    binding must apply uniformly across every backend, not just whichever one a given
+    deployment happens to use."""
+    vault_root = tmp_path / "vault"
+    vault_root.mkdir()
+    Vault(vault_root).create_note(
+        "faq", subdir="clients/online-compliance-center", body="OCC help."
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(vault_root))
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={
+                    "query": "help",
+                    "path_prefix": "clients/online-compliance-center",
+                },
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_orchestrator_invoke_search_refuses_cross_tenant_prefix_on_supabase_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Same gap, third backend: no DIGIVAULT_ROOT and no D1 credentials falls through
+    to Supabase FTS, which must be equally bound to the caller's tenant."""
+    monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+
+    def _boom() -> SupabaseStore:
+        raise AssertionError("must not reach Supabase for a refused cross-tenant prefix")
+
+    monkeypatch.setattr(server.SupabaseStore, "from_env", _boom)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={
+                    "query": "help",
+                    "path_prefix": "clients/online-compliance-center",
+                },
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+
+
 def test_by_path_route_end_to_end_refuses_cross_tenant_prefix_via_real_jwt(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

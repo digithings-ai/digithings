@@ -621,6 +621,17 @@ def orchestrator_invoke(
             str(path_prefix_raw).strip().strip("/") if path_prefix_raw is not None else None
         ) or None
 
+        # Security (CodeRabbit review of PR #2293, and its own follow-up review of PR
+        # #2298): checked once, here, before the backend-precedence branch below, so
+        # it applies uniformly to D1, local-vault, and Supabase — not just whichever
+        # backend happens to be configured today. `path_prefix` reaching this point is
+        # caller/model-supplied; digigraph's own #2265 fix overwrites it before
+        # proxying a chat turn, but a caller hitting this endpoint directly with a
+        # bare `digivault:read` token is not protected by that. No-op when
+        # `path_prefix` is `None` (nothing to check yet — each backend's own "prefix
+        # required" handling still applies) or when `DIGI_TENANT_CORPUS_MAP` is unset.
+        enforce_tenant_path_prefix(_tenant_slug(request), path_prefix)
+
         # D1 first: when the remote corpus is configured it is authoritative, and the
         # baked /data/vault seed must not shadow it (the #2239 production bug — prod
         # sets DIGIVAULT_ROOT to a stub vault that must never win over the real corpus).
@@ -663,13 +674,6 @@ def orchestrator_invoke(
                     tool=tool,
                     error="path_prefix is required when the D1 backend is configured",
                 )
-            # Security (CodeRabbit review of PR #2293): `path_prefix` reaching this
-            # point is caller/model-supplied — digigraph's own #2265 fix overwrites it
-            # before proxying a chat turn, but a caller hitting this endpoint directly
-            # with a bare `digivault:read` token is not protected by that. Check it
-            # against the tenant `DigiAuthMiddleware` verified, not just against the
-            # scope, before ever opening a store for it.
-            enforce_tenant_path_prefix(_tenant_slug(request), path_prefix)
             try:
                 # Wraps the *call*, not just `_open_d1_store`'s construction — a
                 # runtime D1 failure (transport error, an expired CLOUDFLARE_API_TOKEN
