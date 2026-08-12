@@ -638,10 +638,10 @@
     --ink: #14181b;                         /* --ink light */
     --ink-soft: #5c636a;                    /* --ink-soft light */
     --ink-mute: #666c73;                    /* --ink-mute light (WCAG AA fix 2026-08-11) */
-    --accent: #0e8c7f;                      /* --accent light */
-    --accent-weak: rgba(14, 140, 127, 0.1); /* --accent-weak light (.12 → .1 on paper) */
+    --accent: #0c7c71;                      /* --accent light (WCAG 1.4.3 fix, #2280) */
+    --accent-weak: rgba(12, 124, 113, 0.1); /* --accent-weak light (.12 → .1 on paper) */
     --on-accent: #ffffff;                   /* --on-accent light */
-    --up: #0e8c7f;                          /* --up light (paper phosphor) */
+    --up: #0c7c71;                          /* --up light (paper phosphor) */
     --down: #c9533b;                        /* --down light */
     --warn: #b5832a;                        /* --warn light */
   }
