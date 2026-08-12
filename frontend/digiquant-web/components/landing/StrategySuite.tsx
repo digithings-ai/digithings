@@ -165,6 +165,84 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
 }
 
 /**
+ * Placeholder card shown before the strategy index itself (`fetchStrategyIndex`)
+ * has resolved -- keeps <DeckStack/>'s rail at a constant length of
+ * SLAPPER_ORDER.length from the very first render (server included), so its
+ * wrapper structure never changes shape once the real index lands. Without
+ * this, zero <DeckCard>s existed until the client-only index fetch resolved,
+ * and DeckStack's rail-length-dependent branch flipped shape mid-session --
+ * a textbook "external changing data with no snapshot sent with the HTML"
+ * hydration mismatch (#2244). `strategyId` (e.g. "btc_slapper") gives an
+ * honest label before the real symbol is known.
+ */
+function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
+  const label = strategyId.split("_")[0]?.toUpperCase() || strategyId;
+  return (
+    <>
+      <header className="ts-header">
+        <div className="ts-header-main">
+          <h1 className="ts-h1 ts-h1-with-logo">
+            <span className="dqss-logo-skeleton" aria-hidden="true" />
+            <span>{label}</span>
+          </h1>
+          <div className="ts-meta">
+            <span className="dqss-meta-skeleton" aria-hidden="true" />
+          </div>
+        </div>
+      </header>
+
+      <div className="dqss-preview-position">
+        <div className="dqss-position-skeleton" aria-hidden="true" />
+      </div>
+
+      <KpiStrip primary ariaLabel="Headline performance">
+        <Kpi label="CAGR" value={<span className="dqss-kpi-skeleton" aria-hidden="true" />} />
+        <Kpi
+          label="Max drawdown"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-medium"
+          label="Profit factor"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-medium"
+          label="Win rate"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Avg trade return"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Trades / yr"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+      </KpiStrip>
+
+      <div className="ts-mode-bar dqss-preview-mode" aria-hidden="true" />
+
+      <section className="ts-panel ts-tab-stack dqss-preview-panel" aria-label="Loading">
+        <div className="dqss-preview-pane">
+          <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+            <div className="ts-chart dqss-preview-chart">
+              <div className="dqss-chart-skeleton" aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p className="dqss-preview-footer">
+        <span className="dqss-full-skeleton" aria-hidden="true" />
+      </p>
+    </>
+  );
+}
+
+/**
  * One tearsheet preview card body — header, current position, KPIs,
  * chart/table toggle. Rendered inside a <DeckCard className="dqss-card">
  * (the deck card element carries the .dqss-card dress + container queries);
@@ -368,15 +446,32 @@ export function StrategySuite() {
           </Link>
         </div>
 
+        {/* SLAPPER_ORDER (fixed at 3), not strategies.map(...): the card
+            count stays constant across the whole session, so a real card
+            swaps in per-slot as its data lands instead of the deck's slot
+            count changing shape after mount. Verified NOT to fix #2244's
+            hydration flake by itself (see the issue for the full
+            investigation) -- kept because it is still a genuine correctness/
+            UX improvement in its own right (no empty-then-populated flash). */}
         <DeckStack
           ariaLabel="Strategy tearsheets"
-          rail={strategies.map((s) => symbolBase(s.symbol))}
+          rail={SLAPPER_ORDER.map((id) => {
+            const entry = strategies.find((s) => s.strategy === id);
+            return entry ? symbolBase(entry.symbol) : id.split("_")[0]?.toUpperCase() || id;
+          })}
         >
-          {strategies.map((entry) => (
-            <DeckCard key={entry.strategy} className="dqss-card">
-              <StrategyTearsheetCard entry={entry} />
-            </DeckCard>
-          ))}
+          {SLAPPER_ORDER.map((id) => {
+            const entry = strategies.find((s) => s.strategy === id);
+            return (
+              <DeckCard key={id} className="dqss-card">
+                {entry ? (
+                  <StrategyTearsheetCard entry={entry} />
+                ) : (
+                  <StrategyCardSkeleton strategyId={id} />
+                )}
+              </DeckCard>
+            );
+          })}
         </DeckStack>
       </div>
     </section>
