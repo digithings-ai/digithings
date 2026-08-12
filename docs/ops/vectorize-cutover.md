@@ -84,28 +84,7 @@ npx wrangler vectorize create digithings_docs --dimensions=384 --metric=cosine
 npx wrangler vectorize create occ_help --dimensions=384 --metric=cosine
 ```
 
-## 2. Set the two secrets
-
-On the `digithings-stack` Worker (same one that runs `wrangler deploy` for the
-Container):
-
-```bash
-cd frontend/digithings-stack-cloudflare
-npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
-npx wrangler secret put CLOUDFLARE_API_TOKEN
-```
-
-`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` are the canonical names (#2239
-credential rename) — the same account + token also authorizes D1, so a
-deployment that already set the legacy `VECTORIZE_ACCOUNT_ID`/
-`VECTORIZE_API_TOKEN` (or `D1_ACCOUNT_ID`/`D1_API_TOKEN`) keeps working via
-fallback; set the canonical pair and retire the legacy secrets once verified.
-
-Setting both is what flips the container from Chroma to Vectorize on the next
-boot — `entrypoint.sh` computes `DIGI_VECTORIZE_ACTIVE=1` once both resolve to
-non-empty (canonical or legacy) and skips the Chroma seed entirely from then on.
-
-## 3. Sync each corpus — dry-run first, then apply
+## 2. Sync each corpus — dry-run first, then apply
 
 Run from an operator machine or CI, never inside the Container (the Container
 only queries). One prefix per tenant, matching `DIGI_TENANT_CORPUS_MAP`, reading
@@ -142,17 +121,22 @@ legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN` and `D1_ACCOUNT_ID`/
 
 The `--dry-run` pass reads and chunks the real notes and reports the vector
 count that *would* be upserted — no ONNX inference, no model download, no
-network write — so it is safe to run against production Supabase data before
+network write — so it is safe to run against production D1 data before
 committing to the real sync. The apply pass batches chunks across notes into
 Vectorize's upsert batch size (1,000) rather than one HTTP request per note, so
 a full sync of either tenant should be on the order of a handful of requests,
 not one per note.
 
-## 4. Verify the sync landed — before flipping traffic
+## 3. Verify the sync landed — before touching any secret
 
-Do this **before** setting the two secrets on the live Worker (step 2) if you
-want a true pre-cutover check, or immediately after step 3 either way — query
-the index directly and confirm it returns non-zero hits:
+**Do this before step 4, not after.** An earlier revision of this runbook set
+the cutover secrets (below) *before* verifying — an operator following the
+numbered steps in order could flip live traffic onto an empty or partially
+synced index if the Container cold-boots in the gap between "set secrets" and
+"confirm the sync landed" (#2239 review: setting the secrets is what activates
+Vectorize on next boot, and Cloudflare Containers do sleep and cold-boot
+routinely). Query the index directly and confirm it returns non-zero hits
+first:
 
 ```bash
 npx wrangler vectorize info digithings_docs   # vectorCount should be > 0
@@ -168,7 +152,30 @@ step exists to catch. Confirm the corrected form actually parses to 384
 numbers before relying on it (`... | wc -w` should read `384`).
 
 An empty `matches` array, or `vectorCount: 0` from `info`, means the sync did
-not land — do not proceed to cutover. Repeat for `occ_help`.
+not land — **stop here, do not proceed to step 4.** Repeat for `occ_help`.
+
+## 4. Set the two secrets — only once step 3 passed for both indexes
+
+On the `digithings-stack` Worker (same one that runs `wrangler deploy` for the
+Container):
+
+```bash
+cd frontend/digithings-stack-cloudflare
+npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+npx wrangler secret put CLOUDFLARE_API_TOKEN
+```
+
+`CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN` are the canonical names (#2239
+credential rename) — the same account + token also authorizes D1, so a
+deployment that already set the legacy `VECTORIZE_ACCOUNT_ID`/
+`VECTORIZE_API_TOKEN` (or `D1_ACCOUNT_ID`/`D1_API_TOKEN`) keeps working via
+fallback; set the canonical pair and retire the legacy secrets once verified.
+
+Setting both is what flips the container from Chroma to Vectorize on the next
+boot — `entrypoint.sh` computes `DIGI_VECTORIZE_ACTIVE=1` once both resolve to
+non-empty (canonical or legacy) and skips the Chroma seed entirely from then on.
+This is why step 3 must pass first: there is no staged rollout here, only
+"next boot serves from whichever backend has non-empty credentials."
 
 ## Known limitations (do not cutover a workflow that depends on either)
 
