@@ -164,6 +164,11 @@ export function TerminalManifest({
                     onClick={() => select(r.id)}
                   >
                     <span className={`tm-dot${off ? " off" : ""}`} aria-hidden="true" />
+                    {/* The dot is the only running/roadmap signal (color +
+                        glow), aria-hidden with no text equivalent elsewhere
+                        in the row — a screen-reader user got zero indication
+                        of which services are live. */}
+                    <span className="sr-only">{off ? "On the roadmap" : "Online"}</span>
                     <span className="tm-name text-[0.92rem] font-medium">
                       <RowName name={r.name} prefix={namePrefix} />
                     </span>

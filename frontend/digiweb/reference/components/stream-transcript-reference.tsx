@@ -52,7 +52,13 @@ export function StreamTranscriptReference() {
         work never opens on its own. Reduced motion shows the finished turn.
       </p>
 
-      <ChatTranscript flat className="mt-[1.2rem] max-w-[640px] text-[0.78rem] leading-[2.1]">
+      {/* live: the answer below streams in via direct textContent mutation
+          (no React re-render per frame — see the header comment), so without
+          an aria-live region a screen-reader user gets no indication the
+          assistant's answer is arriving or what it says. Matches the pattern
+          already used elsewhere on this page (TerminalStepCaret's role=status,
+          TerminalManifest's aria-live=polite pane). */}
+      <ChatTranscript flat live className="mt-[1.2rem] max-w-[640px] text-[0.78rem] leading-[2.1]">
         <ChatMessage role="user">backtest trend_xsec on ETH, last eight years</ChatMessage>
         <ChatMessage role="assistant">running it through digiquant · nautilus engine</ChatMessage>
         <div className="st-tool">
