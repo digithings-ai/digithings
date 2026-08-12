@@ -161,15 +161,20 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   alone proves a caller may use these routes at all, but carries no tenant
   identity, so any caller holding it could previously name *any* prefix in
   `D1_DATABASE_MAP`, not just the corpus their own credential was issued for.
-  digigraph's own #2265 fix (`orchestration/builtin.py`) already overwrites a
-  model-supplied `path_prefix` unconditionally before proxying a chat turn —
-  but that only protects the model → digigraph → digivault leg. A caller that
-  talks to digivault directly (any holder of a `digivault:read`-scoped JWT
-  hitting this endpoint or `/v1/notes/by-path` itself) bypasses digigraph
-  entirely, which is exactly the residual gap this closes, server-side.
+  A parallel #2265 fix for digigraph's own `orchestration/builtin.py` (making
+  it overwrite a model-supplied `path_prefix` unconditionally before proxying
+  a chat turn) exists on a separate, not-yet-merged branch as of this PR
+  (#2298) — even once merged, it only protects the model → digigraph →
+  digivault leg. A caller that talks to digivault directly (any holder of a
+  `digivault:read`-scoped JWT hitting this endpoint or `/v1/notes/by-path`
+  itself) bypasses digigraph entirely regardless, which is exactly the
+  residual gap this closes, server-side, independent of digigraph's own
+  state — check that state before assuming both legs are covered.
   Enforcement reads `request.state.digi_auth.tenant_slug` (the same verified
   claim `_require_tool_scope` already reads `.scopes` off of — `digikey`
-  populates it on every issued JWT) and checks it against `DIGI_TENANT_CORPUS_MAP`
+  populates it on every token its own `/v1/oauth/token` issues; see
+  `tenant_scope.py`'s module docstring for a known, tracked residual
+  dependency on that claim's trustworthiness) and checks it against `DIGI_TENANT_CORPUS_MAP`
   (the same env var digigraph's own `corpus_routing.py` reads, parsed
   independently here so digivault stays installable standalone). It is a
   no-op when that map is genuinely unset — single-tenant deployments (local

@@ -1157,6 +1157,60 @@ def test_get_note_by_path_allows_the_authenticated_tenants_own_prefix(
     assert result is note
 
 
+def test_orchestrator_invoke_get_note_refuses_a_prefix_outside_the_authenticated_tenant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In-session review of PR #2298: the by-path route and `digivault_search_notes`
+    each had a dedicated cross-tenant test, but `digivault_get_note` — dispatched
+    through `orchestrator_invoke`, a genuinely separate code path from the route even
+    though both call the shared `_fetch_note_by_path` — did not. Both surfaces sharing
+    a helper is exactly the kind of thing a future refactor could quietly break for
+    only one of them; pin the tool-dispatch surface independently."""
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store")
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_get_note",
+                arguments={
+                    "vault_path": "clients/online-compliance-center/x",
+                    "path_prefix": "clients/online-compliance-center",
+                },
+            ),
+            _fake_request(tenant_slug="digithings"),
+        )
+    assert exc.value.status_code == 403
+
+
+def test_orchestrator_invoke_get_note_allows_the_authenticated_tenants_own_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hi")
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            return note
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", _TENANT_MAP)
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/digithings/arch",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(tenant_slug="digithings"),
+    )
+    assert resp.ok is True
+
+
 def test_get_note_by_path_refuses_an_unmapped_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     """Once DIGI_TENANT_CORPUS_MAP is configured at all, a tenant slug absent from it
     has no authorized prefix — this must not fall back to "unscoped, allow"."""

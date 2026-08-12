@@ -311,8 +311,13 @@ def _fetch_note_by_path(
     enforcement point CodeRabbit's review of PR #2293 found missing: the boundary
     above only proves ``vault_path`` matches whatever ``path_prefix`` the *same
     request* supplied, never that the caller was entitled to name that prefix in the
-    first place (#2265's own fix in digigraph's builtin.py only protects the model ->
-    digigraph leg, not a direct caller of this API).
+    first place. digigraph's own #2265 fix, once merged, will independently protect
+    the model -> digigraph leg — but as of this function's own PR (#2298), that fix
+    has not yet landed on ``develop``, so this function is currently the *only*
+    enforcement point for a caller going through digigraph too, not merely a backstop
+    for a caller bypassing it. ``tenant_slug`` itself is only as trustworthy as
+    ``digi_auth`` makes it — see ``tenant_scope.py``'s module docstring for a known,
+    tracked residual dependency on that.
     """
     path = normalize_vault_path(vault_path)
     try:
@@ -625,11 +630,14 @@ def orchestrator_invoke(
         # #2298): checked once, here, before the backend-precedence branch below, so
         # it applies uniformly to D1, local-vault, and Supabase — not just whichever
         # backend happens to be configured today. `path_prefix` reaching this point is
-        # caller/model-supplied; digigraph's own #2265 fix overwrites it before
-        # proxying a chat turn, but a caller hitting this endpoint directly with a
-        # bare `digivault:read` token is not protected by that. No-op when
-        # `path_prefix` is `None` (nothing to check yet — each backend's own "prefix
-        # required" handling still applies) or when `DIGI_TENANT_CORPUS_MAP` is unset.
+        # caller/model-supplied; a caller hitting this endpoint directly with a bare
+        # `digivault:read` token has never been protected by anything digigraph does
+        # (its own #2265 fix, where merged, only covers the model -> digigraph leg —
+        # see tenant_scope.py's module docstring for exactly what state that fix is in
+        # on `develop` as of this comment, and this function's own residual dependency
+        # on `_tenant_slug` actually being trustworthy). No-op when `path_prefix` is
+        # `None` (nothing to check yet — each backend's own "prefix required" handling
+        # still applies) or when `DIGI_TENANT_CORPUS_MAP` is unset.
         enforce_tenant_path_prefix(_tenant_slug(request), path_prefix)
 
         # D1 first: when the remote corpus is configured it is authoritative, and the
