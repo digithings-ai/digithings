@@ -1308,11 +1308,28 @@ uv run python scripts/vectorize_sync.py --prefix clients/online-compliance-cente
 
 ```bash
 cd frontend/digithings-stack-cloudflare
-npx wrangler secret put D1_ACCOUNT_ID
-npx wrangler secret put D1_API_TOKEN
-npx wrangler secret put D1_DATABASE_MAP   # {"clients/digithings":"<id>","clients/online-compliance-center":"<id>"}
-npx wrangler deploy
+val() { grep -E "^$1=" ../../.env | head -1 | cut -d= -f2- | tr -d '"'"'"'; }
+
+printf '%s' "$(val CLOUDFLARE_ACCOUNT_ID)" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+printf '%s' "$(val CLOUDFLARE_API_TOKEN)"  | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put CLOUDFLARE_API_TOKEN
+printf '%s' '{"clients/digithings":"<id>","clients/online-compliance-center":"<id>"}' | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put D1_DATABASE_MAP
+env -u CLOUDFLARE_API_TOKEN npx wrangler deploy
 ```
+
+**The `env -u CLOUDFLARE_API_TOKEN` is load-bearing, not decoration.** That variable
+is *also* wrangler's own authentication variable. If it is exported — which sourcing
+`.env` does — wrangler abandons your `wrangler login` OAuth session and authenticates
+as that token instead. It carries Vectorize and D1 permissions but not Workers, so
+every command above fails with `Authentication error [code: 10000]` against
+`/workers/scripts/...`, which reads like a broken token but is actually the wrong
+identity. Observed live on 2026-08-12. Piping the value on stdin keeps it reaching
+wrangler while the environment stays clean. Leave `CLOUDFLARE_ACCOUNT_ID` exported —
+wrangler uses it to pick the account, and the fallback lookup needs a
+`User -> Memberships` scope this token does not have.
+
+**Do not delete the legacy `VECTORIZE_*` Worker secrets until after this deploy is
+verified.** They serve vector search today; the fallback makes every ordering safe
+except removing them first.
 
 These are **Worker** secrets — a separate store from GitHub Actions. The
 `.github/workflows/docs-onboard-digithings.yml` `apply` job also reads
