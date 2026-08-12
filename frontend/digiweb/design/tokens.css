@@ -27,8 +27,10 @@
   --accent-digigraph:  #e5b765;
   --accent-digiquant:  #3dd6c4; /* ruled 2026-07-03: the terminal phosphor is digiquant's identity
                                    (matches the dark-theme --accent below; the light theme runs its
-                                   deeper #0E8C7F for contrast on paper). emerald #4fa37a returns to
-                                   the unassigned pool. */
+                                   deeper #0E8C7F for contrast on paper — see the light-theme
+                                   override below for why this one does NOT track --accent's own
+                                   separate #2280 darkening). emerald #4fa37a returns to the
+                                   unassigned pool. */
   --accent-atlas:      #6fbf94;
   --accent-hermes:     #4a8f7b;
   --accent-kairos:     #2f7a65;
@@ -205,14 +207,26 @@
                             --surface and --bg while staying lighter/more muted than
                             --ink-soft. */
 
-  --accent:      #0E8C7F;
-  --accent-weak: rgba(14, 140, 127, 0.12);
+  /* WCAG 1.4.3 fix (2026-08-12, #2280): the original light-theme phosphor
+     (#0E8C7F, ruled 2026-07-08) cleared only 4.14:1 against --surface and
+     as little as 3.75:1 against --surface-2 — under the 4.5:1 minimum for
+     normal text, confirmed reachable as both --on-accent-on-accent text
+     (.btn-primary) and --accent-as-text (.kicker/.qn-up/etc., which read
+     --accent-digiquant below, and several other small-caps/CTA classes that
+     read --accent directly). Darkened to #0C7C71: clears 4.5:1+ against
+     white/--bg/--surface-2 in EITHER direction (as text on paper, or as a
+     background under --on-accent white text) — still unmistakably the same
+     teal, this is a ~14% luminance drop, not a hue change. */
+  --accent:      #0C7C71;
+  --accent-weak: rgba(12, 124, 113, 0.12);
   --on-accent:   #FFFFFF;
 
-  /* ruled 2026-07-08: light runs the deeper phosphor #0E8C7F for contrast on
-     paper (same convention as --accent, line ~28) — a literal, not
-     var(--accent), so P&L stays livery-proof. Down keeps the deeper paper red. */
-  --up:   #0E8C7F;
+  /* ruled 2026-07-08, darkened alongside --accent above (#2280 — same
+     phosphor, same contrast fix): light runs the deeper phosphor for
+     contrast on paper (same convention as --accent, line ~28) — a literal,
+     not var(--accent), so P&L stays livery-proof. Down keeps the deeper
+     paper red. */
+  --up:   #0C7C71;
   --down: #C9533B;
   --warn: #B5832A;
 
@@ -244,10 +258,21 @@
      and still serve the dark theme. digichat (3.04:1), digikey (3.05:1),
      digiclaw (3.62:1), and digistore (3.68:1) already clear 3:1 unmodified
      and are deliberately left out of this block. digiquant reuses
-     --accent's own light hex (#0E8C7F, ruled 2026-07-03 above) rather than
-     a new one, since that already IS digiquant's light-theme identity; the
-     rest are the same hue darkened just past 3:1 (3.60–3.63:1, a small
-     margin over the minimum). */
+     --accent's own PRE-#2280 light hex (#0E8C7F, ruled 2026-07-03 above)
+     rather than a new one, since that already IS digiquant's light-theme
+     identity; the rest are the same hue darkened just past 3:1 (3.60–3.63:1,
+     a small margin over the minimum).
+
+     NOT tracking --accent's own #2280 darkening (below): --accent-digiquant
+     is consumed as a BACKGROUND under .accent-digiquant's pinned dark
+     --on-accent (#06110f, comment above) — that pairing needs the accent to
+     stay light, the opposite direction from --accent's #2280 fix, which
+     needs the GENERIC token dark enough to read as TEXT on paper. #0E8C7F
+     already clears 4.5:1 under #06110f (4.64:1); darkening it to match
+     --accent's new #0C7C71 would have dropped that to 3.78:1, trading one
+     WCAG failure for another. Where digiquant's hue needs to read as literal
+     TEXT instead (.qn-up, quant-native/styles.css) it gets its own
+     light-theme override there, independent of this token. */
   --accent-digigraph:  #B27C1E;
   --accent-digiquant:  #0E8C7F;
   --accent-digisearch: #408FB3;
