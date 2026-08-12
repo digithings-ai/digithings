@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   BookOpen,
@@ -230,6 +231,43 @@ export function DailyBriefWorkspace({
     .find(Boolean);
   const digestHref = buildPipelineHref({ date: digestDate, stage: 'synthesis', node: 'digest' });
 
+  // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
+  // CodeRabbit on PR #2287): only shown while the table genuinely overflows
+  // its container AND the user has not already scrolled to the end -- a
+  // static, always-on cue would keep signaling "more here" even once
+  // there is nothing left to reveal. Watches the TABLE's own width (a
+  // ResizeObserver on the scroll container alone would miss content
+  // getting wider without the container itself resizing).
+  const bookScrollRef = useRef<HTMLDivElement>(null);
+  const bookTableRef = useRef<HTMLTableElement>(null);
+  const [showBookFade, setShowBookFade] = useState(false);
+
+  useEffect(() => {
+    const container = bookScrollRef.current;
+    const table = bookTableRef.current;
+    if (!container || !table) {
+      setShowBookFade(false);
+      return;
+    }
+
+    const EPSILON = 1; // sub-pixel rounding slack
+    const update = () => {
+      const overflowing = container.scrollWidth > container.clientWidth + EPSILON;
+      const atEnd = container.scrollLeft + container.clientWidth >= container.scrollWidth - EPSILON;
+      setShowBookFade(overflowing && !atEnd);
+    };
+
+    update();
+    container.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(table);
+    ro.observe(container);
+    return () => {
+      container.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [held.length]);
+
   return (
     <section
       data-testid="daily-brief-workspace"
@@ -456,18 +494,23 @@ export function DailyBriefWorkspace({
             )}
           </div>
 
-          <div className="relative overflow-x-auto py-2 lg:pl-5">
+          <div ref={bookScrollRef} className="relative overflow-x-auto py-2 lg:pl-5">
             {held.length === 0 ? (
               <p className="py-3 text-sm text-ink-mute">No positions held; the book is all cash.</p>
             ) : (
               <>
-                <table className="w-full min-w-[34rem] border-collapse text-left">
+                <table ref={bookTableRef} className="w-full min-w-[34rem] border-collapse text-left">
                   <thead>
                     <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
                       <th className="py-2 pr-3 font-bold">Holding</th>
                       <th className="px-3 py-2 text-right font-bold">Weight</th>
                       <th className="px-3 py-2 text-right font-bold">Change</th>
-                      <th className="py-2 pl-3 text-right font-bold">Day</th>
+                      {/* pr-4, not pl-3 alone (CodeRabbit, PR #2287): the fade
+                          below sits flush against this column's own right
+                          edge, so its values need clearance to stay legible
+                          under it rather than running all the way to the
+                          most-opaque part of the gradient. */}
+                      <th className="py-2 pl-3 pr-4 text-right font-bold">Day</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-hair/70">
@@ -486,7 +529,7 @@ export function DailyBriefWorkspace({
                           <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
                             {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
                           </td>
-                          <td className={`py-2.5 pl-3 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
+                          <td className={`py-2.5 pl-3 pr-4 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
                             {signedPct(position.day_change_pct ?? null)}
                           </td>
                         </tr>
@@ -494,19 +537,22 @@ export function DailyBriefWorkspace({
                     })}
                   </tbody>
                 </table>
-                {/* Scroll-edge cue (full-UI-suite critique, P2): the table's
-                    min-w-[34rem] (544px) forces horizontal scroll on any
-                    viewport under ~560px -- every phone -- with nothing
-                    previously signaling the Change/Day columns run off-
-                    screen. A static fade, pinned to the scroll container's
-                    own viewport (not the scrolling content), reads as
-                    "more here" when the table overflows and is
-                    imperceptible against the same bg-surface when it
-                    does not. */}
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
-                />
+                {/* Scroll-edge cue (full-UI-suite critique, P2; refined per
+                    CodeRabbit on PR #2287): the table's min-w-[34rem] (544px)
+                    forces horizontal scroll on any viewport under ~560px --
+                    every phone -- with nothing previously signaling the
+                    Change/Day columns run off-screen. Shown only while
+                    showBookFade is true (genuinely overflowing AND not
+                    already scrolled to the end, tracked above), so it never
+                    sits over content once there is nothing left to reveal --
+                    and the Day column's own pr-4 keeps its values clear of
+                    the fade's most-opaque edge on the trip there. */}
+                {showBookFade ? (
+                  <div
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
+                  />
+                ) : null}
               </>
             )}
           </div>

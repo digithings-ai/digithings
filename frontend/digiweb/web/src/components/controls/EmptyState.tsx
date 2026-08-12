@@ -92,6 +92,11 @@ export function EmptyState({
   // user's own action (a search, an empty list on first load), not
   // unannounced state changes, so an assertive interrupt there would be
   // noise rather than signal.
+  //
+  // Spread AFTER ...props (CodeRabbit, PR #2287) so the derived role stays
+  // authoritative: no current caller passes its own `role`, but if one ever
+  // did, it should not be able to silently defeat this variant's
+  // accessibility-critical default.
   const live = variant === "error" ? ({ role: "alert" as const }) : {};
   return (
     <article
@@ -103,8 +108,8 @@ export function EmptyState({
         variant === "error" && "ctl-empty--error",
         className,
       )}
-      {...live}
       {...props}
+      {...live}
     >
       {glyphless ? null : (
         <span className="ctl-empty-glyph" aria-hidden="true">
