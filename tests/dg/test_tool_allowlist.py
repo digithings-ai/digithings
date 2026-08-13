@@ -165,3 +165,52 @@ def test_require_tool_calls_loads_cfg_when_none_passed(monkeypatch: pytest.Monke
     )
     req = WorkflowRequest(prompt="hi")
     assert require_tool_calls_for_workflow(req) is True
+
+
+@pytest.mark.unit
+def test_workflow_state_declares_require_tool_calls() -> None:
+    """LangGraph drops undeclared TypedDict keys — see #2097."""
+    from digigraph.graph.state import WorkflowState
+
+    assert "require_tool_calls" in WorkflowState.__annotations__
+
+
+@pytest.mark.unit
+def test_initial_graph_state_carries_require_tool_calls_true() -> None:
+    from digigraph.workflow import _initial_graph_state
+
+    cfg = DigiProjectConfig({"agents": {"require_tool_calls": True}})
+    with patch("digigraph.workflow.DigiProjectConfig.load", return_value=cfg):
+        state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-rtc-1")
+    assert state["require_tool_calls"] is True
+
+
+@pytest.mark.unit
+def test_initial_graph_state_defaults_require_tool_calls_false() -> None:
+    from digigraph.workflow import _initial_graph_state
+
+    cfg = DigiProjectConfig({"agents": {}})
+    with patch("digigraph.workflow.DigiProjectConfig.load", return_value=cfg):
+        state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-rtc-2")
+    assert state["require_tool_calls"] is False
+
+
+@pytest.mark.unit
+def test_langgraph_preserves_require_tool_calls_through_invoke() -> None:
+    """Regression: StateGraph(WorkflowState) must not strip require_tool_calls."""
+    from digigraph.graph.state import WorkflowState
+    from langgraph.graph import END, START, StateGraph
+
+    seen: dict[str, bool | None] = {}
+
+    def _capture(state: WorkflowState) -> dict:
+        seen["require_tool_calls"] = state.get("require_tool_calls")
+        return {}
+
+    builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+    builder.add_node("capture", _capture)
+    builder.add_edge(START, "capture")
+    builder.add_edge("capture", END)
+    graph = builder.compile()
+    graph.invoke({"prompt": "x", "require_tool_calls": True})
+    assert seen["require_tool_calls"] is True
