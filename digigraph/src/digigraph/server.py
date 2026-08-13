@@ -240,10 +240,21 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
     updates: dict[str, str | None] = {"digi_bearer": bearer}
+    # digi_subject keys the cross-thread Store namespace (supervisor_node,
+    # ARCHITECTURE.md §6.10) and, via workflow_thread_id, the checkpoint thread_id — so
+    # it must NEVER survive from a client-supplied WorkflowRequest.digi_subject unless
+    # backed by verified auth (CWE-639 IDOR). This key must always be present in
+    # `updates` (never merely omitted): `req.model_copy(update=updates)` in
+    # _with_digi_request_context only clears a field when its key is explicitly present
+    # here — an absent key leaves the client's original value untouched. So this is an
+    # unconditional assignment, not a conditional override: it sets the verified
+    # `auth.subject` when `auth` is present and its `subject` claim is non-empty, and
+    # explicitly `None` in every other case — no `auth` object at all, OR an `auth`
+    # object present with an empty/falsy `subject` claim. Both are real overrides, not
+    # skips, because the key is always present.
+    updates["digi_subject"] = auth.subject if (auth is not None and auth.subject) else None
     tenant_from_auth: str | None = None
     if auth is not None:
-        if auth.subject:
-            updates["digi_subject"] = auth.subject
         if auth.key_prefix:
             updates["digi_trace_key_prefix"] = auth.key_prefix
         if auth.tenant_slug:

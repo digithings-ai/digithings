@@ -223,7 +223,7 @@ real node executions rather than compiled graph nodes.
 | `request_id` | `str \| None` | Correlation ID propagated to outbound HTTP |
 | `workflow_id` | `str \| None` | Per-run UUID for audit log correlation |
 | `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
-| `digi_subject` | `str \| None` | JWT subject; namespaces the cross-thread Store (see §5.5) and the checkpoint `thread_id`. Client-writable on `WorkflowRequest`, overridden server-side only when `auth.subject` is present (`server.py`'s `_with_digi_request_context`) — see §6's trust-boundary note |
+| `digi_subject` | `str \| None` | JWT subject; namespaces the cross-thread Store (see §5.5) and the checkpoint `thread_id`. Client-writable on `WorkflowRequest`, but `server.py`'s `_digi_fields_from_request` unconditionally overwrites it — to the verified `auth.subject` when present and non-empty, else `None` (no auth, or an auth object with an empty subject claim) — before it reaches graph state; see §6.10 |
 | `allowed_tool_names` | `list[str] \| None` | Tool allowlist; `None` = unrestricted |
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
@@ -269,6 +269,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `digi_trace_key_prefix` / `digi_trace_tenant` / `digi_trace_project_id` / `digi_trace_jti` | `str \| None` | digikey audit fields |
 | `evidence_tier_preference` | `list[str] \| None` | Evidence tier filter |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`); see 4.1 |
+| `digi_subject` | `str \| None` | Client-writable, but never trusted as-is: `server.py`'s `_digi_fields_from_request` unconditionally overwrites it with the verified `auth.subject` (or clears it to `None` when auth is absent or its subject claim is empty) before it reaches graph state — see §6.10 |
 
 ### 4.3 WorkflowResult (`models.py`)
 
@@ -602,11 +603,15 @@ The MCP server (`mcp_server.py`) has no built-in authentication layer. The `stre
 
 The vertical manifest caches in `digisearch_hub.py`, `digiquant_hub.py`, and `digivault_hub.py` are module-level dicts with no TTL or invalidation. If digisearch, digiquant, or digivault adds, removes, or changes a tool definition, the cached schema is stale until the digigraph process restarts. This affects tool schema accuracy in long-running deployments.
 
-### 6.10 Store Namespace Trust Extends the Same `digi_subject`/`thread_id` Gap
+### 6.10 Store Namespace Trust — `digi_subject` Is Server-Verified Before It Reaches Graph State
 
-The Store added in Task 7 (§5.5.4) namespaces every entry by `digi_subject` (`(subject, "prefs")` in `supervisor_node`). `digi_subject` is populated from `WorkflowRequest.digi_subject` — a **client-writable field** — and is only overridden server-side when `auth.subject` is present (`server.py`'s `_with_digi_request_context` / `_digi_fields_from_request`); when authentication is not configured or passes through unauthenticated, a client can set `digi_subject` directly and read or write another subject's Store namespace by guessing or supplying its value. This is the same trust gap §6.1 already documents for `thread_id` (JWT `sub` not bound to checkpoint state), now extended to the new persistent Store namespace — see §11/§12.3's existing recommendation (bind to the JWT `sub` claim) for the checkpointer; the same fix would need to cover the Store's namespace key too.
+The Store added in Task 7 (§5.5.4) namespaces every entry by `digi_subject` (`(subject, "prefs")` in `supervisor_node`). `digi_subject` is a **client-writable field** on `WorkflowRequest`. Previously, `server.py`'s `_digi_fields_from_request` only overrode it server-side when `auth.subject` was truthy — a conditional-only override — so an unauthenticated request, or one whose `auth` object carried an empty `subject` claim, let the client's own `digi_subject` value survive untouched all the way into graph state and the Store namespace key: a CWE-639 IDOR letting a client read or overwrite another subject's stored preference by supplying its value.
 
-**Risk today is low but not zero:** the Store currently holds only a `response_language` preference (§5.5.4), gated behind `DIGI_SUPERVISOR=1` which defaults off, so a realized exploit today at most lets one subject read or overwrite another's language preference. This is worth noting explicitly rather than leaving implicit, since the Store's blast radius will grow with whatever future data any new supervisor-node logic decides to persist there.
+**Fixed:** `_digi_fields_from_request` now sets `updates["digi_subject"]` **unconditionally** on every call — to the verified `auth.subject` when `auth` is present and its `subject` claim is non-empty, and explicitly to `None` in every other case (no `auth` object at all, or an `auth` object present with an empty/falsy `subject`). This distinction matters because `req.model_copy(update=updates)` (in `_with_digi_request_context`) only clears a field when its key is *explicitly present* in `updates` — an absent key leaves the client's original value untouched, so the pre-fix conditional-only override never actually cleared anything; it only skipped setting a new value. Setting the key to `None` unconditionally is what makes it a real override. See `tests/dg/test_api.py::TestDigiSubjectTrustBoundary` for the three pinned cases: authenticated with a real subject (unchanged), no auth object at all (forced to `None`), and an auth object with an empty subject claim (also forced to `None` — the specific gap this fix closes that a "just check `auth is None`" fix would have missed).
+
+This also strictly tightens `workflow_thread_id`'s subject-based `thread_id` scoping (used by both `workflow.py`'s `_graph_thread_config` and `server.py`'s chat/completions path): since `req.digi_subject` itself is now cleared for unauthenticated/empty-subject requests rather than merely the Store lookup being gated, `workflow_thread_id(None, session_id)` degrades to the unscoped `session_id` it already handled gracefully — no functional loss, since a falsy subject was already "no scoping" there.
+
+**Risk before this fix was low but not zero:** the Store currently holds only a `response_language` preference (§5.5.4), gated behind `DIGI_SUPERVISOR=1` which defaults off, so a realized exploit at most let one subject read or overwrite another's language preference. Recorded here for completeness now that it is closed, since the Store's blast radius would have grown with whatever future data any new supervisor-node logic decides to persist there.
 
 ---
 

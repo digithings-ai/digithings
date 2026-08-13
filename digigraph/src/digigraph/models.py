@@ -118,9 +118,13 @@ class WorkflowRequest(BaseModel):
         None,
         description=(
             "JWT subject for checkpoint thread scoping and Store namespace keying. "
-            "Client-writable: only overridden server-side when request auth carries a "
-            "subject (server.py's _with_digi_request_context); an unauthenticated/dev "
-            "request's own value survives untouched. See ARCHITECTURE.md §6.10."
+            "Client-writable on this model but never trusted as-is: server.py's "
+            "_with_digi_request_context/_digi_fields_from_request unconditionally "
+            "overwrite this field with the verified auth.subject when request auth "
+            "carries a non-empty subject, and clear it to None otherwise (no auth at "
+            "all, or an auth object with an empty subject claim) — a client-supplied "
+            "value never reaches graph state or the Store namespace key unverified. "
+            "See ARCHITECTURE.md §6.10."
         ),
     )
     digisearch_index: str | None = Field(
