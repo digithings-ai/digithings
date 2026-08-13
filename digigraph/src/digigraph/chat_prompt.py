@@ -24,6 +24,7 @@ def _trim_to_budget(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
     ``trim_messages`` convention — a trailing assistant-only tail with no matching user
     turn confuses a downstream model more than it helps). ``count_tokens_approximately``
     is an approximate counter (roughly chars/4) — fine for a soft budget, not exact.
+    If trimming would empty the list (no user/human turn anchor), returns untrimmed turns.
     """
     if not turns:
         return turns
@@ -41,6 +42,12 @@ def _trim_to_budget(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
         strategy="last",
         start_on="human",
     )
+    if not trimmed:
+        # trim_messages(start_on="human") returns [] when the input has no
+        # user/human turn to anchor on (e.g. an assistant-only tail after a
+        # whitespace-only user turn was already filtered out upstream). Never
+        # silently empty a non-empty input -- fall back to the untrimmed turns.
+        return turns
     return [(_TYPE_TO_ROLE.get(m.type, m.type), str(m.content)) for m in trimmed]
 
 

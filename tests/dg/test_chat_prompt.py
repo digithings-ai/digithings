@@ -92,3 +92,18 @@ def test_tool_role_messages_are_silently_omitted_today() -> None:
     ]
     prompt = messages_to_workflow_prompt(messages)
     assert "tool result content" not in prompt
+
+
+@pytest.mark.unit
+def test_assistant_only_turns_after_filtered_user_turn_are_not_silently_dropped() -> None:
+    """Regression test: trim_messages(start_on="human") returns [] when there is no
+    user/human turn to anchor on -- e.g. a whitespace-only user turn gets filtered out
+    upstream (role not in the empty-content check), leaving only an assistant turn.
+    _trim_to_budget must fall back to the untrimmed turns rather than silently emptying
+    real content."""
+    messages = [
+        ChatMessage(role="user", content="   "),
+        ChatMessage(role="assistant", content="reply"),
+    ]
+    prompt = messages_to_workflow_prompt(messages)
+    assert "reply" in prompt
