@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   isOpenRouterKey,
@@ -10,8 +11,10 @@ import {
   emptyByokState,
   moveListIndex,
   purgeDurableByokKeys,
+  readByokPrefCookie,
   validateBYOKKey,
   validateBYOKModel,
+  writeByokPrefCookie,
 } from "@/hooks/use-byok-key";
 import { byokActivationGate } from "@/lib/byok-ping";
 
@@ -200,5 +203,39 @@ describe("byokModelPresets", () => {
     for (const p of ["openrouter", "openai", "anthropic", "gemini", "xai"] as const) {
       expect(byokModelPresets(p).length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("BYOK provider/model preference cookie (non-secret, client-side)", () => {
+  beforeEach(() => {
+    // Explicit path=/ so this matches (and actually clears) the path=/
+    // attribute writeByokPrefCookie sets — happy-dom's cookie jar keys
+    // cookies by (name, path) and won't overwrite/delete across a path
+    // mismatch, even when both resolve to "/" on a real browser.
+    document.cookie = "digichat_byok_pref=; path=/; max-age=0";
+  });
+
+  it("returns null when no cookie is set", () => {
+    expect(readByokPrefCookie()).toBeNull();
+  });
+
+  it("round-trips a written preference", () => {
+    writeByokPrefCookie("anthropic", "claude-sonnet-4-20250514");
+    expect(readByokPrefCookie()).toEqual({
+      provider: "anthropic",
+      model: "claude-sonnet-4-20250514",
+    });
+  });
+
+  it("rejects a cookie naming an unknown provider (defense against a stale/tampered value)", () => {
+    document.cookie = `digichat_byok_pref=${encodeURIComponent(
+      JSON.stringify({ p: "not-a-real-provider", m: "x" })
+    )}`;
+    expect(readByokPrefCookie()).toBeNull();
+  });
+
+  it("tolerates a malformed cookie value without throwing", () => {
+    document.cookie = "digichat_byok_pref=not-json-at-all";
+    expect(readByokPrefCookie()).toBeNull();
   });
 });

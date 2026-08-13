@@ -84,6 +84,36 @@ export type BYOKKeyState = {
   isSet: boolean;
 };
 
+const BYOK_PREF_COOKIE = "digichat_byok_pref";
+const BYOK_PREF_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year — non-secret preference only
+
+/** Non-secret provider+model choice, persisted so a returning visitor's picker opens
+ * pre-selected. The key itself is NEVER written here — see useBYOKKey's own doc
+ * comment. Plain client-side cookie (not httpOnly): read/write directly from the
+ * browser, no server round-trip, works on the anonymous /embed surface exactly
+ * like the authenticated app shell. */
+export function readByokPrefCookie(): { provider: BYOKProvider; model: string } | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${BYOK_PREF_COOKIE}=`));
+  if (!match) return null;
+  try {
+    const raw = decodeURIComponent(match.slice(BYOK_PREF_COOKIE.length + 1));
+    const parsed = JSON.parse(raw) as { p?: string; m?: string };
+    if (!parsed.p || !(BYOK_PROVIDER_LIST as readonly string[]).includes(parsed.p)) return null;
+    return { provider: parsed.p as BYOKProvider, model: parsed.m ?? "" };
+  } catch {
+    return null;
+  }
+}
+
+export function writeByokPrefCookie(provider: BYOKProvider, model: string): void {
+  if (typeof document === "undefined") return;
+  const value = encodeURIComponent(JSON.stringify({ p: provider, m: model }));
+  document.cookie = `${BYOK_PREF_COOKIE}=${value}; path=/; max-age=${BYOK_PREF_COOKIE_MAX_AGE}; SameSite=Lax`;
+}
+
 /** A single model entry once live catalog data exists (Task 8+). Falls back to a
  * flat string per fallbackModels entry with tier undefined when live fetch hasn't
  * run or failed — the picker never blocks on the network. */
@@ -131,17 +161,26 @@ export function moveListIndex(
  * Session-only BYOK key holder.
  *
  * Keys live in React state for this tab session. Refresh / new tab → gone.
- * Never writes localStorage, sessionStorage, cookies, or the server.
+ * The key itself is never written to localStorage, sessionStorage, cookies,
+ * or the server. A separate non-secret cookie (`digichat_byok_pref`, see
+ * readByokPrefCookie/writeByokPrefCookie above) persists only the provider
+ * and model identifiers so a returning visitor's picker opens pre-selected —
+ * the key argument to setKey is never passed into that cookie write.
  */
 export function useBYOKKey() {
   const [state, setState] = useState<BYOKKeyState>(() => {
     purgeDurableByokKeys();
-    return emptyByokState();
+    const pref = readByokPrefCookie();
+    return pref
+      ? { key: "", provider: pref.provider, model: pref.model, isSet: false }
+      : emptyByokState();
   });
 
   const setKey = useCallback((key: string, provider: BYOKProvider, model = "") => {
     // Defense in depth: never leave durable leftovers if an older build wrote them.
     purgeDurableByokKeys();
+    // Non-secret preference only — `key` is intentionally never passed here.
+    writeByokPrefCookie(provider, model);
     setState({ key, provider, model, isSet: key.length > 0 });
   }, []);
 
