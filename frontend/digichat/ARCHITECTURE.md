@@ -134,10 +134,9 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 
 | File | Purpose |
 |---|---|
-| `src/app/page.tsx` | Server component: Option A default redirects `/` → `/embed`; `DIGICHAT_REQUIRE_ROOT_AUTH=1` keeps Auth.js gate → `/login` or `ChatShell` |
+| `src/app/page.tsx` | Server component: Option A default redirects `/` → `/embed`; `DIGICHAT_REQUIRE_ROOT_AUTH=1` keeps Auth.js gate → `ChatShell` (no session redirects to `/embed` too — no standalone login page ships) |
 | `src/lib/root-auth.ts` | `isRootAuthRequired()` — root `/` Auth.js wall (default OFF) |
 | `src/app/layout.tsx` | Root layout with `Providers` (session, tooltips) |
-| `src/app/login/` | Login page + form |
 | `src/app/api/chat/route.ts` | Primary BFF chat endpoint |
 | `src/app/api/v1/chat/route.ts` | Machine-client alias — re-exports the chat route |
 | `src/app/api/conversations/route.ts` | List + create conversations |
@@ -317,11 +316,13 @@ src/instrumentation.ts  # Auto-migrate hook
 ```
 
 The root `page.tsx` is a **React Server Component**. By default
-(`DIGICHAT_REQUIRE_ROOT_AUTH` unset/`0` — Option A) it redirects to `/embed` so
-dogfood and most installs never hit the legacy Auth.js `/login` wall. When
-`DIGICHAT_REQUIRE_ROOT_AUTH=1`, it calls `auth()` and redirects to `/login` when
-no session exists. `ChatShell` is a `"use client"` component that owns all thread
-state as React state; the server renders nothing but the initial HTML shell for it.
+(`DIGICHAT_REQUIRE_ROOT_AUTH` unset/`0` — Option A) it redirects to `/embed`. When
+`DIGICHAT_REQUIRE_ROOT_AUTH=1` (Option B — no shipped deployment uses this today),
+it calls `auth()` and, with no session, also redirects to `/embed` — there is no
+standalone `/login` page; a session must come from an OIDC callback, a machine
+key, or the dev-only local-bootstrap credentials provider. `ChatShell` is a
+`"use client"` component that owns all thread state as React state; the server
+renders nothing but the initial HTML shell for it.
 
 ### BFF pattern (route handlers)
 
@@ -361,9 +362,9 @@ BFF route handler
    to `/embed` (tenant `gateMode` applies there — digithings dogfood uses `ungated`).
 2. When root auth is required, the server component calls `auth()` — reads and decrypts
    the session JWT from the httpOnly `__Secure-authjs.session-token` cookie.
-3. No session → `redirect("/login")`.
-4. Login page submits credentials to `POST /api/auth/callback/credentials` (dev) or
-   initiates OIDC redirect (production).
+3. No session → `redirect("/embed")` (no standalone `/login` page ships).
+4. A session is established via `POST /api/auth/callback/credentials` (dev-only
+   providers) or an OIDC redirect (production), not through a digichat-hosted page.
 5. Auth.js writes an encrypted session JWT cookie. `jwt` callback copies `user.id` →
    `token.sub`. `session` callback copies `token.sub` → `session.user.id`.
 5. On subsequent requests, `auth()` decrypts the cookie and returns the session. No
