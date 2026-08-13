@@ -177,9 +177,10 @@ under `agents/sources/subagents/` already pins one; keep doing it:
 
 | Role | Model | Examples |
 |------|-------|----------|
-| Routing, dispatch, dictation cleanup, read-only search | haiku | `component-router`, `dictation-normalizer` |
-| Implementation, spec-writing | sonnet | `spec-writer`, `test-first-implementer` |
-| Review, security audit, architecture judgment | opus | the `/review` in-session lenses, `pr-review-toolkit` plugin agents |
+| Routing, dispatch, dictation cleanup, small/mechanical verification | haiku, or sonnet when the check has any real complexity — pick by task, not by habit | `component-router`, `dictation-normalizer`, a lint/type-check triage pass |
+| Implementation, spec-writing (the heavy lifting) | sonnet | `spec-writer`, `test-first-implementer` |
+| Review, security audit, architecture judgment — reasoning, big-picture opinion, reflection | opus | the `/review` in-session lenses, `pr-review-toolkit` plugin agents |
+| Ad-hoc design/architecture consult ("advisor" role — a second opinion outside a formal review, a judge-panel comparison of approaches) | opus for anything hard-to-reverse or architecturally significant; sonnet default otherwise | a `Plan`/`Explore` agent, an `AskUserQuestion` decision point with real trade-offs, a "which approach is better" comparison |
 
 There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in
 `agents/sources/` — that job already has three owners (Cursor Bugbot, the
@@ -188,16 +189,63 @@ There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in
 ambiguity about which one the harness should pick. Route review work through
 one of those instead of adding a new custom subagent for it.
 
+**Two of those three review paths are not actually pinned — check before trusting
+the table above.** `pr-review-toolkit`'s six agents split: `code-reviewer` and
+`code-simplifier` pin `model: opus`, but `comment-analyzer`, `pr-test-analyzer`,
+`silent-failure-hunter`, and `type-design-analyzer` are `model: inherit` — they
+silently ride whatever the session is on, same as an unpinned custom subagent
+would. The `/review` command's lens fan-out has no subagent file to pin at all
+(it dispatches ad hoc via the `Agent` tool at runtime), so its instructions
+explicitly say to pass `model: opus` on each dispatch rather than leaving it
+implicit — check `agents/sources/commands/review.md` before assuming that still
+holds if the command changes. Don't assume a plugin or ad-hoc dispatch is
+pinned just because a custom subagent would be; verify the specific agent file.
+
+**Advisors get the same treatment as review, not the implementation default.**
+A second-opinion/design-consult moment reads like "quick advice," so it's easy to
+let it silently ride the session's tier — but a wrong architectural call costs
+more to unwind than a wrong implementation does, so treat "should I do A or B"
+the same way as a review: name the model explicitly rather than let it default.
+A judge-panel comparison (multiple independent takes scored against each other)
+is exactly the "architecturally significant" case — pin each panelist to opus,
+not whatever the orchestrator happens to be running.
+
 Orchestrator itself: sonnet by default. Reserve opus/fable for the session only
 when the orchestration/decomposition step is the hard part — a hard subagent
-task gets its own opus pin regardless of what the orchestrator runs. Before
-fanning out more than ~5 subagents in one turn, name each one's model out loud;
-a silent fan-out is how a quota disappears in one prompt. Spot-check a
-subagent's actual model via its transcript
+task gets its own opus pin regardless of what the orchestrator runs. This cuts
+both ways: an opus/fable orchestrator does **not** mean its subagents should
+inherit that tier either — most implementation and routing work under an opus
+session should still be pinned down to sonnet/haiku explicitly. "The
+orchestrator is expensive" and "every subagent should be expensive" are
+independent decisions; make each one on its own merits, not by inheritance in
+either direction. Before fanning out more than ~5 subagents in one turn, name
+each one's model out loud; a silent fan-out is how a quota disappears in one
+prompt. Spot-check a subagent's actual model via its transcript
 (`~/.claude/projects/<proj>/<session>/subagents/agent-<id>.jsonl`) after any
 Claude Code upgrade — pins have regressed silently before.
 
-## Dependency version bounds
+## Context & compaction policy
+
+`.claude/settings.json` sets `autoCompactWindow: 150000` — deliberately tight
+(the allowed range is 100k–1M; unset defaults to a much larger model-tuned
+window). A big context isn't free just because the quota allows it: model
+performance degrades as the window fills, so compacting early is a
+performance choice, not just a cost one. Override per-session with
+`--autocompact` or the `CLAUDE_CODE_AUTO_COMPACT_WINDOW` env var when a task
+genuinely needs more room (e.g. a large migration reading many files at
+once) — don't loosen the committed default for everyone to fix one session.
+
+**Plan compaction points on a long implementation instead of letting it
+happen wherever the window fills.** Before starting multi-step work
+(`/task`, a multi-file migration, a long debugging session), decide up front
+where the natural step boundaries are — after each phase of a plan, after
+each file in a batch, after each subagent's results land — and compact at
+those boundaries deliberately rather than mid-step. Right before compacting,
+write down what the next steps need and nothing else: the specific
+files/lines still to touch, decisions already made and why (not the full
+exploration that led to them), and what's already verified so it isn't
+re-derived. A `TaskUpdate`/todo-list entry or a short note in the turn is
+enough — the goal is that compaction loses exploration, not state.
 
 **Tools whose output gates CI carry an upper bound; runtime libraries do not.**
 
