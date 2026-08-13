@@ -103,6 +103,14 @@ def test_zero_hit_tool_result_reaches_browser_as_a_rag_sources_trace() -> None:
     with patch("digigraph.workflow.build_workflow_graph", return_value=mock_graph):
         run_digigraph_workflow_streaming(WorkflowRequest(prompt="jwt"), queue)
 
+    # Pin subgraphs=True at the real call site: research_node runs inside a compiled
+    # subgraph (graph.py's build_research_subgraph()), not top-level, so without this
+    # flag every custom/updates event from it is silently dropped by LangGraph -- the
+    # exact regression the final whole-branch review caught (fixed in cc199942f).
+    # fake_stream's default (subgraphs=None) means this suite would otherwise stay
+    # green even if the flag were deleted from workflow.py again.
+    assert mock_graph.stream.call_args.kwargs.get("subgraphs") is True
+
     events = []
     while not queue.empty():
         events.append(queue.get())
@@ -162,6 +170,9 @@ def test_round_boundary_reaches_browser_as_its_own_trace_type() -> None:
 
     with patch("digigraph.workflow.build_workflow_graph", return_value=mock_graph):
         run_digigraph_workflow_streaming(WorkflowRequest(prompt="occ"), queue)
+
+    # Pin subgraphs=True at the real call site -- see the sibling test above for why.
+    assert mock_graph.stream.call_args.kwargs.get("subgraphs") is True
 
     events = []
     while not queue.empty():
