@@ -21,8 +21,9 @@ import { cn } from "@/lib/utils";
  * - Supported chart types = whatever ECharts itself supports (bar, line,
  *   scatter, pie, etc.). The spec IS the ECharts option — no adapter layer.
  *
- * Security: the spec is JSON, never HTML. We do not pass custom formatters,
- * so ECharts option objects have no XSS surface here.
+ * Security: the spec is JSON, never HTML. parseChartEnvelope strips
+ * formatter keys before the spec reaches setOption, so untrusted chart
+ * options cannot inject HTML via ECharts tooltip/label formatters.
  */
 export function EChartsCard({
   spec,
