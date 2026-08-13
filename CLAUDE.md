@@ -316,6 +316,22 @@ Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced b
 - **digithings.ai** — Cloudflare Pages via `scripts/build-digithings.sh`. The legacy `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
 - **digiquant.io** — Cloudflare Pages git-integration on this monorepo, building `dist/` via `scripts/build-digiquant.sh` from `main` (per `deploy-digiquant-cloudflare.yml`'s header; the Cloudflare dashboard is authoritative). That is the sole delivery path — the split publish repo in [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md) was never created, and `.github/workflows/deploy-digiquant-cloudflare.yml` is a PR build check, not the deploy.
 
+## Release cadence (release-please)
+
+`release-please-*.yml` workflows (digichat, digiskills, …) propose a release PR on
+every qualifying push to `develop` and keep updating that **same** PR as more
+commits land — that accumulation is the intended design. The version-bump math
+(feat → minor, fix → patch, BREAKING CHANGE → major) is Conventional Commits
+doing its job; don't second-guess it.
+
+**Merging that PR is a separate, deliberate decision — not routine PR hygiene.**
+Treat a green, mergeable release-please PR the same as any other unmerged
+proposal: leave it open until a release is actually intended (e.g. paired with a
+real deploy), not because CI passed. Merging early forecloses accumulation and
+forces the next commit into a brand-new release — three digichat releases (1.1.0,
+1.2.0, and a same-day 1.2.1 proposal) landed within ~48 hours this way, none of
+them tied to a deliberate release decision (2026-08-13).
+
 ## Agent surface
 
 Skills, subagents, and slash commands under `.claude/` are generated from `agents/sources/` by `make agents-init`. Never hand-edit `.claude/agents/`, `.claude/skills/`, or `.claude/commands/` — edit the sources and run `make agents-init`. CI enforces idempotence.

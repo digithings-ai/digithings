@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, TypedDict
+from typing import Any, TypedDict  # score:allow
 
 
 class WorkflowState(TypedDict, total=False):
@@ -46,8 +46,6 @@ class WorkflowState(TypedDict, total=False):
     error_code: str | None
     # Session datasets: ref -> { ref, profile }. No reducer; last writer wins per key.
     stored_datasets: dict[str, dict[str, Any]]
-    # Streaming only: callback(event_type, data). Not serialized; request-scoped.
-    stream_callback: Callable[[str, Any], None]
     # Workflow profile: full_stack | research_rag | quant_backtest | plan_execute (set at invoke).
     workflow_profile: str
     # Per-request corpus routing (X-Digi-Corpus-Index / X-Digi-Vault-Prefix / DIGI_TENANT_CORPUS_MAP).
@@ -62,3 +60,13 @@ class WorkflowState(TypedDict, total=False):
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None
+    # Subject (JWT sub / digikey identity, when auth supplies one) for cross-thread
+    # Store lookups (see graph.get_store()). Falsy (None/empty) skips store lookups
+    # entirely rather than keying on a placeholder. Client-writable on the wire
+    # (models.py's WorkflowRequest.digi_subject), but never trusted as-is: server.py's
+    # _with_digi_request_context/_digi_fields_from_request unconditionally overwrite
+    # this field with the verified auth.subject when request auth carries a non-empty
+    # subject, and clear it to None otherwise (no auth at all, or an auth object with
+    # an empty subject claim) -- a client-supplied value never reaches graph state
+    # unverified. See ARCHITECTURE.md §6.10.
+    digi_subject: str | None

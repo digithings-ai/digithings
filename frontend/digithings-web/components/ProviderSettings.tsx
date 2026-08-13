@@ -10,6 +10,19 @@ import {
 
 type TestResult = { ok: boolean; model?: string; error?: string } | null;
 
+// Record over ProviderId, not a ternary chain — a provider missing from this
+// map is a compile error rather than a silent fallthrough to a generic (and
+// possibly wrong-format) placeholder. xai was the provider a ternary chain
+// missed on this PR: it fell through to the generic "sk-…" text even though
+// x.ai keys start with "xai-" (#2348).
+const KEY_PLACEHOLDERS: Record<ProviderId, string> = {
+  openrouter: "sk-or-v1-…",
+  openai: "sk-…",
+  anthropic: "sk-ant-…",
+  gemini: "AI…",
+  xai: "xai-…",
+};
+
 function ProviderSettingsForm({
   storedKey,
   storedProvider,
@@ -130,15 +143,7 @@ function ProviderSettingsForm({
             onBlur={() => {
               if (inputKey) setValidationError(validateProviderKey(inputKey, inputProvider));
             }}
-            placeholder={
-              inputProvider === "openrouter"
-                ? "sk-or-v1-…"
-                : inputProvider === "anthropic"
-                  ? "sk-ant-…"
-                  : inputProvider === "gemini"
-                    ? "AI…"
-                    : "sk-…"
-            }
+            placeholder={KEY_PLACEHOLDERS[inputProvider]}
             autoComplete="off"
             spellCheck={false}
           />
