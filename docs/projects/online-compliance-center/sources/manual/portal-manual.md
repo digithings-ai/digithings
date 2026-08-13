@@ -186,7 +186,7 @@ Once signed in, every page renders inside the main shell:
 
 **Sidebar map:**
 
-```
+```text
 Online Compliance Center (Overview)
   ├─ Dashboard
   ├─ Reports
@@ -380,7 +380,7 @@ On the **Backup Jobs** table (per connector tab) the action icons let you:
 Route: `/backup-and-restore/restore`. The page opens on the **Restore** card (**"Create Restore Job"**) with the four connector tabs — **Exchange**, **Teams**, **SharePoint**, **OneDrive** — and, for non-trial users, the **Advanced Setup** toggle. Below the wizard, existing restore jobs are listed per connector under **Overview Restore Jobs**.
 
 > **Important — restore jobs start disabled.** Every restore job is created with its schedule set to **Disabled**. To actually run it, go to **Overview Restore Jobs**, find the job, and click the green **Start** arrow under **Actions** (then **Yes, confirm**). This is a deliberate safety step so a restore never runs before you're ready.
-
+>
 > **Trial licenses** allow at most **2 restore jobs per connector**.
 
 All connectors start the same way — **Step 1, General:** enter a **Job Name**. As with backups, the General settings can't be changed after the job is created. Click **Next**.

@@ -25,8 +25,12 @@ They are separate web apps but one platform: the portal even has an **eDiscovery
 Both apps authenticate against the same identity service and use one common model. Understanding it once applies to both manuals.
 
 ### Sign-in & MFA
-- Both apps use email/username + password, followed by **two-factor authentication (2FA/MFA)** via an authenticator app, with recovery codes as a backup.
-- **MFA is enrolled in the Cloud Portal.** If OCC Search finds your account hasn't set up MFA, it sends you to the portal to enroll, then back.
+- Both apps use email/username + password and an **authenticator-app MFA** path (with recovery codes), but MFA is **conditional**:
+  - **Cloud Portal** prompts for MFA only when 2FA is enabled for the account.
+  - **OCC Search** signs you straight in when MFA is not enrolled; if MFA is enabled you verify a code; if MFA is required but not set up, Search sends you to the Cloud Portal to enroll, then back.
+- Password rules differ by app:
+  - **Cloud Portal:** 7–42 characters, including at least one uppercase letter and one special character.
+  - **OCC Search:** at least 6 characters.
 
 ### Roles
 The built-in roles are shared across the platform:
