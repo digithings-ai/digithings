@@ -173,33 +173,42 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
         ),
         _fn(
             TOOL_VAULT_GET_NOTE,
-            # Rewritten for #2306. The old text's only trigger was "use it after a
-            # search returns a promising hit", a judgment call the model lost: it read a
-            # 300-char excerpt clipped before the table it was asked about, decided the
-            # excerpt was enough, never called this tool, and answered wrong. The trigger
-            # is now the question's shape, which the model can evaluate, plus an explicit
-            # instruction not to assess excerpt completeness at all.
-            "Load one whole vault note by vault_path. Call this before answering, for "
-            "every hit you intend to quote, cite, count or reason from. Search returns "
-            "only a short excerpt of a note, and an excerpt is never sufficient "
-            "evidence for a table, a list, a procedure, a number, a date, or any "
-            "all/every/none/no-other claim. Do not assess whether an excerpt looks "
-            "complete — if the answer depends on the note's content, load the note. "
-            "You may issue several digivault_get_note calls in the same turn, one per "
-            "note; they all execute before your next reply, so loading three notes "
-            "costs one round, not three. vault_path always comes from a prior search "
-            "hit and is never invented: from a digivault_search_notes hit read doc_id "
-            "(its metadata holds only title/tags); from a digisearch hit read "
-            "metadata.vault_path (a digisearch hit's own doc_id is a repo path, not a "
-            "vault path). Most notes are one page or section of a larger source and "
-            "come back with parent_doc and segment_label set — if the answer runs past "
-            "the end of the page you loaded, search for the neighbouring page rather "
-            "than assuming the content stops there. Very long notes are cut at about "
-            "12,000 characters and marked '[truncated for LLM context...]'; there is no "
-            "offset or paging argument to fetch the rest, so if you see that marker, "
-            "answer only from what you received and say the note continues. D1-only: "
-            "unlike digivault_search_notes this tool has no filesystem or Supabase "
-            "fallback, so on a deployment without Cloudflare D1 every call fails.",
+            # Rewritten for #2306, then again for the batch follow-up. The excerpt-
+            # sufficiency judgment call is gone (see the trigger rule below); the
+            # original batch guidance here used to say "you may issue several calls in
+            # the same turn... they all execute before your next reply, so loading
+            # three notes costs one round, not three" — true, but it left N separate
+            # activity rows in digichat with no way to group them, since the UI groups
+            # repeated tool calls by (tool, query) and every vault_path is a different
+            # query. vault_paths below fixes that: one call, one activity row, still one
+            # round either way.
+            "Load one or more whole vault notes. Call this before answering, for every "
+            "hit you intend to quote, cite, count or reason from. Search returns only a "
+            "short excerpt of a note, and an excerpt is never sufficient evidence for a "
+            "table, a list, a procedure, a number, a date, or any all/every/none/"
+            "no-other claim. Do not assess whether an excerpt looks complete — if the "
+            "answer depends on the note's content, load the note. When you already know "
+            "several paths up front — e.g. multiple pages of one document, or several "
+            "hits worth reading in full — pass them all in ONE call via vault_paths "
+            "rather than issuing several separate calls: same one round either way, but "
+            "one call renders as one grouped result instead of several. A vault_path "
+            "always comes from a prior search hit and is never invented: from a "
+            "digivault_search_notes hit read doc_id (its metadata holds only "
+            "title/tags); from a digisearch hit read metadata.vault_path (a digisearch "
+            "hit's own doc_id is a repo path, not a vault path). Most notes are one "
+            "page or section of a larger source and come back with parent_doc and "
+            "segment_label set — if the answer runs past the end of the page you "
+            "loaded, search for the neighbouring page rather than assuming the content "
+            "stops there. Very long notes are cut at about 12,000 characters and marked "
+            "'[truncated for LLM context...]'; there is no offset or paging argument to "
+            "fetch the rest, so if you see that marker, answer only from what you "
+            "received and say the note continues. A batch call never fails as a whole "
+            "over one bad path: any path not found, or outside your corpus, is reported "
+            "individually and the other notes in the same call still come back — read "
+            "what succeeded and note what didn't rather than assuming the whole call "
+            "failed. D1-only: unlike digivault_search_notes this tool has no filesystem "
+            "or Supabase fallback, so on a deployment without Cloudflare D1 every call "
+            "fails.",
             {
                 "type": "object",
                 "properties": {
@@ -211,7 +220,24 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                             "from a digisearch hit read metadata.vault_path (that "
                             "tool's own doc_id is a repo path and will not resolve). "
                             "E.g. clients/digithings/security__p003. No .md suffix. A "
-                            "path ending __pNNN is one page of a larger document."
+                            "path ending __pNNN is one page of a larger document. Use "
+                            "this for a single note; use vault_paths instead when you "
+                            "already know more than one path to load."
+                        ),
+                    },
+                    "vault_paths": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Load several notes in one call instead of one call per "
+                            "note — same path rules as vault_path, one entry per note. "
+                            "Prefer this over repeated single-path calls whenever you "
+                            "already know multiple paths up front (e.g. pages 1, 2, 3, "
+                            "5, 6 of one document): it renders as one grouped result "
+                            "instead of several separate ones, and still costs one "
+                            "round. A duplicate path is fetched once. If provided, this "
+                            "is used instead of vault_path — provide exactly one of the "
+                            "two, not both."
                         ),
                     },
                     "path_prefix": {
@@ -252,7 +278,16 @@ def build_orchestrator_tool_manifest() -> list[OpenAIToolDict]:
                         ),
                     },
                 },
-                "required": ["vault_path", "path_prefix"],
+                # vault_path is intentionally NOT in required: a batch call supplies
+                # vault_paths instead. path_prefix stays required unconditionally —
+                # unchanged from before the batch addition, and deliberately not
+                # relaxed; see the comment on the identical decision for
+                # digivault_search_notes below and the #2239 review it cites. The
+                # handler (server.py's TOOL_VAULT_GET_NOTE branch) is what actually
+                # enforces "at least one of vault_path/vault_paths", since JSON schema
+                # has no clean way to express "exactly one of A or B" for a
+                # function-calling parameters block.
+                "required": ["path_prefix"],
             },
         ),
     ]
