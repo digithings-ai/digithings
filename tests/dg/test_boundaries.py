@@ -71,24 +71,28 @@ def test_zero_hit_tool_result_reaches_browser_as_a_rag_sources_trace() -> None:
     only forwarded ``sources``/``tool`` — hit_count/query never left research.py.
     """
     queue: Queue = Queue()
-    seen_callback: dict[str, object] = {}
 
-    def fake_stream(initial, config=None, stream_mode=None):
-        seen_callback["cb"] = config["configurable"]["stream_callback"]
-        # Simulate the tool loop invoking on_tool_step("tool_result", ...) for a
-        # digisearch call that ran but found nothing.
-        seen_callback["cb"](
-            "tool_result",
-            {
-                "name": "digisearch",
-                "content": "{}",
-                "results": [],
-                "rag_sources": [],
-                "hit_count": 0,
-                "query": "jwt",
-            },
-        )
-        return iter(())
+    def fake_stream(initial, config=None, stream_mode=None, version=None, durability=None):
+        # Simulate the tool loop's get_stream_writer() call (research.py's
+        # stream_callback) for a digisearch call that ran but found nothing,
+        # arriving as a stream_mode=["updates","custom"], version="v2" custom part:
+        # {"type": "custom", "ns": (), "data": (event_type, payload)}, exactly what
+        # run_digigraph_workflow_streaming's driver loop unpacks.
+        yield {
+            "type": "custom",
+            "ns": (),
+            "data": (
+                "tool_result",
+                {
+                    "name": "digisearch",
+                    "content": "{}",
+                    "results": [],
+                    "rag_sources": [],
+                    "hit_count": 0,
+                    "query": "jwt",
+                },
+            ),
+        }
 
     mock_graph = MagicMock()
     mock_graph.stream.side_effect = fake_stream
@@ -132,17 +136,21 @@ def test_round_boundary_reaches_browser_as_its_own_trace_type() -> None:
     never leaves digigraph at all.
     """
     queue: Queue = Queue()
-    seen_callback: dict[str, object] = {}
 
-    def fake_stream(initial, config=None, stream_mode=None):
-        seen_callback["cb"] = config["configurable"]["stream_callback"]
-        # Simulate run_tools invoking on_tool_step("round_boundary", ...) after a
-        # round streamed narration content alongside its tool_calls.
-        seen_callback["cb"](
-            "round_boundary",
-            {"round_idx": 1, "narration": "I will load the full notes now."},
-        )
-        return iter(())
+    def fake_stream(initial, config=None, stream_mode=None, version=None, durability=None):
+        # Simulate run_tools's on_tool_step("round_boundary", ...) (fired after a
+        # round streamed narration content alongside its tool_calls) arriving as a
+        # stream_mode=["updates","custom"], version="v2" custom part:
+        # {"type": "custom", "ns": (), "data": (event_type, payload)}, exactly what
+        # run_digigraph_workflow_streaming's driver loop unpacks.
+        yield {
+            "type": "custom",
+            "ns": (),
+            "data": (
+                "round_boundary",
+                {"round_idx": 1, "narration": "I will load the full notes now."},
+            ),
+        }
 
     mock_graph = MagicMock()
     mock_graph.stream.side_effect = fake_stream
