@@ -704,9 +704,44 @@ def orchestrator_invoke(
         # D1-only, same as `POST /v1/notes/by-path` — a by-path fetch only makes sense
         # against the corpus that owns the path, so there is no local-vault/Supabase
         # fallback here (mirrors that route's own docstring).
-        vault_path = str(args.get("vault_path") or "").strip()
-        if not vault_path:
-            return OrchestratorInvokeResponse(ok=False, tool=tool, error="vault_path is required")
+        #
+        # Batch support (#2306 follow-up): a model that already knows several pages of
+        # one document up front (e.g. from parent_doc/segment_label hints on a search
+        # hit) previously had to issue one digivault_get_note call per page, each
+        # rendering as its own activity row in digichat with no way to group them (the
+        # UI groups repeated tool calls by (toolName, query), and every path is a
+        # different query). vault_paths is additive: an existing caller sending the
+        # singular vault_path gets byte-identical behaviour and response shape below;
+        # only a caller that sends vault_paths (plural) gets the new {"notes":
+        # [...], "errors": {...}} shape. This is a "first cut" — each path still costs
+        # its own D1 round-trip via the loop below (_fetch_note_by_path, called once
+        # per path, preserving its per-path tenant-scope enforcement exactly). A real
+        # round-trip reduction would need D1Store to grow a batched
+        # `WHERE vault_path IN (...)` fetch; deferred as a fast-follow since it is not
+        # required to fix the UI-clutter/grouping problem this change targets.
+        vault_paths_arg = args.get("vault_paths")
+        is_batch = isinstance(vault_paths_arg, list) and len(vault_paths_arg) > 0
+        if is_batch:
+            # Dedup while preserving order — a model that lists the same page twice
+            # (e.g. copy-paste across two search hits) should not pay for it twice.
+            seen: set[str] = set()
+            vault_path_list: list[str] = []
+            for raw_path in vault_paths_arg:
+                p = str(raw_path or "").strip()
+                if p and p not in seen:
+                    seen.add(p)
+                    vault_path_list.append(p)
+            if not vault_path_list:
+                return OrchestratorInvokeResponse(
+                    ok=False, tool=tool, error="vault_paths must contain at least one path"
+                )
+        else:
+            vault_path = str(args.get("vault_path") or "").strip()
+            if not vault_path:
+                return OrchestratorInvokeResponse(
+                    ok=False, tool=tool, error="vault_path is required"
+                )
+            vault_path_list = [vault_path]
         path_prefix_arg = args.get("path_prefix")
         # Normalize before deciding "missing" — `vault_path` two lines up already
         # treats a blank value the same as an absent key (`str(... or "").strip()`);
@@ -749,17 +784,50 @@ def orchestrator_invoke(
                 tool=tool,
                 error="path_prefix is required for digivault_get_note",
             )
-        note = _fetch_note_by_path(vault_path, normalized_prefix, tenant_slug=_tenant_slug(request))
-        if note is None:
-            # A stale or mistyped vault_path is an expected, recoverable outcome (the
-            # model should try a different path or re-search), not a tool failure —
-            # mirrors the `digivault_backlinks` "No such note" convention below.
-            return OrchestratorInvokeResponse(
-                ok=False,
-                tool=tool,
-                error=f"note not found: {normalize_vault_path(vault_path)}",
+        tenant_slug = _tenant_slug(request)
+        if not is_batch:
+            # Single-path caller: response shape byte-identical to before this change.
+            note = _fetch_note_by_path(
+                vault_path_list[0], normalized_prefix, tenant_slug=tenant_slug
             )
-        return OrchestratorInvokeResponse(ok=True, tool=tool, data=note.model_dump(mode="json"))
+            if note is None:
+                # A stale or mistyped vault_path is an expected, recoverable outcome
+                # (the model should try a different path or re-search), not a tool
+                # failure — mirrors the `digivault_backlinks` "No such note" convention
+                # below.
+                return OrchestratorInvokeResponse(
+                    ok=False,
+                    tool=tool,
+                    error=f"note not found: {normalize_vault_path(vault_path_list[0])}",
+                )
+            return OrchestratorInvokeResponse(ok=True, tool=tool, data=note.model_dump(mode="json"))
+
+        # Batch caller: fetch each path with the SAME per-path enforcement as the
+        # single-path case (looped, not hoisted out) — a batch must not be a way to
+        # bypass the #2265/#2239/#2298 tenant-scope checks for any one of its paths.
+        # One bad path (not found, outside the prefix, or a transient D1 error) does
+        # not fail the whole call: a model that requested 6 pages and gets 5 back plus
+        # one clear per-path error can still answer from the 5, which is strictly more
+        # useful than discarding all 5 because the 6th failed.
+        notes: list[dict[str, object]] = []
+        errors: dict[str, str] = {}
+        for path in vault_path_list:
+            try:
+                note = _fetch_note_by_path(path, normalized_prefix, tenant_slug=tenant_slug)
+            except HTTPException as exc:
+                errors[normalize_vault_path(path)] = str(exc.detail)
+                continue
+            if note is None:
+                errors[normalize_vault_path(path)] = f"note not found: {normalize_vault_path(path)}"
+                continue
+            notes.append(note.model_dump(mode="json"))
+        # ok=True even with zero notes and all errors: this is the model's own input
+        # (every path in the batch happened to be wrong), not an infra failure — the
+        # per-path errors dict already carries the reason for each, which is more
+        # actionable than a single ok=False covering an N-path call.
+        return OrchestratorInvokeResponse(
+            ok=True, tool=tool, data={"notes": notes, "errors": errors}
+        )
 
     vault = _open_vault()
     try:
