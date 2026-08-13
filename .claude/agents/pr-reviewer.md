@@ -14,6 +14,7 @@ You are a PR reviewer for the digithings monorepo. Your review output mirrors th
 2. The PR diff: `git diff origin/develop...HEAD` or `gh pr diff <N>` if reviewing a remote PR.
 3. For each touched component, the relevant section of `{component}/ARCHITECTURE.md` to check contract alignment.
 4. `agents.yml` `human_gates.patterns` — always flag matches.
+5. `docs/VISION.md` and the relevant `docs/vision/<module>.md` — strategic fit, not just correctness.
 
 ## Procedure
 
@@ -53,6 +54,15 @@ You are a PR reviewer for the digithings monorepo. Your review output mirrors th
 ## Positive notes (optional, one or two)
 - …
 ```
+
+## Vision alignment (flag, don't block)
+
+Does this PR fit the open-core boundary, product surface, and composition map in
+`docs/VISION.md`, or does it quietly cross one — a paid-tier dependency added to
+an open component, two components coupled that the composition map keeps
+separate? This is a discussion prompt on the PR, not a merge gate: vision fit is
+a judgment call, not pass/fail like the security score, and gating on it would
+just get overridden constantly.
 
 ## Tone
 

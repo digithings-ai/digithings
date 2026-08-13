@@ -169,6 +169,27 @@ PR #1891 was rated **Low** at 2 files and +14/−8, and it shipped two false pub
 claims to production. Gate on paths (`digikey/`, brokers, migrations, workflows)
 and on whether behaviour or a public factual claim changed.
 
+## Model & subagent policy
+
+Unpinned subagents inherit the orchestrator's model — an unset `model:` under an
+Opus/Fable session silently runs every subagent at that price. Every subagent
+under `agents/sources/subagents/` already pins one; keep doing it:
+
+| Role | Model | Examples |
+|------|-------|----------|
+| Routing, dispatch, dictation cleanup, read-only search | haiku | `component-router`, `dictation-normalizer` |
+| Implementation, spec-writing | sonnet | `spec-writer`, `test-first-implementer` |
+| Review, security audit, architecture judgment | opus | `pr-reviewer`, `security-reviewer` |
+
+Orchestrator itself: sonnet by default. Reserve opus/fable for the session only
+when the orchestration/decomposition step is the hard part — a hard subagent
+task gets its own opus pin regardless of what the orchestrator runs. Before
+fanning out more than ~5 subagents in one turn, name each one's model out loud;
+a silent fan-out is how a quota disappears in one prompt. Spot-check a
+subagent's actual model via its transcript
+(`~/.claude/projects/<proj>/<session>/subagents/agent-<id>.jsonl`) after any
+Claude Code upgrade — pins have regressed silently before.
+
 ## Dependency version bounds
 
 **Tools whose output gates CI carry an upper bound; runtime libraries do not.**
