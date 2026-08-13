@@ -9,10 +9,9 @@ import {
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
+import { fetchWithTimeout, abortOrMessage } from "@/lib/fetch-with-timeout";
 
 export const maxDuration = 30;
-
-const TIMEOUT_MS = 10_000;
 
 type TestResult = { ok: boolean; model?: string; error?: string };
 
@@ -118,26 +117,6 @@ export async function POST(req: Request): Promise<Response> {
     const msg = e instanceof Error ? e.message : "Unexpected error";
     return jsonResponse({ ok: false, error: msg }, 500);
   }
-}
-
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit
-): Promise<globalThis.Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function abortOrMessage(e: unknown): string {
-  if (e instanceof Error) {
-    return e.name === "AbortError" ? `Request timed out after ${TIMEOUT_MS / 1000} s.` : e.message;
-  }
-  return "Unknown error";
 }
 
 async function testKey(
