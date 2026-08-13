@@ -15,8 +15,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import TypeVar
+from typing import (  # score:allow untyped any — raw JSON-schema dict shape
+    Any,
+    TypeVar,
+)
 
 from pydantic import BaseModel
 
@@ -26,12 +30,13 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
 
+_to_strict_json_schema: Callable[[type[BaseModel]], dict[str, Any]] | None
 try:
     # The OpenAI SDK's own strict-schema normalizer (used internally by
-    # ``client.beta.chat.completions.parse()``): sets ``additionalProperties: false``
-    # AND force-lists every property (recursively, through $defs/items/anyOf) in
-    # ``required`` — a hard requirement of OpenAI-family strict-schema providers that
-    # plain ``model_json_schema()`` does not satisfy for fields with defaults. Without
+    # ``client.beta.chat.completions.parse()``): fills in ``additionalProperties: false``
+    # when absent AND force-lists every property (recursively, through $defs/items/anyOf/
+    # allOf) in ``required`` — a hard requirement of OpenAI-family strict-schema providers
+    # that plain ``model_json_schema()`` does not satisfy for fields with defaults. Without
     # this, a strict-schema provider 400s with "'required' is required to be supplied
     # and to be an array including every key in properties" (confirmed against the
     # live OpenRouter API investigating twelve-x's Aug 2026 digest staleness).
@@ -105,7 +110,7 @@ def structured_completion(
         model,
         messages,
         temperature=temperature,
-        response_format=response_format,  # type: ignore[arg-type]
+        response_format=response_format,
         max_tokens=max_tokens,
     )
     raw = (resp.choices[0].message.content or "").strip() if resp.choices else ""
