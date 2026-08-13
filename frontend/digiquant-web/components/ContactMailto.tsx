@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { MouseEvent, ReactNode } from "react";
 
 /**
@@ -18,16 +18,19 @@ import type { MouseEvent, ReactNode } from "react";
  * rendered anchor's `href` attribute (rewritten to `/cdn-cgi/...`).
  *
  * Rendering with no literal mailto: string in the initial HTML at all — no
- * href server-side, the real href assigned after mount — gives Cloudflare's
- * rewriter nothing to rewrite, so server and client agree. Real users with
- * JS still get a working mailto: link; without JS the link is inert, the
- * same tradeoff any client-only-assigned href accepts.
+ * href server-side, the real href assigned after client mount — gives
+ * Cloudflare's rewriter nothing to rewrite, so server and client agree. Real
+ * users with JS still get a working mailto: link; without JS the link is
+ * inert, the same tradeoff any client-only-assigned href accepts.
  *
- * Pending look (dimmed, aria-disabled) is driven from React state so
- * className / aria-disabled stay synchronized with click prevention — no
+ * Pending look (dimmed, aria-disabled) is derived from a hydration-safe
+ * client mount flag (`useSyncExternalStore`) so className / aria-disabled
+ * stay synchronized with click prevention — no setState-in-effect and no
  * imperative mutations of React-owned attributes.
  */
 const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
+
+const emptySubscribe = () => () => {};
 
 export function ContactMailto({
   href,
@@ -41,25 +44,25 @@ export function ContactMailto({
   ariaLabel?: string;
   children: ReactNode;
 }) {
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setReady(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
   const onClick = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
-      if (!ready) e.preventDefault();
+      if (!mounted) e.preventDefault();
     },
-    [ready],
+    [mounted],
   );
 
   return (
     <a
-      {...(ready ? { href } : {})}
-      className={[className, ...(!ready ? PENDING_CLASSES : [])].filter(Boolean).join(" ")}
+      {...(mounted ? { href } : {})}
+      className={[className, ...(!mounted ? PENDING_CLASSES : [])].filter(Boolean).join(" ")}
       aria-label={ariaLabel}
-      aria-disabled={ready ? undefined : true}
+      aria-disabled={mounted ? undefined : true}
       onClick={onClick}
     >
       {children}

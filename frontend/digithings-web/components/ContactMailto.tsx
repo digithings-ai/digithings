@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 
@@ -22,7 +22,7 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  *
  * Rendering with no literal mailto: string or bare address in the initial
  * HTML at all — no href server-side, the real href (and, for `showAddress`,
- * the address text) assigned after mount — gives Cloudflare's rewriter
+ * the address text) assigned after client mount — gives Cloudflare's rewriter
  * nothing to rewrite, so server and client agree. Real users with JS still
  * get a working mailto: link; without JS the link is inert, the same
  * tradeoff any client-only-assigned href accepts.
@@ -34,8 +34,9 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  * empty and unlabeled until JS runs — a discernible-text regression, not
  * the documented "inert without JS" tradeoff above.
  *
- * Pending look (dimmed, aria-disabled) is driven from React state so
- * className / aria-disabled stay synchronized with click prevention.
+ * Pending look (dimmed, aria-disabled) is derived from a hydration-safe
+ * client mount flag (`useSyncExternalStore`) so className / aria-disabled
+ * stay synchronized with click prevention without setState-in-effect.
  */
 
 /** Pure so the query-string assembly is unit-testable without rendering. */
@@ -48,6 +49,8 @@ export function buildMailtoHref(email: string, subject?: string): string {
 // the frontend canon guard's family census (#1421) rejects a new class in a
 // census app's stylesheet; token-backed Tailwind utilities are not scanned.
 const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
+
+const emptySubscribe = () => () => {};
 
 export function ContactMailto({
   subject,
@@ -69,15 +72,18 @@ export function ContactMailto({
   showAddress?: boolean;
   children?: ReactNode;
 }) {
-  const [readyHref, setReadyHref] = useState<string | null>(null);
-  const [addressText, setAddressText] = useState<string | null>(null);
+  // Server + first client hydration pass: false. After hydration: true.
+  // Prefer this over setState-in-effect (react-hooks/set-state-in-effect).
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
-  useEffect(() => {
-    setReadyHref(buildMailtoHref(DT_CONTACT_EMAIL, subject));
-    if (showAddress) setAddressText(DT_CONTACT_EMAIL);
-  }, [subject, showAddress]);
+  const readyHref = mounted ? buildMailtoHref(DT_CONTACT_EMAIL, subject) : null;
+  const addressText = mounted && showAddress ? DT_CONTACT_EMAIL : null;
+  const pending = !mounted;
 
-  const pending = readyHref === null;
   const onClick = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
       if (pending) e.preventDefault();

@@ -181,10 +181,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     fixture content changed, so this fingerprint is expected to be
     regenerated whenever ARCHITECTURE.md's prose changes materially — it is
     not itself a chunker-behavior assertion beyond the ``<= 2000`` size
-    invariant. Hashes only (count unchanged at 44) re-recorded for #2239's
+    invariant.     Hashes only (count unchanged at 44) re-recorded for #2239's
     Cloudflare credential rename (VECTORIZE_ACCOUNT_ID/VECTORIZE_API_TOKEN ->
     CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN with legacy fallback) --
     prose-only changes to the Vectorize section and the env var reference table.
+    Hashes only again (count still 44) for #2330's CodeRabbit body follow-up:
+    the production-inventory paragraph now documents the D1_ACCOUNT_ID /
+    D1_API_TOKEN credential fallback chain — fixture prose only.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -225,7 +228,7 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
         "0a11a1bc22b44bfa",
-        "906445c5be210637",
+        "7ef582ec2be6842c",
         "7f35e89d259828fa",
         "58cc26905caa4f5c",
         "c3c62657cd6e0f50",

@@ -22,8 +22,8 @@ describe("ContactMailto contracts", () => {
     // serves -- diverging from what the origin (and therefore React's
     // hydration payload) produced, and throwing a hydration mismatch on
     // every page carrying a contact link. The real href/text must only ever
-    // be assigned inside the client-only useEffect below, never returned
-    // from the component's JSX.
+    // be derived after the hydration-safe client mount flag flips true
+    // (useSyncExternalStore), never returned from the server JSX path.
     const path = fileURLToPath(new URL("./ContactMailto.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
 
@@ -61,8 +61,8 @@ describe("ContactMailto contracts", () => {
     // children server-rendered as `<a href="#"></a>` -- empty and unlabeled
     // until JS ran, and on legal/privacy/page.tsx it broke the surrounding
     // sentence outright ("...email . We may need..."). children is now
-    // always rendered; showAddress only controls whether the mount effect
-    // swaps it for the real address afterward.
+    // always rendered; showAddress only controls whether the client mount
+    // path swaps it for the real address afterward.
     const path = fileURLToPath(new URL("./ContactMailto.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
     expect(src).not.toMatch(/showAddress\s*\?\s*null/);
