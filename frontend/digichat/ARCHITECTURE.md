@@ -487,14 +487,24 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
    `byokRequiresModel(provider)`, defined once in the framework-neutral
    `src/lib/byok-providers.ts` (no `"use client"` directive, so both React
    client code and Next.js server Route Handlers can import it) and
-   re-exported by `use-byok-key.ts` for its own callers — every call site
-   defers to that one predicate (never a hand-maintained per-provider list),
-   client and server alike: the 3 client call sites (`chat-panel.tsx`,
-   `embed/embed-client.tsx`, `byok-settings-panel.tsx`) plus the 2 server
-   Route Handlers that forward BYOK headers upstream — `api/chat/route.ts`'s
-   `byokNeedsModel` gate and `api/byok/test/route.ts`'s `needsModel` gate —
-   so adding a 6th provider can't silently omit its model header the way
-   `xai` once was, on either side of the client/server boundary (#2351).
+   re-exported by `use-byok-key.ts` for its own callers. Every client call
+   site defers to that one predicate (never a hand-maintained per-provider
+   list) — `chat-panel.tsx`, `embed/embed-client.tsx`,
+   `byok-settings-panel.tsx` — and so does `api/chat/route.ts`'s
+   `byokNeedsModel` gate, which now calls `byokRequiresModel(byokProvider)`
+   directly in place of its old 5-provider OR-chain, so a 6th `requiresModel`
+   provider can't silently omit its model header there the way `xai` once
+   did (#2351). `api/byok/test/route.ts` also imports this module —
+   `readByokProvider` replaces its old `readProvider` (which fell through to
+   `"openai"` for any unrecognized value) and `byokKeyPrefixError` replaces
+   its five hand-written prefix `if`-blocks — but that route's own
+   `needsModel` gate (which providers require `X-BYOK-Model` before the test
+   ping) is still a separate hand-written `anthropic`/`gemini`/`xai`
+   OR-chain, not yet wired to `byokRequiresModel`. Closing that one remaining
+   gate is scoped to #2347, which touches the same lines — so today a 6th
+   `requiresModel` provider is safe from a silently-skipped model check on
+   `/api/chat` and every client call site, but not yet on `/api/byok/test`'s
+   pre-flight check.
 
 For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
 (no key required) as soon as `openrouter` becomes the selected provider, usually
