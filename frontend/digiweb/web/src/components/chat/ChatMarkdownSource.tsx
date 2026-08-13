@@ -108,74 +108,94 @@ function safeHref(href: string | undefined): string | undefined {
   return href && (href.startsWith("https://") || href.startsWith("http://")) ? href : undefined;
 }
 
-const components: Components = {
-  a: ({ href, children }) => {
-    const safe = safeHref(href);
-    if (!safe) return <span>{children}</span>;
-    return (
-      <a href={safe} target="_blank" rel="noopener noreferrer">
-        {children}
-      </a>
-    );
-  },
-  // Headings are downshifted two levels: a model that opens an answer with `#`
-  // must not take the page's <h1>. Neither digichat /embed nor digithings.ai/chat
-  // has an <h1> of its own on the transcript route, so an un-downshifted h1 from
-  // streamed text becomes the document's top-level heading — a real outline and
-  // screen-reader defect, not a cosmetic one. The renderer this replaced
-  // (digichat-ui's MiniMarkdown) mapped h1→h3, h2→h4, h3→h5, h4→h6; that
-  // behaviour is preserved here rather than dropped.
-  h1: ({ children }) => <h3>{children}</h3>,
-  h2: ({ children }) => <h4>{children}</h4>,
-  h3: ({ children }) => <h5>{children}</h5>,
-  h4: ({ children }) => <h6>{children}</h6>,
-  // Tables scroll inside their own box rather than widening the turn.
-  table: ({ children }) => (
-    <div className="chat-md-table">
-      <table>{children}</table>
-    </div>
-  ),
-  // <ChatCodeBlock>/<ChatMermaidBlock> are <figure>s that bring their own
-  // <pre>, so the fence's wrapper is dropped and `code` decides the shape.
-  // Block code is decided HERE, at the <pre>, because that node is the only one
-  // that actually says "this is a block". Guessing from the child string instead
-  // — react-markdown >=9 dropped the `inline` prop — misread the commonest shape
-  // of model output: a bare one-line fence holding a single shell command has no
-  // language and no newline, so it rendered as inline <code>, losing its block
-  // styling and its copy button. Indented blocks lost their leading whitespace
-  // for the same reason.
-  pre: ({ children }) => {
-    const child = Array.isArray(children) ? children[0] : children;
-    if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
-      const raw = String(child.props.children ?? "").replace(/\n$/, "");
-      const lang = child.props.className?.replace(/^language-/, "").toLowerCase() ?? "";
+/** Per-fence-language block-code hook. Called with the fence's language tag
+ * (lowercased, no `language-` prefix — empty string for a bare fence) and its
+ * raw code. Return a node to render instead of the default fenced-code/mermaid
+ * handling below, or `undefined` to fall through to it. Not consulted for
+ * inline code (a single backtick span) — only ever for a block fence, since
+ * that is the only shape a caller has needed an override for so far. */
+export type CodeBlockOverride = (lang: string, code: string) => ReactNode | undefined;
+
+function buildComponents(renderCodeBlock?: CodeBlockOverride): Components {
+  return {
+    a: ({ href, children }) => {
+      const safe = safeHref(href);
+      if (!safe) return <span>{children}</span>;
+      return (
+        <a href={safe} target="_blank" rel="noopener noreferrer">
+          {children}
+        </a>
+      );
+    },
+    // Headings are downshifted two levels: a model that opens an answer with `#`
+    // must not take the page's <h1>. Neither digichat /embed nor digithings.ai/chat
+    // has an <h1> of its own on the transcript route, so an un-downshifted h1 from
+    // streamed text becomes the document's top-level heading — a real outline and
+    // screen-reader defect, not a cosmetic one. The renderer this replaced
+    // (digichat-ui's MiniMarkdown) mapped h1→h3, h2→h4, h3→h5, h4→h6; that
+    // behaviour is preserved here rather than dropped.
+    h1: ({ children }) => <h3>{children}</h3>,
+    h2: ({ children }) => <h4>{children}</h4>,
+    h3: ({ children }) => <h5>{children}</h5>,
+    h4: ({ children }) => <h6>{children}</h6>,
+    // Tables scroll inside their own box rather than widening the turn.
+    table: ({ children }) => (
+      <div className="chat-md-table">
+        <table>{children}</table>
+      </div>
+    ),
+    // <ChatCodeBlock>/<ChatMermaidBlock> are <figure>s that bring their own
+    // <pre>, so the fence's wrapper is dropped and `code` decides the shape.
+    // Block code is decided HERE, at the <pre>, because that node is the only one
+    // that actually says "this is a block". Guessing from the child string instead
+    // — react-markdown >=9 dropped the `inline` prop — misread the commonest shape
+    // of model output: a bare one-line fence holding a single shell command has no
+    // language and no newline, so it rendered as inline <code>, losing its block
+    // styling and its copy button. Indented blocks lost their leading whitespace
+    // for the same reason.
+    pre: ({ children }) => {
+      const child = Array.isArray(children) ? children[0] : children;
+      if (isValidElement<{ className?: string; children?: ReactNode }>(child)) {
+        const raw = String(child.props.children ?? "").replace(/\n$/, "");
+        const lang = child.props.className?.replace(/^language-/, "").toLowerCase() ?? "";
+        if (renderCodeBlock) {
+          const overridden = renderCodeBlock(lang, raw);
+          if (overridden !== undefined) return overridden;
+        }
+        if (lang === "mermaid") return <ChatMermaidBlock code={raw} />;
+        return <ChatCodeBlock code={raw} lang={lang || undefined} />;
+      }
+      return <>{children}</>;
+    },
+    // Reached for inline code only; the `pre` branch above consumes block code
+    // without rendering its child. renderCodeBlock is deliberately NOT consulted
+    // here — every caller that has needed it so far (a fenced ```json chart
+    // envelope) only ever appears as a block, and applying it to inline spans
+    // too would risk misfiring on a short inline snippet that happens to share a
+    // language tag.
+    code: ({ className, children }) => {
+      const raw = String(children).replace(/\n$/, "");
+      const lang = className?.replace(/^language-/, "").toLowerCase() ?? "";
       if (lang === "mermaid") return <ChatMermaidBlock code={raw} />;
-      return <ChatCodeBlock code={raw} lang={lang || undefined} />;
-    }
-    return <>{children}</>;
-  },
-  // Reached for inline code only; the `pre` branch above consumes block code
-  // without rendering its child.
-  code: ({ className, children }) => {
-    const raw = String(children).replace(/\n$/, "");
-    const lang = className?.replace(/^language-/, "").toLowerCase() ?? "";
-    if (lang === "mermaid") return <ChatMermaidBlock code={raw} />;
-    if (lang) return <ChatCodeBlock code={raw} lang={lang} />;
-    return <code>{raw}</code>;
-  },
-};
+      if (lang) return <ChatCodeBlock code={raw} lang={lang} />;
+      return <code>{raw}</code>;
+    },
+  };
+}
 
 export type ChatMarkdownSourceProps = {
   /** Markdown source. */
   source: string;
+  /** See {@link CodeBlockOverride}. */
+  renderCodeBlock?: CodeBlockOverride;
 };
 
-export function ChatMarkdownSource({ source }: ChatMarkdownSourceProps) {
+export function ChatMarkdownSource({ source, renderCodeBlock }: ChatMarkdownSourceProps) {
   return (
     <ReactMarkdown
       remarkPlugins={remarkPlugins}
       rehypePlugins={rehypePlugins}
-      components={components}
+      components={buildComponents(renderCodeBlock)}
     >
       {source}
     </ReactMarkdown>
