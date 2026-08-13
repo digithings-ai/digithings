@@ -9,8 +9,6 @@ This folder contains the end-user and administrator manuals for the two applicat
 
 Each manual is a **full reference** written for both everyday users and administrators, using the exact wording that appears in the applications.
 
-> **Keeping these docs in sync with the code:** see **[MAINTENANCE.md](./MAINTENANCE.md)** — it maps every manual section to its source-of-truth files in each repo and gives a repeatable re-sync procedure and verification checklist.
-
 ---
 
 ## The two applications at a glance
