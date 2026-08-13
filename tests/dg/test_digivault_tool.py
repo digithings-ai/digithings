@@ -735,3 +735,153 @@ def test_handle_digivault_get_note_omits_segment_keys_for_whole_documents() -> N
     payload = json.loads(out["content"])
     for key in ("parent_doc", "segment_index", "segment_label"):
         assert key not in payload
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_batch_happy_path() -> None:
+    """vault_paths (plural) fetches several notes in one call. content is
+    {"notes": [...]}, one payload per note, and results/rag_sources carry one entry
+    per note — so a later frontend change can group them, per the design that
+    motivated this: the digichat activity UI groups repeated tool calls by
+    (toolName, query), and every vault_path is a different query, so N separate
+    single-path calls always render as N separate rows no matter what."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    batch_data = {
+        "notes": [
+            {
+                "vault_path": "clients/digithings/arch__p001",
+                "title": "Arch p1",
+                "summary": "",
+                "tags": [],
+                "body_markdown": "page one",
+                "parent_doc": "clients/digithings/arch",
+                "segment_index": 1,
+                "segment_label": "p001",
+            },
+            {
+                "vault_path": "clients/digithings/arch__p002",
+                "title": "Arch p2",
+                "summary": "",
+                "tags": [],
+                "body_markdown": "page two",
+                "parent_doc": "clients/digithings/arch",
+                "segment_index": 2,
+                "segment_label": "p002",
+            },
+        ],
+        "errors": {},
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": batch_data},
+    ) as mock_invoke:
+        out = _handle_digivault_get_note(
+            {"vault_paths": ["clients/digithings/arch__p001", "clients/digithings/arch__p002"]},
+            _ctx(),
+        )
+
+    payload = json.loads(out["content"])
+    assert "errors" not in payload  # empty errors dict must not be forwarded as noise
+    assert [n["vault_path"] for n in payload["notes"]] == [
+        "clients/digithings/arch__p001",
+        "clients/digithings/arch__p002",
+    ]
+    assert payload["notes"][0]["segment_label"] == "p001"
+    assert len(out["results"]) == 2
+    assert len(out["rag_sources"]) == 2
+    # digigraph must forward vault_paths as-is, not collapse it back to vault_path.
+    call_args = mock_invoke.call_args.args[2]
+    assert call_args["vault_paths"] == [
+        "clients/digithings/arch__p001",
+        "clients/digithings/arch__p002",
+    ]
+    assert "vault_path" not in call_args
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_batch_surfaces_partial_errors() -> None:
+    """One bad path in a batch must not hide the notes that DID load — the model
+    needs both the good notes and which path(s) failed, in the same message."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    batch_data = {
+        "notes": [
+            {
+                "vault_path": "clients/digithings/arch__p001",
+                "title": "Arch p1",
+                "summary": "",
+                "tags": [],
+                "body_markdown": "page one",
+            }
+        ],
+        "errors": {
+            "clients/digithings/arch__p999": "note not found: clients/digithings/arch__p999"
+        },
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": batch_data},
+    ):
+        out = _handle_digivault_get_note(
+            {"vault_paths": ["clients/digithings/arch__p001", "clients/digithings/arch__p999"]},
+            _ctx(),
+        )
+
+    payload = json.loads(out["content"])
+    assert len(payload["notes"]) == 1
+    assert payload["errors"] == {
+        "clients/digithings/arch__p999": "note not found: clients/digithings/arch__p999"
+    }
+    assert len(out["results"]) == 1
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_batch_all_paths_failed() -> None:
+    """Every path in the batch missing must still return a readable payload (empty
+    notes, full errors dict), not a bare unhelpful string — the model needs to know
+    WHICH paths failed and why, not just that nothing came back."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    batch_data = {
+        "notes": [],
+        "errors": {"clients/digithings/x": "note not found: clients/digithings/x"},
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": batch_data},
+    ):
+        out = _handle_digivault_get_note({"vault_paths": ["clients/digithings/x"]}, _ctx())
+
+    assert isinstance(out, dict)
+    payload = json.loads(out["content"])
+    assert payload["notes"] == []
+    assert payload["errors"] == {"clients/digithings/x": "note not found: clients/digithings/x"}
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_single_path_ignores_stray_vault_paths_key() -> None:
+    """Regression pin: an absent/empty vault_paths must not accidentally flip a
+    normal single-path call into the batch code path."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    note = {
+        "vault_path": "clients/digithings/arch",
+        "title": "Arch",
+        "summary": "",
+        "tags": [],
+        "body_markdown": "hello",
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": note},
+    ) as mock_invoke:
+        out = _handle_digivault_get_note(
+            {"vault_path": "clients/digithings/arch", "vault_paths": []}, _ctx()
+        )
+
+    payload = json.loads(out["content"])
+    assert payload["vault_path"] == "clients/digithings/arch"
+    assert "notes" not in payload
+    call_args = mock_invoke.call_args.args[2]
+    assert call_args["vault_path"] == "clients/digithings/arch"

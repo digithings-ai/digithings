@@ -2065,6 +2065,22 @@ def run_tools(
         if not tool_calls:
             return content or ""
 
+        if on_tool_step is not None and content:
+            # This round's content already streamed live via on_tool_step("content", ...)
+            # inside _produce_turn, before tool_calls was known — that is unavoidable for
+            # a live per-token stream (buffering the whole round to decide "is this
+            # final" would delay the common single-round, no-tool-call case waiting on
+            # a completion that was never provisional). What was missing is a signal,
+            # emitted the moment tool_calls becomes known, marking that content as NOT
+            # the final answer. Without it, a caller has no way to tell "the model
+            # narrated its plan while also calling tools" apart from "this is the
+            # answer" — confirmed in production (#2306 follow-up): a round's narration
+            # ("I will load the full notes...") streamed as ordinary content and landed
+            # directly in front of the next round's real answer with nothing between
+            # them. Retroactive, not preventive — costs nothing extra token-wise, since
+            # the content already streamed before this fires.
+            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": content})
+
         asst_entries: list[ToolCallDict] = []
         for tc in tool_calls:
             name, args_str = _extract_tool_call(tc)

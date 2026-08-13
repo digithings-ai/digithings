@@ -669,6 +669,79 @@ def test_chat_completion_with_tools_loop() -> None:
     assert executed == [("lookup", {"q": "x"})]
     assert ("tool_call", {"name": "lookup", "arguments": {"q": "x"}}) in steps
     assert any(k == "tool_result" for k, _ in steps)
+    # Round 1 had empty content alongside its tool_calls (the common, well-behaved
+    # case) — no round_boundary fires when there is no narration to mark.
+    assert not any(k == "round_boundary" for k, _ in steps)
+
+
+def test_round_with_content_and_tool_calls_emits_round_boundary() -> None:
+    """#2306 follow-up: a round that narrates its plan WHILE also calling tools
+    ("I will load the full notes...") must be marked as not-final the moment
+    tool_calls is known, or a caller downstream has no way to distinguish that
+    narration from the actual final answer that streams right after it — confirmed
+    in production, where the two concatenated into one visible block with nothing
+    between them."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    responses = [
+        _mock_response("I will load the full notes now.", tool_calls=[tc]),
+        _mock_response("Here is the real answer."),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == "Here is the real answer."
+    boundaries = [p for k, p in steps if k == "round_boundary"]
+    assert len(boundaries) == 1
+    assert boundaries[0] == {"round_idx": 0, "narration": "I will load the full notes now."}
+    # The boundary fires the moment tool_calls is known, BEFORE this round's own
+    # tool_call/tool_result events (those fire later, during dispatch) — so a
+    # consumer reacting to it (e.g. closing the current text segment) sees the
+    # marker before the round's tool activity, not interleaved after it.
+    kinds = [k for k, _ in steps]
+    assert kinds.index("round_boundary") < kinds.index("tool_call")
+
+
+def test_round_boundary_not_emitted_on_the_non_streaming_path_without_content() -> None:
+    """Regression pin for the non-streaming branch specifically (test above already
+    covers it, but this isolates it): tool_calls with NO content must still fire no
+    round_boundary, matching the streaming path's behavior exactly."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+    responses = [_mock_response("", tool_calls=[tc]), _mock_response("done")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+    assert not any(k == "round_boundary" for k, _ in steps)
 
 
 def test_chat_completion_with_tools_parallel_branch() -> None:
@@ -844,6 +917,38 @@ def test_stream_deltas_tool_call_then_final_answer() -> None:
     assert ("tool_call", {"name": "lookup", "arguments": {"q": "x"}}) in seen
     assert any(k == "tool_result" for k, _ in seen)
     assert [p for k, p in seen if k == "content"] == ["final ", "answer"]
+    # This round had no content alongside its tool_calls — no round_boundary to mark.
+    assert not any(k == "round_boundary" for k, _ in seen)
+
+
+def test_stream_deltas_narration_alongside_tool_call_emits_round_boundary() -> None:
+    """Streaming path, mirroring the non-streaming test above: a round that streams
+    real content (narration) fragments alongside its tool_calls must fire
+    round_boundary with the JOINED content once tool_calls is known — not per
+    fragment, and not on the non-streaming path only."""
+    round1 = [
+        _stream_chunk(content="I will "),
+        _stream_chunk(content="load the notes."),
+        _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup", arguments="{}")]),
+    ]
+    round2 = [_stream_chunk(content="Real answer.")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1, round2]
+    seen: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+            stream_deltas=True,
+        )
+    assert out == "Real answer."
+    boundaries = [p for k, p in seen if k == "round_boundary"]
+    assert len(boundaries) == 1
+    assert boundaries[0] == {"round_idx": 0, "narration": "I will load the notes."}
 
 
 def test_stream_deltas_default_false_uses_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
