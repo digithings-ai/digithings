@@ -506,6 +506,24 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
     """
     vault_paths_arg = args.get("vault_paths")
     is_batch = isinstance(vault_paths_arg, list) and len(vault_paths_arg) > 0
+    # A blank/whitespace vault_path is treated as absent everywhere else in this
+    # handler (see the single-path branch below), so it must not count as "also
+    # supplied" here either — only a real second selector triggers the rejection.
+    vault_path_also_supplied = bool(str(args.get("vault_path") or "").strip())
+    if is_batch and vault_path_also_supplied:
+        # CodeRabbit finding (#2327 review): this schema's fallback description
+        # says "Provide exactly one of vault_path or vault_paths" and a comment near
+        # the schema claimed "vault_path vs vault_paths is enforced by the handler"
+        # — but nothing here actually enforced it; a model supplying both silently
+        # got the batch path with vault_path discarded, no error. Supplying both is
+        # far more likely a mistake (which one did the model mean?) than a case
+        # worth silently resolving, so reject it explicitly instead.
+        return json.dumps(
+            {
+                "ok": False,
+                "error": ("Provide exactly one of vault_path or vault_paths, not both."),
+            }
+        )
     if is_batch:
         # Mirror digivault's server-side cap so an oversized batch fails before the
         # HTTP round-trip. digillm also caps the whole tool message
