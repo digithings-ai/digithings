@@ -117,8 +117,14 @@ def check_env_vars() -> bool:
 # digillm in just for this. Empty-completion daily failures since 2026-08-11 (#1633) were
 # this check hard-failing the preflight on a single unretried empty response while the real
 # digillm-routed checks below (3/3b/4, which do retry) passed cleanly every time.
+#
+# _OPENROUTER_PING_TIMEOUT bounds each attempt: the openai SDK otherwise defaults to a
+# 600s request timeout (with its own internal retries on top), which combined with our
+# 4-attempt loop could stall the "fast" preflight check for a very long time on a hung
+# connection rather than a clean empty response.
 _OPENROUTER_PING_RETRY_MAX = 3
 _OPENROUTER_PING_RETRY_DELAY = 5.0
+_OPENROUTER_PING_TIMEOUT = 20.0
 
 
 def check_openrouter(model: str = "openrouter/auto") -> bool:
@@ -133,6 +139,8 @@ def check_openrouter(model: str = "openrouter/auto") -> bool:
         client = OpenAI(
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
+            timeout=_OPENROUTER_PING_TIMEOUT,
+            max_retries=0,  # we own the retry loop below; don't stack SDK retries on top
         )
         t0 = time.monotonic()
         content = ""
