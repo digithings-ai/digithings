@@ -4,12 +4,24 @@ import { useCallback, useState } from "react";
 import {
   BYOK_PROVIDER_LIST,
   byokKeyPrefixError,
-  byokRequiresModel,
+  byokRequiresModel as sharedByokRequiresModel,
   type BYOKProvider,
 } from "@/lib/byok-providers";
 
 export type { BYOKProvider };
-export { BYOK_PROVIDER_LIST, byokRequiresModel };
+export { BYOK_PROVIDER_LIST };
+
+/**
+ * Re-exported with the hook's original narrower signature preserved exactly
+ * (`(provider: BYOKProvider) => boolean`, not the shared module's
+ * `(provider: string) => boolean`) — re-exporting the shared predicate
+ * directly would silently widen this public export's accepted type, so an
+ * unvalidated string typo at a client call site would type-check instead of
+ * being caught at compile time. See #2351 review.
+ */
+export function byokRequiresModel(provider: BYOKProvider): boolean {
+  return sharedByokRequiresModel(provider);
+}
 
 /** Legacy durable keys — purged on load; never written again. */
 export const BYOK_DURABLE_STORAGE_KEYS = [

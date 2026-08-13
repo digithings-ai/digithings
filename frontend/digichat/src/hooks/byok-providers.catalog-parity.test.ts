@@ -8,7 +8,7 @@ import {
   isByokProvider,
   readByokProvider,
   type BYOKProvider,
-} from "./byok-providers";
+} from "@/lib/byok-providers";
 
 type CatalogEntry = {
   id: string;

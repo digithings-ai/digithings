@@ -530,7 +530,8 @@ no runtime code (only `id`/`baseUrl`/`requiresModel` feed
 against `src/lib/byok-providers.ts`'s own catalog (`BYOK_PROVIDER_LIST`,
 `byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`) by two test
 files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,
-plus its own `byokModelPresets`) and `lib/byok-providers.catalog-parity.test.ts`
+plus its own `byokModelPresets`) and its sibling
+`hooks/byok-providers.catalog-parity.test.ts`
 (the shared module itself, which is what `api/chat/route.ts` and
 `api/byok/test/route.ts` import directly) — so either copy drifting from the
 catalog fails a test instead of drifting silently. `api/byok/test/route.ts`
