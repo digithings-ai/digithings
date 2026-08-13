@@ -795,7 +795,8 @@ def test_round_limit_exhausted_emits_signal_and_forces_final_answer() -> None:
     assert signals == [{"max_tool_rounds": 2}]
 
 
-def test_max_tool_rounds_zero_never_emits_round_limit_exhausted() -> None:
+@pytest.mark.parametrize("max_tool_rounds", [0, -1])
+def test_max_tool_rounds_zero_never_emits_round_limit_exhausted(max_tool_rounds: int) -> None:
     """max_tool_rounds=0 (or negative) means the for loop's range() is empty -- zero
     tool rounds ever ran, so there is nothing to have "exhausted." Before the guard,
     run_tools fell through to the post-loop code unconditionally and fired
@@ -807,7 +808,7 @@ def test_max_tool_rounds_zero_never_emits_round_limit_exhausted() -> None:
     # `content` stays "" with `current` unchanged from `messages`, so the
     # forced-completion branch's `len(current) > len(messages)` guard is also False.
     fake_client.chat.completions.create.side_effect = AssertionError(
-        "must not call the model when max_tool_rounds=0"
+        f"must not call the model when max_tool_rounds={max_tool_rounds}"
     )
 
     steps: list[tuple[str, Any]] = []
@@ -818,7 +819,7 @@ def test_max_tool_rounds_zero_never_emits_round_limit_exhausted() -> None:
             [{"role": "user", "content": "go"}],
             tools,
             lambda name, args: "tool-result",
-            max_tool_rounds=0,
+            max_tool_rounds=max_tool_rounds,
             on_tool_step=lambda kind, payload: steps.append((kind, payload)),
         )
 
