@@ -477,10 +477,17 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 
 1. Select provider (arrow keys + Enter, or click) — pre-selected from
    `initialProvider` above when set
-2. Paste API key
+2. Paste API key. For OpenAI, Anthropic, and Gemini this immediately fires
+   `POST /api/byok/test` in the background, before any model is chosen —
+   see "Key-step live model ping" below.
 3. Select model from presets (or custom slug) — for OpenRouter, from a live
-   catalog with tier tabs instead (see below)
-4. `POST /api/byok/test` ping — activation is refused until `ok: true`
+   catalog with tier tabs instead (see below); for OpenAI/Anthropic/Gemini,
+   from the key-step ping's live `models` list once it resolves, falling
+   back to presets while pending, on failure, or on an empty list.
+4. `POST /api/byok/test` ping — activation is refused until `ok: true`. For
+   OpenAI/Anthropic/Gemini this step is skipped: the key-step ping from
+   step 2 is reused directly, so exactly one validation call happens
+   across the whole flow for these three providers.
 5. On success, key is held in-memory for this tab session and sent as
    `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
    requests only. Whether `X-BYOK-Model` is sent at all is driven by
@@ -497,14 +504,21 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
    did (#2351). `api/byok/test/route.ts` also imports this module —
    `readByokProvider` replaces its old `readProvider` (which fell through to
    `"openai"` for any unrecognized value) and `byokKeyPrefixError` replaces
-   its five hand-written prefix `if`-blocks — but that route's own
-   `needsModel` gate (which providers require `X-BYOK-Model` before the test
-   ping) is still a separate hand-written `anthropic`/`gemini`/`xai`
-   OR-chain, not yet wired to `byokRequiresModel`. Closing that one remaining
-   gate is scoped to #2347, which touches the same lines — so today a 6th
-   `requiresModel` provider is safe from a silently-skipped model check on
-   `/api/chat` and every client call site, but not yet on `/api/byok/test`'s
-   pre-flight check.
+   its five hand-written prefix `if`-blocks. That route's own `needsModel`
+   gate (which providers require `X-BYOK-Model` before the test ping runs at
+   all) is deliberately its own hand-written check — `provider === "xai"`
+   only (#2347) — and is **not** derived from `byokRequiresModel`. The two
+   guard different things: `byokRequiresModel(provider)` governs whether a
+   model header must be forwarded on the real `/api/chat` request;
+   `needsModel` here governs only whether the *validation ping* needs a
+   model before it can run at all. They diverge on purpose — none of
+   `testOpenAIKey`, `testAnthropicKey`, `testGeminiKey`, or
+   `testOpenRouterKey` read their own `model` parameter, so requiring one
+   before the ping just delayed a call that would have worked without it;
+   only `testXaiKey` has no live-list call, so x.ai is the one provider that
+   still needs a model up front. Deriving `needsModel` from
+   `byokRequiresModel` instead would reintroduce the exact bug #2347 fixed —
+   the two must stay independent.
 
 For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
 (no key required) as soon as `openrouter` becomes the selected provider, usually
@@ -514,6 +528,25 @@ all / a user-starred "custom" set held only in component state) plus a
 per-entry star toggle. Any fetch failure or non-OpenRouter provider falls back
 to the original flat preset list unchanged — the tiered UI is strictly additive
 and never blocks the flow on network.
+
+For OpenAI, Anthropic, and Gemini, `byok-cli-flow.tsx` fires
+`pingByokKey(key, provider, "", { requireModel: false })` as soon as the
+key step is submitted (`submitKey`), before a model is chosen.
+`requireModel: false` (an option `pingByokKey` gained for this) skips its
+own client-side `validateBYOKModel` pre-check, which would otherwise
+refuse to call the server at all for a model-required provider with no
+model chosen yet — exactly the state at the key step for Anthropic and
+Gemini. The result is cached in `keyPing` state; its `models` array
+(already returned by `testOpenAIKey`/`testAnthropicKey`/`testGeminiKey`,
+unused before #2347) populates the model-step picker in place of
+`byokModelPresets(provider)`, falling back to the presets with no visible
+error whenever the ping hasn't resolved yet, failed, or came back with an
+empty list. When the visitor then picks a model, `runValidateAndActivate`
+reuses `keyPing` directly instead of issuing a second
+`POST /api/byok/test` — exactly one validation call happens across the
+whole flow for these three providers, same as it always was for the
+other providers, just moved earlier. OpenRouter's own prefetch and x.ai's
+fallback-preset-only behavior are unchanged.
 
 The BFF forwards BYOK headers to digigraph for the request lifetime and never
 logs or returns the raw key. `byokActivationGate` + Vitest cover the
