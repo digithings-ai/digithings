@@ -78,6 +78,7 @@ class TestRunDigigraphWorkflow:
         assert result.message
 
 
+@pytest.mark.unit
 def test_invoke_passes_durability_sync() -> None:
     """durability defaults to \"async\" (checkpoint persisted concurrently with the next
     step) — too weak for the DIGI_INTERRUPT_AFTER_RESEARCH breakpoint and the /resume
@@ -90,6 +91,7 @@ def test_invoke_passes_durability_sync() -> None:
     assert kwargs.get("durability") == "sync"
 
 
+@pytest.mark.unit
 def test_via_stream_passes_durability_sync() -> None:
     from digigraph.workflow import run_digigraph_workflow_via_stream
 
@@ -101,6 +103,7 @@ def test_via_stream_passes_durability_sync() -> None:
     assert kwargs.get("durability") == "sync"
 
 
+@pytest.mark.unit
 def test_streaming_passes_durability_sync() -> None:
     from queue import Queue
 
