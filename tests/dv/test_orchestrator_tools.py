@@ -28,10 +28,31 @@ def test_get_note_tool_is_in_the_manifest_with_a_vault_path_argument() -> None:
     params = tool["function"]["parameters"]
     assert "vault_path" in params["properties"]
     assert "path_prefix" in params["properties"]
-    assert params["required"] == ["vault_path", "path_prefix"]
+    # vault_path is deliberately NOT required (a batch call supplies vault_paths
+    # instead, see the batch tests below) — path_prefix alone must still be required.
+    assert params["required"] == ["path_prefix"]
     # The description must tell the model where a vault_path comes from, or it will
     # invent one instead of reading it off a digisearch hit.
     assert "digisearch" in tool["function"]["description"].lower()
+
+
+def test_get_note_tool_has_a_vault_paths_batch_argument() -> None:
+    """#2306 follow-up: several notes in one call, one grouped result instead of N
+    separate ones — the lever the live-testing bug report asked for directly."""
+    tool = next(
+        t
+        for t in build_orchestrator_tool_manifest()
+        if t["function"]["name"] == TOOL_VAULT_GET_NOTE
+    )
+    params = tool["function"]["parameters"]
+    assert params["properties"]["vault_paths"]["type"] == "array"
+    assert params["properties"]["vault_paths"]["items"]["type"] == "string"
+    description = tool["function"]["description"].lower()
+    assert "vault_paths" in description
+    # The old "several calls... one per note" guidance must be gone, not merely
+    # supplemented — leaving it in place alongside the new guidance would leave the
+    # model two contradictory recommendations for the same situation.
+    assert "one per note" not in description
 
 
 def test_get_note_tool_path_prefix_description_does_not_claim_enforced_isolation() -> None:

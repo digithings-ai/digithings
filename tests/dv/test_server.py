@@ -1683,3 +1683,198 @@ def test_by_path_route_is_not_shadowed_by_the_name_route(
     got = client.get("/v1/notes/by-path", headers=auth_headers(scopes=[SCOPE_READ]))
     assert got.status_code == 503
     assert got.json()["error"]["message"] == "DIGIVAULT_ROOT is not configured"
+
+
+# ── digivault_get_note batch (vault_paths) — #2306 follow-up ────────────────────
+def test_orchestrator_invoke_get_note_batch_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """vault_paths fetches several notes in one call, response shape is {"notes": [...],
+    "errors": {}} — distinct from the single-path shape, which stays a bare note dict."""
+    notes_by_path = {
+        "clients/digithings/arch__p001": NoteDetail(
+            vault_path="clients/digithings/arch__p001", title="Arch p1", body_markdown="page one"
+        ),
+        "clients/digithings/arch__p002": NoteDetail(
+            vault_path="clients/digithings/arch__p002", title="Arch p2", body_markdown="page two"
+        ),
+    }
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            return notes_by_path.get(vault_path)
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_paths": [
+                    "clients/digithings/arch__p001",
+                    "clients/digithings/arch__p002",
+                ],
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert resp.data["errors"] == {}
+    got = {n["vault_path"]: n["body_markdown"] for n in resp.data["notes"]}
+    assert got == {
+        "clients/digithings/arch__p001": "page one",
+        "clients/digithings/arch__p002": "page two",
+    }
+
+
+def test_orchestrator_invoke_get_note_batch_partial_failure_keeps_the_good_notes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One bad path in a batch of six must not discard the other five — the model gets
+    what succeeded plus a keyed error for what didn't, and can still answer."""
+    good = NoteDetail(
+        vault_path="clients/digithings/arch__p001", title="Arch p1", body_markdown="ok"
+    )
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            return good if vault_path == "clients/digithings/arch__p001" else None
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_paths": ["clients/digithings/arch__p001", "clients/digithings/arch__p999"],
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert len(resp.data["notes"]) == 1
+    assert resp.data["notes"][0]["vault_path"] == "clients/digithings/arch__p001"
+    assert resp.data["errors"] == {
+        "clients/digithings/arch__p999": "note not found: clients/digithings/arch__p999"
+    }
+
+
+def test_orchestrator_invoke_get_note_batch_enforces_prefix_per_path_not_just_the_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The #2265/#2239/#2298 tenant-scope check must run for EVERY path in a batch, not
+    just get short-circuited after the first one passes — a batch must not become a way
+    to smuggle one cross-corpus path past the boundary the single-path case enforces."""
+    in_scope = NoteDetail(
+        vault_path="clients/digithings/arch__p001", title="P1", body_markdown="ok"
+    )
+
+    class _FakeD1:
+        def get_note(self, vault_path: str) -> NoteDetail:
+            raise AssertionError("must not reach the store for the out-of-scope path")
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    monkeypatch.setattr(
+        server,
+        "_fetch_note_by_path",
+        lambda vault_path, path_prefix, **_kw: (
+            in_scope
+            if vault_path == "clients/digithings/arch__p001"
+            else (_ for _ in ()).throw(HTTPException(status_code=403, detail="out of scope"))
+        ),
+    )
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_paths": [
+                    "clients/digithings/arch__p001",
+                    "clients/online-compliance-center/x",
+                ],
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert len(resp.data["notes"]) == 1
+    assert resp.data["notes"][0]["vault_path"] == "clients/digithings/arch__p001"
+    assert resp.data["errors"] == {"clients/online-compliance-center/x": "out of scope"}
+
+
+def test_orchestrator_invoke_get_note_batch_dedupes_while_preserving_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    note = NoteDetail(vault_path="clients/digithings/arch__p001", title="P1", body_markdown="ok")
+
+    class _FakeD1:
+        calls: list[str] = []
+
+        def get_note(self, vault_path: str) -> NoteDetail | None:
+            _FakeD1.calls.append(vault_path)
+            return note
+
+    monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_paths": [
+                    "clients/digithings/arch__p001",
+                    "clients/digithings/arch__p001",
+                ],
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert len(resp.data["notes"]) == 1
+    assert _FakeD1.calls == ["clients/digithings/arch__p001"]
+
+
+def test_orchestrator_invoke_get_note_batch_empty_list_is_ok_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(prefix: str | None) -> None:
+        raise AssertionError("must not open a store for an empty vault_paths")
+
+    monkeypatch.setattr(server, "_open_d1_store", _boom)
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={"vault_paths": ["   ", ""], "path_prefix": "clients/digithings"},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is False
+    assert resp.error == "vault_paths must contain at least one path"
+
+
+def test_orchestrator_invoke_get_note_single_path_unchanged_when_vault_paths_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression pin: adding vault_paths must not alter the singular vault_path
+    response shape at all — a direct API caller who has never heard of vault_paths
+    must see byte-identical behaviour after this change."""
+    note = NoteDetail(vault_path="clients/digithings/arch", title="Arch", body_markdown="hello")
+    monkeypatch.setattr(
+        server, "_open_d1_store", lambda prefix: SimpleNamespace(get_note=lambda p: note)
+    )
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_get_note",
+            arguments={
+                "vault_path": "clients/digithings/arch",
+                "path_prefix": "clients/digithings",
+            },
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data is not None
+    assert resp.data == note.model_dump(mode="json")
+    assert "notes" not in resp.data
+    assert "errors" not in resp.data

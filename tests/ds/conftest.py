@@ -7,6 +7,13 @@ from collections.abc import Generator
 import digisearch.indexes.backends.vectorize as vectorize_module
 import pytest
 
+#: Cloudflare credential env vars — shared definition in tests.digi_test_env.
+#: Re-export the autouse fixture so it remains active for this suite; rationale
+#: for clearing (host-shell wrangler credentials) is documented there.
+from tests.digi_test_env import (  # noqa: F401
+    clear_cloudflare_credential_env as _clear_cloudflare_credential_env,
+)
+
 
 @pytest.fixture(autouse=True)
 def _reset_default_embedder_singleton() -> Generator[None]:
@@ -30,31 +37,3 @@ def _reset_default_embedder_singleton() -> Generator[None]:
         yield
     finally:
         vectorize_module._default_embedder_singleton = None
-
-
-#: Every name in the CLOUDFLARE_*/VECTORIZE_*/D1_* credential fallback chain
-#: (digisearch.search._stub._first_env, used by `_vectorize_backend`,
-#: `route_add_chunks`, and `server._require_real_search_backend`). Cleared before
-#: every test so a real Cloudflare credential sitting in the host shell
-#: (CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN are wrangler-conventional names,
-#: plausibly already exported for unrelated `wrangler` CLI use on a developer
-#: machine) can never leak into a test that assumes Vectorize is unconfigured --
-#: the #2239 credential rename widened the set of names that activate Vectorize, so
-#: this fixture keeps the existing per-test `monkeypatch.delenv(...)` calls correct
-#: without editing every one of them. Individual tests still opt in with their own
-#: `monkeypatch.setenv`.
-_CLOUDFLARE_CREDENTIAL_ENV_VARS = (
-    "CLOUDFLARE_ACCOUNT_ID",
-    "CLOUDFLARE_API_TOKEN",
-    "VECTORIZE_ACCOUNT_ID",
-    "VECTORIZE_API_TOKEN",
-    "D1_ACCOUNT_ID",
-    "D1_API_TOKEN",
-)
-
-
-@pytest.fixture(autouse=True)
-def _clear_cloudflare_credential_env(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
-    for name in _CLOUDFLARE_CREDENTIAL_ENV_VARS:
-        monkeypatch.delenv(name, raising=False)
-    yield

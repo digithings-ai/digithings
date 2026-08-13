@@ -111,6 +111,11 @@ When `stream: true` in `POST /v1/chat/completions`:
    - `content` — LLM token deltas, HTML-escaped
    - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk (skipped when `X-Suppress-Tool-Stream` is set)
    - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
+     (`tool_call` / `tool_result` / `rag_sources` / `round_boundary`, …). The
+     `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
+     zero-based round number, and `narration` is the assistant text produced that round
+     (with `stream_deltas`, content deltas were already emitted; without streaming,
+     `round_boundary` is the only callback that exposes that narration).
    - `done` — terminates the generator loop
 4. If the client disconnects mid-stream, the generator raises an exception; the background thread continues running until it completes naturally. There is no cancellation token or thread interrupt mechanism — see Section 6 (Security Analysis).
 

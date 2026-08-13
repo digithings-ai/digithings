@@ -112,3 +112,61 @@ def test_zero_hit_tool_result_reaches_browser_as_a_rag_sources_trace() -> None:
     assert payload["tool"] == "digisearch"
     assert payload["hit_count"] == 0
     assert payload["query"] == "jwt"
+
+
+@pytest.mark.unit
+def test_round_boundary_reaches_browser_as_its_own_trace_type() -> None:
+    """#2306 follow-up: run_tools's on_tool_step("round_boundary", ...) — fired the
+    moment a round's tool_calls becomes known, marking that round's already-streamed
+    content as not the final answer — must reach the real stream_callback and come
+    out as a `trace` event of type `round_boundary`, not silently dropped and not
+    conflated with the plain `content` event type.
+
+    This matters because `content` is the ONE event type server.py's
+    _stream_completions_progressive still forwards to a client with
+    suppress_tool_stream=True (digichat always sets this) — `tool_call`/
+    `tool_result`/`reasoning` are all suppressed for that client, and an
+    unrecognized event_type falls through every branch and reaches nothing. `trace`
+    is the only channel left that still reaches such a client, so this fires on
+    that channel specifically (same as code_block/rag_sources above), or the signal
+    never leaves digigraph at all.
+    """
+    queue: Queue = Queue()
+    seen_callback: dict[str, object] = {}
+
+    def fake_stream(initial, config=None, stream_mode=None):
+        seen_callback["cb"] = config["configurable"]["stream_callback"]
+        # Simulate run_tools invoking on_tool_step("round_boundary", ...) after a
+        # round streamed narration content alongside its tool_calls.
+        seen_callback["cb"](
+            "round_boundary",
+            {"round_idx": 1, "narration": "I will load the full notes now."},
+        )
+        return iter(())
+
+    mock_graph = MagicMock()
+    mock_graph.stream.side_effect = fake_stream
+    mock_graph.get_state.return_value = MagicMock(values={})
+
+    with patch("digigraph.workflow.build_workflow_graph", return_value=mock_graph):
+        run_digigraph_workflow_streaming(WorkflowRequest(prompt="occ"), queue)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get())
+
+    boundary_traces = [
+        data
+        for (kind, data) in events
+        if kind == "trace" and isinstance(data, dict) and data.get("type") == "round_boundary"
+    ]
+    assert len(boundary_traces) == 1
+    payload = boundary_traces[0]["payload"]
+    assert payload["round_idx"] == 1
+    assert payload["narration"] == "I will load the full notes now."
+    # The bare, un-wrapped event ALSO still reaches the queue once (the final
+    # unconditional `event_queue.put((event_type, data))`, same as tool_call/
+    # tool_result alongside their own code_block/rag_sources traces above) -- this
+    # is harmless: server.py's SSE loop has no branch matching a raw "round_boundary"
+    # event_type, so it is silently ignored there. What matters is that the WRAPPED
+    # trace event above exists at all.

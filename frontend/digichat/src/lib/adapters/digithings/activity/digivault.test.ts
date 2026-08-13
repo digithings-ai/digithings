@@ -40,6 +40,59 @@ describe("mapDigivaultSearchNotes", () => {
     expect(mapDigivaultSearchNotes({ query: "showcase" })).toBeNull();
   });
 
+  it("preserves digivault_get_note batch errors when notes are absent", () => {
+    expect(
+      mapDigivaultSearchNotes({
+        query: "batch",
+        errors: {
+          "clients/x/missing": "not found",
+          "clients/x/bad": "forbidden",
+        },
+      }),
+    ).toEqual({
+      operation: "execute_tool",
+      status: "failed",
+      label: "digivault errors (2)",
+      toolName: "digivault",
+      query: "batch",
+    });
+  });
+
+  it("keeps successful batch notes alongside partial errors", () => {
+    const span = mapDigivaultSearchNotes({
+      notes: [
+        {
+          vault_path: "clients/digithings/ok",
+          title: "OK",
+          body_markdown: "body",
+        },
+      ],
+      errors: { "clients/digithings/missing": "not found" },
+      query: "batch",
+    });
+    expect(span?.status).toBe("completed");
+    expect(span?.label).toBe("Sources (1 errors)");
+    expect(span?.documents).toEqual([
+      { title: "OK", path: "clients/digithings/ok", snippet: "body" },
+    ]);
+  });
+
+  it("maps notes:[] with only errors as execute_tool failed (not a fake hitCount)", () => {
+    expect(
+      mapDigivaultSearchNotes({
+        notes: [],
+        errors: { "clients/x/missing": "not found" },
+        query: "batch",
+      }),
+    ).toEqual({
+      operation: "execute_tool",
+      status: "failed",
+      label: "digivault errors (1)",
+      toolName: "digivault",
+      query: "batch",
+    });
+  });
+
   it("leaves the successful (non-empty) path byte-identical", () => {
     const payload = {
       query: "showcase",

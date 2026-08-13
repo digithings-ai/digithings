@@ -93,7 +93,8 @@ export function getLiverySnapshot() {
   try {
     const v = localStorage.getItem(KEY);
     // migrate the retired "default" (theme cyan) selection to monochrome
-    return !v || v === "default" ? "mono" : v;
+    if (!v || v === "default") return "mono";
+    return LIVERY_OPTIONS.some((o) => o.id === v) ? v : "mono";
   } catch {
     return "mono";
   }
@@ -104,10 +105,14 @@ export function getLiveryServerSnapshot() {
   return "mono";
 }
 
+/** Allowed livery ids for the pre-paint init script (kept in sync with
+ *  LIVERY_OPTIONS — roadmap / unknown ids fall back to mono). */
+const LIVERY_INIT_IDS = LIVERY_OPTIONS.map((o) => o.id);
+
 /** Pre-paint init: applies the stored livery before first paint (no flash).
- *  Monochrome is the default, so a missing/legacy value resolves to ink.
- *  Mirrors applyLivery()'s --on-accent handling (including
+ *  Monochrome is the default, so a missing/legacy/unsupported value resolves
+ *  to ink. Mirrors applyLivery()'s --on-accent handling (including
  *  isInkCollapsingLivery's mono/atlas/hermes/kairos list — inlined here
  *  since this runs as a raw pre-hydration <script>, not compiled TS) — see
  *  its doc comment. */
-export const liveryInitScript = `(function(){try{var v=localStorage.getItem('${KEY}');if(v==='default')v=null;v=v||'mono';var ink=(v==='mono'||v==='atlas'||v==='hermes'||v==='kairos');var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')');if(ink){el.style.removeProperty('--on-accent')}else{el.style.setProperty('--on-accent','#06110f')}}catch(e){}})();`;
+export const liveryInitScript = `(function(){try{var allowed=${JSON.stringify(LIVERY_INIT_IDS)};var v=localStorage.getItem('${KEY}');if(v==='default')v=null;if(!v||allowed.indexOf(v)<0)v='mono';var ink=(v==='mono'||v==='atlas'||v==='hermes'||v==='kairos');var el=document.documentElement;el.style.setProperty('--accent',v==='mono'?'var(--ink)':'var(--accent-'+v+')');if(ink){el.style.removeProperty('--on-accent')}else{el.style.setProperty('--on-accent','#06110f')}}catch(e){}})();`;

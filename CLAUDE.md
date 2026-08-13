@@ -169,7 +169,83 @@ PR #1891 was rated **Low** at 2 files and +14/−8, and it shipped two false pub
 claims to production. Gate on paths (`digikey/`, brokers, migrations, workflows)
 and on whether behaviour or a public factual claim changed.
 
-## Dependency version bounds
+## Model & subagent policy
+
+Unpinned subagents inherit the orchestrator's model — an unset `model:` under an
+Opus/Fable session silently runs every subagent at that price. Every subagent
+under `agents/sources/subagents/` already pins one; keep doing it:
+
+| Role | Model | Examples |
+|------|-------|----------|
+| Routing, dispatch, dictation cleanup, small/mechanical verification | haiku, or sonnet when the check has any real complexity — pick by task, not by habit | `component-router`, `dictation-normalizer`, a lint/type-check triage pass |
+| Implementation, spec-writing (the heavy lifting) | sonnet | `spec-writer`, `test-first-implementer` |
+| Review, security audit, architecture judgment — reasoning, big-picture opinion, reflection | opus | the `/review` in-session lenses, `pr-review-toolkit` plugin agents |
+| Ad-hoc design/architecture consult ("advisor" role — a second opinion outside a formal review, a judge-panel comparison of approaches) | opus for anything hard-to-reverse or architecturally significant; sonnet default otherwise | a `Plan`/`Explore` agent, an `AskUserQuestion` decision point with real trade-offs, a "which approach is better" comparison |
+
+There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in
+`agents/sources/` — that job already has three owners (Cursor Bugbot, the
+`/review` command's fresh-context lens fan-out, and the `pr-review-toolkit` and
+`superpowers:requesting-code-review` plugin skills), and a fourth would only add
+ambiguity about which one the harness should pick. Route review work through
+one of those instead of adding a new custom subagent for it.
+
+**Two of those three review paths are not actually pinned — check before trusting
+the table above.** `pr-review-toolkit`'s six agents split: `code-reviewer` and
+`code-simplifier` pin `model: opus`, but `comment-analyzer`, `pr-test-analyzer`,
+`silent-failure-hunter`, and `type-design-analyzer` are `model: inherit` — they
+silently ride whatever the session is on, same as an unpinned custom subagent
+would. The `/review` command's lens fan-out has no subagent file to pin at all
+(it dispatches ad hoc via the `Agent` tool at runtime), so its instructions
+explicitly say to pass `model: opus` on each dispatch rather than leaving it
+implicit — check `agents/sources/commands/review.md` before assuming that still
+holds if the command changes. Don't assume a plugin or ad-hoc dispatch is
+pinned just because a custom subagent would be; verify the specific agent file.
+
+**Advisors get the same treatment as review, not the implementation default.**
+A second-opinion/design-consult moment reads like "quick advice," so it's easy to
+let it silently ride the session's tier — but a wrong architectural call costs
+more to unwind than a wrong implementation does, so treat "should I do A or B"
+the same way as a review: name the model explicitly rather than let it default.
+A judge-panel comparison (multiple independent takes scored against each other)
+is exactly the "architecturally significant" case — pin each panelist to opus,
+not whatever the orchestrator happens to be running.
+
+Orchestrator itself: sonnet by default. Reserve opus/fable for the session only
+when the orchestration/decomposition step is the hard part — a hard subagent
+task gets its own opus pin regardless of what the orchestrator runs. This cuts
+both ways: an opus/fable orchestrator does **not** mean its subagents should
+inherit that tier either — most implementation and routing work under an opus
+session should still be pinned down to sonnet/haiku explicitly. "The
+orchestrator is expensive" and "every subagent should be expensive" are
+independent decisions; make each one on its own merits, not by inheritance in
+either direction. Before fanning out more than ~5 subagents in one turn, name
+each one's model out loud; a silent fan-out is how a quota disappears in one
+prompt. Spot-check a subagent's actual model via its transcript
+(`~/.claude/projects/<proj>/<session>/subagents/agent-<id>.jsonl`) after any
+Claude Code upgrade — pins have regressed silently before.
+
+## Context & compaction policy
+
+`.claude/settings.json` sets `autoCompactWindow: 150000` — deliberately tight
+(the allowed range is 100k–1M; unset defaults to a much larger model-tuned
+window). A big context isn't free just because the quota allows it: model
+performance degrades as the window fills, so compacting early is a
+performance choice, not just a cost one. Override per-session with
+`--autocompact` or the `CLAUDE_CODE_AUTO_COMPACT_WINDOW` env var when a task
+genuinely needs more room (e.g. a large migration reading many files at
+once) — don't loosen the committed default for everyone to fix one session.
+
+**Plan compaction points on a long implementation instead of letting it
+happen wherever the window fills.** Before starting multi-step work
+(`/task`, a multi-file migration, a long debugging session), decide up front
+where the natural step boundaries are — after each phase of a plan, after
+each file in a batch, after each subagent's results land — and compact at
+those boundaries deliberately rather than mid-step. Right before compacting,
+write down what the next steps need and nothing else: the specific
+files/lines still to touch, decisions already made and why (not the full
+exploration that led to them), and what's already verified so it isn't
+re-derived. A `TaskUpdate`/todo-list entry or a short note in the turn is
+enough — the goal is that compaction loses exploration, not state.
 
 **Tools whose output gates CI carry an upper bound; runtime libraries do not.**
 
@@ -226,27 +302,9 @@ Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §
 
 Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed).
 
-Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, and `<handle>/<slug>` for a named human contributor. Agent session branches are valid names — `claude/<slug>` pushes fine; it is *linkage*, below, that it does not satisfy.
+Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, and `<handle>/<slug>` for a named human contributor.
 
-The **Check linkage** CI gate (the `Require Fixes` check) is separate from the branch-name rule. It passes on any one of these, in the order `.github/workflows/ci-pr-hygiene.yml` tests them:
-
-1. Head is `develop`, base is `main`, **and the head repo is this repo** — promotion PR; every commit in the range already faced this same gate at its own PR into `develop`, where it either carried linkage or was exempted by rule 3. All three are checked: a `develop`-headed PR into another base is not exempted, and since `head.ref` is the bare branch name in the *head* repository — and every fork inherits a branch named `develop` — a fork's `develop` does not qualify.
-2. Head branch is `module/*` — umbrella PR; the underlying task PRs already carried linkage.
-3. Head branch is `docs/*` or `chore/*` — **bypassed outright**, no issue required. A `CLAUDE.md` tweak or a CI dedupe does not need a backlog item.
-4. Head branch is `task/<N>-slug` — implicit link to issue #N.
-5. A `Fixes/Closes/Resolves #N` keyword appears in the PR **body or title** (either one).
-
-Bypass 1 exists because the same act — promoting `develop` to `main` — got a different verdict depending on how the PR was opened. Of 142 PRs merged into `main`, 50 were promotions opened from a `chore/promote-develop-to-main-*` head and passed automatically via rule 3, while 83 were opened from `develop` directly. Replaying the gate over those 83: **38 failed, 45 passed** — 35 of the 45 by a deliberate standalone `Fixes #N` line and 10 by a keyword that merely appeared somewhere in the prose. So the gate was not blind to promotions; it was inconsistent about them, and a bare `develop` head was the case it had no rule for.
-
-Nothing was ever blocked by this: `Require Fixes` is not a required check on `main` (only `Every commit reaching main was reviewed` is). The cost was a red X on the repo's highest-stakes PR that carried no information, which teaches everyone to ignore it.
-
-Two things this bypass does **not** claim. It does not claim every promoted commit carries an issue link — rule 3 exempts `docs/*` and `chore/*` outright, so `develop` genuinely does accumulate unlinked commits, and they reach `main`. And it does not borrow authority from `ci-review-coverage.yml`: that gate asserts every commit was *reviewed*, which is a different invariant from linkage and cannot stand in for it. The bypass rests only on the narrower claim that each commit already received this gate's own verdict at its own PR.
-
-Not covered: `develop` → `module/*` sync PRs, which fail the gate for the same structural reason. Use the `chore/sync-*` head that the branching section already prescribes — it clears via rule 3.
-
-Note a `Fixes #N` on a promotion never auto-closed anything either: GitHub auto-closes only on merge into the default branch, and this repo's default is `develop`, not `main`.
-
-So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that still need an explicit keyword — as are the agent namespaces (`claude/<slug>` et al.), which no rule bypasses. Prefer `task/<N>-slug` for issue-linked work, and never `Closes #N` against an umbrella tracking issue you don't want auto-closed — use `Refs #N` when the PR should not close the issue, which satisfies no gate on its own and so pairs with a `docs/`, `chore/`, or `task/` branch.
+**Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 
 ## Liveness vs status
 

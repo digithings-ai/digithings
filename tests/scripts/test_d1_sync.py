@@ -186,9 +186,9 @@ def test_publish_normalises_vault_paths_and_extracts_segment_columns() -> None:
         },
         body="body text",
     )
-    assert params[0] == "clients/x/doc__p013"  # .md stripped
-    assert params[8] == "doc"  # parent_doc column
-    assert params[9] == 13  # segment_index column
+    assert params[_column_index("vault_path")] == "clients/x/doc__p013"  # .md stripped
+    assert params[_column_index("parent_doc")] == "doc"
+    assert params[_column_index("segment_index")] == 13
 
 
 # --- chunk_statements: batch size is derived from column count, not hardcoded ------
@@ -302,7 +302,7 @@ def test_row_params_serializes_non_json_frontmatter_values_defensively() -> None
     params = row_params(
         vault_path="x/a", title="A", frontmatter={"weird": datetime.date(2026, 8, 1)}, body="b"
     )
-    frontmatter_json = params[5]
+    frontmatter_json = params[_column_index("frontmatter")]
     assert json.loads(frontmatter_json) == {"weird": "2026-08-01"}
 
 
@@ -347,7 +347,10 @@ def test_read_vault_derives_summary_and_wikilinks_from_body(tmp_path: Path) -> N
     rows = _read_vault(tmp_path, "clients/x")
 
     assert len(rows) == 1
-    summary, wikilinks = rows[0][3], json.loads(rows[0][7])
+    summary, wikilinks = (
+        rows[0][_column_index("summary")],
+        json.loads(rows[0][_column_index("wikilinks")]),
+    )
     assert summary == "The tagline."
     assert wikilinks == ["b", "c"]
 
@@ -361,14 +364,14 @@ def test_row_params_normalizes_string_form_tags() -> None:
     Must go through ``_normalize_tags`` instead, the same normalization ``Vault``
     itself applies to frontmatter tags."""
     params = row_params(vault_path="x/a", title="t", frontmatter={"tags": "arch, graph"}, body="b")
-    assert json.loads(params[6]) == ["arch", "graph"]
+    assert json.loads(params[_column_index("tags")]) == ["arch", "graph"]
 
 
 def test_row_params_strips_hash_prefixed_list_tags() -> None:
     params = row_params(
         vault_path="x/a", title="t", frontmatter={"tags": ["#arch", "graph"]}, body="b"
     )
-    assert json.loads(params[6]) == ["arch", "graph"]
+    assert json.loads(params[_column_index("tags")]) == ["arch", "graph"]
 
 
 def test_dry_run_makes_zero_d1_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -858,6 +861,14 @@ def test_search_survives_a_resync_even_when_the_fts_rebuild_fails(
 
 
 # --- #2239 review, Minor M2: PARAMS_PER_ROW has nothing tying it to the schema -----
+
+
+def _column_index(name: str) -> int:
+    """Index of ``name`` in UPSERT_PREFIX's column list (ground truth for row_params)."""
+    match = re.search(r"\((.*?)\)", UPSERT_PREFIX)
+    assert match is not None, f"no column list found in {UPSERT_PREFIX!r}"
+    cols = [c.strip() for c in match.group(1).split(",")]
+    return cols.index(name)
 
 
 def _upsert_prefix_column_count(prefix: str) -> int:

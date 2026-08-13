@@ -243,10 +243,12 @@ def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[st
             "function": {
                 "name": "digivault_get_note",
                 "description": (
-                    "Load one vault note in full, instead of reasoning from its excerpt. "
-                    "The vault_path argument is copied from a prior digivault_search_notes "
-                    "hit's doc_id field (that hit's JSON has no field literally named "
-                    "vault_path). Do not use a digisearch hit's doc_id here — digisearch's "
+                    "Load one or more vault notes in full, instead of reasoning from "
+                    "excerpts. For a single note, pass vault_path copied from a prior "
+                    "digivault_search_notes hit's doc_id field (that hit's JSON has no "
+                    "field literally named vault_path). For several notes at once, pass "
+                    "vault_paths (array) instead — prefer that over repeated single-path "
+                    "calls. Do not use a digisearch hit's doc_id here — digisearch's "
                     "doc_id is a repo path, not a vault path, and this tool will refuse or "
                     "404 on it. D1-only: requires DIGIVAULT_URL, POST /v1/orchestrator_tools, "
                     "and a D1-backed digivault deployment."
@@ -259,12 +261,24 @@ def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[st
                             "description": (
                                 "Copy this from a digivault_search_notes hit's doc_id "
                                 "field — not from a digisearch hit's doc_id, which is a "
-                                "repo path this tool cannot load."
+                                "repo path this tool cannot load. Use vault_paths instead "
+                                "when loading more than one note."
+                            ),
+                        },
+                        "vault_paths": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Load several notes in one call (same path rules as "
+                                "vault_path). Prefer over repeated single-path calls. "
+                                "Provide exactly one of vault_path or vault_paths."
                             ),
                         },
                         "path_prefix": {"type": "string"},
                     },
-                    "required": ["vault_path", "path_prefix"],
+                    # Match the live digivault manifest: path_prefix required;
+                    # vault_path vs vault_paths is enforced by the handler.
+                    "required": ["path_prefix"],
                 },
             },
         }
@@ -445,18 +459,97 @@ def _mark_truncated_excerpts(
     )
 
 
+def _note_to_result_and_payload(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Convert one digivault note dict into (result-for-citations, payload-for-llm).
+
+    Shared by the single-path and batch branches of _handle_digivault_get_note so the
+    two response shapes stay in lockstep rather than drifting into two hand-maintained
+    copies of the same field list.
+    """
+    result = {
+        "content": data.get("body_markdown", ""),
+        "score": None,
+        "doc_id": data.get("vault_path"),
+        "metadata": {"title": data.get("title"), "tags": data.get("tags")},
+    }
+    payload_for_llm = {
+        "vault_path": data.get("vault_path"),
+        "title": data.get("title"),
+        "summary": data.get("summary"),
+        "tags": data.get("tags"),
+        "body_markdown": data.get("body_markdown"),
+    }
+    # Segment identity (#2306). Most of this corpus is not whole documents: 1190 of 1279
+    # digithings notes and 300 of 328 OCC notes are one page or section of a larger
+    # source, so "load the whole note" routinely hands the model one page of forty with
+    # nothing saying so. That is the same wrong-answer shape as the excerpt bug one layer
+    # down — a table continuing onto the next page reads as a complete table — and it is
+    # also what makes the tool description's "search for the neighbouring page" rule
+    # actionable. Emitted only when present, so a whole-document note is unchanged.
+    for key in ("parent_doc", "segment_index", "segment_label"):
+        value = data.get(key)
+        if value is not None:
+            payload_for_llm[key] = value
+    return result, payload_for_llm
+
+
 def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> str | dict[str, Any]:
-    """Load one vault note in full by vault_path (the locate-then-load follow-up to
-    digivault_search_notes, which only returns a short excerpt per hit)."""
-    vault_path = args.get("vault_path", "")
-    if not vault_path or not str(vault_path).strip():
-        return "vault_path is required."
+    """Load one or more vault notes in full (the locate-then-load follow-up to
+    digivault_search_notes, which only returns a short excerpt per hit).
+
+    Batch support (#2306 follow-up): vault_paths (plural) fetches several notes in one
+    call — one activity row in digichat instead of N, since the UI groups repeated tool
+    calls by (tool, query) and every vault_path is a different query. vault_path
+    (singular) keeps its original request/response shape completely unchanged; only a
+    caller that sends vault_paths gets the new {"notes": [...], "errors": {...}}
+    payload shape, so nothing here can regress an existing single-path caller.
+    """
+    vault_paths_arg = args.get("vault_paths")
+    is_batch = isinstance(vault_paths_arg, list) and len(vault_paths_arg) > 0
+    # A blank/whitespace vault_path is treated as absent everywhere else in this
+    # handler (see the single-path branch below), so it must not count as "also
+    # supplied" here either — only a real second selector triggers the rejection.
+    vault_path_also_supplied = bool(str(args.get("vault_path") or "").strip())
+    if is_batch and vault_path_also_supplied:
+        # CodeRabbit finding (#2327 review): this schema's fallback description
+        # says "Provide exactly one of vault_path or vault_paths" and a comment near
+        # the schema claimed "vault_path vs vault_paths is enforced by the handler"
+        # — but nothing here actually enforced it; a model supplying both silently
+        # got the batch path with vault_path discarded, no error. Supplying both is
+        # far more likely a mistake (which one did the model mean?) than a case
+        # worth silently resolving, so reject it explicitly instead.
+        return json.dumps(
+            {
+                "ok": False,
+                "error": ("Provide exactly one of vault_path or vault_paths, not both."),
+            }
+        )
+    if is_batch:
+        # Mirror digivault's server-side cap so an oversized batch fails before the
+        # HTTP round-trip. digillm also caps the whole tool message
+        # (DIGI_TOOL_MESSAGE_MAX_CHARS, default 12000) for the LLM — that limit
+        # applies to the serialized batch as one tool result, not per note.
+        if len(vault_paths_arg) > 20:
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": (
+                        f"vault_paths exceeds maximum batch size of 20 (got {len(vault_paths_arg)})"
+                    ),
+                }
+            )
+    else:
+        vault_path = args.get("vault_path", "")
+        if not vault_path or not str(vault_path).strip():
+            return "vault_path is required."
     args_eff = dict(args)
     # Security: overwrite unconditionally, never default-if-missing. A model that
     # supplies its own path_prefix must not be able to select another tenant's corpus.
     # If context has no prefix (unmapped tenant slug), this passes None through — we do
     # not fall back to an unscoped read; digivault's own handler refuses that with
-    # ok=False rather than serving the whole vault.
+    # ok=False rather than serving the whole vault. Applies identically to every path
+    # in a batch call — digivault's own handler loops the same per-path enforcement,
+    # not just the first path.
     args_eff["path_prefix"] = context.vault_path_prefix
     try:
         inv = invoke_digivault_tool(
@@ -501,34 +594,41 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
     data = inv.get("data")
     if not isinstance(data, dict):
         return "Note not found."
-    result = {
-        "content": data.get("body_markdown", ""),
-        "score": None,
-        "doc_id": data.get("vault_path"),
-        "metadata": {"title": data.get("title"), "tags": data.get("tags")},
-    }
-    payload_for_llm = {
-        "vault_path": data.get("vault_path"),
-        "title": data.get("title"),
-        "summary": data.get("summary"),
-        "tags": data.get("tags"),
-        "body_markdown": data.get("body_markdown"),
-    }
-    # Segment identity (#2306). Most of this corpus is not whole documents: 1190 of 1279
-    # digithings notes and 300 of 328 OCC notes are one page or section of a larger
-    # source, so "load the whole note" routinely hands the model one page of forty with
-    # nothing saying so. That is the same wrong-answer shape as the excerpt bug one layer
-    # down — a table continuing onto the next page reads as a complete table — and it is
-    # also what makes the tool description's "search for the neighbouring page" rule
-    # actionable. Emitted only when present, so a whole-document note is unchanged.
-    for key in ("parent_doc", "segment_index", "segment_label"):
-        value = data.get(key)
-        if value is not None:
-            payload_for_llm[key] = value
+
+    if not is_batch:
+        result, payload_for_llm = _note_to_result_and_payload(data)
+        return {
+            "content": json.dumps(payload_for_llm),
+            "results": [result],
+            "rag_sources": rag_sources_from_results([result]),
+        }
+
+    # Batch: digivault's response shape here is {"notes": [...], "errors": {...}} —
+    # see the server-side TOOL_VAULT_GET_NOTE branch. A partial failure (some paths
+    # found, some not) still has ok=True at the digivault layer, since it's the
+    # model's own input at fault for the failed paths, not an infra error — so a
+    # non-empty errors dict alone must not be mistaken for the whole call failing.
+    notes = data.get("notes")
+    errors = data.get("errors") or {}
+    if not isinstance(notes, list):
+        return "Note not found."
+    results: list[dict[str, Any]] = []
+    payloads: list[dict[str, Any]] = []
+    for note_data in notes:
+        if not isinstance(note_data, dict):
+            continue
+        result, payload_for_llm = _note_to_result_and_payload(note_data)
+        results.append(result)
+        payloads.append(payload_for_llm)
+    if not results and not errors:
+        return "Note not found."
+    content: dict[str, Any] = {"notes": payloads}
+    if errors:
+        content["errors"] = errors
     return {
-        "content": json.dumps(payload_for_llm),
-        "results": [result],
-        "rag_sources": rag_sources_from_results([result]),
+        "content": json.dumps(content),
+        "results": results,
+        "rag_sources": rag_sources_from_results(results),
     }
 
 

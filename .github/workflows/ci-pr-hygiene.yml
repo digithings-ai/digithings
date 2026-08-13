@@ -1,12 +1,19 @@
 name: "CI: PR hygiene"
 
-# Lightweight PR gates: issue linkage (every PR) + agent-task TSV coverage (path-gated).
-# One workflow dispatch instead of separate pr-linkage + project-fields-coverage runs.
-# TSV coverage also runs on schedule to catch gaps outside PRs.
+# Agent-task TSV coverage (path-gated), on schedule and PR.
+#
+# The issue-linkage check ("Require Fixes #N or task/N-* branch") that used to
+# live here was removed 2026-08 (docs/adr/0024-drop-pr-linkage-enforcement.md):
+# it was never a required status check on main or develop, so a failure never
+# blocked a merge, yet it still cost a CI run per PR and produced real rework
+# when it failed on PRs that merged anyway regardless (#2227, #2296). Linking a
+# PR to an issue (task/<N>-slug branch, or `Fixes #N` in the body) remains the
+# convention — see CLAUDE.md's Branching model section — it's just no longer
+# machine-enforced.
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC daily
   workflow_dispatch:
@@ -17,87 +24,9 @@ concurrency:
 
 permissions:
   contents: read
-  issues: read
   pull-requests: read
 
 jobs:
-  check-linkage:
-    name: Require Fixes #N or task/N-* branch
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check linkage
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
-          PR_BASE: ${{ github.event.pull_request.base.ref }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          THIS_REPO: ${{ github.repository }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          set -euo pipefail
-
-          # Bypass: develop -> main is a promotion PR. A promotion re-delivers
-          # commits that already faced THIS gate at their own PR into develop —
-          # each one either carried linkage or was explicitly exempted here (a
-          # docs/* or chore/* head needs no issue). So re-asking at the
-          # promotion tier cannot add information; it can only ask the promotion
-          # author to invent a keyword. Note this is a linkage claim only:
-          # whether those commits were *reviewed* is a different invariant,
-          # asserted separately by ci-review-coverage.yml.
-          #
-          # Three things are checked, not one. head.ref is the bare branch name
-          # in the HEAD repository and every fork inherits a branch named
-          # develop, so the head repo is verified too; and the base is verified
-          # so a develop-headed PR into some other base is not exempted.
-          if [[ "${PR_BRANCH:-}" == "develop" && "${PR_BASE:-}" == "main" \
-                && -n "${THIS_REPO:-}" && "${PR_HEAD_REPO:-}" == "${THIS_REPO}" ]]; then
-            echo "OK — promotion PR (develop -> main); each commit already faced this gate at its own PR"
-            exit 0
-          fi
-
-          # Bypass: module/<component> -> develop is an umbrella PR; the
-          # underlying task PRs already carried individual issue linkage,
-          # so requiring Fixes #N on the roll-up is redundant.
-          if [[ "$PR_BRANCH" =~ ^module/ ]]; then
-            echo "OK — module umbrella PR ($PR_BRANCH); underlying task PRs carry issue linkage"
-            exit 0
-          fi
-
-          # Bypass: docs/* and chore/* are process/maintenance changes with no
-          # behavior impact — don't force a backlog issue for a CLAUDE.md tweak
-          # or a CI workflow dedupe.
-          if [[ "$PR_BRANCH" =~ ^(docs|chore)/ ]]; then
-            echo "OK — docs/chore branch ($PR_BRANCH); no issue required"
-            exit 0
-          fi
-
-          # Implicit link: task/<N>-<slug> branch.
-          if [[ "$PR_BRANCH" =~ ^task/([0-9]+)- ]]; then
-            echo "OK — branch '$PR_BRANCH' implicitly links to issue #${BASH_REMATCH[1]}"
-            exit 0
-          fi
-
-          # Explicit link: Fixes/Closes/Resolves #N in body or title.
-          haystack=$'\n'"${PR_BODY:-}"$'\n'"${PR_TITLE:-}"
-          if printf '%s' "$haystack" | grep -Eqi '(^|[^[:alnum:]_])(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
-            echo "OK — PR references an issue via Fixes/Closes/Resolves keyword"
-            exit 0
-          fi
-
-          cat <<MSG >&2
-          ❌ This PR is not linked to an issue.
-
-          Link it one of two ways:
-            • Use a branch named  task/<N>-<slug>   (recommended; created by 'make task ISSUE=N')
-            • Add a line to the PR body:  Fixes #<N>   (or 'Closes #N' / 'Resolves #N')
-
-          Rationale: every code change must trace back to a backlog item on the
-          GitHub Project board. See docs/agents/AGENT_WORKFLOW.md.
-          MSG
-          exit 1
-
   path-filter:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

@@ -69,6 +69,12 @@ export type ActivitySpan = {
    */
   documentsWithheld?: boolean;
   brief?: ActivityBrief;
+  /**
+   * Upstream hit count when source mapping yielded no documents (e.g. digisearch
+   * returned sources without usable path/title). Used only when `documents` is
+   * empty so a positive search is not misreported as "no hits".
+   */
+  hitCount?: number;
 };
 
 const OPERATIONS = ["execute_tool", "retrieve", "chat"] as const;
@@ -191,6 +197,14 @@ export function sanitizeActivitySpan(input: unknown): ActivitySpan | null {
 
   const documentsWithheld = bool(record.documentsWithheld);
   if (documentsWithheld) span.documentsWithheld = documentsWithheld;
+
+  if (
+    typeof record.hitCount === "number" &&
+    Number.isFinite(record.hitCount) &&
+    record.hitCount > 0
+  ) {
+    span.hitCount = Math.trunc(record.hitCount);
+  }
 
   return span;
 }
@@ -347,18 +361,50 @@ export function toDigiChatActivity(
       const query = span.query ?? pendingQuery;
       const hits = span.documents ?? [];
       const key = toolKey(name, query);
+      // Failed retrieve must never fall through to hitCount-as-success —
+      // digivault all-error batches previously set status=failed with
+      // hitCount=errorCount and rendered as N successful hits.
+      if (span.status === "failed") {
+        const failResult: DigiChatActivity = {
+          kind: "status",
+          message: query ? `Search for "${query}" failed.` : "Search failed.",
+        };
+        const failIdx = toolRows.get(key);
+        const pending = pendingRow.get(name);
+        pendingRow.delete(name);
+        completedTools.delete(key);
+        failedTools.add(key);
+        if (failIdx !== undefined) {
+          rows[failIdx] = failResult;
+        } else if (pending !== undefined) {
+          rows[pending] = failResult;
+          toolRows.set(key, pending);
+        } else {
+          rows.push(failResult);
+          toolRows.set(key, rows.length - 1);
+        }
+        continue;
+      }
       // `labels` detail: applyActivityDetail already stripped the documents
       // server-side, but a retrieve span is only ever emitted when the search
       // genuinely found something (see the providers) — so hits: [] here
       // would misreport a real result as "no hits" (the shared UI renders
       // count === 0 as the literal string `no hits for "…"`). Render an
       // honest "search happened" status row instead of a fabricated count.
+      // When mapping dropped every source but upstream hit_count was positive,
+      // prefer that count over documents.length so the UI does not say "no hits".
+      const count =
+        hits.length > 0
+          ? hits.length
+          : typeof span.hitCount === "number" && span.hitCount > 0
+            ? span.hitCount
+            : 0;
       const result: DigiChatActivity = span.documentsWithheld
         ? {
             kind: "status",
             message: query ? `Found results for "${query}".` : "Search completed.",
           }
-        : { kind: "tool_result", name, query, hits, count: hits.length };
+        : { kind: "tool_result", name, query, hits, count };
       const idx = toolRows.get(key);
       if (idx !== undefined) {
         const existing = rows[idx];
@@ -375,7 +421,16 @@ export function toDigiChatActivity(
               seenPaths.add(hit.path);
             }
           }
-          rows[idx] = { ...result, hits: mergedHits, count: mergedHits.length };
+          // CodeRabbit finding (#2327 review): mergedHits.length is 0 whenever
+          // both sides are hitCount-only spans (no structured hits at all, e.g.
+          // repeated digivault_get_note rounds) — unconditionally using it here
+          // silently dropped a genuinely positive count to 0, exactly the
+          // "no hits" misreport documentsWithheld exists elsewhere to prevent.
+          // Prefer mergedHits.length once real hits exist; otherwise carry
+          // forward whichever side had a positive hitCount-derived count.
+          const mergedCount =
+            mergedHits.length > 0 ? mergedHits.length : Math.max(existing.count, result.count);
+          rows[idx] = { ...result, hits: mergedHits, count: mergedCount };
         } else {
           rows[idx] = result;
         }

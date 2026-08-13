@@ -52,9 +52,11 @@ sync landed before traffic depends on it.
 ## 0. Prerequisites for running the sync script locally
 
 **Source: Cloudflare D1, not Supabase (#2239).** `scripts/vectorize_sync.py` reads
-notes from D1 via `scripts/d1_sync.py`'s `D1Store.list_notes()` — the notes and the
-vectors have to describe the same corpus, so `--database` must be the **same** D1
-database `d1_sync.py --prefix <p>` published that prefix into. `CORE_SUPABASE_*` is
+notes from D1 via `D1Store.list_notes()` defined in
+`digivault/src/digivault/d1_store.py` (imported directly — not from
+`scripts/d1_sync.py`) — the notes and the vectors have to describe the same
+corpus, so `--database` must be the **same** D1 database
+`d1_sync.py --prefix <p>` published that prefix into. `CORE_SUPABASE_*` is
 not read anywhere on this path any more.
 
 `scripts/vectorize_sync.py` also imports `digivault`, which is not on `sys.path`

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 
@@ -21,11 +21,11 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  * build served without Cloudflare in front of it.
  *
  * Rendering with no literal mailto: string or bare address in the initial
- * HTML at all — an inert `href="#"` server-side, the real href (and,
- * for `showAddress`, the address text) assigned after mount — gives
- * Cloudflare's rewriter nothing to rewrite, so server and client agree.
- * Real users with JS still get a working mailto: link; without JS the link
- * is inert, the same tradeoff any client-only-assigned href accepts.
+ * HTML at all — no href server-side, the real href (and, for `showAddress`,
+ * the address text) assigned after client mount — gives Cloudflare's rewriter
+ * nothing to rewrite, so server and client agree. Real users with JS still
+ * get a working mailto: link; without JS the link is inert, the same
+ * tradeoff any client-only-assigned href accepts.
  *
  * `showAddress` callers must still pass `children` — a non-address fallback
  * ("Email us", "us", …) that server-renders as the link's visible text and
@@ -34,16 +34,9 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  * empty and unlabeled until JS runs — a discernible-text regression, not
  * the documented "inert without JS" tradeoff above.
  *
- * WCAG 1 fix (full-UI-suite critique, digithings-web target): the inert
- * pre-mount state looked IDENTICAL to a working link — a click before the
- * effect below runs (slow connection, or permanently for a no-JS visitor)
- * silently jumped to "#", on the page's only conversion mechanism (every
- * "Email us"/"Enterprise"/"Or email us directly" CTA routes through this
- * component). The pending look (dimmed, aria-disabled) is baked into the
- * JSX unconditionally, in token-backed Tailwind utilities, and cleared by
- * mutating the mounted DOM node directly in the same effect that already
- * assigns the real href two lines below — the same pattern already applied
- * to frontend/digiquant-web's copy of this component, PR #2283.
+ * Pending look (dimmed, aria-disabled) is derived from a hydration-safe
+ * client mount flag (`useSyncExternalStore`) so className / aria-disabled
+ * stay synchronized with click prevention without setState-in-effect.
  */
 
 /** Pure so the query-string assembly is unit-testable without rendering. */
@@ -56,6 +49,8 @@ export function buildMailtoHref(email: string, subject?: string): string {
 // the frontend canon guard's family census (#1421) rejects a new class in a
 // census app's stylesheet; token-backed Tailwind utilities are not scanned.
 const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
+
+const emptySubscribe = () => () => {};
 
 export function ContactMailto({
   subject,
@@ -77,34 +72,34 @@ export function ContactMailto({
   showAddress?: boolean;
   children?: ReactNode;
 }) {
-  const ref = useRef<HTMLAnchorElement>(null);
+  // Server + first client hydration pass: false. After hydration: true.
+  // Prefer this over setState-in-effect (react-hooks/set-state-in-effect).
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.href = buildMailtoHref(DT_CONTACT_EMAIL, subject);
-    if (showAddress) el.textContent = DT_CONTACT_EMAIL;
-    el.classList.remove(...PENDING_CLASSES);
-    el.removeAttribute("aria-disabled");
-  }, [subject, showAddress]);
+  const readyHref = mounted ? buildMailtoHref(DT_CONTACT_EMAIL, subject) : null;
+  const addressText = mounted && showAddress ? DT_CONTACT_EMAIL : null;
+  const pending = !mounted;
 
-  // Reads the live DOM rather than component state, so it keeps swallowing
-  // clicks exactly until the effect above clears aria-disabled -- no state
-  // to fall out of sync with the imperative DOM mutation.
-  const onClick = useCallback((e: MouseEvent<HTMLAnchorElement>) => {
-    if (ref.current?.getAttribute("aria-disabled") === "true") e.preventDefault();
-  }, []);
+  const onClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      if (pending) e.preventDefault();
+    },
+    [pending],
+  );
 
   return (
     <a
-      ref={ref}
-      href="#"
-      className={[className, ...PENDING_CLASSES].filter(Boolean).join(" ")}
+      {...(readyHref ? { href: readyHref } : {})}
+      className={[className, ...(pending ? PENDING_CLASSES : [])].filter(Boolean).join(" ")}
       aria-label={ariaLabel}
-      aria-disabled="true"
+      aria-disabled={pending ? true : undefined}
       onClick={onClick}
     >
-      {children}
+      {addressText ?? children}
     </a>
   );
 }

@@ -34,7 +34,7 @@ Shipped and in active use:
 - Per-component `AGENTS.md` plus a root onboarding doc
 - Generated `.mcp.json` for the team's existing tools (Jira, Linear, Slack, Notion, Supabase, GitLab, GitHub Issues)
 - Conventional-commit enforcement and worktree-per-task isolation
-- Bundled subagents and skills (spec-writer, pr-reviewer, finish-task, triage, and more)
+- Bundled subagents and skills (spec-writer, component-router, finish-task, triage, and more) — deliberately no bundled PR-review subagent; that's left to the harness's own review tooling (Bugbot, an in-session fan-out, or a review plugin) to avoid competing review paths
 - An install wizard plus an interactive `AI_SETUP.md` walkthrough
 
 ## Capabilities — 12-month roadmap
