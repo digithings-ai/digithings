@@ -1991,9 +1991,12 @@ def run_tools(
         on_tool_step: Optional callback invoked with ``("tool_call", {name,
             arguments})`` before each call and ``("tool_result", {name, content,
             ...})`` after. Also receives ``("round_boundary", {round_idx,
-            narration})`` at the end of each tool round — consumers may handle or
-            ignore it. With ``stream_deltas`` enabled, narration content deltas
-            were already emitted before ``round_boundary``; without streaming,
+            narration})`` after each tool round that produced non-empty assistant
+            narration — consumers may handle or ignore it. Tool-only rounds
+            (empty narration) deliberately skip this event so callbacks stay
+            ordered ``tool_call`` → ``tool_result`` without a vacuous boundary.
+            With ``stream_deltas`` enabled, narration content deltas were already
+            emitted before ``round_boundary``; without streaming,
             ``round_boundary`` is the only callback that exposes that narration.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
@@ -2069,13 +2072,24 @@ def run_tools(
         if not tool_calls:
             return content or ""
 
-        if on_tool_step is not None:
-            # Always emit round_boundary once tool_calls are known — including when
-            # narration is empty — so consumers get one boundary per tool round as
-            # the docstring promises. Content may already have streamed live via
-            # on_tool_step("content", ...) inside _produce_turn; this marks that
-            # stream as NOT the final answer (#2306 follow-up). Empty narration is
-            # still a real boundary (tool-only round).
+        if on_tool_step is not None and content:
+            # This round's content already streamed live via on_tool_step("content", ...)
+            # inside _produce_turn, before tool_calls was known — that is unavoidable for
+            # a live per-token stream (buffering the whole round to decide "is this
+            # final" would delay the common single-round, no-tool-call case waiting on
+            # a completion that was never provisional). What was missing is a signal,
+            # emitted the moment tool_calls becomes known, marking that content as NOT
+            # the final answer. Without it, a caller has no way to tell "the model
+            # narrated its plan while also calling tools" apart from "this is the
+            # answer" — confirmed in production (#2306 follow-up): a round's narration
+            # ("I will load the full notes...") streamed as ordinary content and landed
+            # directly in front of the next round's real answer with nothing between
+            # them. Retroactive, not preventive — costs nothing extra token-wise, since
+            # the content already streamed before this fires.
+            #
+            # Empty-narration tool rounds deliberately skip this callback: there is no
+            # streamed content to demote, and emitting a vacuous boundary would reorder
+            # consumer callbacks ahead of tool_call (see digigraph rag_stream tests).
             on_tool_step("round_boundary", {"round_idx": round_idx, "narration": content})
 
         asst_entries: list[ToolCallDict] = []
