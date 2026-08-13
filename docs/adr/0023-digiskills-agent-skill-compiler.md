@@ -51,7 +51,7 @@ Scaffold a new top-level module, `digiskills/`, following the standard digithing
 
 - Generated `SKILL.md` quality depends on the LLM synthesis step; Phase 1 needs an explicit human-review gate before a generated bundle is considered shippable — this is not a fire-and-forget pipeline yet.
 - Deferring the distribution-mechanism decision (static vs. MCP vs. both) means Phase 1 does not fully answer the client's long-term ask ("skills that stay current"); a static bundle goes stale as the client's API evolves and will need a regeneration/versioning story before P4.
-- P3 (external ingestion) introduces a new trust boundary — client docs, possibly API keys or internal URLs in scraped content — that is out of scope for this ADR and must get its own security review pass (`security-reviewer` agent / `docs/scoring/SECURITY.md`) before any real client data is processed.
+- P3 (external ingestion) introduces a new trust boundary — client docs, possibly API keys or internal URLs in scraped content — that is out of scope for this ADR and must get its own security review pass (`docs/scoring/SECURITY.md`, via `/review`'s security lens or Cursor Bugbot — there is no standing `security-reviewer` subagent; see CLAUDE.md § Model & subagent policy) before any real client data is processed.
 - Scope discipline risk: the natural next request after P1 works will be "just host it for us," pulling toward the Phase 4 platform before the compiler itself is proven. This ADR deliberately fences that off.
 
 ## Links

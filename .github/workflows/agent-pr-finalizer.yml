@@ -1,6 +1,14 @@
-# Daily agent PR finalizer — backstop for cursor/* PRs that missed the Cursor Automation
-# merge path. The gh-aw copilot-pr-lifecycle workflow that used to own copilot/* PRs
-# was deleted 2026-08-05 with the subscription; this finalizer is now the only one.
+# Daily agent PR finalizer — backstop for agent-branch PRs (cursor/*, task/*,
+# claude/*, bot/*) that missed their normal merge path. The gh-aw
+# copilot-pr-lifecycle workflow that used to own copilot/* PRs was deleted
+# 2026-08-05 with the subscription; this finalizer is now the only one.
+#
+# Widened from cursor/*-only 2026-08 (audit finding: scripts/finalize_agent_prs.py's
+# AGENT_BRANCH_PREFIXES already included task/*/claude/*, but --cursor-only here
+# re-filtered them straight back out, so the fix never reached production). Safe to
+# widen because fix_via is still branch-aware — only cursor/* PRs get the
+# Cursor-agent fix-dispatch path (scripts/finalize_agent_prs.py:evaluate_pr), everything
+# else just gets a "needs fix" comment with no automated remediation attempted.
 name: "Agent: PR finalizer"
 
 on:
@@ -28,7 +36,7 @@ concurrency:
 
 jobs:
   finalize:
-    name: Finalize cursor/* PRs
+    name: Finalize agent-branch PRs
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -36,21 +44,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Evaluate cursor/* PRs
+      - name: Evaluate agent-branch PRs
         id: eval
         env:
           GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # Copilot automation is retired; this backstop only owns cursor/* PRs.
-          python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only --json > /tmp/pr-actions.json
+          # Copilot automation is retired; --cursor-only dropped 2026-08 so this
+          # backstop covers task/* and claude/* too (see header comment above).
+          python3 scripts/finalize_agent_prs.py --repo "$REPO" --json > /tmp/pr-actions.json
           {
             echo "actions<<EOF"
             cat /tmp/pr-actions.json
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
-          python3 scripts/finalize_agent_prs.py --repo "$REPO" --cursor-only
+          python3 scripts/finalize_agent_prs.py --repo "$REPO"
 
       - name: Apply finalizer actions
         env:
@@ -94,7 +103,7 @@ jobs:
               return any(marker in (c.get("body") or "") for c in data.get("comments", []))
 
           actions = json.load(open("/tmp/pr-actions.json"))
-          print(f"Processing {len(actions)} cursor/* PR(s) (dry_run={dry_run})")
+          print(f"Processing {len(actions)} agent-branch PR(s) (dry_run={dry_run})")
 
           for action in actions:
               pr = action["pr_number"]
