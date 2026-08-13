@@ -10,11 +10,19 @@ interface EventContext {
 type TestResult = { ok: boolean; model?: string; error?: string };
 
 const TIMEOUT_MS = 10_000;
+// Defensive cap on upstream provider error text passed through to the client
+// (see `sanitizeUpstreamError` below) -- not a UX limit, just a ceiling.
+const MAX_UPSTREAM_ERROR_LEN = 300;
 
 function jsonResponse(body: TestResult, status: number): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json; charset=utf-8" },
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      // Responses here can carry information derived from a submitted secret
+      // key (validation result, provider error text) -- never cache.
+      "cache-control": "no-store",
+    },
   });
 }
 
@@ -36,8 +44,28 @@ function validateKey(key: string, provider: ProviderId): string | null {
     case "xai":
       if (!key.startsWith("xai-")) return "x.ai keys start with xai-.";
       break;
+    default: {
+      const _exhaustive: never = provider;
+      return _exhaustive;
+    }
   }
   return null;
+}
+
+/**
+ * Upstream provider error bodies are passed through to the client today
+ * (`testOpenRouter` and its siblings return `body.error?.message` verbatim).
+ * Defense in depth in case a provider ever echoes the submitted key back in
+ * an error: strip any occurrence of the raw key and cap the length so a
+ * pathological upstream response can't balloon the reply either.
+ */
+function sanitizeUpstreamError(message: string | undefined, key: string): string | undefined {
+  if (!message) return message;
+  let sanitized = key ? message.split(key).join("[redacted]") : message;
+  if (sanitized.length > MAX_UPSTREAM_ERROR_LEN) {
+    sanitized = `${sanitized.slice(0, MAX_UPSTREAM_ERROR_LEN)}…`;
+  }
+  return sanitized;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
@@ -63,7 +91,12 @@ async function testOpenRouter(key: string): Promise<TestResult> {
   });
   if (!resp.ok) {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-    return { ok: false, error: body.error?.message ?? `OpenRouter returned HTTP ${resp.status}` };
+    return {
+      ok: false,
+      error:
+        sanitizeUpstreamError(body.error?.message, key) ??
+        `OpenRouter returned HTTP ${resp.status}`,
+    };
   }
   return { ok: true, model: "openai/gpt-4o-mini" };
 }
@@ -74,7 +107,10 @@ async function testOpenAI(key: string): Promise<TestResult> {
   });
   if (!resp.ok) {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-    return { ok: false, error: body.error?.message ?? `OpenAI returned HTTP ${resp.status}` };
+    return {
+      ok: false,
+      error: sanitizeUpstreamError(body.error?.message, key) ?? `OpenAI returned HTTP ${resp.status}`,
+    };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
   return { ok: true, model: data.data?.[0]?.id ?? "gpt-4o-mini" };
@@ -86,7 +122,11 @@ async function testAnthropic(key: string): Promise<TestResult> {
   });
   if (!resp.ok) {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-    return { ok: false, error: body.error?.message ?? `Anthropic returned HTTP ${resp.status}` };
+    return {
+      ok: false,
+      error:
+        sanitizeUpstreamError(body.error?.message, key) ?? `Anthropic returned HTTP ${resp.status}`,
+    };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
   return { ok: true, model: data.data?.[0]?.id ?? "claude-3-5-haiku-20241022" };
@@ -98,7 +138,10 @@ async function testGemini(key: string): Promise<TestResult> {
   );
   if (!resp.ok) {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-    return { ok: false, error: body.error?.message ?? `Gemini returned HTTP ${resp.status}` };
+    return {
+      ok: false,
+      error: sanitizeUpstreamError(body.error?.message, key) ?? `Gemini returned HTTP ${resp.status}`,
+    };
   }
   return { ok: true, model: "gemini-2.5-flash" };
 }
@@ -109,7 +152,10 @@ async function testXai(key: string): Promise<TestResult> {
   });
   if (!resp.ok) {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-    return { ok: false, error: body.error?.message ?? `x.ai returned HTTP ${resp.status}` };
+    return {
+      ok: false,
+      error: sanitizeUpstreamError(body.error?.message, key) ?? `x.ai returned HTTP ${resp.status}`,
+    };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
   return { ok: true, model: data.data?.[0]?.id ?? "grok-4-3" };
