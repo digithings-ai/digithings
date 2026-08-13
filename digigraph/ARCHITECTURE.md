@@ -223,6 +223,7 @@ real node executions rather than compiled graph nodes.
 | `request_id` | `str \| None` | Correlation ID propagated to outbound HTTP |
 | `workflow_id` | `str \| None` | Per-run UUID for audit log correlation |
 | `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
+| `digi_subject` | `str \| None` | JWT subject; namespaces the cross-thread Store (see §5.5) and the checkpoint `thread_id`. Client-writable on `WorkflowRequest`, overridden server-side only when `auth.subject` is present (`server.py`'s `_with_digi_request_context`) — see §6's trust-boundary note |
 | `allowed_tool_names` | `list[str] \| None` | Tool allowlist; `None` = unrestricted |
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
@@ -425,9 +426,11 @@ digisearch, digiquant, and digivault each own their tool schemas via `POST /v1/o
 
 The manifest cache uses synchronous `httpx.Client` (blocking calls inside async FastAPI). This can block the event loop thread during tool schema resolution. The current request handling is synchronous (FastAPI's thread pool), so this is acceptable but limits throughput under high concurrency.
 
+Each hub's `invoke_*` function (`invoke_digisearch_tool`/`invoke_digiquant_tool`/`invoke_digivault_tool`) is wrapped by a per-service `CircuitBreaker` (`digigraph/circuit_breaker.py`, `failure_threshold=5`, `recovery_timeout=30.0`) — not just the legacy `tools/digisearch.py` helper. Only the network call itself (`client.post(...)`) runs inside the breaker's `with _cb:` scope, so only a genuine transport failure (`httpx.RequestError`: connection refused, timeout, DNS failure) counts toward opening the circuit. `raise_for_status()`/`.json()` run *outside* that scope: a raised `httpx.HTTPStatusError` (4xx/5xx) or a JSON decode error still returns this function's normal `{"ok": False, "error": ...}` contract, but does not trip the breaker — mirroring `graph/graph.py`'s `_DIGIQUANT_RETRY_POLICY` reasoning ("never `httpx.HTTPStatusError` — a 4xx/5xx is a real rejection, not a blip"). This matters because a single caller sending malformed tool-call arguments (a client-caused 4xx) must not open the process-wide circuit for 30 seconds for every other user.
+
 ### 5.5 Checkpointing
 
-Process-wide singleton via `get_checkpointer()` in `graph/graph.py:29`:
+Process-wide singleton via `get_checkpointer()` in `graph/graph.py:108`:
 
 | `DIGI_CHECKPOINTER` value | Backend | Notes |
 |--------------------------|---------|-------|
@@ -485,6 +488,20 @@ It accepts either libpq spelling (`postgresql://` URI or `host=… dbname=…` k
 
 Timing is the only thing that changes: an unreachable Postgres already raised `psycopg.OperationalError` out of `get_checkpointer()` (via `cm.__enter__()`), so no new failure *mode* is introduced — it now surfaces in ~10s instead of hanging on the OS TCP timeout. On the Olympus path `hermes/chain.py::_acquire_checkpointer` catches `Exception` and degrades to an uncheckpointed run.
 
+#### 5.5.4 Store (cross-thread memory) — parallel but not identical backend selection
+
+`get_store()` (`graph/graph.py:183`, Task 7) provides a **process-wide `Store`**, distinct from the checkpointer above: the checkpointer is scoped to a single `thread_id`, while the Store holds values that should survive a subject opening a brand-new thread (today: a `response_language` preference, keyed by `digi_subject` — see `supervisor_node`, gated behind `DIGI_SUPERVISOR=1`). It mirrors `DIGI_CHECKPOINTER`'s *kind* selection where LangGraph has an equivalent, but the mapping is **not one-to-one**:
+
+| `DIGI_CHECKPOINTER` value | `get_checkpointer()` backend | `get_store()` backend |
+|--------------------------|-------------------------------|------------------------|
+| unset / `memory` | `MemorySaver` | `InMemoryStore` |
+| `sqlite` | `SqliteSaver` (persistent, file-backed) | `InMemoryStore` (**not** persistent) |
+| `postgres` | `PostgresSaver` | `PostgresStore` (same conn string, reusing `_bounded_conn_string`'s connect-timeout/keepalive bounds) |
+
+LangGraph ships no first-class `Store` equivalent of `SqliteSaver`, so `sqlite` maps to `InMemoryStore` here — a documented, same-process choice, not a silent one: unlike `get_checkpointer()`'s sqlite path, **`DIGI_CHECKPOINTER=sqlite` gets no persistent cross-thread Store at all**. A response-language preference set under `sqlite` is lost on process restart and is never shared across replicas, even though the checkpointer itself (thread-scoped state) survives both. Only `DIGI_CHECKPOINTER=postgres` gets a Store that persists and is shared across replicas; every other setting (including sqlite) silently falls back to `InMemoryStore`, with a warning now logged for both failure paths that can produce that fallback under `postgres` (missing `langgraph-checkpoint-postgres` install, or `DIGI_CHECKPOINTER_POSTGRES_URI` unset).
+
+Today's realized impact is low: `DIGI_SUPERVISOR` defaults off, so the supervisor node (the only current Store reader/writer) does not run by default, and the Store holds nothing but a language preference even when it is on. See §6 for the Store's namespace-trust dependency on `digi_subject`.
+
 ### 5.6 Streaming SSE Architecture
 
 ```
@@ -498,17 +515,20 @@ _stream_completions_progressive (server.py generator)
         │                           ├── defines stream_callback(event_type, data) closure
         │                           │     (content/tool_call/round_boundary/tool_result handling)
         │                           ├── graph.stream(initial, config=config,
-        │                           │               stream_mode=["updates", "custom"], version="v2")
+        │                           │               stream_mode=["updates", "custom"], version="v2",
+        │                           │               subgraphs=True)   # required -- research runs in a subgraph
         │                           │     │
-        │                           │     ├── part["type"] == "custom"
+        │                           │     ├── part["type"] == "custom"   (any ns, never filtered)
         │                           │     │     (event_type, data) = part["data"]
         │                           │     │     └── stream_callback(event_type, data)   [called directly]
         │                           │     │
         │                           │     └── part["type"] == "updates"
-        │                           │           _stream_update_summary(update)
-        │                           │           └── event_queue.put(("trace", graph_update))
+        │                           │           ├── part["ns"] non-empty (inner-subgraph node) → skip
+        │                           │           └── part["ns"] == () (top-level node) →
+        │                           │                 _stream_update_summary(update)
+        │                           │                 └── event_queue.put(("trace", graph_update))
         │                           │
-        │                           │   Inside the graph run, research_node → _run_document_rag_path:
+        │                           │   Inside the graph run (research subgraph), research_node → _run_document_rag_path:
         │                           │     writer = _safe_stream_writer()   # get_stream_writer(), no-op outside a real invocation
         │                           │     run_tools(..., on_tool_step=stream_callback)
         │                           │           └── stream_callback(...) → writer((event_type, data))
@@ -525,9 +545,11 @@ _stream_completions_progressive (server.py generator)
               └── "done" → break → yield stop chunk → yield [DONE]
 ```
 
-Nodes emit streaming events via LangGraph's native `get_stream_writer()` (`langgraph.config`), not via a callback threaded through state, config, or a `ContextVar` — that 3-tier resolver was collapsed in c32a7a970. `_run_document_rag_path` (`research.py:291`) resolves the writer through `_safe_stream_writer()` (`research.py:26-34`): it calls `get_stream_writer()` and catches the `RuntimeError` LangGraph raises when it's invoked outside a real graph run (e.g. a unit test calling a node function directly instead of going through `graph.invoke()`/`graph.stream()`), falling back to a no-op `lambda _data: None`. This is what lets `tests/dg/test_nodes.py` call node functions in isolation without a full graph invocation. The resolved `writer` (`research.py:370`) is closed over by a local `stream_callback(event_type, data)` (`research.py:372-379`) that enriches `digisearch`/`digisearch_fetch_all` `tool_call` events with `index_name` before calling `writer((event_type, data))`; that `stream_callback` is passed to `run_tools(..., on_tool_step=stream_callback)`, so every `tool_call`/`tool_result`/`content`/`reasoning` event the tool loop emits flows out through the writer.
+Nodes emit streaming events via LangGraph's native `get_stream_writer()` (`langgraph.config`), not via a callback threaded through state, config, or a `ContextVar` — that 3-tier resolver was collapsed in c32a7a970. `_run_document_rag_path` (`research.py:311`) resolves the writer through `_safe_stream_writer()` (`research.py:26-34`): it calls `get_stream_writer()` and catches the `RuntimeError` LangGraph raises when it's invoked outside a real graph run (e.g. a unit test calling a node function directly instead of going through `graph.invoke()`/`graph.stream()`), falling back to a no-op `lambda _data: None`. This is what lets `tests/dg/test_nodes.py` call node functions in isolation without a full graph invocation. (`_safe_get_store()`, `research.py:37-54`, mirrors the same pattern for `get_store()` — see §5.5.4 and §6.10.) The resolved `writer` (`research.py:390`) is closed over by a local `stream_callback(event_type, data)` (`research.py:392-399`) that enriches `digisearch`/`digisearch_fetch_all` `tool_call` events with `index_name` before calling `writer((event_type, data))`; that `stream_callback` is passed to `run_tools(..., on_tool_step=stream_callback)`, so every `tool_call`/`tool_result`/`content`/`reasoning` event the tool loop emits flows out through the writer.
 
-`workflow.py`'s `run_digigraph_workflow_streaming` (`workflow.py:291-`) drives the graph with `graph.stream(initial, config=config, stream_mode=["updates", "custom"], version="v2", durability="sync")` (`workflow.py:424-429`). The dual-mode list means each yielded `part` carries a `"type"` discriminant: a `part["type"] == "custom"` entry is exactly the `(event_type, data)` tuple a node wrote via `get_stream_writer()`, and the driver loop unpacks it and calls its own rich `stream_callback` closure (`workflow.py:315-407`) directly — the same content-buffering, `tool_call` → `code_block` trace synthesis for `data_engineer_agent`, `round_boundary` → trace event (#2306), and `tool_result`-with-`rag_sources` → `rag_sources` trace event handling this closure has always done, just invoked without an intermediate `ContextVar` hop. A `part["type"] == "updates"` entry is the per-node state delta LangGraph emits natively; `_stream_update_summary` reduces it to `{node: {"keys": [...]}}` (avoiding serialization of large state values) and it is forwarded as a `graph_update` trace event. There is no config channel and no module-level `ContextVar`: the writer `get_stream_writer()` returns is scoped to the current graph run by LangGraph itself, so `workflow.py` never needs to inject anything into `research.py` — it only needs to be the consumer on the other end of `graph.stream(...)`.
+`workflow.py`'s `run_digigraph_workflow_streaming` (`workflow.py:293-`) drives the graph with `graph.stream(initial, config=config, stream_mode=["updates", "custom"], version="v2", durability="sync", subgraphs=True)` (`workflow.py:426-433`). The dual-mode list means each yielded `part` carries a `"type"` discriminant: a `part["type"] == "custom"` entry is exactly the `(event_type, data)` tuple a node wrote via `get_stream_writer()`, and the driver loop unpacks it and calls its own rich `stream_callback` closure (`workflow.py:317-409`) directly — the same content-buffering, `tool_call` → `code_block` trace synthesis for `data_engineer_agent`, `round_boundary` → trace event (#2306), and `tool_result`-with-`rag_sources` → `rag_sources` trace event handling this closure has always done, just invoked without an intermediate `ContextVar` hop. A `part["type"] == "updates"` entry is the per-node state delta LangGraph emits natively; `_stream_update_summary` reduces it to `{node: {"keys": [...]}}` (avoiding serialization of large state values) and it is forwarded as a `graph_update` trace event. There is no config channel and no module-level `ContextVar`: the writer `get_stream_writer()` returns is scoped to the current graph run by LangGraph itself, so `workflow.py` never needs to inject anything into `research.py` — it only needs to be the consumer on the other end of `graph.stream(...)`.
+
+**`subgraphs=True` is required, not optional.** `research_node`/`research_brief_builder_node` run inside a *compiled subgraph* (`graph/research_subgraph.py`'s `build_research_subgraph()`, added as the single `"research"` node by `graph/graph.py`'s `build_workflow_graph()`), not as top-level nodes on the outer graph. LangGraph filters `"custom"`/`"updates"` parts sourced from inside a subgraph unless the outer `.stream()` call passes `subgraphs=True` — without it, every `_safe_stream_writer()` write from `_run_document_rag_path` (`tool_call`, `tool_result`, `content`, `reasoning`, `round_boundary` — nearly everything the diagram above shows) was silently dropped before ever reaching this loop (fixed; previously a live regression). With `subgraphs=True` on, `"updates"` parts also start arriving for inner-subgraph nodes with a non-empty `ns` (e.g. `ns=("research:<uuid>",)`); the driver loop skips those (`if part["ns"]: continue`) before building the `graph_update` trace event, so only the outer, top-level node completions are reported — this filter does **not** apply to `"custom"` parts, which must flow through regardless of which namespace they originated from. See `tests/dg/test_subgraph_streaming.py` for a standalone regression test of this exact mechanism.
 
 ---
 
@@ -579,6 +601,12 @@ The MCP server (`mcp_server.py`) has no built-in authentication layer. The `stre
 ### 6.9 Manifest Cache Never Invalidates
 
 The vertical manifest caches in `digisearch_hub.py`, `digiquant_hub.py`, and `digivault_hub.py` are module-level dicts with no TTL or invalidation. If digisearch, digiquant, or digivault adds, removes, or changes a tool definition, the cached schema is stale until the digigraph process restarts. This affects tool schema accuracy in long-running deployments.
+
+### 6.10 Store Namespace Trust Extends the Same `digi_subject`/`thread_id` Gap
+
+The Store added in Task 7 (§5.5.4) namespaces every entry by `digi_subject` (`(subject, "prefs")` in `supervisor_node`). `digi_subject` is populated from `WorkflowRequest.digi_subject` — a **client-writable field** — and is only overridden server-side when `auth.subject` is present (`server.py`'s `_with_digi_request_context` / `_digi_fields_from_request`); when authentication is not configured or passes through unauthenticated, a client can set `digi_subject` directly and read or write another subject's Store namespace by guessing or supplying its value. This is the same trust gap §6.1 already documents for `thread_id` (JWT `sub` not bound to checkpoint state), now extended to the new persistent Store namespace — see §11/§12.3's existing recommendation (bind to the JWT `sub` claim) for the checkpointer; the same fix would need to cover the Store's namespace key too.
+
+**Risk today is low but not zero:** the Store currently holds only a `response_language` preference (§5.5.4), gated behind `DIGI_SUPERVISOR=1` which defaults off, so a realized exploit today at most lets one subject read or overwrite another's language preference. This is worth noting explicitly rather than leaving implicit, since the Store's blast radius will grow with whatever future data any new supervisor-node logic decides to persist there.
 
 ---
 
