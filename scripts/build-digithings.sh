@@ -91,12 +91,23 @@ echo "--- mirroring Pages Functions to repo root ---"
 rm -rf functions
 if [ -d frontend/digithings-web/functions ] && [ -n "$(find frontend/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
   cp -r frontend/digithings-web/functions functions
+  # Wrangler's functions bundler treats every file under functions/ as a route
+  # candidate. Test files (e.g. test.test.ts, colocated next to test.ts per
+  # this repo's convention) export no onRequest* handler today, so they don't
+  # currently register as a route -- but that's an accident of what they
+  # happen to export, not a guarantee. Strip them from the mirrored copy so
+  # it stays true by construction (#2348).
+  find functions -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) -delete
 else
   echo "ERROR: expected frontend/digithings-web/functions (digivault /api/chat)" >&2
   exit 1
 fi
 if [ ! -f functions/api/chat.ts ]; then
   echo "ERROR: functions/api/chat.ts missing after mirror" >&2
+  exit 1
+fi
+if find functions -type f -name "*.test.ts" 2>/dev/null | grep -q .; then
+  echo "ERROR: test files still present under functions/ after exclusion (#2348)" >&2
   exit 1
 fi
 

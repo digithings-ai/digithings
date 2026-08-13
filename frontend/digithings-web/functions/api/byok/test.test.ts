@@ -77,6 +77,50 @@ describe("POST /api/byok/test", () => {
     });
   });
 
+  describe("secret-derived responses are never cached (#2348 minor finding 7)", () => {
+    it("sets Cache-Control: no-store on a validation-error response", async () => {
+      const res = await onRequestPost(
+        request({ "x-byok-key": "sk-not-xai", "x-byok-provider": "xai" }),
+      );
+      expect(res.status).toBe(400);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    });
+
+    it("sets Cache-Control: no-store on a successful live-test response", async () => {
+      fetchMock.mockResolvedValueOnce(jsonFetchResponse({ data: [{ id: "grok-4-3" }] }));
+      const res = await onRequestPost(
+        request({ "x-byok-key": "xai-realkey", "x-byok-provider": "xai" }),
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("cache-control")).toBe("no-store");
+    });
+  });
+
+  describe("upstream error passthrough is sanitized defensively (#2348 minor finding 7)", () => {
+    it("redacts the submitted key if a provider ever echoes it back in an error message", async () => {
+      fetchMock.mockResolvedValueOnce(
+        jsonFetchResponse({ error: { message: "invalid key: xai-realkey supplied" } }, 401),
+      );
+      const res = await onRequestPost(
+        request({ "x-byok-key": "xai-realkey", "x-byok-provider": "xai" }),
+      );
+      const body = await res.json();
+      expect(body.error).not.toContain("xai-realkey");
+      expect(body.error).toBe("invalid key: [redacted] supplied");
+    });
+
+    it("caps an unexpectedly long upstream error message", async () => {
+      const longMessage = "x".repeat(1000);
+      fetchMock.mockResolvedValueOnce(jsonFetchResponse({ error: { message: longMessage } }, 401));
+      const res = await onRequestPost(
+        request({ "x-byok-key": "xai-realkey", "x-byok-provider": "xai" }),
+      );
+      const body = await res.json();
+      expect(body.error.length).toBeLessThan(longMessage.length);
+      expect(body.error.endsWith("…")).toBe(true);
+    });
+  });
+
   describe("unrecognized provider header (no more silent openrouter coercion)", () => {
     it("returns an explicit 400 instead of coercing to openrouter", async () => {
       const res = await onRequestPost(
