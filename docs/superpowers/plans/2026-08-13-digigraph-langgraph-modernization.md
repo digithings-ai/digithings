@@ -10,11 +10,13 @@
 
 ## Global Constraints
 
-- Installed `langgraph` is **1.2.10** (verified via `uv.lock`, not the `>=0.2` floor in `digigraph/pyproject.toml`) — every LangGraph API used below is verified against this exact version's source (and, for the Store API, against `langgraph-checkpoint` 4.2.0, which is what actually ships `langgraph.store.*`).
-- Every new/modified test must carry `@pytest.mark.unit` (or sit in a file with module-level `pytestmark = pytest.mark.unit`) and run under `make test-unit` — no live network, no live stack.
+- Installed `langgraph` is **1.2.10** (verified via `uv.lock`, not the `>=0.2` floor in `digigraph/pyproject.toml`) — every LangGraph API used below is verified against this exact version's source (and, for the Store API, against `langgraph-checkpoint` **4.1.1**, which is what `uv.lock` actually resolves and is what ships `langgraph.store.*` — not the `4.2.0` this plan previously claimed).
+- **Raise `digigraph/pyproject.toml`'s floor before Task 1's branch.** `langgraph>=0.2` does not guarantee any of `RetryPolicy` (Task 4), `get_stream_writer()`/`stream_mode=["updates","custom"]` v2 (Task 5), `durability=` (Task 3), or the Store API (Task 7) actually exist at install time — all seven tasks are verified only against the installed `1.2.10`. Bump the floor to `langgraph>=1.2.10,<2` and run `uv lock` to regenerate `uv.lock` as part of Task 1's commit, so the declared range matches what every later task actually requires instead of drifting further from it with each task.
+- Every new/modified test must carry `@pytest.mark.unit` (or sit in a file with module-level `pytestmark = pytest.mark.unit`) and run under `make test-unit` — no live network, no live stack. A module-level `pytestmark` does **not** cover top-level test functions defined in a file that *also* has a class carrying its own `@pytest.mark.unit` — mark each new top-level function explicitly (see Task 3, which added exactly this gap).
 - Digi product names are always lowercase in prose, comments, and docstrings (digigraph, digillm, digichat, etc.) — never in code identifiers, which keep their language casing.
 - Ruff-compliant, line length 100. Run `ruff check . && ruff format .` before each commit.
 - Branching: `module/digigraph` is a two-hop backend module (`scripts/project_routing.json` maps `component:digigraph` → `module/digigraph`). **Sync `module/digigraph` with `develop` before branching** (`git fetch origin && git rev-list --count origin/module/digigraph..origin/develop` — if nonzero, open a `chore/sync-*` PR into `module/digigraph` first, per `CLAUDE.md`'s branching model). File one GitHub issue for this modernization batch (or reuse an existing one) before Task 1's branch, and use `task/<issue>-<slug>` branches — one per task, all based off the synced `module/digigraph` tip (not off each other, so review stays independent per CLAUDE.md's "review belongs at the task PR" policy).
+- **Pre-PR gates, required before Task 1's branch and before opening each task's PR** (per `CLAUDE.md`'s scoring gate and branching model — not new rules, just made explicit here so no task skips them): the GitHub issue filed above must be tracked on Project `#1`; each PR body must carry `Fixes #<N>` against it (or the task's implicit `task/<N>-slug` linkage); `make score` must record Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9 before the PR opens; and any task that turns out to touch `digikey/`, a broker/live-trading path, a new external service dependency, or an architecture decision not already covered by an existing `ARCHITECTURE.md` must be escalated for human review before merging, per `CLAUDE.md`'s "Human gate" section — none of Tasks 1–7 as scoped below are expected to hit that gate, but a task that grows scope during implementation must re-check it.
 - Every task's tests must actually exercise the real function under test (not a `MagicMock` standing in for the exact thing being verified) — this repo has a documented history of mocks silently masking a signature drift (see Task 1's own motivation).
 
 ---
@@ -28,6 +30,7 @@
 **Interfaces:**
 - Consumes: nothing new — `run_tools`'s existing signature (`model, messages, tools, execute_tool, *, temperature, max_tool_rounds, on_tool_step, parallel_safe_tools, stream_deltas, search_parameters`) is unchanged.
 - Produces: `run_tools` now emits an additional `on_tool_step("round_limit_exhausted", {"max_tool_rounds": int})` event when the round budget is exhausted, and no longer lets an exception from a *sequential* (non-parallel-safe) tool call propagate out of the whole run — it becomes `{"content": str(exception)}`, exactly matching the parallel branch's existing behavior 3 lines above it.
+- **The recoverable-error tuple is deliberately narrow, not accidentally incomplete.** It covers exactly `(RuntimeError, OSError, ValueError, TypeError, KeyError)` — the common, expected ways a tool implementation signals "bad input, try again," where recovering and giving the model another turn is strictly better than crashing. An exception *outside* that tuple (a bug in the tool, a custom exception type, an assertion failure) is treated as a genuinely unexpected failure and must still propagate out of `run_tools` uncaught — this is load-bearing for digigraph's `research_agent.py`, whose `defer_finalization` telemetry mechanism specifically relies on being able to observe an exception escaping the tool loop (`tests/dg/test_research_agent.py::test_tool_path_deferral_survives_a_failing_tool` exercises exactly this, using a custom exception type outside this tuple so the test keeps meaning what it says regardless of which built-in types this tuple covers). Do not "complete" this contract by broadening it to `except Exception` — that would silently swallow the exact failures the deferral mechanism exists to catch.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -141,7 +144,10 @@ Replace with:
                     # Mirror the parallel branch's except-tuple 3 lines above (line 167) —
                     # a raised exception here must become a recoverable tool result, not
                     # abort the whole run and discard every tool result already gathered
-                    # this round.
+                    # this round. Deliberately NOT `except Exception`: an exception outside
+                    # this tuple is an unexpected tool failure, not a recoverable one, and
+                    # must keep propagating — digigraph's research_agent.py defer_finalization
+                    # telemetry path depends on exactly that (see its own test suite).
                     result = {"content": str(e)}
                 ordered.append(((tc_id, name, args), result))
 ```
@@ -250,12 +256,17 @@ def test_short_history_is_unaffected_by_trimming() -> None:
 
 @pytest.mark.unit
 def test_tool_role_messages_are_silently_omitted_today() -> None:
-    """Documents the current, deliberate simplification: digichat never sends role="tool"
-    history to digigraph today (verified: frontend/digichat/src/lib/adapters/digithings/
-    never constructs one), so dropping it here is a right-sized simplification, not
-    silent data loss. If this test starts failing because a real caller DOES send
-    tool-role turns, chat_prompt.py needs real tool-turn support (see its module
-    docstring) — not a tweak to this test."""
+    """Documents the current, deliberate simplification: role="tool" content is dropped
+    by messages_to_workflow_prompt. This test only proves that direct-conversion behavior
+    — it does NOT, and cannot, prove digichat never sends one: the adapter that would
+    construct such a message lives in frontend/digichat/src/lib/adapters/digithings/,
+    a TypeScript file this Python test has no way to exercise or import. The "digichat
+    never constructs one" claim is a manually-verified grep, not something this test
+    enforces — if that assumption ever stops holding, this test keeps passing right
+    through the regression. Treat it as a change-detector for chat_prompt.py's own
+    conversion rule, not a tripwire for the upstream adapter; a real tripwire for the
+    adapter assumption would need a cross-language contract test or an e2e digichat→
+    digigraph fixture, out of scope here."""
     messages = [
         ChatMessage(role="user", content="call the tool"),
         ChatMessage(role="tool", content="tool result content"),
@@ -291,10 +302,13 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.messages.utils import count_tokens_approximately, trim_messages
 ```
 
-Add a module-level constant and helper, right after the existing imports:
+Add a module-level constant and helpers, right after the existing imports:
 
 ```python
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # Soft token budget for flattened chat history. Override via env; the default leaves
 # headroom for the system prompt and downstream RAG context digisearch/digivault add on
@@ -304,6 +318,54 @@ _DEFAULT_MAX_HISTORY_TOKENS = 8000
 _TYPE_TO_ROLE = {"human": "user", "ai": "assistant"}
 
 
+def _resolve_max_history_tokens() -> int:
+    """Read DIGI_CHAT_HISTORY_MAX_TOKENS, falling back to the default on any bad value.
+
+    A malformed or non-positive override must never crash every multi-turn request —
+    ``int()`` on a garbled env value raises ``ValueError`` with no recovery today. Log
+    once per bad value and fall back rather than fail the request or silently accept a
+    budget that can't do its job (<=0 would trim everything, every turn, forever).
+    """
+    raw = os.environ.get("DIGI_CHAT_HISTORY_MAX_TOKENS", "").strip()
+    if not raw:
+        return _DEFAULT_MAX_HISTORY_TOKENS
+    try:
+        parsed = int(raw)
+    except ValueError:
+        logger.warning(
+            "DIGI_CHAT_HISTORY_MAX_TOKENS=%r is not an integer; using default %d",
+            raw,
+            _DEFAULT_MAX_HISTORY_TOKENS,
+        )
+        return _DEFAULT_MAX_HISTORY_TOKENS
+    if parsed <= 0:
+        logger.warning(
+            "DIGI_CHAT_HISTORY_MAX_TOKENS=%d must be positive; using default %d",
+            parsed,
+            _DEFAULT_MAX_HISTORY_TOKENS,
+        )
+        return _DEFAULT_MAX_HISTORY_TOKENS
+    return parsed
+
+
+def _truncate_oversized_single_turn(content: str, max_tokens: int) -> str:
+    """Truncate a single turn's content to fit the budget when there's nothing to drop.
+
+    ``trim_messages`` trims by dropping whole messages — with only one message, it has
+    nothing to drop, so the single-turn fast path in ``messages_to_workflow_prompt``
+    must not skip budget enforcement just because there's only one turn. Keep the
+    trailing ``max_tokens * 4`` characters (``count_tokens_approximately`` is ~chars/4),
+    matching ``strategy="last"``'s "most recent wins" rule below — the tail of a long
+    single message is more likely to hold the actual ask than the lead-in.
+    """
+    if count_tokens_approximately([HumanMessage(content=content)]) <= max_tokens:
+        return content
+    budget_chars = max_tokens * 4
+    if len(content) <= budget_chars:
+        return content
+    return "…[earlier content truncated]…\n" + content[-budget_chars:]
+
+
 def _trim_to_budget(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Token-budget-trim a flattened (role, content) turn list.
 
@@ -311,10 +373,11 @@ def _trim_to_budget(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
     ``trim_messages`` convention — a trailing assistant-only tail with no matching user
     turn confuses a downstream model more than it helps). ``count_tokens_approximately``
     is an approximate counter (roughly chars/4) — fine for a soft budget, not exact.
+    If trimming would empty the list (no user/human turn anchor), returns untrimmed turns.
     """
     if not turns:
         return turns
-    max_tokens = int(os.environ.get("DIGI_CHAT_HISTORY_MAX_TOKENS", str(_DEFAULT_MAX_HISTORY_TOKENS)))
+    max_tokens = _resolve_max_history_tokens()
     as_messages = [
         HumanMessage(content=content) if role == "user" else AIMessage(content=content)
         for role, content in turns
@@ -326,10 +389,16 @@ def _trim_to_budget(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
         strategy="last",
         start_on="human",
     )
+    if not trimmed:
+        # trim_messages(start_on="human") returns [] when the input has no user/human
+        # turn to anchor on (e.g. an assistant-only tail after a whitespace-only user
+        # turn was already filtered out upstream). Never silently empty a non-empty
+        # input — fall back to the untrimmed turns.
+        return turns
     return [(_TYPE_TO_ROLE.get(m.type, m.type), str(m.content)) for m in trimmed]
 ```
 
-Then in `messages_to_workflow_prompt`, insert the trim call right before the final flattening loop:
+Then in `messages_to_workflow_prompt`, insert the trim call right before the final flattening loop — and route the single-turn fast path through the same budget instead of skipping it:
 
 ```python
     if not turns:
@@ -338,7 +407,9 @@ Then in `messages_to_workflow_prompt`, insert the trim call right before the fin
         return last if isinstance(last, str) else str(last)
 
     if len(turns) == 1 and turns[0][0] == "user":
-        return turns[0][1]
+        # Still a single turn, still no role labels — but a lone turn larger than the
+        # budget must not bypass it just because trim_messages has nothing to drop.
+        return _truncate_oversized_single_turn(turns[0][1], _resolve_max_history_tokens())
 
     turns = _trim_to_budget(turns)
 
@@ -412,9 +483,10 @@ ever stops holding."
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `tests/dg/test_workflow.py`:
+Add to `tests/dg/test_workflow.py`. These three are top-level functions, not methods on the file's existing marked class — a class-level `@pytest.mark.unit` (or a class-scoped `pytestmark`) does not apply to them, so each needs its own marker or `make test-unit` silently skips it:
 
 ```python
+@pytest.mark.unit
 def test_invoke_passes_durability_sync() -> None:
     """durability defaults to \"async\" (checkpoint persisted concurrently with the next
     step) — too weak for the DIGI_INTERRUPT_AFTER_RESEARCH breakpoint and the /resume
@@ -427,6 +499,7 @@ def test_invoke_passes_durability_sync() -> None:
     assert kwargs.get("durability") == "sync"
 
 
+@pytest.mark.unit
 def test_via_stream_passes_durability_sync() -> None:
     from digigraph.workflow import run_digigraph_workflow_via_stream
 
@@ -438,6 +511,7 @@ def test_via_stream_passes_durability_sync() -> None:
     assert kwargs.get("durability") == "sync"
 
 
+@pytest.mark.unit
 def test_streaming_passes_durability_sync() -> None:
     from queue import Queue
 
@@ -513,17 +587,25 @@ LLM-round-trip-dwarfed write-before-continue cost in exchange."
 
 ---
 
-### Task 4: graph.py — RetryPolicy on digiquant nodes + sync-checkpointer comment
+### Task 4: graph.py — RetryPolicy on backtest only + sync-checkpointer comment
+
+**Research finding that changed this task's scope:** the original draft gave both nodes an identical `RetryPolicy(retry_on=httpx.RequestError)` at the graph level. Two problems, both confirmed against the real `backtest_node`/`optimize_node` bodies (`digigraph/src/digigraph/graph/nodes.py`) and digiquant's actual `/run_optimize` implementation, not assumed:
+1. **Both nodes catch `_DIGIQUANT_CLIENT_ERRORS = (httpx.HTTPStatusError, httpx.RequestError)` internally and return an error dict** (`{"backtest_result": None, "error": str(e)}` / `{"optimize_result": None, "optimize_error": str(e)}`). A `RetryPolicy` only triggers on an exception that escapes the node function — since both nodes swallow it into a normal return value, `retry_policy` on either node is **inert**: it would never fire, no matter how it's configured. Attaching it without also changing what the node does with the exception ships a policy that looks like a fix and does nothing.
+2. **`optimize_node`'s `POST /run_optimize` is not idempotent and digiquant has no way to make it safe to retry today** — confirmed by reading `digiquant/src/digiquant/optimize.py` and `server.py`: every call mints a fresh `run_id` server-side with no client-supplied job/request id, no content-hash dedup, and no unique-constraint-backed job table (the pattern used elsewhere in digiquant, e.g. `weights_fingerprint()` in `olympus/hermes/writers/commit_io.py` and the unique constraints in `olympus/atlas/decision_log.py`, is not applied here). Worse, `method="random"`/`method="bayesian"` are **not even deterministic** across repeats (`sample_random_params()` and the Optuna sampler are both unseeded, and `OptimizeRequest` has no `seed` field) — a blind retry after an ambiguous timeout (request may have already reached the server and started an expensive search) can silently return a *different* result than the run a client thinks it's polling for, not just waste compute. `backtest_node` doesn't have this correctness risk: its job store (`backtest_jobs.py`) is deterministic given the same input, in-memory, and TTL-pruned — a duplicate retried job wastes compute but produces an equivalent result and no persisted side effect.
+
+So this task now gives the two nodes **different** treatment instead of a shared policy:
+- `backtest_node`: re-raise `httpx.RequestError` (still catch and return `httpx.HTTPStatusError` as before — a 4xx/5xx is a real rejection, not a blip) so a graph-level `RetryPolicy` can actually retry it. The accepted residual risk (a retry that lands after the server already created a job re-POSTs and creates a second one) is bounded and non-corrupting, and is recorded in a comment rather than left implicit.
+- `optimize_node`: **no retry policy, no behavior change** — keep catching both exception types and returning the error dict exactly as today. Automatic retry here stays out of scope until digiquant grows an idempotency-key or content-fingerprint dedup mechanism for `/run_optimize` (the two patterns already established elsewhere in digiquant are directly reusable: `weights_fingerprint()`-style hash comparison, or a DB unique constraint keyed on a caller-supplied id). File that as its own digiquant-side GitHub issue — it is backend work in a different service, not a digigraph LangGraph-modernization task, and doesn't belong in this plan's scope.
 
 **Files:**
-- Modify: `digigraph/src/digigraph/graph/graph.py`
+- Modify: `digigraph/src/digigraph/graph/graph.py`, `digigraph/src/digigraph/graph/nodes.py`
 - Test: `tests/dg/test_graph_profiles.py`
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: `build_workflow_graph()`'s compiled graph now has `retry_policy=(RetryPolicy(max_attempts=3, retry_on=httpx.RequestError),)` on both the `"backtest"` and `"optimize"` nodes, accessible via `compiled.nodes["backtest"].retry_policy` / `compiled.nodes["optimize"].retry_policy`.
+- Produces: `backtest_node` now lets `httpx.RequestError` propagate instead of catching it (still catches `httpx.HTTPStatusError` and returns the existing error-dict shape for that case). `build_workflow_graph()`'s compiled graph now has `retry_policy=(RetryPolicy(max_attempts=3, retry_on=httpx.RequestError),)` on the `"backtest"` node only, accessible via `compiled.nodes["backtest"].retry_policy`; `compiled.nodes["optimize"].retry_policy` stays `()`, unchanged. `optimize_node`'s behavior is otherwise unchanged.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 Add to `tests/dg/test_graph_profiles.py`:
 
@@ -542,27 +624,65 @@ def reset_workflow_graph_cache():
 
 
 @pytest.mark.unit
-def test_backtest_and_optimize_nodes_have_retry_policy(reset_workflow_graph_cache) -> None:
-    """A single dropped network packet must not fail the whole backtest/optimize run —
-    RetryPolicy scoped to httpx.RequestError (transient network failures) only, never
-    HTTPStatusError (a 4xx/5xx is a real rejection and must not be blindly retried)."""
+def test_backtest_node_has_retry_policy_optimize_does_not(reset_workflow_graph_cache) -> None:
+    """A single dropped network packet must not fail the whole backtest run — RetryPolicy
+    scoped to httpx.RequestError (transient network failures) only, never HTTPStatusError
+    (a 4xx/5xx is a real rejection and must not be blindly retried). optimize_node gets NO
+    retry_policy: /run_optimize is not idempotent and non-deterministic across repeats for
+    random/bayesian methods, so an automatic retry there is a correctness risk, not just a
+    cost one, until digiquant grows a dedup mechanism (tracked separately)."""
     import httpx
 
     graph = build_workflow_graph()
-    for name in ("backtest", "optimize"):
-        node = graph.nodes[name]
-        assert node.retry_policy, f"{name} node has no retry_policy"
-        policy = node.retry_policy[0]
-        assert policy.retry_on is httpx.RequestError
-        assert policy.max_attempts == 3
+    backtest_node = graph.nodes["backtest"]
+    assert backtest_node.retry_policy, "backtest node has no retry_policy"
+    policy = backtest_node.retry_policy[0]
+    assert policy.retry_on is httpx.RequestError
+    assert policy.max_attempts == 3
+
+    optimize_node = graph.nodes["optimize"]
+    assert not optimize_node.retry_policy, (
+        "optimize node must NOT have a retry_policy — /run_optimize is not idempotent"
+    )
+
+
+@pytest.mark.unit
+def test_backtest_node_reraises_request_error_optimize_node_still_catches_it() -> None:
+    """The node-level behavior RetryPolicy depends on: backtest_node must let
+    httpx.RequestError escape (or RetryPolicy above is inert — it never triggers on a
+    swallowed exception); optimize_node must keep catching it into the existing error-dict
+    shape, unchanged, since it has no retry policy to hand the exception to."""
+    import httpx
+
+    from digigraph.graph.nodes import backtest_node, optimize_node
+
+    state = {
+        "strategy_name": "s",
+        "symbols": ["AAPL"],
+        "strategy_params": {},
+    }
+    with patch("digigraph.graph.nodes.sync_client") as m_client, patch(
+        "digigraph.graph.nodes._digiquant_url_configured", return_value=True
+    ), patch("digigraph.graph.nodes.DIGIQUANT_DATA_DIR", "/tmp/data"):
+        m_client.return_value.__enter__.return_value.post.side_effect = httpx.RequestError(
+            "boom"
+        )
+        with pytest.raises(httpx.RequestError):
+            backtest_node(state)
+
+        m_client.return_value.__enter__.return_value.post.side_effect = httpx.RequestError(
+            "boom"
+        )
+        result = optimize_node(state)
+        assert result["optimize_error"] is not None and "boom" in result["optimize_error"]
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd digigraph && python -m pytest ../tests/dg/test_graph_profiles.py -k retry_policy -v`
-Expected: FAILS with `AssertionError: backtest node has no retry_policy` (`node.retry_policy` is `()`/falsy today).
+Run: `cd digigraph && python -m pytest ../tests/dg/test_graph_profiles.py -k "retry_policy or reraises_request_error" -v`
+Expected: `test_backtest_node_has_retry_policy_optimize_does_not` FAILS with `AssertionError: backtest node has no retry_policy` (`node.retry_policy` is `()`/falsy today, on both nodes). `test_backtest_node_reraises_request_error_optimize_node_still_catches_it` FAILS on `pytest.raises(httpx.RequestError)` — `backtest_node` still catches and returns an error dict today, so no exception escapes to raise.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement — graph.py**
 
 In `digigraph/src/digigraph/graph/graph.py`, add to the imports:
 
@@ -576,11 +696,13 @@ from langgraph.types import RetryPolicy
 Add a module-level policy constant, right after `_CHECKPOINTER_CONN_BOUNDS`:
 
 ```python
-# Both nodes call digiquant over HTTP; a single dropped packet should not fail the
-# whole run. Scoped to httpx.RequestError (connection/timeout — transient) only, never
-# httpx.HTTPStatusError (a 4xx/5xx from digiquant is a real rejection, not a blip, and
-# retrying it burns the retry budget for nothing).
-_DIGIQUANT_RETRY_POLICY = RetryPolicy(max_attempts=3, retry_on=httpx.RequestError)
+# backtest_node re-raises httpx.RequestError (never HTTPStatusError — a 4xx/5xx from
+# digiquant is a real rejection, not a blip) so a single dropped packet doesn't fail the
+# whole run. NOT applied to optimize_node: /run_optimize is neither idempotent nor
+# deterministic across repeats for random/bayesian methods (no client-supplied job id,
+# no content-hash dedup — see Task 4's research note above), so an automatic retry there
+# is a correctness risk until digiquant grows a dedup mechanism, not just a cost one.
+_BACKTEST_RETRY_POLICY = RetryPolicy(max_attempts=3, retry_on=httpx.RequestError)
 ```
 
 In `build_workflow_graph()`, find:
@@ -593,11 +715,34 @@ In `build_workflow_graph()`, find:
 Replace with:
 
 ```python
-    builder.add_node("backtest", backtest_node, retry_policy=_DIGIQUANT_RETRY_POLICY)
-    builder.add_node("optimize", optimize_node, retry_policy=_DIGIQUANT_RETRY_POLICY)
+    builder.add_node("backtest", backtest_node, retry_policy=_BACKTEST_RETRY_POLICY)
+    builder.add_node("optimize", optimize_node)
 ```
 
-Add a comment above `get_checkpointer()` recording why sync checkpointers are correct here (the sync-checkpointer part of this task, no code change):
+- [ ] **Step 4: Implement — nodes.py, only backtest_node's except clause changes**
+
+In `digigraph/src/digigraph/graph/nodes.py`, `backtest_node`'s final `except` clause currently reads:
+
+```python
+    except _DIGIQUANT_CLIENT_ERRORS as e:
+        return {"backtest_result": None, "error": str(e)}
+```
+
+Replace with (split the tuple — `optimize_node`'s own `except _DIGIQUANT_CLIENT_ERRORS` clause a few lines below is untouched):
+
+```python
+    except httpx.HTTPStatusError as e:
+        return {"backtest_result": None, "error": str(e)}
+    # httpx.RequestError (connection/timeout — transient) is deliberately NOT caught
+    # here: it must propagate so _BACKTEST_RETRY_POLICY (graph.py) can retry it. A
+    # retry that lands after the server already created a job re-POSTs and creates a
+    # second one — accepted, since a backtest job is deterministic, in-memory, and
+    # TTL-pruned (wasteful, not corrupting), unlike optimize (see Task 4's research note).
+```
+
+- [ ] **Step 5: Add a comment above `get_checkpointer()`**
+
+Records why sync checkpointers are correct here (the sync-checkpointer part of this task, no code change):
 
 ```python
 # Sync checkpointers (SqliteSaver/PostgresSaver, not the Async* variants) are correct
@@ -608,24 +753,37 @@ Add a comment above `get_checkpointer()` recording why sync checkpointers are co
 def get_checkpointer():
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] **Step 6: Run tests to verify they pass**
 
 Run: `cd digigraph && python -m pytest ../tests/dg/test_graph_profiles.py -v`
-Expected: all tests PASS, including the new one and every pre-existing test in the file.
+Expected: all tests PASS, including the two new ones and every pre-existing test in the file.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: File the digiquant follow-up issue**
+
+Open a separate GitHub issue against digiquant (not this plan's scope): "`/run_optimize` needs an idempotency mechanism before automatic retry is safe" — reference the two reusable patterns already in that codebase (`weights_fingerprint()` content-hash comparison in `olympus/hermes/writers/commit_io.py`, or a DB unique constraint like `olympus/atlas/decision_log.py`'s). Link it from this task's PR body with `Refs #<N>` (not `Fixes` — this task does not resolve it).
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add digigraph/src/digigraph/graph/graph.py tests/dg/test_graph_profiles.py
-git commit -m "fix(digigraph): RetryPolicy on backtest/optimize nodes; document sync checkpointer choice
+git add digigraph/src/digigraph/graph/graph.py digigraph/src/digigraph/graph/nodes.py tests/dg/test_graph_profiles.py
+git commit -m "fix(digigraph): RetryPolicy on backtest only; document sync checkpointer choice
 
-Both nodes wrap httpx calls in try/except but give up on the first transient
-failure — a dropped packet fails the whole backtest run. RetryPolicy scoped
-to httpx.RequestError only (never HTTPStatusError — a 4xx/5xx is a real
-rejection, not a blip).
+backtest_node and optimize_node both caught httpx.RequestError internally and
+returned an error dict, so a graph-level RetryPolicy on either would have been
+inert -- it never sees an exception to retry. Split backtest_node's except
+clause so httpx.RequestError propagates (HTTPStatusError still caught -- a
+4xx/5xx is a real rejection, not a blip) and give only the backtest node a
+RetryPolicy.
+
+optimize_node gets no retry policy and no behavior change: /run_optimize is
+neither idempotent (no client-supplied job id, no dedup) nor deterministic
+across repeats for random/bayesian methods (unseeded sampler, no seed field
+on OptimizeRequest) -- an automatic retry there is a correctness risk, not
+just a wasted-compute one, until digiquant grows a dedup mechanism. Filed as
+a separate digiquant-side follow-up (Refs #<N>).
 
 Also record, in a comment, why sync checkpointers are the right choice given
-every call site is a plain sync def — so it doesn't silently rot if a route
+every call site is a plain sync def -- so it doesn't silently rot if a route
 here ever goes async."
 ```
 
@@ -1174,8 +1332,9 @@ nothing reads it either, it's provably dead; removed."
 - Test: `tests/dg/test_graph.py` (new HITL regression test)
 
 **Interfaces:**
-- Consumes: `digigraph.circuit_breaker.CircuitBreaker`/`CircuitBreakerOpen` (existing, unchanged) — same pattern already used in `digigraph/src/digigraph/tools/digisearch.py`.
+- Consumes: `digigraph.circuit_breaker.CircuitBreaker`/`CircuitBreakerOpen` (existing, unchanged) — same pattern already used in `digigraph/src/digigraph/tools/digisearch.py`. Also consumes each hub's existing `HUB_CLIENT_ERRORS` import (`digigraph.vertical_orchestrator._common` — already imported in all three hub files today, no new import needed) — see the normalization note below.
 - Produces: `invoke_digisearch_tool`, `invoke_digiquant_tool`, `invoke_digivault_tool` all return `{"ok": False, "error": "<service> circuit open; downstream unavailable"}` instead of raising/timing-out when their respective circuit is open — same dict-shaped error contract these functions already use for `invalid_response`.
+- **A raised downstream HTTP error must be normalized too, not just an open circuit.** `CircuitBreaker.__exit__` records a failure and returns `False` on any exception raised inside its `with` block — `False` means "don't suppress," so the original exception keeps propagating past the `with _cb, sync_client(...)` block. Concretely: a 503 response makes `r.raise_for_status()` raise `httpx.HTTPStatusError`; the breaker sees it, counts it toward the failure threshold, and lets it keep going — `except CircuitBreakerOpen` never catches it, because it isn't a `CircuitBreakerOpen`. Without a second `except` clause, the first 5 induced-failure calls in Step 1's own test would raise instead of returning `{"ok": False, ...}` — the test would fail even after "successfully" adding the breaker. Catch `HUB_CLIENT_ERRORS` (already imported, already the convention every hub uses for `invalid_response`-style failures) in a clause below `except CircuitBreakerOpen`, so a real downstream failure both counts toward the breaker's threshold (via `__exit__`, already happening) AND surfaces through the same `ok: False` contract as every other failure path in these functions, instead of escaping as a raised exception.
 
 **Note on test file placement:** `tests/dg/test_vertical_connectors.py` tests a *different* module (`digigraph.connectors.digiquant`/`digigraph.connectors.digisearch` — a separate connector layer, not the `vertical_orchestrator/*_hub.py` files this task touches). Create a new file `tests/dg/test_vertical_orchestrator_circuit_breaker.py` instead, so this doesn't get confused with that unrelated module.
 
@@ -1318,6 +1477,12 @@ with:
             body = r.json()
     except CircuitBreakerOpen:
         return {"ok": False, "error": "digisearch circuit open; downstream unavailable"}
+    except HUB_CLIENT_ERRORS as e:
+        # A real (non-circuit-open) downstream failure also counts as a breaker
+        # failure -- CircuitBreaker.__exit__ already recorded it above -- but must
+        # still surface as this function's normal ok:False contract rather than
+        # raise, matching every other failure path here (see "invalid_response").
+        return {"ok": False, "error": f"digisearch invoke failed: {e}"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "invalid_response"}
     return body
@@ -1355,6 +1520,8 @@ with:
             body = r.json()
     except CircuitBreakerOpen:
         return {"ok": False, "error": "digiquant circuit open; downstream unavailable"}
+    except HUB_CLIENT_ERRORS as e:
+        return {"ok": False, "error": f"digiquant invoke failed: {e}"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "invalid_response"}
     return body
@@ -1392,6 +1559,8 @@ with:
             body = r.json()
     except CircuitBreakerOpen:
         return {"ok": False, "error": "digivault circuit open; downstream unavailable"}
+    except HUB_CLIENT_ERRORS as e:
+        return {"ok": False, "error": f"digivault invoke failed: {e}"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "invalid_response"}
     return body
@@ -1399,12 +1568,50 @@ with:
 
 **Important — this must not break the existing `ok=False`-over-HTTP-200 test:** `tests/dg/test_digivault_tool.py::test_invoke_digivault_tool_ok_false_message_survives_the_http_hop` sends a **200** response with `{"ok": False, "error": "..."}` in the body — `raise_for_status()` never fires on a 200, so this path is unaffected by wrapping with `_cb` (the breaker only reacts to a raised exception). Run this specific test as part of Step 6 to confirm.
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [ ] **Step 6: Add a regression test locking in the merged error contract end-to-end**
+
+The `except HUB_CLIENT_ERRORS` clause just added changes what a genuine downstream HTTP failure looks like by the time it reaches `digigraph.orchestration.builtin`'s handlers — before, the real exception propagated out of `invoke_digivault_tool` and was caught one layer up by that handler's own `except _ORCHESTRATOR_CLIENT_ERRORS`, producing a bare `"digivault orchestrator invoke failed: {e}"` string; after, `invoke_digivault_tool` swallows it and returns `{"ok": False, "error": ...}`, which now flows through the handler's *existing* generic `not inv.get("ok")` passthrough as `json.dumps(inv)` instead. Nothing in Step 1's circuit-breaker test (which calls `invoke_digivault_tool` directly) or the rest of this file's tests (which mock `invoke_digivault_tool` itself) drives a real failure through both the hub *and* the handler together — add one test that does, via `httpx.MockTransport`, unmocked at the hub level (same pattern as the 200-with-`ok:false` test above, one layer further out):
+
+```python
+@pytest.mark.unit
+def test_handle_digivault_search_real_http_failure_reaches_handler_as_ok_false() -> None:
+    from digigraph.orchestration.builtin import _handle_digivault_search
+    from digigraph.vertical_orchestrator import digivault_hub
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "service unavailable"})
+
+    def fake_sync_client(**kwargs: object) -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(handler))
+
+    ctx = _ctx(vault_path_prefix="clients/digithings")
+    try:
+        with patch.object(digivault_hub, "sync_client", fake_sync_client):
+            out = _handle_digivault_search({"query": "anything"}, ctx)
+    finally:
+        # digivault_hub._cb is a module-level singleton shared across the whole test
+        # session. One failure sits well below failure_threshold=5 and can't flip it
+        # OPEN alone, but reset explicitly anyway so this can't leak into another test.
+        digivault_hub._cb._state = digivault_hub._cb._CLOSED
+        digivault_hub._cb._failures = 0
+        digivault_hub._cb._opened_at = None
+
+    assert isinstance(out, str)
+    assert "digivault orchestrator invoke failed" not in out
+    payload = json.loads(out)
+    assert payload["ok"] is False
+    assert "digivault invoke failed" in payload["error"]
+    assert "503" in payload["error"]
+```
+
+Add this to `tests/dg/test_digivault_tool.py` (needs `import json` if not already present in that file).
+
+- [ ] **Step 7: Run tests to verify they pass**
 
 Run: `cd digigraph && python -m pytest ../tests/dg/test_vertical_orchestrator_circuit_breaker.py ../tests/dg/test_digivault_tool.py ../tests/dg/test_digisearch_handler.py ../tests/dg/test_nodes.py -v`
-Expected: all PASS, including `test_invoke_digivault_tool_ok_false_message_survives_the_http_hop` (proving the circuit-breaker wrap doesn't interfere with the 200-with-`ok:false` convention) and every test that patches `invoke_digisearch_tool`/`invoke_digivault_tool` at the `digigraph.orchestration.builtin.invoke_*_tool` level (unaffected — those patches replace the function entirely, never reaching the real breaker-wrapped body).
+Expected: all PASS, including `test_invoke_digivault_tool_ok_false_message_survives_the_http_hop` and the new Step 6 test (proving the circuit-breaker wrap doesn't interfere with the 200-with-`ok:false` convention, and that a real downstream failure now reaches the handler as the merged `ok:False` contract, not the old bare-string shape) and every test that patches `invoke_digisearch_tool`/`invoke_digivault_tool` at the `digigraph.orchestration.builtin.invoke_*_tool` level (unaffected — those patches replace the function entirely, never reaching the real breaker-wrapped body).
 
-- [ ] **Step 7: Write the HITL resume regression test**
+- [ ] **Step 8: Write the HITL resume regression test**
 
 This is a documented, empirically-verified test of the **existing, known gap** (server.py's `/threads/{id}/resume` calls `Command(resume=...)`, but digigraph wires only a static `interrupt_after=["research"]` breakpoint — no node calls `interrupt()`, so the resume *value* has nothing to attach to and is silently dropped). It is deliberately built on a minimal graph using digigraph's exact `compile()` call shape, not the full production graph — isolating the HITL *mechanism* question from digigraph's unrelated routing/LLM complexity.
 
@@ -1474,18 +1681,19 @@ def test_static_interrupt_after_pauses_but_resume_value_is_silently_dropped() ->
     )
 ```
 
-- [ ] **Step 8: Run test to verify it passes**
+- [ ] **Step 9: Run test to verify it passes**
 
 Run: `cd digigraph && python -m pytest ../tests/dg/test_graph.py -k hitl_resume -v`
 Expected: PASSES (this documents *current* behavior — it was empirically verified against installed `langgraph==1.2.10` before being written into this plan, so it should pass on first run, not fail-then-pass like the other tasks' tests).
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add digigraph/src/digigraph/vertical_orchestrator/digisearch_hub.py \
         digigraph/src/digigraph/vertical_orchestrator/digiquant_hub.py \
         digigraph/src/digigraph/vertical_orchestrator/digivault_hub.py \
         tests/dg/test_vertical_orchestrator_circuit_breaker.py \
+        tests/dg/test_digivault_tool.py \
         tests/dg/test_graph.py
 git commit -m "fix(digigraph): circuit breaker on the real tool-call hot path; HITL resume regression test
 
@@ -1497,6 +1705,14 @@ connectors (ARCHITECTURE.md ยง5.4) -- had no circuit breaker at all: a
 downstream outage meant every request paid the full HTTP timeout with no
 fail-fast. Wrap all 3 invoke_*_tool functions with the same pattern already
 proven in tools/digisearch.py.
+
+Deviation from the original draft: catching only CircuitBreakerOpen left a
+real downstream HTTPStatusError/RequestError free to escape CircuitBreaker's
+__exit__ (which records the failure but returns False, i.e. 'don't
+suppress') -- added an `except HUB_CLIENT_ERRORS` branch (already imported in
+each hub file) so a genuine failure also surfaces through the same ok:False
+contract instead of raising, plus a regression test locking in what that
+does to the merged error shape one layer up in orchestration/builtin.py.
 
 Also add a regression test proving the known HITL gap empirically: a static
 interrupt_after breakpoint really does pause the graph (verified via
@@ -1519,7 +1735,8 @@ has a test that must start failing (in the good way) when it lands."
 
 **Interfaces:**
 - Consumes: `langgraph.store.memory.InMemoryStore`, `langgraph.store.postgres.PostgresStore` (verified: both ship inside `langgraph-checkpoint`/`langgraph-checkpoint-postgres`, already-installed dependencies — no new package needed), `langgraph.config.get_store()`.
-- Produces: `get_store()` — a new function in `graph.py`, mirroring `get_checkpointer()`'s selection logic. `build_workflow_graph()`'s compiled graph now has a `store` (verify via `compiled.store is not None`). `WorkflowState` gains `digi_subject: str | None`. `supervisor_node` (only runs when `DIGI_SUPERVISOR=1`) persists/retrieves `response_language` per-subject via `store.get((subject, "prefs"), "response_language")` / `store.put((subject, "prefs"), "response_language", {"language": ...})`.
+- Produces: `get_store()` — a new function in `graph.py`, mirroring `get_checkpointer()`'s selection logic *except* for the postgres-misconfiguration case, where it deliberately does NOT mirror it — see below. `build_workflow_graph()`'s compiled graph now has a `store` (verify via `compiled.store is not None`). `WorkflowState` gains `digi_subject: str | None`. `supervisor_node` (only runs when `DIGI_SUPERVISOR=1`) persists/retrieves `response_language` per-subject via `store.get((subject, "prefs"), "response_language")` / `store.put((subject, "prefs"), "response_language", {"language": ...})`.
+- **Fail closed when postgres is configured but unusable — do not silently fall back to `InMemoryStore`.** If `DIGI_CHECKPOINTER=postgres` is set but `DIGI_CHECKPOINTER_POSTGRES_URI` is empty, or `langgraph-checkpoint-postgres` isn't installed, falling back to an in-process `InMemoryStore` means cross-thread preferences silently stop surviving a restart (or ever existed cross-process at all) while every other signal — the env var, the deployment's own assumption — says "this is durable." That's strictly worse than the checkpointer's *own* postgres branch, which was checked against the real code, not assumed: `get_checkpointer()`'s `elif kind == "postgres":` branch does `except ImportError: pass` with **no fallback constructed inside that branch at all** — not "deliberately loud," genuinely silent (the function returns `None`, and nothing downstream currently checks for that). This plan does not fix `get_checkpointer()` — that's checkpointing, not memory, and out of this task's scope — but `get_store()` must not repeat the same silent-fallback shape for a *new* piece of state. Raise a clear, actionable error instead of falling back, for both misconfiguration cases.
 
 - [ ] **Step 1: Write the failing test — store selection**
 
@@ -1541,15 +1758,59 @@ def test_get_store_defaults_to_in_memory(monkeypatch: pytest.MonkeyPatch) -> Non
     import digigraph.graph.graph as _graph_module
 
     monkeypatch.delenv("DIGI_CHECKPOINTER", raising=False)
+    original = _graph_module._store_instance
     _graph_module._store_instance = None
-    store = get_store()
-    assert type(store).__name__ == "InMemoryStore"
+    try:
+        store = get_store()
+        assert type(store).__name__ == "InMemoryStore"
+    finally:
+        _graph_module._store_instance = original
+
+
+@pytest.mark.unit
+def test_get_store_fails_closed_when_postgres_uri_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DIGI_CHECKPOINTER=postgres with no URI must not silently degrade to
+    InMemoryStore -- that would make cross-thread preferences quietly stop
+    surviving a restart while the deployment's own config says "this is durable."""
+    from digigraph.graph.graph import get_store
+    import digigraph.graph.graph as _graph_module
+
+    monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
+    monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
+    original = _graph_module._store_instance
+    _graph_module._store_instance = None
+    try:
+        with pytest.raises(RuntimeError, match="DIGI_CHECKPOINTER_POSTGRES_URI"):
+            get_store()
+    finally:
+        _graph_module._store_instance = original
+
+
+@pytest.mark.unit
+def test_get_store_fails_closed_when_postgres_extra_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DIGI_CHECKPOINTER=postgres with a real URI but no langgraph-checkpoint-postgres
+    installed must also raise, not fall back -- same reasoning as the missing-URI case."""
+    from digigraph.graph.graph import get_store
+    import digigraph.graph.graph as _graph_module
+
+    monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
+    monkeypatch.setenv("DIGI_CHECKPOINTER_POSTGRES_URI", "postgresql://localhost/test")
+    original = _graph_module._store_instance
+    _graph_module._store_instance = None
+    try:
+        with patch.dict("sys.modules", {"langgraph.store.postgres": None}):
+            with pytest.raises(RuntimeError, match="checkpoint-postgres"):
+                get_store()
+    finally:
+        _graph_module._store_instance = original
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd digigraph && python -m pytest ../tests/dg/test_graph_profiles.py -k "has_a_store or get_store_defaults" -v`
-Expected: `test_build_workflow_graph_has_a_store` FAILS (`graph.store is None` — no store compiled in yet). `test_get_store_defaults_to_in_memory` FAILS with `ImportError`/`AttributeError` (`get_store` doesn't exist yet).
+Run: `cd digigraph && python -m pytest ../tests/dg/test_graph_profiles.py -k "has_a_store or get_store" -v`
+Expected: `test_build_workflow_graph_has_a_store` FAILS (`graph.store is None` — no store compiled in yet). The three `get_store` tests FAIL with `ImportError`/`AttributeError` (`get_store` doesn't exist yet).
 
 - [ ] **Step 3: Implement `get_store()` in graph.py**
 
@@ -1568,14 +1829,18 @@ def get_store():
 
     Distinct from the checkpointer above, which is scoped to a single thread_id: this is
     for values that should survive a user opening a brand-new thread (e.g. a response-
-    language preference). Mirrors DIGI_CHECKPOINTER's kind selection where it makes
-    sense: DIGI_CHECKPOINTER=postgres gets a real PostgresStore (same conn string,
-    reusing _bounded_conn_string's connect-timeout/keepalive bounds); every other kind
-    (memory/sqlite/unset) gets an InMemoryStore. LangGraph ships no first-class Store
-    equivalent of SqliteSaver, so mapping "sqlite" to InMemoryStore here is a documented,
-    same-process choice -- not a silent degradation the way an unreachable postgres
-    connection is for get_checkpointer() (that one is deliberately loud; see the
-    ImportError/missing-URI branch below, which matches that same discipline).
+    language preference). Mirrors DIGI_CHECKPOINTER's kind selection: DIGI_CHECKPOINTER=
+    postgres gets a real PostgresStore (same conn string, reusing _bounded_conn_string's
+    connect-timeout/keepalive bounds); every other kind (memory/sqlite/unset) gets an
+    InMemoryStore. LangGraph ships no first-class Store equivalent of SqliteSaver, so
+    mapping "sqlite" to InMemoryStore here is a documented, same-process choice.
+
+    Unlike get_checkpointer()'s postgres branch (which silently returns None on a
+    missing URI or a missing langgraph-checkpoint-postgres install -- a pre-existing gap,
+    out of this task's scope), a postgres misconfiguration here raises RuntimeError
+    instead of falling back to InMemoryStore: a silent fallback would make cross-thread
+    preferences quietly stop surviving a restart while DIGI_CHECKPOINTER=postgres still
+    claims otherwise. Fail loud, not quiet, for a newly-introduced piece of state.
     """
     global _store_instance
     raw = (os.environ.get("DIGI_CHECKPOINTER") or "").strip().lower()
@@ -1584,26 +1849,28 @@ def get_store():
             return _store_instance
         if raw == "postgres":
             conn_string = os.environ.get("DIGI_CHECKPOINTER_POSTGRES_URI", "").strip()
-            if conn_string:
-                try:
-                    from langgraph.store.postgres import PostgresStore
+            if not conn_string:
+                raise RuntimeError(
+                    "DIGI_CHECKPOINTER=postgres requires DIGI_CHECKPOINTER_POSTGRES_URI "
+                    "to be set for cross-thread memory (Store API); refusing to silently "
+                    "fall back to an in-process InMemoryStore."
+                )
+            try:
+                from langgraph.store.postgres import PostgresStore
+            except ImportError as e:
+                raise RuntimeError(
+                    "DIGI_CHECKPOINTER=postgres requires langgraph-checkpoint-postgres "
+                    "for cross-thread memory (Store API). Install with: "
+                    "pip install 'digigraph[checkpoint-postgres]'"
+                ) from e
+            cm = PostgresStore.from_conn_string(_bounded_conn_string(conn_string))
+            _cm_holders.append(cm)
+            _store_instance = cm.__enter__()
+            _store_instance.setup()
+            return _store_instance
+        from langgraph.store.memory import InMemoryStore
 
-                    cm = PostgresStore.from_conn_string(_bounded_conn_string(conn_string))
-                    _cm_holders.append(cm)
-                    _store_instance = cm.__enter__()
-                    _store_instance.setup()
-                except ImportError:
-                    import logging as _logging
-
-                    _logging.getLogger(__name__).warning(
-                        "langgraph-checkpoint-postgres not installed; falling back to "
-                        "InMemoryStore for cross-thread memory. Install with: "
-                        "pip install 'digigraph[checkpoint-postgres]'"
-                    )
-        if _store_instance is None:
-            from langgraph.store.memory import InMemoryStore
-
-            _store_instance = InMemoryStore()
+        _store_instance = InMemoryStore()
         return _store_instance
 ```
 
@@ -1637,7 +1904,7 @@ Replace with:
 - [ ] **Step 4: Run store-selection tests to verify they pass**
 
 Run: `cd digigraph && python -m pytest ../tests/dg/test_graph_profiles.py -v`
-Expected: all PASS, including the 2 new tests and every pre-existing test in the file.
+Expected: all PASS, including the 4 new tests and every pre-existing test in the file.
 
 - [ ] **Step 5: Write the failing test — supervisor preference round-trip**
 
@@ -1784,11 +2051,15 @@ durable per-subject lookup.
 Add get_store() alongside get_checkpointer() (same DIGI_CHECKPOINTER-kind
 branching; postgres gets a real PostgresStore reusing the existing connection
 bounds, everything else gets InMemoryStore -- LangGraph ships no Store
-equivalent of SqliteSaver, so this is a documented same-process choice, not a
-silent degradation). Wire store=get_store() into compile(). supervisor_node
-(DIGI_SUPERVISOR=1 only) is the concrete first consumer: it persists an
-explicitly-set response_language per subject and recalls it on a thread that
-omits one."
+equivalent of SqliteSaver, so this is a documented same-process choice).
+Unlike get_checkpointer()'s postgres branch, a misconfigured postgres store
+(missing URI, missing langgraph-checkpoint-postgres) raises RuntimeError
+instead of silently falling back to InMemoryStore -- a silent fallback here
+would make cross-thread preferences quietly stop surviving a restart while
+DIGI_CHECKPOINTER=postgres still claims otherwise. Wire store=get_store()
+into compile(). supervisor_node (DIGI_SUPERVISOR=1 only) is the concrete
+first consumer: it persists an explicitly-set response_language per subject
+and recalls it on a thread that omits one."
 ```
 
 ---
@@ -1796,6 +2067,6 @@ omits one."
 ## Self-Review Notes (for whoever picks this plan up)
 
 - **Spec coverage:** all 7 items from the modernization research's Quick Wins (1.1–1.6), the biggest Medium item (2.1, streaming), 2.2 (tool-turn decision), 2.3/2.5-equivalent (circuit breaker + HITL test), and 3.1 (Store) are covered. Explicitly deferred, per the research's own sequencing and this plan's stated scope: 2.4 (`TimeoutPolicy`, blocked on converting `backtest_node` to `async def` — a separate, real scope decision), 3.2 (`CachePolicy`, eval-only, low value), 3.3 (`Command`-based routing collapse, cosmetic, all-or-nothing).
-- **Every LangGraph API cited was checked against the actually-installed version** (`langgraph==1.2.10` core, `langgraph-checkpoint==4.2.0` for the Store submodule, `langgraph-checkpoint-postgres==3.1.0`) by reading the installed source directly — not assumed from training data, which can be stale for a library at this release cadence. Two things worth knowing if a version bump ever changes this: `get_stream_writer()`/`get_store()` live in `langgraph.config`; `stream_mode=["updates", "custom"], version="v2"` yields `{"type": ..., "ns": ..., "data": ...}` dicts (verified in `langgraph/types.py`'s `StreamPart` union).
+- **Every LangGraph API cited was checked against the actually-installed version** (`langgraph==1.2.10` core, `langgraph-checkpoint==4.1.1` for the Store submodule — corrected from an earlier `4.2.0` claim in this plan that didn't match what `uv.lock` actually resolves — `langgraph-checkpoint-postgres==3.1.0`) by reading the installed source directly — not assumed from training data, which can be stale for a library at this release cadence. Two things worth knowing if a version bump ever changes this: `get_stream_writer()`/`get_store()` live in `langgraph.config`; `stream_mode=["updates", "custom"], version="v2"` yields `{"type": ..., "ns": ..., "data": ...}` dicts (verified in `langgraph/types.py`'s `StreamPart` union).
 - **Task 5's design was adjusted mid-verification**, not guessed: the HITL regression test in Task 6 was empirically run against real installed LangGraph before being written down, and its exact assertions (`paused.next == ("validate",)`, the resume value being silently dropped) reflect what was actually observed, not a plausible-sounding guess.
 - **Type/interface consistency check:** `research_node`, `research_brief_builder_node`, `supervisor_node`, `strategy_validator_node` all end up as 1-arg `(state)` functions after Task 5 — consistent across every task that touches them (6, 7) and every call site (`research_subgraph.py`, `graph.py`'s `add_node` calls, the new tests).
