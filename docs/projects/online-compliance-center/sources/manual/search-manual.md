@@ -98,7 +98,7 @@ OCC Search uses the **same role model as the Cloud Portal** (see [portal-manual 
 
 - **Client Search Reviewer** — read-only search access; browse, search, preview, and (where granted) tag.
 - **Search Manager** — full search domain across the tenant's cases: create/edit/delete cases and criteria.
-- **Client Manager** / **Client Administrator** — broader tenant administration, including user/role management. **Client Administrator** (client-scoped, with `four-eyes.read` / `four-eyes.manage`) configures the four‑eyes toggle — not Super/System Administrator. See [portal-manual §10](./portal-manual.md#10-configuration--administration) / [§10.2](./portal-manual.md#102-four-eyes-two-person-approval).
+- **Client Manager** / **Client Administrator** — broader tenant administration, including user/role management. **Client Administrator** (client-scoped, with `four-eyes.read` / `four-eyes.manage`) configures the four‑eyes toggle — not Super/System Administrator. See [portal-manual §10](./portal-manual.md#10-administration-configuration) / [§10.2](./portal-manual.md#102-four-eyes-two-person-approval).
 - **System Administrator** / **Super Administrator** — cross-tenant administration. They do **not** use the client-scoped **4-Eyes** configuration tab (portal excludes Super/System Admin from that tab).
 
 **Search-relevant permissions** (features hide or disable based on these):
