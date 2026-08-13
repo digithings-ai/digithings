@@ -2182,13 +2182,19 @@ def run_tools(
     # tool-free completion depends on whether the last round left narration content
     # (see below) — this log/signal fires either way, so its wording must not imply
     # the forced completion unconditionally follows.
-    logger.warning(
-        "run_tools: exhausted max_tool_rounds=%d without the model returning an "
-        "empty tool_calls response",
-        max_tool_rounds,
-    )
-    if on_tool_step is not None:
-        on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
+    #
+    # Guard against max_tool_rounds <= 0: `range(max_tool_rounds)` above is then empty,
+    # so the for loop body never ran a single round — there is nothing to have
+    # "exhausted." Firing the log/signal in that case would falsely claim the model
+    # burned through a budget it was never given a chance to use.
+    if max_tool_rounds > 0:
+        logger.warning(
+            "run_tools: exhausted max_tool_rounds=%d without the model returning an "
+            "empty tool_calls response",
+            max_tool_rounds,
+        )
+        if on_tool_step is not None:
+            on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
 
     # Hit max rounds with no final content: force one more answer without tools.
     # Otherwise the last round's own narration content IS the final answer -- no

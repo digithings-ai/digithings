@@ -9,6 +9,8 @@ import re
 from typing import Any
 
 from langgraph.config import get_store, get_stream_writer
+from langgraph.store.base import BaseStore
+from langgraph.types import StreamWriter
 
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
@@ -23,7 +25,7 @@ from digigraph.trace_events import merge_rag_sources_accumulator
 logger = logging.getLogger(__name__)
 
 
-def _safe_stream_writer():
+def _safe_stream_writer() -> StreamWriter:
     """get_stream_writer() raises RuntimeError when called outside a compiled graph's
     invocation (e.g. a unit test calling a node function directly, bypassing
     graph.invoke()/.stream()) -- catch that and fall back to a true no-op, so node
@@ -34,7 +36,7 @@ def _safe_stream_writer():
         return lambda _data: None
 
 
-def _safe_get_store():
+def _safe_get_store() -> BaseStore | None:
     """get_store() raises RuntimeError when called outside a compiled graph's
     invocation (e.g. a unit test calling a node function directly, or any other
     out-of-runnable-context call) -- catch that and return None, mirroring

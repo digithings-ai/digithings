@@ -793,6 +793,37 @@ def test_round_limit_exhausted_emits_signal_and_forces_final_answer() -> None:
     assert signals == [{"max_tool_rounds": 2}]
 
 
+def test_max_tool_rounds_zero_never_emits_round_limit_exhausted() -> None:
+    """max_tool_rounds=0 (or negative) means the for loop's range() is empty -- zero
+    tool rounds ever ran, so there is nothing to have "exhausted." Before the guard,
+    run_tools fell through to the post-loop code unconditionally and fired
+    round_limit_exhausted (and the matching warning log) even though no round ran at
+    all, falsely implying the model burned through a budget it never got a chance to
+    use."""
+    fake_client = MagicMock()
+    # No completion call should happen at all: the loop body never executes, and
+    # `content` stays "" with `current` unchanged from `messages`, so the
+    # forced-completion branch's `len(current) > len(messages)` guard is also False.
+    fake_client.chat.completions.create.side_effect = AssertionError(
+        "must not call the model when max_tool_rounds=0"
+    )
+
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=0,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == ""
+    assert not any(k == "round_limit_exhausted" for k, _ in steps)
+
+
 def test_round_boundary_not_emitted_on_the_non_streaming_path_without_content() -> None:
     """Regression pin for the non-streaming branch specifically (test above already
     covers it, but this isolates it): tool_calls with NO content must still fire no

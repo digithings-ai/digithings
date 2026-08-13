@@ -4,6 +4,7 @@ hot path every LLM tool call to digisearch/digiquant/digivault goes through
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
 from unittest.mock import patch
 
 import httpx
@@ -13,13 +14,13 @@ pytestmark = pytest.mark.unit
 
 
 @pytest.fixture(autouse=True)
-def _reset_all_hub_breakers():
+def _reset_all_hub_breakers() -> Iterator[None]:
     """Each hub's CircuitBreaker is a module-level singleton shared across the whole
     test session -- reset state before AND after every test in this file so test order
     can't leak an OPEN circuit into an unrelated test."""
     from digigraph.vertical_orchestrator import digiquant_hub, digisearch_hub, digivault_hub
 
-    def _reset():
+    def _reset() -> None:
         for mod in (digisearch_hub, digiquant_hub, digivault_hub):
             mod._cb._state = mod._cb._CLOSED
             mod._cb._failures = 0
@@ -30,7 +31,7 @@ def _reset_all_hub_breakers():
     _reset()
 
 
-def _failing_client():
+def _failing_client() -> Callable[..., httpx.Client]:
     """A transport that raises httpx.ConnectError directly, not a 503 response.
 
     Only a genuine connectivity/transport failure (httpx.RequestError) should count
@@ -75,7 +76,7 @@ def _failing_client():
     ],
 )
 def test_circuit_opens_after_five_failures_and_fails_fast(
-    hub_module_path: str, invoke_name: str, invoke_kwargs: dict, service_label: str
+    hub_module_path: str, invoke_name: str, invoke_kwargs: dict[str, str], service_label: str
 ) -> None:
     import importlib
 
@@ -109,7 +110,7 @@ def test_circuit_opens_after_five_failures_and_fails_fast(
     assert service_label in result["error"]
 
 
-def _client_error_client(status: int = 422):
+def _client_error_client(status: int = 422) -> Callable[..., httpx.Client]:
     """A transport that returns a real HTTP response with a client/server error
     status -- exercises raise_for_status() raising httpx.HTTPStatusError, which
     (per Finding 2's corrected design) must NOT count toward opening the breaker."""
@@ -144,7 +145,7 @@ def _client_error_client(status: int = 422):
     ],
 )
 def test_client_caused_errors_never_open_the_circuit(
-    hub_module_path: str, invoke_name: str, invoke_kwargs: dict
+    hub_module_path: str, invoke_name: str, invoke_kwargs: dict[str, str]
 ) -> None:
     """Finding 2 (IMPORTANT, final whole-branch review): a client-caused failure --
     e.g. malformed tool-call arguments producing a 422 from a single misbehaving
