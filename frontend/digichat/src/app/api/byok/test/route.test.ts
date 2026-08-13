@@ -130,6 +130,25 @@ describe("POST /api/byok/test", () => {
     expect(body.ok).toBe(false);
   });
 
+  // #2351: readProvider used to fall through to "openai" for any unrecognized
+  // x-byok-provider value. readByokProvider (from the shared
+  // frontend/digichat/src/lib/byok-providers.ts module) never coerces —
+  // an unrecognized value must fail explicitly instead of silently being
+  // validated as OpenAI.
+  it("returns 400 with an explicit unknown-provider error for an unrecognized provider, instead of silently validating as OpenAI", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: { "x-byok-key": "sk-test", "x-byok-provider": "bogus" },
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.ok).toBe(false);
+    expect(body.error).toMatch(/unknown/i);
+    expect(body.error).toContain("bogus");
+  });
+
   it("returns 400 for invalid OpenAI key prefix", async () => {
     const res = await POST(
       new Request("http://localhost/api/byok/test", {

@@ -484,9 +484,17 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
 5. On success, key is held in-memory for this tab session and sent as
    `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
    requests only. Whether `X-BYOK-Model` is sent at all is driven by
-   `byokRequiresModel(provider)` — every call site defers to that one
-   predicate (never a hand-maintained per-provider list) so adding a 6th
-   provider can't silently omit its model header the way `xai` once was.
+   `byokRequiresModel(provider)`, defined once in the framework-neutral
+   `src/lib/byok-providers.ts` (no `"use client"` directive, so both React
+   client code and Next.js server Route Handlers can import it) and
+   re-exported by `use-byok-key.ts` for its own callers — every call site
+   defers to that one predicate (never a hand-maintained per-provider list),
+   client and server alike: the 3 client call sites (`chat-panel.tsx`,
+   `embed/embed-client.tsx`, `byok-settings-panel.tsx`) plus the 2 server
+   Route Handlers that forward BYOK headers upstream — `api/chat/route.ts`'s
+   `byokNeedsModel` gate and `api/byok/test/route.ts`'s `needsModel` gate —
+   so adding a 6th provider can't silently omit its model header the way
+   `xai` once was, on either side of the client/server boundary (#2351).
 
 For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
 (no key required) as soon as `openrouter` becomes the selected provider, usually
@@ -509,10 +517,17 @@ ceiling too, not just the anonymous-embed one.
 `config/byok-providers.json`'s `keyPrefix`/`fallbackModels` fields are read by
 no runtime code (only `id`/`baseUrl`/`requiresModel` feed
 `digigraph/src/digigraph/llm_auth.py`'s loader) but are checked for parity
-against the hand-written copies in `use-byok-key.ts`
-(`validateBYOKKey`/`byokModelPresets`) by
-`use-byok-key.catalog-parity.test.ts`, so either copy drifting from the
-catalog fails a test instead of drifting silently.
+against `src/lib/byok-providers.ts`'s own catalog (`BYOK_PROVIDER_LIST`,
+`byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`) by two test
+files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,
+plus its own `byokModelPresets`) and `lib/byok-providers.catalog-parity.test.ts`
+(the shared module itself, which is what `api/chat/route.ts` and
+`api/byok/test/route.ts` import directly) — so either copy drifting from the
+catalog fails a test instead of drifting silently. `api/byok/test/route.ts`
+also calls `readByokProvider` from that same module: an `X-BYOK-Provider`
+value naming no known provider gets an explicit
+`400 Unknown BYOK provider: "…"` response instead of being silently treated
+as `openai`, the pre-#2351 behavior of that route's old `readProvider`.
 
 **digithings rule:** digithings tenants use `backend.type: digigraph` only.
 digivault and digisearch are digigraph tools (activity mappers under

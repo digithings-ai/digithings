@@ -7,6 +7,7 @@ import {
 import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
+import { byokRequiresModel } from "@/lib/byok-providers";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
@@ -200,11 +201,7 @@ export async function POST(req: Request) {
   );
 
   // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
-  const byokNeedsModel =
-    byokProvider === "openrouter" ||
-    byokProvider === "anthropic" ||
-    byokProvider === "gemini" ||
-    byokProvider === "xai";
+  const byokNeedsModel = byokRequiresModel(byokProvider);
   if (byokKey && byokNeedsModel && !byokModel) {
     return new Response(
       JSON.stringify({

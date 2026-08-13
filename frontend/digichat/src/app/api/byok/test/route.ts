@@ -1,9 +1,13 @@
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import {
-  isOpenRouterKey,
   normalizeOpenRouterModel,
   OPENROUTER_API_BASE,
 } from "@/lib/byok-openrouter";
+import {
+  byokKeyPrefixError,
+  readByokProvider,
+  type BYOKProvider,
+} from "@/lib/byok-providers";
 import {
   isEmbedChatRequest,
   resolveEmbedChatTenant,
@@ -20,16 +24,6 @@ type TestResult = {
   models?: { id: string; label: string }[];
   error?: string;
 };
-
-type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini" | "xai";
-
-function readProvider(raw: string): BYOKProvider {
-  if (raw === "anthropic") return "anthropic";
-  if (raw === "openrouter") return "openrouter";
-  if (raw === "gemini") return "gemini";
-  if (raw === "xai") return "xai";
-  return "openai";
-}
 
 function rateLimitResponse(message: string, retryAfterSec: number): Response {
   return new Response(JSON.stringify({ ok: false, error: message }), {
@@ -84,7 +78,11 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
-  const provider = readProvider(req.headers.get("x-byok-provider")?.trim() ?? "openai");
+  // A missing/empty header defaults to "openai" (unchanged behavior). A
+  // *present but unrecognized* value is never silently coerced to "openai"
+  // — it fails explicitly below instead (#2351).
+  const rawProvider = req.headers.get("x-byok-provider")?.trim() ?? "";
+  const provider = rawProvider === "" ? "openai" : readByokProvider(rawProvider);
   const byokModel = normalizeOpenRouterModel(
     req.headers.get("x-byok-model")?.trim() ?? ""
   );
@@ -93,32 +91,16 @@ export async function POST(req: Request): Promise<Response> {
     return jsonResponse({ ok: false, error: "No BYOK key provided." }, 400);
   }
 
-  if (provider === "openai" && !byokKey.startsWith("sk-")) {
+  if (provider === null) {
     return jsonResponse(
-      { ok: false, error: "OpenAI keys must start with sk-." },
+      { ok: false, error: `Unknown BYOK provider: "${rawProvider}".` },
       400
     );
   }
-  if (provider === "anthropic" && !byokKey.startsWith("sk-ant-")) {
-    return jsonResponse(
-      { ok: false, error: "Anthropic keys must start with sk-ant-." },
-      400
-    );
-  }
-  if (provider === "openrouter" && !isOpenRouterKey(byokKey)) {
-    return jsonResponse(
-      { ok: false, error: "OpenRouter keys must start with sk-or-." },
-      400
-    );
-  }
-  if (provider === "gemini" && !byokKey.startsWith("AI")) {
-    return jsonResponse(
-      { ok: false, error: "Gemini keys must start with AI." },
-      400
-    );
-  }
-  if (provider === "xai" && !byokKey.startsWith("xai-")) {
-    return jsonResponse({ ok: false, error: "x.ai keys must start with xai-." }, 400);
+
+  const prefixError = byokKeyPrefixError(byokKey, provider);
+  if (prefixError) {
+    return jsonResponse({ ok: false, error: prefixError }, 400);
   }
 
   const needsModel =

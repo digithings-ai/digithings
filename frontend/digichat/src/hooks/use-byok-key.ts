@@ -1,17 +1,15 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { isOpenRouterKey } from "@/lib/byok-openrouter";
+import {
+  BYOK_PROVIDER_LIST,
+  byokKeyPrefixError,
+  byokRequiresModel,
+  type BYOKProvider,
+} from "@/lib/byok-providers";
 
-export type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini" | "xai";
-
-export const BYOK_PROVIDER_LIST: readonly BYOKProvider[] = [
-  "openrouter",
-  "openai",
-  "anthropic",
-  "gemini",
-  "xai",
-];
+export type { BYOKProvider };
+export { BYOK_PROVIDER_LIST, byokRequiresModel };
 
 /** Legacy durable keys — purged on load; never written again. */
 export const BYOK_DURABLE_STORAGE_KEYS = [
@@ -19,11 +17,6 @@ export const BYOK_DURABLE_STORAGE_KEYS = [
   "byok_provider",
   "byok_model",
 ] as const;
-
-/** Non-OpenAI BYOK requires an explicit model slug (digigraph spend path). */
-export function byokRequiresModel(provider: BYOKProvider): boolean {
-  return provider !== "openai";
-}
 
 export function byokModelPlaceholder(provider: BYOKProvider): string {
   switch (provider) {
@@ -222,22 +215,7 @@ export function useBYOKKey() {
 /** Validate key format. Returns null if valid, or an error message. */
 export function validateBYOKKey(key: string, provider: BYOKProvider): string | null {
   if (!key.trim()) return "API key is required.";
-  if (provider === "openai" && !key.startsWith("sk-")) {
-    return "OpenAI keys must start with sk-.";
-  }
-  if (provider === "anthropic" && !key.startsWith("sk-ant-")) {
-    return "Anthropic keys must start with sk-ant-.";
-  }
-  if (provider === "openrouter" && !isOpenRouterKey(key)) {
-    return "OpenRouter keys must start with sk-or-.";
-  }
-  if (provider === "gemini" && !key.startsWith("AI")) {
-    return "Gemini keys must start with AI.";
-  }
-  if (provider === "xai" && !key.startsWith("xai-")) {
-    return "x.ai keys must start with xai-.";
-  }
-  return null;
+  return byokKeyPrefixError(key, provider);
 }
 
 /** Validate model when required (all non-OpenAI providers). Returns null if valid. */
