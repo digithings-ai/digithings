@@ -243,7 +243,6 @@ real node executions rather than compiled graph nodes.
 | `quant_artifact_uri` | `str \| None` | Opaque artifact ref (Phase 2 contract) |
 | `error` | `str \| None` | Terminal error; stops further node execution |
 | `stored_datasets` | `dict[str, dict]` | Ref → profile map (survives across turns via checkpointer) |
-| `stream_callback` | `Callable` | Not serialized; injected per-request for streaming |
 | `workflow_profile` | `str` | Active profile (`full_stack`, `research_rag`, `quant_backtest`, `plan_execute`) |
 | `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. |
 | `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map) |
@@ -496,11 +495,25 @@ _stream_completions_progressive (server.py generator)
         │
         ├── spawns Thread → run_digigraph_workflow_streaming(req, event_queue)
         │                           │
-        │                           ├── _stream_callback_ctx (ContextVar) set
-        │                           ├── graph.stream(..., stream_mode="updates")
-        │                           │     └── research_node → run_tools
-        │                           │           └── stream_callback("tool_call/result/content/reasoning/trace")
-        │                           │                 └── event_queue.put(...)
+        │                           ├── defines stream_callback(event_type, data) closure
+        │                           │     (content/tool_call/round_boundary/tool_result handling)
+        │                           ├── graph.stream(initial, config=config,
+        │                           │               stream_mode=["updates", "custom"], version="v2")
+        │                           │     │
+        │                           │     ├── part["type"] == "custom"
+        │                           │     │     (event_type, data) = part["data"]
+        │                           │     │     └── stream_callback(event_type, data)   [called directly]
+        │                           │     │
+        │                           │     └── part["type"] == "updates"
+        │                           │           _stream_update_summary(update)
+        │                           │           └── event_queue.put(("trace", graph_update))
+        │                           │
+        │                           │   Inside the graph run, research_node → _run_document_rag_path:
+        │                           │     writer = _safe_stream_writer()   # get_stream_writer(), no-op outside a real invocation
+        │                           │     run_tools(..., on_tool_step=stream_callback)
+        │                           │           └── stream_callback(...) → writer((event_type, data))
+        │                           │                 └── surfaces above as a "custom" part
+        │                           │
         │                           └── event_queue.put(("done", None))
         │
         └── while True: ev = event_queue.get()
@@ -512,7 +525,9 @@ _stream_completions_progressive (server.py generator)
               └── "done" → break → yield stop chunk → yield [DONE]
 ```
 
-The `_stream_callback_ctx` is a `ContextVar` used to pass the callback from `workflow.py` to `research.py` without threading state through the LangGraph config. The `stream_mode="updates"` call on `graph.stream` drives per-node progress events; the research node's tool loop emits fine-grained events independently.
+Nodes emit streaming events via LangGraph's native `get_stream_writer()` (`langgraph.config`), not via a callback threaded through state, config, or a `ContextVar` — that 3-tier resolver was collapsed in c32a7a970. `_run_document_rag_path` (`research.py:291`) resolves the writer through `_safe_stream_writer()` (`research.py:26-34`): it calls `get_stream_writer()` and catches the `RuntimeError` LangGraph raises when it's invoked outside a real graph run (e.g. a unit test calling a node function directly instead of going through `graph.invoke()`/`graph.stream()`), falling back to a no-op `lambda _data: None`. This is what lets `tests/dg/test_nodes.py` call node functions in isolation without a full graph invocation. The resolved `writer` (`research.py:370`) is closed over by a local `stream_callback(event_type, data)` (`research.py:372-379`) that enriches `digisearch`/`digisearch_fetch_all` `tool_call` events with `index_name` before calling `writer((event_type, data))`; that `stream_callback` is passed to `run_tools(..., on_tool_step=stream_callback)`, so every `tool_call`/`tool_result`/`content`/`reasoning` event the tool loop emits flows out through the writer.
+
+`workflow.py`'s `run_digigraph_workflow_streaming` (`workflow.py:291-`) drives the graph with `graph.stream(initial, config=config, stream_mode=["updates", "custom"], version="v2", durability="sync")` (`workflow.py:424-429`). The dual-mode list means each yielded `part` carries a `"type"` discriminant: a `part["type"] == "custom"` entry is exactly the `(event_type, data)` tuple a node wrote via `get_stream_writer()`, and the driver loop unpacks it and calls its own rich `stream_callback` closure (`workflow.py:315-407`) directly — the same content-buffering, `tool_call` → `code_block` trace synthesis for `data_engineer_agent`, `round_boundary` → trace event (#2306), and `tool_result`-with-`rag_sources` → `rag_sources` trace event handling this closure has always done, just invoked without an intermediate `ContextVar` hop. A `part["type"] == "updates"` entry is the per-node state delta LangGraph emits natively; `_stream_update_summary` reduces it to `{node: {"keys": [...]}}` (avoiding serialization of large state values) and it is forwarded as a `graph_update` trace event. There is no config channel and no module-level `ContextVar`: the writer `get_stream_writer()` returns is scoped to the current graph run by LangGraph itself, so `workflow.py` never needs to inject anything into `research.py` — it only needs to be the consumer on the other end of `graph.stream(...)`.
 
 ---
 
