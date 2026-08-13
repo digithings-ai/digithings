@@ -457,11 +457,21 @@ UX (`src/components/byok-cli-flow.tsx`) is a stepwise terminal sequence rendered
 
 1. Select provider (arrow keys + Enter, or click)
 2. Paste API key
-3. Select model from presets (or custom slug)
+3. Select model from presets (or custom slug) — for OpenRouter, from a live
+   catalog with tier tabs instead (see below)
 4. `POST /api/byok/test` ping — activation is refused until `ok: true`
 5. On success, key is held in-memory for this tab session and sent as
    `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
    requests only
+
+For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
+(no key required) as soon as `openrouter` becomes the selected provider, usually
+before the model step even renders. Once that catalog lands, the model step
+replaces the flat preset list with tier tabs (free / opensource / flagship /
+all / a user-starred "custom" set held only in component state) plus a
+per-entry star toggle. Any fetch failure or non-OpenRouter provider falls back
+to the original flat preset list unchanged — the tiered UI is strictly additive
+and never blocks the flow on network.
 
 The BFF forwards BYOK headers to digigraph for the request lifetime and never
 logs or returns the raw key. `byokActivationGate` + Vitest cover the

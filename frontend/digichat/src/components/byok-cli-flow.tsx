@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   type BYOKProvider,
+  type ByokModelOption,
   BYOK_PROVIDER_LIST,
   byokModelPresets,
   byokRequiresModel,
@@ -59,6 +60,8 @@ function TermOptionList({
   onHighlight,
   onSelect,
   listLabel,
+  onToggleStar,
+  isStarred,
 }: {
   options: readonly string[];
   labels?: readonly string[];
@@ -66,6 +69,8 @@ function TermOptionList({
   onHighlight: (i: number) => void;
   onSelect: (value: string) => void;
   listLabel: string;
+  onToggleStar?: (value: string) => void;
+  isStarred?: (value: string) => boolean;
 }) {
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -112,6 +117,19 @@ function TermOptionList({
         const active = i === highlighted;
         return (
           <li key={opt || "(default)"} role="option" aria-selected={active} data-idx={i}>
+            {onToggleStar && opt !== CUSTOM_MODEL ? (
+              <button
+                type="button"
+                className="dc-byok-star"
+                aria-label={isStarred?.(opt) ? "remove from custom" : "add to custom"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStar(opt);
+                }}
+              >
+                {isStarred?.(opt) ? "★" : "☆"}
+              </button>
+            ) : null}
             <button
               type="button"
               className={cn("dc-byok-option", active && "dc-byok-option-active")}
@@ -162,13 +180,41 @@ export function ByokCliFlow({
   const [customModel, setCustomModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ping, setPing] = useState<ByokPingResult | null>(null);
+  type LiveBuckets = {
+    free: ByokModelOption[];
+    opensource: ByokModelOption[];
+    flagship: ByokModelOption[];
+    all: ByokModelOption[];
+  };
+  const [liveModels, setLiveModels] = useState<LiveBuckets | null>(null);
+  const [modelsFetchFailed, setModelsFetchFailed] = useState(false);
+  const [tier, setTier] = useState<"free" | "opensource" | "flagship" | "all" | "custom">("all");
+  const [customIds, setCustomIds] = useState<Set<string>>(new Set());
   const keyInputRef = useRef<HTMLInputElement>(null);
   const customModelRef = useRef<HTMLInputElement>(null);
   const formId = useId();
   /** Drop in-flight ping activation if the flow unmounts (Escape / cancel). */
   const aliveRef = useRef(true);
 
+  const tieredOptions = provider === "openrouter" && liveModels ? liveModels : null;
+
+  const toggleCustom = useCallback((id: string) => {
+    setCustomIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const modelOptions = (() => {
+    if (tieredOptions) {
+      const list =
+        tier === "custom"
+          ? tieredOptions.all.filter((m) => customIds.has(m.id))
+          : tieredOptions[tier];
+      return [...list.map((m) => m.id), CUSTOM_MODEL];
+    }
     const presets = [...byokModelPresets(provider)];
     if (!byokRequiresModel(provider)) {
       return ["", ...presets, CUSTOM_MODEL];
@@ -179,6 +225,9 @@ export function ByokCliFlow({
   const modelLabels = modelOptions.map((m) => {
     if (m === "") return "(provider default)";
     if (m === CUSTOM_MODEL) return "custom…";
+    if (tieredOptions) {
+      return tieredOptions.all.find((o) => o.id === m)?.label ?? m;
+    }
     return m;
   });
 
@@ -188,6 +237,23 @@ export function ByokCliFlow({
       aliveRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (provider !== "openrouter" || liveModels || modelsFetchFailed) return;
+    let cancelled = false;
+    fetch("/api/byok/models?provider=openrouter", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: LiveBuckets & { ok: boolean }) => {
+        if (cancelled) return;
+        setLiveModels({ free: data.free, opensource: data.opensource, flagship: data.flagship, all: data.all });
+      })
+      .catch(() => {
+        if (!cancelled) setModelsFetchFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, liveModels, modelsFetchFailed]);
 
   useEffect(() => {
     if (step === "key") keyInputRef.current?.focus();
@@ -344,6 +410,14 @@ export function ByokCliFlow({
             </TermLine>
           ) : null}
 
+          {provider === "openrouter" && !liveModels && !modelsFetchFailed ? (
+            <TermLine marker="·">
+              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                fetching live model catalog…
+              </span>
+            </TermLine>
+          ) : null}
+
           {step === "provider" ? (
             <TermLine marker=">">
               <p className="dc-byok-prompt">Select provider (↑↓ + Enter, or click)</p>
@@ -431,7 +505,27 @@ export function ByokCliFlow({
                   spellCheck={false}
                   className="dc-byok-input"
                 />
-              ) : (
+              ) : null}
+              {tieredOptions ? (
+                <div className="dc-byok-tier-tabs" role="tablist" aria-label="Model tier">
+                  {(["free", "opensource", "flagship", "all", "custom"] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      role="tab"
+                      aria-selected={tier === t}
+                      className={cn("dc-byok-tier-tab", tier === t && "dc-byok-tier-tab-active")}
+                      onClick={() => {
+                        setTier(t);
+                        setModelHi(0);
+                      }}
+                    >
+                      {t} ({t === "custom" ? customIds.size : tieredOptions[t].length})
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {!customModel ? (
                 <TermOptionList
                   options={modelOptions}
                   labels={modelLabels}
@@ -439,8 +533,10 @@ export function ByokCliFlow({
                   onHighlight={setModelHi}
                   onSelect={selectModel}
                   listLabel="BYOK models"
+                  onToggleStar={tieredOptions ? toggleCustom : undefined}
+                  isStarred={tieredOptions ? (id) => customIds.has(id) : undefined}
                 />
-              )}
+              ) : null}
             </TermLine>
           ) : null}
 
