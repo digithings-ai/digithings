@@ -853,6 +853,42 @@ def test_round_boundary_not_emitted_on_the_non_streaming_path_without_content() 
     assert not any(k == "round_boundary" for k, _ in steps)
 
 
+def test_run_tools_forwards_tool_choice_required() -> None:
+    """run_tools(tool_choice='required') reaches the underlying completions call."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("final answer")
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool=lambda n, a: "unused",
+            tool_choice="required",
+        )
+    assert out == "final answer"
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["tool_choice"] == "required"
+
+
+def test_run_tools_defaults_tool_choice_to_auto() -> None:
+    """Unchanged default behavior when tool_choice is not passed."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("final answer")
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool=lambda n, a: "unused",
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["tool_choice"] == "auto"
+
+
 def test_chat_completion_with_tools_parallel_branch() -> None:
     """Two parallel-safe tools in one round run via the concurrent branch."""
     fn_a = MagicMock()

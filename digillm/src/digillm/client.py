@@ -1974,6 +1974,7 @@ def run_tools(
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
+    tool_choice: str | ToolArguments = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
@@ -1988,6 +1989,8 @@ def run_tools(
         execute_tool: ``execute_tool(name, arguments) -> str | {"content": str, ...}``.
         temperature:  Sampling temperature.
         max_tool_rounds: Maximum tool rounds before forcing a final answer.
+        tool_choice:  Passed to every turn's completion call ("auto" default;
+            "required" forces a tool call every round). See :func:`completion`.
         on_tool_step: Optional callback invoked with ``("tool_call", {name,
             arguments})`` before each call and ``("tool_result", {name, content,
             ...})`` after. Also receives ``("round_boundary", {round_idx,
@@ -2056,7 +2059,7 @@ def run_tools(
                 turn_messages,
                 temperature=temperature,
                 tools=turn_tools,
-                tool_choice="auto",
+                tool_choice=tool_choice,
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
             )
@@ -2066,7 +2069,7 @@ def run_tools(
                 turn_messages,
                 temperature=temperature,
                 tools=turn_tools,
-                tool_choice="auto",
+                tool_choice=tool_choice,
                 search_parameters=search_parameters if include_search else None,
             )
         )
