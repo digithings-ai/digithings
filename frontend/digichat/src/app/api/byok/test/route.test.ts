@@ -99,11 +99,7 @@ describe("POST /api/byok/test", () => {
     const res = await POST(
       new Request("http://localhost/api/byok/test", {
         method: "POST",
-        headers: {
-          "x-byok-key": "sk-proj-bad",
-          "x-byok-provider": "openrouter",
-          "x-byok-model": "openai/gpt-4o-mini",
-        },
+        headers: { "x-byok-key": "sk-proj-bad", "x-byok-provider": "openrouter" },
       })
     );
     expect(res.status).toBe(400);
@@ -111,19 +107,51 @@ describe("POST /api/byok/test", () => {
     expect(body.error).toContain("sk-or-");
   });
 
-  it("returns 400 when OpenRouter model header missing", async () => {
-    const res = await POST(
-      new Request("http://localhost/api/byok/test", {
-        method: "POST",
-        headers: {
-          "x-byok-key": "sk-or-v1-test",
-          "x-byok-provider": "openrouter",
-        },
-      })
+  it("validates an OpenRouter key via GET /api/v1/key with no model required", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: { label: "test-key", limit: 10, usage: 1, is_free_tier: false } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
     );
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toContain("Model is required");
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/byok/test", {
+          method: "POST",
+          headers: { "x-byok-key": "sk-or-v1-test", "x-byok-provider": "openrouter" },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      const [url] = fetchSpy.mock.calls[0] as [string];
+      expect(url).toBe("https://openrouter.ai/api/v1/key");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("rejects an OpenRouter key with zero remaining credit even on HTTP 200", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: { label: "exhausted", limit: 10, usage: 10, is_free_tier: false } }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/byok/test", {
+          method: "POST",
+          headers: { "x-byok-key": "sk-or-v1-test", "x-byok-provider": "openrouter" },
+        }),
+      );
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.ok).toBe(false);
+      expect(body.error).toContain("credit");
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("returns 400 for invalid Gemini key prefix", async () => {

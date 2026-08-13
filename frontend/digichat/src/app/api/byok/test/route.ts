@@ -104,7 +104,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const needsModel =
-    provider === "openrouter" || provider === "anthropic" || provider === "gemini" || provider === "xai";
+    provider === "anthropic" || provider === "gemini" || provider === "xai";
   if (needsModel && !byokModel) {
     return jsonResponse(
       {
@@ -135,7 +135,7 @@ async function testKey(
     case "anthropic":
       return testAnthropicKey(key);
     case "openrouter":
-      return testOpenRouterKey(key, model);
+      return testOpenRouterKey(key);
     case "gemini":
       return testGeminiKey(key);
     case "xai":
@@ -188,23 +188,10 @@ async function testAnthropicKey(key: string): Promise<TestResult> {
   }
 }
 
-async function testOpenRouterKey(key: string, model: string): Promise<TestResult> {
-  const referer =
-    process.env.DIGICHAT_SITE_URL?.trim() || "https://digithings.ai";
+async function testOpenRouterKey(key: string): Promise<TestResult> {
   try {
-    const resp = await fetchWithTimeout(`${OPENROUTER_API_BASE}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "content-type": "application/json",
-        "HTTP-Referer": referer,
-        "X-OpenRouter-Title": "digichat",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: "ping" }],
-        max_tokens: 1,
-      }),
+    const resp = await fetchWithTimeout(`${OPENROUTER_API_BASE}/key`, {
+      headers: { Authorization: `Bearer ${key}` },
     });
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as {
@@ -215,8 +202,17 @@ async function testOpenRouterKey(key: string, model: string): Promise<TestResult
         error: body.error?.message ?? `OpenRouter returned HTTP ${resp.status}`,
       };
     }
-    const data = (await resp.json()) as { model?: string };
-    return { ok: true, model: data.model ?? model };
+    const data = (await resp.json()) as {
+      data?: { limit?: number | null; usage?: number };
+    };
+    const limit = data.data?.limit;
+    const usage = data.data?.usage ?? 0;
+    // limit === null means unlimited/no cap on this key — only a finite,
+    // fully-consumed limit means "this key has no credit left."
+    if (typeof limit === "number" && usage >= limit) {
+      return { ok: false, error: "This OpenRouter key has no remaining credit." };
+    }
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
