@@ -1,0 +1,47 @@
+[
+  {
+    "id": "openrouter",
+    "label": "OpenRouter",
+    "keyPrefix": "sk-or-",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "requiresModel": true,
+    "fallbackModels": [
+      "openai/gpt-4o-mini",
+      "openai/gpt-4o",
+      "anthropic/claude-sonnet-4",
+      "google/gemini-2.0-flash"
+    ]
+  },
+  {
+    "id": "openai",
+    "label": "OpenAI",
+    "keyPrefix": "sk-",
+    "baseUrl": "https://api.openai.com/v1",
+    "requiresModel": false,
+    "fallbackModels": ["gpt-4o-mini", "gpt-4o", "o4-mini"]
+  },
+  {
+    "id": "anthropic",
+    "label": "Anthropic",
+    "keyPrefix": "sk-ant-",
+    "baseUrl": "https://api.anthropic.com/v1",
+    "requiresModel": true,
+    "fallbackModels": [
+      "claude-sonnet-4-20250514",
+      "claude-haiku-4-20250514",
+      "claude-opus-4-20250514"
+    ]
+  },
+  {
+    "id": "gemini",
+    "label": "Gemini",
+    "keyPrefix": "AI",
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/",
+    "requiresModel": true,
+    "fallbackModels": [
+      "gemini/gemini-2.0-flash",
+      "gemini/gemini-2.5-flash",
+      "gemini/gemini-2.5-pro"
+    ]
+  }
+]
