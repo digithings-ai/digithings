@@ -16,7 +16,7 @@
 - This is `component:digigraph` — two-hop branching: `task/201-tool-calling-gate` → `module/digigraph` → `develop`. Before branching, check staleness: `git fetch origin && git rev-list --count origin/module/digigraph..origin/develop` — sync via a `chore/sync-*` PR into `module/digigraph` first if non-zero.
 - `llm_auth.py` is not touched by this plan (that's the other plan), but `project_config.py`/`models.py`/`server.py` changes here are still network-exposure-adjacent (a new externally-visible field/header on `/v1/chat/completions`) — this lands under CLAUDE.md's human-gate rule; plan for explicit review before merge, not just a passing `make score`.
 - Every commit message stays scoped to what that commit's step actually changed — no bundling.
-- Design reference: [`docs/superpowers/specs/2026-08-13-digichat-byok-model-catalog-design.md`](../specs/2026-08-13-digichat-byok-model-catalog-design.md), sections "Tool-calling requirement gate" (Decisions, Data flow, Security considerations).
+- Design reference: `docs/superpowers/specs/2026-08-13-digichat-byok-model-catalog-design.md`, sections "Tool-calling requirement gate" (Decisions, Data flow, Security considerations). That spec is scoped to the sibling digichat branch (`task/2347-digichat-byok-catalog-live-models`, PR #2357) and doesn't exist in this digigraph-scoped branch's tree — not linked here to avoid a broken relative path.
 
 ---
 
