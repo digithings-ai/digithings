@@ -361,6 +361,30 @@ export function toDigiChatActivity(
       const query = span.query ?? pendingQuery;
       const hits = span.documents ?? [];
       const key = toolKey(name, query);
+      // Failed retrieve must never fall through to hitCount-as-success —
+      // digivault all-error batches previously set status=failed with
+      // hitCount=errorCount and rendered as N successful hits.
+      if (span.status === "failed") {
+        const failResult: DigiChatActivity = {
+          kind: "status",
+          message: query ? `Search for "${query}" failed.` : "Search failed.",
+        };
+        const failIdx = toolRows.get(key);
+        const pending = pendingRow.get(name);
+        pendingRow.delete(name);
+        completedTools.delete(key);
+        failedTools.add(key);
+        if (failIdx !== undefined) {
+          rows[failIdx] = failResult;
+        } else if (pending !== undefined) {
+          rows[pending] = failResult;
+          toolRows.set(key, pending);
+        } else {
+          rows.push(failResult);
+          toolRows.set(key, rows.length - 1);
+        }
+        continue;
+      }
       // `labels` detail: applyActivityDetail already stripped the documents
       // server-side, but a retrieve span is only ever emitted when the search
       // genuinely found something (see the providers) — so hits: [] here

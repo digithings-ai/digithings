@@ -50,12 +50,11 @@ describe("mapDigivaultSearchNotes", () => {
         },
       }),
     ).toEqual({
-      operation: "retrieve",
+      operation: "execute_tool",
       status: "failed",
       label: "digivault errors (2)",
       toolName: "digivault",
       query: "batch",
-      hitCount: 2,
     });
   });
 
@@ -76,6 +75,22 @@ describe("mapDigivaultSearchNotes", () => {
     expect(span?.documents).toEqual([
       { title: "OK", path: "clients/digithings/ok", snippet: "body" },
     ]);
+  });
+
+  it("maps notes:[] with only errors as execute_tool failed (not a fake hitCount)", () => {
+    expect(
+      mapDigivaultSearchNotes({
+        notes: [],
+        errors: { "clients/x/missing": "not found" },
+        query: "batch",
+      }),
+    ).toEqual({
+      operation: "execute_tool",
+      status: "failed",
+      label: "digivault errors (1)",
+      toolName: "digivault",
+      query: "batch",
+    });
   });
 
   it("leaves the successful (non-empty) path byte-identical", () => {

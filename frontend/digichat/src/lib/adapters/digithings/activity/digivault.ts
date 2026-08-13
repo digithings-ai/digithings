@@ -23,13 +23,16 @@ export function mapDigivaultSearchNotes(
     if (errors && typeof errors === "object" && !Array.isArray(errors)) {
       const paths = Object.keys(errors as Record<string, unknown>);
       if (paths.length > 0) {
+        // All-error batch (notes absent): emit execute_tool/failed so
+        // toDigiChatActivity's failure path renders "Search … failed." —
+        // never overload hitCount with an error count (that field means
+        // upstream digisearch hit_count when documents mapped empty).
         return {
-          operation: "retrieve",
+          operation: "execute_tool",
           status: "failed",
           label: `digivault errors (${paths.length})`,
           toolName: "digivault",
           ...(query ? { query } : {}),
-          hitCount: paths.length,
         };
       }
     }
@@ -77,20 +80,25 @@ export function mapDigivaultSearchNotes(
   // same reasoning as mapDigisearchRagSources next door: omitting `documents`
   // (rather than early-returning null) is what lets toDigiChatActivity's
   // retrieve branch render the honest `count: 0` "no hits" row instead of
-  // dropping the span outright. Partial batch failures keep successful notes
-  // and surface error count via hitCount when documents mapped empty.
+  // dropping the span outright. All-error batches (notes present but every
+  // entry failed mapping, or notes: [] with errors) use execute_tool/failed
+  // so the UI shows a failure rather than a fake hit count.
+  if (errorCount > 0 && documents.length === 0) {
+    return {
+      operation: "execute_tool",
+      status: "failed",
+      label: `digivault errors (${errorCount})`,
+      toolName: "digivault",
+      ...(query ? { query } : {}),
+    };
+  }
   return {
     operation: "retrieve",
-    status: errorCount > 0 && documents.length === 0 ? "failed" : "completed",
+    status: "completed",
     label:
-      errorCount > 0 && documents.length > 0
-        ? `Sources (${errorCount} errors)`
-        : errorCount > 0
-          ? `digivault errors (${errorCount})`
-          : "Sources",
+      errorCount > 0 ? `Sources (${errorCount} errors)` : "Sources",
     toolName: "digivault",
     ...(documents.length ? { documents } : {}),
-    ...(!documents.length && errorCount > 0 ? { hitCount: errorCount } : {}),
     ...(query ? { query } : {}),
   };
 }
