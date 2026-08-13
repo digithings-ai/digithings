@@ -72,6 +72,8 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["vault_path_prefix"] = req.vault_path_prefix
     if req.research_system_prompt_override:
         initial["research_system_prompt_override"] = req.research_system_prompt_override
+    if req.digi_subject:
+        initial["digi_subject"] = req.digi_subject
     # Unlike the three fields above, response_language is a user-toggleable per-turn
     # preference, not a static tenant-derived value — it must be set unconditionally
     # (even to None) so switching back to English on a later turn actually clears a
@@ -156,7 +158,7 @@ def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     graph = build_workflow_graph()
     initial: dict[str, Any] = _initial_graph_state(req, workflow_id)
     config: dict = _graph_thread_config(req)
-    final = graph.invoke(initial, config=config)
+    final = graph.invoke(initial, config=config, durability="sync")
     dg_audit_log(
         "workflow_end",
         agent_id="digigraph",
@@ -264,7 +266,7 @@ def run_digigraph_workflow_via_stream(req: WorkflowRequest) -> WorkflowResult:
     graph = build_workflow_graph()
     initial = _initial_graph_state(req, workflow_id)
     config = _graph_thread_config(req)
-    for _ in graph.stream(initial, config=config, stream_mode="updates"):
+    for _ in graph.stream(initial, config=config, stream_mode="updates", durability="sync"):
         pass
     snapshot = graph.get_state(config)
     final = (snapshot.values if snapshot else None) or {}
@@ -302,7 +304,6 @@ def run_digigraph_workflow_streaming(
     tool loop still emits tool/content events via the same callback.
     Intended to be run in a thread; the server consumes the queue and emits SSE.
     """
-    from digigraph.graph.research import _stream_callback_ctx
     from digigraph.trace_events import TraceEventV1
 
     workflow_id = str(uuid.uuid4())
@@ -414,20 +415,46 @@ def run_digigraph_workflow_streaming(
         **_audit_digi_kwargs(req),
     )
     graph = build_workflow_graph()
-    token = _stream_callback_ctx.set(stream_callback)
     final: dict[str, Any] = {}
     try:
         initial = _initial_graph_state(req, workflow_id)
         config: dict = {
             "configurable": {
                 "thread_id": workflow_thread_id(req.digi_subject, req.session_id),
-                "stream_callback": stream_callback,
             },
         }
-        for update in graph.stream(initial, config=config, stream_mode="updates"):
+        for part in graph.stream(
+            initial,
+            config=config,
+            stream_mode=["updates", "custom"],
+            version="v2",
+            durability="sync",
+            subgraphs=True,
+        ):
             if cancel_event is not None and cancel_event.is_set():
                 event_queue.put(("done", None))
                 return
+            if part["type"] == "custom":
+                # "custom" parts are NOT filtered by ns: research_node and
+                # research_brief_builder_node run inside the compiled "research"
+                # subgraph (graph.py builds it via build_research_subgraph() and adds
+                # it as a single node), so every _safe_stream_writer() write from
+                # _run_document_rag_path (tool_call, tool_result, content, reasoning,
+                # round_boundary) arrives here with a non-empty ns -- without
+                # subgraphs=True above, LangGraph drops these silently before they
+                # ever reach this loop.
+                event_type, data = part["data"]
+                stream_callback(event_type, data)
+                continue
+            if part["ns"]:
+                # subgraphs=True also makes "updates" parts start arriving for nodes
+                # INSIDE the research subgraph (ns=("research:<uuid>",)), which would
+                # double-report a graph_update trace event for both the inner node's
+                # completion and the outer "research" node's completion. Only
+                # top-level graph updates (ns == ()) are reported as graph_update
+                # trace events; this does not affect the "custom" branch above.
+                continue
+            update = part["data"]
             event_queue.put(
                 (
                     "trace",
@@ -459,8 +486,6 @@ def run_digigraph_workflow_streaming(
         event_queue.put(("content", f"Error: {e!s}"))
         event_queue.put(("done", None))
         return
-    finally:
-        _stream_callback_ctx.reset(token)
 
     dg_audit_log(
         "workflow_end",
