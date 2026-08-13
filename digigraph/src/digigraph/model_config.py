@@ -62,13 +62,16 @@ _OPEN_WEIGHT_ALLOWED_MODELS = (
     "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
 )
 _BALANCED_ALLOWED_MODELS = (
-    "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-4o-mini*,perplexity/*"
+    "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-5-mini*,perplexity/*"
 )
 _DEFAULT_COST_QUALITY_TRADEOFF = 10
-# Mid-tier frontier slugs permitted on ``balanced`` (not ``cheap``).
+# Mid-tier frontier slugs permitted on ``balanced`` (not ``cheap``). #2363: gpt-5-mini
+# supersedes gpt-4o-mini as the balanced-tier OpenAI slug in olympus_models.yaml; the
+# old marker stays so a model_modes.yaml override can still name it explicitly.
 _BALANCED_FLAGSHIP_MARKERS = frozenset(
     {
         "gpt-4o-mini",
+        "gpt-5-mini",
         "gemini-2.0-flash",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
@@ -397,7 +400,9 @@ def sanitize_allowed_models(allowed_models: str, *, tier: str = "cheap") -> str:
             entry
             for entry in entries
             if not is_flagship_allowed_models_entry(entry)
-            or entry.lower().startswith(("openai/gpt-4o-mini", "google/", "x-ai/"))
+            or entry.lower().startswith(
+                ("openai/gpt-4o-mini", "openai/gpt-5-mini", "google/", "x-ai/")
+            )
         ]
         return ",".join(kept) if kept else _BALANCED_ALLOWED_MODELS
     kept = [entry for entry in entries if not is_flagship_allowed_models_entry(entry)]
