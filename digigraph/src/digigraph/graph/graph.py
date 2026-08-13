@@ -5,9 +5,7 @@ from __future__ import annotations
 import os
 import threading
 
-import httpx
 from langgraph.graph import END, START, StateGraph
-from langgraph.types import RetryPolicy
 
 from digigraph.graph.nodes import (
     backtest_node,
@@ -58,11 +56,19 @@ _CHECKPOINTER_CONN_BOUNDS: dict[str, int] = {
     "keepalives_count": 5,
 }
 
-# Both nodes call digiquant over HTTP; a single dropped packet should not fail the
-# whole run. Scoped to httpx.RequestError (connection/timeout — transient) only, never
-# httpx.HTTPStatusError (a 4xx/5xx from digiquant is a real rejection, not a blip, and
-# retrying it burns the retry budget for nothing).
-_DIGIQUANT_RETRY_POLICY = RetryPolicy(max_attempts=3, retry_on=httpx.RequestError)
+# No node-level RetryPolicy on backtest/optimize (deliberate, not an oversight): both
+# nodes already catch httpx.RequestError (among other transient errors) INSIDE their own
+# function body via _DIGIQUANT_CLIENT_ERRORS (nodes.py) and return a normal error-state
+# dict rather than letting the exception propagate. LangGraph's node-level retry only
+# fires on an exception escaping the node function -- which never happens here, so a
+# RetryPolicy on these nodes would be pure dead code (it could never actually trigger).
+#
+# Letting httpx.RequestError propagate instead, so a real RetryPolicy *could* fire,
+# would introduce a duplicate-request risk: these are POST calls to digiquant with no
+# idempotency-key protection (only a correlation X-Request-ID), so a network-blip retry
+# could kick off two backtest/optimize runs. Adding real idempotency support to
+# digiquant is out of scope here -- a separate service, a separate body of work. See
+# tests/dg/test_graph_profiles.py::test_backtest_and_optimize_nodes_have_no_retry_policy.
 
 
 def _bounded_conn_string(conn_string: str) -> str:
@@ -328,8 +334,8 @@ def build_workflow_graph():
         builder.add_node("supervisor", supervisor_node)
     builder.add_node("research", research_sg)
     builder.add_node("validate_strategy", strategy_validator_node)
-    builder.add_node("backtest", backtest_node, retry_policy=_DIGIQUANT_RETRY_POLICY)
-    builder.add_node("optimize", optimize_node, retry_policy=_DIGIQUANT_RETRY_POLICY)
+    builder.add_node("backtest", backtest_node)
+    builder.add_node("optimize", optimize_node)
     if supervisor_on:
         builder.add_edge(START, "supervisor")
         builder.add_conditional_edges("supervisor", _route_after_supervisor)

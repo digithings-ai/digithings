@@ -162,16 +162,25 @@ def test_get_store_warns_on_postgres_with_missing_uri(
 
 
 @pytest.mark.unit
-def test_backtest_and_optimize_nodes_have_retry_policy(reset_workflow_graph_cache) -> None:
-    """A single dropped network packet must not fail the whole backtest/optimize run —
-    RetryPolicy scoped to httpx.RequestError (transient network failures) only, never
-    HTTPStatusError (a 4xx/5xx is a real rejection and must not be blindly retried)."""
-    import httpx
+def test_backtest_and_optimize_nodes_have_no_retry_policy(reset_workflow_graph_cache) -> None:
+    """Deliberate non-decision, not a regression: backtest_node/optimize_node (nodes.py)
+    catch httpx.RequestError (via _DIGIQUANT_CLIENT_ERRORS) INSIDE their own function
+    body and return a normal error-state dict, so the exception never escapes the node
+    function. A node-level RetryPolicy only fires on an exception escaping the node --
+    which never happens here -- so a RetryPolicy on these nodes would be dead code that
+    could never actually trigger (previously present as `_DIGIQUANT_RETRY_POLICY`,
+    removed here).
 
+    A real fix (letting httpx.RequestError propagate so a RetryPolicy could fire) is
+    deliberately NOT done: these are POST calls to digiquant with no idempotency-key
+    protection, so a network-blip retry could kick off two backtest/optimize runs.
+    Reintroducing a retry policy here needs real idempotency-key support in digiquant
+    first -- a separate body of work. See graph.py's comment above `build_workflow_graph`."""
     graph = build_workflow_graph()
     for name in ("backtest", "optimize"):
         node = graph.nodes[name]
-        assert node.retry_policy, f"{name} node has no retry_policy"
-        policy = node.retry_policy[0]
-        assert policy.retry_on is httpx.RequestError
-        assert policy.max_attempts == 3
+        assert not node.retry_policy, (
+            f"{name} node has a retry_policy again -- either digiquant now has "
+            "idempotency-key support (update this test and the graph.py comment "
+            "explaining why it was removed), or this is a regression."
+        )
