@@ -16,12 +16,13 @@ const TIMEOUT_MS = 10_000;
 
 type TestResult = { ok: boolean; model?: string; error?: string };
 
-type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini";
+type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini" | "xai";
 
 function readProvider(raw: string): BYOKProvider {
   if (raw === "anthropic") return "anthropic";
   if (raw === "openrouter") return "openrouter";
   if (raw === "gemini") return "gemini";
+  if (raw === "xai") return "xai";
   return "openai";
 }
 
@@ -94,9 +95,12 @@ export async function POST(req: Request): Promise<Response> {
       400
     );
   }
+  if (provider === "xai" && !byokKey.startsWith("xai-")) {
+    return jsonResponse({ ok: false, error: "x.ai keys must start with xai-." }, 400);
+  }
 
   const needsModel =
-    provider === "openrouter" || provider === "anthropic" || provider === "gemini";
+    provider === "openrouter" || provider === "anthropic" || provider === "gemini" || provider === "xai";
   if (needsModel && !byokModel) {
     return jsonResponse(
       {
@@ -150,6 +154,8 @@ async function testKey(
       return testOpenRouterKey(key, model);
     case "gemini":
       return testGeminiKey(key);
+    case "xai":
+      return testXaiKey(key);
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;
@@ -250,6 +256,24 @@ async function testGeminiKey(key: string): Promise<TestResult> {
     const data = (await resp.json()) as { models?: { name?: string }[] };
     const first = data.models?.[0]?.name?.replace(/^models\//, "") ?? "gemini-2.0-flash";
     return { ok: true, model: first };
+  } catch (e) {
+    return { ok: false, error: abortOrMessage(e) };
+  }
+}
+
+async function testXaiKey(key: string): Promise<TestResult> {
+  try {
+    const resp = await fetchWithTimeout("https://api.x.ai/v1/models", {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      return { ok: false, error: body.error?.message ?? `x.ai returned HTTP ${resp.status}` };
+    }
+    const data = (await resp.json()) as { data?: { id: string }[] };
+    return { ok: true, model: data.data?.[0]?.id ?? "grok-4-3" };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }

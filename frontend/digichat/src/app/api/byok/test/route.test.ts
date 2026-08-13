@@ -156,4 +156,35 @@ describe("POST /api/byok/test", () => {
     const body = await res.json();
     expect(body.error).toContain("Model is required");
   });
+
+  it("returns 400 for invalid x.ai key prefix", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: {
+          "x-byok-key": "not-xai",
+          "x-byok-provider": "xai",
+          "x-byok-model": "grok-4-3",
+        },
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("xai-");
+  });
+
+  it("returns 400 when x.ai model header missing", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: {
+          "x-byok-key": "xai-test",
+          "x-byok-provider": "xai",
+        },
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain("Model is required");
+  });
 });

@@ -384,7 +384,9 @@ export function ByokCliFlow({
                       ? "sk-ant-…"
                       : provider === "gemini"
                         ? "AIza…"
-                        : "sk-or-v1-…"
+                        : provider === "xai"
+                          ? "xai-…"
+                          : "sk-or-v1-…"
                 }
                 autoComplete="off"
                 spellCheck={false}

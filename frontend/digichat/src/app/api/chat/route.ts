@@ -203,7 +203,8 @@ export async function POST(req: Request) {
   const byokNeedsModel =
     byokProvider === "openrouter" ||
     byokProvider === "anthropic" ||
-    byokProvider === "gemini";
+    byokProvider === "gemini" ||
+    byokProvider === "xai";
   if (byokKey && byokNeedsModel && !byokModel) {
     return new Response(
       JSON.stringify({

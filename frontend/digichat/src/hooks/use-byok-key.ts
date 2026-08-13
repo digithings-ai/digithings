@@ -3,13 +3,14 @@
 import { useCallback, useState } from "react";
 import { isOpenRouterKey } from "@/lib/byok-openrouter";
 
-export type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini";
+export type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini" | "xai";
 
 export const BYOK_PROVIDER_LIST: readonly BYOKProvider[] = [
   "openrouter",
   "openai",
   "anthropic",
   "gemini",
+  "xai",
 ];
 
 /** Legacy durable keys — purged on load; never written again. */
@@ -32,6 +33,8 @@ export function byokModelPlaceholder(provider: BYOKProvider): string {
       return "claude-sonnet-4-20250514";
     case "gemini":
       return "gemini/gemini-2.0-flash";
+    case "xai":
+      return "grok-4-3";
     case "openai":
       return "gpt-4o-mini";
     default: {
@@ -65,6 +68,8 @@ export function byokModelPresets(provider: BYOKProvider): readonly string[] {
         "gemini/gemini-2.5-flash",
         "gemini/gemini-2.5-pro",
       ];
+    case "xai":
+      return ["grok-4-3", "grok-4.5"];
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;
@@ -159,6 +164,9 @@ export function validateBYOKKey(key: string, provider: BYOKProvider): string | n
   }
   if (provider === "gemini" && !key.startsWith("AI")) {
     return "Gemini keys must start with AI.";
+  }
+  if (provider === "xai" && !key.startsWith("xai-")) {
+    return "x.ai keys must start with xai-.";
   }
   return null;
 }
