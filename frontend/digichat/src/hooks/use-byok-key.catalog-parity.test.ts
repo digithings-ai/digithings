@@ -55,6 +55,22 @@ describe("use-byok-key <-> config/byok-providers.json parity", () => {
     }
   });
 
+  // The test above only proves the negative direction (a key matching NO
+  // prefix is rejected) — it can't detect the catalog's keyPrefix drifting
+  // to a value validateBYOKKey doesn't actually check (e.g. catalog says
+  // "sk-anthropic-" while validateBYOKKey still checks "sk-ant-": the
+  // negative-only test above still passes, since the sentinel key matches
+  // neither). This test closes that gap: a key built from exactly the
+  // catalog's own keyPrefix must be ACCEPTED by validateBYOKKey.
+  it("validateBYOKKey accepts a key built from the catalog's own keyPrefix for that provider", () => {
+    const catalog = loadCatalog();
+    for (const entry of catalog) {
+      const key = `${entry.keyPrefix}test-key-000`;
+      const result = validateBYOKKey(key, entry.id as BYOKProvider);
+      expect(result).toBeNull();
+    }
+  });
+
   it("byokModelPresets(provider) matches the catalog's fallbackModels exactly", () => {
     const catalog = loadCatalog();
     for (const entry of catalog) {
