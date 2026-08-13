@@ -62,8 +62,11 @@ class WorkflowState(TypedDict, total=False):
     supervisor_route: str | None
     # Subject (JWT sub / digikey identity, when auth supplies one) for cross-thread
     # Store lookups (see graph.get_store()). Falsy (None/empty) skips store lookups
-    # entirely rather than keying on a placeholder -- but this is a client-writable
-    # field (models.py's WorkflowRequest.digi_subject), only overridden server-side
-    # when request auth carries a subject; an unauthenticated/dev request's own value
-    # is not verified. See ARCHITECTURE.md §6.10.
+    # entirely rather than keying on a placeholder. Client-writable on the wire
+    # (models.py's WorkflowRequest.digi_subject), but never trusted as-is: server.py's
+    # _with_digi_request_context/_digi_fields_from_request unconditionally overwrite
+    # this field with the verified auth.subject when request auth carries a non-empty
+    # subject, and clear it to None otherwise (no auth at all, or an auth object with
+    # an empty subject claim) -- a client-supplied value never reaches graph state
+    # unverified. See ARCHITECTURE.md §6.10.
     digi_subject: str | None
