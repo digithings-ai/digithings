@@ -421,7 +421,16 @@ export function toDigiChatActivity(
               seenPaths.add(hit.path);
             }
           }
-          rows[idx] = { ...result, hits: mergedHits, count: mergedHits.length };
+          // CodeRabbit finding (#2327 review): mergedHits.length is 0 whenever
+          // both sides are hitCount-only spans (no structured hits at all, e.g.
+          // repeated digivault_get_note rounds) — unconditionally using it here
+          // silently dropped a genuinely positive count to 0, exactly the
+          // "no hits" misreport documentsWithheld exists elsewhere to prevent.
+          // Prefer mergedHits.length once real hits exist; otherwise carry
+          // forward whichever side had a positive hitCount-derived count.
+          const mergedCount =
+            mergedHits.length > 0 ? mergedHits.length : Math.max(existing.count, result.count);
+          rows[idx] = { ...result, hits: mergedHits, count: mergedCount };
         } else {
           rows[idx] = result;
         }

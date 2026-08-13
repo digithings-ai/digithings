@@ -209,6 +209,48 @@ describe("toDigiChatActivity", () => {
     ]);
   });
 
+  // CodeRabbit finding (#2327 review): merging two hitCount-only retrieve spans
+  // (both with empty `hits`, e.g. digivault_get_note rounds whose citations
+  // don't carry structured hits) unconditionally set count: mergedHits.length,
+  // silently dropping a genuinely positive count to 0 — the exact "no hits"
+  // misreport the surrounding documentsWithheld logic exists to prevent.
+  it("keeps a positive hitCount-derived count when merging two hits-less retrieve spans", () => {
+    const withHitCount = (toolName: string, query: string, hitCount: number): ActivitySpan => ({
+      operation: "retrieve",
+      toolName,
+      query,
+      status: "completed",
+      label: "Sources",
+      hitCount,
+    });
+    const rows = toDigiChatActivity([
+      withHitCount("digivault_get_note", "clients/x/p001", 1),
+      withHitCount("digivault_get_note", "clients/x/p001", 1),
+    ]);
+    expect(rows).toEqual([
+      { kind: "tool_result", name: "digivault_get_note", query: "clients/x/p001", hits: [], count: 1 },
+    ]);
+  });
+
+  it("still prefers mergedHits.length over hitCount once real hits are present", () => {
+    const rows = toDigiChatActivity([
+      retrieved("digivault_search_notes", "q", [{ title: "A", path: "a" }]),
+      retrieved("digivault_search_notes", "q", [{ title: "B", path: "b" }]),
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "digivault_search_notes",
+        query: "q",
+        hits: [
+          { title: "A", path: "a" },
+          { title: "B", path: "b" },
+        ],
+        count: 2,
+      },
+    ]);
+  });
+
   it("renders an in-flight search as a tool_call", () => {
     expect(toDigiChatActivity([started("file_search")])).toEqual([
       { kind: "tool_call", name: "file_search", query: "" },
