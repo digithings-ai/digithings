@@ -17,6 +17,8 @@ vi.mock("@/lib/bff-rate-limit", () => ({
 }));
 
 import { requireDigiChatAuth } from "@/lib/request-auth";
+import { resolveEmbedChatTenant } from "@/lib/embed-chat-tenant";
+import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 
 function req(url: string, headers: Record<string, string> = {}) {
@@ -45,6 +47,22 @@ describe("GET /api/byok/models", () => {
   it("rate-limits authenticated callers too, not just embed", async () => {
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 5 });
     const res = await GET(req("/api/byok/models?provider=openrouter"));
+    expect(res.status).toBe(429);
+    expect(checkBffRateLimit).toHaveBeenCalled();
+  });
+
+  it("rate-limits the embed path too, once it clears the embed-IP check", async () => {
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+    vi.mocked(resolveEmbedChatTenant).mockReturnValue({
+      tenantSlug: "digithings",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: null,
+    });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 5 });
+    const res = await GET(
+      req("/api/byok/models?provider=openrouter", { "x-embed-host": "https://digithings.ai" }),
+    );
     expect(res.status).toBe(429);
     expect(checkBffRateLimit).toHaveBeenCalled();
   });
