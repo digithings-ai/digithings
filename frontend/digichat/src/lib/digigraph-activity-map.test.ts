@@ -213,4 +213,45 @@ describe("mapDigigraphTraceToSpans", () => {
       )
     ).toEqual([]);
   });
+
+  // digigraph now emits a rag_sources trace even on a zero-hit search (see
+  // digigraph's workflow.py, bb96fb85e) — this must render as a visible span
+  // distinct from both a real hit and the tool never having run, not vanish.
+  it("maps a zero-hit rag_sources trace to a visible completed retrieve span", () => {
+    const spans = mapDigigraphTraceToSpans(
+      {
+        type: "rag_sources",
+        payload: { tool: "digisearch", query: "jwt", sources: [], hit_count: 0 },
+      },
+      "full"
+    );
+    expect(spans).toEqual([
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "digisearch",
+        query: "jwt",
+      },
+    ]);
+  });
+
+  it("maps a zero-hit digivault_search_notes trace to a visible completed retrieve span", () => {
+    const spans = mapDigigraphTraceToSpans(
+      {
+        type: "digivault_search_notes",
+        payload: { query: "nonexistent topic", hits: [] },
+      },
+      "full"
+    );
+    expect(spans).toEqual([
+      {
+        operation: "retrieve",
+        status: "completed",
+        label: "Sources",
+        toolName: "digivault",
+        query: "nonexistent topic",
+      },
+    ]);
+  });
 });

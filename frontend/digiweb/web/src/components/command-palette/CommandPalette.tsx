@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useBodyScrollLock } from "../../lib/useBodyScrollLock";
 
 /**
  * CommandPalette — the ⌘K command bar shell promoted from the design
@@ -117,6 +118,13 @@ export type CommandPaletteProps = {
 const defaultEmpty = (query: string): ReactNode =>
   query ? <>No matches for “{query}”.</> : "No matches.";
 
+// Focus-trap boundary query — deliberately generic, not "just the input":
+// consumers can pass interactive inputLeading/inputTrailing content (olympus
+// ships a real Close button there), so the trap must cycle the dialog's
+// actual focusable set rather than assume the input is the only one.
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export function CommandPalette({
   open,
   onClose,
@@ -141,6 +149,7 @@ export function CommandPalette({
   const [active, setActive] = useState(0);
   const [mounted, setMounted] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   // Reset synchronously on the opening render — a reopen never flashes the
   // previous query (React's adjust-state-during-render pattern).
@@ -154,6 +163,12 @@ export function CommandPalette({
   }
 
   useEffect(() => setMounted(true), []);
+
+  // Lock body scroll while the dialog is open — reference-counted (see
+  // useBodyScrollLock) so this coordinates safely with any other overlay
+  // (e.g. NavShell's own menu) that may be locked at the same time,
+  // regardless of open/close order.
+  useBodyScrollLock(open);
 
   const resolvedGroups = typeof groups === "function" ? groups(query) : groups;
   const flat = resolvedGroups.flatMap((g) => g.items);
@@ -184,6 +199,33 @@ export function CommandPalette({
       if (e.key === "Escape") {
         e.preventDefault();
         onCloseRef.current();
+        return;
+      }
+      if (e.key === "Tab") {
+        // Focus trap: only intercept at the dialog's boundary — wrap
+        // Tab past the last focusable back to the first, and Shift+Tab
+        // before the first back to the last — rather than pinning focus to
+        // the input unconditionally, since a consumer's inputLeading/
+        // inputTrailing slot can carry its own focusable content (olympus's
+        // production palette ships a real Close button there).
+        const panel = panelRef.current;
+        if (!panel) return;
+        const focusables = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const activeEl = document.activeElement;
+        if (e.shiftKey) {
+          if (activeEl === first || !panel.contains(activeEl)) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (activeEl === last || !panel.contains(activeEl)) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
         return;
       }
       const len = flatRef.current.length;
@@ -235,7 +277,7 @@ export function CommandPalette({
       aria-label={ariaLabel}
     >
       <div className="cp-scrim" onClick={onClose} aria-hidden="true" />
-      <div className={`cp-panel${className ? ` ${className}` : ""}`}>
+      <div ref={panelRef} className={`cp-panel${className ? ` ${className}` : ""}`}>
         <div className="cp-input-row">
           {inputLeading !== undefined ? (
             inputLeading

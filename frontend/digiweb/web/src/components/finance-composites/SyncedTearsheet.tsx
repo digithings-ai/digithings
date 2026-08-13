@@ -56,6 +56,15 @@ export type SyncedTearsheetProps = {
   ariaLabel?: string;
   /** Extra classes on the host (defaults fill the parent: h-full w-full). */
   className?: string;
+  /**
+   * Let page scroll/wheel/touch-drag pass through instead of panning or
+   * zooming the chart. Off by default — this component rides real Olympus
+   * dashboard surfaces (e.g. a workspace's drawdown view) where pan/zoom on
+   * the chart is an intended interaction. Turn it on only for a display
+   * specimen embedded in scrolling prose (see synced-tearsheet-reference.tsx)
+   * where nobody is meant to interact with the chart itself.
+   */
+  pageScrollThrough?: boolean;
 };
 
 function deriveDrawdown(equity: TearsheetPoint[]): TearsheetPoint[] {
@@ -72,6 +81,7 @@ export function SyncedTearsheet({
   equityStretch = 2.4,
   ariaLabel,
   className,
+  pageScrollThrough = false,
 }: SyncedTearsheetProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
 
@@ -112,6 +122,17 @@ export function SyncedTearsheet({
         vertLine: { color: p.inkMute, labelBackgroundColor: p.accent },
         horzLine: { color: p.inkMute, labelBackgroundColor: p.accent },
       },
+      ...(pageScrollThrough
+        ? {
+            handleScroll: {
+              mouseWheel: false,
+              pressedMouseMove: false,
+              horzTouchDrag: false,
+              vertTouchDrag: false,
+            },
+            handleScale: { axisPressedMouseMove: false, mouseWheel: false, pinch: false },
+          }
+        : {}),
     });
 
     // pane 0 — cumulative equity (identity accent)
@@ -191,7 +212,7 @@ export function SyncedTearsheet({
       themeObs.disconnect();
       chart.remove();
     };
-  }, [equity, drawdown, equityStretch]);
+  }, [equity, drawdown, equityStretch, pageScrollThrough]);
 
   return (
     <div

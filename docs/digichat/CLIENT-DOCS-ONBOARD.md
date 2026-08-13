@@ -23,7 +23,7 @@ Pipeline order:
 scrape_site → classify_pages → fetch_docs
   → [ingest_static / ingest_openapi / ingest_repo?]
   → [write_vault_notes?] → [write_search_index?]
-  → [sync_onboard_vault.py → Supabase?]
+  → [d1_sync.py → D1?]
 ```
 
 Website crawl remains the primary discovery path. Manifest extensions:
@@ -89,10 +89,11 @@ python scripts/docs_onboard/run_onboard.py \
 ```
 
 Production digithings path prefers `--digivault-url` (filesystem vault on the
-operator digivault) then `scripts/sync_onboard_vault.py` to publish to the
-existing Supabase `architecture_notes` table (service role; `--dry-run` first).
-Do **not** point public digivault search at an unpublished local `DIGIVAULT_ROOT`
-only — that splits the brain from Supabase FTS.
+operator digivault) then `scripts/d1_sync.py` to publish the vault into Cloudflare
+D1 (`clients/digithings`'s `notes` table + FTS5 index; `--dry-run` first — reads
+and counts, writes nothing, needs no credentials). Do **not** point public
+digivault search at an unpublished local `DIGIVAULT_ROOT` only — that splits the
+brain from the D1 corpus digivault actually serves in production.
 
 #### Operator apply
 
@@ -107,10 +108,11 @@ Corpus refresh for client #0 is automated by
 [`.github/workflows/docs-onboard-digithings.yml`](../../.github/workflows/docs-onboard-digithings.yml)
 on relevant pushes to `main` (and `workflow_dispatch`). The Action dry-runs
 classification, then on apply writes a filesystem vault (`--sinks vault`) and runs
-`sync_onboard_vault.py` **without** `--dry-run` under the `production`
-environment — same pattern as
-[`sync-architecture-vault.yml`](../../.github/workflows/sync-architecture-vault.yml)
-(dry-run validates ingest only; Supabase upsert is live on apply).
+`scripts/d1_sync.py` to publish that vault into Cloudflare D1 (`clients/digithings`)
+under the `production` environment — the same dry-run/apply CI shape as
+[`sync-architecture-vault.yml`](../../.github/workflows/sync-architecture-vault.yml),
+though that pipeline is a separate, still-Supabase-backed corpus
+(`architecture_notes`) unrelated to this D1 publish.
 
 digisearch dual-sink remains an **operator / local** step (or legacy
 `docs-reindex-guide.yml` on `develop`): Actions runners cannot post
@@ -134,8 +136,10 @@ Profile A digivault typically mounts a Compose volume at `/data/vault`. Point
 `--vault-root` / `DIGIVAULT_ROOT` at that same root so onboard notes land where
 `digivault_search_notes` reads them.
 
-When `DIGIVAULT_ROOT` is set, digivault searches the **local** filesystem first;
-otherwise it uses Supabase FTS (digithings.ai reference path). See
+digivault's search precedence is **D1 → local filesystem → Supabase FTS**: D1
+wins whenever `D1_DATABASE_MAP` is configured (even over a `DIGIVAULT_ROOT` set
+for local iteration); otherwise `DIGIVAULT_ROOT`, when set, searches the local
+filesystem; Supabase FTS is the last-resort fallback. See
 [`digivault/ARCHITECTURE.md`](../../digivault/ARCHITECTURE.md).
 
 Attach/mount details for one-shot Compose jobs are deferred (Pick 3 later /

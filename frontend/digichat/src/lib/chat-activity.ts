@@ -81,6 +81,27 @@ function str(value: unknown, max: number): string | undefined {
   return trimmed.slice(0, max);
 }
 
+/**
+ * Cap a snippet at `max` chars, marking a real cut with a trailing "…" — a bare slice
+ * is indistinguishable from a note that just happens to be exactly this short, and the
+ * source note behind this snippet can run to thousands of characters (mirrors the
+ * backend's own truncation-signal fix for the model-facing payload,
+ * digigraph/orchestration/builtin.py's _mark_truncated_excerpts — this is the same
+ * problem one layer up, for the human reading the activity panel instead of the model).
+ *
+ * The ellipsis is RESERVED space (slice to max - 1, then append), not appended after an
+ * already-max-length slice — appending after would make the string max + 1 chars, and
+ * any downstream re-clip to `max` (this same MAX_SNIPPET_CHARS constant is re-applied
+ * when a wire payload is re-parsed) would cut the marker back off.
+ */
+function snippetStr(value: unknown, max: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.length <= max) return trimmed.slice(0, max);
+  return trimmed.slice(0, max - 1).trimEnd() + "…";
+}
+
 function bool(value: unknown): true | undefined {
   return value === true ? true : undefined;
 }
@@ -100,7 +121,7 @@ function documents(value: unknown): ActivityDocument[] | undefined {
     if (typeof record.year === "number" && Number.isFinite(record.year)) {
       doc.year = Math.trunc(record.year);
     }
-    const snippet = str(record.snippet, MAX_SNIPPET_CHARS);
+    const snippet = snippetStr(record.snippet, MAX_SNIPPET_CHARS);
     if (snippet) doc.snippet = snippet;
     out.push(doc);
     if (out.length === MAX_DOCUMENTS) break;

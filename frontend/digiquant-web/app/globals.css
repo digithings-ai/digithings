@@ -255,12 +255,14 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .dqpipe-track-fill {
-  position: absolute; top: 0; left: 0; width: 100%; height: 0%;
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  transform: scaleY(0);
+  transform-origin: top;
   border-radius: 999px;
   background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 45%, transparent));
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
-  transition: height 0.15s linear;
-  will-change: height;
+  transition: transform 0.15s linear;
+  will-change: transform;
 }
 .dqpipe-step {
   position: relative; display: flex; justify-content: flex-start; width: 50%;
@@ -274,10 +276,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   transform: translateX(52px) translateY(8px);
 }
 .dqpipe-step.is-visible { opacity: 1; transform: none; }
-.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-left: 2px solid var(--accent); border-radius: var(--r-md); padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 24px 48px -36px color-mix(in srgb, var(--accent) 35%, transparent); }
-.dqpipe-step.is-right .dqpipe-card { border-left: 1px solid var(--hair); border-right: 2px solid var(--accent); }
-.dqpipe-step.is-exec .dqpipe-card { border-left-color: var(--up); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
-.dqpipe-step.is-exec.is-right .dqpipe-card { border-right-color: var(--up); }
+.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 24px 48px -36px color-mix(in srgb, var(--accent) 35%, transparent); }
+.dqpipe-step.is-exec .dqpipe-card { background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
 .dqpipe-rail {
   position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
   border: 2px solid var(--hair-2); background: var(--bg);
@@ -298,7 +298,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   }
   .dqpipe-step.is-right { transform: translateX(-36px) translateY(8px); }
   .dqpipe-step.is-visible { transform: none; }
-  .dqpipe-step.is-right .dqpipe-card { border-left: 2px solid var(--accent); border-right: 1px solid var(--hair); }
   .dqpipe-rail { left: 4px !important; right: auto !important; }
 }
 
@@ -335,7 +334,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-scene-title { font-family: var(--serif); font-size: clamp(1.5rem, 3.2vw, 2.3rem); font-weight: 400; letter-spacing: -0.015em; margin-top: 0.5rem; color: var(--ink); }
 .dqp-rail { position: relative; display: flex; justify-content: space-between; max-width: 760px; margin: 0 auto 2rem; padding: 0 8px; }
 .dqp-rail::before { content: ""; position: absolute; left: 8px; right: 8px; top: 11px; height: 2px; background: var(--hair); }
-.dqp-fill { position: absolute; left: 8px; top: 11px; height: 2px; background: var(--accent); width: 0; box-shadow: 0 0 12px var(--accent); transition: width 0.15s linear; }
+.dqp-fill { position: absolute; left: 8px; right: 8px; top: 11px; height: 2px; background: var(--accent); transform: scaleX(0); transform-origin: left; box-shadow: 0 0 12px var(--accent); transition: transform 0.15s linear; }
 .dqp-node { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 0.6rem; width: 120px; }
 .dqp-dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--hair-2); background: var(--bg); display: grid; place-items: center; font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-mute); transition: 0.3s var(--ease); }
 .dqp-node.on .dqp-dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 16px var(--accent-weak); }
@@ -615,6 +614,20 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   animation: dqss-skel 1.2s ease-in-out infinite;
 }
 @keyframes dqss-skel { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+/* Card-level placeholder shown before the strategy index itself has loaded
+   (StrategyCardSkeleton, #2244) -- same shimmer as .dqss-chart-skeleton
+   above, sized per element instead of duplicated per class. */
+.dqss-logo-skeleton, .dqss-meta-skeleton, .dqss-kpi-skeleton, .dqss-full-skeleton {
+  display: inline-block;
+  border-radius: 4px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--hair) 55%, transparent) 0%, color-mix(in srgb, var(--hair) 25%, transparent) 50%, color-mix(in srgb, var(--hair) 55%, transparent) 100%);
+  background-size: 200% 100%;
+  animation: dqss-skel 1.2s ease-in-out infinite;
+}
+.dqss-logo-skeleton { width: 28px; height: 28px; border-radius: 50%; }
+.dqss-meta-skeleton { width: 8rem; height: 0.9rem; }
+.dqss-kpi-skeleton { width: 3.2rem; height: 1em; }
+.dqss-full-skeleton { width: 7rem; height: 0.9rem; }
 .dqss-chart-empty {
   display: flex;
   align-items: center;
@@ -647,7 +660,9 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
      (deck.css) and DeckStack gates its recede transform off under reduced
      motion; every card is always fully rendered in flow (no-JS included,
      law 06). */
-  .dqss-chart-skeleton { animation: none; }
+  .dqss-chart-skeleton, .dqss-logo-skeleton, .dqss-meta-skeleton, .dqss-kpi-skeleton, .dqss-full-skeleton {
+    animation: none;
+  }
 }
 
 /* ---- subsystem poster (canon §12) ----

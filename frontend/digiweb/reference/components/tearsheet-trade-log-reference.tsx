@@ -69,6 +69,7 @@ export function TearsheetTradeLogReference() {
         { label: "Return", numeric: true },
       ]}
       rows={rows}
+      ariaLabel="Trade log — every round trip"
     />
   );
 }

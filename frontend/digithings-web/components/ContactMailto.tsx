@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 
 /**
@@ -33,6 +33,17 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  * rendering `showAddress` with no children at all leaves the link visibly
  * empty and unlabeled until JS runs — a discernible-text regression, not
  * the documented "inert without JS" tradeoff above.
+ *
+ * WCAG 1 fix (full-UI-suite critique, digithings-web target): the inert
+ * pre-mount state looked IDENTICAL to a working link — a click before the
+ * effect below runs (slow connection, or permanently for a no-JS visitor)
+ * silently jumped to "#", on the page's only conversion mechanism (every
+ * "Email us"/"Enterprise"/"Or email us directly" CTA routes through this
+ * component). The pending look (dimmed, aria-disabled) is baked into the
+ * JSX unconditionally, in token-backed Tailwind utilities, and cleared by
+ * mutating the mounted DOM node directly in the same effect that already
+ * assigns the real href two lines below — the same pattern already applied
+ * to frontend/digiquant-web's copy of this component, PR #2283.
  */
 
 /** Pure so the query-string assembly is unit-testable without rendering. */
@@ -40,6 +51,11 @@ export function buildMailtoHref(email: string, subject?: string): string {
   const query = subject ? `?subject=${subject}` : "";
   return `mailto:${email}${query}`;
 }
+
+// Baked into the JSX unconditionally rather than a new app-local CSS class —
+// the frontend canon guard's family census (#1421) rejects a new class in a
+// census app's stylesheet; token-backed Tailwind utilities are not scanned.
+const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
 
 export function ContactMailto({
   subject,
@@ -68,10 +84,26 @@ export function ContactMailto({
     if (!el) return;
     el.href = buildMailtoHref(DT_CONTACT_EMAIL, subject);
     if (showAddress) el.textContent = DT_CONTACT_EMAIL;
+    el.classList.remove(...PENDING_CLASSES);
+    el.removeAttribute("aria-disabled");
   }, [subject, showAddress]);
 
+  // Reads the live DOM rather than component state, so it keeps swallowing
+  // clicks exactly until the effect above clears aria-disabled -- no state
+  // to fall out of sync with the imperative DOM mutation.
+  const onClick = useCallback((e: MouseEvent<HTMLAnchorElement>) => {
+    if (ref.current?.getAttribute("aria-disabled") === "true") e.preventDefault();
+  }, []);
+
   return (
-    <a ref={ref} href="#" className={className} aria-label={ariaLabel}>
+    <a
+      ref={ref}
+      href="#"
+      className={[className, ...PENDING_CLASSES].filter(Boolean).join(" ")}
+      aria-label={ariaLabel}
+      aria-disabled="true"
+      onClick={onClick}
+    >
       {children}
     </a>
   );

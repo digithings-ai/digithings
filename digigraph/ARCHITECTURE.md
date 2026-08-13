@@ -394,7 +394,7 @@ START
                                                                └─ optimize enabled → optimize → END
 ```
 
-When `agents.always_retrieve_tools` is set, `research_node` (document RAG path) invokes those tools **before** the LLM turn, injects `[tool_name results]…` blocks into the user message, and **strips** those tool names from `tools_for_llm` so the model cannot re-call the same retrieval tools. Prefetch passes `top_k=4` for digisearch and `limit=3` for `digivault_search_notes` so a tiny seed corpus does not dump the whole index every turn. If no tools remain, `run_tools` runs a single streamed completion (no tool rounds).
+Retrieval is model-driven, not prefetched: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`, then `digivault_get_note` with a hit's `vault_path` to load the full note instead of reasoning from the ~300-char excerpt `digivault_search_notes` returns. Nothing is invoked before the LLM turn and nothing is injected into the user message. `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools, `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
 
 `agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
@@ -406,7 +406,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (one tool, `digivault_search_notes`) activates only when `DIGIVAULT_URL` is set.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -417,7 +417,7 @@ digisearch, digiquant, and digivault each own their tool schemas via `POST /v1/o
 1. Calls `fetch_digisearch_tool_dicts(base_url, index_config, bearer, request_id)` at schema resolution time. Results are cached in a module-level dict (`_MANIFEST_CACHE`) keyed on `(base_url, index_config)` — this cache is **never invalidated** for the lifetime of the process.
 2. Invokes tools via `invoke_digisearch_tool(base_url, tool, args, ...)` → `POST /v1/orchestrator_invoke`.
 3. The digiquant connector follows the same pattern via `digiquant_hub.py`.
-4. The digivault connector (`digivault_hub.py`) follows the same pattern for one tool, `digivault_search_notes` — full-text search over the digithings architecture vault (Supabase-backed, `SupabaseStore.search`). It has no `index_config` (vault search is not index-scoped), so its manifest cache key is the base URL alone.
+4. The digivault connector (`digivault_hub.py`) follows the same pattern for two tools: `digivault_search_notes` — full-text search over the digithings architecture vault (D1 FTS5 when configured, else filesystem/Supabase) — and `digivault_get_note`, which loads one note in full by the `vault_path` a search hit returns, so the model can read the whole page instead of reasoning from `digivault_search_notes`'s ~300-char excerpt. `digivault_get_note` is D1-only (503s on a non-D1 deployment) and requires `path_prefix`; digigraph's handler overwrites `path_prefix` from `ToolContext.vault_path_prefix` unconditionally (never trusting a model-supplied value) so a model cannot select another tenant's corpus — `_handle_digivault_search` does the same. Neither tool has an `index_config` (vault search/load is not index-scoped), so the manifest cache key is the base URL alone.
 
 The manifest cache uses synchronous `httpx.Client` (blocking calls inside async FastAPI). This can block the event loop thread during tool schema resolution. The current request handling is synchronous (FastAPI's thread pool), so this is acceptable but limits throughput under high concurrency.
 
@@ -711,11 +711,13 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 **Protocol:** HTTP via `digivault_hub.py`
 
-- **Manifest:** `POST /v1/orchestrator_tools` — returns the OpenAI tool dict for `digivault_search_notes`. Cached per `base_url` (no `index_config` — vault search is not index-scoped).
-- **Invoke:** `POST /v1/orchestrator_invoke` — dispatches to `SupabaseStore.search` (the `search_architecture_notes` RPC) on digivault's side. Accepts `{tool, arguments}`.
+- **Manifest:** `POST /v1/orchestrator_tools` — returns the OpenAI tool dicts for `digivault_search_notes` and `digivault_get_note` (and other digivault-owned tools digigraph does not register). Cached per `base_url` (no `index_config` — vault search is not index-scoped).
+- **Invoke:** `POST /v1/orchestrator_invoke` — for `digivault_search_notes`, dispatches to D1 FTS5 when configured, else the local filesystem vault, else `SupabaseStore.search` (the `search_architecture_notes` RPC); for `digivault_get_note`, a D1-only note fetch by `vault_path` (no filesystem/Supabase fallback). Accepts `{tool, arguments}`.
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header; `X-Request-ID` forwarded from `ToolContext.request_id`.
 - **Env:** `DIGIVAULT_URL` (empty = the `digivault` skill is not registered for the request; other skills are unaffected). In Docker: `http://digivault:8004`.
-- **Purpose:** reproduces the vault-grounded documentation search the digithings.ai chat widget calls directly today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — the tool digichat's BFF needs once traffic moves off the bespoke widget onto digigraph.
+- **Tenant scoping:** both handlers overwrite the `path_prefix` argument from `ToolContext.vault_path_prefix` unconditionally before invoking — a model-supplied `path_prefix` is always discarded, never merely defaulted-if-omitted, so the model cannot read another tenant's corpus. With no context prefix (unmapped tenant slug), `path_prefix` is passed through as `None`. `digivault_get_note` is D1-only, so this always ends in digivault's handler refusing the unscoped call with `ok=False` rather than falling back to a full-vault read (D1 has no unscoped mode). `digivault_search_notes` refuses the same way on D1, but that refusal is deployment-scoped: on a non-D1 backend (local filesystem vault, or Supabase), a `None` prefix is treated as "no filter" rather than refused — `search_local_vault` (`digivault/src/digivault/local_search.py:88`) and `SupabaseStore.search` both then read across the whole corpus. Production is D1-backed, so this gap only reaches a non-D1 deployment.
+- **Error surfacing:** `invoke_digivault_tool` calls `raise_for_status()`, which raises and drops the response body on any non-2xx status — so a *raised* HTTP error from digivault reaches the model as a bare status code, never the `detail` string. digivault's argument-validation failures (e.g. missing `path_prefix`) are therefore returned as `OrchestratorInvokeResponse(ok=False, error=...)` at HTTP 200, specifically so the reason string survives this hop.
+- **Purpose:** reproduces the vault-grounded documentation search the digithings.ai chat widget calls directly today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — the tool digichat's BFF needs once traffic moves off the bespoke widget onto digigraph. `digivault_get_note` extends this to full-note loads so the model is not limited to reasoning from a short excerpt.
 
 ---
 
@@ -744,7 +746,7 @@ digigraph:
 |----------|------------------|-------------|
 | `DIGIQUANT_URL` | `http://digiquant:8001` | digiquant HTTP base URL |
 | `DIGISEARCH_URL` | `http://digisearch:8002` | digisearch HTTP base URL; empty = search disabled |
-| `DIGIVAULT_URL` | `http://digivault:8004` | digivault HTTP base URL; empty = `digivault_search_notes` disabled |
+| `DIGIVAULT_URL` | `http://digivault:8004` | digivault HTTP base URL; empty = `digivault_search_notes` / `digivault_get_note` disabled |
 | `DIGISMITH_URL` | `http://digismith:8003` | digismith status URL (unused by digigraph HTTP) |
 | `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | JWT public key endpoint |
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer claim |

@@ -345,7 +345,26 @@ def run_digigraph_workflow_streaming(
                             ).model_dump(),
                         )
                     )
-        if event_type == "tool_result" and isinstance(data, dict) and data.get("rag_sources"):
+        if event_type == "tool_result" and isinstance(data, dict) and "rag_sources" in data:
+            # Fire on any retrieval tool's result, hit or miss. "rag_sources" is a key
+            # only retrieval handlers set on their return dict (digisearch,
+            # digisearch_fetch_all, digivault_search_notes, digivault_get_note,
+            # digisearch_research_delegate) — present even when empty on a zero-hit
+            # search. Non-retrieval tools (visualization_agent, digistore_list, todo,
+            # ...) never set this key, so they still never produce a trace here.
+            # Gating on truthiness (as before) meant a zero-hit search never got a
+            # trace event at all: "searched, found nothing" and "never searched"
+            # looked identical downstream. hit_count/query (set by research.py's
+            # execute_search wrapper) are forwarded when present so the browser can
+            # tell the two apart.
+            rag_payload: dict[str, Any] = {
+                "sources": data["rag_sources"],
+                "tool": data.get("name", "digisearch"),
+            }
+            if "query" in data:
+                rag_payload["query"] = data["query"]
+            if "hit_count" in data:
+                rag_payload["hit_count"] = data["hit_count"]
             event_queue.put(
                 (
                     "trace",
@@ -354,10 +373,7 @@ def run_digigraph_workflow_streaming(
                         workflow_id=trace_ctx["workflow_id"],
                         request_id=trace_ctx["request_id"],
                         session_id=trace_ctx["session_id"],
-                        payload={
-                            "sources": data["rag_sources"],
-                            "tool": data.get("name", "digisearch"),
-                        },
+                        payload=rag_payload,
                     ).model_dump(),
                 )
             )

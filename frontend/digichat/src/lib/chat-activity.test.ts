@@ -221,6 +221,20 @@ describe("toDigiChatActivity", () => {
     ]);
   });
 
+  // digisearch/digivault (via digigraph) never emit a preceding execute_tool
+  // started/completed pair — a zero-hit search reaches here as a single
+  // completed `retrieve` span with no `documents` field (see
+  // mapDigisearchRagSources/mapDigivaultSearchNotes). It must render the same
+  // honest "no hits" result as the settle-pass case above, distinct from both
+  // a real hit (has documents) and the tool never running (no span at all).
+  it("renders a lone zero-hit retrieve span (no preceding execute_tool) as a no-hits result", () => {
+    expect(
+      toDigiChatActivity([
+        { operation: "retrieve", toolName: "digisearch", query: "jwt", status: "completed", label: "Sources" },
+      ])
+    ).toEqual([{ kind: "tool_result", name: "digisearch", query: "jwt", hits: [], count: 0 }]);
+  });
+
   it("keeps a completed search as a running tool_call until the turn settles", () => {
     expect(
       toDigiChatActivity([started("file_search"), finished("file_search", "auth")], {
@@ -477,6 +491,40 @@ describe("Phase 2 document fields + brief allowlist", () => {
       }),
     );
     expect(out!.documents![0].snippet).toHaveLength(MAX_SNIPPET_CHARS);
+  });
+
+  it("marks a capped snippet with a trailing ellipsis, reserving space so the cap doesn't clip it off", () => {
+    // #2306-era finding: the note behind this snippet can be 1000s of chars long, and a
+    // bare slice with no marker is indistinguishable from a note that just happens to be
+    // exactly this short — a user has no way to tell "this is everything" from "this is
+    // the first 280 characters of a lot more". Mirrors the backend's own fix for the
+    // model-facing payload (digigraph/orchestration/builtin.py's _mark_truncated_excerpts);
+    // this is the same problem one layer up, for the human reading the activity panel.
+    const full = "x".repeat(MAX_SNIPPET_CHARS + 200);
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [{ title: "T", path: "p", snippet: full }],
+      }),
+    );
+    const snippet = out!.documents![0].snippet!;
+    // Exactly MAX_SNIPPET_CHARS total -- the ellipsis is RESERVED space, not appended
+    // after the cap, or a naive re-clip anywhere downstream would slice the marker off.
+    expect(snippet).toHaveLength(MAX_SNIPPET_CHARS);
+    expect(snippet.endsWith("…")).toBe(true);
+    expect(snippet.slice(0, -1)).toBe(full.slice(0, MAX_SNIPPET_CHARS - 1));
+  });
+
+  it("does not add an ellipsis to a snippet that was never truncated", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [{ title: "T", path: "p", snippet: "A short, complete snippet." }],
+      }),
+    );
+    expect(out!.documents![0].snippet).toBe("A short, complete snippet.");
   });
 
   it("rejects non-finite year and non-string tier/snippet without dropping the doc", () => {

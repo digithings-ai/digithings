@@ -20,7 +20,7 @@ export default function PrivacyPage() {
     <>
       <DtNav />
 
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" className="pt-[var(--dq-nav-h)]">
         <PageHead kicker={"// privacy"} title="How this website handles data.">
           This notice explains what the digithings.ai website stores in your browser and what
           happens when you use its optional chat. It does not cover a copy of the open-source
