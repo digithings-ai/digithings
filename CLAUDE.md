@@ -179,7 +179,14 @@ under `agents/sources/subagents/` already pins one; keep doing it:
 |------|-------|----------|
 | Routing, dispatch, dictation cleanup, read-only search | haiku | `component-router`, `dictation-normalizer` |
 | Implementation, spec-writing | sonnet | `spec-writer`, `test-first-implementer` |
-| Review, security audit, architecture judgment | opus | `pr-reviewer`, `security-reviewer` |
+| Review, security audit, architecture judgment | opus | the `/review` in-session lenses, `pr-review-toolkit` plugin agents |
+
+There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in
+`agents/sources/` — that job already has three owners (Cursor Bugbot, the
+`/review` command's fresh-context lens fan-out, and the `pr-review-toolkit` and
+`superpowers:requesting-code-review` plugin skills), and a fourth would only add
+ambiguity about which one the harness should pick. Route review work through
+one of those instead of adding a new custom subagent for it.
 
 Orchestrator itself: sonnet by default. Reserve opus/fable for the session only
 when the orchestration/decomposition step is the hard part — a hard subagent
