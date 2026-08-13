@@ -216,12 +216,20 @@ issue	phase	area	kind	priority	model
 1615	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1622	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 1636	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
+1638	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1639	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+1672	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 1855	Phase 2 — Hardening	digichat	Feature	P1	sonnet
 1866	Phase 3 — Domain unification	digichat	Task	P2	sonnet
 1804	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1811	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
 1814	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
+1945	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
+1950	Phase 3 — Domain unification	digiquant	Epic	P1	opus
+1974	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
+2011	Phase 3 — Domain unification	digichat	Task	P2	sonnet
 2109	Phase 2 — Hardening	Cross-cutting	Bug	P0	sonnet
 2115		Cross-cutting	Task	P1	sonnet
 2118		Cross-cutting	Task	P1	sonnet
+2351	Phase 3 — Domain unification	digichat	Task	P2	sonnet
 2235	Phase 3 — Domain unification	Website	Task	P2	sonnet

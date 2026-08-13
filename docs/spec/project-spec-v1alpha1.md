@@ -49,7 +49,11 @@ agents:
   planning_mode: bool     # Enable plan-then-execute flow (default: false)
   workflow_profile: string # Workflow graph profile name (default: "default")
   research_brief: bool    # Run ResearchBrief post-pass after answer (default: true; env DIGI_RESEARCH_BRIEF)
-  always_retrieve_tools:  # Prefetch these tools before the LLM turn; inject results; strip from tools_for_llm
+  always_retrieve_tools:  # Deprecated/inert (#2240): used to prefetch these tools before
+                          # the LLM turn and strip them from tools_for_llm; that prefetch
+                          # was removed so the model decides retrieval itself. The key
+                          # still parses (DigiProjectConfig.get_always_retrieve_tools())
+                          # but nothing calls it.
     - digisearch
   allowed_tools:          # Restrict tool names available to the research node (default: all)
     - digisearch

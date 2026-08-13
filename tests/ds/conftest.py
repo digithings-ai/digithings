@@ -7,6 +7,13 @@ from collections.abc import Generator
 import digisearch.indexes.backends.vectorize as vectorize_module
 import pytest
 
+#: Cloudflare credential env vars — shared definition in tests.digi_test_env.
+#: Re-export the autouse fixture so it remains active for this suite; rationale
+#: for clearing (host-shell wrangler credentials) is documented there.
+from tests.digi_test_env import (  # noqa: F401
+    clear_cloudflare_credential_env as _clear_cloudflare_credential_env,
+)
+
 
 @pytest.fixture(autouse=True)
 def _reset_default_embedder_singleton() -> Generator[None]:

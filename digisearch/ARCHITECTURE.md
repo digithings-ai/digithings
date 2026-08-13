@@ -551,10 +551,14 @@ Azure is registered first (preferred), then Vectorize, then Chroma, stub last. A
 
 `indexes/backends/vectorize.py` implements `DigiIndex` over the Cloudflare
 Vectorize v2 REST API. `search/_stub.py`'s `_vectorize_backend` activates it
-ahead of Chroma whenever `VECTORIZE_ACCOUNT_ID` and `VECTORIZE_API_TOKEN` are
-both set (non-empty after `.strip()`), and it is what the production
-Cloudflare Container uses (`frontend/digithings-stack-cloudflare/container/`
-unsets `CHROMA_PATH` and skips the Chroma seed once Vectorize is configured).
+ahead of Chroma whenever `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are
+both set (non-empty after `.strip()`) — canonical names shared with D1
+(#2239 credential rename: same Cloudflare account + token authorizes both);
+each falls back to the legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`,
+then `D1_ACCOUNT_ID`/`D1_API_TOKEN`, names when unset (`_first_env`), so the
+rename is zero-downtime. This is what the production Cloudflare Container uses
+(`frontend/digithings-stack-cloudflare/container/` unsets `CHROMA_PATH` and
+skips the Chroma seed once Vectorize is configured).
 
 It exists because Cloudflare Container disk is ephemeral: a container-local
 Chroma index has to be rebuilt from scratch on every cold boot. With Vectorize
@@ -814,7 +818,7 @@ The reranker is not wired into the production `POST /query` path. It is availabl
 
 ### Index backends (production inventory)
 
-**Production:** Chroma (local persistent or HTTP), Azure AI Search, and Cloudflare Vectorize (`VectorizeBackend`) — the production Cloudflare Container runs Vectorize exclusively (Chroma is unset once `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN` are present); Docker Compose deployments still default to Chroma.
+**Production:** Chroma (local persistent or HTTP), Azure AI Search, and Cloudflare Vectorize (`VectorizeBackend`) — the production Cloudflare Container runs Vectorize exclusively (Chroma is unset once remote-index credentials resolve: canonical `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN`, then legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`, then `D1_ACCOUNT_ID`/`D1_API_TOKEN` as a supported fallback for the same account/token pair); Docker Compose deployments still default to Chroma.
 
 **Not in production:** `FAISSBackend` (`indexes/backends/faiss.py`) and `PineconeBackend` are unregistered stubs — do not enable without a new ADR and registry wiring.
 
@@ -903,8 +907,8 @@ docker compose --profile digisearch-mcp up
 |----------|---------|---------|
 | `CHROMA_PATH` | _(unset)_ | Path to persistent Chroma data directory; activates Chroma backend |
 | `CHROMA_HOST` | _(unset)_ | Chroma HTTP server host; activates Chroma backend (remote mode) |
-| `VECTORIZE_ACCOUNT_ID` | _(unset)_ | Cloudflare account id owning the Vectorize indexes; with `VECTORIZE_API_TOKEN`, activates Vectorize and takes priority over Chroma |
-| `VECTORIZE_API_TOKEN` | _(unset)_ | Cloudflare API token for the Vectorize v2 REST API |
+| `CLOUDFLARE_ACCOUNT_ID` | _(unset)_ | Cloudflare account id owning both the Vectorize indexes and the D1 databases (canonical, #2239 credential rename); with `CLOUDFLARE_API_TOKEN`, activates Vectorize and takes priority over Chroma. Falls back to legacy `VECTORIZE_ACCOUNT_ID`, then `D1_ACCOUNT_ID`, when unset. |
+| `CLOUDFLARE_API_TOKEN` | _(unset)_ | Cloudflare API token for the Vectorize v2 REST API (same token also authorizes D1). Falls back to legacy `VECTORIZE_API_TOKEN`, then `D1_API_TOKEN`, when unset. |
 | `AZURE_SEARCH_ENDPOINT` | _(unset)_ | Azure AI Search service endpoint URL |
 | `AZURE_SEARCH_API_KEY` | _(unset)_ | Azure AI Search admin or query key |
 | `AZURE_SEARCH_INDEX_NAME` | _(unset)_ | Default Azure index name |

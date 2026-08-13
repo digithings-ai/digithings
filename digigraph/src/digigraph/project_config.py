@@ -412,7 +412,15 @@ class DigiProjectConfig:
         return [str(x).strip() for x in raw if x and str(x).strip()]
 
     def get_always_retrieve_tools(self) -> list[str]:
-        """Tools to invoke before the LLM tool loop (structural retrieval, not prompt-only)."""
+        """Parse ``agents.always_retrieve_tools`` from the project config.
+
+        Dead configuration as of #2240: this used to gate a prefetch step in
+        ``research.py`` that ran a fixed tool before the LLM turn; that step was
+        removed so the model decides retrieval itself, and nothing calls this
+        method today. Retained rather than deleted only because the key still
+        parses under the DigiProject schema — dropping it would be a schema
+        change, not a code cleanup.
+        """
         raw = self.agents.get("always_retrieve_tools")
         if not isinstance(raw, list) or not raw:
             return []

@@ -78,7 +78,7 @@ html {
   padding: 0.5rem 0.9rem;
   border-radius: 8px;
   background: var(--accent);
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   text-decoration: none;
@@ -223,6 +223,15 @@ html {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
 
+/* appearance:none above drops the native select focus ring in Chromium along
+   with the rest of the native chrome — restore a visible one, matching the
+   theme-toggle/burger treatment below. */
+.site-nav-livery select:focus-visible,
+.site-nav-suite select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .site-nav-livery select option,
 .site-nav-suite select option {
   background: var(--surface);
@@ -349,6 +358,11 @@ html {
 
 .site-nav-sheet a[aria-current="page"] {
   border-bottom-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
+}
+
+.site-nav-sheet a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 /* Collapsed state — driven by JS fit-detection (SiteNav), not a fixed
@@ -497,7 +511,7 @@ html {
 
 .btn-primary {
   background: var(--accent);
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -520,8 +534,8 @@ html {
   width: 11px;
   height: 11px;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--surface-inverse, #06110f) 30%, transparent);
-  border-top-color: var(--surface-inverse, #06110f);
+  border: 2px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
+  border-top-color: var(--on-accent);
   animation: btn-spin 0.7s linear infinite;
 }
 

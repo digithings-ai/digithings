@@ -24,6 +24,8 @@ export default function OccChatPage() {
     <>
       <DtNav autoHide="hover" />
       <main
+        id="main"
+        tabIndex={-1}
         style={{
           display: "flex",
           flexDirection: "column",

@@ -26,10 +26,23 @@ import { useReducedMotion } from "motion/react";
  *   <div role="tabpanel" id={tabPanelId("Account view", tab.id)}
  *        aria-labelledby={tabId("Account view", tab.id)}>…</div>
  *
- * When the consumer's panels carry no DOM ids (e.g. a wrapper adapting
- * legacy children), pass `linkPanels={false}` to omit `aria-controls` —
- * the attribute is optional in the APG tabs pattern, and a dangling
- * reference is worse than none.
+ * That per-tab-id default is only correct when the consumer genuinely mounts
+ * ONE role="tabpanel" per tab. Content-swapping consumers — one physical
+ * panel whose content changes with `active`, which is the common case —
+ * must pass `sharedPanel` instead: every tab's aria-controls then points at
+ * the CURRENTLY ACTIVE tab's panel id (matching the one real panel, which
+ * the consumer keys the same way: id={tabPanelId(label, tabs[active].id)}),
+ * rather than each tab dangling a reference to an id that only exists while
+ * IT is the active one. Found live in two shipped consumers (#2272) and,
+ * closer to home, in this file's own reference showcase before this fix —
+ * the tell is a single tabpanel below the strip whose `key` changes with
+ * `active` rather than one tabpanel per tab.
+ *
+ * When the consumer's panels carry no DOM ids at all (e.g. a wrapper
+ * adapting legacy children, or no panel semantics apply), pass
+ * `linkPanels={false}` to omit `aria-controls` entirely — the attribute is
+ * optional in the APG tabs pattern, and a dangling reference is worse than
+ * none.
  *
  * Wiring (in the consuming app):
  *   globals.css   @import "@digithings/web/styles/effects-chrome.css";
@@ -47,6 +60,15 @@ export type TabStripProps = {
   variant?: "underline" | "pill" | "chip";
   /** Emit aria-controls → tabPanelId(label, id) (default). False = omit. */
   linkPanels?: boolean;
+  /**
+   * True when the consumer mounts ONE physical role="tabpanel" whose content
+   * swaps with `active`, rather than one tabpanel per tab (see the module
+   * doc comment above). Every tab's aria-controls then points at the
+   * currently active tab's panel id instead of its own — the one id that
+   * actually exists in the DOM — so inactive tabs never dangle a reference.
+   * No-op when `linkPanels` is false.
+   */
+  sharedPanel?: boolean;
   className?: string;
 };
 
@@ -72,6 +94,7 @@ export function TabStrip({
   label,
   variant = "underline",
   linkPanels = true,
+  sharedPanel = false,
   className,
 }: TabStripProps) {
   const listRef = useRef<HTMLDivElement>(null);
@@ -143,7 +166,11 @@ export function TabStrip({
           role="tab"
           id={tabId(label, t.id)}
           aria-selected={i === active}
-          aria-controls={linkPanels ? tabPanelId(label, t.id) : undefined}
+          aria-controls={
+            linkPanels
+              ? tabPanelId(label, sharedPanel ? tabs[active].id : t.id)
+              : undefined
+          }
           tabIndex={i === active ? 0 : -1}
           className="tab-btn"
           onClick={() => onChange(i)}

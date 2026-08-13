@@ -35,6 +35,7 @@ export function SyncedTearsheetReference() {
     <SyncedTearsheet
       equity={EQUITY}
       ariaLabel="Synced tearsheet — cumulative equity and underwater drawdown, weekly demo series 2022–2026"
+      pageScrollThrough
     />
   );
 }

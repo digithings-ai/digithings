@@ -6,7 +6,7 @@
     "predev": "node ./lib/sync-openapi.mjs",
     "dev": "next dev --hostname 127.0.0.1",
     "prebuild": "node ./lib/write-csp-headers.mjs && node ./lib/sync-openapi.mjs",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",

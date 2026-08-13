@@ -22,11 +22,20 @@ export function ToastStackReference() {
     setToasts((list) => list.filter((t) => t.id !== id));
   }, []);
 
-  const push = useCallback((tone: ToastTone, title: string, message: string, ttlMs = 4200) => {
-    const id = ++counter;
-    setToasts((list) => [...list.slice(-3), { id, tone, title, message, ttlMs }]);
-    return id;
-  }, []);
+  const push = useCallback(
+    (
+      tone: ToastTone,
+      title: string,
+      message: string,
+      ttlMs = 4200,
+      action?: ToastItem["action"],
+    ) => {
+      const id = ++counter;
+      setToasts((list) => [...list.slice(-3), { id, tone, title, message, ttlMs, action }]);
+      return id;
+    },
+    [],
+  );
 
   const deploy = useCallback(() => {
     const id = push("loading", "Deploying…", "trend_xsec → paper", 0);
@@ -56,7 +65,16 @@ export function ToastStackReference() {
         <button type="button" className="btn-ghost" onClick={() => push("success", "Backtest complete", "PF 2.31 · saved to vault")}>
           Success
         </button>
-        <button type="button" className="btn-ghost" onClick={() => push("error", "Run failed", "digikey token expired — reissue")}>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() =>
+            push("error", "Run failed", "digikey token expired — reissue", 4200, {
+              label: "Reissue",
+              onClick: () => push("success", "Token reissued", "digikey token refreshed"),
+            })
+          }
+        >
           Error
         </button>
         <button type="button" className="btn-ghost" onClick={() => push("info", "New data", "3,102 ETH-USD bars indexed")}>

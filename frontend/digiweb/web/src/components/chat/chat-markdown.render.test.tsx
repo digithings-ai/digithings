@@ -207,6 +207,65 @@ describe("code blocks", () => {
     expect(html).toContain("<code>npm ci</code>");
   });
 
+  // renderCodeBlock (#2320): additive, optional per-fence-language hook so a
+  // consumer (digichat's chat-panel, rendering a ```json chart envelope as a
+  // chart widget) can intercept one specific block shape without forking the
+  // whole shared renderer, or losing mermaid/code-highlighting for everything
+  // else in the same message.
+  describe("renderCodeBlock override", () => {
+    it("uses the override's returned node for a matching fence instead of the default block", () => {
+      const html = renderToStaticMarkup(
+        <ChatMarkdown
+          source={"```chart\n{}\n```"}
+          renderCodeBlock={(lang) => (lang === "chart" ? <div className="my-widget" /> : undefined)}
+        />,
+      );
+      expect(html).toContain("my-widget");
+      expect(html).not.toContain("chat-md-code");
+    });
+
+    it("falls through to the default block when the override returns undefined", () => {
+      const html = renderToStaticMarkup(
+        <ChatMarkdown
+          source={"```python\nx = 1\n```"}
+          renderCodeBlock={(lang) => (lang === "chart" ? <div className="my-widget" /> : undefined)}
+        />,
+      );
+      expect(html).toContain("chat-md-code");
+      expect(html).not.toContain("my-widget");
+    });
+
+    it("falls through to mermaid when the override declines a mermaid fence", () => {
+      const html = renderToStaticMarkup(
+        <ChatMarkdown
+          source={"```mermaid\ngraph TD;\n  A-->B;\n```"}
+          renderCodeBlock={(lang) => (lang === "chart" ? <div className="my-widget" /> : undefined)}
+        />,
+      );
+      expect(html).toContain("chat-md-mermaid");
+      expect(html).not.toContain("my-widget");
+    });
+
+    it("is not consulted for inline code", () => {
+      const html = renderToStaticMarkup(
+        <ChatMarkdown
+          source={"use `chart` here"}
+          renderCodeBlock={() => <div className="my-widget" />}
+        />,
+      );
+      expect(html).not.toContain("my-widget");
+      expect(html).toContain("<code>chart</code>");
+    });
+
+    it("every existing fence renders unchanged when no override is passed", () => {
+      const html = renderToStaticMarkup(
+        <ChatMarkdown source={"```python\nx = 1\n```\n\n```mermaid\ngraph TD;\n  A-->B;\n```"} />,
+      );
+      expect(html).toContain("chat-md-code");
+      expect(html).toContain("chat-md-mermaid");
+    });
+  });
+
   // KaTeX echoes the raw source in its MathML <annotation>, so the string itself
   // survives legitimately. What must not survive is an inline style built from it.
   it("bounds a hostile \\rule so it cannot blow out the page", () => {

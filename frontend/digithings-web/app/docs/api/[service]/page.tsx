@@ -54,7 +54,7 @@ export default async function OpenApiServicePage({
   return (
     <>
       <DtNav />
-      <main className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
         <div className="docs-shell docs-shell--wide">
           <div className="docs-content flex min-w-0 flex-col gap-[clamp(1.2rem,2.5vw,1.8rem)]">
             <nav className="flex flex-wrap items-center gap-[0.55rem] font-mono text-[0.72rem] text-ink-mute">

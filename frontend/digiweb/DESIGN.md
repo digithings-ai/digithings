@@ -119,7 +119,7 @@ digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue grad
 The palette is intentionally narrow: three neutrals for text, three surfaces for depth, one accent, and two small semantic sets (money, diff) that are deliberately fenced off from the accent system so a scoped livery can never repaint a gain, a loss, or a code change.
 
 ### Primary
-- **Phosphor Teal** (`#3DD6C4` dark / `#0E8C7F` light): the system's default accent — code-commented in the tokens file as "the terminal phosphor," it is digiquant's identity color and the monochrome livery's fallback. Used for focus rings, the single primary CTA, selected-state fills, chart identity lines, and anything reading "this is the live/default module." Spent sparingly by rule, never as a background wash.
+- **Phosphor Teal** (`#3DD6C4` dark / `#0C7C71` light): the system's default accent — code-commented in the tokens file as "the terminal phosphor," it is digiquant's identity color and the monochrome livery's fallback. Used for focus rings, the single primary CTA, selected-state fills, chart identity lines, and anything reading "this is the live/default module." Spent sparingly by rule, never as a background wash. The light value was darkened from `#0E8C7F` on 2026-08-12 (WCAG 1.4.3): the lighter hex cleared only 4.14:1 for text/`--on-accent` use, under the 4.5:1 minimum. The per-module token `--accent-digiquant` deliberately stayed at the original `#0E8C7F`, since it is consumed as a *background* under a fixed dark `--on-accent`, a pairing that needs the opposite direction.
 
 ### Secondary — Module Liveries (opt-in, one at a time)
 - **Amber Gold** — digigraph (`#E5B765`)
@@ -132,7 +132,7 @@ The palette is intentionally narrow: three neutrals for text, three surfaces for
 **The One-Livery Rule.** Exactly one module accent is active at a time, set via a global livery switcher or a local `.accent-<module>` scope class — never two module hues visible in the same view. `atlas`, `hermes`, and `kairos` are backend LangGraph sub-graph names, not colored products: their accents collapse to plain `--ink` on any redesigned surface by explicit ruling, so they never appear in the livery switcher.
 
 ### Tertiary — Money (fenced off from livery, never scoped)
-- **Gain** (`#3DD6C4` dark / `#0E8C7F` light): positive P&L and returns only.
+- **Gain** (`#3DD6C4` dark / `#0C7C71` light): positive P&L and returns only. Light value darkened alongside Phosphor Teal above (2026-08-12, WCAG 1.4.3) — `--up` is a literal, kept in sync with `--accent`'s light hex by convention, not a live reference.
 - **Loss** (`#E5533E` dark / `#C9533B` light): negative P&L and returns only.
 - **Caution** (`#E0B341` dark / `#B5832A` light): warnings and non-P&L "bearish sentiment" reads that must not borrow money color.
 
@@ -221,7 +221,7 @@ Borders are uniformly 1px hairline; the only thicker strokes are decorative chev
 
 ### Buttons
 - **Shape:** pill (`border-radius: 999px`), 1px border baseline, `0.62rem 1.3rem` padding.
-- **Primary:** solid `--accent` fill, dark label color (falls through to a hardcoded `#06110F`-equivalent fallback rather than a properly declared on-accent token in the reference implementation — see Don'ts). No hover treatment exists on the plain primary button; only a "magnetic," pointer-following variant gets motion feedback, framed in the codebase as "the one earned exception to the one-motion-moment law."
+- **Primary:** solid `--accent` fill, label color from `--on-accent` — livery-aware (`.accent-<module>` scopes and the page-level livery picker both pin it to a legible dark ink; only mono/atlas/hermes/kairos, whose accent already collapses to `--ink`, follow the theme's own light/dark flip). No hover treatment exists on the plain primary button; only a "magnetic," pointer-following variant gets motion feedback, framed in the codebase as "the one earned exception to the one-motion-moment law."
 - **Ghost:** transparent, hairline border, hover tints the border toward accent — the default choice for any non-primary action.
 - **Quiet:** transparent, no border, reads as a low-emphasis text link (`ink-mute` → `ink` on hover).
 - **Danger:** transparent, loss-tinted text and border, hover fills a faint loss-tinted wash.
@@ -280,4 +280,4 @@ NavShell settles (gains a blurred hairline backdrop) after 8px of scroll and eit
 - **Don't** let `atlas`, `hermes`, or `kairos` render as colored products on a redesigned surface — they name backend LangGraph sub-graphs and must collapse to plain ink.
 - **Don't** reuse the diff palette (`--rv-add`/`--rv-del`) for anything except unified-diff review UI, and don't reuse money colors for a non-financial positive/negative read (olympus's bull/bear sentiment bar deliberately uses `--accent`/`--warn`, not `--up`/`--down`, for exactly this reason).
 - **Don't** put a message in a bubble or box inside the chat transcript — plain turns are grid rows; only rich embedded objects earn a frame.
-- **Don't** carry forward the reference implementation's known gaps as if they were intentional: the undeclared `--surface-inverse` fallback, missing `:disabled` styling on ghost/quiet/danger buttons, and the digichat light-theme accent (`--accent-digichat`, 2.4:1 contrast) failing to fall back to the AA-safe neutral teal the codebase itself documents as the fix. Treat these as bugs to fix in new work, not patterns to imitate.
+- **Don't** carry forward the reference implementation's remaining known gaps as if they were intentional: missing `:disabled` styling on ghost/quiet/danger buttons, and the digichat light-theme accent (`--accent-digichat`, 2.4:1 contrast) failing to fall back to the AA-safe neutral teal the codebase itself documents as the fix. Treat these as bugs to fix in new work, not patterns to imitate. (The reference implementation's undeclared `--surface-inverse` fallback — the cause of illegible button text under the default monochrome livery — was fixed by routing every `.btn-primary`/`.ctl-btn-ref--primary`/`.cw-btn--primary`/toggle-knob text color through the already-correct `--on-accent` token instead.)

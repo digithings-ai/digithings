@@ -181,7 +181,13 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     fixture content changed, so this fingerprint is expected to be
     regenerated whenever ARCHITECTURE.md's prose changes materially — it is
     not itself a chunker-behavior assertion beyond the ``<= 2000`` size
-    invariant.
+    invariant.     Hashes only (count unchanged at 44) re-recorded for #2239's
+    Cloudflare credential rename (VECTORIZE_ACCOUNT_ID/VECTORIZE_API_TOKEN ->
+    CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN with legacy fallback) --
+    prose-only changes to the Vectorize section and the env var reference table.
+    Hashes only again (count still 44) for #2330's CodeRabbit body follow-up:
+    the production-inventory paragraph now documents the D1_ACCOUNT_ID /
+    D1_API_TOKEN credential fallback chain — fixture prose only.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
@@ -210,9 +216,9 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "3adbe61bdd01cb82",
         "819ebadc3320ecc2",
         "09b95dddeb54c404",
-        "99ce6e6e0f28628b",
-        "63a471e295e59f9a",
-        "9c7c924ae7c401bb",
+        "ae0fa675eb628fe7",
+        "b56e3e5173fa2b82",
+        "e04f2c804b4baa0c",
         "2ec8256cb4695f07",
         "16bea1bbfea529fc",
         "5b438889eafdfbb9",
@@ -222,12 +228,12 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
         "0a11a1bc22b44bfa",
-        "e8c2b818684a96ec",
+        "7ef582ec2be6842c",
         "7f35e89d259828fa",
         "58cc26905caa4f5c",
         "c3c62657cd6e0f50",
-        "8fcb8e12a0319d6c",
-        "b9753bcd781a8581",
+        "dccc3e4f6ff514e6",
+        "1bc8e963fdd4c124",
         "17b58004ca6d9f7b",
         "87f70c3f0e892260",
         "a2a8fe99c2eece30",
