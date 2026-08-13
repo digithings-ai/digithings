@@ -116,7 +116,12 @@ class WorkflowRequest(BaseModel):
     digi_trace_jti: str | None = Field(None, description="JWT jti for audit (optional).")
     digi_subject: str | None = Field(
         None,
-        description="JWT subject for checkpoint thread scoping (set from request auth).",
+        description=(
+            "JWT subject for checkpoint thread scoping and Store namespace keying. "
+            "Client-writable: only overridden server-side when request auth carries a "
+            "subject (server.py's _with_digi_request_context); an unauthenticated/dev "
+            "request's own value survives untouched. See ARCHITECTURE.md §6.10."
+        ),
     )
     digisearch_index: str | None = Field(
         None,

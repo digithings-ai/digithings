@@ -60,7 +60,10 @@ class WorkflowState(TypedDict, total=False):
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None
-    # Authenticated subject (JWT sub / digikey identity) for cross-thread Store lookups
-    # (see graph.get_store()). None for unauthenticated/dev requests -- store lookups are
-    # skipped entirely in that case, never keyed on a placeholder subject.
+    # Subject (JWT sub / digikey identity, when auth supplies one) for cross-thread
+    # Store lookups (see graph.get_store()). Falsy (None/empty) skips store lookups
+    # entirely rather than keying on a placeholder -- but this is a client-writable
+    # field (models.py's WorkflowRequest.digi_subject), only overridden server-side
+    # when request auth carries a subject; an unauthenticated/dev request's own value
+    # is not verified. See ARCHITECTURE.md §6.10.
     digi_subject: str | None

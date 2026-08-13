@@ -472,8 +472,10 @@ def test_handle_digivault_search_real_http_failure_reaches_handler_as_ok_false()
             out = _handle_digivault_search({"query": "anything"}, ctx)
     finally:
         # digivault_hub._cb is a module-level CircuitBreaker singleton shared across
-        # the whole test session. One failure here sits well below its
-        # failure_threshold=5, so it can't flip OPEN on its own, but reset explicitly
+        # the whole test session. A 503 (HTTPStatusError) doesn't trip it at all under
+        # the corrected design (only httpx.RequestError -- genuine transport failures
+        # -- counts; see digivault_hub.py's invoke_digivault_tool), so this reset is
+        # purely defensive, not compensating for partial progress toward OPEN. Kept
         # anyway so this test can never leak state into an unrelated test -- mirrors
         # test_vertical_orchestrator_circuit_breaker.py's own reset fixture.
         digivault_hub._cb._state = digivault_hub._cb._CLOSED
