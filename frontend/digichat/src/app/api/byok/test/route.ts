@@ -13,7 +13,12 @@ import { fetchWithTimeout, abortOrMessage } from "@/lib/fetch-with-timeout";
 
 export const maxDuration = 30;
 
-type TestResult = { ok: boolean; model?: string; error?: string };
+type TestResult = {
+  ok: boolean;
+  model?: string;
+  models?: { id: string; label: string }[];
+  error?: string;
+};
 
 type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini" | "xai";
 
@@ -154,7 +159,8 @@ async function testOpenAIKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `OpenAI returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    return { ok: true, model: data.data?.[0]?.id ?? "gpt-4o-mini" };
+    const models = (data.data ?? []).map((m) => ({ id: m.id, label: m.id }));
+    return { ok: true, model: models[0]?.id ?? "gpt-4o-mini", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
@@ -175,7 +181,8 @@ async function testAnthropicKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `Anthropic returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    return { ok: true, model: data.data?.[0]?.id ?? "claude-3-haiku-20240307" };
+    const models = (data.data ?? []).map((m) => ({ id: m.id, label: m.id }));
+    return { ok: true, model: models[0]?.id ?? "claude-3-haiku-20240307", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
@@ -233,8 +240,11 @@ async function testGeminiKey(key: string): Promise<TestResult> {
       };
     }
     const data = (await resp.json()) as { models?: { name?: string }[] };
-    const first = data.models?.[0]?.name?.replace(/^models\//, "") ?? "gemini-2.0-flash";
-    return { ok: true, model: first };
+    const models = (data.models ?? [])
+      .map((m) => (m.name ?? "").replace(/^models\//, ""))
+      .filter(Boolean)
+      .map((id) => ({ id, label: id }));
+    return { ok: true, model: models[0]?.id ?? "gemini-2.0-flash", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }

@@ -187,4 +187,59 @@ describe("POST /api/byok/test", () => {
     const body = await res.json();
     expect(body.error).toContain("Model is required");
   });
+
+  it("returns the full model list for a valid OpenAI key, not just the first id", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ id: "gpt-4o-mini" }, { id: "gpt-4o" }, { id: "o4-mini" }] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/byok/test", {
+          method: "POST",
+          headers: { "x-byok-key": "sk-test", "x-byok-provider": "openai" },
+        }),
+      );
+      const body = await res.json();
+      expect(body.models).toEqual([
+        { id: "gpt-4o-mini", label: "gpt-4o-mini" },
+        { id: "gpt-4o", label: "gpt-4o" },
+        { id: "o4-mini", label: "o4-mini" },
+      ]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("returns the full model list for a valid Gemini key, from the models[].name shape", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          models: [{ name: "models/gemini-2.0-flash" }, { name: "models/gemini-2.5-flash" }],
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/byok/test", {
+          method: "POST",
+          headers: {
+            "x-byok-key": "AIza-test",
+            "x-byok-provider": "gemini",
+            "x-byok-model": "gemini/gemini-2.0-flash",
+          },
+        }),
+      );
+      const body = await res.json();
+      expect(body.models).toEqual([
+        { id: "gemini-2.0-flash", label: "gemini-2.0-flash" },
+        { id: "gemini-2.5-flash", label: "gemini-2.5-flash" },
+      ]);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
 });
