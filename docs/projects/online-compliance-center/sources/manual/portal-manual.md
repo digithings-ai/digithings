@@ -186,7 +186,7 @@ Once signed in, every page renders inside the main shell:
 
 **Sidebar map:**
 
-```text
+```
 Online Compliance Center (Overview)
   ├─ Dashboard
   ├─ Reports
@@ -380,7 +380,7 @@ On the **Backup Jobs** table (per connector tab) the action icons let you:
 Route: `/backup-and-restore/restore`. The page opens on the **Restore** card (**"Create Restore Job"**) with the four connector tabs — **Exchange**, **Teams**, **SharePoint**, **OneDrive** — and, for non-trial users, the **Advanced Setup** toggle. Below the wizard, existing restore jobs are listed per connector under **Overview Restore Jobs**.
 
 > **Important — restore jobs start disabled.** Every restore job is created with its schedule set to **Disabled**. To actually run it, go to **Overview Restore Jobs**, find the job, and click the green **Start** arrow under **Actions** (then **Yes, confirm**). This is a deliberate safety step so a restore never runs before you're ready.
->
+
 > **Trial licenses** allow at most **2 restore jobs per connector**.
 
 All connectors start the same way — **Step 1, General:** enter a **Job Name**. As with backups, the General settings can't be changed after the job is created. Click **Next**.
@@ -453,9 +453,37 @@ Route: `/backup-and-restore/reports`. Lists **all jobs that have already run**. 
 
 ### 6.6 User Dashboard (License Management)
 
-Route: `/backup-and-restore/users`. The **License Management** view — per-user backup coverage and how your backup licenses are being consumed across the tenant.
+Route: `/backup-and-restore/users`, titled **License Management**. Per-user backup coverage, plus the tools for **removing** a user's backed-up data. Four tabs:
 
-> **Reconciliation note (Admin Guide, Feb 2025).** The Admin Guide also documents a **Mailboxes** statistics page (Top-10 mailboxes by items/size, exportable per location, with a **Backup** location option). In the current application, backup mailbox statistics are surfaced through the **Dashboard** ([§6.1](#61-dashboard)) and this **User Dashboard**; a standalone "Mailboxes" page remains part of the Email Archive area (see [§8](#8-email-archive--teams-archive)).
+#### 6.6.1 User Overview
+
+KPI cards across the top: **Accounts backed up** (*of N in Microsoft 365*), **Microsoft 365 accounts** (*eligible for backup*), **Latest monthly backup** (*most recent backup volume*), and **Overall coverage** (*X of Y accounts*), followed by a chart of backed-up **Emails** and **Attachments** per year.
+
+Below that, a table of every user with **Name**, **Email**, and a green tick / red cross for **Exchange**, **Teams**, and **OneDrive** coverage. The **delete** action on a row starts a deletion job for that user — it jumps to the **Deletion Jobs** tab with the mailbox pre-selected. The icon is greyed out if you lack `backup.delete`.
+
+#### 6.6.2 Deletion Jobs
+
+> **This permanently destroys backed-up data.** A deletion job removes the selected mailboxes' backed-up items from storage. It is the tool for GDPR erasure requests and for reclaiming licenses from departed staff — not something to run exploratively. Requires `backup.delete`; the wizard is hidden entirely without it.
+
+**New Deletion Job** wizard:
+
+1. **General** — **Job Name** (required, min. 4 characters).
+2. **Accounts** — **Select one or more Mailboxes**. **Select all Mailboxes** covers the whole tenant and warns you first (trial users can't select all, and are capped at 10 mailboxes). **Exclude selected Mailboxes** inverts the selection — everything *except* what you picked.
+3. **Schedule** — same recurrence options as backup jobs. Choosing an immediate run creates the job first and then starts it.
+
+Created jobs appear in the **Deletion Jobs** table with **Name**, **Status**, **Created On** and **Next Run**, and the usual **Start** / **Stop** / **Delete** / **View Report** actions.
+
+#### 6.6.3 Jobs Overview
+
+**Job Monitor** and **Job Reporting** filtered to deletion jobs only — watch a deletion in progress and review what previous ones removed.
+
+#### 6.6.4 Deletion Blocklist
+
+A tenant-level list of users who must **not** be backed up. Add an entry by typing a **User (UPN / Email)** and clicking **Add**; the table shows **User (UPN / Email)** and **Blocklisted On**.
+
+Removing an entry warns: *"This re-permits future backup of this user. It does not restore any already-deleted data."* — the blocklist governs **future backups**; it doesn't recover anything already removed. Adding requires `backup.create`, removing requires `backup.delete`; read-only roles can view the list but not change it. The tab is hidden from **trial** users.
+
+> **Reconciliation note (Admin Guide, Feb 2025).** The Admin Guide also documents a **Mailboxes** statistics page (Top-10 mailboxes by items/size, exportable per location, with a **Backup** location option). In the current application, backup mailbox statistics are surfaced through the **Dashboard** ([§6.1](#61-dashboard)) and this **User Dashboard**; a standalone "Mailboxes" page remains part of the Email Archive area (see [§8](#8-email-archive--teams-archive)). Deletion jobs and the Deletion Blocklist above are **not** in the Admin Guide at all — they are newer, and are documented here from the application.
 
 ### 6.7 Hidden Jobs *(admin only)*
 
@@ -465,27 +493,104 @@ Route: `/backup-and-restore/hidden-jobs`. System-internal jobs (versioning, erro
 
 ## 7. Data Management (Compliance)
 
-The Data Management module (labelled **Compliance** in some places) governs file and version state across SharePoint and OneDrive. **Requires** `datamgmt.read`; links are disabled if the license excludes Data Management, and the File Manager / Monitoring / Reporting links are also disabled for the **trial** role.
+Data Management reduces the storage your Microsoft 365 tenant consumes by **trimming old file versions in SharePoint and Teams sites**. It shows you how much space old versions are costing, lets you create jobs that keep only the *N* most recent versions of files that haven't changed in a while, and reports how much space each run freed.
 
-> This is a newer module of the current application and is not covered by the Feb 2025 Admin Guide.
+The sidebar section is labelled **Data Management**; its URLs use `/compliance`. **Requires** `datamgmt.read`; links are disabled if the license excludes Data Management, and **File Manager**, **Job Monitor** and **Reports** are also disabled for the **trial** role (trial users keep the read-only Dashboard).
+
+Per-action permissions: `datamgmt.create` (create jobs), `datamgmt.update` (edit), `datamgmt.start` / `datamgmt.stop` (run/stop), `datamgmt.delete` (delete). Buttons you don't have permission for are simply absent.
+
+> **Not in the Admin Guide.** This module postdates the Feb 2025 Admin Guide, so nothing below is covered there. It is documented here from the application itself.
+
+**What "versions" means here.** Every time someone edits a file in SharePoint/Teams, Microsoft keeps the previous copy as a version. Over years this silently consumes most of a tenant's storage. A Data Management job walks the sites you select and, for files that haven't been modified within an **inactivity threshold**, keeps only the newest *N* versions.
 
 ### 7.1 Dashboard
-Route `/compliance/dashboard`. Aggregate SharePoint/OneDrive statistics — number of sites, files, and storage consumed — so you can see the scope of what Data Management is governing.
 
-### 7.2 File Manager
-Route `/compliance`. Browse the SharePoint/OneDrive structure like a file explorer:
-1. Navigate into sites/drives and folders using the tree/breadcrumbs.
-2. Search for a specific file.
-3. Select an item to view its **compliance / archiving state** (whether it's archived, versioned, or subject to a data-management rule).
+Route `/compliance/dashboard`. Titled **"Your Microsoft 365 Data"**. This is the only Data Management page a **trial** user can open; trial (and mock) tenants see example figures behind an **"Example Data"** banner.
 
-### 7.3 Job Monitor
-Route `/compliance/monitoring`. Track data-management job execution in progress, with per-job status and progress.
+**Top row of tiles**
 
-### 7.4 Reports
-Route `/compliance/reporting`. Retention and compliance analytics across your data-management activity.
+| Tile | What it tells you |
+|---|---|
+| Donut chart | Total number of sites, split into **SharePoint Sites** and **Teams Sites** |
+| **Files / Versions** | How many files exist and how many versions in total |
+| **Used / Included Storage** | Storage consumed vs. what your license includes |
+| **Estimated Additional Storage Costs** | Cost of the overage, at **0.15 € / GB / Month** (shows `0 €` while you're under your included storage, red when over) |
 
-### 7.5 Deletion & elevated access
-Data-management job types include standard jobs and **Deletion** jobs. Deletion jobs that bypass retention require elevated approval (*"Require Elevated Access"* / *"Approve Archive Bypass"*), and administrators can maintain a **Deletion Blocklist** of protected users (by UPN/email) that must never be deleted.
+**Savings Summary** — tabs for **SharePoint** and **Teams**, each showing **Managed Sites** and **Removed Versions**. (**Removed Files** is displayed as `N/A` — files themselves are not deleted, only versions.)
+
+**AI-Driven Data Optimizations** — a table of suggested cleanup strategies, each with the **Size** it would reclaim and the **Estimated Cost Savings (Year)** in euros:
+
+1. *Keep 3 versions for files not modified in the last 6 months*
+2. *Keep 3 versions for files not modified in the last 12 months*
+3. *Remove all versions of files not accessed since 1 year, and replace files with link* — **not selectable** (informational only)
+4. *Keep 3 for files not modified in the last 3 months from the Top 20 Teams / SharePoint Sites*
+5. *Backup and delete unused SharePoint / Teams Sites not accessed since 1 year* — **not selectable** (informational only)
+
+Tick one row (only one at a time) and click **Create Job** — you're taken to the **File Manager** with the wizard pre-filled for that strategy, scheduled to run immediately. The button stays disabled for **trial** users and for tenants without Data Management enabled.
+
+**Top 10 Sites Without Data Management** — a leaderboard of the biggest sites not yet covered by a job, with tabs for SharePoint and Teams, showing **Site Name**, **Files**, **Versions**, and **Size**. This is where to look first when deciding what to target.
+
+**Storage chart** — plots **Microsoft Storage without OCC** against **Microsoft Storage with OCC**, plus dotted **Forecast** lines for both, and summarises **Storage Savings (in total)** and **Cost Savings (in total)**.
+
+> If the page shows *"Could not retrieve data. Make sure you have a SharePoint location."*, your tenant has no SharePoint location configured yet — an administrator has to add one before Data Management can report anything.
+
+### 7.2 File Manager — the jobs page
+
+Route `/compliance`. Despite the name this is **not a file browser**: it is where you create and manage Data Management jobs. It has a **Create New Job** wizard at the top and a **Data Management Jobs Overview** table below, both under a **SharePoint** tab.
+
+### 7.3 Creating a Data Management job
+
+In **Create New Job**, work through the four wizard steps:
+
+**Step 1 — General.** Enter a **Job Name** (required, at least 4 characters).
+
+**Step 2 — Site Selection.** Choose which sites the job covers:
+- **Select one or more Sites** — pick individual sites from the dropdown (each is shown as `Name (Email)`).
+- **Select all Sites** — covers every site. Turning this on clears any individual selection and shows a notice: *"OCC will automatically search for all new Sites in your Microsoft tenant."* — i.e. sites created later are picked up automatically, so you don't have to revisit the job.
+
+**Step 3 — Filters.** This is the actual policy:
+- **Inactivity Threshold (days)** — only files untouched for at least this many days are processed. Default **30**.
+- **Number of Versions to Keep** — how many recent versions survive. Default **3**; **3 is also the minimum** the form accepts.
+- **Delete Versions** — off by default. Leaving it **off** means the job runs as an *analysis*: it reports what it could reclaim without deleting anything. Turning it **on** pops a warning — *"This setting will delete all existing versions that match the selected filters."* — and makes the deletion real.
+
+> **Run it once with Delete Versions off.** The report then tells you exactly how many versions and how much space are eligible, so you can confirm the numbers before anything is removed.
+
+**Step 4 — Schedule.** Pick **Job Recurrence**:
+- **Disabled** — *No automatic runs*; the job is created but only runs when you start it by hand.
+- **Start after creation** — *Runs once immediately*.
+- **Weekly** — *Selected days at a set time*; choose the **Execution Time** and one or more **Days of the Week**. Times are entered in your local timezone and stored in UTC.
+
+Finish the wizard to create the job. A confirmation appears and the jobs table refreshes.
+
+### 7.4 Managing existing jobs
+
+**Data Management Jobs Overview** lists your jobs with **Name**, **Type**, **Status**, **Created On** and **Next Run**. Per row:
+
+- **Edit** (`datamgmt.update`) — reopens the same wizard steps in a **Scheduled Jobs Settings** dialog; **Save** applies the change. Disabled while the job is `STARTING`, `STOPPING` or `RUNNING`.
+- **Start** (`datamgmt.start`) — shown when the job is **Ready** or **Failed**.
+- **Stop** (`datamgmt.stop`) — shown for any other state; disabled mid-transition (`STARTING` / `STOPPING`).
+- **Delete** (`datamgmt.delete`) — disabled while the job is starting, stopping or running.
+- **View Report** — opens the job's run history (the same columns as [§7.6](#76-reports)).
+
+### 7.5 Job Monitor
+
+Route `/compliance/monitoring`, titled **Data Management Monitoring**. Shows runs as they happen, with **Status**, **Job Name**, **Job Type**, **Connector**, **Sites** (finished / total), **Eligible Versions**, **Successful Count**, **Error Count**, **Eligible Size for Deletion** and **Processed Size**.
+
+Per row you can **Stop** the run (`datamgmt.stop`) or open **Detailed Reports** for per-site progress.
+
+### 7.6 Reports
+
+Route `/compliance/reporting`, titled **Data Management Reports**. Lists completed runs with **Status**, **Job Name**, **Job Type**, **Connector**, **Sites**, **Eligible Versions**, **Successfully Processed Versions**, **Error Count**, **Eligible Size for Deletion**, **Freed Space**, and **Finished**.
+
+**Freed Space reads 0 unless the job actually deleted versions** — that's how you tell an analysis run from a real cleanup.
+
+Open **Detailed Reports** on a row for the per-site breakdown: **Site Name**, **Eligible Versions**, **Error Count**, **Successfully Processed Versions**, **Number of Files**, **Number of Versions**, and **Eligible Size for Deletion**.
+
+### 7.7 The system job *(Super Administrator only)*
+
+If the tenant has a SharePoint location and no system job exists yet, a **Data Management System Job** card appears on the File Manager page with a **Create and Start System Job** button. It creates a predefined, weekly, analysis-only job (`DATAMANAGEMENT_SYSTEM_JOB`) that scans all sites across several inactivity thresholds (0 / 90 / 180 / 360 days) and starts it immediately. Its output is what feeds the Dashboard's optimization figures.
+
+This job is **hidden from every role except Super Administrator**, in the jobs table, the Job Monitor and the reports alike. Non-super-admins never see it.
 
 ---
 
@@ -537,7 +642,11 @@ Deletion jobs remove archived data — used to meet statutory deletion deadlines
 
 The job appears under **Overview Deletion Jobs**, where you can review and edit it.
 
-> Deletion jobs are powerful and irreversible. Where the portal enforces the four‑eyes rule, sensitive/retention-bypassing deletions require a second approver, and administrators can maintain a **Deletion Blocklist** of protected users (by UPN/email) that must never be deleted.
+> Deletion jobs are powerful and irreversible.
+
+> **Archive deletion in the newer portal.** An archive-deletion equivalent exists in the current application's code — an **Archive → User Dashboard** tab mirroring [§6.6.2](#662-deletion-jobs) — but it is **not reachable**, because the whole Archiving menu except the Dashboard is disabled (see the notice at the start of [§8](#8-email-archive--teams-archive)). If it is re-enabled, it behaves as follows, and it is stricter than the legacy portal: before creating the job the app checks every selected mailbox against your **archive retention policies**, and if any of them is still retaining data (a future retention date, or indefinite retention) creation is **blocked** with an *"Archive data is protected"* dialog naming the mailboxes. Only a **Super/System Administrator** can override it, using a **Bypass archive protection** switch that requires confirming a disclaimer — *"This will permanently delete archived items for the selected mailboxes even if they are still under a retention date."* Everyone else is told to raise a support ticket instead.
+>
+> The **Deletion Blocklist** is a **backup** feature, not an archive one, and it prevents *future backups* of a user rather than protecting them from deletion — see [§6.6.4](#664-deletion-blocklist).
 
 ### 8.5 Proxy Rights
 
@@ -643,7 +752,25 @@ Create a short **"What's New"** message shown to users on the Homepage until the
 A tenant-scoped, read-only trail of user activity (logins, job creation, role changes, four‑eyes events, etc.). Mutations made through the portal are recorded automatically (super-admin actions are excluded from auto-logging).
 
 ### 10.6 Tenant
-Tenant administration for Super/System Administrators (tenant records and settings).
+
+Tenant administration for Super/System Administrators. The table lists every tenant with a **switch column**, **Tenant Name**, and **Status** (the provisioning state), plus **Add Tenant** to create one.
+
+> **Not in the Admin Guide.** Cross-tenant administration postdates it; the following is documented from the application.
+
+**Switching the active tenant.** The switch in the first column makes that tenant the one you're working in — everything else in the portal (dashboards, jobs, users) then reports on it. You're asked to confirm, and the switch is unavailable for the tenant you're already in and for tenants that are `DEPROVISIONED` or `RUNNING`.
+
+**Per-tenant actions:**
+
+| Action | What it does |
+|---|---|
+| **Mode** | Switches the tenant to **Collection and Indexing** mode. The confirmation states plainly: *"This enables indexing of the collected data and **cannot be undone**."* |
+| **Search Provisioning** | Manages the tenant's search capacity: set the **Search Tier** (**Basic**, **Standard**, **Standard S2**) and **Save**; **Add** or **Remove** a **Search Pipeline** (currently **Email (Light)**). |
+| **Locations** | Lists the tenant's storage locations by **Location Name** and **Type**, with delete per row. Missing locations can be created individually (**Manual creation**) or in bulk — the button reads **Create all locations** or **Create missing locations** depending on what's absent. |
+| **Edit** | Tenant details: **Tenant Name**, **Organization ID**, and **Max Versions**. |
+| **Deprovision** | *"Are you sure you want to deprovision this Tenant?"* — tears down the tenant's provisioned resources. |
+| **Delete** | *"Are you sure to delete this Tenant?"* — removes the tenant record. |
+
+> **Deprovision and Delete are destructive and are not undone by re-creating the tenant.** Confirm you have the right row — the active-tenant switch and these actions sit in the same table.
 
 ---
 
@@ -701,7 +828,11 @@ The app runs in one of several modes: production, staging, or a self-contained m
 
 ### 12.5 Reconciliation with the Admin Guide (Feb 2025)
 
-This manual documents the **current application**. The official **Admin Guide OCC (Feb 2025)** documents the production portal at `portal.netmail.cloud`. Where they differ:
+This manual documents the **current application**, as built. The official **Admin Guide OCC (Feb 2025)** documents the production portal at `portal.netmail.cloud`.
+
+> **The Admin Guide does not bound this manual's scope.** Anything the application does is documented here in full, whether or not the guide mentions it. The guide is used only to *flag differences* for readers coming from it — a feature's absence from the guide is never a reason to describe it more briefly. Data Management ([§7](#7-data-management-compliance)), deletion jobs and the blocklist ([§6.6](#66-user-dashboard-license-management)), four-eyes ([§10.2](#102-four-eyes-two-person-approval)) and the eDiscovery Search app all postdate it and are documented from the code.
+
+Where the two differ:
 
 | Topic | Admin Guide (Feb 2025) | Current application | Notes |
 |---|---|---|---|
@@ -712,7 +843,8 @@ This manual documents the **current application**. The official **Admin Guide OC
 | **Per-job completion email** | Entered on the job's Schedule step | Notifications configured centrally under **Account → Notifications** | Archive/Teams-archive jobs on `portal.netmail.cloud` still offer the per-job email. |
 | **Email Archive / Teams Archive / Deletion Jobs / Proxy Rights** | Fully functional in the portal | Delivered via `portal.netmail.cloud`; disabled in the newer portal except the Archive Dashboard notice | See [§8](#8-email-archive--teams-archive). |
 | **Backup mailbox statistics** | "Mailboxes" page (Top-10, export by location) | Surfaced via Backup **Dashboard** + **User Dashboard**; a Mailboxes page remains in Email Archive | See [§6.6](#66-user-dashboard-license-management). |
-| **Data Management (Compliance)** | Not documented | Present ([§7](#7-data-management-compliance)) | Newer module. |
+| **Data Management** | Not documented | SharePoint/Teams version trimming — dashboard, job wizard, monitor, reports, system job ([§7](#7-data-management-compliance)) | Newer module; documented in full from the application. |
+| **Deletion jobs & Deletion Blocklist** | Deletion jobs documented for the legacy portal; no blocklist | Backup deletion jobs and the tenant blocklist under **User Dashboard** ([§6.6](#66-user-dashboard-license-management)) | Newer; the current app also blocks archive deletions that conflict with retention ([§8.4](#84-deletion-jobs)). |
 | **Four‑eyes, eDiscovery Search app, cross-tenant admin** | Not documented | Present ([§10](#10-administration-configuration), companion Search manual) | Newer capabilities. |
 
 ### 12.6 Contact & support
