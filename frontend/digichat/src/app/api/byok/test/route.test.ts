@@ -236,19 +236,58 @@ describe("POST /api/byok/test", () => {
     expect(body.error).toContain("AI");
   });
 
-  it("returns 400 when Gemini model header missing", async () => {
-    const res = await POST(
-      new Request("http://localhost/api/byok/test", {
-        method: "POST",
-        headers: {
-          "x-byok-key": "AIza-test",
-          "x-byok-provider": "gemini",
-        },
-      })
+  // #2347: testGeminiKey never reads its `model` parameter — requiring one
+  // before the ping just delayed a call that would have worked without it.
+  it("no longer requires a model for Gemini (Gemini's own call never reads it)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ models: [{ name: "models/gemini-2.0-flash" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
     );
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toContain("Model is required");
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/byok/test", {
+          method: "POST",
+          headers: {
+            "x-byok-key": "AIza-test",
+            "x-byok-provider": "gemini",
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  // #2347: same reasoning as the Gemini case above — testAnthropicKey never
+  // reads its `model` parameter either.
+  it("no longer requires a model for Anthropic (Anthropic's own call never reads it)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ id: "claude-3-5-haiku-20241022" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    try {
+      const res = await POST(
+        new Request("http://localhost/api/byok/test", {
+          method: "POST",
+          headers: {
+            "x-byok-key": "sk-ant-test",
+            "x-byok-provider": "anthropic",
+          },
+        }),
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("returns 400 for invalid x.ai key prefix", async () => {

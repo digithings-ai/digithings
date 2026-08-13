@@ -103,8 +103,14 @@ export async function POST(req: Request): Promise<Response> {
     return jsonResponse({ ok: false, error: prefixError }, 400);
   }
 
-  const needsModel =
-    provider === "anthropic" || provider === "gemini" || provider === "xai";
+  // Deliberately NOT derived from byokRequiresModel(provider) — that
+  // predicate answers a different question (does /api/chat need a model
+  // header). This gate answers only "does the *validation ping* need a
+  // model before it can run at all" — and none of testOpenAIKey,
+  // testAnthropicKey, testGeminiKey, or testOpenRouterKey read their model
+  // parameter. Only testXaiKey has no live-list call of its own, so x.ai is
+  // the one provider that still needs a model up front (#2347).
+  const needsModel = provider === "xai";
   if (needsModel && !byokModel) {
     return jsonResponse(
       {
