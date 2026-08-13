@@ -36,6 +36,23 @@ describe("bucketOpenRouterModels", () => {
     expect(flagship.map((m) => m.id)).toEqual(["anthropic/claude-opus-4"]);
   });
 
+  it("buckets a model priced at exactly the flagship floor as flagship (inclusive boundary)", () => {
+    const { flagship } = bucketOpenRouterModels([
+      // exactly $3 / 1M tokens == 0.000003 / token
+      { id: "some-vendor/at-floor", pricing: { prompt: "0.000003", completion: "0.000003" } },
+    ]);
+    expect(flagship.map((m) => m.id)).toEqual(["some-vendor/at-floor"]);
+  });
+
+  it("does not bucket a model priced just below the flagship floor as flagship", () => {
+    const { flagship, all } = bucketOpenRouterModels([
+      // just under $3 / 1M tokens
+      { id: "some-vendor/below-floor", pricing: { prompt: "0.0000029", completion: "0.0000029" } },
+    ]);
+    expect(flagship).toHaveLength(0);
+    expect(all[0].tier).toBeUndefined();
+  });
+
   it("a mid-priced, non-open-weight model has no tier but still appears in all", () => {
     const { free, opensource, flagship, all } = bucketOpenRouterModels([
       { id: "some-vendor/mid-tier", pricing: { prompt: "0.0000005", completion: "0.0000015" } },
@@ -60,7 +77,7 @@ describe("bucketOpenRouterModels", () => {
   });
 
   it("skips entries with no id", () => {
-    const { all } = bucketOpenRouterModels([{ id: "" }, { id: "vendor/ok" }] as never);
+    const { all } = bucketOpenRouterModels([{ id: "" }, { id: "vendor/ok" }]);
     expect(all.map((m) => m.id)).toEqual(["vendor/ok"]);
   });
 

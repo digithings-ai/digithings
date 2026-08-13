@@ -1,3 +1,5 @@
+import type { ByokModelOption } from "@/hooks/use-byok-key";
+
 /** One entry from OpenRouter's public GET /api/v1/models catalog (fields we use).
  * Exact field names per OpenRouter's documented response shape — re-verify against
  * their live docs before depending on this in production; see the design spec's
@@ -8,15 +10,6 @@ export type OpenRouterCatalogEntry = {
   pricing?: { prompt?: string; completion?: string };
   hugging_face_id?: string;
   supported_parameters?: string[];
-};
-
-export type ByokModelTier = "free" | "opensource" | "flagship";
-
-export type ByokModelOption = {
-  id: string;
-  label: string;
-  tier?: ByokModelTier;
-  supportsTools: boolean;
 };
 
 /** Entries with no hugging_face_id fall back to this publisher-prefix allowlist for
@@ -51,7 +44,17 @@ function promptPricePerMillion(entry: OpenRouterCatalogEntry): number | null {
 }
 
 function isFree(entry: OpenRouterCatalogEntry): boolean {
-  return entry.pricing?.prompt === "0" && entry.pricing?.completion === "0";
+  const prompt = entry.pricing?.prompt;
+  const completion = entry.pricing?.completion;
+  if (prompt === undefined || completion === undefined) return false;
+  const promptNum = Number(prompt);
+  const completionNum = Number(completion);
+  return (
+    Number.isFinite(promptNum) &&
+    promptNum === 0 &&
+    Number.isFinite(completionNum) &&
+    completionNum === 0
+  );
 }
 
 function isOpenSource(entry: OpenRouterCatalogEntry): boolean {
@@ -64,7 +67,7 @@ function isFlagship(entry: OpenRouterCatalogEntry): boolean {
   return price !== null && price >= FLAGSHIP_PROMPT_PRICE_FLOOR_USD_PER_1M;
 }
 
-function tierFor(entry: OpenRouterCatalogEntry): ByokModelTier | undefined {
+function tierFor(entry: OpenRouterCatalogEntry): NonNullable<ByokModelOption["tier"]> | undefined {
   if (isFree(entry)) return "free";
   if (isFlagship(entry)) return "flagship";
   if (isOpenSource(entry)) return "opensource";
@@ -90,7 +93,7 @@ export function bucketOpenRouterModels(entries: readonly OpenRouterCatalogEntry[
   const opensource: ByokModelOption[] = [];
   const flagship: ByokModelOption[] = [];
   for (const entry of capped) {
-    if (!entry.id) continue;
+    if (typeof entry.id !== "string" || !entry.id) continue;
     const option: ByokModelOption = {
       id: entry.id,
       label: entry.name?.trim() || entry.id,
