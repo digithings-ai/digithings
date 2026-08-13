@@ -256,7 +256,10 @@ export function ByokCliFlow({
       return [...list.map((m) => m.id), CUSTOM_MODEL];
     }
     if (liveKeyStepModels) {
-      return [...liveKeyStepModels.map((m) => m.id), CUSTOM_MODEL];
+      const liveIds = liveKeyStepModels.map((m) => m.id);
+      return byokRequiresModel(provider)
+        ? [...liveIds, CUSTOM_MODEL]
+        : ["", ...liveIds, CUSTOM_MODEL];
     }
     const presets = [...byokModelPresets(provider)];
     if (!byokRequiresModel(provider)) {

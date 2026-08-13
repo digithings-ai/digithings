@@ -158,6 +158,48 @@ describe("ByokCliFlow", () => {
     expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
   });
 
+  // Regression: modelOptions used to check liveKeyStepModels before the
+  // !byokRequiresModel(provider) branch that prepends "" ("(provider
+  // default)"). OpenAI is the only key-step-ping provider with
+  // byokRequiresModel === false, so once its ping resolved with a real
+  // models list, "(provider default)" silently disappeared for the rest of
+  // the session. See #2347 final whole-branch review.
+  it("keeps the (provider default) option for OpenAI once the live key-step ping resolves", async () => {
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/api/byok/models")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ ok: true, free: [], opensource: [], flagship: [], all: [] }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            model: "gpt-4o-mini",
+            models: [
+              { id: "gpt-4o-mini", label: "gpt-4o-mini" },
+              { id: "gpt-4o", label: "gpt-4o" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<ByokCliFlow onClose={() => {}} onActivate={() => {}} />);
+
+    fireEvent.click(screen.getByText("openai"));
+    const keyInput = screen.getByLabelText("Paste API key, then Enter");
+    fireEvent.change(keyInput, { target: { value: "sk-test-1234" } });
+    fireEvent.keyDown(keyInput, { key: "Enter" });
+
+    expect(await screen.findByText("gpt-4o")).toBeInTheDocument();
+    expect(screen.getByText("(provider default)")).toBeInTheDocument();
+  });
+
   it("falls back to preset models when the key-step ping fails for Anthropic, without a user-visible error", async () => {
     const fetchSpy = vi.fn().mockImplementation(() =>
       Promise.resolve(
