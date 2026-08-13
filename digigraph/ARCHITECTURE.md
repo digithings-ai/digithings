@@ -590,13 +590,19 @@ since this flag has no registry-bounded ceiling the way a tool allowlist does.
 Forcing `tool_choice="required"` also changes the cost and failure shape of the
 round budget described above. With it off, `tool_calls` can come back empty and
 `run_tools()` returns early, so `max_tool_rounds` is a ceiling the model rarely
-exhausts; with it on, `tool_calls` is never empty, the early return is
-unreachable, and the budget becomes a fixed cost — with `research.py`'s current
-`max_tool_rounds=4`, every request with `require_tool_calls: true` makes exactly
-5 completion calls and 4 tool executions, not "up to." It also changes what
-happens when a model can't comply: a provider that rejects forced tool use for
-that model now returns a hard error for the whole request, rather than the model
-quietly answering without tools the way a tool-incapable model degrades today.
+exhausts; with it on, a tool-enabled round returning empty `tool_calls` is no
+longer treated as an early final answer — `run_tools()` raises instead, so a
+provider that ignores the `required` hint doesn't get to silently answer without
+calling a tool. A compliant model still hits every round in the budget, so with
+`research.py`'s current `max_tool_rounds=4` a request with `require_tool_calls:
+true` makes 4 tool rounds plus one tool-free wrap-up completion — 5 total — only
+when the last round's own narration was empty; when that round already carried
+non-empty content, it's returned directly with no wrap-up, for 4. Either way,
+not the fixed 5 this used to claim. It also changes what happens when a model
+can't comply at the provider level: a provider that rejects forced tool use for
+that model outright now returns a hard error for the whole request, rather than
+the model quietly answering without tools the way a tool-incapable model
+degrades today.
 
 ### 6.3 Code Execution Gate
 

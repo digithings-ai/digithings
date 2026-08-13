@@ -2079,6 +2079,20 @@ def run_tools(
         # multi-round tool loop doesn't re-search (and re-bill) every round.
         content, tool_calls = _produce_turn(current, tools, include_search=round_idx == 0)
         if not tool_calls:
+            if tool_choice == "required":
+                # tool_choice="required" is a floor a deployment opted into (see
+                # digigraph.tool_policy.require_tool_calls_for_workflow) specifically so a
+                # tool-enabled turn can never silently answer without calling a tool. A
+                # provider that honors tool_choice shouldn't reach this branch at all; one
+                # that returns content anyway is a fail-open path we must not paper over by
+                # returning that content as if it were a legitimate final answer.
+                # NOTE: this does not extend to the tool-free wrap-up completion below (after
+                # the round budget is exhausted) — that call passes tools=None, so neither
+                # _produce_turn branch puts tool_choice on the wire for it.
+                raise RuntimeError(
+                    "run_tools: tool_choice='required' but the model returned no tool_calls "
+                    f"in round {round_idx}"
+                )
             return content or ""
 
         if on_tool_step is not None and content:

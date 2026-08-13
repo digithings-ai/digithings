@@ -853,21 +853,25 @@ def test_round_boundary_not_emitted_on_the_non_streaming_path_without_content() 
     assert not any(k == "round_boundary" for k, _ in steps)
 
 
-def test_run_tools_forwards_tool_choice_required() -> None:
-    """run_tools(tool_choice='required') reaches the underlying completions call."""
+def test_run_tools_raises_when_required_tool_choice_gets_no_tool_calls() -> None:
+    """tool_choice='required' must fail closed, not silently return content, when a
+    tool-enabled turn ignores the requirement and answers without calling a tool —
+    a deployment that opted into this floor (agents.require_tool_calls) never gets
+    a quiet parametric-knowledge answer in its place."""
     fake_client = MagicMock()
     fake_client.chat.completions.create.return_value = _mock_response("final answer")
 
     tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
     with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
-        out = digillm.run_tools(
-            "gpt-4o-mini",
-            [{"role": "user", "content": "go"}],
-            tools,
-            execute_tool=lambda n, a: "unused",
-            tool_choice="required",
-        )
-    assert out == "final answer"
+        with pytest.raises(RuntimeError, match="tool_choice='required'"):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool=lambda n, a: "unused",
+                tool_choice="required",
+            )
+    # tool_choice still reached the wire before the model's response was rejected.
     _, kwargs = fake_client.chat.completions.create.call_args
     assert kwargs["tool_choice"] == "required"
 
@@ -1099,7 +1103,13 @@ def test_stream_deltas_narration_alongside_tool_call_emits_round_boundary() -> N
 def test_stream_deltas_forwards_tool_choice_required() -> None:
     """tool_choice='required' reaches the wire on the STREAMING path — the only
     path production ever takes for this parameter (research.py always passes
-    on_tool_step, which forces stream_deltas=True in digigraph's wrapper)."""
+    on_tool_step, which forces stream_deltas=True in digigraph's wrapper).
+
+    max_tool_rounds=1 keeps this exercising the intended shape: one tool-enabled
+    round (tool_calls present, so the fail-closed check added for the
+    tool_choice='required' floor never fires) followed by the forced tool-free
+    wrap-up completion (tools=None, so tool_choice never reaches that call's wire
+    either) — not a second 'required' round, which would now raise."""
     round1 = [
         _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup")]),
         _stream_chunk(tool_calls=[_tc_fragment(0, arguments='{"q":')]),
@@ -1119,6 +1129,7 @@ def test_stream_deltas_forwards_tool_choice_required() -> None:
             on_tool_step=lambda kind, payload: None,
             stream_deltas=True,
             tool_choice="required",
+            max_tool_rounds=1,
         )
     assert out == "final answer"
     # First round has tools attached, so tool_choice must be on the wire.
