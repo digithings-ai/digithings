@@ -210,12 +210,12 @@ class TestByokProviderGuard:
     which providers a key is actually spent on, and server.py refuses the rest.
     """
 
-    @pytest.mark.parametrize("provider", ["openai", "openrouter", "gemini", "anthropic"])
+    @pytest.mark.parametrize("provider", ["openai", "openrouter", "gemini", "anthropic", "xai"])
     def test_routed_providers_are_supported(self, provider: str) -> None:
         assert byok_provider_supported(provider)
         assert provider in BYOK_ROUTABLE_PROVIDERS
 
-    @pytest.mark.parametrize("provider", ["xai", "", "nonsense"])
+    @pytest.mark.parametrize("provider", ["", "nonsense"])
     def test_unrouted_providers_are_refused(self, provider: str) -> None:
         """Each of these would otherwise have been billed to the operator."""
         assert not byok_provider_supported(provider)
@@ -251,7 +251,7 @@ class TestByokGuardOverHttp:
 
         return TestClient(app)
 
-    @pytest.mark.parametrize("provider", ["xai", "nonsense"])
+    @pytest.mark.parametrize("provider", ["nonsense"])
     def test_an_unroutable_key_is_refused_not_silently_swallowed(self, provider: str) -> None:
         res = self._client().get(
             "/healthz", headers={"x-byok-key": "sk-secret", "x-byok-provider": provider}
@@ -264,7 +264,7 @@ class TestByokGuardOverHttp:
         # And it must never echo the key back.
         assert "sk-secret" not in res.text
 
-    @pytest.mark.parametrize("provider", ["gemini", "anthropic", "openrouter"])
+    @pytest.mark.parametrize("provider", ["gemini", "anthropic", "openrouter", "xai"])
     def test_model_required_for_non_openai(self, provider: str) -> None:
         res = self._client().get(
             "/healthz", headers={"x-byok-key": "sk-ok", "x-byok-provider": provider}
@@ -279,6 +279,7 @@ class TestByokGuardOverHttp:
             ("openrouter", "openai/gpt-4o-mini"),
             ("gemini", "gemini-2.5-flash"),
             ("anthropic", "claude-sonnet-4-6"),
+            ("xai", "grok-4-3"),
         ],
     )
     def test_a_routable_key_passes_through(self, provider: str, model: str) -> None:
