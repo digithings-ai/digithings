@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import threading
 
+import httpx
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import RetryPolicy
 
 from digigraph.graph.nodes import (
     backtest_node,
@@ -54,6 +56,12 @@ _CHECKPOINTER_CONN_BOUNDS: dict[str, int] = {
     "keepalives_count": 5,
 }
 
+# Both nodes call digiquant over HTTP; a single dropped packet should not fail the
+# whole run. Scoped to httpx.RequestError (connection/timeout — transient) only, never
+# httpx.HTTPStatusError (a 4xx/5xx from digiquant is a real rejection, not a blip, and
+# retrying it burns the retry budget for nothing).
+_DIGIQUANT_RETRY_POLICY = RetryPolicy(max_attempts=3, retry_on=httpx.RequestError)
+
 
 def _bounded_conn_string(conn_string: str) -> str:
     """Return ``conn_string`` with connect-timeout and TCP-keepalive params filled in.
@@ -90,6 +98,11 @@ def _bounded_conn_string(conn_string: str) -> str:
         return conn_string
 
 
+# Sync checkpointers (SqliteSaver/PostgresSaver, not the Async* variants) are correct
+# here because every call site in workflow.py is a plain `def` (FastAPI runs these off
+# the event loop in its own threadpool already). If any route here ever becomes
+# `async def`, the checkpointer selection below must move to AsyncSqliteSaver /
+# AsyncPostgresSaver in lockstep, or graph.compile(checkpointer=...) raises at runtime.
 def get_checkpointer():
     """
     Return a process-wide checkpointer for the current DIGI_CHECKPOINTER setting.
@@ -261,8 +274,8 @@ def build_workflow_graph():
         builder.add_node("supervisor", supervisor_node)
     builder.add_node("research", research_sg)
     builder.add_node("validate_strategy", strategy_validator_node)
-    builder.add_node("backtest", backtest_node)
-    builder.add_node("optimize", optimize_node)
+    builder.add_node("backtest", backtest_node, retry_policy=_DIGIQUANT_RETRY_POLICY)
+    builder.add_node("optimize", optimize_node, retry_policy=_DIGIQUANT_RETRY_POLICY)
     if supervisor_on:
         builder.add_edge(START, "supervisor")
         builder.add_conditional_edges("supervisor", _route_after_supervisor)

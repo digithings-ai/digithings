@@ -86,3 +86,32 @@ def test_profile_a_digiproject_is_chat_only() -> None:
         assert "digisearch" in tools
         assert "digivault_search_notes" in tools
         assert not any("digiquant" in t or "backtest" in t for t in tools)
+
+
+@pytest.fixture(autouse=False)
+def reset_workflow_graph_cache():
+    """Reset the process-wide compiled-graph cache so build_workflow_graph() rebuilds
+    with this test's env/module state, instead of returning whatever a prior test in
+    this session already compiled and cached (graph.py:23-24, no invalidation)."""
+    import digigraph.graph.graph as _graph_module
+
+    original = _graph_module._workflow_graph_cache
+    _graph_module._workflow_graph_cache = None
+    yield
+    _graph_module._workflow_graph_cache = original
+
+
+@pytest.mark.unit
+def test_backtest_and_optimize_nodes_have_retry_policy(reset_workflow_graph_cache) -> None:
+    """A single dropped network packet must not fail the whole backtest/optimize run —
+    RetryPolicy scoped to httpx.RequestError (transient network failures) only, never
+    HTTPStatusError (a 4xx/5xx is a real rejection and must not be blindly retried)."""
+    import httpx
+
+    graph = build_workflow_graph()
+    for name in ("backtest", "optimize"):
+        node = graph.nodes[name]
+        assert node.retry_policy, f"{name} node has no retry_policy"
+        policy = node.retry_policy[0]
+        assert policy.retry_on is httpx.RequestError
+        assert policy.max_attempts == 3
