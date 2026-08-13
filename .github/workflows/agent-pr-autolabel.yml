@@ -29,7 +29,7 @@ jobs:
           PR=""
           if [[ -n "$BRANCH" ]]; then
             case "$BRANCH" in
-              cursor/*|copilot/*|bot/*) ;;
+              cursor/*|copilot/*|bot/*|task/*|claude/*) ;;
               *) echo "Not an agent branch — skipping."; exit 0 ;;
             esac
             PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \

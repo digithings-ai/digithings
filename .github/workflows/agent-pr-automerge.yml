@@ -94,7 +94,8 @@ jobs:
             echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [[ "$HEAD_BRANCH" != cursor/* && "$HEAD_BRANCH" != copilot/* && "$HEAD_BRANCH" != bot/* ]]; then
+          if [[ "$HEAD_BRANCH" != cursor/* && "$HEAD_BRANCH" != copilot/* && "$HEAD_BRANCH" != bot/* \
+                && "$HEAD_BRANCH" != task/* && "$HEAD_BRANCH" != claude/* ]]; then
             echo "Branch $HEAD_BRANCH is not an agent branch — skipping."
             echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0

@@ -6,11 +6,15 @@ from __future__ import annotations
 import json
 import subprocess
 
-AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/")
+AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/", "task/", "claude/")
 # copilot/* stays a valid branch name in BRANCHING.md, so the prefix above keeps it —
 # but there is no Copilot-specific check any more. The "Copilot targeted CI" arm was
 # removed with copilot-pr-targeted-ci.yml (2026-08-05): that check run can never be
 # posted again, so a branch matching copilot/* is now gated on main CI like any other.
+# task/* and claude/* added 2026-08: these are the two largest sources of agent PR
+# volume in this repo (38 + 19 of the last 100 PRs) and previously had zero
+# automerge-eligibility coverage at all — the allowlist here only ever tracked
+# cursor/bot, which covered a smaller slice than it excluded.
 IGNORED_CHECK_NAMES: frozenset[str] = frozenset()
 
 
