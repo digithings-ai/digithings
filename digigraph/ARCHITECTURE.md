@@ -573,6 +573,17 @@ When an allowlist is active, `execute()` in `registry.py:106` rejects denied too
 
 An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. `None` means unrestricted.
 
+### 6.2.1 Tool Choice Requirement
+
+`agents.require_tool_calls` (bool, default `false`) forces `tool_choice="required"`
+on every tool-calling turn in `research_node`'s `run_tools()` call — for deployments
+(e.g. OCC) that depend on multi-round tool calls for retrieval and should never
+silently answer from parametric knowledge alone. Resolved as a **floor**, not an
+override, by `tool_policy.require_tool_calls_for_workflow()`: project config or
+`DIGI_REQUIRE_TOOL_CALLS` wins over a request/`X-Require-Tool-Calls` header value
+of `false` — deliberately the opposite precedence from `agents.allowed_tools`,
+since this flag has no registry-bounded ceiling the way a tool allowlist does.
+
 ### 6.3 Code Execution Gate
 
 `policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
