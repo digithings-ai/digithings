@@ -17,11 +17,14 @@ Auditing the last 100 PRs against this gate surfaced two things:
    only `Every commit reaching main was reviewed`; `develop` has no required
    checks at all. A failing `Require Fixes` run could not, and never did,
    block a merge.
-2. **It still cost real cycles despite that.** PR #2296 failed once and
-   needed two follow-up reruns before the body carried a satisfying keyword —
-   pure rework for a check with no veto power. PR #2227 failed **twice** and
-   merged anyway, which is the outcome the check was already documented to
-   produce for every PR, not just that one.
+2. **It still cost nothing to fail, so failing changed nothing.** PR #2227
+   failed **twice** and merged anyway. PR #2296 is a second instance of the
+   same outcome, not a rework case: its `ci-pr-hygiene` runs on the same head
+   SHA went success (20:46) → success (20:48) → **failure** (21:58), and it
+   merged at 22:01 — three minutes after the failing run, with the check
+   still red and no `Fixes/Closes/Resolves` keyword in the body. Both PRs
+   show the same thing: the check could go red and the merge happened anyway,
+   because nothing consumed its result.
 
 Replaying the gate's own bypass logic over 142 historical `main` PRs (see the
 prior CLAUDE.md text, preserved below) had already shown the gate was

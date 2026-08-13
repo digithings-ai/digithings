@@ -57,6 +57,7 @@ log()   { echo "  $*"; }
 ok()    { echo "  ✓ $*"; }
 skip()  { echo "  – $* (already exists; use --force to overwrite)"; }
 dry()   { echo "  [dry] $*"; }
+warn()  { echo "  ! $*" >&2; }
 
 die() {
   echo "error: $*" >&2
@@ -71,6 +72,15 @@ install_file() {
 
   if [ "$DRY_RUN" = "1" ]; then
     dry "would install: $dst${desc:+ — $desc}"
+    return
+  fi
+
+  # A removed template (e.g. a retired subagent) must degrade to a skipped
+  # file, not a hard abort — this script runs under `set -euo pipefail`, and
+  # the Python step below has no existence check of its own, so a missing
+  # $src previously took down every install step after it in the same run.
+  if [ ! -f "$src" ]; then
+    warn "template missing, skipping: $dst${desc:+ — $desc} (source: $src)"
     return
   fi
 
@@ -653,7 +663,7 @@ echo "→ Claude Code subagents"
 agents_src="$DIGIDEV_DIR/templates/claude/agents"
 agents_dst=".claude/agents"
 for f in component-router.md dictation-normalizer.md spec-writer.md \
-          pr-reviewer.md security-reviewer.md test-first-implementer.md; do
+          test-first-implementer.md; do
   install_file "$agents_src/$f" "$agents_dst/$f"
 done
 

@@ -38,9 +38,13 @@ CI catches drift via `scripts/agents_init.py --check` — a PR whose generated f
 | `dictation-normalizer` | `dictation-normalizer.md` | Reshape rambling dictated input into a structured block; invoke via `/normalize`. |
 | `component-router` | `component-router.md` | Map a described change onto the right component + reading list + test command. |
 | `spec-writer` | `spec-writer.md` | Emit issue bodies matching `.github/ISSUE_TEMPLATE/agent_task.yml`; invoke via `/spec`. |
-| `pr-reviewer` | `pr-reviewer.md` | Rubric-aware PR review aligned with `docs/scoring/`. |
 | `test-first-implementer` | `test-first-implementer.md` | Red/green/refactor TDD loop bound to the component test command. |
-| `security-reviewer` | `security-reviewer.md` | Focused OWASP + digithings-specific security sweep before PR review. |
+
+There is deliberately no `pr-reviewer`/`security-reviewer` subagent here — that job
+already has three owners (Cursor Bugbot, the `/review` command's fresh-context
+lens fan-out in `agents/sources/commands/review.md`, and the `pr-review-toolkit` +
+`superpowers:requesting-code-review` plugin skills). See CLAUDE.md § Model &
+subagent policy for the full reasoning.
 
 ### Skills (`agents/sources/skills/`)
 

@@ -124,3 +124,29 @@ def test_the_classifier_no_longer_reasons_about_copilot_reviews() -> None:
     assert not hasattr(fap, "_copilot_review_state")
     source = SCRIPT.read_text(encoding="utf-8")
     assert "copilot_state" not in source
+
+
+def test_a_fork_pr_is_never_listed_even_with_an_agent_branch_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CWE-862 regression test: a branch name matching AGENT_BRANCH_PREFIXES is not
+    proof the PR came from this repo — anyone can name a fork branch `task/1-x`.
+    `_list_agent_prs` must filter on the live `isCrossRepository` field from the API,
+    not just the branch string, or the finalizer's ready_merge path (label-add +
+    `gh pr merge --auto --squash`) would auto-merge an attacker's fork PR."""
+    same_repo = _pr(number=1, headRefName="task/1-legit")
+    fork = _pr(number=2, headRefName="task/1-legit", isCrossRepository=True)
+    fork_default_missing_field = {k: v for k, v in _pr(number=3).items()}
+    del fork_default_missing_field["isDraft"]  # unrelated field; isCrossRepository absent entirely
+    monkeypatch.setattr(fap, "_gh_json", lambda *a: [same_repo, fork, fork_default_missing_field])
+    prs = fap._list_agent_prs("digithings-ai/digithings")
+    numbers = {pr["number"] for pr in prs}
+    assert numbers == {1, 3}, "fork PR (isCrossRepository=True) must be excluded"
+
+
+def test_list_agent_prs_still_filters_by_branch_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent_branch = _pr(number=1, headRefName="claude/some-work")
+    other_branch = _pr(number=2, headRefName="feat/unrelated")
+    monkeypatch.setattr(fap, "_gh_json", lambda *a: [agent_branch, other_branch])
+    prs = fap._list_agent_prs("digithings-ai/digithings")
+    assert {pr["number"] for pr in prs} == {1}

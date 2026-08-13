@@ -564,12 +564,42 @@ jobs:
       - olympus
       - web
       - score
+      - e2e-contract
+      - nautilus-smoke
+      - atlas-graph
       - pip-audit
       - ruff-and-scripts
       - actionlint
       - compose-validate
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      # Drift guard: this job's own `needs:` list was hand-enumerated once
+      # and already went stale silently (e2e-contract/nautilus-smoke/
+      # atlas-graph were added to ci.yml after required-checks existed and
+      # never got added here — a real false-green gap, not hypothetical).
+      # Fail loudly instead of trusting the list matches the file forever.
+      - name: Verify needs list covers every job in this file
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 -c "
+          import yaml
+          with open('.github/workflows/ci.yml') as f:
+              doc = yaml.safe_load(f)
+          jobs = set(doc['jobs']) - {'required-checks'}
+          needs = set(doc['jobs']['required-checks']['needs'])
+          missing = jobs - needs
+          extra = needs - jobs
+          if missing or extra:
+              if missing:
+                  print('::error::required-checks is missing these jobs from needs:', sorted(missing))
+              if extra:
+                  print('::error::required-checks needs lists jobs that do not exist:', sorted(extra))
+              raise SystemExit(1)
+          print('required-checks needs matches all', len(jobs), 'other jobs in ci.yml')
+          "
+
       - name: Fail if any dependency failed or was cancelled
         env:
           RESULTS: ${{ toJSON(needs) }}

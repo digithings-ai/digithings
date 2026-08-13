@@ -61,9 +61,21 @@ def _list_agent_prs(repo: str) -> list[dict]:
         "--limit",
         "100",
         "--json",
-        "number,headRefName,baseRefName,title,body,labels,createdAt,isDraft,mergeable,reviewRequests,reviews,statusCheckRollup",
+        "number,headRefName,baseRefName,title,body,labels,createdAt,isDraft,mergeable,"
+        "reviewRequests,reviews,statusCheckRollup,isCrossRepository",
     )
-    return [pr for pr in prs if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)]
+    # CWE-862 guard, same as agent-pr-autolabel.yml / agent-pr-automerge.yml: a
+    # branch name matching an agent prefix is not proof of origin, and this
+    # finalizer's ready_merge path does the same label-add + auto-merge those
+    # two workflows guard — this script just didn't have the check yet.
+    # isCrossRepository comes from the live PR object via the API, not the
+    # (attacker-controlled) branch name.
+    return [
+        pr
+        for pr in prs
+        if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)
+        and not pr.get("isCrossRepository", False)
+    ]
 
 
 def _issue_labels(repo: str, issue_number: int) -> list[str]:
