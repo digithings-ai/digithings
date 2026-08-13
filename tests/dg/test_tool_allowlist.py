@@ -8,7 +8,11 @@ import pytest
 from digigraph.models import WorkflowRequest
 from digigraph.orchestration.registry import ToolContext, execute, get_tools
 from digigraph.project_config import DigiProjectConfig
-from digigraph.tool_policy import allowed_tool_names_for_workflow, state_list_from_frozen
+from digigraph.tool_policy import (
+    allowed_tool_names_for_workflow,
+    require_tool_calls_for_workflow,
+    state_list_from_frozen,
+)
 
 
 @pytest.mark.unit
@@ -112,3 +116,52 @@ def test_policy_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_state_list_from_frozen() -> None:
     assert state_list_from_frozen(None) is None
     assert state_list_from_frozen(frozenset({"b", "a"})) == ["a", "b"]
+
+
+@pytest.mark.unit
+def test_require_tool_calls_project_true_wins_even_if_request_false() -> None:
+    """The floor: a request-level False cannot lower a project-mandated True."""
+    cfg = DigiProjectConfig({"agents": {"require_tool_calls": True}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=False)
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_request_true_raises_it_when_project_unset() -> None:
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=True)
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_defaults_false_when_nothing_set() -> None:
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is False
+
+
+@pytest.mark.unit
+def test_require_tool_calls_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGI_REQUIRE_TOOL_CALLS", "1")
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_env_false_does_not_win(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_REQUIRE_TOOL_CALLS", raising=False)
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=False)
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is False
+
+
+@pytest.mark.unit
+def test_require_tool_calls_loads_cfg_when_none_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mirrors allowed_tool_names_for_workflow's cfg=None -> DigiProjectConfig.load() fallback."""
+    monkeypatch.setattr(
+        "digigraph.tool_policy.DigiProjectConfig.load",
+        staticmethod(lambda: DigiProjectConfig({"agents": {"require_tool_calls": True}})),
+    )
+    req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req) is True
