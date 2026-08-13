@@ -37,6 +37,11 @@ RUN uv pip install --system -e "./digillm"
 
 COPY digigraph/pyproject.toml ./digigraph/
 COPY digigraph/src ./digigraph/src
+# BYOK provider allowlist catalog: llm_auth.py's __file__-relative fallback
+# resolves to /app/config/byok-providers.json under this image's WORKDIR/layout.
+# Bake it in so a raw ghcr.io/.../digigraph image boots with zero configuration;
+# still overridable via a volume mount at /app/config or DIGI_CONFIG_PATH.
+COPY config/byok-providers.json ./config/byok-providers.json
 # ECharts → SVG (optional): install JS deps for render_svg path; safe to fail if lockfile missing
 RUN if [ -f digigraph/src/digigraph/tools/analytics/visualization/echarts/package-lock.json ]; then \
       cd digigraph/src/digigraph/tools/analytics/visualization/echarts && npm ci --omit=dev; \

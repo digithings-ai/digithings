@@ -25,11 +25,13 @@ accepts ``Request`` objects.
 from __future__ import annotations
 
 import json
+import os
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, NamedTuple  # score:allow untyped any — Starlette Request kept loose
 
 from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
+
 
 # Single source of truth for the BYOK provider allowlist — see
 # docs/superpowers/specs/2026-08-13-digichat-byok-model-catalog-design.md.
@@ -40,7 +42,25 @@ from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
 # checks, rather than a running process that silently 400s every BYOK
 # request. See the design spec's Error handling section for why this
 # deliberately differs from model_config.py's own reload behavior.
-_BYOK_CATALOG_PATH = Path(__file__).resolve().parents[3] / "config" / "byok-providers.json"
+#
+# Path resolution honors ``DIGI_CONFIG_PATH`` when set (the same env var
+# model_config.py's loaders read — see its ``_load_model_modes``), so an
+# operator who points the service at a config directory gets the catalog
+# from there instead of a hardcoded, image-layout-dependent guess. Falling
+# back to a bare ``Path(DIGI_CONFIG_PATH or "config")`` (model_config.py's
+# own pattern) would NOT work here when the var is unset: that resolves
+# relative to CWD, whereas this fallback must keep resolving to
+# ``<repo>/config`` for local dev, editable installs, and tests regardless
+# of the process's working directory — hence the ``__file__``-relative
+# fallback is kept unchanged and only used when the env var is absent.
+def _resolve_byok_catalog_path() -> Path:
+    config_dir_override = os.environ.get("DIGI_CONFIG_PATH")
+    if config_dir_override:
+        return Path(config_dir_override) / "byok-providers.json"
+    return Path(__file__).resolve().parents[3] / "config" / "byok-providers.json"
+
+
+_BYOK_CATALOG_PATH = _resolve_byok_catalog_path()
 
 
 def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:

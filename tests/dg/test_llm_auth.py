@@ -9,6 +9,9 @@ covered by digillm/tests/test_digillm.py.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from digigraph.llm_auth import (
     BYOK_ROUTABLE_PROVIDERS,
@@ -23,6 +26,8 @@ from digigraph.llm_auth import (
 
 from digillm import get_byok as digillm_get_byok
 from digillm import get_proxy_key as digillm_get_proxy_key
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class _Headers:
@@ -332,3 +337,71 @@ class TestByokCatalogLoad:
         bad.write_text("not json", encoding="utf-8")
         with pytest.raises(ValueError):
             _load_byok_catalog(bad)
+
+
+@pytest.mark.unit
+class TestByokCatalogPathResolution:
+    """``DIGI_CONFIG_PATH`` override for the catalog path (deploy distribution fix).
+
+    ``_resolve_byok_catalog_path`` is a plain function of ``os.environ`` — unlike
+    ``_BYOK_CATALOG_PATH`` (computed once at import), calling it fresh per-test
+    sidesteps the reload/monkeypatch contradiction documented on
+    ``TestByokCatalogLoad`` above.
+    """
+
+    def test_unset_env_resolves_to_repo_config(self, monkeypatch) -> None:
+        """With no override, resolution must still land on the repo's real catalog —
+        this is the path digigraph actually imports with in local dev/tests."""
+        monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
+        from digigraph.llm_auth import _BYOK_CATALOG_PATH, _resolve_byok_catalog_path
+
+        resolved = _resolve_byok_catalog_path()
+        assert resolved == _REPO_ROOT / "config" / "byok-providers.json"
+        assert resolved.exists()
+        # And this is exactly what the module computed at import time.
+        assert _BYOK_CATALOG_PATH == resolved
+
+    def test_digi_config_path_override_wins(self, tmp_path, monkeypatch) -> None:
+        """Set DIGI_CONFIG_PATH → the loader reads from THAT directory, not the repo default."""
+        from digigraph.llm_auth import _load_byok_catalog, _resolve_byok_catalog_path
+
+        override_dir = tmp_path / "custom-config"
+        override_dir.mkdir()
+        catalog = [{"id": "openai", "baseUrl": "https://example-override.test/v1"}]
+        (override_dir / "byok-providers.json").write_text(json.dumps(catalog), encoding="utf-8")
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(override_dir))
+        resolved = _resolve_byok_catalog_path()
+        assert resolved == override_dir / "byok-providers.json"
+        assert resolved != _REPO_ROOT / "config" / "byok-providers.json"
+
+        base_urls, _ = _load_byok_catalog(resolved)
+        assert base_urls == {"openai": "https://example-override.test/v1"}
+
+    def test_missing_file_still_raises_with_override_set(self, tmp_path, monkeypatch) -> None:
+        """The fail-loud guarantee (#existing behavior) must survive the override path too."""
+        from digigraph.llm_auth import _load_byok_catalog, _resolve_byok_catalog_path
+
+        empty_dir = tmp_path / "empty-config"
+        empty_dir.mkdir()
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(empty_dir))
+        resolved = _resolve_byok_catalog_path()
+        with pytest.raises(FileNotFoundError):
+            _load_byok_catalog(resolved)
+
+
+@pytest.mark.unit
+class TestByokCatalogVendoredCopy:
+    """The infra/digichat-release vendored copy must never silently drift from the
+    canonical repo-root catalog — that drift is exactly how #FIX-1 broke two of
+    three real deploy targets (baked/mounted images shipping a stale or missing
+    catalog while the repo-root copy moved on)."""
+
+    def test_vendored_copy_matches_canonical_catalog(self) -> None:
+        canonical = _REPO_ROOT / "config" / "byok-providers.json"
+        vendored = _REPO_ROOT / "infra" / "digichat-release" / "config" / "byok-providers.json"
+        assert canonical.exists(), canonical
+        assert vendored.exists(), vendored
+        assert json.loads(canonical.read_text(encoding="utf-8")) == json.loads(
+            vendored.read_text(encoding="utf-8")
+        )
