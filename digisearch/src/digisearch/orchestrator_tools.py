@@ -226,7 +226,7 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> OpenAITo
             "description": (
                 "Fetch ALL matching documents by paginating automatically. Use when the user asks for "
                 "a complete result set across this corpus (e.g. every matching document for a filter, "
-                "or all hits for a subject). Guarantees complete result set. "
+                "or all hits for a subject). Paginates automatically; `max_results` can cap the result set. "
                 f"Index: {index_name}.{filterable_hint}"
             ),
             "parameters": {
