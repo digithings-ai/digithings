@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from digigraph.models import ChatMessage, WorkflowRequest, WorkflowResult
+from digigraph.models import ChatCompletionRequest, ChatMessage, WorkflowRequest, WorkflowResult
 from pydantic import ValidationError
 
 
@@ -45,6 +45,23 @@ class TestWorkflowRequest:
     def test_missing_prompt_raises(self) -> None:
         with pytest.raises(ValidationError):
             WorkflowRequest.model_validate({})
+
+    def test_workflow_request_accepts_require_tool_calls(self) -> None:
+        req = WorkflowRequest(prompt="hi", require_tool_calls=True)
+        assert req.require_tool_calls is True
+
+    def test_workflow_request_require_tool_calls_defaults_to_none(self) -> None:
+        req = WorkflowRequest(prompt="hi")
+        assert req.require_tool_calls is None
+
+
+@pytest.mark.unit
+class TestChatCompletionRequest:
+    """ChatCompletionRequest model."""
+
+    def test_chat_completion_request_accepts_require_tool_calls(self) -> None:
+        req = ChatCompletionRequest(messages=[], require_tool_calls=False)
+        assert req.require_tool_calls is False
 
 
 @pytest.mark.unit

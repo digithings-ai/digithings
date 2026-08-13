@@ -67,6 +67,16 @@ class ChatCompletionRequest(BaseModel):
         None,
         description="Optional tool allowlist for this completion. Overrides project/env when set. Also accepted via X-Allowed-Tools header (comma-separated).",
     )
+    require_tool_calls: bool | None = Field(
+        None,
+        description=(
+            "Optional per-request signal that this completion needs tool_choice='required'. "
+            "Also accepted via X-Require-Tool-Calls header. Combined with project "
+            "agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS as a FLOOR (any true "
+            "value wins) — unlike allowed_tools, this can only raise the requirement, never "
+            "lower one the deployment already mandates."
+        ),
+    )
 
 
 class WorkflowRequest(BaseModel):
@@ -90,6 +100,15 @@ class WorkflowRequest(BaseModel):
         description=(
             "Optional allowlist of orchestrator tool names. When set (including []), overrides "
             "project agents.allowed_tools and DIGI_ALLOWED_TOOLS. Omit to use those sources."
+        ),
+    )
+    require_tool_calls: bool | None = Field(
+        None,
+        description=(
+            "Optional per-request signal that this workflow needs tool_choice='required'. "
+            "Combined with project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS "
+            "as a FLOOR (any true value wins) — unlike allowed_tools, this can only raise the "
+            "requirement, never lower one the deployment already mandates."
         ),
     )
     trading_profile: dict[str, Any] | None = Field(
