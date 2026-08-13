@@ -28,7 +28,7 @@ from digisearch.orchestrator_tools import (
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
     OpenAIToolDict,
 )
-from digisearch.search._stub import query_index, route_add_chunks
+from digisearch.search._stub import _first_env, query_index, route_add_chunks
 
 configure_logging()
 
@@ -72,9 +72,11 @@ def _require_real_search_backend() -> None:
     if allow_stub:
         logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
         return
-    if (
-        os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
-        and os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+    # Canonical-first, legacy-fallback (#2239 credential rename) -- same precedence
+    # `_vectorize_backend` uses, so this startup gate can never disagree with the
+    # backend it's gating.
+    if _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID") and _first_env(
+        "CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"
     ):
         return
     from digisearch.indexes.backends import azure_search as _az
@@ -88,8 +90,8 @@ def _require_real_search_backend() -> None:
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
-            "digisearch requires a real backend: set VECTORIZE_ACCOUNT_ID+VECTORIZE_API_TOKEN, "
-            "AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
+            "digisearch requires a real backend: set CLOUDFLARE_ACCOUNT_ID+CLOUDFLARE_API_TOKEN "
+            "(or legacy VECTORIZE_*/D1_* names), AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 

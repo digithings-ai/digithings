@@ -207,6 +207,83 @@ def test_vectorize_inactive_when_unconfigured(monkeypatch: pytest.MonkeyPatch) -
     assert _stub._vectorize_backend(Query(text="hi", top_k=3), "i") is None
 
 
+# ── canonical CLOUDFLARE_*/legacy VECTORIZE_*/D1_* credential fallback (#2239
+# credential rename) ─────────────────────────────────────────────────────────
+@pytest.mark.unit
+def test_vectorize_selected_with_canonical_cloudflare_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The canonical (wrangler-conventional) names alone must activate Vectorize --
+    no legacy VECTORIZE_*/D1_* name needs to be set at all."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "tok")
+
+    captured: dict[str, object] = {}
+
+    class _Stub:
+        def __init__(self, name: str, **kwargs: object) -> None:
+            captured["kwargs"] = kwargs
+
+        def query(self, _q: Query) -> list[object]:
+            return []
+
+    monkeypatch.setattr(
+        "digisearch.indexes.backends.vectorize.VectorizeBackend", _Stub, raising=True
+    )
+    response = _stub._vectorize_backend(Query(text="hi", top_k=3), "occ-help")
+    assert response is not None
+    assert captured["kwargs"] == {"account_id": "acct", "api_token": "tok"}
+
+
+@pytest.mark.unit
+def test_vectorize_selected_with_legacy_d1_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero-downtime property: the D1_* names (same account + token as Vectorize,
+    per #2239) must keep activating Vectorize with no CLOUDFLARE_*/VECTORIZE_* name
+    set at all -- this is what makes sharing one credential pair meaningful."""
+    monkeypatch.setenv("D1_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("D1_API_TOKEN", "tok")
+
+    class _Stub:
+        def __init__(self, name: str, **kwargs: object) -> None:
+            pass
+
+        def query(self, _q: Query) -> list[object]:
+            return []
+
+    monkeypatch.setattr(
+        "digisearch.indexes.backends.vectorize.VectorizeBackend", _Stub, raising=True
+    )
+    response = _stub._vectorize_backend(Query(text="hi", top_k=3), "occ-help")
+    assert response is not None
+
+
+@pytest.mark.unit
+def test_vectorize_backend_canonical_wins_over_legacy_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When multiple names in the fallback chain are set to *different* values, the
+    canonical CLOUDFLARE_* pair must win over both legacy VECTORIZE_* and D1_*."""
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "canonical-acct")
+    monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "legacy-vectorize-acct")
+    monkeypatch.setenv("D1_ACCOUNT_ID", "legacy-d1-acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "canonical-tok")
+    monkeypatch.setenv("VECTORIZE_API_TOKEN", "legacy-vectorize-tok")
+    monkeypatch.setenv("D1_API_TOKEN", "legacy-d1-tok")
+
+    captured: dict[str, object] = {}
+
+    class _Stub:
+        def __init__(self, name: str, **kwargs: object) -> None:
+            captured["kwargs"] = kwargs
+
+        def query(self, _q: Query) -> list[object]:
+            return []
+
+    monkeypatch.setattr(
+        "digisearch.indexes.backends.vectorize.VectorizeBackend", _Stub, raising=True
+    )
+    _stub._vectorize_backend(Query(text="hi", top_k=3), "occ-help")
+    assert captured["kwargs"] == {"account_id": "canonical-acct", "api_token": "canonical-tok"}
+
+
 @pytest.mark.unit
 def test_vectorize_registered_before_chroma() -> None:
     names = [fn.__name__ for fn in _stub._backends]
@@ -231,4 +308,21 @@ def test_real_backend_check_accepts_vectorize(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.delenv("DIGISEARCH_ALLOW_STUB", raising=False)
     monkeypatch.setenv("VECTORIZE_ACCOUNT_ID", "acct")
     monkeypatch.setenv("VECTORIZE_API_TOKEN", "tok")
+    _require_real_search_backend()
+
+
+@pytest.mark.unit
+def test_real_backend_check_accepts_canonical_cloudflare_vars(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """This startup gate must use the same canonical-first, legacy-fallback
+    precedence as `_vectorize_backend` (#2239 credential rename) -- else it could
+    disagree with the backend it exists to gate."""
+    from digisearch.server import _require_real_search_backend
+
+    monkeypatch.delenv("CHROMA_PATH", raising=False)
+    monkeypatch.delenv("CHROMA_HOST", raising=False)
+    monkeypatch.delenv("DIGISEARCH_ALLOW_STUB", raising=False)
+    monkeypatch.setenv("CLOUDFLARE_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", "tok")
     _require_real_search_backend()

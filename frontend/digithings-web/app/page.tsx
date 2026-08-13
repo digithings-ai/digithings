@@ -142,7 +142,7 @@ export default function Home() {
     <>
       <DtNav />
 
-      <main>
+      <main id="main">
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">
@@ -162,7 +162,16 @@ export default function Home() {
             choice of model.
           </p>
           <div className="dqhero-cta">
-            <p className="dqhero-scroll-label">Scroll to explore</p>
+            {/* Real link, not decorative copy (full-UI-suite critique, P3):
+                the hero's only affordance used to be a <p>, and the nearest
+                actual CTA (NavShell's "Ask digichat" pill) disappears at
+                exactly the scroll depth that leaves the hero (autoHide
+                yields past 180px) -- so the page's most-viewed screen handed
+                off to one with no visible action. Same copy, same look,
+                now an anchor to the next section instead of a static label. */}
+            <a className="dqhero-scroll-label" href="#metrics">
+              Scroll to explore
+            </a>
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>
         </HeroMesh>
@@ -190,8 +199,17 @@ export default function Home() {
             <Reveal className="section-head center">
               <span className="kicker">{"// the architecture"}</span>
               {/* nowrap from md up so the claim holds one line; it still wraps on
-                  phones, where forcing one line would shrink it to nothing. */}
-              <h2 className="md:whitespace-nowrap">Eleven modules. One toolkit.</h2>
+                  phones, where forcing one line would shrink it to nothing.
+                  "Nine", not "Eleven" (full-UI-suite critique, P2): the
+                  #metrics section one screen above states, and the odometer
+                  literally renders, "9" shipped modules — a scanning reader
+                  hitting two different headline-level numbers back to back
+                  reads as a contradiction, even though both are correct under
+                  their own count (nine shipped vs. eleven total registered).
+                  The 9-shipped/2-roadmap split already lives in the body copy
+                  below; the headline now matches the number it is standing
+                  next to. */}
+              <h2 className="md:whitespace-nowrap">Nine modules. One toolkit.</h2>
               <p>
                 The nine that ship run standalone or compose with the rest — retrieval, quant
                 research and chat, plus the auth, tracing and audit any deployment needs. Two more

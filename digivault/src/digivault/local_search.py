@@ -12,9 +12,9 @@ from digivault.vault import Vault
 
 _TOKEN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
-# Common English function words — always_retrieve passes the full user prompt as
-# the query, so without filtering "what/is/how/the" scores every note and Prefetch
-# returns the same vault set on every turn.
+# Common English function words — a model-written query can still be a full,
+# question-shaped sentence (e.g. "what is page 13?"), so without filtering
+# "what/is/how/the" would score every note in the corpus.
 _STOPWORDS: frozenset[str] = frozenset(
     {
         "a",

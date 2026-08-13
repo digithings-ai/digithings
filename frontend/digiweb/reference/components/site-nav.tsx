@@ -109,7 +109,11 @@ export function SiteNav() {
     if (!collapsed && open) setOpen(false);
   }
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  // Boundary-checked, not a bare startsWith: /data would otherwise also read
+  // "current" on a hypothetical /data-v2 route (or any other sibling sharing
+  // the prefix) — match only the exact path or a path continuing after "/".
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <nav

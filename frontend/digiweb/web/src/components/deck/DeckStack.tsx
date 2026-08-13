@@ -12,8 +12,9 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { m, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { m, useMotionValueEvent, useScroll, useTransform } from "motion/react";
 import type { MotionStyle, MotionValue } from "motion/react";
+import { useMotionSafe } from "../../motion/primitives";
 
 /**
  * DeckStack / DeckCard — the sticky stacking card deck promoted from the
@@ -170,7 +171,14 @@ export function DeckStack({
   className,
 }: DeckStackProps) {
   const deckRef = useRef<HTMLDivElement | null>(null);
-  const reduced = useReducedMotion();
+  // useMotionSafe(), not raw useReducedMotion() -- see WordReveal.tsx's fix
+  // comment (#2244) for the hydration-mismatch mechanism this avoids. `wide`
+  // defaults to false on the first render either way (useSyncExternalStore's
+  // own server-snapshot guard), which already short-circuits `animate` below
+  // to false regardless of `reduced` -- so this specific value never caused
+  // a mismatch in practice, but it's the same unsafe pattern and not worth
+  // leaving as an exception.
+  const reduced = !useMotionSafe();
   const wide = useSyncExternalStore(subscribeWide, getWideSnapshot, getWideServerSnapshot);
   const [active, setActive] = useState(0);
 

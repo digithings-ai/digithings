@@ -24,11 +24,19 @@ export OPENAI_API_BASE="${OPENAI_API_BASE:-http://127.0.0.1:4000/v1}"
 export DIGI_CONFIG_PATH="${DIGI_CONFIG_PATH:-/app/config}"
 export DIGI_PROJECT_CONFIG="${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}"
 export DIGI_WORKFLOW_PROFILE="${DIGI_WORKFLOW_PROFILE:-research_rag}"
-export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}"
+# THIS line is the container's real DIGI_ALLOWED_TOOLS fallback, not wrangler.toml's
+# [vars] entry: src/index.ts forwards an explicit envVars whitelist to the container and
+# DIGI_ALLOWED_TOOLS is not on it, so the [vars] value never arrives and this default is
+# what the process actually gets. #2304 updated the wrangler.toml copy believing it was
+# the live one -- it is inert for this deploy path (the compose paths do read their own
+# env, so those edits were real). Keep this list in sync with agents.allowed_tools in
+# infra/digichat-release/config/digiproject.yaml, which outranks it whenever the project
+# config loads; this value only decides what happens when that load fails (#2306).
+export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes,digivault_get_note}"
 # "Is Vectorize configured?" must agree with digisearch's own Python check
-# (os.environ.get(name, "").strip() truthiness, see
-# digisearch/src/digisearch/search/_stub.py) byte-for-byte, or one side
-# silently falls through to an also-unconfigured Chroma and serves empty
+# (the CLOUDFLARE_*/VECTORIZE_*/D1_* canonical-with-fallback lookup, see
+# digisearch/src/digisearch/search/_stub.py's _first_env) byte-for-byte, or one
+# side silently falls through to an also-unconfigured Chroma and serves empty
 # results with no error (see issue discussion). A sed [[:space:]] rewrite
 # can only ever *approximate* str.strip() -- it is ASCII-whitespace-only
 # (or locale-dependent in ways that still don't match Python's Unicode
@@ -44,8 +52,17 @@ export DIGI_ALLOWED_TOOLS="${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_not
 if _digi_vectorize_check=$(python3 -c '
 import os
 
-account = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
-token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
+
+def _first_env(*names):
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+account = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
 print("1" if (account and token) else "0")
 ' 2>/dev/null) && [ "$_digi_vectorize_check" = "1" ]; then
   DIGI_VECTORIZE_ACTIVE=1
@@ -66,6 +83,20 @@ else
   export CHROMA_PATH="$DATA_CHROMA"
 fi
 export DIGIVAULT_ROOT="$DATA_VAULT"
+# Shared Cloudflare credential pair (#2239 rename): CLOUDFLARE_ACCOUNT_ID/
+# CLOUDFLARE_API_TOKEN are canonical for both Vectorize and D1; VECTORIZE_*/
+# D1_ACCOUNT_ID/D1_API_TOKEN are the legacy names, still read as a fallback by
+# digivault.server/digisearch.search._stub's _first_env-style lookups.
+export CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
+export CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+export VECTORIZE_ACCOUNT_ID="${VECTORIZE_ACCOUNT_ID:-}"
+export VECTORIZE_API_TOKEN="${VECTORIZE_API_TOKEN:-}"
+# D1 is selected by presence (digivault/src/digivault/server.py) -- account id,
+# token (resolved via the fallback chain above) and D1_DATABASE_MAP must all be
+# non-empty for the D1 backend to be preferred over DIGIVAULT_ROOT.
+export D1_ACCOUNT_ID="${D1_ACCOUNT_ID:-}"
+export D1_API_TOKEN="${D1_API_TOKEN:-}"
+export D1_DATABASE_MAP="${D1_DATABASE_MAP:-}"
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:////data/digikey.db}"
 export DIGIKEY_BLOCKLIST_REDIS_URL="${DIGIKEY_BLOCKLIST_REDIS_URL:-redis://127.0.0.1:6379/0}"
 export DIGIKEY_REQUIRE_BLOCKLIST="${DIGIKEY_REQUIRE_BLOCKLIST:-0}"

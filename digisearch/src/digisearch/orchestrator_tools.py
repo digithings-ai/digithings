@@ -47,9 +47,23 @@ def _build_search_tool_description(index_config: dict[str, Any]) -> str:
     """Build tool description from index config."""
     index_name = (index_config.get("index_name") or "default").strip()
     parts = [
-        "Search the document index for relevant information. Use when you need to find content related to the user's question. Generate a concise search query optimized for retrieval. "
-        "For 'all emails from user X' use filters: fromAddress eq 'x@example.com' or fromName; for 'emails mentioning subject Y' use a text query and/or filters. "
-        "For requests that need the full result set (e.g. 'all emails from X'), use digisearch_fetch_all so every matching document is retrieved; otherwise use digisearch with include_total_count and pagination (skip/top_k) if needed.",
+        # Corpus-neutral by design (#2306). This text previously carried worked examples
+        # for a Microsoft Exchange mailbox index ("for 'all emails from user X' use
+        # filters: fromAddress eq ..."), which is boilerplate from a different
+        # deployment: on the digithings/OCC documentation corpora no such field exists,
+        # so it invited filters that match nothing and framed a docs assistant as an email
+        # search. The concrete field names the model may use are appended below from
+        # index_config (filterable/facetable/result_metadata fields), which is the only
+        # part that can be accurate for whichever index is actually mounted.
+        "Search the document corpus for passages relevant to the user's question. This is "
+        "semantic (vector) search: it matches on meaning, so phrase the query as the idea "
+        "you are looking for rather than as a bag of keywords. "
+        "Each hit is one CHUNK of a document, not the whole document, and its content is an "
+        "excerpt — a hit marked content_truncated has more text than you were shown. When a "
+        "hit carries metadata.vault_path it came from the vault: pass that value to "
+        "digivault_get_note to read the whole note instead of reasoning from the chunk. "
+        "For a result set larger than one page, use include_total_count and paginate with "
+        "skip/top_k; digisearch_fetch_all retrieves every match where that tool is available.",
         f"Index: {index_name}.",
     ]
     filterable = index_config.get("filterable_fields") or []
@@ -83,9 +97,16 @@ def _build_search_tool_description(index_config: dict[str, Any]) -> str:
             parts.append("Examples: " + "; ".join(examples) + ".")
         else:
             parts.append("E.g. toRecipients/any(r: r/emailAddress/address eq 'user@example.com').")
-    parts.append(
-        "For date ranges use filters with sentDateTime or createdDateTime and op ge/le (ISO 8601)."
-    )
+    # Only offer date-range guidance when this index actually has a date field to filter
+    # on (#2306). Appended unconditionally, it named sentDateTime/createdDateTime — mailbox
+    # fields absent from the documentation corpora — so on those indexes it advertised a
+    # filter that can only ever match nothing.
+    date_fields = [f for f in filterable if "date" in f.lower() or "time" in f.lower()]
+    if date_fields:
+        parts.append(
+            f"For date ranges use filters with {' or '.join(date_fields[:2])} "
+            "and op ge/le (ISO 8601)."
+        )
     if index_config.get("facetable_fields"):
         parts.append(
             "For exploratory queries use the facets parameter to get value counts before narrowing."
@@ -115,7 +136,12 @@ def build_search_tool(index_config: dict[str, Any] | None = None) -> OpenAIToolD
                     },
                     "filter": {
                         "type": "string",
-                        "description": "Optional raw OData filter (when index allows raw filter). Use for collection fields, e.g. toRecipients/any(r: r/emailAddress/address eq 'user@example.com').",
+                        "description": (
+                            "Optional raw OData filter, for collection fields the structured "
+                            "`filters` array cannot express. Only usable when this index "
+                            "declares such fields (they are listed above with worked "
+                            "examples); otherwise prefer `filters`."
+                        ),
                     },
                     "filters": {
                         "type": "array",
@@ -137,13 +163,16 @@ def build_search_tool(index_config: dict[str, Any] | None = None) -> OpenAIToolD
                             "required": ["field", "op", "value"],
                         },
                         "description": (
-                            f'Optional structured filters, e.g. [{{"field": "sourceType", "op": "eq", "value": "EXCHANGE"}}].{filterable_hint}'
+                            f'Optional structured filters, e.g. [{{"field": "source", "op": "eq", "value": "SECURITY.md"}}].{filterable_hint}'
                         ),
                     },
                     "columns": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Optional metadata columns to return (e.g. subject, fromAddress, sourceType, sentDateTime).",
+                        "description": (
+                            "Optional metadata columns to return. Use only names listed as "
+                            "available for this index above; unknown names are ignored."
+                        ),
                     },
                     "top_k": {
                         "type": "integer",
@@ -208,7 +237,10 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> OpenAITo
                     },
                     "filter": {
                         "type": "string",
-                        "description": "Optional raw OData filter, e.g. fromAddress eq 'user@example.com'.",
+                        "description": (
+                            "Optional raw OData filter over this index's filterable fields, e.g. "
+                            "source eq 'SECURITY.md'. Prefer the structured `filters` array."
+                        ),
                     },
                     "filters": {
                         "type": "array",

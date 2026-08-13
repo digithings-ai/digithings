@@ -84,7 +84,8 @@ Boot order (critical for Cloudflare Containers port probes):
 3. Oneshot `seed_chroma` waits for digigraph `/healthz`, then runs
    `digisearch ingest` for **`digithings_docs`** (`/seed/digithings_docs`) and
    **`occ_help`** (`/seed/occ_help`) into Chroma.
-4. When `VECTORIZE_ACCOUNT_ID` / `VECTORIZE_API_TOKEN` are both set, the
+4. When `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` (or the legacy
+   `VECTORIZE_ACCOUNT_ID` / `VECTORIZE_API_TOKEN`) are both set, the
    container performs **no boot seeding at all**: `seed_chroma.sh` exits
    immediately and `start_digisearch.sh` skips the marker wait, starting
    digisearch straight away against the remote Vectorize index. Container
@@ -92,11 +93,11 @@ Boot order (critical for Cloudflare Containers port probes):
    local Chroma volume never survives a sleep/wake cycle — so pointing at a
    remote index removes the re-parse/re-chunk/re-embed cost of every cold
    boot rather than just relocating it. Without those two vars set, digisearch
-   still waits for `.stack_chroma_seeded_v3` (success) so CLI ingest and the
+   still waits for `.stack_chroma_seeded_v4` (success) so CLI ingest and the
    HTTP server never share a PersistentClient — it does **not** treat
-   `.stack_chroma_seed_failed_v3` as done; that marker only prevents
+   `.stack_chroma_seed_failed_v4` as done; that marker only prevents
    `seed_chroma.sh` itself from short-circuiting on the next boot, so a failed
-   run retries from scratch. Bump the `v3` suffix in `seed_chroma.sh` /
+   run retries from scratch. Bump the `v4` suffix in `seed_chroma.sh` /
    `start_digisearch.sh` when seed markdown changes so existing volumes
    re-ingest.
 
@@ -114,7 +115,7 @@ reach digisearch ingest with a JWT that has `digisearch:ingest`).
 ```bash
 # Inside the stack container (volume wipe or seed failure):
 supervisorctl stop digisearch
-rm -f /data/chroma/.stack_chroma_seeded_v3 /data/chroma/.stack_chroma_seed_failed_v3
+rm -f /data/chroma/.stack_chroma_seeded_v4 /data/chroma/.stack_chroma_seed_failed_v4
 /bin/sh /seed_chroma.sh
 supervisorctl start digisearch
 ```

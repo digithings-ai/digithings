@@ -22,6 +22,7 @@ export default function ChatPage() {
     <>
       <DtNav autoHide="hover" />
       <main
+        id="main"
         style={{
           display: "flex",
           flexDirection: "column",

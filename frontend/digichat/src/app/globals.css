@@ -145,7 +145,12 @@
   /* shadcn --accent intentionally NOT defined here — the canon token flows
      through (body livery resolves it to the digichat rose; see header). */
   --accent-foreground: var(--ink);
-  --destructive: var(--down);
+  /* --danger is the canon non-financial danger/error token (tokens.css) —
+     distinct from --down (P&L-only) on purpose, so a kill-switch/error state
+     and a genuine drawdown figure never share a color. This bridge used to
+     alias --destructive straight to --down; fixed alongside the same bug in
+     the reference app's controls/account pages (#2248). */
+  --destructive: var(--danger);
   /* Error copy sits on --destructive/10 tints, never on solid red, and
      rendered inherited ink pre-canon (the var was undefined) — keep ink. */
   --destructive-foreground: var(--ink);
