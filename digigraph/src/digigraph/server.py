@@ -379,7 +379,10 @@ def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> W
 
 # --- Thread state (LangGraph get_state) ---
 
-# Keys we expose from checkpointed state (exclude stream_callback and other internals).
+# Keys we expose from checkpointed state (exclude digi_bearer and other internals;
+# streaming now goes through LangGraph's native get_stream_writer(), so there is no
+# stream_callback state key to exclude anymore -- see graph/research.py's
+# _safe_stream_writer()).
 _THREAD_STATE_KEYS = (
     "stored_datasets",
     "research_response",

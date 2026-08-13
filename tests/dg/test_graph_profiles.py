@@ -102,10 +102,15 @@ def reset_workflow_graph_cache():
 
 
 @pytest.mark.unit
-def test_build_workflow_graph_has_a_store(reset_workflow_graph_cache) -> None:
+def test_build_workflow_graph_has_a_store(reset_workflow_graph_cache, reset_store) -> None:
     """Cross-thread memory (Store) is distinct from the checkpointer (thread-scoped) --
     the compiled graph must have one so nodes can call get_store() successfully instead
-    of silently no-op'ing."""
+    of silently no-op'ing.
+
+    Uses reset_store (not just reset_workflow_graph_cache): build_workflow_graph() calls
+    get_store() internally, which lazily creates and caches a process-wide InMemoryStore
+    in _store_instance -- without reset_store this leaks a live store into every other
+    test in the session, the exact leak reset_store exists to prevent."""
     graph = build_workflow_graph()
     assert graph.store is not None
 
@@ -136,6 +141,24 @@ def test_get_store_defaults_to_in_memory(
     monkeypatch.delenv("DIGI_CHECKPOINTER", raising=False)
     store = get_store()
     assert type(store).__name__ == "InMemoryStore"
+
+
+@pytest.mark.unit
+def test_get_store_warns_on_postgres_with_missing_uri(
+    monkeypatch: pytest.MonkeyPatch, reset_store, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Finding 5 (MINOR, final whole-branch review): get_store()'s docstring claims
+    the missing-URI fallback path logs a warning "matching that same discipline" as
+    the ImportError branch -- this pins that it actually does now, instead of
+    silently degrading to InMemoryStore with no operator-visible signal."""
+    from digigraph.graph.graph import get_store
+
+    monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
+    monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
+    with caplog.at_level("WARNING"):
+        store = get_store()
+    assert type(store).__name__ == "InMemoryStore"
+    assert "DIGI_CHECKPOINTER_POSTGRES_URI is unset" in caplog.text
 
 
 @pytest.mark.unit

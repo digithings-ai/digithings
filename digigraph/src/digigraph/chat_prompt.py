@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -16,6 +17,23 @@ _DEFAULT_MAX_HISTORY_TOKENS = 8000
 
 _TYPE_TO_ROLE = {"human": "user", "ai": "assistant"}
 
+logger = logging.getLogger(__name__)
+
+
+def _max_history_tokens() -> int:
+    """Read DIGI_CHAT_HISTORY_MAX_TOKENS, falling back to the default on a
+    non-numeric value instead of letting int() raise ValueError and abort trimming."""
+    raw = os.environ.get("DIGI_CHAT_HISTORY_MAX_TOKENS", str(_DEFAULT_MAX_HISTORY_TOKENS))
+    try:
+        return int(raw)
+    except ValueError:
+        logger.warning(
+            "DIGI_CHAT_HISTORY_MAX_TOKENS=%r is not a valid integer; using default %d",
+            raw,
+            _DEFAULT_MAX_HISTORY_TOKENS,
+        )
+        return _DEFAULT_MAX_HISTORY_TOKENS
+
 
 def _trim_to_budget(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """Token-budget-trim a flattened (role, content) turn list.
@@ -28,9 +46,7 @@ def _trim_to_budget(turns: list[tuple[str, str]]) -> list[tuple[str, str]]:
     """
     if not turns:
         return turns
-    max_tokens = int(
-        os.environ.get("DIGI_CHAT_HISTORY_MAX_TOKENS", str(_DEFAULT_MAX_HISTORY_TOKENS))
-    )
+    max_tokens = _max_history_tokens()
     as_messages = [
         HumanMessage(content=content) if role == "user" else AIMessage(content=content)
         for role, content in turns

@@ -217,6 +217,14 @@ def get_store():
                         "InMemoryStore for cross-thread memory. Install with: "
                         "pip install 'digigraph[checkpoint-postgres]'"
                     )
+            else:
+                import logging as _logging
+
+                _logging.getLogger(__name__).warning(
+                    "DIGI_CHECKPOINTER=postgres but DIGI_CHECKPOINTER_POSTGRES_URI is "
+                    "unset; falling back to InMemoryStore for cross-thread memory (not "
+                    "persistent, not shared across replicas)."
+                )
         if _store_instance is None:
             from langgraph.store.memory import InMemoryStore
 

@@ -1998,10 +1998,12 @@ def run_tools(
             With ``stream_deltas`` enabled, narration content deltas were already
             emitted before ``round_boundary``; without streaming,
             ``round_boundary`` is the only callback that exposes that narration.
-            Receives ``("round_limit_exhausted", {max_tool_rounds})`` once,
-            immediately before the forced tool-free final completion, when
-            ``max_tool_rounds`` is exhausted without the model producing a final
-            answer.
+            Receives ``("round_limit_exhausted", {max_tool_rounds})`` once when
+            ``max_tool_rounds`` is exhausted (every round through the budget still
+            returned tool_calls). This fires regardless of what happens next: a
+            forced tool-free completion only actually runs when the last round's
+            content was empty; when that content was non-empty, it is returned
+            directly as the final answer instead, with no forced completion.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
@@ -2176,16 +2178,21 @@ def run_tools(
 
     # Reaching here means every round through max_tool_rounds still returned tool_calls
     # (any round with no tool_calls returns early above) — the budget is genuinely
-    # exhausted, not just "the model happened to stop."
+    # exhausted, not just "the model happened to stop." Whether that forces an extra
+    # tool-free completion depends on whether the last round left narration content
+    # (see below) — this log/signal fires either way, so its wording must not imply
+    # the forced completion unconditionally follows.
     logger.warning(
-        "run_tools: exhausted max_tool_rounds=%d without a final answer; forcing one "
-        "tool-free completion",
+        "run_tools: exhausted max_tool_rounds=%d without the model returning an "
+        "empty tool_calls response",
         max_tool_rounds,
     )
     if on_tool_step is not None:
         on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
 
     # Hit max rounds with no final content: force one more answer without tools.
+    # Otherwise the last round's own narration content IS the final answer -- no
+    # forced completion follows (see docstring above / round_limit_exhausted note).
     if not content and len(current) > len(messages):
         current.append(
             {

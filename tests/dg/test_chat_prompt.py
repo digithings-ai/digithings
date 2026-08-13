@@ -65,6 +65,25 @@ def test_long_history_is_trimmed_to_token_budget(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.unit
+def test_non_numeric_history_max_tokens_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Finding 5 (MINOR, final whole-branch review): a non-numeric
+    DIGI_CHAT_HISTORY_MAX_TOKENS (e.g. a typo'd env value) must not raise ValueError
+    out of int() and abort the whole flatten -- fall back to the default budget and
+    log a warning instead."""
+    monkeypatch.setenv("DIGI_CHAT_HISTORY_MAX_TOKENS", "not-a-number")
+    messages = [
+        ChatMessage(role="user", content="turn one"),
+        ChatMessage(role="assistant", content="ack one"),
+        ChatMessage(role="user", content="most recent question"),
+    ]
+    prompt = messages_to_workflow_prompt(messages)
+    assert "most recent question" in prompt
+    assert "not a valid integer" in caplog.text
+
+
+@pytest.mark.unit
 def test_short_history_is_unaffected_by_trimming() -> None:
     """A short history well under the token budget must pass through byte-identical to
     today's behavior — trimming must never rewrite content it didn't need to drop."""
