@@ -455,6 +455,7 @@ def _run_document_rag_path(
         execute_tool=execute_search,
         max_tool_rounds=4,
         on_tool_step=stream_callback,
+        tool_choice="required" if state.get("require_tool_calls") else "auto",
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
