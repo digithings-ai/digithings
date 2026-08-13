@@ -87,6 +87,16 @@ jobs:
           BASE_REF: ${{ needs.resolve-pr.outputs.base_ref }}
         run: |
           set -euo pipefail
+          # CWE-862 guard, repeated here since this is a separate trigger path
+          # from agent-pr-autolabel.yml: isCrossRepository comes from the live
+          # PR object via the API, not from the (attacker-controlled) branch
+          # name, so a fork can't spoof its way past the prefix check below.
+          IS_FORK=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json isCrossRepository --jq '.isCrossRepository')
+          if [[ "$IS_FORK" == "true" ]]; then
+            echo "PR #$PR_NUMBER is from a fork — refusing to enable auto-merge."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           LABELS=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name]')
           HAS_LABEL=$(echo "$LABELS" | jq 'index("automerge-agent") != null')
           if [[ "$HAS_LABEL" != "true" ]]; then
