@@ -667,6 +667,23 @@ for f in component-router.md dictation-normalizer.md spec-writer.md \
   install_file "$agents_src/$f" "$agents_dst/$f"
 done
 
+# Retired subagents — the installer stopped installing these (there is
+# deliberately no standing pr-reviewer/security-reviewer subagent; that job
+# already has three owners: Bugbot, an in-session review fan-out, and review
+# plugins) but never removed a copy left over from a prior install. Clean up
+# on upgrade so it doesn't sit there as a dead, unmaintained file.
+for f in pr-reviewer.md security-reviewer.md; do
+  retired_dst_abs="$REPO_ROOT/$agents_dst/$f"
+  if [ -f "$retired_dst_abs" ]; then
+    if [ "$DRY_RUN" = "1" ]; then
+      dry "would remove retired subagent: $agents_dst/$f"
+    else
+      rm -f "$retired_dst_abs"
+      ok "removed retired subagent: $agents_dst/$f"
+    fi
+  fi
+done
+
 # ── Claude Code skills ────────────────────────────────────────────────────────
 
 echo "→ Claude Code skills"

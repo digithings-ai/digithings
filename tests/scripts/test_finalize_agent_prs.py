@@ -133,20 +133,32 @@ def test_a_fork_pr_is_never_listed_even_with_an_agent_branch_name(
     proof the PR came from this repo — anyone can name a fork branch `task/1-x`.
     `_list_agent_prs` must filter on the live `isCrossRepository` field from the API,
     not just the branch string, or the finalizer's ready_merge path (label-add +
-    `gh pr merge --auto --squash`) would auto-merge an attacker's fork PR."""
-    same_repo = _pr(number=1, headRefName="task/1-legit")
+    `gh pr merge --auto --squash`) would auto-merge an attacker's fork PR.
+
+    Fail-closed variant (CodeRabbit finding on #2345): the filter requires
+    `isCrossRepository is False` exactly, not just falsy — a MISSING field must
+    be excluded too, not treated as "confirmed same-repo." An earlier version of
+    both this test and the production filter got this backwards: `.get(...,
+    False)` on a missing field defaults to False, which reads as "not a fork,"
+    the wrong default for a security check that can't confirm the PR's origin.
+    """
+    same_repo = _pr(number=1, headRefName="task/1-legit", isCrossRepository=False)
     fork = _pr(number=2, headRefName="task/1-legit", isCrossRepository=True)
-    fork_default_missing_field = {k: v for k, v in _pr(number=3).items()}
-    del fork_default_missing_field["isDraft"]  # unrelated field; isCrossRepository absent entirely
-    monkeypatch.setattr(fap, "_gh_json", lambda *a: [same_repo, fork, fork_default_missing_field])
+    missing_field = _pr(number=3, headRefName="task/1-legit")
+    assert "isCrossRepository" not in missing_field, (
+        "fixture must omit the field, not just falsy it"
+    )
+    monkeypatch.setattr(fap, "_gh_json", lambda *a: [same_repo, fork, missing_field])
     prs = fap._list_agent_prs("digithings-ai/digithings")
     numbers = {pr["number"] for pr in prs}
-    assert numbers == {1, 3}, "fork PR (isCrossRepository=True) must be excluded"
+    assert numbers == {1}, (
+        "only the confirmed same-repo PR should survive; fork and missing-field must not"
+    )
 
 
 def test_list_agent_prs_still_filters_by_branch_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
-    agent_branch = _pr(number=1, headRefName="claude/some-work")
-    other_branch = _pr(number=2, headRefName="feat/unrelated")
+    agent_branch = _pr(number=1, headRefName="claude/some-work", isCrossRepository=False)
+    other_branch = _pr(number=2, headRefName="feat/unrelated", isCrossRepository=False)
     monkeypatch.setattr(fap, "_gh_json", lambda *a: [agent_branch, other_branch])
     prs = fap._list_agent_prs("digithings-ai/digithings")
     assert {pr["number"] for pr in prs} == {1}

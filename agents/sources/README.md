@@ -63,6 +63,10 @@ subagent policy for the full reasoning.
 | `/score` | `score.md` | Run the scoring gate via `make score`. |
 | `/task` | `task.md` | Start a backlog task via `make task ISSUE=N`. |
 | `/triage` | `triage.md` | Triage CI failures for a PR number. |
+| `/review` | `review.md` | Run the review lens fan-out (correctness, claim accuracy, regression, security, CI/deploy) for a PR number, in-session when Bugbot is unavailable. |
+| `/opsx-propose` | `opsx-propose.md` | Start an OpenSpec change proposal. |
+| `/opsx-apply` | `opsx-apply.md` | Implement the current OpenSpec change. |
+| `/opsx-archive` | `opsx-archive.md` | Archive a completed OpenSpec change. |
 
 ## Related
 

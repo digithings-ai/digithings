@@ -70,11 +70,18 @@ def _list_agent_prs(repo: str) -> list[dict]:
     # two workflows guard — this script just didn't have the check yet.
     # isCrossRepository comes from the live PR object via the API, not the
     # (attacker-controlled) branch name.
+    #
+    # Fail closed: require the field to be exactly `False`, not merely falsy.
+    # `.get(..., False)` treats a MISSING field the same as a confirmed
+    # same-repo PR — the one case where we can't confirm the PR isn't a fork,
+    # that reads as "trust it." A field GitHub always returns for this query
+    # shouldn't be missing in practice, but if it ever is, exclude rather than
+    # include (CodeRabbit finding on #2345).
     return [
         pr
         for pr in prs
         if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)
-        and not pr.get("isCrossRepository", False)
+        and pr.get("isCrossRepository") is False
     ]
 
 
