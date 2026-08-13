@@ -1998,6 +1998,10 @@ def run_tools(
             With ``stream_deltas`` enabled, narration content deltas were already
             emitted before ``round_boundary``; without streaming,
             ``round_boundary`` is the only callback that exposes that narration.
+            Receives ``("round_limit_exhausted", {max_tool_rounds})`` once,
+            immediately before the forced tool-free final completion, when
+            ``max_tool_rounds`` is exhausted without the model producing a final
+            answer.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
