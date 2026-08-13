@@ -17,8 +17,6 @@ import {
   isTextUIPart,
   type UIMessage,
 } from "ai";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ArrowDown, Copy, RefreshCw, Square, Wrench, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,31 +33,22 @@ import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
 import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
 import { ChatActivities } from "@digithings/digichat-ui";
+import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
 
 const MAX_INPUT_LINES = 5;
 
-const markdownComponents = {
-  code(props: {
-    className?: string;
-    children?: React.ReactNode;
-    inline?: boolean;
-    node?: unknown;
-  }) {
-    const { className, children, inline } = props;
-    const text = Array.isArray(children)
-      ? children.join("")
-      : typeof children === "string"
-        ? children
-        : "";
-    const isFenced = !inline && /language-json/i.test(className ?? "");
-    if (isFenced) {
-      const spec = parseChartEnvelope(text);
-      if (spec) {
-        return <EChartsCard spec={spec} />;
-      }
-    }
-    return <code className={className}>{children}</code>;
-  },
+// The one digichat-specific fence shape the shared <ChatMarkdown> renderer
+// (also used by digichat's own /embed, digithings-web, and digiweb — mermaid,
+// syntax-highlighted code with copy, LaTeX) has no reason to know about: a
+// ```json block whose content parses as a chart envelope renders as a live
+// chart instead of source text. Everything else — including a ```json block
+// that is NOT a chart spec — falls through to the shared renderer's own
+// default handling (undefined return), which now means it gets real syntax
+// highlighting instead of the bare, unstyled <code> this used to render.
+const renderChartCodeBlock: CodeBlockOverride = (lang, code) => {
+  if (lang !== "json") return undefined;
+  const spec = parseChartEnvelope(code);
+  return spec ? <EChartsCard spec={spec} /> : undefined;
 };
 
 function messagePlainText(message: UIMessage): string {
@@ -82,11 +71,11 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
   if (message.role === "user") {
     const text = messagePlainText(message);
     return (
-      <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {text}
-        </ReactMarkdown>
-      </div>
+      <ChatMarkdown
+        source={text}
+        renderCodeBlock={renderChartCodeBlock}
+        className="text-[var(--text-primary)]"
+      />
     );
   }
 
@@ -113,17 +102,15 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
         }
         if (isTextUIPart(part)) {
           return (
-            <div
+            <ChatMarkdown
               key={i}
+              source={part.text}
+              renderCodeBlock={renderChartCodeBlock}
               className={cn(
-                "prose prose-invert prose-sm max-w-none text-[var(--text-primary)]",
+                "text-[var(--text-primary)]",
                 isLast && isStreaming && "dc-term-streaming",
               )}
-            >
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {part.text}
-              </ReactMarkdown>
-            </div>
+            />
           );
         }
         if (part.type === "tool-invocation" || part.type === "dynamic-tool") {
