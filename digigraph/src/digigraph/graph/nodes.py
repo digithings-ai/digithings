@@ -11,7 +11,7 @@ import httpx
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
 
-from digigraph.graph.research import _stream_callback_ctx, research_node
+from digigraph.graph.research import _safe_stream_writer, research_node
 from digigraph.graph.state import WorkflowState
 from digigraph.trace_events import TraceEventV1
 from digigraph.trading_profile import optimization_constraints_dict_from_profile
@@ -47,7 +47,6 @@ __all__ = [
     "optimize_node",
     "strategy_validator_node",
     "supervisor_node",
-    "_stream_callback_ctx",
 ]
 
 
@@ -57,55 +56,39 @@ def _digiquant_outbound_headers(state: WorkflowState) -> dict[str, str]:
     return outbound_service_headers(state.get("request_id"), bearer)
 
 
-def _resolve_stream_callback(
-    state: WorkflowState,
-    config: dict | None,
-) -> object | None:
-    cb = None
-    if config and isinstance(config.get("configurable"), dict):
-        cb = config["configurable"].get("stream_callback")
-    if cb is None:
-        cb = state.get("stream_callback")
-    if cb is None:
-        cb = _stream_callback_ctx.get()
-    return cb
-
-
-def supervisor_node(state: WorkflowState, config: dict | None = None) -> dict:
+def supervisor_node(state: WorkflowState) -> dict:
     """Optional entry node: trace span + depth budget (set DIGI_SUPERVISOR=1)."""
     max_d = int(os.environ.get("DIGI_SUPERVISOR_MAX_DEPTH", "8"))
     depth = state.get("supervisor_depth_remaining")
     if depth is None:
         depth = max_d
-    cb = _resolve_stream_callback(state, config)
-    if cb is not None and callable(cb):
-        ev = TraceEventV1(
-            type="span",
-            workflow_id=state.get("workflow_id"),
-            request_id=state.get("request_id"),
-            session_id=state.get("session_id"),
-            payload={"node": "supervisor", "depth_remaining": depth},
-        )
-        cb("trace", ev.model_dump())
+    writer = _safe_stream_writer()
+    ev = TraceEventV1(
+        type="span",
+        workflow_id=state.get("workflow_id"),
+        request_id=state.get("request_id"),
+        session_id=state.get("session_id"),
+        payload={"node": "supervisor", "depth_remaining": depth},
+    )
+    writer(("trace", ev.model_dump()))
     if depth <= 0:
         return {"error": "supervisor: max routing depth exceeded", "supervisor_depth_remaining": 0}
     return {"supervisor_depth_remaining": depth - 1, "supervisor_route": "research"}
 
 
-def strategy_validator_node(state: WorkflowState, config: dict | None = None) -> dict:
+def strategy_validator_node(state: WorkflowState) -> dict:
     """Ensure quant backtest inputs exist before calling digiquant."""
     if state.get("error"):
         return {}
-    cb = _resolve_stream_callback(state, config)
-    if cb is not None and callable(cb):
-        ev = TraceEventV1(
-            type="graph_step",
-            workflow_id=state.get("workflow_id"),
-            request_id=state.get("request_id"),
-            session_id=state.get("session_id"),
-            payload={"node": "validate_strategy", "status": "start"},
-        )
-        cb("trace", ev.model_dump())
+    writer = _safe_stream_writer()
+    ev = TraceEventV1(
+        type="graph_step",
+        workflow_id=state.get("workflow_id"),
+        request_id=state.get("request_id"),
+        session_id=state.get("session_id"),
+        payload={"node": "validate_strategy", "status": "start"},
+    )
+    writer(("trace", ev.model_dump()))
     strategy_name = state.get("strategy_name")
     symbols = state.get("symbols")
     if not strategy_name or not isinstance(strategy_name, str) or not strategy_name.strip():

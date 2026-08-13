@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, TypedDict
+from typing import Any, TypedDict
 
 
 class WorkflowState(TypedDict, total=False):
@@ -46,8 +46,6 @@ class WorkflowState(TypedDict, total=False):
     error_code: str | None
     # Session datasets: ref -> { ref, profile }. No reducer; last writer wins per key.
     stored_datasets: dict[str, dict[str, Any]]
-    # Streaming only: callback(event_type, data). Not serialized; request-scoped.
-    stream_callback: Callable[[str, Any], None]
     # Workflow profile: full_stack | research_rag | quant_backtest | plan_execute (set at invoke).
     workflow_profile: str
     # Per-request corpus routing (X-Digi-Corpus-Index / X-Digi-Vault-Prefix / DIGI_TENANT_CORPUS_MAP).

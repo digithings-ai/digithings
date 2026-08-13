@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -136,34 +137,66 @@ class TestResearchNode:
         assert "[Current session datasets:" not in user_msg
         assert user_msg == "analyse AAPL"
 
-    def test_rag_stream_callback_called_for_tool_call_and_result(self) -> None:
-        """When stream_callback is in state, RAG path calls it with tool_call and tool_result."""
-        calls = []
-
-        def stream_callback(event_type: str, data: dict) -> None:
-            calls.append((event_type, data))
+    def test_stream_callback_from_state_rag_path_calls_it(self) -> None:
+        """RAG path emits tool_call/tool_result via get_stream_writer() now, captured
+        through the graph's own stream_mode="custom" channel — not injected via state."""
+        from digigraph.graph.state import WorkflowState
+        from langgraph.graph import END, START, StateGraph
 
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
             with patch(
                 "digigraph.graph.research._load_research_settings",
                 return_value=(None, "default", "default", "You have digisearch. Use it and summarize."),
             ):
-                # Patch the HTTP call inside _handle_digisearch so the handler runs normally
-                with patch("digigraph.orchestration.builtin.invoke_digisearch_tool", return_value={
-                    "ok": True,
-                    "data": {
-                        "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
-                        "total": 1,
+                with patch(
+                    "digigraph.orchestration.builtin.invoke_digisearch_tool",
+                    return_value={
+                        "ok": True,
+                        "data": {
+                            "results": [
+                                {
+                                    "content": "Doc 1 content",
+                                    "score": 0.9,
+                                    "doc_id": "d1",
+                                    "rank": 1,
+                                    "metadata": {},
+                                }
+                            ],
+                            "total": 1,
+                        },
                     },
-                }):
+                ):
                     with patch("digillm.client._stream_completion_one_turn") as m:
-                        # RAG path uses streaming: first turn returns tool call, second returns final content
                         m.side_effect = [
-                            ("", [{"id": "tc1", "function": {"name": "digisearch", "arguments": '{"query": "test query"}'}}]),
+                            (
+                                "",
+                                [
+                                    {
+                                        "id": "tc1",
+                                        "function": {
+                                            "name": "digisearch",
+                                            "arguments": '{"query": "test query"}',
+                                        },
+                                    }
+                                ],
+                            ),
                             ("Summary of the docs.", None),
                         ]
-                        out = research_node({"prompt": "find docs", "stream_callback": stream_callback})
-        assert out.get("research_response") == "Summary of the docs."
+                        g: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+                        g.add_node("research", research_node)
+                        g.add_edge(START, "research")
+                        g.add_edge("research", END)
+                        compiled = g.compile()
+                        calls: list[tuple[str, Any]] = []
+                        final: dict[str, Any] = {}
+                        for part in compiled.stream(
+                            {"prompt": "find docs"}, stream_mode=["updates", "custom"], version="v2"
+                        ):
+                            if part["type"] == "custom":
+                                calls.append(part["data"])
+                            else:
+                                final.update(part["data"].get("research", {}))
+        assert final.get("research_response") == "Summary of the docs."
         assert len(calls) >= 2
         assert calls[0][0] == "tool_call"
         assert calls[0][1].get("name") == "digisearch"
@@ -184,13 +217,21 @@ class TestResearchNode:
         instead. ``run_tools`` (digillm) is faked in-line rather than imported, so we
         control exactly when ``execute_tool``/``on_tool_step`` fire without depending
         on digillm's streaming internals.
+
+        ``_safe_stream_writer`` (not ``get_stream_writer`` directly) is patched to
+        capture events: this bare call bypasses any compiled graph, so the real
+        ``get_stream_writer()`` would raise (caught and no-op'd by
+        ``_safe_stream_writer`` in production) -- patching the seam lets this test
+        observe what the node writes without needing a full graph invocation, matching
+        the single-tuple ``writer((event_type, data))`` calling convention used
+        everywhere else post-migration.
         """
         from digigraph.graph.research import _run_document_rag_path
 
         events: list[tuple[str, object]] = []
 
-        def stream_callback(event_type: str, data: object) -> None:
-            events.append((event_type, data))
+        def fake_writer(item: tuple[str, object]) -> None:
+            events.append(item)
 
         def fake_run_tools(
             *,
@@ -207,20 +248,20 @@ class TestResearchNode:
             on_tool_step("tool_result", result)
             return "No results found for jwt."
 
-        with patch("digigraph.graph.research.run_tools", side_effect=fake_run_tools):
-            with patch(
-                "digigraph.orchestration.execute",
-                return_value={"results": [], "rag_sources": []},
-            ):
-                out = _run_document_rag_path(
-                    state={"prompt": "jwt", "stream_callback": stream_callback},
-                    config=None,
-                    cfg=None,
-                    system_prompt="You have digisearch. Use it and summarize.",
-                    index_name="default",
-                    index_display_name="default",
-                    prompt="jwt",
-                )
+        with patch("digigraph.graph.research._safe_stream_writer", return_value=fake_writer):
+            with patch("digigraph.graph.research.run_tools", side_effect=fake_run_tools):
+                with patch(
+                    "digigraph.orchestration.execute",
+                    return_value={"results": [], "rag_sources": []},
+                ):
+                    out = _run_document_rag_path(
+                        state={"prompt": "jwt"},
+                        cfg=None,
+                        system_prompt="You have digisearch. Use it and summarize.",
+                        index_name="default",
+                        index_display_name="default",
+                        prompt="jwt",
+                    )
 
         assert out.get("research_response") == "No results found for jwt."
         assert (
@@ -247,7 +288,6 @@ class TestResearchNode:
             with patch("digigraph.graph.research.run_tools", return_value="Summary."):
                 _run_document_rag_path(
                     state={"prompt": "hi"},
-                    config=None,
                     cfg=None,
                     system_prompt="sys",
                     index_name="   ",
@@ -271,7 +311,6 @@ class TestResearchNode:
             with patch("digigraph.graph.research.run_tools", return_value="Summary."):
                 _run_document_rag_path(
                     state={"prompt": "hi"},
-                    config=None,
                     cfg=None,
                     system_prompt="sys",
                     index_name="",

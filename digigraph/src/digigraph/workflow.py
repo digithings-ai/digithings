@@ -302,7 +302,6 @@ def run_digigraph_workflow_streaming(
     tool loop still emits tool/content events via the same callback.
     Intended to be run in a thread; the server consumes the queue and emits SSE.
     """
-    from digigraph.graph.research import _stream_callback_ctx
     from digigraph.trace_events import TraceEventV1
 
     workflow_id = str(uuid.uuid4())
@@ -414,22 +413,29 @@ def run_digigraph_workflow_streaming(
         **_audit_digi_kwargs(req),
     )
     graph = build_workflow_graph()
-    token = _stream_callback_ctx.set(stream_callback)
     final: dict[str, Any] = {}
     try:
         initial = _initial_graph_state(req, workflow_id)
         config: dict = {
             "configurable": {
                 "thread_id": workflow_thread_id(req.digi_subject, req.session_id),
-                "stream_callback": stream_callback,
             },
         }
-        for update in graph.stream(
-            initial, config=config, stream_mode="updates", durability="sync"
+        for part in graph.stream(
+            initial,
+            config=config,
+            stream_mode=["updates", "custom"],
+            version="v2",
+            durability="sync",
         ):
             if cancel_event is not None and cancel_event.is_set():
                 event_queue.put(("done", None))
                 return
+            if part["type"] == "custom":
+                event_type, data = part["data"]
+                stream_callback(event_type, data)
+                continue
+            update = part["data"]
             event_queue.put(
                 (
                     "trace",
@@ -461,8 +467,6 @@ def run_digigraph_workflow_streaming(
         event_queue.put(("content", f"Error: {e!s}"))
         event_queue.put(("done", None))
         return
-    finally:
-        _stream_callback_ctx.reset(token)
 
     dg_audit_log(
         "workflow_end",

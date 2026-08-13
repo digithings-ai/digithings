@@ -6,8 +6,9 @@ import json
 import logging
 import os
 import re
-from contextvars import ContextVar
 from typing import Any
+
+from langgraph.config import get_stream_writer
 
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
@@ -21,9 +22,17 @@ from digigraph.trace_events import merge_rag_sources_accumulator
 
 logger = logging.getLogger(__name__)
 
-# Stream callback for streaming runs. Set by workflow before invoke so the node can use it
-# when LangGraph does not pass config to the node (or strips configurable).
-_stream_callback_ctx: ContextVar[object | None] = ContextVar("stream_callback", default=None)
+
+def _safe_stream_writer():
+    """get_stream_writer() raises RuntimeError when called outside a compiled graph's
+    invocation (e.g. a unit test calling a node function directly, bypassing
+    graph.invoke()/.stream()) -- catch that and fall back to a true no-op, so node
+    logic stays testable in isolation without needing a full graph invocation."""
+    try:
+        return get_stream_writer()
+    except RuntimeError:
+        return lambda _data: None
+
 
 RESEARCH_SYSTEM = """You are a quant research assistant. Given a user idea for a trading strategy, respond with exactly one JSON object (no markdown fences, no prose before or after) with keys:
 - "strategy_name": snake_case name, e.g. mean_reversion_stat_arb, ema_cross, bollinger_mr
@@ -282,7 +291,6 @@ def _tool_name(tool: dict[str, Any] | str) -> str | None:
 def _run_document_rag_path(
     *,
     state: WorkflowState,
-    config: dict | None,
     cfg: DigiProjectConfig | None,
     system_prompt: str,
     index_name: str,
@@ -359,24 +367,16 @@ def _run_document_rag_path(
                 result.setdefault("query", str(query_arg))
         return result
 
-    raw_callback = None
-    if config and isinstance(config.get("configurable"), dict):
-        raw_callback = config["configurable"].get("stream_callback")
-    if raw_callback is None:
-        raw_callback = state.get("stream_callback")
-    if raw_callback is None:
-        raw_callback = _stream_callback_ctx.get()
+    writer = _safe_stream_writer()
 
     def stream_callback(event_type: str, data: Any) -> None:
-        if raw_callback is None:
-            return
         if (
             event_type == "tool_call"
             and data
             and data.get("name") in ("digisearch", "digisearch_fetch_all")
         ):
             data = {**data, "index_name": index_display_name}
-        raw_callback(event_type, data)
+        writer((event_type, data))
 
     user_content = str(prompt)
 
@@ -584,7 +584,7 @@ def _run_quant_or_augmented_path(
         return out
 
 
-def research_node(state: WorkflowState, config: dict | None = None) -> dict:
+def research_node(state: WorkflowState) -> dict:
     """Data Science Family (Phase 1): LLM infers strategy/symbols or document-mode RAG with tools."""
     prompt = state.get("prompt")
     if not prompt or not str(prompt).strip():
@@ -613,7 +613,6 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
         try:
             return _run_document_rag_path(
                 state=state,
-                config=config,
                 cfg=cfg,
                 system_prompt=system_prompt,
                 index_name=index_name,
