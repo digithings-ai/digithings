@@ -140,10 +140,15 @@ def test_schema_from_digivault_manifest_get_note_falls_back_on_error() -> None:
     ):
         schema = _schema_from_digivault_manifest(_ctx(), "digivault_get_note")
     assert schema["function"]["name"] == "digivault_get_note"
-    assert schema["function"]["parameters"]["required"] == ["vault_path", "path_prefix"]
+    params = schema["function"]["parameters"]
+    assert params["required"] == ["path_prefix"]
+    assert "vault_path" in params["properties"]
+    assert "vault_paths" in params["properties"]
+    assert params["properties"]["vault_paths"]["type"] == "array"
     description = schema["function"]["description"]
     assert "doc_id" in description
     assert "digisearch" in description  # warns the model off digisearch's doc_id
+    assert "vault_paths" in description
 
 
 @pytest.mark.unit

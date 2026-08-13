@@ -46,13 +46,17 @@ from digivault.orchestrator_tools import (
 )
 from digivault.path_scopes import SCOPE_WRITE, digivault_path_scopes
 from digivault.supabase_store import SupabaseStore, SupabaseStoreError, _first_env
-from digivault.tenant_scope import enforce_tenant_path_prefix
+from digivault.tenant_scope import enforce_tenant_path_prefix, mapped_tenant_path_prefix
 from digivault.vault import Vault, VaultError
 
 # /v1/orchestrator_invoke is gated at SCOPE_READ (most tools are reads); the one
 # mutating tool enforces SCOPE_WRITE here so a read-only caller can't reach it.
 _TOOL_WRITE_SCOPES: dict[str, str] = {TOOL_VAULT_CREATE_NOTE: SCOPE_WRITE}
 _MAX_SEARCH_NOTES_LIMIT = 50
+# Bound digivault_get_note batch size (model-supplied vault_paths). Each path is
+# still one serial D1 round-trip today; without a cap a single tool call can
+# amplify into unbounded metered reads and a huge serialized payload for the LLM.
+_MAX_GET_NOTE_BATCH = 20
 
 logger = logging.getLogger(__name__)
 
@@ -622,23 +626,34 @@ def orchestrator_invoke(
             limit = DEFAULT_SEARCH_NOTES_LIMIT
         limit = max(1, min(limit, _MAX_SEARCH_NOTES_LIMIT))
         path_prefix_raw = args.get("path_prefix")
+        # Same empty-normalizing set as digivault_get_note / resolve_path_prefix
+        # (including ".md") — bare strip("/").strip() left ".md" as a non-None
+        # prefix that D1Store.search rejects with ValueError (#2327 CodeRabbit).
         path_prefix = (
-            str(path_prefix_raw).strip().strip("/") if path_prefix_raw is not None else None
+            normalize_vault_path(str(path_prefix_raw)) if path_prefix_raw is not None else ""
         ) or None
+
+        tenant_slug = _tenant_slug(request)
+        # When DIGI_TENANT_CORPUS_MAP is set, an omitted path_prefix must not fall
+        # through to local-vault / Supabase as an unfiltered search (authz bypass
+        # for multi-tenant deployments without D1). Resolve the caller's mapped
+        # prefix before backend selection (#2327 CodeRabbit).
+        if path_prefix is None:
+            mapped = mapped_tenant_path_prefix(tenant_slug)
+            if mapped is not None:
+                path_prefix = mapped
 
         # Security (CodeRabbit review of PR #2293, and its own follow-up review of PR
         # #2298): checked once, here, before the backend-precedence branch below, so
         # it applies uniformly to D1, local-vault, and Supabase — not just whichever
         # backend happens to be configured today. `path_prefix` reaching this point is
-        # caller/model-supplied; a caller hitting this endpoint directly with a bare
-        # `digivault:read` token has never been protected by anything digigraph does
-        # (its own #2265 fix, where merged, only covers the model -> digigraph leg —
-        # see tenant_scope.py's module docstring for exactly what state that fix is in
-        # on `develop` as of this comment, and this function's own residual dependency
-        # on `_tenant_slug` actually being trustworthy). No-op when `path_prefix` is
-        # `None` (nothing to check yet — each backend's own "prefix required" handling
-        # still applies) or when `DIGI_TENANT_CORPUS_MAP` is unset.
-        enforce_tenant_path_prefix(_tenant_slug(request), path_prefix)
+        # caller/model-supplied (or tenant-map-resolved above); a caller hitting this
+        # endpoint directly with a bare `digivault:read` token has never been protected
+        # by anything digigraph does (its own #2265 fix only covers the model ->
+        # digigraph leg — see tenant_scope.py). No-op when `path_prefix` is still
+        # `None` (map unset; each backend's own "prefix required" handling still
+        # applies) or when `DIGI_TENANT_CORPUS_MAP` is unset.
+        enforce_tenant_path_prefix(tenant_slug, path_prefix)
 
         # D1 first: when the remote corpus is configured it is authoritative, and the
         # baked /data/vault seed must not shadow it (the #2239 production bug — prod
@@ -734,6 +749,15 @@ def orchestrator_invoke(
             if not vault_path_list:
                 return OrchestratorInvokeResponse(
                     ok=False, tool=tool, error="vault_paths must contain at least one path"
+                )
+            if len(vault_path_list) > _MAX_GET_NOTE_BATCH:
+                return OrchestratorInvokeResponse(
+                    ok=False,
+                    tool=tool,
+                    error=(
+                        f"vault_paths exceeds maximum batch size of {_MAX_GET_NOTE_BATCH} "
+                        f"(got {len(vault_path_list)} after dedup)"
+                    ),
                 )
         else:
             vault_path = str(args.get("vault_path") or "").strip()

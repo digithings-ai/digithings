@@ -16,6 +16,7 @@ from digivault.tenant_scope import (
     TenantCorpusMapError,
     _load_tenant_prefix_map,
     enforce_tenant_path_prefix,
+    mapped_tenant_path_prefix,
 )
 from fastapi import HTTPException
 
@@ -83,6 +84,22 @@ def test_load_tenant_prefix_map_keeps_usable_entries_despite_one_bad_sibling() -
 def test_load_tenant_prefix_map_lowercases_the_slug_key() -> None:
     raw = '{"DigiThings": {"vaultPathPrefix": "clients/digithings"}}'
     assert _load_tenant_prefix_map(raw) == {"digithings": "clients/digithings"}
+
+
+def test_mapped_tenant_path_prefix_unset() -> None:
+    assert mapped_tenant_path_prefix("digithings", raw_map="") is None
+    assert mapped_tenant_path_prefix("digithings", raw_map=None) is None
+
+
+def test_mapped_tenant_path_prefix_resolves() -> None:
+    assert mapped_tenant_path_prefix("digithings", raw_map=_MAP) == "clients/digithings"
+    assert mapped_tenant_path_prefix("occ", raw_map=_MAP) == "clients/online-compliance-center"
+
+
+def test_mapped_tenant_path_prefix_unknown_tenant_403() -> None:
+    with pytest.raises(HTTPException) as exc:
+        mapped_tenant_path_prefix("unknown", raw_map=_MAP)
+    assert exc.value.status_code == 403
 
 
 # ── enforce_tenant_path_prefix ───────────────────────────────────────────────

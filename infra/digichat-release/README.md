@@ -121,7 +121,7 @@ Profile A digigraph is **research_rag only**. The stack image ships
 
 - `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml`
 - `DIGI_WORKFLOW_PROFILE=research_rag`
-- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes,digivault_get_note`
+- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes` (stock Profile A; add `digivault_get_note` only when D1 is configured)
 - `DIGIQUANT_URL=` (empty)
 
 digichat probes only digigraph (`DIGICHAT_ENABLED_SERVICES=digigraph`). OCC and

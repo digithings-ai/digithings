@@ -243,10 +243,12 @@ def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[st
             "function": {
                 "name": "digivault_get_note",
                 "description": (
-                    "Load one vault note in full, instead of reasoning from its excerpt. "
-                    "The vault_path argument is copied from a prior digivault_search_notes "
-                    "hit's doc_id field (that hit's JSON has no field literally named "
-                    "vault_path). Do not use a digisearch hit's doc_id here — digisearch's "
+                    "Load one or more vault notes in full, instead of reasoning from "
+                    "excerpts. For a single note, pass vault_path copied from a prior "
+                    "digivault_search_notes hit's doc_id field (that hit's JSON has no "
+                    "field literally named vault_path). For several notes at once, pass "
+                    "vault_paths (array) instead — prefer that over repeated single-path "
+                    "calls. Do not use a digisearch hit's doc_id here — digisearch's "
                     "doc_id is a repo path, not a vault path, and this tool will refuse or "
                     "404 on it. D1-only: requires DIGIVAULT_URL, POST /v1/orchestrator_tools, "
                     "and a D1-backed digivault deployment."
@@ -259,12 +261,24 @@ def _schema_from_digivault_manifest(ctx: ToolContext, tool_name: str) -> dict[st
                             "description": (
                                 "Copy this from a digivault_search_notes hit's doc_id "
                                 "field — not from a digisearch hit's doc_id, which is a "
-                                "repo path this tool cannot load."
+                                "repo path this tool cannot load. Use vault_paths instead "
+                                "when loading more than one note."
+                            ),
+                        },
+                        "vault_paths": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "Load several notes in one call (same path rules as "
+                                "vault_path). Prefer over repeated single-path calls. "
+                                "Provide exactly one of vault_path or vault_paths."
                             ),
                         },
                         "path_prefix": {"type": "string"},
                     },
-                    "required": ["vault_path", "path_prefix"],
+                    # Match the live digivault manifest: path_prefix required;
+                    # vault_path vs vault_paths is enforced by the handler.
+                    "required": ["path_prefix"],
                 },
             },
         }
@@ -492,7 +506,21 @@ def _handle_digivault_get_note(args: dict[str, Any], context: ToolContext) -> st
     """
     vault_paths_arg = args.get("vault_paths")
     is_batch = isinstance(vault_paths_arg, list) and len(vault_paths_arg) > 0
-    if not is_batch:
+    if is_batch:
+        # Mirror digivault's server-side cap so an oversized batch fails before the
+        # HTTP round-trip. digillm also caps the whole tool message
+        # (DIGI_TOOL_MESSAGE_MAX_CHARS, default 12000) for the LLM — that limit
+        # applies to the serialized batch as one tool result, not per note.
+        if len(vault_paths_arg) > 20:
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": (
+                        f"vault_paths exceeds maximum batch size of 20 (got {len(vault_paths_arg)})"
+                    ),
+                }
+            )
+    else:
         vault_path = args.get("vault_path", "")
         if not vault_path or not str(vault_path).strip():
             return "vault_path is required."

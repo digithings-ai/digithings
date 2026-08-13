@@ -132,6 +132,32 @@ def _load_tenant_prefix_map(raw: str | None = None) -> dict[str, str]:
     return out
 
 
+def mapped_tenant_path_prefix(tenant_slug: str | None, *, raw_map: str | None = None) -> str | None:
+    """Return this tenant's vault prefix when ``DIGI_TENANT_CORPUS_MAP`` is set.
+
+    Used to fill an omitted ``path_prefix`` before local-vault / Supabase search so
+    a multi-tenant deployment never falls through to an unfiltered corpus read.
+
+    - Map unset → ``None`` (single-tenant; caller keeps omitted-prefix behavior).
+    - Map set, tenant known → that tenant's normalized prefix.
+    - Map set, tenant unknown / empty → ``HTTPException(403)``.
+    - Map set but unusable → ``HTTPException(503)``.
+    """
+    try:
+        table = _load_tenant_prefix_map(raw_map)
+    except TenantCorpusMapError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not table:
+        return None
+    authorized = table.get((tenant_slug or "").strip().lower())
+    if authorized is None:
+        raise HTTPException(
+            status_code=403,
+            detail="path_prefix does not match the authenticated tenant's corpus",
+        )
+    return authorized
+
+
 def enforce_tenant_path_prefix(
     tenant_slug: str | None, requested_prefix: str | None, *, raw_map: str | None = None
 ) -> None:
