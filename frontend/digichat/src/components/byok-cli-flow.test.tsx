@@ -1,13 +1,10 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ByokCliFlow } from "./byok-cli-flow";
+import { useBYOKKey } from "@/hooks/use-byok-key";
 
 describe("ByokCliFlow", () => {
-  beforeEach(() => {
-    document.cookie = "digichat_byok_pref=; max-age=0";
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -114,5 +111,86 @@ describe("ByokCliFlow", () => {
     fireEvent.change(keyInput, { target: { value: "sk-or-v1-test" } });
     fireEvent.keyDown(keyInput, { key: "Enter" });
     await waitFor(() => expect(screen.getByText(/free \(1\)/)).toBeInTheDocument());
+  });
+});
+
+// Regression for the final-review Important finding: the digichat_byok_pref
+// cookie restored a {provider, model} preference but every consumer only ever
+// passed it into `active`, which is gated behind isSet — never true from a
+// cookie alone (no key persists). Net effect: the picker always opened on
+// "openrouter" and the remembered preference did nothing. initialProvider/
+// initialModel are a separate channel from `active` specifically so a
+// remembered-but-unvalidated preference can seed the picker without also
+// rendering the "BYOK active"/"done" state, which really would be wrong when
+// no key is live.
+describe("ByokCliFlow initialProvider/initialModel (remembered preference, not a live key)", () => {
+  it("pre-selects the given initialProvider instead of defaulting to openrouter", () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no network in tests")));
+    render(
+      <ByokCliFlow
+        onClose={() => {}}
+        onActivate={() => {}}
+        initialProvider="anthropic"
+        initialModel="claude-3-5-haiku"
+      />,
+    );
+    expect(screen.getByText("anthropic").closest("li")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("openrouter").closest("li")).toHaveAttribute("aria-selected", "false");
+  });
+
+  it("does not render the active/done state just because initialProvider is set (no key is live)", () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no network in tests")));
+    render(
+      <ByokCliFlow
+        onClose={() => {}}
+        onActivate={() => {}}
+        initialProvider="anthropic"
+        initialModel="claude-3-5-haiku"
+      />,
+    );
+    expect(screen.queryByText(/session only/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("BYOK providers")).toBeInTheDocument();
+  });
+});
+
+describe("ByokCliFlow composed with useBYOKKey — the remembered cookie preference actually reaches the picker", () => {
+  const COOKIE_NAME = "digichat_byok_pref";
+
+  afterEach(() => {
+    // Explicit path=/ so this matches (and actually clears) the path=/
+    // attribute writeByokPrefCookie sets — happy-dom's cookie jar keys
+    // cookies by (name, path) and won't overwrite/delete across a path
+    // mismatch (see the same note in use-byok-key.test.ts).
+    document.cookie = `${COOKIE_NAME}=; path=/; max-age=0`;
+  });
+
+  /** Mirrors exactly how chat-panel.tsx / embed-client.tsx / byok-settings-panel.tsx
+   * wire useBYOKKey()'s return into ByokCliFlow. */
+  function Wrapper() {
+    const { provider, model, isSet, setKey, clearKey } = useBYOKKey();
+    return (
+      <ByokCliFlow
+        onClose={() => {}}
+        onActivate={setKey}
+        onClear={clearKey}
+        active={isSet ? { provider, model } : null}
+        initialProvider={provider}
+        initialModel={model}
+      />
+    );
+  }
+
+  it("opens with the cookie's remembered provider pre-selected, not openrouter, when no key is active", () => {
+    document.cookie = `${COOKIE_NAME}=${encodeURIComponent(
+      JSON.stringify({ p: "anthropic", m: "claude-3-5-haiku" }),
+    )}; path=/`;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no network in tests")));
+
+    render(<Wrapper />);
+
+    // No live key was ever set — the "active"/"done" summary must not show.
+    expect(screen.queryByText(/session only/)).not.toBeInTheDocument();
+    expect(screen.getByText("anthropic").closest("li")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("openrouter").closest("li")).toHaveAttribute("aria-selected", "false");
   });
 });

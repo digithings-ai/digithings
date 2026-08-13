@@ -18,9 +18,14 @@ vi.mock("@/lib/embed-ip-rate-limit", () => ({
   checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
 }));
 
+vi.mock("@/lib/bff-rate-limit", () => ({
+  checkBffRateLimit: vi.fn(() => ({ allowed: true })),
+}));
+
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveEmbedChatTenant } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
+import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 
 describe("POST /api/byok/test", () => {
   beforeEach(() => {
@@ -29,6 +34,48 @@ describe("POST /api/byok/test", () => {
       allowed: true,
       retryAfterSec: 0,
     });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
+  });
+
+  // Fix 5 regression: the authenticated path previously had no rate limit at
+  // all here (unlike GET /api/byok/models, which checkBffRateLimit-gates both
+  // paths) — an authenticated caller could loop this route and spend
+  // digichat's own egress against a third-party provider with no ceiling.
+  it("rate-limits authenticated callers, not just embed (isolated from the embed-IP check)", async () => {
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 5 });
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: { "x-byok-key": "sk-test", "x-byok-provider": "openai" },
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect(checkBffRateLimit).toHaveBeenCalled();
+    // Never reached the embed-IP check — this is the authenticated path.
+    expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
+  });
+
+  it("rate-limits the embed path too, once it clears the embed-IP check", async () => {
+    vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
+    vi.mocked(resolveEmbedChatTenant).mockReturnValue({
+      tenantSlug: "digithings",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: null,
+    });
+    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 5 });
+    const res = await POST(
+      new Request("http://localhost/api/byok/test", {
+        method: "POST",
+        headers: {
+          "x-byok-key": "sk-test",
+          "x-byok-provider": "openai",
+          "x-embed-host": "https://digithings.ai",
+        },
+      }),
+    );
+    expect(res.status).toBe(429);
+    expect(checkBffRateLimit).toHaveBeenCalled();
   });
 
   it("returns 401 without auth when not an embed request", async () => {

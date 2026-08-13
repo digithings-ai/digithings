@@ -9,6 +9,7 @@ import {
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
+import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { fetchWithTimeout, abortOrMessage } from "@/lib/fetch-with-timeout";
 
 export const maxDuration = 30;
@@ -49,9 +50,18 @@ function rateLimitResponse(message: string, retryAfterSec: number): Response {
  * Auth mirrors POST /api/chat: DigiChat session/machine key, OR a verified
  * anonymous embed request (`X-Embed-Host` / embed referer). Embed visitors on
  * digithings.ai / OCC must validate BYOK before session activation.
+ *
+ * Rate-limited on BOTH the embed-IP path AND the authenticated/session path —
+ * same unconditional-on-both-paths shape as GET /api/byok/models. Each call
+ * here makes an outbound credentialed request to a third-party provider using
+ * digichat's own egress, so an authenticated caller looping this route
+ * unthrottled was a real gap (unlike /api/byok/models, this route needs a key
+ * to do anything, but the egress cost is per-request regardless of whether
+ * the key turns out to be valid).
  */
 export async function POST(req: Request): Promise<Response> {
   const authResult = await requireDigiChatAuth(req);
+  let rateKey: string;
   if (authResult instanceof Response) {
     if (!isEmbedChatRequest(req)) return authResult;
     const embedCtx = resolveEmbedChatTenant(req);
@@ -63,6 +73,14 @@ export async function POST(req: Request): Promise<Response> {
         ipRate.retryAfterSec,
       );
     }
+    rateKey = `byok-test:embed:${embedCtx.tenantSlug}`;
+  } else {
+    rateKey = `byok-test:${authResult.tenantSlug}:${authResult.ownerUserSub}`;
+  }
+
+  const rate = checkBffRateLimit(rateKey);
+  if (!rate.allowed) {
+    return rateLimitResponse("Too many requests. Try again shortly.", rate.retryAfterSec);
   }
 
   const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";

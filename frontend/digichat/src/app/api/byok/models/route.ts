@@ -24,8 +24,8 @@ function jsonResponse(body: unknown, status: number): Response {
  * unauthenticated fetch proxy for the other four BYOK providers.
  *
  * Rate-limited on BOTH the embed-IP path AND the authenticated/session path
- * (unlike /api/byok/test, which today only limits the embed-IP path) — this
- * route needs no key at all to trigger, a lower bar than /api/byok/test.
+ * (same shape as /api/byok/test) — this route needs no key at all to
+ * trigger, a lower bar than /api/byok/test.
  */
 export async function GET(req: Request): Promise<Response> {
   const authResult = await requireDigiChatAuth(req);

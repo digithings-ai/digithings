@@ -446,23 +446,47 @@ Provider list is defined by `config/byok-providers.json`.
 
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 
-Visitor API keys are **session memory only** (`useBYOKKey` React state). They
-are never written to `localStorage`, `sessionStorage`, cookies, or Postgres.
-Legacy durable keys (`byok_api_key` / `byok_provider` / `byok_model`) are purged
-on hook mount. A page refresh clears BYOK.
+Visitor API keys are **session memory only** (`useBYOKKey` React state). The
+key itself is never written to `localStorage`, `sessionStorage`, cookies, or
+Postgres — the only thing that persists across sessions is the non-secret
+`digichat_byok_pref` cookie (`readByokPrefCookie`/`writeByokPrefCookie` in
+`use-byok-key.ts`), which holds just `{provider, model}` so a returning
+visitor's picker opens pre-selected instead of always defaulting to
+OpenRouter. `useBYOKKey()` restores that pair into its `provider`/`model`
+state on mount, always with `isSet: false` (no key ever ships with it), and
+`clearKey()` deletes the cookie outright rather than rewriting it — clearing
+a key does not silently reset the remembered provider to OpenRouter. This
+cookie is a known no-op on `/embed`'s cross-site iframe surface when the
+visitor's browser blocks or partitions third-party cookies (Safari/Firefox by
+default, Chrome without CHIPS) — the picker just falls back to its default
+there, nothing breaks. Legacy durable keys (`byok_api_key` / `byok_provider` /
+`byok_model`) are purged on hook mount. A page refresh always clears the live
+key.
 
-UX (`src/components/byok-cli-flow.tsx`) is a stepwise terminal sequence rendered
-**inline in the chat transcript** (DigiChatSession `settingsPanel` slot inside
-`.dc-thread`, and the app shell `ChatPanel` when `/key` opens BYOK mode):
+`ByokCliFlow` (`src/components/byok-cli-flow.tsx`) takes `active` (a
+currently-live, validated key — gates the "done" step and "BYOK active" text)
+and, separately, optional `initialProvider`/`initialModel` (just seeds the
+picker's starting selection, e.g. from the cookie above, without implying a
+live key). All three call sites (`chat-panel.tsx`, `embed/embed-client.tsx`,
+`byok-settings-panel.tsx`) wire `useBYOKKey()`'s `provider`/`model` into the
+latter pair independently of `active`/`isSet`.
 
-1. Select provider (arrow keys + Enter, or click)
+UX is a stepwise terminal sequence rendered **inline in the chat transcript**
+(DigiChatSession `settingsPanel` slot inside `.dc-thread`, and the app shell
+`ChatPanel` when `/key` opens BYOK mode):
+
+1. Select provider (arrow keys + Enter, or click) — pre-selected from
+   `initialProvider` above when set
 2. Paste API key
 3. Select model from presets (or custom slug) — for OpenRouter, from a live
    catalog with tier tabs instead (see below)
 4. `POST /api/byok/test` ping — activation is refused until `ok: true`
 5. On success, key is held in-memory for this tab session and sent as
    `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
-   requests only
+   requests only. Whether `X-BYOK-Model` is sent at all is driven by
+   `byokRequiresModel(provider)` — every call site defers to that one
+   predicate (never a hand-maintained per-provider list) so adding a 6th
+   provider can't silently omit its model header the way `xai` once was.
 
 For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
 (no key required) as soon as `openrouter` becomes the selected provider, usually
@@ -475,7 +499,20 @@ and never blocks the flow on network.
 
 The BFF forwards BYOK headers to digigraph for the request lifetime and never
 logs or returns the raw key. `byokActivationGate` + Vitest cover the
-session-only / validation-before-activate contract.
+session-only / validation-before-activate contract. `POST /api/byok/test` is
+rate-limited on both the embed-IP path and the authenticated/session path
+(`checkBffRateLimit`, same unconditional-on-both-paths shape as
+`GET /api/byok/models`) — each call makes an outbound credentialed request to
+the provider using digichat's own egress, so the authenticated path needs a
+ceiling too, not just the anonymous-embed one.
+
+`config/byok-providers.json`'s `keyPrefix`/`fallbackModels` fields are read by
+no runtime code (only `id`/`baseUrl`/`requiresModel` feed
+`digigraph/src/digigraph/llm_auth.py`'s loader) but are checked for parity
+against the hand-written copies in `use-byok-key.ts`
+(`validateBYOKKey`/`byokModelPresets`) by
+`use-byok-key.catalog-parity.test.ts`, so either copy drifting from the
+catalog fails a test instead of drifting silently.
 
 **digithings rule:** digithings tenants use `backend.type: digigraph` only.
 digivault and digisearch are digigraph tools (activity mappers under

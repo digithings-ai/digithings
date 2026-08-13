@@ -153,8 +153,20 @@ export type ByokCliFlowProps = {
   /** Called only after a successful provider ping. Parent holds session memory. */
   onActivate: (key: string, provider: BYOKProvider, model: string) => void;
   onClear?: () => void;
-  /** When BYOK is already active this session. */
+  /** When BYOK is already active this session (a validated key is currently
+   * live). Also gates the "done" step / re-key display — a non-null `active`
+   * renders "BYOK active" text, so it must never be used just to seed the
+   * picker's starting selection. */
   active?: { provider: BYOKProvider; model: string } | null;
+  /**
+   * Non-secret provider/model choice to pre-select the picker with, when no
+   * key is currently active — e.g. restored from the digichat_byok_pref
+   * cookie by useBYOKKey(). Distinct from `active`: this does NOT imply a
+   * live/validated key, so it only seeds the initial provider/model state
+   * and never flips the initial step to "done".
+   */
+  initialProvider?: BYOKProvider;
+  initialModel?: string;
   title?: string;
   className?: string;
 };
@@ -164,18 +176,23 @@ export function ByokCliFlow({
   onActivate,
   onClear,
   active = null,
+  initialProvider,
+  initialModel,
   title,
   className,
 }: ByokCliFlowProps) {
   const [step, setStep] = useState<Step>(active ? "done" : "provider");
   const [provider, setProvider] = useState<BYOKProvider>(
-    active?.provider ?? "openrouter",
+    active?.provider ?? initialProvider ?? "openrouter",
   );
   const [providerHi, setProviderHi] = useState(() =>
-    Math.max(0, BYOK_PROVIDER_LIST.indexOf(active?.provider ?? "openrouter")),
+    Math.max(
+      0,
+      BYOK_PROVIDER_LIST.indexOf(active?.provider ?? initialProvider ?? "openrouter"),
+    ),
   );
   const [inputKey, setInputKey] = useState("");
-  const [model, setModel] = useState(active?.model ?? "");
+  const [model, setModel] = useState(active?.model ?? initialModel ?? "");
   const [modelHi, setModelHi] = useState(0);
   const [customModel, setCustomModel] = useState(false);
   const [error, setError] = useState<string | null>(null);

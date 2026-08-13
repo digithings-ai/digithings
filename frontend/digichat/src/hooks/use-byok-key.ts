@@ -90,8 +90,15 @@ const BYOK_PREF_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year — non-secret pr
 /** Non-secret provider+model choice, persisted so a returning visitor's picker opens
  * pre-selected. The key itself is NEVER written here — see useBYOKKey's own doc
  * comment. Plain client-side cookie (not httpOnly): read/write directly from the
- * browser, no server round-trip, works on the anonymous /embed surface exactly
- * like the authenticated app shell. */
+ * browser, no server round-trip.
+ *
+ * Known limitation on /embed: that surface is a cross-site iframe, where
+ * `document.cookie` access is blocked or partitioned by default in Safari and
+ * Firefox, and needs `Partitioned` (CHIPS) in Chrome to survive third-party-
+ * cookie blocking. This preference silently won't persist there in a
+ * cookie-blocking browser — nothing breaks, the picker just falls back to its
+ * default. CHIPS is out of scope here; the authenticated app shell (not a
+ * cross-site iframe) is unaffected. */
 export function readByokPrefCookie(): { provider: BYOKProvider; model: string } | null {
   if (typeof document === "undefined") return null;
   const match = document.cookie
@@ -111,7 +118,22 @@ export function readByokPrefCookie(): { provider: BYOKProvider; model: string } 
 export function writeByokPrefCookie(provider: BYOKProvider, model: string): void {
   if (typeof document === "undefined") return;
   const value = encodeURIComponent(JSON.stringify({ p: provider, m: model }));
-  document.cookie = `${BYOK_PREF_COOKIE}=${value}; path=/; max-age=${BYOK_PREF_COOKIE_MAX_AGE}; SameSite=Lax`;
+  // `; Secure` only when actually on https — an unconditional Secure would silently
+  // stop the browser from storing the cookie at all on local http dev (and in any
+  // test environment whose document URL isn't https), breaking the whole feature
+  // there rather than just tightening it in production.
+  const secure =
+    typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${BYOK_PREF_COOKIE}=${value}; path=/; max-age=${BYOK_PREF_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+}
+
+/** Delete the preference cookie outright (not a rewrite to a default value) —
+ * used by clearKey() below. Must match writeByokPrefCookie's `path=/` exactly:
+ * a cookie is keyed by (name, path), so a delete without a matching path
+ * leaves the original untouched instead of removing it. */
+export function deleteByokPrefCookie(): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${BYOK_PREF_COOKIE}=; path=/; max-age=0`;
 }
 
 /** A single model entry once live catalog data exists (Task 8+). Falls back to a
@@ -184,7 +206,15 @@ export function useBYOKKey() {
     setState({ key, provider, model, isSet: key.length > 0 });
   }, []);
 
-  const clearKey = useCallback(() => setKey("", "openrouter", ""), [setKey]);
+  const clearKey = useCallback(() => {
+    // Not setKey("", "openrouter", "") — that routes through writeByokPrefCookie
+    // and would silently reset the remembered provider/model preference to
+    // openrouter instead of removing it. "Clear my key" must not touch the
+    // preference cookie at all beyond deleting it outright.
+    purgeDurableByokKeys();
+    deleteByokPrefCookie();
+    setState(emptyByokState());
+  }, []);
 
   return { ...state, setKey, clearKey };
 }
