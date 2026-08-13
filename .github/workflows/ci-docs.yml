@@ -4,19 +4,15 @@ name: "CI: docs"
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    paths:
-      - "docs/**"
-      - "**/*.md"
-      - "agents.yml"
-      - "agents/**"
-      - ".cursor/**"
-      - ".github/copilot-instructions.md"
-      - "scripts/check_doc_links.py"
-      - "scripts/agents_init.py"
-      - ".github/workflows/ci-docs.yml"
-      - ".github/workflows/*.md"
-      - ".github/workflows/*.lock.yml"
+  # No path filter on pull_request: a workflow-level path filter means the
+  # check never posts a status on PRs outside these paths, and GitHub then
+  # blocks merge forever waiting on a check that will never run once this
+  # name is added to develop's required status checks (see CLAUDE.md §
+  # Branching model). Push keeps its path filter since that only affects
+  # direct-push runs, not PR-merge gating. The job itself is cheap
+  # (doc-link scan + agents-init --check), so running it unconditionally
+  # costs little.
+  pull_request: {}
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}

@@ -11,12 +11,13 @@ on:
       # workflow. Without it, edits here ship unverified — the component lanes
       # already do this via scripts/ci_paths.yaml, this one had been missed.
       - ".github/workflows/ci-type-check.yml"
-  pull_request:
-    paths:
-      - "digibase/**"
-      - "digikey/**"
-      - "mypy.ini"
-      - ".github/workflows/ci-type-check.yml"
+  # No path filter on pull_request: a workflow-level path filter means the
+  # check never posts a status on PRs outside these paths, and GitHub then
+  # blocks merge forever waiting on a check that will never run if this name
+  # is ever added to develop's required status checks (see CLAUDE.md §
+  # Branching model). Push keeps its path filter since that only affects
+  # direct-push runs, not PR-merge gating.
+  pull_request: {}
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}

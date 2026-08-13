@@ -23,7 +23,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/")
+AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/", "task/", "claude/")
+# Kept in sync with scripts/agent_pr_checks.py and
+# scripts/verify_agent_automerge_pr.py by hand (three separate copies of this
+# tuple — flagged by CodeRabbit on #2341 as worth centralizing; not done here
+# to keep this fix minimal, but the next branch-prefix change should define it
+# once and import it in all three places).
 COPILOT_REVIEW_LOGINS = frozenset({"copilot", "copilot-swe-agent", "copilot-swe-agent[bot]"})
 ISSUE_LINK_RE = re.compile(r"(?i)(?:fixes|closes|resolves)\s+#(\d+)")
 FINALIZER_MARKER = "**Agent PR finalizer**"
