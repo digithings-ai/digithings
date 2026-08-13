@@ -225,6 +225,7 @@ real node executions rather than compiled graph nodes.
 | `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
 | `digi_subject` | `str \| None` | JWT subject; namespaces the cross-thread Store (see §5.5) and the checkpoint `thread_id`. Client-writable on `WorkflowRequest`, but `server.py`'s `_digi_fields_from_request` unconditionally overwrites it — to the verified `auth.subject` when present and non-empty, else `None` (no auth, or an auth object with an empty subject claim) — before it reaches graph state; see §6.10 |
 | `allowed_tool_names` | `list[str] \| None` | Tool allowlist; `None` = unrestricted |
+| `require_tool_calls` | `bool` | Deployment-grain `tool_choice="required"` mandate — see `tool_policy.require_tool_calls_for_workflow`. **Must** be declared — LangGraph drops undeclared keys. |
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
 | `strategy_params` | `dict[str, Any]` | Optional pre-filled digiquant parameters |
@@ -262,6 +263,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `session_id` | `str \| None` | Maps to LangGraph `thread_id` |
 | `request_id` | `str \| None` | Taken from `X-Request-ID` when omitted |
 | `allowed_tools` | `list[str] \| None` | Overrides project/env allowlist |
+| `require_tool_calls` | `bool \| None` | Combined with project config / env as a FLOOR — can only raise, never lower, the deployment's mandate; see 4.1 |
 | `trading_profile` | `dict \| None` | Maps to `optimization_constraints` |
 | `strategy_params` | `dict \| None` | Skip LLM param extraction |
 | `research_filters` | `list[dict] \| None` | Injected into digisearch calls |
@@ -312,6 +314,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
+| `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
 
 ---
 
@@ -573,7 +576,7 @@ When an allowlist is active, `execute()` in `registry.py:106` rejects denied too
 
 An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. `None` means unrestricted.
 
-### 6.2.1 Tool Choice Requirement
+#### 6.2.1 Tool Choice Requirement
 
 `agents.require_tool_calls` (bool, default `false`) forces `tool_choice="required"`
 on every tool-calling turn in `research_node`'s `run_tools()` call — for deployments
@@ -583,6 +586,17 @@ override, by `tool_policy.require_tool_calls_for_workflow()`: project config or
 `DIGI_REQUIRE_TOOL_CALLS` wins over a request/`X-Require-Tool-Calls` header value
 of `false` — deliberately the opposite precedence from `agents.allowed_tools`,
 since this flag has no registry-bounded ceiling the way a tool allowlist does.
+
+Forcing `tool_choice="required"` also changes the cost and failure shape of the
+round budget described above. With it off, `tool_calls` can come back empty and
+`run_tools()` returns early, so `max_tool_rounds` is a ceiling the model rarely
+exhausts; with it on, `tool_calls` is never empty, the early return is
+unreachable, and the budget becomes a fixed cost — with `research.py`'s current
+`max_tool_rounds=4`, every request with `require_tool_calls: true` makes exactly
+5 completion calls and 4 tool executions, not "up to." It also changes what
+happens when a model can't comply: a provider that rejects forced tool use for
+that model now returns a hard error for the whole request, rather than the model
+quietly answering without tools the way a tool-incapable model degrades today.
 
 ### 6.3 Code Execution Gate
 
@@ -836,6 +850,7 @@ digigraph:
 | `DIGI_WORKFLOW_PROFILE` | `full_stack` | Workflow profile when not set in project config |
 | `DIGI_RESEARCH_BRIEF` | (unset → YAML / default on) | Override `agents.research_brief`: `0`/`false` skips ResearchBrief post-pass |
 | `DIGI_ALLOWED_TOOLS` | (empty) | Comma-separated allowlist (env fallback) |
+| `DIGI_REQUIRE_TOOL_CALLS` | (empty) | Force `tool_choice="required"` deployment-wide: `1`/`true` |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
 | `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |

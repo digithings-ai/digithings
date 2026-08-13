@@ -1096,6 +1096,36 @@ def test_stream_deltas_narration_alongside_tool_call_emits_round_boundary() -> N
     assert boundaries[0] == {"round_idx": 0, "narration": "I will load the notes."}
 
 
+def test_stream_deltas_forwards_tool_choice_required() -> None:
+    """tool_choice='required' reaches the wire on the STREAMING path — the only
+    path production ever takes for this parameter (research.py always passes
+    on_tool_step, which forces stream_deltas=True in digigraph's wrapper)."""
+    round1 = [
+        _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup")]),
+        _stream_chunk(tool_calls=[_tc_fragment(0, arguments='{"q":')]),
+        _stream_chunk(tool_calls=[_tc_fragment(0, arguments=' "x"}')]),
+    ]
+    round2 = [_stream_chunk(content="final "), _stream_chunk(content="answer")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1, round2]
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool=lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: None,
+            stream_deltas=True,
+            tool_choice="required",
+        )
+    assert out == "final answer"
+    # First round has tools attached, so tool_choice must be on the wire.
+    first_call_kwargs = fake_client.chat.completions.create.call_args_list[0][1]
+    assert first_call_kwargs["tool_choice"] == "required"
+
+
 def test_stream_deltas_default_false_uses_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without stream_deltas, turns are produced by the non-streaming chat_completion."""
     fn = MagicMock()
