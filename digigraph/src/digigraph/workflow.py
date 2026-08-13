@@ -156,7 +156,7 @@ def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     graph = build_workflow_graph()
     initial: dict[str, Any] = _initial_graph_state(req, workflow_id)
     config: dict = _graph_thread_config(req)
-    final = graph.invoke(initial, config=config)
+    final = graph.invoke(initial, config=config, durability="sync")
     dg_audit_log(
         "workflow_end",
         agent_id="digigraph",
@@ -264,7 +264,7 @@ def run_digigraph_workflow_via_stream(req: WorkflowRequest) -> WorkflowResult:
     graph = build_workflow_graph()
     initial = _initial_graph_state(req, workflow_id)
     config = _graph_thread_config(req)
-    for _ in graph.stream(initial, config=config, stream_mode="updates"):
+    for _ in graph.stream(initial, config=config, stream_mode="updates", durability="sync"):
         pass
     snapshot = graph.get_state(config)
     final = (snapshot.values if snapshot else None) or {}
@@ -424,7 +424,9 @@ def run_digigraph_workflow_streaming(
                 "stream_callback": stream_callback,
             },
         }
-        for update in graph.stream(initial, config=config, stream_mode="updates"):
+        for update in graph.stream(
+            initial, config=config, stream_mode="updates", durability="sync"
+        ):
             if cancel_event is not None and cancel_event.is_set():
                 event_queue.put(("done", None))
                 return
