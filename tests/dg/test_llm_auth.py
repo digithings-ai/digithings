@@ -286,3 +286,49 @@ class TestByokGuardOverHttp:
     def test_no_byok_header_is_untouched(self) -> None:
         """The guard must only fire when a key is actually present."""
         assert self._client().get("/healthz").status_code == 200
+
+
+@pytest.mark.unit
+class TestByokCatalogLoad:
+    """The catalog is loaded once at import time and fails loudly, not silently.
+
+    DEVIATION FROM THE ORIGINAL TASK SPEC — see task-a2-report.md for detail:
+    the originally-specified test drove this through
+    ``importlib.reload(llm_auth)`` with ``monkeypatch.setattr(llm_auth,
+    "_BYOK_CATALOG_PATH", ...)``. That pattern is self-contradictory against
+    the loader's own (correct, and required) production behavior — a
+    module-level constant unconditionally recomputed from ``Path(__file__)``
+    on every exec — and was confirmed empirically, not just by inspection:
+    the first ``importlib.reload`` inside ``pytest.raises`` recomputes the
+    *real* catalog path before ``_load_byok_catalog`` ever sees the
+    monkeypatched one, so the expected exception never fires. Making the
+    module remember the monkeypatched path across reload (e.g. a
+    ``globals().get(...)`` guard) fixes that, but then the very next line in
+    the same test — the "restore the real module state" reload — reloads
+    again while the monkeypatch is *still active* (monkeypatch only undoes
+    at fixture teardown, after the test body returns) and raises the same
+    exception a second time, uncaught, failing the test outright. Nothing in
+    the module's own state can tell that second reload apart from the
+    first. Both variants were run against this exact test file to confirm
+    before choosing this replacement.
+
+    So this class instead drives ``_load_byok_catalog`` directly — the exact
+    function ``_BYOK_BASE_URLS``/``BYOK_MODEL_REQUIRED_PROVIDERS`` are built
+    from at import time (see the unconditional module-level call right below
+    its definition) — which exercises the identical fail-loud behavior
+    without the reload/monkeypatch contradiction.
+    """
+
+    def test_missing_catalog_file_raises(self, tmp_path) -> None:
+        from digigraph.llm_auth import _load_byok_catalog
+
+        with pytest.raises(FileNotFoundError):
+            _load_byok_catalog(tmp_path / "does-not-exist.json")
+
+    def test_malformed_catalog_raises(self, tmp_path) -> None:
+        from digigraph.llm_auth import _load_byok_catalog
+
+        bad = tmp_path / "byok-providers.json"
+        bad.write_text("not json", encoding="utf-8")
+        with pytest.raises(ValueError):
+            _load_byok_catalog(bad)
