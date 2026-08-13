@@ -1990,7 +1990,11 @@ def run_tools(
         max_tool_rounds: Maximum tool rounds before forcing a final answer.
         on_tool_step: Optional callback invoked with ``("tool_call", {name,
             arguments})`` before each call and ``("tool_result", {name, content,
-            ...})`` after.
+            ...})`` after. Also receives ``("round_boundary", {round_idx,
+            narration})`` at the end of each tool round — consumers may handle or
+            ignore it. With ``stream_deltas`` enabled, narration content deltas
+            were already emitted before ``round_boundary``; without streaming,
+            ``round_boundary`` is the only callback that exposes that narration.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.

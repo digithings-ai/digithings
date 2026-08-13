@@ -413,10 +413,10 @@ def test_main_requires_cloudflare_credentials_for_a_real_run(
 
     monkeypatch.setattr(d1_store_module, "D1Store", _FakeD1Store)
 
-    with pytest.raises(SystemExit):
-        vectorize_sync_module.main(
-            ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
-        )
+    rc = vectorize_sync_module.main(
+        ["--prefix", "clients/acme", "--index", "acme-docs", "--database", "db-1"]
+    )
+    assert rc == 1
 
 
 def test_dry_run_makes_zero_embed_calls(

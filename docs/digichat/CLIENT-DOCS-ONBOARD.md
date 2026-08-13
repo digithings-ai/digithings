@@ -137,8 +137,10 @@ Profile A digivault typically mounts a Compose volume at `/data/vault`. Point
 `digivault_search_notes` reads them.
 
 digivault's search precedence is **D1 → local filesystem → Supabase FTS**: D1
-wins whenever `D1_DATABASE_MAP` is configured (even over a `DIGIVAULT_ROOT` set
-for local iteration); otherwise `DIGIVAULT_ROOT`, when set, searches the local
+wins only when `_d1_configured()` is true — resolved account ID, resolved API
+token, **and** `D1_DATABASE_MAP` are all set (even over a `DIGIVAULT_ROOT` set
+for local iteration). Partial D1 configuration raises `D1StoreError` rather
+than falling back. Otherwise `DIGIVAULT_ROOT`, when set, searches the local
 filesystem; Supabase FTS is the last-resort fallback. See
 [`digivault/ARCHITECTURE.md`](../../digivault/ARCHITECTURE.md).
 

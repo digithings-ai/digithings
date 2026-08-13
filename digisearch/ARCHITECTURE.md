@@ -818,7 +818,7 @@ The reranker is not wired into the production `POST /query` path. It is availabl
 
 ### Index backends (production inventory)
 
-**Production:** Chroma (local persistent or HTTP), Azure AI Search, and Cloudflare Vectorize (`VectorizeBackend`) — the production Cloudflare Container runs Vectorize exclusively (Chroma is unset once `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN`, or the legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`, are present); Docker Compose deployments still default to Chroma.
+**Production:** Chroma (local persistent or HTTP), Azure AI Search, and Cloudflare Vectorize (`VectorizeBackend`) — the production Cloudflare Container runs Vectorize exclusively (Chroma is unset once remote-index credentials resolve: canonical `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN`, then legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`, then `D1_ACCOUNT_ID`/`D1_API_TOKEN` as a supported fallback for the same account/token pair); Docker Compose deployments still default to Chroma.
 
 **Not in production:** `FAISSBackend` (`indexes/backends/faiss.py`) and `PineconeBackend` are unregistered stubs — do not enable without a new ADR and registry wiring.
 

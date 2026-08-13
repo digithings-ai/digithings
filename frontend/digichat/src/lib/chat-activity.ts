@@ -69,6 +69,12 @@ export type ActivitySpan = {
    */
   documentsWithheld?: boolean;
   brief?: ActivityBrief;
+  /**
+   * Upstream hit count when source mapping yielded no documents (e.g. digisearch
+   * returned sources without usable path/title). Used only when `documents` is
+   * empty so a positive search is not misreported as "no hits".
+   */
+  hitCount?: number;
 };
 
 const OPERATIONS = ["execute_tool", "retrieve", "chat"] as const;
@@ -191,6 +197,14 @@ export function sanitizeActivitySpan(input: unknown): ActivitySpan | null {
 
   const documentsWithheld = bool(record.documentsWithheld);
   if (documentsWithheld) span.documentsWithheld = documentsWithheld;
+
+  if (
+    typeof record.hitCount === "number" &&
+    Number.isFinite(record.hitCount) &&
+    record.hitCount > 0
+  ) {
+    span.hitCount = Math.trunc(record.hitCount);
+  }
 
   return span;
 }
@@ -353,12 +367,20 @@ export function toDigiChatActivity(
       // would misreport a real result as "no hits" (the shared UI renders
       // count === 0 as the literal string `no hits for "…"`). Render an
       // honest "search happened" status row instead of a fabricated count.
+      // When mapping dropped every source but upstream hit_count was positive,
+      // prefer that count over documents.length so the UI does not say "no hits".
+      const count =
+        hits.length > 0
+          ? hits.length
+          : typeof span.hitCount === "number" && span.hitCount > 0
+            ? span.hitCount
+            : 0;
       const result: DigiChatActivity = span.documentsWithheld
         ? {
             kind: "status",
             message: query ? `Found results for "${query}".` : "Search completed.",
           }
-        : { kind: "tool_result", name, query, hits, count: hits.length };
+        : { kind: "tool_result", name, query, hits, count };
       const idx = toolRows.get(key);
       if (idx !== undefined) {
         const existing = rows[idx];

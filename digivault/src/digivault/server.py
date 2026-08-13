@@ -739,12 +739,17 @@ def orchestrator_invoke(
         if is_batch:
             # Dedup while preserving order — a model that lists the same page twice
             # (e.g. copy-paste across two search hits) should not pay for it twice.
+            # Key on normalize_vault_path so "a/b" and "a/b.md" (or trailing slash)
+            # collapse to one fetch; keep the first raw form for the downstream call.
             seen: set[str] = set()
             vault_path_list: list[str] = []
             for raw_path in vault_paths_arg:
                 p = str(raw_path or "").strip()
-                if p and p not in seen:
-                    seen.add(p)
+                if not p:
+                    continue
+                key = normalize_vault_path(p) or p
+                if key not in seen:
+                    seen.add(key)
                     vault_path_list.append(p)
             if not vault_path_list:
                 return OrchestratorInvokeResponse(

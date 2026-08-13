@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { MouseEvent, ReactNode } from "react";
 import { DT_CONTACT_EMAIL } from "@/app/_nav";
 
@@ -21,11 +21,11 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  * build served without Cloudflare in front of it.
  *
  * Rendering with no literal mailto: string or bare address in the initial
- * HTML at all — an inert `href="#"` server-side, the real href (and,
- * for `showAddress`, the address text) assigned after mount — gives
- * Cloudflare's rewriter nothing to rewrite, so server and client agree.
- * Real users with JS still get a working mailto: link; without JS the link
- * is inert, the same tradeoff any client-only-assigned href accepts.
+ * HTML at all — no href server-side, the real href (and, for `showAddress`,
+ * the address text) assigned after mount — gives Cloudflare's rewriter
+ * nothing to rewrite, so server and client agree. Real users with JS still
+ * get a working mailto: link; without JS the link is inert, the same
+ * tradeoff any client-only-assigned href accepts.
  *
  * `showAddress` callers must still pass `children` — a non-address fallback
  * ("Email us", "us", …) that server-renders as the link's visible text and
@@ -34,16 +34,8 @@ import { DT_CONTACT_EMAIL } from "@/app/_nav";
  * empty and unlabeled until JS runs — a discernible-text regression, not
  * the documented "inert without JS" tradeoff above.
  *
- * WCAG 1 fix (full-UI-suite critique, digithings-web target): the inert
- * pre-mount state looked IDENTICAL to a working link — a click before the
- * effect below runs (slow connection, or permanently for a no-JS visitor)
- * silently jumped to "#", on the page's only conversion mechanism (every
- * "Email us"/"Enterprise"/"Or email us directly" CTA routes through this
- * component). The pending look (dimmed, aria-disabled) is baked into the
- * JSX unconditionally, in token-backed Tailwind utilities, and cleared by
- * mutating the mounted DOM node directly in the same effect that already
- * assigns the real href two lines below — the same pattern already applied
- * to frontend/digiquant-web's copy of this component, PR #2283.
+ * Pending look (dimmed, aria-disabled) is driven from React state so
+ * className / aria-disabled stay synchronized with click prevention.
  */
 
 /** Pure so the query-string assembly is unit-testable without rendering. */
@@ -77,34 +69,31 @@ export function ContactMailto({
   showAddress?: boolean;
   children?: ReactNode;
 }) {
-  const ref = useRef<HTMLAnchorElement>(null);
+  const [readyHref, setReadyHref] = useState<string | null>(null);
+  const [addressText, setAddressText] = useState<string | null>(null);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.href = buildMailtoHref(DT_CONTACT_EMAIL, subject);
-    if (showAddress) el.textContent = DT_CONTACT_EMAIL;
-    el.classList.remove(...PENDING_CLASSES);
-    el.removeAttribute("aria-disabled");
+    setReadyHref(buildMailtoHref(DT_CONTACT_EMAIL, subject));
+    if (showAddress) setAddressText(DT_CONTACT_EMAIL);
   }, [subject, showAddress]);
 
-  // Reads the live DOM rather than component state, so it keeps swallowing
-  // clicks exactly until the effect above clears aria-disabled -- no state
-  // to fall out of sync with the imperative DOM mutation.
-  const onClick = useCallback((e: MouseEvent<HTMLAnchorElement>) => {
-    if (ref.current?.getAttribute("aria-disabled") === "true") e.preventDefault();
-  }, []);
+  const pending = readyHref === null;
+  const onClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      if (pending) e.preventDefault();
+    },
+    [pending],
+  );
 
   return (
     <a
-      ref={ref}
-      href="#"
-      className={[className, ...PENDING_CLASSES].filter(Boolean).join(" ")}
+      {...(readyHref ? { href: readyHref } : {})}
+      className={[className, ...(pending ? PENDING_CLASSES : [])].filter(Boolean).join(" ")}
       aria-label={ariaLabel}
-      aria-disabled="true"
+      aria-disabled={pending ? true : undefined}
       onClick={onClick}
     >
-      {children}
+      {addressText ?? children}
     </a>
   );
 }

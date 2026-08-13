@@ -224,8 +224,9 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> OpenAITo
         "function": {
             "name": TOOL_DIGISEARCH_FETCH_ALL,
             "description": (
-                "Fetch ALL matching documents by paginating automatically. Use when the user asks for 'all' results "
-                "(e.g. all emails from user X, all emails mentioning a subject). Guarantees complete result set. "
+                "Fetch ALL matching documents by paginating automatically. Use when the user asks for "
+                "a complete result set across this corpus (e.g. every matching document for a filter, "
+                "or all hits for a subject). Guarantees complete result set. "
                 f"Index: {index_name}.{filterable_hint}"
             ),
             "parameters": {
@@ -266,7 +267,15 @@ def build_fetch_all_tool(index_config: dict[str, Any] | None = None) -> OpenAITo
                     "order_by": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "Sort clauses, e.g. ['sentDateTime desc'].",
+                        "description": (
+                            "Sort clauses over filterable fields, e.g. "
+                            + (
+                                f"['{filterable[0]} desc']"
+                                if filterable
+                                else "['search.score() desc']"
+                            )
+                            + "."
+                        ),
                     },
                     "max_results": {
                         "type": "integer",

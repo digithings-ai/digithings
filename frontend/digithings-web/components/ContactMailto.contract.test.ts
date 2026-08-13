@@ -30,7 +30,8 @@ describe("ContactMailto contracts", () => {
     const returnBlock = src.slice(src.indexOf("return ("), src.lastIndexOf(");"));
     expect(returnBlock).not.toContain("mailto:");
     expect(returnBlock).not.toContain(DT_CONTACT_EMAIL);
-    expect(returnBlock).toContain('href="#"');
+    expect(returnBlock).not.toContain('href="#"');
+    expect(returnBlock).toContain("readyHref");
 
     // Outside the doc comment, the only literal "mailto:" in the file is the
     // template-string prefix inside buildMailtoHref -- not duplicated inline
@@ -65,7 +66,7 @@ describe("ContactMailto contracts", () => {
     const path = fileURLToPath(new URL("./ContactMailto.tsx", import.meta.url));
     const src = readFileSync(path, "utf8");
     expect(src).not.toMatch(/showAddress\s*\?\s*null/);
-    expect(src).toContain("{children}");
+    expect(src).toContain("{addressText ?? children}");
   });
 
   it("gives every showAddress call site non-empty fallback text, not a self-closing tag", () => {
