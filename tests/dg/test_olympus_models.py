@@ -40,8 +40,8 @@ _CHEAP_PHASE_MODELS = frozenset(
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        "openrouter/google/gemini-3.7-flash",
-        "openrouter/openai/gpt-5-mini",
+        "openrouter/google/gemini-2.5-flash",
+        "openrouter/openai/gpt-4o-mini",
         "openrouter/x-ai/grok-4.3",
     }
 )
@@ -49,9 +49,9 @@ _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
         "openrouter/deepseek/deepseek-v4-pro",  # #1622
-        "openrouter/openai/gpt-5-mini",
+        "openrouter/openai/gpt-4o",
         "openrouter/anthropic/claude-sonnet-4.6",
-        "openrouter/google/gemini-3.7-flash",
+        "openrouter/google/gemini-2.5-flash",
         "openrouter/x-ai/grok-4.3",
     }
 )
@@ -64,8 +64,9 @@ _WEB_SEARCH_MODELS = frozenset(
         "openrouter/deepseek/deepseek-v4-flash:online",  # #1622
         "openrouter/deepseek/deepseek-r1:online",
         "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/google/gemini-3.7-flash:online",
-        "openrouter/openai/gpt-5-mini:online",
+        "openrouter/google/gemini-2.5-flash:online",
+        "openrouter/openai/gpt-4o-mini:online",
+        "openrouter/openai/gpt-4o:online",
         "openrouter/anthropic/claude-sonnet-4.6:online",
     }
 )
@@ -195,7 +196,7 @@ def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPa
     cfg = model_config._load_olympus_models()
     balanced = cfg.tiers["balanced"]
     research = balanced.allowed_models["research"]
-    assert any("gpt-5-mini" in m for m in research)
+    assert any("gpt-4o-mini" in m for m in research)
     assert any("gemini" in m for m in research)
     model = get_model_for_phase("macro")
     assert model is not None

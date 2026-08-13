@@ -71,18 +71,23 @@ tiers:
       - "openrouter/meta-llama/llama-4-maverick:online"
 
   balanced:
+    # openai/gpt-5-mini tried 2026-08-13 (#2363): endpoint gate failed — tools call
+    # returned an empty body twice (no tool_calls, no content). Reverted to
+    # gpt-4o-mini, the gate-proven slug. Re-try gpt-5-mini only once OpenRouter's
+    # function-tool endpoint for it stops returning empty completions.
+    # google/gemini-3.7-flash tried 2026-08-13 (#2363): endpoint gate failed —
+    # json_schema output was not valid JSON (returned prose, "Here is the...",
+    # instead of a structured object). Reverted to gemini-2.5-flash, the
+    # gate-proven slug.
     openrouter:
-      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,z-ai/*,openai/gpt-5-mini*,perplexity/*"
+      allowed_models: "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,z-ai/*,openai/gpt-4o-mini*,perplexity/*"
       cost_quality_tradeoff: 7
-    # #2363: gpt-4o-mini -> gpt-5-mini, gemini-2.5-flash -> gemini-3.7-flash. Both are
-    # currency swaps (prior slugs superseded on OpenRouter), not policy changes — pending
-    # validate-olympus-pools.yml as the pass/fail gate on the new endpoints.
     allowed_models:
       extraction:
         - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/google/gemini-3.7-flash"
-        - "openrouter/openai/gpt-5-mini"
+        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/openai/gpt-4o-mini"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
         - "openrouter/deepseek/deepseek-chat"
@@ -92,52 +97,54 @@ tiers:
         # retry (the #1006 empty-completion class). Re-add a GLM only after
         # glm-5.2/glm-5-turbo passes the gate consistently.
         - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/google/gemini-3.7-flash"
+        - "openrouter/google/gemini-2.5-flash"
         - "openrouter/x-ai/grok-4.3"
-        - "openrouter/openai/gpt-5-mini"
+        - "openrouter/openai/gpt-4o-mini"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/x-ai/grok-4.3"
-        - "openrouter/google/gemini-3.7-flash"
+        - "openrouter/google/gemini-2.5-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/deepseek/deepseek-chat:online"
-      - "openrouter/google/gemini-3.7-flash:online"
-      - "openrouter/openai/gpt-5-mini:online"
+      - "openrouter/google/gemini-2.5-flash:online"
+      - "openrouter/openai/gpt-4o-mini:online"
 
   quality:
     openrouter:
       allowed_models: "deepseek/*,meta-llama/*,mistralai/*,openai/*,google/*,anthropic/*,x-ai/*,z-ai/*,perplexity/*"
       cost_quality_tradeoff: 0
-    # #2363: gpt-4o -> gpt-5-mini, gemini-2.5-flash -> gemini-3.7-flash (currency swaps,
-    # pending validate-olympus-pools.yml). claude-sonnet-4.6 and grok-4.3 kept as-is —
-    # no evidence they're superseded; re-verify against the gate rather than guess a slug.
     allowed_models:
       extraction:
         - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/openai/gpt-5-mini"
-        - "openrouter/google/gemini-3.7-flash"
+        - "openrouter/openai/gpt-4o-mini"
+        - "openrouter/google/gemini-2.5-flash"
         - "openrouter/anthropic/claude-sonnet-4.6"
       research:
         - "openrouter/deepseek/deepseek-v4-pro"
-        - "openrouter/openai/gpt-5-mini"
+        # openai/gpt-5-mini tried here too 2026-08-13 (#2363) as a gpt-4o replacement:
+        # same failure as the balanced-tier attempt — tools call returned an empty
+        # body twice. gpt-4o remains the gate-proven OpenAI slug for this tier.
+        - "openrouter/openai/gpt-4o"
         - "openrouter/anthropic/claude-sonnet-4.6"
         # No Gemini Pro entry: the endpoint gate failed three Pro variants in a row
         # (2.5-pro: non-JSON under strict json_schema; 3-pro-preview: 404 rotated out;
-        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-3.7-flash (#2363,
-        # supersedes 2.5-flash) is the gate-proven Google slug — it carries Google
-        # coverage here; re-verify against the gate before adding a Pro variant back.
-        - "openrouter/google/gemini-3.7-flash"
+        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-2.5-flash is the one
+        # gate-proven Google slug — it carries Google coverage here. gemini-3.7-flash
+        # was also tried 2026-08-13 (#2363) and failed the same way as 2.5-pro
+        # (non-JSON prose under strict json_schema) — still no Gemini slug newer than
+        # 2.5-flash clears the gate.
+        - "openrouter/google/gemini-2.5-flash"
         - "openrouter/x-ai/grok-4.3"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-pro"
         - "openrouter/anthropic/claude-sonnet-4.6"
-        - "openrouter/openai/gpt-5-mini"
+        - "openrouter/openai/gpt-4o"
         - "openrouter/x-ai/grok-4.3"
     web_search_models:
       - "openrouter/perplexity/sonar"
-      - "openrouter/openai/gpt-5-mini:online"
+      - "openrouter/openai/gpt-4o:online"
       - "openrouter/deepseek/deepseek-r1:online"
       - "openrouter/anthropic/claude-sonnet-4.6:online"
 
