@@ -16,6 +16,26 @@
   container-type: inline-size;
 }
 
+/* Each row's screen-reader-only running/roadmap text. Deliberately NOT
+   Tailwind's `.sr-only`: that utility is only emitted into an app whose own
+   source uses the class, so a shared component leaning on it renders a
+   plain visible span in any app that does not — exactly the bug already
+   hit once on digithings.ai (see terminal-loaders.css's .tl-sr, the same
+   fix for the same reason). A component's a11y cannot depend on the
+   consumer's build config, so the rule ships here with the component that
+   needs it. */
+.tm-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+
 .tm-pane {
   /* two-colour mix — no token utility */
   background: color-mix(in srgb, var(--surface) 70%, transparent);

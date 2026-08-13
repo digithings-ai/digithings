@@ -89,6 +89,32 @@ roughly $1.00–$1.50 a run, so a review on every push is a real monthly cost. T
 Copilot request job was removed from `ci.yml` when that subscription lapsed
 (#1894) — it had been reporting success while attaching no reviewer.
 
+**CodeRabbit reviews automatically, but only on branches it is told about.** It
+auto-reviews the default branch (`develop`) plus whatever `base_branches` lists
+in [`.coderabbit.yaml`](.coderabbit.yaml) — currently `main`, `module/*` and
+`release/*`. Before that file existed it reviewed **only** `develop`, and said so
+only in a small "Review skipped" comment, so two classes of PR were silently
+unreviewed: every two-hop task PR (`task/<N>-slug` → `module/<component>`), which
+is precisely where this section argues review belongs, and every promotion PR
+into `main` (verified on #2231, #2232, #2242 — skip notice, zero reviews).
+
+So, in practice:
+
+| PR | automatic CodeRabbit review? |
+|----|------------------------------|
+| anything → `develop` | yes (default branch) |
+| `task/<N>-slug` → `module/<component>` | yes, via `.coderabbit.yaml` |
+| `develop` → `main` (promotion) | yes, via `.coderabbit.yaml` |
+| anything → an unlisted base | **no** — force it with `@coderabbitai review` |
+
+`@coderabbitai review` forces a review on any PR regardless, and
+`@coderabbitai configuration` prints the resolved config annotated with which
+layer supplied each setting — use it rather than guessing, since an organization
+Global Override outranks the repo file. A **passing CodeRabbit status check is
+not the same as an approving review**: it can sit alongside a blocking
+`CHANGES_REQUESTED`, so check `gh pr view --json reviewDecision`, not just checks,
+before merging.
+
 Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
 of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
 review Cursor will quote and the least actionable, since a finding needs a fresh
@@ -143,7 +169,83 @@ PR #1891 was rated **Low** at 2 files and +14/−8, and it shipped two false pub
 claims to production. Gate on paths (`digikey/`, brokers, migrations, workflows)
 and on whether behaviour or a public factual claim changed.
 
-## Dependency version bounds
+## Model & subagent policy
+
+Unpinned subagents inherit the orchestrator's model — an unset `model:` under an
+Opus/Fable session silently runs every subagent at that price. Every subagent
+under `agents/sources/subagents/` already pins one; keep doing it:
+
+| Role | Model | Examples |
+|------|-------|----------|
+| Routing, dispatch, dictation cleanup, small/mechanical verification | haiku, or sonnet when the check has any real complexity — pick by task, not by habit | `component-router`, `dictation-normalizer`, a lint/type-check triage pass |
+| Implementation, spec-writing (the heavy lifting) | sonnet | `spec-writer`, `test-first-implementer` |
+| Review, security audit, architecture judgment — reasoning, big-picture opinion, reflection | opus | the `/review` in-session lenses, `pr-review-toolkit` plugin agents |
+| Ad-hoc design/architecture consult ("advisor" role — a second opinion outside a formal review, a judge-panel comparison of approaches) | opus for anything hard-to-reverse or architecturally significant; sonnet default otherwise | a `Plan`/`Explore` agent, an `AskUserQuestion` decision point with real trade-offs, a "which approach is better" comparison |
+
+There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in
+`agents/sources/` — that job already has three owners (Cursor Bugbot, the
+`/review` command's fresh-context lens fan-out, and the `pr-review-toolkit` and
+`superpowers:requesting-code-review` plugin skills), and a fourth would only add
+ambiguity about which one the harness should pick. Route review work through
+one of those instead of adding a new custom subagent for it.
+
+**Two of those three review paths are not actually pinned — check before trusting
+the table above.** `pr-review-toolkit`'s six agents split: `code-reviewer` and
+`code-simplifier` pin `model: opus`, but `comment-analyzer`, `pr-test-analyzer`,
+`silent-failure-hunter`, and `type-design-analyzer` are `model: inherit` — they
+silently ride whatever the session is on, same as an unpinned custom subagent
+would. The `/review` command's lens fan-out has no subagent file to pin at all
+(it dispatches ad hoc via the `Agent` tool at runtime), so its instructions
+explicitly say to pass `model: opus` on each dispatch rather than leaving it
+implicit — check `agents/sources/commands/review.md` before assuming that still
+holds if the command changes. Don't assume a plugin or ad-hoc dispatch is
+pinned just because a custom subagent would be; verify the specific agent file.
+
+**Advisors get the same treatment as review, not the implementation default.**
+A second-opinion/design-consult moment reads like "quick advice," so it's easy to
+let it silently ride the session's tier — but a wrong architectural call costs
+more to unwind than a wrong implementation does, so treat "should I do A or B"
+the same way as a review: name the model explicitly rather than let it default.
+A judge-panel comparison (multiple independent takes scored against each other)
+is exactly the "architecturally significant" case — pin each panelist to opus,
+not whatever the orchestrator happens to be running.
+
+Orchestrator itself: sonnet by default. Reserve opus/fable for the session only
+when the orchestration/decomposition step is the hard part — a hard subagent
+task gets its own opus pin regardless of what the orchestrator runs. This cuts
+both ways: an opus/fable orchestrator does **not** mean its subagents should
+inherit that tier either — most implementation and routing work under an opus
+session should still be pinned down to sonnet/haiku explicitly. "The
+orchestrator is expensive" and "every subagent should be expensive" are
+independent decisions; make each one on its own merits, not by inheritance in
+either direction. Before fanning out more than ~5 subagents in one turn, name
+each one's model out loud; a silent fan-out is how a quota disappears in one
+prompt. Spot-check a subagent's actual model via its transcript
+(`~/.claude/projects/<proj>/<session>/subagents/agent-<id>.jsonl`) after any
+Claude Code upgrade — pins have regressed silently before.
+
+## Context & compaction policy
+
+`.claude/settings.json` sets `autoCompactWindow: 150000` — deliberately tight
+(the allowed range is 100k–1M; unset defaults to a much larger model-tuned
+window). A big context isn't free just because the quota allows it: model
+performance degrades as the window fills, so compacting early is a
+performance choice, not just a cost one. Override per-session with
+`--autocompact` or the `CLAUDE_CODE_AUTO_COMPACT_WINDOW` env var when a task
+genuinely needs more room (e.g. a large migration reading many files at
+once) — don't loosen the committed default for everyone to fix one session.
+
+**Plan compaction points on a long implementation instead of letting it
+happen wherever the window fills.** Before starting multi-step work
+(`/task`, a multi-file migration, a long debugging session), decide up front
+where the natural step boundaries are — after each phase of a plan, after
+each file in a batch, after each subagent's results land — and compact at
+those boundaries deliberately rather than mid-step. Right before compacting,
+write down what the next steps need and nothing else: the specific
+files/lines still to touch, decisions already made and why (not the full
+exploration that led to them), and what's already verified so it isn't
+re-derived. A `TaskUpdate`/todo-list entry or a short note in the turn is
+enough — the goal is that compaction loses exploration, not state.
 
 **Tools whose output gates CI carry an upper bound; runtime libraries do not.**
 
@@ -200,16 +302,9 @@ Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §
 
 Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed).
 
-Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, and `<handle>/<slug>` for a named human contributor. Agent session branches are valid names — `claude/<slug>` pushes fine; it is *linkage*, below, that it does not satisfy.
+Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, and `<handle>/<slug>` for a named human contributor.
 
-The **Check linkage** CI gate (the `Require Fixes` check) is separate from the branch-name rule. It passes on any one of these, in the order `.github/workflows/ci-pr-hygiene.yml` tests them:
-
-1. Head branch is `module/*` — umbrella PR; the underlying task PRs already carried linkage.
-2. Head branch is `docs/*` or `chore/*` — **bypassed outright**, no issue required. A `CLAUDE.md` tweak or a CI dedupe does not need a backlog item.
-3. Head branch is `task/<N>-slug` — implicit link to issue #N.
-4. A `Fixes/Closes/Resolves #N` keyword appears in the PR **body or title** (either one).
-
-So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that still need an explicit keyword — as are the agent namespaces (`claude/<slug>` et al.), which no rule bypasses. Prefer `task/<N>-slug` for issue-linked work, and never `Closes #N` against an umbrella tracking issue you don't want auto-closed — use `Refs #N` when the PR should not close the issue, which satisfies no gate on its own and so pairs with a `docs/`, `chore/`, or `task/` branch.
+**Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 
 ## Liveness vs status
 
@@ -220,6 +315,22 @@ So `feat/<slug>` and `fix/<slug>` are the only name-rule-valid patterns that sti
 
 - **digithings.ai** — Cloudflare Pages via `scripts/build-digithings.sh`. The legacy `static.yml` GitHub Pages workflow was **removed** in the 2026-06 workflow cleanup; do not use GitHub Pages for this domain.
 - **digiquant.io** — Cloudflare Pages git-integration on this monorepo, building `dist/` via `scripts/build-digiquant.sh` from `main` (per `deploy-digiquant-cloudflare.yml`'s header; the Cloudflare dashboard is authoritative). That is the sole delivery path — the split publish repo in [docs/adr/0012-digiquant-io-split-repo.md](docs/adr/0012-digiquant-io-split-repo.md) was never created, and `.github/workflows/deploy-digiquant-cloudflare.yml` is a PR build check, not the deploy.
+
+## Release cadence (release-please)
+
+`release-please-*.yml` workflows (digichat, digiskills, …) propose a release PR on
+every qualifying push to `develop` and keep updating that **same** PR as more
+commits land — that accumulation is the intended design. The version-bump math
+(feat → minor, fix → patch, BREAKING CHANGE → major) is Conventional Commits
+doing its job; don't second-guess it.
+
+**Merging that PR is a separate, deliberate decision — not routine PR hygiene.**
+Treat a green, mergeable release-please PR the same as any other unmerged
+proposal: leave it open until a release is actually intended (e.g. paired with a
+real deploy), not because CI passed. Merging early forecloses accumulation and
+forces the next commit into a brand-new release — three digichat releases (1.1.0,
+1.2.0, and a same-day 1.2.1 proposal) landed within ~48 hours this way, none of
+them tied to a deliberate release decision (2026-08-13).
 
 ## Agent surface
 

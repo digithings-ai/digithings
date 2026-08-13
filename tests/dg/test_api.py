@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -357,3 +358,65 @@ class TestOpenAICompatible:
         assert "<details>" not in body
         assert "Tool:" in body or "digisearch" in body  # neutral formatter
         assert "Answer" in body
+
+
+@pytest.mark.unit
+class TestDigiSubjectTrustBoundary:
+    """CWE-639 IDOR regression (finding: digi_subject reaches the Store namespace
+    unverified). `digi_subject` is a client-writable field on `WorkflowRequest`, used
+    both for checkpoint thread_id scoping and, since Task 7, as the Store namespace
+    key in supervisor_node (a subject's stored response_language preference). Before
+    this fix, server.py's _digi_fields_from_request only overrode digi_subject when
+    auth.subject was truthy -- a conditional-only override that left the client's own
+    value untouched whenever auth was absent, or present with an empty subject claim.
+
+    These tests exercise _with_digi_request_context directly (the function that
+    builds the trusted WorkflowRequest from HTTP request + auth state) with a
+    lightweight fake Request, covering all three trust states. See ARCHITECTURE.md
+    §6.10."""
+
+    @staticmethod
+    def _fake_request(*, digi_auth: object | None) -> SimpleNamespace:
+        state = SimpleNamespace(digi_auth=digi_auth, digi_bearer=None)
+        return SimpleNamespace(state=state, headers={})
+
+    def test_authenticated_real_subject_is_preserved(self) -> None:
+        """(a) Existing behavior preserved: a verified, non-empty auth.subject still
+        wins over -- and overwrites -- whatever the client sent in the request body."""
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        auth = DigiAuthContext(subject="verified-user-1")
+        req = WorkflowRequest(prompt="hi", digi_subject="client-claimed-user")
+        out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
+        assert out.digi_subject == "verified-user-1"
+
+    def test_no_auth_object_forces_digi_subject_to_none(self) -> None:
+        """(b) The core regression: with NO auth object at all on request.state, a
+        client-supplied digi_subject must NOT survive into the returned
+        WorkflowRequest -- it must be forced to None regardless of what the client
+        sent in the request body, since it would otherwise key the Store namespace
+        (supervisor_node) with an unverified, attacker-chosen value."""
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+
+        req = WorkflowRequest(prompt="hi", digi_subject="attacker-controlled-subject")
+        out = _with_digi_request_context(self._fake_request(digi_auth=None), req)
+        assert out.digi_subject is None
+
+    def test_auth_object_with_empty_subject_forces_digi_subject_to_none(self) -> None:
+        """(c) The specific gap CodeRabbit flagged, distinct from (b): an auth object
+        IS present, but its subject claim is empty/falsy. A conditional-only override
+        (`if auth.subject: updates["digi_subject"] = auth.subject`) leaves the
+        "digi_subject" key entirely absent from `updates` in this case, so
+        `req.model_copy(update=updates)` would never touch -- let alone clear -- the
+        client's own digi_subject value. Must still be forced to None."""
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        auth = DigiAuthContext(subject="")
+        req = WorkflowRequest(prompt="hi", digi_subject="attacker-controlled-subject")
+        out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
+        assert out.digi_subject is None

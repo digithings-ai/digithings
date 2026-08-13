@@ -1990,7 +1990,20 @@ def run_tools(
         max_tool_rounds: Maximum tool rounds before forcing a final answer.
         on_tool_step: Optional callback invoked with ``("tool_call", {name,
             arguments})`` before each call and ``("tool_result", {name, content,
-            ...})`` after.
+            ...})`` after. Also receives ``("round_boundary", {round_idx,
+            narration})`` after each tool round that produced non-empty assistant
+            narration — consumers may handle or ignore it. Tool-only rounds
+            (empty narration) deliberately skip this event so callbacks stay
+            ordered ``tool_call`` → ``tool_result`` without a vacuous boundary.
+            With ``stream_deltas`` enabled, narration content deltas were already
+            emitted before ``round_boundary``; without streaming,
+            ``round_boundary`` is the only callback that exposes that narration.
+            Receives ``("round_limit_exhausted", {max_tool_rounds})`` once when
+            ``max_tool_rounds`` is exhausted (every round through the budget still
+            returned tool_calls). This fires regardless of what happens next: a
+            forced tool-free completion only actually runs when the last round's
+            content was empty; when that content was non-empty, it is returned
+            directly as the final answer instead, with no forced completion.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
@@ -2065,6 +2078,26 @@ def run_tools(
         if not tool_calls:
             return content or ""
 
+        if on_tool_step is not None and content:
+            # This round's content already streamed live via on_tool_step("content", ...)
+            # inside _produce_turn, before tool_calls was known — that is unavoidable for
+            # a live per-token stream (buffering the whole round to decide "is this
+            # final" would delay the common single-round, no-tool-call case waiting on
+            # a completion that was never provisional). What was missing is a signal,
+            # emitted the moment tool_calls becomes known, marking that content as NOT
+            # the final answer. Without it, a caller has no way to tell "the model
+            # narrated its plan while also calling tools" apart from "this is the
+            # answer" — confirmed in production (#2306 follow-up): a round's narration
+            # ("I will load the full notes...") streamed as ordinary content and landed
+            # directly in front of the next round's real answer with nothing between
+            # them. Retroactive, not preventive — costs nothing extra token-wise, since
+            # the content already streamed before this fires.
+            #
+            # Empty-narration tool rounds deliberately skip this callback: there is no
+            # streamed content to demote, and emitting a vacuous boundary would reorder
+            # consumer callbacks ahead of tool_call (see digigraph rag_stream tests).
+            on_tool_step("round_boundary", {"round_idx": round_idx, "narration": content})
+
         asst_entries: list[ToolCallDict] = []
         for tc in tool_calls:
             name, args_str = _extract_tool_call(tc)
@@ -2113,7 +2146,15 @@ def run_tools(
             for tc_id, name, args in parsed:
                 if on_tool_step is not None:
                     on_tool_step("tool_call", {"name": name, "arguments": args})
-                ordered.append(((tc_id, name, args), execute_tool(name, args)))
+                try:
+                    result = execute_tool(name, args)
+                except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
+                    # Mirror the parallel branch's except-tuple 3 lines above (line 167) —
+                    # a raised exception here must become a recoverable tool result, not
+                    # abort the whole run and discard every tool result already gathered
+                    # this round.
+                    result = {"content": str(e)}
+                ordered.append(((tc_id, name, args), result))
 
         for (tc_id, name, args), result in ordered:
             if on_tool_step is not None:
@@ -2135,7 +2176,29 @@ def run_tools(
                 }
             )
 
+    # Reaching here means every round through max_tool_rounds still returned tool_calls
+    # (any round with no tool_calls returns early above) — the budget is genuinely
+    # exhausted, not just "the model happened to stop." Whether that forces an extra
+    # tool-free completion depends on whether the last round left narration content
+    # (see below) — this log/signal fires either way, so its wording must not imply
+    # the forced completion unconditionally follows.
+    #
+    # Guard against max_tool_rounds <= 0: `range(max_tool_rounds)` above is then empty,
+    # so the for loop body never ran a single round — there is nothing to have
+    # "exhausted." Firing the log/signal in that case would falsely claim the model
+    # burned through a budget it was never given a chance to use.
+    if max_tool_rounds > 0:
+        logger.warning(
+            "run_tools: exhausted max_tool_rounds=%d without the model returning an "
+            "empty tool_calls response",
+            max_tool_rounds,
+        )
+        if on_tool_step is not None:
+            on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
+
     # Hit max rounds with no final content: force one more answer without tools.
+    # Otherwise the last round's own narration content IS the final answer -- no
+    # forced completion follows (see docstring above / round_limit_exhausted note).
     if not content and len(current) > len(messages):
         current.append(
             {

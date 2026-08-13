@@ -111,6 +111,11 @@ When `stream: true` in `POST /v1/chat/completions`:
    - `content` — LLM token deltas, HTML-escaped
    - `reasoning` — accumulated into a `<thinking>` block before the first `content` chunk (skipped when `X-Suppress-Tool-Stream` is set)
    - `trace` — `TraceEventV1` dicts embedded in `delta.digigraph_trace` for digichat
+     (`tool_call` / `tool_result` / `rag_sources` / `round_boundary`, …). The
+     `round_boundary` event marks the end of a digillm tool round: `round_idx` is the
+     zero-based round number, and `narration` is the assistant text produced that round
+     (with `stream_deltas`, content deltas were already emitted; without streaming,
+     `round_boundary` is the only callback that exposes that narration).
    - `done` — terminates the generator loop
 4. If the client disconnects mid-stream, the generator raises an exception; the background thread continues running until it completes naturally. There is no cancellation token or thread interrupt mechanism — see Section 6 (Security Analysis).
 
@@ -218,6 +223,7 @@ real node executions rather than compiled graph nodes.
 | `request_id` | `str \| None` | Correlation ID propagated to outbound HTTP |
 | `workflow_id` | `str \| None` | Per-run UUID for audit log correlation |
 | `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
+| `digi_subject` | `str \| None` | JWT subject; namespaces the cross-thread Store (see §5.5) and the checkpoint `thread_id`. Client-writable on `WorkflowRequest`, but `server.py`'s `_digi_fields_from_request` unconditionally overwrites it — to the verified `auth.subject` when present and non-empty, else `None` (no auth, or an auth object with an empty subject claim) — before it reaches graph state; see §6.10 |
 | `allowed_tool_names` | `list[str] \| None` | Tool allowlist; `None` = unrestricted |
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
@@ -238,7 +244,6 @@ real node executions rather than compiled graph nodes.
 | `quant_artifact_uri` | `str \| None` | Opaque artifact ref (Phase 2 contract) |
 | `error` | `str \| None` | Terminal error; stops further node execution |
 | `stored_datasets` | `dict[str, dict]` | Ref → profile map (survives across turns via checkpointer) |
-| `stream_callback` | `Callable` | Not serialized; injected per-request for streaming |
 | `workflow_profile` | `str` | Active profile (`full_stack`, `research_rag`, `quant_backtest`, `plan_execute`) |
 | `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. |
 | `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map) |
@@ -264,6 +269,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `digi_trace_key_prefix` / `digi_trace_tenant` / `digi_trace_project_id` / `digi_trace_jti` | `str \| None` | digikey audit fields |
 | `evidence_tier_preference` | `list[str] \| None` | Evidence tier filter |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`); see 4.1 |
+| `digi_subject` | `str \| None` | Client-writable, but never trusted as-is: `server.py`'s `_digi_fields_from_request` unconditionally overwrites it with the verified `auth.subject` (or clears it to `None` when auth is absent or its subject claim is empty) before it reaches graph state — see §6.10 |
 
 ### 4.3 WorkflowResult (`models.py`)
 
@@ -394,7 +400,7 @@ START
                                                                └─ optimize enabled → optimize → END
 ```
 
-When `agents.always_retrieve_tools` is set, `research_node` (document RAG path) invokes those tools **before** the LLM turn, injects `[tool_name results]…` blocks into the user message, and **strips** those tool names from `tools_for_llm` so the model cannot re-call the same retrieval tools. Prefetch passes `top_k=4` for digisearch and `limit=3` for `digivault_search_notes` so a tiny seed corpus does not dump the whole index every turn. If no tools remain, `run_tools` runs a single streamed completion (no tool rounds).
+Retrieval is model-driven, not prefetched: `research_node` (document RAG path) hands the full tool set to `run_tools` with a `max_tool_rounds=4` budget and lets the model decide whether and when to call `digisearch` / `digivault_search_notes`, then `digivault_get_note` with a hit's `vault_path` to load the full note instead of reasoning from the ~300-char excerpt `digivault_search_notes` returns. Nothing is invoked before the LLM turn and nothing is injected into the user message. `agents.always_retrieve_tools` is dead configuration — `DigiProjectConfig.get_always_retrieve_tools()` still exists and still parses the key, but nothing calls it, since the prefetch it used to gate was removed. All shipped `digiproject.yaml` files have had the key dropped. If the model calls no tools, `run_tools` runs a single streamed completion (no tool rounds). **`max_tool_rounds=4` bounds tool-calling rounds, not completions outright**: `digillm.client.run_tools` (`digillm/src/digillm/client.py:2138-2147`) fires one additional tool-free completion when the round budget is exhausted and the model still hasn't produced final content, so a fully-exhausted budget costs up to **5** completions, not 4.
 
 `agents.research_brief` (default `true`; env `DIGI_RESEARCH_BRIEF=0/1` overrides) controls whether `build_research_subgraph()` wires `research_brief_builder` after `research_inner`. When false, the subgraph ends when the answer stream completes — dogfood chat uses this to avoid a post-answer `completion_text` latency tax.
 
@@ -406,7 +412,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (one tool, `digivault_search_notes`) activates only when `DIGIVAULT_URL` is set.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -417,13 +423,15 @@ digisearch, digiquant, and digivault each own their tool schemas via `POST /v1/o
 1. Calls `fetch_digisearch_tool_dicts(base_url, index_config, bearer, request_id)` at schema resolution time. Results are cached in a module-level dict (`_MANIFEST_CACHE`) keyed on `(base_url, index_config)` — this cache is **never invalidated** for the lifetime of the process.
 2. Invokes tools via `invoke_digisearch_tool(base_url, tool, args, ...)` → `POST /v1/orchestrator_invoke`.
 3. The digiquant connector follows the same pattern via `digiquant_hub.py`.
-4. The digivault connector (`digivault_hub.py`) follows the same pattern for one tool, `digivault_search_notes` — full-text search over the digithings architecture vault (Supabase-backed, `SupabaseStore.search`). It has no `index_config` (vault search is not index-scoped), so its manifest cache key is the base URL alone.
+4. The digivault connector (`digivault_hub.py`) follows the same pattern for two tools: `digivault_search_notes` — full-text search over the digithings architecture vault (D1 FTS5 when configured, else filesystem/Supabase) — and `digivault_get_note`, which loads one note in full by the `vault_path` a search hit returns, so the model can read the whole page instead of reasoning from `digivault_search_notes`'s ~300-char excerpt. `digivault_get_note` is D1-only (503s on a non-D1 deployment) and requires `path_prefix`; digigraph's handler overwrites `path_prefix` from `ToolContext.vault_path_prefix` unconditionally (never trusting a model-supplied value) so a model cannot select another tenant's corpus — `_handle_digivault_search` does the same. Neither tool has an `index_config` (vault search/load is not index-scoped), so the manifest cache key is the base URL alone.
 
 The manifest cache uses synchronous `httpx.Client` (blocking calls inside async FastAPI). This can block the event loop thread during tool schema resolution. The current request handling is synchronous (FastAPI's thread pool), so this is acceptable but limits throughput under high concurrency.
 
+Each hub's `invoke_*` function (`invoke_digisearch_tool`/`invoke_digiquant_tool`/`invoke_digivault_tool`) is wrapped by a per-service `CircuitBreaker` (`digigraph/circuit_breaker.py`, `failure_threshold=5`, `recovery_timeout=30.0`) — not just the legacy `tools/digisearch.py` helper. Only the network call itself (`client.post(...)`) runs inside the breaker's `with _cb:` scope, so only a genuine transport failure (`httpx.RequestError`: connection refused, timeout, DNS failure) counts toward opening the circuit. `raise_for_status()`/`.json()` run *outside* that scope: a raised `httpx.HTTPStatusError` (4xx/5xx) or a JSON decode error still returns this function's normal `{"ok": False, "error": ...}` contract, but does not trip the breaker — the same `httpx.RequestError`-only, never-`HTTPStatusError` scoping rationale that `graph/nodes.py`'s `_DIGIQUANT_CLIENT_ERRORS` handling follows ("never `httpx.HTTPStatusError` — a 4xx/5xx is a real rejection, not a blip"). This matters because a single caller sending malformed tool-call arguments (a client-caused 4xx) must not open the process-wide circuit for 30 seconds for every other user.
+
 ### 5.5 Checkpointing
 
-Process-wide singleton via `get_checkpointer()` in `graph/graph.py:29`:
+Process-wide singleton via `get_checkpointer()` in `graph/graph.py:108`:
 
 | `DIGI_CHECKPOINTER` value | Backend | Notes |
 |--------------------------|---------|-------|
@@ -481,6 +489,20 @@ It accepts either libpq spelling (`postgresql://` URI or `host=… dbname=…` k
 
 Timing is the only thing that changes: an unreachable Postgres already raised `psycopg.OperationalError` out of `get_checkpointer()` (via `cm.__enter__()`), so no new failure *mode* is introduced — it now surfaces in ~10s instead of hanging on the OS TCP timeout. On the Olympus path `hermes/chain.py::_acquire_checkpointer` catches `Exception` and degrades to an uncheckpointed run.
 
+#### 5.5.4 Store (cross-thread memory) — parallel but not identical backend selection
+
+`get_store()` (`graph/graph.py:183`, Task 7) provides a **process-wide `Store`**, distinct from the checkpointer above: the checkpointer is scoped to a single `thread_id`, while the Store holds values that should survive a subject opening a brand-new thread (today: a `response_language` preference, keyed by `digi_subject` — see `supervisor_node`, gated behind `DIGI_SUPERVISOR=1`). It mirrors `DIGI_CHECKPOINTER`'s *kind* selection where LangGraph has an equivalent, but the mapping is **not one-to-one**:
+
+| `DIGI_CHECKPOINTER` value | `get_checkpointer()` backend | `get_store()` backend |
+|--------------------------|-------------------------------|------------------------|
+| unset / `memory` | `MemorySaver` | `InMemoryStore` |
+| `sqlite` | `SqliteSaver` (persistent, file-backed) | `InMemoryStore` (**not** persistent) |
+| `postgres` | `PostgresSaver` | `PostgresStore` (same conn string, reusing `_bounded_conn_string`'s connect-timeout/keepalive bounds) |
+
+LangGraph ships no first-class `Store` equivalent of `SqliteSaver`, so `sqlite` maps to `InMemoryStore` here — a documented, same-process choice, not a silent one: unlike `get_checkpointer()`'s sqlite path, **`DIGI_CHECKPOINTER=sqlite` gets no persistent cross-thread Store at all**. A response-language preference set under `sqlite` is lost on process restart and is never shared across replicas, even though the checkpointer itself (thread-scoped state) survives both. Only `DIGI_CHECKPOINTER=postgres` gets a Store that persists and is shared across replicas; every other setting (including sqlite) silently falls back to `InMemoryStore`, with a warning now logged for both failure paths that can produce that fallback under `postgres` (missing `langgraph-checkpoint-postgres` install, or `DIGI_CHECKPOINTER_POSTGRES_URI` unset).
+
+Today's realized impact is low: `DIGI_SUPERVISOR` defaults off, so the supervisor node (the only current Store reader/writer) does not run by default, and the Store holds nothing but a language preference even when it is on. See §6 for the Store's namespace-trust dependency on `digi_subject`.
+
 ### 5.6 Streaming SSE Architecture
 
 ```
@@ -491,11 +513,28 @@ _stream_completions_progressive (server.py generator)
         │
         ├── spawns Thread → run_digigraph_workflow_streaming(req, event_queue)
         │                           │
-        │                           ├── _stream_callback_ctx (ContextVar) set
-        │                           ├── graph.stream(..., stream_mode="updates")
-        │                           │     └── research_node → run_tools
-        │                           │           └── stream_callback("tool_call/result/content/reasoning/trace")
-        │                           │                 └── event_queue.put(...)
+        │                           ├── defines stream_callback(event_type, data) closure
+        │                           │     (content/tool_call/round_boundary/tool_result handling)
+        │                           ├── graph.stream(initial, config=config,
+        │                           │               stream_mode=["updates", "custom"], version="v2",
+        │                           │               subgraphs=True)   # required -- research runs in a subgraph
+        │                           │     │
+        │                           │     ├── part["type"] == "custom"   (any ns, never filtered)
+        │                           │     │     (event_type, data) = part["data"]
+        │                           │     │     └── stream_callback(event_type, data)   [called directly]
+        │                           │     │
+        │                           │     └── part["type"] == "updates"
+        │                           │           ├── part["ns"] non-empty (inner-subgraph node) → skip
+        │                           │           └── part["ns"] == () (top-level node) →
+        │                           │                 _stream_update_summary(update)
+        │                           │                 └── event_queue.put(("trace", graph_update))
+        │                           │
+        │                           │   Inside the graph run (research subgraph), research_node → _run_document_rag_path:
+        │                           │     writer = _safe_stream_writer()   # get_stream_writer(), no-op outside a real invocation
+        │                           │     run_tools(..., on_tool_step=stream_callback)
+        │                           │           └── stream_callback(...) → writer((event_type, data))
+        │                           │                 └── surfaces above as a "custom" part
+        │                           │
         │                           └── event_queue.put(("done", None))
         │
         └── while True: ev = event_queue.get()
@@ -507,7 +546,11 @@ _stream_completions_progressive (server.py generator)
               └── "done" → break → yield stop chunk → yield [DONE]
 ```
 
-The `_stream_callback_ctx` is a `ContextVar` used to pass the callback from `workflow.py` to `research.py` without threading state through the LangGraph config. The `stream_mode="updates"` call on `graph.stream` drives per-node progress events; the research node's tool loop emits fine-grained events independently.
+Nodes emit streaming events via LangGraph's native `get_stream_writer()` (`langgraph.config`), not via a callback threaded through state, config, or a `ContextVar` — that 3-tier resolver was collapsed in c32a7a970. `_run_document_rag_path` (`research.py:311`) resolves the writer through `_safe_stream_writer()` (`research.py:26-34`): it calls `get_stream_writer()` and catches the `RuntimeError` LangGraph raises when it's invoked outside a real graph run (e.g. a unit test calling a node function directly instead of going through `graph.invoke()`/`graph.stream()`), falling back to a no-op `lambda _data: None`. This is what lets `tests/dg/test_nodes.py` call node functions in isolation without a full graph invocation. (`_safe_get_store()`, `research.py:37-54`, mirrors the same pattern for `get_store()` — see §5.5.4 and §6.10.) The resolved `writer` (`research.py:390`) is closed over by a local `stream_callback(event_type, data)` (`research.py:392-399`) that enriches `digisearch`/`digisearch_fetch_all` `tool_call` events with `index_name` before calling `writer((event_type, data))`; that `stream_callback` is passed to `run_tools(..., on_tool_step=stream_callback)`, so every `tool_call`/`tool_result`/`content`/`reasoning` event the tool loop emits flows out through the writer.
+
+`workflow.py`'s `run_digigraph_workflow_streaming` (`workflow.py:293-`) drives the graph with `graph.stream(initial, config=config, stream_mode=["updates", "custom"], version="v2", durability="sync", subgraphs=True)` (`workflow.py:426-433`). The dual-mode list means each yielded `part` carries a `"type"` discriminant: a `part["type"] == "custom"` entry is exactly the `(event_type, data)` tuple a node wrote via `get_stream_writer()`, and the driver loop unpacks it and calls its own rich `stream_callback` closure (`workflow.py:317-409`) directly — the same content-buffering, `tool_call` → `code_block` trace synthesis for `data_engineer_agent`, `round_boundary` → trace event (#2306), and `tool_result`-with-`rag_sources` → `rag_sources` trace event handling this closure has always done, just invoked without an intermediate `ContextVar` hop. A `part["type"] == "updates"` entry is the per-node state delta LangGraph emits natively; `_stream_update_summary` reduces it to `{node: {"keys": [...]}}` (avoiding serialization of large state values) and it is forwarded as a `graph_update` trace event. There is no config channel and no module-level `ContextVar`: the writer `get_stream_writer()` returns is scoped to the current graph run by LangGraph itself, so `workflow.py` never needs to inject anything into `research.py` — it only needs to be the consumer on the other end of `graph.stream(...)`.
+
+**`subgraphs=True` is required, not optional.** `research_node`/`research_brief_builder_node` run inside a *compiled subgraph* (`graph/research_subgraph.py`'s `build_research_subgraph()`, added as the single `"research"` node by `graph/graph.py`'s `build_workflow_graph()`), not as top-level nodes on the outer graph. LangGraph filters `"custom"`/`"updates"` parts sourced from inside a subgraph unless the outer `.stream()` call passes `subgraphs=True` — without it, every `_safe_stream_writer()` write from `_run_document_rag_path` (`tool_call`, `tool_result`, `content`, `reasoning`, `round_boundary` — nearly everything the diagram above shows) was silently dropped before ever reaching this loop (fixed; previously a live regression). With `subgraphs=True` on, `"updates"` parts also start arriving for inner-subgraph nodes with a non-empty `ns` (e.g. `ns=("research:<uuid>",)`); the driver loop skips those (`if part["ns"]: continue`) before building the `graph_update` trace event, so only the outer, top-level node completions are reported — this filter does **not** apply to `"custom"` parts, which must flow through regardless of which namespace they originated from. See `tests/dg/test_subgraph_streaming.py` for a standalone regression test of this exact mechanism.
 
 ---
 
@@ -559,6 +602,16 @@ The MCP server (`mcp_server.py`) has no built-in authentication layer. The `stre
 ### 6.9 Manifest Cache Never Invalidates
 
 The vertical manifest caches in `digisearch_hub.py`, `digiquant_hub.py`, and `digivault_hub.py` are module-level dicts with no TTL or invalidation. If digisearch, digiquant, or digivault adds, removes, or changes a tool definition, the cached schema is stale until the digigraph process restarts. This affects tool schema accuracy in long-running deployments.
+
+### 6.10 Store Namespace Trust — `digi_subject` Is Server-Verified Before It Reaches Graph State
+
+The Store added in Task 7 (§5.5.4) namespaces every entry by `digi_subject` (`(subject, "prefs")` in `supervisor_node`). `digi_subject` is a **client-writable field** on `WorkflowRequest`. Previously, `server.py`'s `_digi_fields_from_request` only overrode it server-side when `auth.subject` was truthy — a conditional-only override — so an unauthenticated request, or one whose `auth` object carried an empty `subject` claim, let the client's own `digi_subject` value survive untouched all the way into graph state and the Store namespace key: a CWE-639 IDOR letting a client read or overwrite another subject's stored preference by supplying its value.
+
+**Fixed:** `_digi_fields_from_request` now sets `updates["digi_subject"]` **unconditionally** on every call — to the verified `auth.subject` when `auth` is present and its `subject` claim is non-empty, and explicitly to `None` in every other case (no `auth` object at all, or an `auth` object present with an empty/falsy `subject`). This distinction matters because `req.model_copy(update=updates)` (in `_with_digi_request_context`) only clears a field when its key is *explicitly present* in `updates` — an absent key leaves the client's original value untouched, so the pre-fix conditional-only override never actually cleared anything; it only skipped setting a new value. Setting the key to `None` unconditionally is what makes it a real override. See `tests/dg/test_api.py::TestDigiSubjectTrustBoundary` for the three pinned cases: authenticated with a real subject (unchanged), no auth object at all (forced to `None`), and an auth object with an empty subject claim (also forced to `None` — the specific gap this fix closes that a "just check `auth is None`" fix would have missed).
+
+This also strictly tightens `workflow_thread_id`'s subject-based `thread_id` scoping (used by both `workflow.py`'s `_graph_thread_config` and `server.py`'s chat/completions path): since `req.digi_subject` itself is now cleared for unauthenticated/empty-subject requests rather than merely the Store lookup being gated, `workflow_thread_id(None, session_id)` degrades to the unscoped `session_id` it already handled gracefully — no functional loss, since a falsy subject was already "no scoping" there.
+
+**Risk before this fix was low but not zero:** the Store currently holds only a `response_language` preference (§5.5.4), gated behind `DIGI_SUPERVISOR=1` which defaults off, so a realized exploit at most let one subject read or overwrite another's language preference. Recorded here for completeness now that it is closed, since the Store's blast radius would have grown with whatever future data any new supervisor-node logic decides to persist there.
 
 ---
 
@@ -711,11 +764,13 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 
 **Protocol:** HTTP via `digivault_hub.py`
 
-- **Manifest:** `POST /v1/orchestrator_tools` — returns the OpenAI tool dict for `digivault_search_notes`. Cached per `base_url` (no `index_config` — vault search is not index-scoped).
-- **Invoke:** `POST /v1/orchestrator_invoke` — dispatches to `SupabaseStore.search` (the `search_architecture_notes` RPC) on digivault's side. Accepts `{tool, arguments}`.
+- **Manifest:** `POST /v1/orchestrator_tools` — returns the OpenAI tool dicts for `digivault_search_notes` and `digivault_get_note` (and other digivault-owned tools digigraph does not register). Cached per `base_url` (no `index_config` — vault search is not index-scoped).
+- **Invoke:** `POST /v1/orchestrator_invoke` — for `digivault_search_notes`, dispatches to D1 FTS5 when configured, else the local filesystem vault, else `SupabaseStore.search` (the `search_architecture_notes` RPC); for `digivault_get_note`, a D1-only note fetch by `vault_path` (no filesystem/Supabase fallback). Accepts `{tool, arguments}`.
 - **Auth:** Bearer token from `WorkflowState.digi_bearer` is forwarded via `Authorization: Bearer` header; `X-Request-ID` forwarded from `ToolContext.request_id`.
 - **Env:** `DIGIVAULT_URL` (empty = the `digivault` skill is not registered for the request; other skills are unaffected). In Docker: `http://digivault:8004`.
-- **Purpose:** reproduces the vault-grounded documentation search the digithings.ai chat widget calls directly today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — the tool digichat's BFF needs once traffic moves off the bespoke widget onto digigraph.
+- **Tenant scoping:** both handlers overwrite the `path_prefix` argument from `ToolContext.vault_path_prefix` unconditionally before invoking — a model-supplied `path_prefix` is always discarded, never merely defaulted-if-omitted, so the model cannot read another tenant's corpus. With no context prefix (unmapped tenant slug), `path_prefix` is passed through as `None`. `digivault_get_note` is D1-only, so this always ends in digivault's handler refusing the unscoped call with `ok=False` rather than falling back to a full-vault read (D1 has no unscoped mode). `digivault_search_notes` refuses the same way on D1, but that refusal is deployment-scoped: on a non-D1 backend (local filesystem vault, or Supabase), a `None` prefix is treated as "no filter" rather than refused — `search_local_vault` (`digivault/src/digivault/local_search.py:88`) and `SupabaseStore.search` both then read across the whole corpus. Production is D1-backed, so this gap only reaches a non-D1 deployment.
+- **Error surfacing:** `invoke_digivault_tool` calls `raise_for_status()`, which raises and drops the response body on any non-2xx status — so a *raised* HTTP error from digivault reaches the model as a bare status code, never the `detail` string. digivault's argument-validation failures (e.g. missing `path_prefix`) are therefore returned as `OrchestratorInvokeResponse(ok=False, error=...)` at HTTP 200, specifically so the reason string survives this hop.
+- **Purpose:** reproduces the vault-grounded documentation search the digithings.ai chat widget calls directly today ([ADR-0018](../docs/adr/0018-digichat-path-routing.md), epic #1248) — the tool digichat's BFF needs once traffic moves off the bespoke widget onto digigraph. `digivault_get_note` extends this to full-note loads so the model is not limited to reasoning from a short excerpt.
 
 ---
 
@@ -744,7 +799,7 @@ digigraph:
 |----------|------------------|-------------|
 | `DIGIQUANT_URL` | `http://digiquant:8001` | digiquant HTTP base URL |
 | `DIGISEARCH_URL` | `http://digisearch:8002` | digisearch HTTP base URL; empty = search disabled |
-| `DIGIVAULT_URL` | `http://digivault:8004` | digivault HTTP base URL; empty = `digivault_search_notes` disabled |
+| `DIGIVAULT_URL` | `http://digivault:8004` | digivault HTTP base URL; empty = `digivault_search_notes` / `digivault_get_note` disabled |
 | `DIGISMITH_URL` | `http://digismith:8003` | digismith status URL (unused by digigraph HTTP) |
 | `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | JWT public key endpoint |
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer claim |

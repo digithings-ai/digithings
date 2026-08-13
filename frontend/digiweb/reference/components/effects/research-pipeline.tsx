@@ -87,8 +87,12 @@ export function ResearchPipeline() {
     els.forEach((el) => io.observe(el));
 
     const syncFill = () => {
+      // scaleY, not height: the element's box stays 100% tall always (CSS),
+      // and progress is drawn by scaling that fixed box from its top edge —
+      // a transform is GPU-composited and never triggers layout, unlike
+      // animating height on every scroll-driven syncFill() call.
       if (reduced) {
-        fill.style.height = "100%";
+        fill.style.transform = "scaleY(1)";
         return;
       }
       const rect = list.getBoundingClientRect();
@@ -96,7 +100,7 @@ export function ResearchPipeline() {
       const start = vh * 0.42;
       const end = rect.height - vh * 0.12;
       const progress = end > 0 ? clamp((start - rect.top) / end, 0, 1) : 0;
-      fill.style.height = `${progress * 100}%`;
+      fill.style.transform = `scaleY(${progress})`;
     };
 
     syncFill();

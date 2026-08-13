@@ -87,7 +87,7 @@ export function ChatComposerReference() {
                 <span className="size-1.5 rounded-full bg-accent" aria-hidden="true" />
                 digichat · opus
               </button>
-              <span className="inline-flex items-center gap-[0.35rem] text-ink-mute font-mono text-[0.66rem]">
+              <span className="inline-flex items-center gap-[0.35rem] text-ink-mute font-mono text-[0.66rem] max-[440px]:hidden">
                 <span className="kbd">/</span> commands
               </span>
             </div>

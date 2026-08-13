@@ -353,6 +353,96 @@ it("strips Open WebUI tool dumps from streamed answer text", async () => {
   expect(body).not.toContain("<details>");
 });
 
+// #2306 follow-up: narration written alongside a round's tool calls (e.g. "I will
+// load the full notes now.") must not concatenate with the final answer in the
+// same visible text part. Confirmed live in production before this fix: the two
+// read as one continuous, self-contradicting block.
+it("splits narration from the final answer into separate text parts on round_boundary", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "I will load the notes." } }] })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [
+            { delta: { digigraph_trace: { v: 1, type: "round_boundary", payload: { round_idx: 0 } } } },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Here is the real answer." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  const events = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("data: ") && l !== "data: [DONE]")
+    .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+
+  const textStarts = events.filter((e) => e.type === "text-start");
+  const textEnds = events.filter((e) => e.type === "text-end");
+  // Two distinct text parts: the narration, and the real answer.
+  expect(textStarts).toHaveLength(2);
+  expect(textEnds).toHaveLength(2);
+  const [firstId, secondId] = textStarts.map((e) => e.id);
+  expect(firstId).not.toBe(secondId);
+
+  const deltasFor = (id: unknown) =>
+    events
+      .filter((e) => e.type === "text-delta" && e.id === id)
+      .map((e) => e.delta)
+      .join("");
+  expect(deltasFor(firstId)).toBe("I will load the notes.");
+  expect(deltasFor(secondId)).toBe("Here is the real answer.");
+
+  // The round_boundary trace itself must render no visible activity chip.
+  expect(body).not.toContain("round_boundary");
+});
+
+// A normal single-round exchange (no tool calls at all) must be completely
+// unaffected: exactly one text part, same as before this change.
+it("keeps a single unbroken text part when no round_boundary ever fires", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello " } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "there." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  const events = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("data: ") && l !== "data: [DONE]")
+    .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+
+  expect(events.filter((e) => e.type === "text-start")).toHaveLength(1);
+  expect(events.filter((e) => e.type === "text-end")).toHaveLength(1);
+  expect(events.filter((e) => e.type === "text-start")[0]?.id).toBe("assistant-main");
+});
+
 it("opts digigraph out of Open WebUI format on the dogfood stream path", async () => {
   const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response("data: [DONE]\n\n", {

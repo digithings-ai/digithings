@@ -205,10 +205,19 @@ structured_completion(
 ) -> BaseModel  # validated instance of output_type
 ```
 
-Builds a json_schema `response_format` from `output_type.model_json_schema()`,
-calls `chat_completion`, strips markdown fences, narrows to the outermost
-`{...}`, and `model_validate`s. (digigraph's structured path returned a `str`;
-this wrapper provides the validated-model contract twelve-x expects.)
+Builds a json_schema `response_format` from `output_type`, calls
+`chat_completion`, strips markdown fences, narrows to the outermost `{...}`,
+and `model_validate`s. (digigraph's structured path returned a `str`; this
+wrapper provides the validated-model contract twelve-x expects.)
+
+When `strict=True` (the default), the schema is normalized via the OpenAI
+SDK's own `openai.lib._pydantic.to_strict_json_schema` — plain
+`output_type.model_json_schema()` sets `additionalProperties: false` only when
+the model has `extra="forbid"`, and never force-lists every property in
+`required` (fields with defaults are simply omitted), which OpenAI-family
+strict-schema providers reject outright. Falls back to plain
+`model_json_schema()` with a warning if that (private, unexported) SDK helper
+is ever unavailable.
 
 ### `resolve_model`
 

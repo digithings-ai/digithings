@@ -10,11 +10,32 @@ export function mapDigivaultSearchNotes(
   payload: Record<string, unknown>
 ): ActivitySpan | null {
   const hits = payload.hits ?? payload.results ?? payload.notes;
-  if (!Array.isArray(hits) || !hits.length) {
-    const query =
-      typeof payload.query === "string" && payload.query.trim()
-        ? payload.query.trim()
-        : undefined;
+  const query =
+    typeof payload.query === "string" && payload.query.trim()
+      ? payload.query.trim()
+      : undefined;
+
+  if (!Array.isArray(hits)) {
+    // No hits/results/notes key at all — not a completed search result.
+    // Still surface digivault_get_note batch errors (notes may be absent while
+    // errors is present) and in-flight "Searching digivault…" spans.
+    const errors = payload.errors;
+    if (errors && typeof errors === "object" && !Array.isArray(errors)) {
+      const paths = Object.keys(errors as Record<string, unknown>);
+      if (paths.length > 0) {
+        // All-error batch (notes absent): emit execute_tool/failed so
+        // toDigiChatActivity's failure path renders "Search … failed." —
+        // never overload hitCount with an error count (that field means
+        // upstream digisearch hit_count when documents mapped empty).
+        return {
+          operation: "execute_tool",
+          status: "failed",
+          label: `digivault errors (${paths.length})`,
+          toolName: "digivault",
+          ...(query ? { query } : {}),
+        };
+      }
+    }
     if (payload.status === "started" || payload.status === "in_progress") {
       return {
         operation: "execute_tool",
@@ -50,18 +71,34 @@ export function mapDigivaultSearchNotes(
     seen.add(doc.path);
     documents.push(doc);
   }
-  if (!documents.length) return null;
-
-  const query =
-    typeof payload.query === "string" && payload.query.trim()
-      ? payload.query.trim()
+  const errors =
+    payload.errors && typeof payload.errors === "object" && !Array.isArray(payload.errors)
+      ? (payload.errors as Record<string, unknown>)
       : undefined;
+  const errorCount = errors ? Object.keys(errors).length : 0;
+  // A zero-hit search (`hits: []`, explicitly present) reaches here too —
+  // same reasoning as mapDigisearchRagSources next door: omitting `documents`
+  // (rather than early-returning null) is what lets toDigiChatActivity's
+  // retrieve branch render the honest `count: 0` "no hits" row instead of
+  // dropping the span outright. All-error batches (notes present but every
+  // entry failed mapping, or notes: [] with errors) use execute_tool/failed
+  // so the UI shows a failure rather than a fake hit count.
+  if (errorCount > 0 && documents.length === 0) {
+    return {
+      operation: "execute_tool",
+      status: "failed",
+      label: `digivault errors (${errorCount})`,
+      toolName: "digivault",
+      ...(query ? { query } : {}),
+    };
+  }
   return {
     operation: "retrieve",
     status: "completed",
-    label: "Sources",
+    label:
+      errorCount > 0 ? `Sources (${errorCount} errors)` : "Sources",
     toolName: "digivault",
-    documents,
+    ...(documents.length ? { documents } : {}),
     ...(query ? { query } : {}),
   };
 }

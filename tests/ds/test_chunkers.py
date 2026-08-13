@@ -12,7 +12,8 @@ from digisearch.ingestion.chunkers.recursive import RecursiveChunker
 
 # Multi-paragraph, multi-section document used to characterize existing chunk
 # boundaries/counts on normally-delimited text (issue #2180 regression net).
-_CHARACTERIZATION_DOC = """# Title
+_CHARACTERIZATION_DOC = (
+    """# Title
 
 Paragraph one has a few sentences. It talks about nothing in particular. This is
 just filler content meant to exercise the recursive chunker's delimiter search
@@ -36,7 +37,9 @@ one more sentence for good measure, so the paragraph is not too short.
 Paragraph five is the final paragraph in this characterization fixture. It is
 here to ensure the chunker exercises its merge-and-overlap logic across more
 than a handful of paragraphs before the document ends.
-""" * 20
+"""
+    * 20
+)
 
 
 @pytest.mark.unit
@@ -50,7 +53,9 @@ def test_fixed_chunker() -> None:
 
 @pytest.mark.unit
 def test_recursive_chunker() -> None:
-    doc = Document(id="d1", content="Para one.\n\nPara two.\n\nPara three.", source="x", doc_type="txt")
+    doc = Document(
+        id="d1", content="Para one.\n\nPara two.\n\nPara three.", source="x", doc_type="txt"
+    )
     ch = RecursiveChunker(chunk_size=512, chunk_overlap=64)
     chunks = ch.chunk(doc)
     assert len(chunks) >= 1
@@ -160,52 +165,80 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     digisearch/ARCHITECTURE.md contains three sections (heading blocks with no
     blank line inside) that pre-#2153-fix produced oversized chunks (2999,
     3616, 2149 chars) via the concatenate-into-`current` bug. The fingerprint
-    below was recorded post-fix — count went 35 -> 36 as those three sections
-    now sub-split into within-budget pieces — and the size assertion pins the
-    fixed invariant going forward.
+    was first recorded post-fix at count 36 (up from 35, as those three
+    sections sub-split into within-budget pieces) — and the size assertion
+    pins that fixed invariant going forward. Count and hashes were
+    re-recorded at 42 for #2201 (Vectorize backend docs added to
+    ARCHITECTURE.md), then again at 43 for the #2201 final-review fixes (the
+    index-naming-coupling and fetch-all-clamp paragraphs added to the
+    Vectorize section), then hashes only (count unchanged at 43) when the
+    same #2201 branch corrected the index-naming caveat from "unresolved" to
+    "verified 2026-08-11 against the live account", then to count 44 when the
+    same branch reworded that caveat again to fix a false claim about
+    Cloudflare's docs (advisory naming guidance is stated in prose, not
+    silent) — the reworded paragraph pushed the same chunk over the size
+    budget and it split into two: the chunker did not change, only the
+    fixture content changed, so this fingerprint is expected to be
+    regenerated whenever ARCHITECTURE.md's prose changes materially — it is
+    not itself a chunker-behavior assertion beyond the ``<= 2000`` size
+    invariant.     Hashes only (count unchanged at 44) re-recorded for #2239's
+    Cloudflare credential rename (VECTORIZE_ACCOUNT_ID/VECTORIZE_API_TOKEN ->
+    CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN with legacy fallback) --
+    prose-only changes to the Vectorize section and the env var reference table.
+    Hashes only again (count still 44) for #2330's CodeRabbit body follow-up:
+    the production-inventory paragraph now documents the D1_ACCOUNT_ID /
+    D1_API_TOKEN credential fallback chain — fixture prose only.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 36
+    assert len(chunks) == 44
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
         "2a6c63aff18cb155",
-        "1d6bd0e31f071177",
-        "bec1824f32e66433",
-        "eca233208630b7bf",
+        "7a5ae94e970d3e1e",
+        "b0ee551252e0eaad",
+        "dbbea9505a0aa65e",
+        "a7a0007c9aec8d7c",
         "5c44b3a1c81aaae0",
-        "619afb8cf00d0076",
+        "25c5737630eaedf6",
         "415f566722403afb",
         "28e404859ca4cd4e",
         "bee5fa38b170d902",
-        "1985cd389cfd5f7b",
-        "be26d567b57a7f71",
+        "16584e006bbec980",
+        "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
-        "74104a32ff15d2d5",
-        "34876c720cb7acaa",
+        "941a8a3c77732354",
+        "3adbe61bdd01cb82",
         "819ebadc3320ecc2",
         "09b95dddeb54c404",
-        "1393cde1b3798c83",
-        "18168764abc51f0d",
-        "ce8d7c30f5398278",
-        "e15576236dd1ba07",
+        "ae0fa675eb628fe7",
+        "b56e3e5173fa2b82",
+        "e04f2c804b4baa0c",
+        "2ec8256cb4695f07",
+        "16bea1bbfea529fc",
+        "5b438889eafdfbb9",
+        "2181660c1f2b61f1",
+        "b36181233771c6b2",
         "f2687d4521d1e069",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
         "0a11a1bc22b44bfa",
-        "741194a852e5c01a",
-        "217c7d169b90a8be",
-        "e98012ae08e70074",
-        "6f9cd7106211dc80",
-        "1926d1832b6806b6",
-        "0332f563f8afacbc",
-        "6f9625d36ae831a9",
-        "098d38b802535342",
+        "7ef582ec2be6842c",
+        "7f35e89d259828fa",
+        "58cc26905caa4f5c",
+        "c3c62657cd6e0f50",
+        "dccc3e4f6ff514e6",
+        "1bc8e963fdd4c124",
+        "17b58004ca6d9f7b",
+        "87f70c3f0e892260",
+        "a2a8fe99c2eece30",
+        "deae7c288ab01590",
+        "ac8dbe83a57bf4f4",
         "7b92c8753a4f1d27",
         "0f0940ad5aa21435",
         "f45e1c5392b5eef0",

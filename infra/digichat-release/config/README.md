@@ -4,10 +4,13 @@ Mounted read-only into LiteLLM and digigraph as `/app/config`.
 
 - `litellm.yaml` — proxy models / timeouts. Edit locally; do not commit API keys.
 - `model_modes.yaml` — digigraph `DIGI_LLM_MODE` defaults (`test` / `medium` / `best`).
-- `digiproject.yaml` — **chat-only** digigraph project (`research_rag`, research agent,
-  `digisearch` + `digivault_search_notes` only). No digiquant / backtest.
-- digigraph reads this path via `DIGI_CONFIG_PATH` and
-  `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml`. Keep filenames stable.
+- `digiproject.yaml` — **D1 / Cloudflare stack** digigraph project (`research_rag`,
+  research agent, `digisearch` + `digivault_search_notes` + `digivault_get_note`).
+- `digiproject.profile-a-local.yaml` — **stock Profile A compose** (no D1): same
+  chat-only profile but omits `digivault_get_note` (D1-only tool). Compose defaults
+  `DIGI_PROJECT_CONFIG` to this file.
+- digigraph reads this path via `DIGI_CONFIG_PATH` and `DIGI_PROJECT_CONFIG`.
+  Keep filenames stable.
 
 ### Chat-only service set (website digichat / OCC)
 

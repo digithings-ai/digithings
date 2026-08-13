@@ -61,7 +61,7 @@ export function ChatWidgetFrame({
                 {eyebrow}
               </p>
             ) : null}
-            {title ? <h4 className="m-0 font-mono text-[0.86rem] text-ink">{title}</h4> : null}
+            {title ? <h3 className="m-0 font-mono text-[0.86rem] text-ink">{title}</h3> : null}
           </div>
           {badge ? <span className="shrink-0">{badge}</span> : null}
         </header>
@@ -79,14 +79,14 @@ export function ChatWidgetFrame({
 export type ChatWidgetButtonTone = "primary" | "ghost" | "danger";
 
 export type ChatWidgetButtonProps = ComponentPropsWithoutRef<"button"> & {
-  /** primary = accent fill, ghost = hairline, danger = down-toned hairline. */
+  /** primary = accent fill, ghost = hairline, danger = danger-toned hairline. */
   tone?: ChatWidgetButtonTone;
 };
 
 const TONES: Record<ChatWidgetButtonTone, string> = {
   primary: "cw-btn--primary border-transparent bg-accent",
   ghost: "cw-btn--ghost border-hair bg-transparent text-ink",
-  danger: "cw-btn--danger bg-transparent text-down",
+  danger: "cw-btn--danger bg-transparent text-danger",
 };
 
 export function ChatWidgetButton({

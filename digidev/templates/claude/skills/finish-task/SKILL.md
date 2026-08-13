@@ -20,7 +20,9 @@ Fix every non-trivial finding before continuing.
 
 ### 2. Review
 
-Use the `pr-reviewer` subagent (if available) or manually review against each rubric in `docs/scoring/`:
+Review against each rubric in `docs/scoring/`, using whatever review tooling your
+harness already provides (Cursor Bugbot, an in-session `/review`-style fan-out,
+or a PR-review plugin) rather than a bespoke subagent:
 
 | Dimension | Min | Rubric |
 |---|---|---|

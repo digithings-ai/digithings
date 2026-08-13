@@ -1,8 +1,9 @@
 "use client";
 
-import { m, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { m, useScroll, useTransform } from "motion/react";
 import type { MotionValue } from "motion/react";
 import { useRef } from "react";
+import { useMotionSafe } from "../../motion/primitives";
 
 /**
  * WordReveal — the full-drama pinned-blur reveal promoted from the design
@@ -89,7 +90,16 @@ export type WordRevealProps = {
 
 export function WordReveal({ text, kicker, title, id, className }: WordRevealProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const reduced = useReducedMotion();
+  // useMotionSafe(), not raw useReducedMotion(): SSR can't know the real media
+  // query, and motion/react's hook seeds its `useState` from a synchronously-
+  // read matchMedia value on the client's very first render -- so a real
+  // reduced-motion user's first hydration render (`reduced=true`, the `text`
+  // branch below) structurally disagreed with SSR's motion-safe default
+  // (`reduced=false`/null, the words.map() branch), throwing a hydration
+  // mismatch (#2244). useMotionSafe() reports motion-safe on that first
+  // render on both server and client, then resolves the real preference one
+  // effect-tick later -- the same hydration-safe pattern <Reveal/> already uses.
+  const reduced = !useMotionSafe();
   // 0 = track top enters the viewport bottom; 1 = track top reaches the
   // viewport top (the sticky pin engages, line at mid-viewport). The reveal
   // maps onto the line's entry ride — see the timing note above.

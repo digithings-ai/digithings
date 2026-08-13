@@ -165,7 +165,10 @@ html {
 html.no-js .dqhero-h1 .ln > span { transform: none; }
 html.no-js .dqhero-lede,
 html.no-js .dqhero-cta { opacity: 1; transform: none; }
-.dqhero-scroll-label { margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
+/* Now a real <a href="#metrics">, not a static <p> (full-UI-suite critique,
+   P3) -- text-decoration reset since this wasn't a link before and had no
+   underline in its original design. */
+.dqhero-scroll-label { display: inline-block; margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
 /* scroll-down cue: accent hairline with a pulse travelling down it */
 .dqhero-scroll { position: relative; width: 2px; height: 88px; overflow: hidden; border-radius: 1px; background: linear-gradient(color-mix(in srgb, var(--accent) 52%, var(--hair-2)), transparent); }
 .dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 32px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); animation: dq-scrollcue 1.55s var(--ease) infinite; }
@@ -218,6 +221,15 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
 .dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
 .dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
+
+/* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
+   fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's
+   shared .tl-boot class fills var(--bg) by default (right for its usual mode:
+   pinned over an app that has not rendered, with nothing behind it) -- scoped
+   override for this usage only, so .grain/.glow stay visible through the
+   loading phase instead of disappearing behind a flat rectangle that then pops
+   away once digichat itself loads. */
+.tl-boot.dc-embed-boot { background: transparent; }
 
 
 /* Landing / module cards continue below */

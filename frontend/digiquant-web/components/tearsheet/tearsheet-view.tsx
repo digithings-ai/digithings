@@ -434,6 +434,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                   onView={setViewFromChart}
                   fullSpan={fullSpan}
                   resetView={presetView}
+                  ariaLabel={`${data.symbol} candlestick price chart`}
                 />
               </div>
             </div>
@@ -442,16 +443,16 @@ export function TearsheetView({ slug }: { slug: string }) {
             <PrintHeading>Equity</PrintHeading>
             <div className="ts-chart">
               {chartScale === "log" ? (
-                <TimeSeries points={chartEquity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} />
+                <TimeSeries points={chartEquity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} ariaLabel="Equity curve in dollars, log scale" />
               ) : (
-                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} />
+                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} ariaLabel="Equity curve, percent return, linear scale" />
               )}
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "drawdown"}>
             <PrintHeading>Drawdown</PrintHeading>
             <div className="ts-chart">
-              <TimeSeries points={chartDrawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} />
+              <TimeSeries points={chartDrawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} ariaLabel="Drawdown, percent below peak equity" />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
@@ -464,6 +465,7 @@ export function TearsheetView({ slug }: { slug: string }) {
                 onView={setViewFromChart}
                 fullSpan={fullSpan}
                 resetView={presetView}
+                ariaLabel="Per-trade profit and loss, percent"
               />
             </div>
           </div>

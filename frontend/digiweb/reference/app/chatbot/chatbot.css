@@ -45,7 +45,7 @@
 /* Composer — layout, spacing, and token colours migrated to utilities in
    chat-composer-reference.tsx. What stays here is mechanics: the focus-within
    color-mix border, the ::placeholder colour, hover color-mixes, and the send
-   button's surface-inverse custom-prop colour + transitions. */
+   button's --on-accent colour + transitions. */
 
 .composer {
   transition: border-color 0.2s var(--ease);
@@ -76,7 +76,7 @@
 }
 
 .composer-send {
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
   transition: opacity 0.2s var(--ease), transform 0.15s var(--ease);
 }
 

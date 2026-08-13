@@ -83,6 +83,7 @@ export function PortfolioContributionChart({
           colors={colors}
           height={340}
           benchmark={benchmark ? { label: benchmark.ticker, values: benchmark.series.map((point) => point.returnPct) } : undefined}
+          ariaLabel="Portfolio return contribution by factor"
         />
       )}
     </section>

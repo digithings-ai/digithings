@@ -8,9 +8,11 @@ from typing import Any
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
 
+from digigraph.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from digigraph.vertical_orchestrator._common import HUB_CLIENT_ERRORS, log_manifest_fetch_failure
 
 _MANIFEST_CACHE: dict[str, list[dict[str, Any]]] = {}
+_cb = CircuitBreaker("digisearch_hub", failure_threshold=5, recovery_timeout=30.0)
 
 
 def _cache_key(base_url: str, index_config: dict[str, Any] | None) -> str:
@@ -68,10 +70,31 @@ def invoke_digisearch_tool(
         "arguments": arguments,
         "default_index_name": default_index_name,
     }
-    with sync_client(timeout=120.0) as client:
-        r = client.post(url, json=payload, headers=headers)
+    try:
+        # Only the network call itself is inside `with _cb:` -- a genuine transport
+        # failure (httpx.RequestError: connection refused, timeout, DNS failure) is
+        # what should count against the breaker. `raise_for_status()`/`.json()` run
+        # OUTSIDE it deliberately: a 4xx/5xx response or a malformed body is a real
+        # rejection from a live, reachable service (RetryPolicy's own reasoning in
+        # graph/graph.py: "never httpx.HTTPStatusError -- a 4xx/5xx is a real
+        # rejection, not a blip"), not evidence the service is down, so it must not
+        # trip the process-wide circuit for every other caller.
+        with _cb:
+            with sync_client(timeout=120.0) as client:
+                r = client.post(url, json=payload, headers=headers)
         r.raise_for_status()
-    body = r.json()
+        body = r.json()
+    except CircuitBreakerOpen:
+        return {"ok": False, "error": "digisearch circuit open; downstream unavailable"}
+    except HUB_CLIENT_ERRORS as e:
+        # A genuine transport failure (httpx.RequestError, raised inside `with _cb:`
+        # above) also counts as a breaker failure -- CircuitBreaker.__exit__ already
+        # recorded it -- but must still surface as this function's normal ok:False
+        # contract rather than raise, matching every other failure path here (see
+        # "invalid_response"). A 4xx/5xx or malformed-JSON response reaches this
+        # same except clause but was raised AFTER `with _cb:` already exited
+        # cleanly, so it does not count toward opening the circuit.
+        return {"ok": False, "error": f"digisearch invoke failed: {e}"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "invalid_response"}
     return body

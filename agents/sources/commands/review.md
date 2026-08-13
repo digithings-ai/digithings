@@ -36,7 +36,14 @@ labelled as one.
 1. **Get the diff.** `gh pr diff <N>`. Note the base: task PRs target `develop`.
 
 2. **Fan out over independent lenses**, each in its own subagent with no knowledge
-   of how the code came to be written. Use the lenses that fit the diff:
+   of how the code came to be written. These lenses have no subagent file to pin a
+   model — dispatch each explicitly with `model: opus` (per CLAUDE.md's Model &
+   subagent policy: review/security/architecture judgment is the opus tier).
+   Leaving `model` unset means each lens silently inherits whatever the orchestrating
+   session is running, which is the exact risk this repo already documents and
+   guards against for fixed subagents — it just isn't fixed here because this
+   command dispatches ad hoc rather than through a pinned `agents/sources/subagents/`
+   file. Use the lenses that fit the diff:
    - **correctness** — wrong output, unhandled state, off-by-one, async ordering
    - **claim accuracy** — every factual assertion about this repo checked against
      the source. This lens has caught more real defects here than any other: a
