@@ -17,6 +17,7 @@ max_depth: 4
 sinks: [vault, search]
 digisearch_index: occ_help
 vault_subdir: clients/online-compliance-center
+static_sources: docs/projects/online-compliance-center/sources/manual-docs.yaml
 docs_path_prefixes:
   - /index.php
 skip_path_prefixes:

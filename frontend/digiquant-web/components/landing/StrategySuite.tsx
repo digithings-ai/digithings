@@ -181,10 +181,17 @@ function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
     <>
       <header className="ts-header">
         <div className="ts-header-main">
-          <h1 className="ts-h1 ts-h1-with-logo">
+          {/* h3, not h1: this card is always embedded under the homepage's
+              own hero h1 and this section's h2 ("Research-grade systems,
+              ready to explore.") -- never a standalone page (that's
+              tearsheet-view.tsx's TearsheetView, whose own h1 is genuinely
+              page-level on /strategies/[id]). The .ts-h1/.ts-h1-with-logo
+              classes are purely visual grammar, shared by name only; the
+              heading level is chosen per call site, not by the class. */}
+          <h3 className="ts-h1 ts-h1-with-logo">
             <span className="dqss-logo-skeleton" aria-hidden="true" />
             <span>{label}</span>
-          </h1>
+          </h3>
           <div className="ts-meta">
             <span className="dqss-meta-skeleton" aria-hidden="true" />
           </div>
@@ -300,7 +307,9 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
     <>
       <header ref={headerRef} className="ts-header">
         <div className="ts-header-main">
-          <h1 className="ts-h1 ts-h1-with-logo">
+          {/* h3, not h1 -- see StrategyCardSkeleton's comment above: this
+              card is always homepage-embedded, never a standalone page. */}
+          <h3 className="ts-h1 ts-h1-with-logo">
             <AssetLogoFor
               strategy={entry.strategy}
               symbol={entry.symbol}
@@ -308,7 +317,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
               className="ts-header-logo"
             />
             <span>{title}</span>
-          </h1>
+          </h3>
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
             <span className="ts-chip">{symbol}</span>
@@ -380,6 +389,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
                     view={view6m}
                     fullSpan={fullSpan}
                     compact
+                    ariaLabel={`${entry.strategy} preview candlestick chart`}
                   />
                 ) : (
                   <div className="dqss-chart-empty">

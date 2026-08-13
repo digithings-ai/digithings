@@ -171,6 +171,116 @@ class TestResearchNode:
         assert calls[1][0] == "tool_result"
         assert "Doc 1 content" in (calls[1][1].get("content") or "")
 
+    def test_a_zero_hit_search_still_emits_a_trace(self) -> None:
+        """A search that finds nothing must be visible, not silent.
+
+        Today only rag_sources produces a span, so 'searched and found nothing' and
+        'never searched' look identical in the UI — which is exactly the confusion this
+        change is meant to remove.
+
+        Drives ``_run_document_rag_path`` directly rather than ``research_node``: the
+        node wraps the whole RAG path in a broad ``except Exception``, which would
+        swallow an assertion failure here and report a misleading "error" state
+        instead. ``run_tools`` (digillm) is faked in-line rather than imported, so we
+        control exactly when ``execute_tool``/``on_tool_step`` fire without depending
+        on digillm's streaming internals.
+        """
+        from digigraph.graph.research import _run_document_rag_path
+
+        events: list[tuple[str, object]] = []
+
+        def stream_callback(event_type: str, data: object) -> None:
+            events.append((event_type, data))
+
+        def fake_run_tools(
+            *,
+            model: str,
+            messages: list[dict],
+            tools: list,
+            execute_tool,
+            max_tool_rounds: int,
+            on_tool_step,
+        ) -> str:
+            # Simulate one digillm tool round: a digisearch call that finds nothing.
+            on_tool_step("tool_call", {"name": "digisearch", "arguments": {"query": "jwt"}})
+            result = execute_tool("digisearch", {"query": "jwt"})
+            on_tool_step("tool_result", result)
+            return "No results found for jwt."
+
+        with patch("digigraph.graph.research.run_tools", side_effect=fake_run_tools):
+            with patch(
+                "digigraph.orchestration.execute",
+                return_value={"results": [], "rag_sources": []},
+            ):
+                out = _run_document_rag_path(
+                    state={"prompt": "jwt", "stream_callback": stream_callback},
+                    config=None,
+                    cfg=None,
+                    system_prompt="You have digisearch. Use it and summarize.",
+                    index_name="default",
+                    index_display_name="default",
+                    prompt="jwt",
+                )
+
+        assert out.get("research_response") == "No results found for jwt."
+        assert (
+            "tool_result",
+            {"results": [], "rag_sources": [], "hit_count": 0, "query": "jwt"},
+        ) in events
+
+    def test_run_document_rag_path_normalizes_empty_index_name(self) -> None:
+        """#2295 review: an empty or whitespace-only index_name (e.g. a blank
+        DIGISEARCH_INDEX env var) must not reach ToolContext.index_name
+        unnormalized. index_name is now written unconditionally into every
+        digisearch call's args (builtin.py's _handle_digisearch #2265 fix), so
+        an empty ToolContext.index_name is no longer harmlessly absent —
+        digisearch's own "default" fallback never gets a chance to apply."""
+        from digigraph.graph.research import _run_document_rag_path
+
+        captured: dict[str, str] = {}
+
+        def fake_get_tools_for_skills(skill_ids: list, context: object) -> list:
+            captured["index_name"] = context.index_name
+            return []
+
+        with patch("digigraph.skills.get_tools_for_skills", side_effect=fake_get_tools_for_skills):
+            with patch("digigraph.graph.research.run_tools", return_value="Summary."):
+                _run_document_rag_path(
+                    state={"prompt": "hi"},
+                    config=None,
+                    cfg=None,
+                    system_prompt="sys",
+                    index_name="   ",
+                    index_display_name="   ",
+                    prompt="hi",
+                )
+
+        assert captured["index_name"] == "default"
+
+    def test_run_document_rag_path_normalizes_truly_empty_index_name(self) -> None:
+        """Same as above for the plain-empty-string case (not just whitespace)."""
+        from digigraph.graph.research import _run_document_rag_path
+
+        captured: dict[str, str] = {}
+
+        def fake_get_tools_for_skills(skill_ids: list, context: object) -> list:
+            captured["index_name"] = context.index_name
+            return []
+
+        with patch("digigraph.skills.get_tools_for_skills", side_effect=fake_get_tools_for_skills):
+            with patch("digigraph.graph.research.run_tools", return_value="Summary."):
+                _run_document_rag_path(
+                    state={"prompt": "hi"},
+                    config=None,
+                    cfg=None,
+                    system_prompt="sys",
+                    index_name="",
+                    index_display_name="",
+                    prompt="hi",
+                )
+
+        assert captured["index_name"] == "default"
+
 
 @pytest.mark.unit
 class TestBacktestNode:

@@ -44,6 +44,15 @@ const HERMES: Phase[] = [
   ["h9", "Commit run", "persist & evolve"],
 ];
 
+// The chips below render the REAL phase-folder names (atlas/phases/,
+// hermes/phases/), not a display count — Hermes's h7 → h7e → h9 has no h8
+// because that number was never assigned a phase, not because one is
+// missing. Surfaced as a title so a visitor unfamiliar with the codebase
+// does not read the gap as a typo or broken enumeration (full-UI-suite
+// critique, digiquant-web target, P3).
+const PHASE_ID_TITLE =
+  "The real internal phase-folder name, not a sequential count — a gap (like Hermes's missing h8) means that number was never assigned, not a typo.";
+
 const NODES: [num: string, label: string][] = [
   ["01", "Atlas"],
   ["02", "Hermes"],
@@ -145,7 +154,7 @@ export function OlympusScene() {
       const rect = scrolly!.getBoundingClientRect();
       const total = scrolly!.offsetHeight - window.innerHeight;
       gp = clamp(-rect.top / (total || 1), 0, 1);
-      railFill!.style.width = gp * 100 + "%";
+      railFill!.style.transform = `scaleX(${gp})`;
       // kinetic 3D Olympus mark behind the scene — fades in then keeps growing
       if (logoBg) {
         const lt = document.documentElement.getAttribute("data-theme") === "light";
@@ -275,7 +284,7 @@ export function OlympusScene() {
               </div>
               {ATLAS.map(([id, n, d]) => (
                 <div className="dqp-step" data-eng="0" key={`a-${id}`}>
-                  <div className="dqp-si">{id}</div>
+                  <div className="dqp-si" title={PHASE_ID_TITLE}>{id}</div>
                   <div className="dqp-sn">{n}</div>
                   <div className="dqp-sd">{d}</div>
                 </div>
@@ -285,7 +294,7 @@ export function OlympusScene() {
               </div>
               {HERMES.map(([id, n, d]) => (
                 <div className="dqp-step" data-eng="1" key={`h-${id}`}>
-                  <div className="dqp-si">{id}</div>
+                  <div className="dqp-si" title={PHASE_ID_TITLE}>{id}</div>
                   <div className="dqp-sn">{n}</div>
                   <div className="dqp-sd">{d}</div>
                 </div>

@@ -345,7 +345,54 @@ def run_digigraph_workflow_streaming(
                             ).model_dump(),
                         )
                     )
-        if event_type == "tool_result" and isinstance(data, dict) and data.get("rag_sources"):
+        if event_type == "round_boundary" and isinstance(data, dict):
+            # #2306 follow-up: run_tools fires this the moment a round's tool_calls
+            # becomes known, marking that round's already-streamed "content" as NOT
+            # the final answer. Forwarded as a "trace"/digigraph_trace event — the
+            # same channel code_block/rag_sources use above — because that is the
+            # ONLY event type server.py's _stream_completions_progressive still
+            # forwards to a client with suppress_tool_stream=True (digichat always
+            # sets this): "content" itself is the visible answer channel and cannot
+            # double as this signal without a consumer misreading narration as the
+            # answer, which is precisely the bug this closes.
+            event_queue.put(
+                (
+                    "trace",
+                    TraceEventV1(
+                        type="round_boundary",
+                        workflow_id=trace_ctx["workflow_id"],
+                        request_id=trace_ctx["request_id"],
+                        session_id=trace_ctx["session_id"],
+                        payload={
+                            "round_idx": data.get("round_idx"),
+                            # Capped defensively, matching code_block's 24_000-char cap
+                            # above -- narration is normally short model prose, not
+                            # arbitrary user/tool content, but nothing enforces that.
+                            "narration": str(data.get("narration") or "")[:24_000],
+                        },
+                    ).model_dump(),
+                )
+            )
+        if event_type == "tool_result" and isinstance(data, dict) and "rag_sources" in data:
+            # Fire on any retrieval tool's result, hit or miss. "rag_sources" is a key
+            # only retrieval handlers set on their return dict (digisearch,
+            # digisearch_fetch_all, digivault_search_notes, digivault_get_note,
+            # digisearch_research_delegate) — present even when empty on a zero-hit
+            # search. Non-retrieval tools (visualization_agent, digistore_list, todo,
+            # ...) never set this key, so they still never produce a trace here.
+            # Gating on truthiness (as before) meant a zero-hit search never got a
+            # trace event at all: "searched, found nothing" and "never searched"
+            # looked identical downstream. hit_count/query (set by research.py's
+            # execute_search wrapper) are forwarded when present so the browser can
+            # tell the two apart.
+            rag_payload: dict[str, Any] = {
+                "sources": data["rag_sources"],
+                "tool": data.get("name", "digisearch"),
+            }
+            if "query" in data:
+                rag_payload["query"] = data["query"]
+            if "hit_count" in data:
+                rag_payload["hit_count"] = data["hit_count"]
             event_queue.put(
                 (
                     "trace",
@@ -354,10 +401,7 @@ def run_digigraph_workflow_streaming(
                         workflow_id=trace_ctx["workflow_id"],
                         request_id=trace_ctx["request_id"],
                         session_id=trace_ctx["session_id"],
-                        payload={
-                            "sources": data["rag_sources"],
-                            "tool": data.get("name", "digisearch"),
-                        },
+                        payload=rag_payload,
                     ).model_dump(),
                 )
             )

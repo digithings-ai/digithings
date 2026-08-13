@@ -195,6 +195,18 @@
   transform: scaleX(1);
 }
 
+/* "You are here": this grid mirrors the top nav (see the section copy), and
+   site-nav.tsx already solves current-page wayfinding via aria-current —
+   applying the identical signal here so the grid's own card for the page
+   you're standing on is distinguishable at a glance, not just on hover. */
+.co-card[aria-current="page"] {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+
+.co-card[aria-current="page"]::before {
+  transform: scaleX(1);
+}
+
 /* .co-index, .co-label, .co-blurb migrated to Tailwind utilities on
    contents-overview.tsx */
 

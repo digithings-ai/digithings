@@ -57,8 +57,20 @@ export class DigiStackContainer extends Container {
     OPENAI_API_BASE: env.OPENAI_API_BASE ?? "http://127.0.0.1:4000/v1",
     DIGI_LLM_MODE: env.DIGI_LLM_MODE ?? "test",
     CHROMA_PATH: env.CHROMA_PATH ?? "/data/chroma",
+    // Canonical shared Cloudflare credential pair (#2239 rename) -- one account +
+    // token now authorizes both Vectorize and D1. VECTORIZE_*/D1_ACCOUNT_ID/
+    // D1_API_TOKEN below are the legacy names: still forwarded, still live Worker
+    // secrets, and still read as a fallback by the container's Python side
+    // (digivault.server / digisearch.search._stub's _first_env-style lookups), so
+    // this rename ships with zero downtime -- delete the legacy secrets only once
+    // CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN are set and verified working.
+    CLOUDFLARE_ACCOUNT_ID: env.CLOUDFLARE_ACCOUNT_ID ?? "",
+    CLOUDFLARE_API_TOKEN: env.CLOUDFLARE_API_TOKEN ?? "",
     VECTORIZE_ACCOUNT_ID: env.VECTORIZE_ACCOUNT_ID ?? "",
     VECTORIZE_API_TOKEN: env.VECTORIZE_API_TOKEN ?? "",
+    D1_ACCOUNT_ID: env.D1_ACCOUNT_ID ?? "",
+    D1_API_TOKEN: env.D1_API_TOKEN ?? "",
+    D1_DATABASE_MAP: env.D1_DATABASE_MAP ?? "",
     DIGIVAULT_ROOT: env.DIGIVAULT_ROOT ?? "/data/vault",
     DIGISEARCH_INDEX: env.DIGISEARCH_INDEX ?? "digithings_docs",
     DIGI_TENANT_CORPUS_MAP:
@@ -126,8 +138,13 @@ export interface Env {
   OPENAI_API_BASE?: string;
   DIGI_LLM_MODE?: string;
   CHROMA_PATH?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_API_TOKEN?: string;
   VECTORIZE_ACCOUNT_ID?: string;
   VECTORIZE_API_TOKEN?: string;
+  D1_ACCOUNT_ID?: string;
+  D1_API_TOKEN?: string;
+  D1_DATABASE_MAP?: string;
   DIGIVAULT_ROOT?: string;
   DIGISEARCH_INDEX?: string;
   DIGI_TENANT_CORPUS_MAP?: string;

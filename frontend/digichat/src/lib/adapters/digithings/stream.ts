@@ -103,7 +103,8 @@ export async function createDigigraphTraceStreamResponse(opts: {
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),
     execute: async ({ writer }) => {
-      const textId = "assistant-main";
+      let textSeq = 0;
+      let textId = "assistant-main";
       writer.write({ type: "text-start", id: textId });
       let activitySeq = 0;
       const bodyPayload: Record<string, unknown> = {
@@ -169,6 +170,24 @@ export async function createDigigraphTraceStreamResponse(opts: {
         const tr = delta.digigraph_trace;
         if (tr && typeof tr === "object") {
           const payload = tr as DigigraphTracePayload;
+
+          // #2306 follow-up: a round_boundary trace marks that the content already
+          // streamed for that round (if any — digigraph only fires this when the
+          // round narrated something) was NOT the final answer, e.g. "I will load
+          // the full notes now." written alongside that round's tool calls. Without
+          // this, that narration and the next round's real answer land in the SAME
+          // text part with nothing between them — confirmed in production, where
+          // they read as one continuous, self-contradicting block ("...I cannot
+          // fully answer... [answers fully anyway]"). Closing the current text part
+          // and opening a fresh one puts them in separate message parts instead.
+          // This is NOT an activity span — it renders no visible chip; it only
+          // resets which text part subsequent "content" deltas land in.
+          if (payload.type === "round_boundary") {
+            writer.write({ type: "text-end", id: textId });
+            textId = `assistant-main-${++textSeq}`;
+            writer.write({ type: "text-start", id: textId });
+            continue;
+          }
 
           for (const span of mapDigigraphTraceToSpans(payload, opts.activityDetail)) {
             writer.write({

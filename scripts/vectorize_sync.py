@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Sync onboard notes from Supabase ``architecture_notes`` into Cloudflare Vectorize.
+"""Sync notes from Cloudflare D1 into Cloudflare Vectorize.
 
 Runs on an operator machine or in CI — never inside the Cloudflare Container, which
 only ever queries. Chunking goes through the same SegmentAwareChunker path production
 retrieval assumes, so the index matches the pipeline that was validated.
 
-``--dry-run`` still reads notes from Supabase and chunks them — that's the only way
-to get an accurate count — but skips both the embedder and the Vectorize upsert, so
-it costs no ONNX inference, no model download, and no network write. The reported
-count is the number of vectors that *would* be upserted.
+``--database`` MUST be the same D1 database ``scripts/d1_sync.py`` published
+``--prefix`` into — digisearch's Vectorize hits carry a ``vault_path``, and
+``digivault_get_note`` resolves that path against D1, not Vectorize. Point this at a
+different database than digivault serves the same prefix from and every hit the
+model tries to load 404s: the vectors and the notes have to describe the same corpus.
+
+``--dry-run`` still reads notes from D1 and chunks them — that's the only way to get
+an accurate count — but skips both the embedder and the Vectorize upsert, so it costs
+no ONNX inference, no model download, and no network write. The reported count is
+the number of vectors that *would* be upserted.
 
 ``--index`` is NOT a free choice: it must equal the ``DIGISEARCH_INDEX`` /
 ``DIGI_TENANT_CORPUS_MAP`` entry the digisearch server for that tenant is
@@ -37,9 +43,14 @@ single canonical name on both sides of the pairing.
 
 Apply::
 
-    CORE_SUPABASE_URL=… CORE_SUPABASE_ANON_KEY=… \\
-    VECTORIZE_ACCOUNT_ID=… VECTORIZE_API_TOKEN=… \\
-      python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs
+    CLOUDFLARE_ACCOUNT_ID=… CLOUDFLARE_API_TOKEN=… \\
+      python3 scripts/vectorize_sync.py --prefix clients/digithings --index digithings_docs \\
+        --database <d1-database-id>
+
+One Cloudflare account + token now covers both the D1 read and the Vectorize write
+(#2239 credential rename) -- ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` are
+canonical; the legacy ``D1_ACCOUNT_ID``/``D1_API_TOKEN``/``VECTORIZE_ACCOUNT_ID``/
+``VECTORIZE_API_TOKEN`` names still work as a fallback (see ``_first_env`` below).
 """
 
 from __future__ import annotations
@@ -297,23 +308,67 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--database",
+        required=True,
+        help=(
+            "D1 database id holding this corpus' notes — the same id d1_sync.py wrote "
+            "to for --prefix. Vectors are derived from D1, so a mismatch silently "
+            "embeds a different corpus than digivault serves."
+        ),
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help=(
-            "Read notes from Supabase, chunk, and report the vector count — skip "
+            "Read notes from D1, chunk, and report the vector count — skip "
             "embedding and the Vectorize upsert entirely."
         ),
     )
     args = parser.parse_args(argv)
 
-    import os
-
     from digisearch.embedding.providers.minilm import MINILM_MODEL_ID, MiniLMEmbedder
     from digisearch.indexes.backends.vectorize import DEFAULT_BATCH_SIZE, VectorizeBackend
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
-    from digivault.supabase_store import SupabaseStore
+    from digivault.d1_errors import D1StoreError
+    from digivault.d1_store import D1Store
+    from digivault.supabase_store import _first_env
 
-    notes = SupabaseStore.from_env().list_notes(path_prefix=args.prefix)
+    # Canonical-first, legacy-fallback (#2239 credential rename): D1 and Vectorize
+    # now share one Cloudflare account + token, so this single resolution feeds both
+    # the D1 read below and the Vectorize sink further down -- CLOUDFLARE_ACCOUNT_ID/
+    # CLOUDFLARE_API_TOKEN first, then the legacy VECTORIZE_*/D1_* names, whichever
+    # the operator still has set.
+    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    if not account_id or not api_token:
+        # Checked before the D1 read below, not only before the Vectorize write
+        # further down: D1 is read on every invocation, `--dry-run` included, so
+        # without this an entirely-unset credential pair still reached Cloudflare as
+        # an unauthenticated request, came back 401, and -- 401 being retryable, see
+        # `_is_retryable_status` -- burned the full retry budget's backoff delay
+        # before `D1StoreError` finally surfaced below. This up-front check skips
+        # that wasted, slow round-trip entirely (#2239 review).
+        print(
+            "error: CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        notes = D1Store(
+            args.database,
+            account_id=account_id,
+            api_token=api_token,
+        ).list_notes(path_prefix=args.prefix)
+    except (ValueError, D1StoreError) as exc:
+        # ValueError: resolve_path_prefix (digivault.d1_store) rejects a non-None
+        # prefix that normalizes to empty (e.g. "--prefix /") -- fail closed rather
+        # than silently syncing every note in the database.
+        # D1StoreError: a wrong database id, a malformed-but-non-empty token, or a
+        # transport blip -- the presence check above only catches an entirely absent
+        # credential, never a wrong one. Both give the clean CLI error d1_sync.py gives.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     print(f"{len(notes)} notes under {args.prefix!r}", file=sys.stderr)
 
     class _CountingSink:
@@ -327,10 +382,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         sink = _CountingSink()
     else:
-        account_id = os.environ.get("VECTORIZE_ACCOUNT_ID", "").strip()
-        api_token = os.environ.get("VECTORIZE_API_TOKEN", "").strip()
-        if not account_id or not api_token:
-            raise SystemExit("VECTORIZE_ACCOUNT_ID and VECTORIZE_API_TOKEN are required")
         sink = VectorizeBackend(args.index, account_id=account_id, api_token=api_token)
 
     if not args.dry_run:

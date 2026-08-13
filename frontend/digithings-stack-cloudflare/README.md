@@ -84,7 +84,10 @@ Boot order (critical for Cloudflare Containers port probes):
 3. Oneshot `seed_chroma` waits for digigraph `/healthz`, then runs
    `digisearch ingest` for **`digithings_docs`** (`/seed/digithings_docs`) and
    **`occ_help`** (`/seed/occ_help`) into Chroma.
-4. When `VECTORIZE_ACCOUNT_ID` / `VECTORIZE_API_TOKEN` are both set, the
+4. When remote-index credentials resolve — canonical
+   `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`, then legacy
+   `VECTORIZE_ACCOUNT_ID` / `VECTORIZE_API_TOKEN`, then
+   `D1_ACCOUNT_ID` / `D1_API_TOKEN` as a supported fallback — the
    container performs **no boot seeding at all**: `seed_chroma.sh` exits
    immediately and `start_digisearch.sh` skips the marker wait, starting
    digisearch straight away against the remote Vectorize index. Container
@@ -172,9 +175,10 @@ Ollama in this path unless you need them.
 digigraph chat-only env (set in `wrangler.toml` / entrypoint / bundle compose):
 
 - `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml` — `research_rag`, research only,
-  tools `digisearch` + `digivault_search_notes`
+  tools `digisearch` + `digivault_search_notes` + `digivault_get_note` (this stack has D1)
 - `DIGI_WORKFLOW_PROFILE=research_rag`
-- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes`
+- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes,digivault_get_note` — fallback
+  only, read solely when `digiproject.yaml` fails to load; kept in sync with it
 - `DIGIQUANT_URL=` (empty) — never route to `backtest_node`
 
 digichat: `DIGICHAT_ENABLED_SERVICES=digigraph` (do not probe digiquant).

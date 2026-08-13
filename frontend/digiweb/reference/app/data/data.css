@@ -196,6 +196,16 @@
   border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
 
+.cr-arrow:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.cr-arrow:disabled:hover {
+  color: var(--ink-soft);
+  border-color: var(--hair);
+}
+
 /* Edge fades: the rail reads as a strip that continues past both sides */
 .cr-mask {
   margin-top: 1.2rem;

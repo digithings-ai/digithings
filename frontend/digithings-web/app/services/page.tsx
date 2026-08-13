@@ -45,7 +45,7 @@ export default function ServicesPage() {
     <>
       <DtNav />
 
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <PageHead
           kicker={"// services"}
           title={

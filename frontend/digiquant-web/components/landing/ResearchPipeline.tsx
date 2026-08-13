@@ -84,7 +84,7 @@ export function ResearchPipeline() {
 
     const syncFill = () => {
       if (reduced) {
-        fill.style.height = "100%";
+        fill.style.transform = "scaleY(1)";
         return;
       }
       const rect = list.getBoundingClientRect();
@@ -92,7 +92,7 @@ export function ResearchPipeline() {
       const start = vh * 0.42;
       const end = rect.height - vh * 0.12;
       const progress = end > 0 ? clamp((start - rect.top) / end, 0, 1) : 0;
-      fill.style.height = `${progress * 100}%`;
+      fill.style.transform = `scaleY(${progress})`;
     };
 
     syncFill();

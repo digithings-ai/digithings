@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { ReactNode } from "react";
+import { useCallback, useSyncExternalStore } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 /**
  * A `mailto:` link assigned client-side after mount instead of baked into
@@ -17,12 +17,21 @@ import type { ReactNode } from "react";
  * payload (which still carries the plain `mailto:` string) against the
  * rendered anchor's `href` attribute (rewritten to `/cdn-cgi/...`).
  *
- * Rendering with no literal mailto: string in the initial HTML at all — an
- * inert `href="#"` server-side, the real href assigned after mount — gives
- * Cloudflare's rewriter nothing to rewrite, so server and client agree.
- * Real users with JS still get a working mailto: link; without JS the link
- * is inert, the same tradeoff any client-only-assigned href accepts.
+ * Rendering with no literal mailto: string in the initial HTML at all — no
+ * href server-side, the real href assigned after client mount — gives
+ * Cloudflare's rewriter nothing to rewrite, so server and client agree. Real
+ * users with JS still get a working mailto: link; without JS the link is
+ * inert, the same tradeoff any client-only-assigned href accepts.
+ *
+ * Pending look (dimmed, aria-disabled) is derived from a hydration-safe
+ * client mount flag (`useSyncExternalStore`) so className / aria-disabled
+ * stay synchronized with click prevention — no setState-in-effect and no
+ * imperative mutations of React-owned attributes.
  */
+const PENDING_CLASSES = ["opacity-50", "cursor-default"] as const;
+
+const emptySubscribe = () => () => {};
+
 export function ContactMailto({
   href,
   className,
@@ -35,15 +44,27 @@ export function ContactMailto({
   ariaLabel?: string;
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLAnchorElement>(null);
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
 
-  useEffect(() => {
-    const el = ref.current;
-    if (el) el.href = href;
-  }, [href]);
+  const onClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      if (!mounted) e.preventDefault();
+    },
+    [mounted],
+  );
 
   return (
-    <a ref={ref} href="#" className={className} aria-label={ariaLabel}>
+    <a
+      {...(mounted ? { href } : {})}
+      className={[className, ...(!mounted ? PENDING_CLASSES : [])].filter(Boolean).join(" ")}
+      aria-label={ariaLabel}
+      aria-disabled={mounted ? undefined : true}
+      onClick={onClick}
+    >
       {children}
     </a>
   );
