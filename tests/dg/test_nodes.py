@@ -359,6 +359,26 @@ class TestSupervisorNode:
         )
         assert out.get("response_language") == "de"
 
+    def test_supervisor_node_does_not_crash_outside_a_real_graph_invocation(self) -> None:
+        """Finding 3 (IMPORTANT, final whole-branch review): supervisor_node must stay
+        callable/testable in isolation the same way _safe_stream_writer() already
+        guarantees for get_stream_writer(). Calling it directly (bypassing
+        graph.invoke()/.stream() entirely) with a digi_subject set used to reach
+        get_store() outside any runnable context, which raises RuntimeError -- and even
+        inside a graph compiled WITHOUT a store, get_store() returns None, and the
+        subsequent store.put()/.get() would raise AttributeError. _safe_get_store()
+        closes both gaps; this pins that the bare call is now safe and simply skips the
+        store-dependent logic."""
+        from digigraph.graph.nodes import supervisor_node
+
+        out = supervisor_node({"digi_subject": "user-42", "response_language": "de"})
+
+        assert "error" not in out
+        # No store available -- the response_language passed in is not echoed back as
+        # a fallback (there was no prior-thread value to recall), and nothing raised.
+        assert "response_language" not in out
+        assert out.get("supervisor_route") == "research"
+
 
 @pytest.mark.unit
 class TestBacktestNode:

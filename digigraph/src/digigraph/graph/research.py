@@ -8,7 +8,7 @@ import os
 import re
 from typing import Any
 
-from langgraph.config import get_stream_writer
+from langgraph.config import get_store, get_stream_writer
 
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
@@ -32,6 +32,26 @@ def _safe_stream_writer():
         return get_stream_writer()
     except RuntimeError:
         return lambda _data: None
+
+
+def _safe_get_store():
+    """get_store() raises RuntimeError when called outside a compiled graph's
+    invocation (e.g. a unit test calling a node function directly, or any other
+    out-of-runnable-context call) -- catch that and return None, mirroring
+    _safe_stream_writer()'s pattern so node logic stays testable/callable in
+    isolation without needing a real graph invocation.
+
+    Also covers the in-graph case where the compiled graph has no store attached
+    at all: LangGraph's get_store() returns None then (no exception), which a bare
+    ``store.put(...)``/``store.get(...)`` call would turn into an AttributeError.
+    Callers must treat a None return here the same as "no store available" and
+    skip the store-dependent logic, exactly as if the calling condition (e.g.
+    ``if subject:``) were false.
+    """
+    try:
+        return get_store()
+    except RuntimeError:
+        return None
 
 
 RESEARCH_SYSTEM = """You are a quant research assistant. Given a user idea for a trading strategy, respond with exactly one JSON object (no markdown fences, no prose before or after) with keys:

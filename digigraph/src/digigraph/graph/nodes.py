@@ -11,9 +11,8 @@ from typing import Any
 import httpx
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
-from langgraph.config import get_store
 
-from digigraph.graph.research import _safe_stream_writer, research_node
+from digigraph.graph.research import _safe_get_store, _safe_stream_writer, research_node
 from digigraph.graph.state import WorkflowState
 from digigraph.trace_events import TraceEventV1
 from digigraph.trading_profile import optimization_constraints_dict_from_profile
@@ -77,16 +76,24 @@ def supervisor_node(state: WorkflowState) -> dict:
     updates: dict[str, Any] = {}
     subject = state.get("digi_subject")
     if subject:
-        namespace = (subject, "prefs")
-        store = get_store()
-        if state.get("response_language"):
-            # Explicit this-turn value -- persist it for future threads.
-            store.put(namespace, "response_language", {"language": state["response_language"]})
-        else:
-            # No value this turn -- fall back to a prior thread's preference, if any.
-            item = store.get(namespace, "response_language")
-            if item is not None:
-                updates["response_language"] = item.value.get("language")
+        # _safe_get_store() mirrors _safe_stream_writer(): outside a real graph
+        # invocation get_store() raises RuntimeError, and inside a graph compiled
+        # without a store it returns None -- either way, a bare store.put()/.get()
+        # would raise. Skip the store logic entirely when unavailable, same as if
+        # `subject` were falsy.
+        store = _safe_get_store()
+        if store is not None:
+            namespace = (subject, "prefs")
+            if state.get("response_language"):
+                # Explicit this-turn value -- persist it for future threads.
+                store.put(
+                    namespace, "response_language", {"language": state["response_language"]}
+                )
+            else:
+                # No value this turn -- fall back to a prior thread's preference, if any.
+                item = store.get(namespace, "response_language")
+                if item is not None:
+                    updates["response_language"] = item.value.get("language")
 
     if depth <= 0:
         return {
