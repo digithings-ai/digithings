@@ -59,17 +59,29 @@ def invoke_digivault_tool(
     headers["Content-Type"] = "application/json"
     payload: dict[str, Any] = {"tool": tool, "arguments": arguments}
     try:
-        with _cb, sync_client(timeout=30.0) as client:
-            r = client.post(url, json=payload, headers=headers)
-            r.raise_for_status()
-            body = r.json()
+        # Only the network call itself is inside `with _cb:` -- a genuine transport
+        # failure (httpx.RequestError: connection refused, timeout, DNS failure) is
+        # what should count against the breaker. `raise_for_status()`/`.json()` run
+        # OUTSIDE it deliberately: a 4xx/5xx response or a malformed body is a real
+        # rejection from a live, reachable service (RetryPolicy's own reasoning in
+        # graph/graph.py: "never httpx.HTTPStatusError -- a 4xx/5xx is a real
+        # rejection, not a blip"), not evidence the service is down, so it must not
+        # trip the process-wide circuit for every other caller.
+        with _cb:
+            with sync_client(timeout=30.0) as client:
+                r = client.post(url, json=payload, headers=headers)
+        r.raise_for_status()
+        body = r.json()
     except CircuitBreakerOpen:
         return {"ok": False, "error": "digivault circuit open; downstream unavailable"}
     except HUB_CLIENT_ERRORS as e:
-        # A real (non-circuit-open) downstream failure also counts as a breaker
-        # failure -- CircuitBreaker.__exit__ already recorded it above -- but must
-        # still surface as this function's normal ok:False contract rather than
-        # raise, matching every other failure path here (see "invalid_response").
+        # A genuine transport failure (httpx.RequestError, raised inside `with _cb:`
+        # above) also counts as a breaker failure -- CircuitBreaker.__exit__ already
+        # recorded it -- but must still surface as this function's normal ok:False
+        # contract rather than raise, matching every other failure path here (see
+        # "invalid_response"). A 4xx/5xx or malformed-JSON response reaches this
+        # same except clause but was raised AFTER `with _cb:` already exited
+        # cleanly, so it does not count toward opening the circuit.
         return {"ok": False, "error": f"digivault invoke failed: {e}"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "invalid_response"}
