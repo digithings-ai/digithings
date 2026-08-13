@@ -289,6 +289,7 @@ export function ByokCliFlow({
     setModelHi(0);
     setError(null);
     setPing(null);
+    setCustomIds(new Set());
     setStep("key");
   }, []);
 
@@ -357,6 +358,7 @@ export function ByokCliFlow({
     setPing(null);
     setError(null);
     setCustomModel(false);
+    setCustomIds(new Set());
     setStep("provider");
   }, [onClear]);
 
@@ -366,6 +368,7 @@ export function ByokCliFlow({
     setPing(null);
     setError(null);
     setCustomModel(false);
+    setCustomIds(new Set());
     setStep("provider");
   }, []);
 
