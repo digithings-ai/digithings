@@ -79,6 +79,16 @@ export type BYOKKeyState = {
   isSet: boolean;
 };
 
+/** A single model entry once live catalog data exists (Task 8+). Falls back to a
+ * flat string per fallbackModels entry with tier undefined when live fetch hasn't
+ * run or failed — the picker never blocks on the network. */
+export type ByokModelOption = {
+  id: string;
+  label: string;
+  tier?: "free" | "opensource" | "flagship";
+  supportsTools?: boolean;
+};
+
 export function emptyByokState(
   provider: BYOKProvider = "openrouter",
 ): BYOKKeyState {
