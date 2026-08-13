@@ -10,9 +10,9 @@ Mounted read-only into LiteLLM and digigraph as `/app/config`.
   chat-only profile but omits `digivault_get_note` (D1-only tool). Compose defaults
   `DIGI_PROJECT_CONFIG` to this file.
 - `byok-providers.json` — BYOK provider allowlist for `llm_auth.py`. A vendored
-  copy of the repo-root `config/byok-providers.json`; the two must stay
-  byte-identical (see `tests/dg/test_llm_auth.py::TestByokCatalogVendoredCopy`,
-  which fails CI if they drift).
+  copy of the repo-root `config/byok-providers.json`; the two must stay in sync
+  (see `tests/dg/test_llm_auth.py::TestByokCatalogVendoredCopy`, which compares
+  parsed JSON — not byte-for-byte — and fails CI if the *content* drifts).
 - digigraph reads this path via `DIGI_CONFIG_PATH` and `DIGI_PROJECT_CONFIG`.
   Keep filenames stable.
 
