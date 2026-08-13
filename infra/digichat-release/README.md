@@ -119,9 +119,13 @@ Stack-only `docker run` (no digichat UI): see
 Profile A digigraph is **research_rag only**. The stack image ships
 `config/digiproject.yaml` and sets:
 
-- `DIGI_PROJECT_CONFIG=/app/config/digiproject.yaml`
+- `DIGI_PROJECT_CONFIG=/app/config/digiproject.profile-a-local.yaml` (stock
+  local/self-host — no D1, so `allowed_tools` omits `digivault_get_note`; the
+  D1-backed Cloudflare stack overrides this to `digiproject.yaml`, which includes it)
 - `DIGI_WORKFLOW_PROFILE=research_rag`
-- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes,digivault_get_note`
+- `DIGI_ALLOWED_TOOLS=digisearch,digivault_search_notes` (fallback only — read
+  solely when the project config above fails to load; kept in sync with
+  whichever `digiproject*.yaml` is actually mounted, not a separate default)
 - `DIGIQUANT_URL=` (empty)
 
 digichat probes only digigraph (`DIGICHAT_ENABLED_SERVICES=digigraph`). OCC and

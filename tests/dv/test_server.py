@@ -1717,6 +1717,7 @@ def test_orchestrator_invoke_get_note_batch_happy_path(monkeypatch: pytest.Monke
         _fake_request(),
     )
     assert resp.ok is True
+    assert resp.data is not None
     assert resp.data["errors"] == {}
     got = {n["vault_path"]: n["body_markdown"] for n in resp.data["notes"]}
     assert got == {
@@ -1750,6 +1751,7 @@ def test_orchestrator_invoke_get_note_batch_partial_failure_keeps_the_good_notes
         _fake_request(),
     )
     assert resp.ok is True
+    assert resp.data is not None
     assert len(resp.data["notes"]) == 1
     assert resp.data["notes"][0]["vault_path"] == "clients/digithings/arch__p001"
     assert resp.data["errors"] == {
@@ -1795,6 +1797,7 @@ def test_orchestrator_invoke_get_note_batch_enforces_prefix_per_path_not_just_th
         _fake_request(),
     )
     assert resp.ok is True
+    assert resp.data is not None
     assert len(resp.data["notes"]) == 1
     assert resp.data["notes"][0]["vault_path"] == "clients/digithings/arch__p001"
     assert resp.data["errors"] == {"clients/online-compliance-center/x": "out of scope"}
@@ -1827,6 +1830,7 @@ def test_orchestrator_invoke_get_note_batch_dedupes_while_preserving_order(
         _fake_request(),
     )
     assert resp.ok is True
+    assert resp.data is not None
     assert len(resp.data["notes"]) == 1
     assert _FakeD1.calls == ["clients/digithings/arch__p001"]
 
@@ -1870,6 +1874,7 @@ def test_orchestrator_invoke_get_note_single_path_unchanged_when_vault_paths_abs
         _fake_request(),
     )
     assert resp.ok is True
+    assert resp.data is not None
     assert resp.data == note.model_dump(mode="json")
     assert "notes" not in resp.data
     assert "errors" not in resp.data

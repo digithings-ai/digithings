@@ -68,7 +68,8 @@ agents:
     1. Search before answering. Never answer a documentation question from memory.
     2. Read the shape of what came back, not just the text: you see at most 5 rows, and
        each row's content is clipped.
-    3. A row marked "truncated": true means you have NOT seen that document. Load it
+    3. A row marked "truncated": true (digigraph), or digisearch's content_truncated /
+       possibly_truncated on fetch_all, means you have NOT seen that document. Load it
        before using it for anything beyond a one-line fact: digivault_get_note with the
        row's doc_id for a digivault_search_notes hit, or with its metadata.vault_path
        for a digisearch hit. Always load the full note when the question involves a

@@ -74,6 +74,23 @@ export function TearsheetChartsReference() {
   const chartView = printing ? PRINT_FULL_VIEW : view;
   const chartScale: ChartScale = printing ? "linear" : scale;
 
+  // ariaLabels must describe the visible window (lookback / pan), not always
+  // the full-history periodStart/periodEnd — screen readers otherwise hear
+  // full-span dates while the chart shows a subset.
+  const viewDateLabel = useMemo(() => {
+    if (!D.fullSpan || (chartView.lo <= 0 && chartView.hi >= 1)) {
+      return `${D.periodStart} to ${D.periodEnd}`;
+    }
+    const t0 = new Date(D.fullSpan[0]).getTime();
+    const t1 = new Date(D.fullSpan[1]).getTime();
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) {
+      return "visible chart range";
+    }
+    const start = new Date(t0 + chartView.lo * (t1 - t0)).toISOString().slice(0, 10);
+    const end = new Date(t0 + chartView.hi * (t1 - t0)).toISOString().slice(0, 10);
+    return `${start} to ${end}`;
+  }, [chartView]);
+
   const setViewFromChart = useCallback((v: ViewWindow) => {
     setViewOverride(v);
     const matched = matchLookbackPreset(v, D.fullSpan);
@@ -272,22 +289,22 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
-                ariaLabel={`${D.symbol} candlestick price chart, ${chartScale} scale, with long and short trade entry and exit markers, ${D.periodStart} to ${D.periodEnd}`}
+                ariaLabel={`${D.symbol} candlestick price chart, ${chartScale} scale, with long and short trade entry and exit markers, ${viewDateLabel}`}
               />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "equity"}>
             <div className="ts-chart">
               {chartScale === "log" ? (
-                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve in dollars, log scale, ${D.periodStart} to ${D.periodEnd}`} />
+                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve in dollars, log scale, ${viewDateLabel}`} />
               ) : (
-                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve, percent return, linear scale, ${D.periodStart} to ${D.periodEnd}`} />
+                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve, percent return, linear scale, ${viewDateLabel}`} />
               )}
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "drawdown"}>
             <div className="ts-chart">
-              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Drawdown, percent below peak equity, ${D.periodStart} to ${D.periodEnd}`} />
+              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Drawdown, percent below peak equity, ${viewDateLabel}`} />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
@@ -299,7 +316,7 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
-                ariaLabel={`Per-trade profit and loss, percent, realized and open trades, ${D.periodStart} to ${D.periodEnd}`}
+                ariaLabel={`Per-trade profit and loss, percent, realized and open trades, ${viewDateLabel}`}
               />
             </div>
           </div>

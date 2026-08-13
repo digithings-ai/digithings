@@ -209,6 +209,48 @@ describe("toDigiChatActivity", () => {
     ]);
   });
 
+  // CodeRabbit finding (#2327 review): merging two hitCount-only retrieve spans
+  // (both with empty `hits`, e.g. digivault_get_note rounds whose citations
+  // don't carry structured hits) unconditionally set count: mergedHits.length,
+  // silently dropping a genuinely positive count to 0 — the exact "no hits"
+  // misreport the surrounding documentsWithheld logic exists to prevent.
+  it("keeps a positive hitCount-derived count when merging two hits-less retrieve spans", () => {
+    const withHitCount = (toolName: string, query: string, hitCount: number): ActivitySpan => ({
+      operation: "retrieve",
+      toolName,
+      query,
+      status: "completed",
+      label: "Sources",
+      hitCount,
+    });
+    const rows = toDigiChatActivity([
+      withHitCount("digivault_get_note", "clients/x/p001", 1),
+      withHitCount("digivault_get_note", "clients/x/p001", 1),
+    ]);
+    expect(rows).toEqual([
+      { kind: "tool_result", name: "digivault_get_note", query: "clients/x/p001", hits: [], count: 1 },
+    ]);
+  });
+
+  it("still prefers mergedHits.length over hitCount once real hits are present", () => {
+    const rows = toDigiChatActivity([
+      retrieved("digivault_search_notes", "q", [{ title: "A", path: "a" }]),
+      retrieved("digivault_search_notes", "q", [{ title: "B", path: "b" }]),
+    ]);
+    expect(rows).toEqual([
+      {
+        kind: "tool_result",
+        name: "digivault_search_notes",
+        query: "q",
+        hits: [
+          { title: "A", path: "a" },
+          { title: "B", path: "b" },
+        ],
+        count: 2,
+      },
+    ]);
+  });
+
   it("renders an in-flight search as a tool_call", () => {
     expect(toDigiChatActivity([started("file_search")])).toEqual([
       { kind: "tool_call", name: "file_search", query: "" },
@@ -317,6 +359,38 @@ describe("toDigiChatActivity", () => {
     expect(
       toDigiChatActivity([{ operation: "execute_tool", toolName: "file_search", status: "failed", label: "x" }])
     ).toEqual([{ kind: "status", message: "Search failed." }]);
+  });
+
+  // Regression (#2330): a failed retrieve with hitCount set (error count
+  // mistakenly reused as hit_count) must not render as N successful hits.
+  it("renders a failed retrieve span as a failure, never as hitCount successes", () => {
+    expect(
+      toDigiChatActivity([
+        {
+          operation: "retrieve",
+          status: "failed",
+          label: "digivault errors (2)",
+          toolName: "digivault",
+          query: "batch",
+          hitCount: 2,
+        },
+      ]),
+    ).toEqual([{ kind: "status", message: 'Search for "batch" failed.' }]);
+  });
+
+  it("still uses positive hitCount on a completed retrieve when documents mapped empty", () => {
+    expect(
+      toDigiChatActivity([
+        {
+          operation: "retrieve",
+          status: "completed",
+          label: "Sources",
+          toolName: "digisearch",
+          query: "jwt",
+          hitCount: 3,
+        },
+      ]),
+    ).toEqual([{ kind: "tool_result", name: "digisearch", query: "jwt", hits: [], count: 3 }]);
   });
 
   it("renders citations with no preceding search step using an empty query", () => {
@@ -491,6 +565,40 @@ describe("Phase 2 document fields + brief allowlist", () => {
       }),
     );
     expect(out!.documents![0].snippet).toHaveLength(MAX_SNIPPET_CHARS);
+  });
+
+  it("marks a capped snippet with a trailing ellipsis, reserving space so the cap doesn't clip it off", () => {
+    // #2306-era finding: the note behind this snippet can be 1000s of chars long, and a
+    // bare slice with no marker is indistinguishable from a note that just happens to be
+    // exactly this short — a user has no way to tell "this is everything" from "this is
+    // the first 280 characters of a lot more". Mirrors the backend's own fix for the
+    // model-facing payload (digigraph/orchestration/builtin.py's _mark_truncated_excerpts);
+    // this is the same problem one layer up, for the human reading the activity panel.
+    const full = "x".repeat(MAX_SNIPPET_CHARS + 200);
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [{ title: "T", path: "p", snippet: full }],
+      }),
+    );
+    const snippet = out!.documents![0].snippet!;
+    // Exactly MAX_SNIPPET_CHARS total -- the ellipsis is RESERVED space, not appended
+    // after the cap, or a naive re-clip anywhere downstream would slice the marker off.
+    expect(snippet).toHaveLength(MAX_SNIPPET_CHARS);
+    expect(snippet.endsWith("…")).toBe(true);
+    expect(snippet.slice(0, -1)).toBe(full.slice(0, MAX_SNIPPET_CHARS - 1));
+  });
+
+  it("does not add an ellipsis to a snippet that was never truncated", () => {
+    const out = sanitizeActivitySpan(
+      span({
+        operation: "retrieve",
+        status: "completed",
+        documents: [{ title: "T", path: "p", snippet: "A short, complete snippet." }],
+      }),
+    );
+    expect(out!.documents![0].snippet).toBe("A short, complete snippet.");
   });
 
   it("rejects non-finite year and non-string tier/snippet without dropping the doc", () => {

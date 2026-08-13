@@ -389,6 +389,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
                     view={view6m}
                     fullSpan={fullSpan}
                     compact
+                    ariaLabel={`${entry.strategy} preview candlestick chart`}
                   />
                 ) : (
                   <div className="dqss-chart-empty">

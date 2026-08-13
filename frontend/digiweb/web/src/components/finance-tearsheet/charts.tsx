@@ -761,7 +761,7 @@ function Svg({
   preserveAspectRatio?: string;
   /** role="img" needs an accessible name or it announces as a bare, unnamed
    *  image — every chart consumer must pass one describing the series. */
-  ariaLabel?: string;
+  ariaLabel: string;
 }) {
   const ref = useRef<SVGSVGElement>(null);
   const controlRef = useRef(control);
@@ -860,7 +860,7 @@ export interface TimeSeriesProps {
   /** Accessible name for the chart (role="img" has none without it) — should
    *  summarize the series, e.g. "Equity curve, percent return, linear scale,
    *  Jan 2023 to Feb 2025". */
-  ariaLabel?: string;
+  ariaLabel: string;
 }
 
 /**
@@ -957,7 +957,7 @@ export interface CandlestickChartProps {
   /** Accessible name for the chart (role="img" has none without it) — should
    *  summarize the series, e.g. "BTC-USD candlestick price, linear scale,
    *  with trade entry/exit markers, Jan 2023 to Feb 2025". */
-  ariaLabel?: string;
+  ariaLabel: string;
 }
 
 /**
@@ -1323,7 +1323,7 @@ export interface SignedBarsProps {
   height?: number;
   fmt?: (v: number) => string;
   /** Accessible name for the chart (role="img" has none without it). */
-  ariaLabel?: string;
+  ariaLabel: string;
 }
 
 /** Per-item signed bar chart (gains var(--up), losses var(--down)). */
@@ -1390,7 +1390,7 @@ export interface ContributionReturnChartProps {
   benchmark?: { label: string; values: number[] };
   /** Accessible name for the chart (role="img" has none without it) — should
    *  summarize the series, e.g. "Portfolio return contribution by factor". */
-  ariaLabel?: string;
+  ariaLabel: string;
 }
 
 /** Signed cumulative contribution stacks with the exact portfolio return overlaid. */
@@ -1585,7 +1585,7 @@ export interface TradeReturnChartProps {
   /** Accessible name for the chart (role="img" has none without it) — should
    *  summarize the series, e.g. "Per-trade profit and loss, realized and
    *  open trades, Jan 2023 to Feb 2025". */
-  ariaLabel?: string;
+  ariaLabel: string;
 }
 
 function sliceTradeBarsByView(

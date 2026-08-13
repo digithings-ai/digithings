@@ -140,10 +140,15 @@ def test_schema_from_digivault_manifest_get_note_falls_back_on_error() -> None:
     ):
         schema = _schema_from_digivault_manifest(_ctx(), "digivault_get_note")
     assert schema["function"]["name"] == "digivault_get_note"
-    assert schema["function"]["parameters"]["required"] == ["vault_path", "path_prefix"]
+    params = schema["function"]["parameters"]
+    assert params["required"] == ["path_prefix"]
+    assert "vault_path" in params["properties"]
+    assert "vault_paths" in params["properties"]
+    assert params["properties"]["vault_paths"]["type"] == "array"
     description = schema["function"]["description"]
     assert "doc_id" in description
     assert "digisearch" in description  # warns the model off digisearch's doc_id
+    assert "vault_paths" in description
 
 
 @pytest.mark.unit
@@ -885,3 +890,58 @@ def test_handle_digivault_get_note_single_path_ignores_stray_vault_paths_key() -
     assert "notes" not in payload
     call_args = mock_invoke.call_args.args[2]
     assert call_args["vault_path"] == "clients/digithings/arch"
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_rejects_vault_path_and_vault_paths_together() -> None:
+    """CodeRabbit finding on #2327: builtin.py's schema-fallback description claims
+    'vault_path vs vault_paths is enforced by the handler', but the handler only
+    checked is_batch and silently preferred vault_paths, ignoring a supplied
+    vault_path with no error -- the comment asserted an enforcement that did not
+    exist. A model that supplies both most likely means one of the two by mistake;
+    silently picking one is more confusing than a clear rejection naming both."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    def _boom(*_a, **_kw):
+        raise AssertionError("must not call digivault when both selectors are supplied")
+
+    with patch("digigraph.orchestration.builtin.invoke_digivault_tool", side_effect=_boom):
+        out = _handle_digivault_get_note(
+            {
+                "vault_path": "clients/digithings/arch",
+                "vault_paths": ["clients/digithings/arch__p002"],
+            },
+            _ctx(),
+        )
+
+    assert isinstance(out, str)
+    assert "exactly one" in out.lower()
+    assert "vault_path" in out
+    assert "vault_paths" in out
+
+
+@pytest.mark.unit
+def test_handle_digivault_get_note_blank_vault_path_alongside_vault_paths_is_fine() -> None:
+    """A blank/whitespace vault_path is not a real second selector -- must not
+    trip the new both-supplied rejection (mirrors how the single-path branch
+    already treats blank as absent)."""
+    from digigraph.orchestration.builtin import _handle_digivault_get_note
+
+    note = {
+        "vault_path": "clients/digithings/arch__p001",
+        "title": "P1",
+        "summary": "",
+        "tags": [],
+        "body_markdown": "ok",
+    }
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digivault_tool",
+        return_value={"ok": True, "data": {"notes": [note], "errors": {}}},
+    ):
+        out = _handle_digivault_get_note(
+            {"vault_path": "   ", "vault_paths": ["clients/digithings/arch__p001"]}, _ctx()
+        )
+
+    assert isinstance(out, dict)
+    payload = json.loads(out["content"])
+    assert len(payload["notes"]) == 1

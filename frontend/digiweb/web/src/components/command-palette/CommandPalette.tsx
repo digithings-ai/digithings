@@ -123,7 +123,7 @@ const defaultEmpty = (query: string): ReactNode =>
 // ships a real Close button there), so the trap must cycle the dialog's
 // actual focusable set rather than assume the input is the only one.
 const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href]:not([tabindex^="-"]), button:not([disabled]):not([tabindex^="-"]), input:not([disabled]):not([tabindex^="-"]), select:not([disabled]):not([tabindex^="-"]), textarea:not([disabled]):not([tabindex^="-"]), [tabindex]:not([tabindex^="-"])';
 
 export function CommandPalette({
   open,

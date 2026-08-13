@@ -142,7 +142,7 @@ export default function Home() {
     <>
       <DtNav />
 
-      <main id="main">
+      <main id="main" tabIndex={-1}>
         <HeroMesh>
           <h1 className="dqhero-h1">
             <span className="ln">

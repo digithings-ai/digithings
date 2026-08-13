@@ -86,6 +86,11 @@ function extractEnvVarsKeyToRef(source) {
     .filter((pair) => pair !== null);
 }
 
+function extractEnvVarsKeys(source) {
+  const body = extractEnvVarsBlock(source);
+  return [...body.matchAll(/^ {4}([A-Za-z_][A-Za-z0-9_]*):/gm)].map((m) => m[1]);
+}
+
 function extractEnvInterfaceStringMembers(source) {
   const block = source.match(/export interface Env \{([\s\S]*?)\n\}/);
   if (!block) {
@@ -98,10 +103,13 @@ function extractEnvInterfaceStringMembers(source) {
 
 describe("Env / envVars parity", () => {
   it("forwards every string member of Env through envVars", () => {
+    // Compare Env members to top-level envVars *keys* (not arbitrary env.*
+    // references elsewhere in the block). A typo'd key that still reads
+    // env.FOO would pass a refs-only check while never forwarding FOO.
     const envMembers = extractEnvInterfaceStringMembers(indexSource);
-    const forwarded = new Set(extractEnvVarsRefs(indexSource));
+    const forwarded = new Set(extractEnvVarsKeys(indexSource));
     const missing = envMembers.filter((name) => !forwarded.has(name));
-    expect(missing, `Env member(s) declared but never read via env.* in envVars: ${missing}`).toEqual(
+    expect(missing, `Env member(s) declared but never keyed in envVars: ${missing}`).toEqual(
       [],
     );
   });

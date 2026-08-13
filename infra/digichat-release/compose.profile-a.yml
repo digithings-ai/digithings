@@ -157,10 +157,13 @@ services:
       DIGIKEY_PUBLIC_KEY_PEM: ${DIGIKEY_PUBLIC_KEY_PEM:-}
       OPENAI_API_BASE: http://litellm:4000/v1
       DIGI_CONFIG_PATH: /app/config
-      DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}
+      # Local Profile A has no D1 — use the no-get_note project config. Cloudflare
+      # keeps digiproject.yaml (with digivault_get_note). Override via DIGI_PROJECT_CONFIG.
+      DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-/app/config/digiproject.profile-a-local.yaml}
       DIGI_WORKFLOW_PROFILE: ${DIGI_WORKFLOW_PROFILE:-research_rag}
       # Multi-image Profile A has digivault only (no digisearch service).
-      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes,digivault_get_note}
+      # digivault_get_note is D1-only; stock Profile A sets DIGIVAULT_ROOT only.
+      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}
       DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
       DIGI_ENABLE_DEBUG_ENDPOINTS: ${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
       DIGI_ENABLE_THREAD_API: ${DIGI_ENABLE_THREAD_API:-0}
