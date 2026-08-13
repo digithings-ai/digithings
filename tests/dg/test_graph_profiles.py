@@ -110,13 +110,30 @@ def test_build_workflow_graph_has_a_store(reset_workflow_graph_cache) -> None:
     assert graph.store is not None
 
 
-@pytest.mark.unit
-def test_get_store_defaults_to_in_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.fixture(autouse=False)
+def reset_store():
+    """Reset the process-wide Store singleton between tests.
+
+    Mirrors reset_checkpointer's save/restore pattern (test_graph.py) for the
+    analogous get_store() singleton (graph.py) -- without this, a test that sets
+    _store_instance = None to force a fresh get_store() call leaves a live
+    InMemoryStore for the rest of the pytest session with no teardown.
+    """
     import digigraph.graph.graph as _graph_module
+
+    original_instance = _graph_module._store_instance
+    _graph_module._store_instance = None
+    yield
+    _graph_module._store_instance = original_instance
+
+
+@pytest.mark.unit
+def test_get_store_defaults_to_in_memory(
+    monkeypatch: pytest.MonkeyPatch, reset_store
+) -> None:
     from digigraph.graph.graph import get_store
 
     monkeypatch.delenv("DIGI_CHECKPOINTER", raising=False)
-    _graph_module._store_instance = None
     store = get_store()
     assert type(store).__name__ == "InMemoryStore"
 
