@@ -1,7 +1,7 @@
 // Cloudflare Pages Function — POST /api/byok/test
 // Validates a BYOK key against the selected provider (no persistence).
 
-type ProviderId = "openrouter" | "openai" | "anthropic" | "gemini";
+type ProviderId = "openrouter" | "openai" | "anthropic" | "gemini" | "xai";
 
 interface EventContext {
   request: Request;
@@ -32,6 +32,9 @@ function validateKey(key: string, provider: ProviderId): string | null {
       break;
     case "gemini":
       if (!key.startsWith("AI")) return "Gemini keys start with AI.";
+      break;
+    case "xai":
+      if (!key.startsWith("xai-")) return "x.ai keys start with xai-.";
       break;
   }
   return null;
@@ -100,6 +103,18 @@ async function testGemini(key: string): Promise<TestResult> {
   return { ok: true, model: "gemini-2.5-flash" };
 }
 
+async function testXai(key: string): Promise<TestResult> {
+  const resp = await fetchWithTimeout("https://api.x.ai/v1/models", {
+    headers: { Authorization: `Bearer ${key}` },
+  });
+  if (!resp.ok) {
+    const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
+    return { ok: false, error: body.error?.message ?? `x.ai returned HTTP ${resp.status}` };
+  }
+  const data = (await resp.json()) as { data?: { id: string }[] };
+  return { ok: true, model: data.data?.[0]?.id ?? "grok-4-3" };
+}
+
 function sameSiteOK(request: Request): boolean {
   const reqHost = new URL(request.url).hostname;
   if (reqHost === "localhost" || reqHost === "127.0.0.1") return true;
@@ -118,11 +133,23 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
   }
 
   const key = ctx.request.headers.get("x-byok-key")?.trim() ?? "";
-  const raw = ctx.request.headers.get("x-byok-provider")?.trim() ?? "openrouter";
-  const provider: ProviderId =
-    raw === "openai" || raw === "anthropic" || raw === "gemini" || raw === "openrouter"
-      ? raw
-      : "openrouter";
+  // No provider header at all defaults to openrouter (back-compat for callers
+  // that don't set it). A header that IS present but names something we don't
+  // recognize is a genuine client error, not something to paper over — silently
+  // coercing it to openrouter would run a stranger's key against the wrong
+  // provider's API and surface a confusing OpenRouter-flavored error.
+  const rawHeader = ctx.request.headers.get("x-byok-provider")?.trim() ?? "";
+  const raw = rawHeader || "openrouter";
+  if (
+    raw !== "openai" &&
+    raw !== "anthropic" &&
+    raw !== "gemini" &&
+    raw !== "openrouter" &&
+    raw !== "xai"
+  ) {
+    return jsonResponse({ ok: false, error: `Unknown BYOK provider: ${raw}` }, 400);
+  }
+  const provider: ProviderId = raw;
 
   const validation = validateKey(key, provider);
   if (validation) return jsonResponse({ ok: false, error: validation }, 400);
@@ -141,6 +168,9 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
         break;
       case "gemini":
         result = await testGemini(key);
+        break;
+      case "xai":
+        result = await testXai(key);
         break;
     }
     return jsonResponse(result, result.ok ? 200 : 400);
