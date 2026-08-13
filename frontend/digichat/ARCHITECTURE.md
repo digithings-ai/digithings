@@ -441,7 +441,8 @@ On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants wit
 (even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
 the visitor activates a validated key, the failed turn is retried with existing
 `X-BYOK-*` headers. BYOK providers listed in the UI: OpenAI, OpenRouter,
-Anthropic, Gemini (model required for all non-OpenAI providers).
+Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
+Provider list is defined by `config/byok-providers.json`.
 
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 

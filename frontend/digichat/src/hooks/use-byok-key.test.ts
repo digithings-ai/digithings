@@ -5,6 +5,7 @@ import {
 } from "@/lib/byok-openrouter";
 import {
   BYOK_DURABLE_STORAGE_KEYS,
+  byokModelPlaceholder,
   byokModelPresets,
   emptyByokState,
   moveListIndex,
@@ -50,6 +51,14 @@ describe("validateBYOKKey", () => {
   it("rejects Anthropic key that only starts with sk-", () => {
     expect(validateBYOKKey("sk-only", "anthropic")).not.toBeNull();
   });
+
+  it("returns null for a valid x.ai key", () => {
+    expect(validateBYOKKey("xai-test123", "xai")).toBeNull();
+  });
+
+  it("errors when x.ai key does not start with xai-", () => {
+    expect(validateBYOKKey("not-xai", "xai")).toMatch(/xai-/);
+  });
 });
 
 describe("validateBYOKModel", () => {
@@ -65,8 +74,19 @@ describe("validateBYOKModel", () => {
     expect(validateBYOKModel("gemini/gemini-2.0-flash", "gemini")).toBeNull();
   });
 
+  it("requires model for x.ai", () => {
+    expect(validateBYOKModel("", "xai")).not.toBeNull();
+    expect(validateBYOKModel("grok-4-3", "xai")).toBeNull();
+  });
+
   it("does not require model for OpenAI", () => {
     expect(validateBYOKModel("", "openai")).toBeNull();
+  });
+});
+
+describe("byokModelPlaceholder", () => {
+  it("returns non-empty placeholder for x.ai", () => {
+    expect(byokModelPlaceholder("xai")).toBeTruthy();
   });
 });
 
@@ -177,7 +197,7 @@ describe("byokActivationGate (validation before session activate)", () => {
 
 describe("byokModelPresets", () => {
   it("returns non-empty presets for every provider", () => {
-    for (const p of ["openrouter", "openai", "anthropic", "gemini"] as const) {
+    for (const p of ["openrouter", "openai", "anthropic", "gemini", "xai"] as const) {
       expect(byokModelPresets(p).length).toBeGreaterThan(0);
     }
   });
