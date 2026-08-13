@@ -1214,6 +1214,52 @@ def test_structured_completion_sends_json_schema_response_format() -> None:
     assert "properties" in rf["json_schema"]["schema"]
 
 
+class _PersonWithOptional(BaseModel):
+    name: str
+    nickname: str | None = None
+
+
+def test_structured_completion_strict_schema_lists_every_property_as_required() -> None:
+    """Strict mode must list defaulted/optional fields in `required` too (nullable
+    instead of omitted) — OpenAI-family providers 400 otherwise. Plain
+    `model_json_schema()` omits fields with a default from `required`."""
+    captured: dict[str, Any] = {}
+
+    def fake_create(_client: Any, **kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return _mock_response('{"name": "X", "nickname": null}')
+
+    with patch.object(client_mod, "_create_with_retry", side_effect=fake_create):
+        with patch.object(client_mod, "get_client_for_model", return_value=MagicMock()):
+            digillm.structured_completion(
+                "gpt-4o-mini", [{"role": "user", "content": "x"}], _PersonWithOptional
+            )
+    schema = captured["response_format"]["json_schema"]["schema"]
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["additionalProperties"] is False
+
+
+def test_structured_completion_non_strict_keeps_plain_schema() -> None:
+    """strict=False must NOT force-list optional fields into `required` — it uses
+    plain `model_json_schema()`, which omits defaulted fields."""
+    captured: dict[str, Any] = {}
+
+    def fake_create(_client: Any, **kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return _mock_response('{"name": "X"}')
+
+    with patch.object(client_mod, "_create_with_retry", side_effect=fake_create):
+        with patch.object(client_mod, "get_client_for_model", return_value=MagicMock()):
+            digillm.structured_completion(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "x"}],
+                _PersonWithOptional,
+                strict=False,
+            )
+    schema = captured["response_format"]["json_schema"]["schema"]
+    assert "nickname" not in schema["required"]
+
+
 def test_structured_completion_validation_error() -> None:
     bad = '{"name": "NoAge"}'  # missing required 'age'
     with patch.object(client_mod, "_create_with_retry", return_value=_mock_response(bad)):
