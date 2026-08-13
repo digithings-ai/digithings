@@ -109,6 +109,23 @@ def test_enforce_allows_unnormalized_variants_of_the_same_prefix() -> None:
     enforce_tenant_path_prefix("digithings", "/clients/digithings/", raw_map=_MAP)
 
 
+def test_enforce_refuses_a_sub_prefix_of_the_tenants_own_corpus() -> None:
+    """CodeRabbit review of PR #2305: comparison is exact, not prefix containment —
+    narrowing the requested scope to a subfolder of the tenant's own corpus (e.g.
+    "clients/digithings/policies") is refused too, same as a different tenant's
+    prefix. This matches the rest of the system: D1_DATABASE_MAP's own lookup in
+    server.py's _open_d1_store is an exact dict key match against the corpus-level
+    prefix, not a startswith() check — a caller narrowing path_prefix to a subfolder
+    was never a supported way to scope a search to that subfolder (use the query
+    text for that instead), so this isn't a new restriction, only a clearer 403
+    where an unmapped path_prefix used to surface as a less specific 503 further
+    downstream. Pinned so the exact-match decision is a recorded choice, not an
+    accident of the comparison operator."""
+    with pytest.raises(HTTPException) as exc:
+        enforce_tenant_path_prefix("digithings", "clients/digithings/policies", raw_map=_MAP)
+    assert exc.value.status_code == 403
+
+
 def test_enforce_refuses_another_tenants_prefix() -> None:
     """The exact cross-tenant scenario CodeRabbit's review flagged: a digithings
     caller naming the occ corpus's prefix."""
