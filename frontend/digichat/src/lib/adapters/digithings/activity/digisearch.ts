@@ -41,16 +41,23 @@ export function mapDigisearchRagSources(
   // started/completed execute_tool pair (digisearch/digivault never emit
   // one).
   //
-  // `hit_count` rides along on this payload too (see digigraph's
-  // workflow.py) but is deliberately not read here: `documents.length` after
-  // de-duplication is the number that actually reaches the screen, so it is
-  // the authoritative count. Nothing in this package consumes `hit_count`.
+  // `hit_count` rides along on this payload (see digigraph's workflow.py).
+  // Prefer documents.length when mapping produced docs; when mapping yields
+  // zero documents but upstream reported a positive hit_count (sources lacked
+  // usable path/title), keep that count so the UI does not say "no hits".
+  const upstreamHits =
+    typeof payload.hit_count === "number" &&
+    Number.isFinite(payload.hit_count) &&
+    payload.hit_count > 0
+      ? Math.trunc(payload.hit_count)
+      : undefined;
   return {
     operation: "retrieve",
     status: "completed",
     label: "Sources",
     toolName,
     ...(documents.length ? { documents } : {}),
+    ...(!documents.length && upstreamHits ? { hitCount: upstreamHits } : {}),
     ...(query ? { query } : {}),
   };
 }

@@ -162,7 +162,7 @@
      chart. Scoped to .is-interactive only: a static/non-interactive chart
      has no pointerdown handler and should keep ordinary page-scroll touch
      behavior. */
-  .ts-svg.is-interactive { touch-action: none; }
+  .ts-svg.is-interactive { touch-action: pan-y; }
   .ts-grid { stroke: var(--hair); stroke-width: 1; }
   .ts-grid-zero { stroke: var(--hair-2); }
   .ts-axis { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 11px; }

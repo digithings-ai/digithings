@@ -348,7 +348,11 @@ def main(argv: list[str] | None = None) -> int:
         # `_is_retryable_status` -- burned the full retry budget's backoff delay
         # before `D1StoreError` finally surfaced below. This up-front check skips
         # that wasted, slow round-trip entirely (#2239 review).
-        raise SystemExit("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required")
+        print(
+            "error: CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN are required",
+            file=sys.stderr,
+        )
+        return 1
 
     try:
         notes = D1Store(

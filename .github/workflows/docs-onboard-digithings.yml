@@ -177,8 +177,8 @@ jobs:
           if [ -z "$D1_DATABASE_MAP" ]; then
             echo "::error::D1_DATABASE_MAP is not set in the production environment"
             missing=1
-          elif ! python3 -c 'import json, os; json.loads(os.environ["D1_DATABASE_MAP"])["clients/digithings"]' 2>/dev/null; then
-            echo "::error::D1_DATABASE_MAP is not valid JSON, or has no \"clients/digithings\" entry"
+          elif ! python3 -c 'import json, os, sys; v=json.loads(os.environ["D1_DATABASE_MAP"]).get("clients/digithings"); sys.exit(0 if isinstance(v, str) and v.strip() else 1)' 2>/dev/null; then
+            echo "::error::D1_DATABASE_MAP is not valid JSON, or \"clients/digithings\" is missing/empty/non-string"
             missing=1
           fi
           exit "$missing"

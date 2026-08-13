@@ -319,6 +319,38 @@ describe("toDigiChatActivity", () => {
     ).toEqual([{ kind: "status", message: "Search failed." }]);
   });
 
+  // Regression (#2330): a failed retrieve with hitCount set (error count
+  // mistakenly reused as hit_count) must not render as N successful hits.
+  it("renders a failed retrieve span as a failure, never as hitCount successes", () => {
+    expect(
+      toDigiChatActivity([
+        {
+          operation: "retrieve",
+          status: "failed",
+          label: "digivault errors (2)",
+          toolName: "digivault",
+          query: "batch",
+          hitCount: 2,
+        },
+      ]),
+    ).toEqual([{ kind: "status", message: 'Search for "batch" failed.' }]);
+  });
+
+  it("still uses positive hitCount on a completed retrieve when documents mapped empty", () => {
+    expect(
+      toDigiChatActivity([
+        {
+          operation: "retrieve",
+          status: "completed",
+          label: "Sources",
+          toolName: "digisearch",
+          query: "jwt",
+          hitCount: 3,
+        },
+      ]),
+    ).toEqual([{ kind: "tool_result", name: "digisearch", query: "jwt", hits: [], count: 3 }]);
+  });
+
   it("renders citations with no preceding search step using an empty query", () => {
     expect(
       toDigiChatActivity([

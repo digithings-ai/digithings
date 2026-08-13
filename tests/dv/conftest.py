@@ -6,31 +6,19 @@ from collections.abc import Generator
 
 import pytest
 
+from tests.digi_test_env import CLOUDFLARE_CREDENTIAL_ENV_VARS as _SHARED_CF_ENV_VARS
+
 #: Every name in the CLOUDFLARE_*/VECTORIZE_*/D1_* credential fallback chain
-#: (digivault.server._d1_credentials, via digivault.supabase_store._first_env).
-#: Cleared before every test so a real Cloudflare credential sitting in the host
-#: shell (CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN are wrangler-conventional names,
-#: plausibly already exported for unrelated `wrangler` CLI use on a developer
-#: machine) can never leak into a test that assumes D1 is unconfigured -- the
-#: canonical-with-fallback lookup added by the #2239 credential rename widened the
-#: set of env var names that can make `_d1_configured()` see "some but not all"
-#: configured, so this fixture keeps the existing per-test `monkeypatch.delenv(...)`
-#: calls throughout this module correct without editing every one of them. Individual
-#: tests still opt in with their own `monkeypatch.setenv`.
+#: (digivault.server._d1_credentials, via digivault.supabase_store._first_env),
+#: plus digivault suite-specific maps. Cleared before every test so a real
+#: Cloudflare credential sitting in the host shell can never leak into a test
+#: that assumes D1 is unconfigured. Individual tests still opt in with their
+#: own `monkeypatch.setenv`.
 _CLOUDFLARE_CREDENTIAL_ENV_VARS = (
-    "CLOUDFLARE_ACCOUNT_ID",
-    "CLOUDFLARE_API_TOKEN",
-    "VECTORIZE_ACCOUNT_ID",
-    "VECTORIZE_API_TOKEN",
-    "D1_ACCOUNT_ID",
-    "D1_API_TOKEN",
+    *_SHARED_CF_ENV_VARS,
     "D1_DATABASE_MAP",
-    # Same leakage concern as the vars above: a developer working on the digigraph
-    # corpus-routing feature in this same repo could plausibly have this exported in
-    # their shell. digivault.tenant_scope reads it (added alongside the #2265/PR #2293
-    # tenant-prefix-binding fix) -- cleared here so only a test that explicitly
-    # `monkeypatch.setenv`s it exercises tenant binding, never one that assumes
-    # single-tenant (map-unset) behavior.
+    # Same leakage concern: digivault.tenant_scope reads DIGI_TENANT_CORPUS_MAP
+    # (added alongside the #2265/PR #2293 tenant-prefix-binding fix).
     "DIGI_TENANT_CORPUS_MAP",
 )
 

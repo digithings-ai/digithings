@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useEffect, useRef, type ReactNode } from "react";
 
 /**
  * ProductFrame — the "real surface, cropped" technique promoted from the
@@ -17,6 +17,13 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
  *   globals.css   @import "@digithings/web/styles/data-layout.css";
  *                 @source "<path-to>/digiweb/web/src/components/data-layout";
  */
+
+/** useLayoutEffect on the client (no paint flash); useEffect on the server
+ *  so SSR never warns about layout effects. Initial HTML stays the overflow
+ *  crop at scale 1 until measurement runs after hydration. */
+const useIsoLayoutEffect =
+  typeof document !== "undefined" ? useLayoutEffect : useEffect;
+
 export type ProductFrameProps = {
   /** Mono overlay tag naming the crop — "atlas · research". */
   tag?: string;
@@ -38,12 +45,9 @@ export function ProductFrame({
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const artboardRef = useRef<HTMLDivElement | null>(null);
 
-  // useLayoutEffect, not useEffect: a plain effect fires AFTER the browser
-  // paints, so the 800px-fixed artboard rendered its unscaled (uncropped-to-
-  // frame) state — visibly, on every mount — for one frame before the scale
-  // factor ever got written. Measuring/writing before paint removes that
-  // flash entirely; ResizeObserver still owns every subsequent resize.
-  useLayoutEffect(() => {
+  // Measuring/writing before paint removes the unscaled flash; ResizeObserver
+  // still owns every subsequent resize. Server path uses useEffect (above).
+  useIsoLayoutEffect(() => {
     const vp = viewportRef.current;
     const art = artboardRef.current;
     if (!vp || !art) return;
