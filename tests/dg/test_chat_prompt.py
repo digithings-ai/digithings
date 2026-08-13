@@ -44,3 +44,51 @@ def test_system_messages_are_omitted() -> None:
     )
     assert prompt == "hi"
     assert "You are helpful" not in prompt
+
+
+@pytest.mark.unit
+def test_long_history_is_trimmed_to_token_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A long multi-turn history must not grow the flattened prompt unbounded — with a
+    small token budget, the oldest turns must be dropped while the most recent exchange
+    survives intact."""
+    monkeypatch.setenv("DIGI_CHAT_HISTORY_MAX_TOKENS", "30")
+    messages = [
+        ChatMessage(role="user", content="turn one is old and should get dropped " * 10),
+        ChatMessage(role="assistant", content="ack one " * 10),
+        ChatMessage(role="user", content="turn two, also old " * 10),
+        ChatMessage(role="assistant", content="ack two " * 10),
+        ChatMessage(role="user", content="most recent question"),
+    ]
+    prompt = messages_to_workflow_prompt(messages)
+    assert "most recent question" in prompt
+    assert "turn one is old" not in prompt
+
+
+@pytest.mark.unit
+def test_short_history_is_unaffected_by_trimming() -> None:
+    """A short history well under the token budget must pass through byte-identical to
+    today's behavior — trimming must never rewrite content it didn't need to drop."""
+    messages = [
+        ChatMessage(role="user", content="What is digigraph?"),
+        ChatMessage(role="assistant", content="digigraph is the orchestration hub."),
+    ]
+    prompt = messages_to_workflow_prompt(messages)
+    assert "User: What is digigraph?" in prompt
+    assert "Assistant: digigraph is the orchestration hub." in prompt
+
+
+@pytest.mark.unit
+def test_tool_role_messages_are_silently_omitted_today() -> None:
+    """Documents the current, deliberate simplification: digichat never sends role="tool"
+    history to digigraph today (verified: frontend/digichat/src/lib/adapters/digithings/
+    never constructs one), so dropping it here is a right-sized simplification, not
+    silent data loss. If this test starts failing because a real caller DOES send
+    tool-role turns, chat_prompt.py needs real tool-turn support (see its module
+    docstring) — not a tweak to this test."""
+    messages = [
+        ChatMessage(role="user", content="call the tool"),
+        ChatMessage(role="tool", content="tool result content"),
+        ChatMessage(role="assistant", content="here is my answer"),
+    ]
+    prompt = messages_to_workflow_prompt(messages)
+    assert "tool result content" not in prompt
