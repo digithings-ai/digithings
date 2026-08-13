@@ -5,7 +5,7 @@ This folder contains the end-user and administrator manuals for the two applicat
 | Manual | Application | What it covers |
 |---|---|---|
 | **[portal-manual.md](./portal-manual.md)** | **Cloud Portal** (`cloud-portal-ui`) | Microsoft 365 backup & restore, data management/compliance, email archive, reporting & documents, and administration (users, roles, tenants, clients, announcements, four‑eyes, audit logs). |
-| **[search-manual.md](./search-manual.md)** | **OCC Search** (`occ-search`) | The eDiscovery workspace: cases, searching & browsing the archive, message preview, tagging, legal holds, and exporting. |
+| **[search-manual.md](./search-manual.md)** | **OCC Search** (`occ-search`) | The eDiscovery workspace: cases, searching & browsing the archive, message preview, tagging, and exporting. |
 
 Each manual is a **full reference** written for both everyday users and administrators, using the exact wording that appears in the applications.
 
@@ -14,7 +14,7 @@ Each manual is a **full reference** written for both everyday users and administ
 ## The two applications at a glance
 
 - **Cloud Portal** is where you protect and govern your Microsoft 365 data day to day — scheduling backups, running restores, managing compliance, and administering users and tenants.
-- **OCC Search** is where legal/compliance reviewers investigate archived mailbox data — organizing work into cases, searching, tagging, preserving (legal holds), and exporting.
+- **OCC Search** is where legal/compliance reviewers investigate archived mailbox data — organizing work into cases, searching, tagging, and exporting. (Legal holds are defined in the permission model but **not available** in the app — see [search-manual §12](./search-manual.md#12-legal-holds).)
 
 They are separate web apps but one platform: the portal even has an **eDiscovery** menu entry that points at the Search app (disabled inside the portal itself).
 
@@ -25,12 +25,8 @@ They are separate web apps but one platform: the portal even has an **eDiscovery
 Both apps authenticate against the same identity service and use one common model. Understanding it once applies to both manuals.
 
 ### Sign-in & MFA
-- Both apps use email/username + password and an **authenticator-app MFA** path (with recovery codes), but MFA is **conditional**:
-  - **Cloud Portal** prompts for MFA only when 2FA is enabled for the account.
-  - **OCC Search** signs you straight in when MFA is not enrolled; if MFA is enabled you verify a code; if MFA is required but not set up, Search sends you to the Cloud Portal to enroll, then back.
-- Password rules differ by app:
-  - **Cloud Portal:** 7–42 characters, including at least one uppercase letter and one special character.
-  - **OCC Search:** at least 6 characters.
+- Both apps use email/username + password, followed by **two-factor authentication (2FA/MFA)** via an authenticator app, with recovery codes as a backup.
+- **MFA is enrolled in the Cloud Portal.** If OCC Search finds your account hasn't set up MFA, it sends you to the portal to enroll, then back.
 
 ### Roles
 The built-in roles are shared across the platform:
@@ -69,6 +65,6 @@ In both cases the flow is the same shape: a requester triggers the action → an
 
 - These manuals were written from the application source: route definitions, UI locale/label files, role and permission definitions, and feature components. Quoted labels are taken verbatim from the apps.
 - They are **reconciled with the official product documentation** — the **Admin Guide OCC (Feb 2025)** for the portal and the **User Guide – Search (April 2025)** for search. Where the current apps differ from those guides (for example MFA method, or features delivered via `portal.netmail.cloud`), each manual includes *Reconciliation notes* and a summary table (portal §12.5, search §16.6).
-- Where a feature is **disabled or has moved**, the manuals say so — most notably **Email Archive, Teams Archive, Deletion Jobs, and Proxy Rights**, which are delivered through `portal.netmail.cloud`.
+- Where a feature is **disabled, unreleased, or has moved**, the manuals say so up front rather than describing it as working. Most notably: **Email Archive, Teams Archive, Deletion Jobs, and Proxy Rights** are delivered through `portal.netmail.cloud`; and **legal holds in OCC Search are not available** despite having permissions defined for them ([search-manual §12](./search-manual.md#12-legal-holds)).
 - Both apps can run against a built-in **mock/demo mode**; in that mode the data is seeded sample data rather than your live tenant.
 - The manuals describe what the apps do for end users and administrators; they do not name internal back-end services.

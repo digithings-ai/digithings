@@ -39,14 +39,15 @@
 - **Browse** the archive folder-by-folder.
 - **Preview** individual messages and inspect their full indexed properties and attachments.
 - **Tag** messages (individually or in bulk) for review workflows.
-- Apply **legal holds** to preserve custodian data.
-- **Export** messages as EML or MBOX archives.
+- **Export** the messages you select as EML or MBOX archives.
 
-It searches a cloud search index built from your organization's archived data, and it stores its work (cases, tags, holds, saved searches, exports) in your tenant's compliance service.
+It searches a cloud search index built from your organization's archived data, and it stores its work (cases, tags, saved searches, exports) in your tenant's compliance service.
+
+> **Legal holds are not available.** The app defines hold permissions and carries an unreleased implementation, but there is no reachable hold UI and no hold backend — see [§12](#12-legal-holds) before relying on it for preservation.
 
 **What you can see and do depends on your role and permissions.** Features simply hide or disable when you lack the permission for them. To even enter OCC Search you must hold `cases.read`; without it you see the **"Access not enabled yet"** page.
 
-> **Two "Search" experiences — which one is this?** The official **User Guide – Search (April 2025)** documents the **end-user archive Search**: a webmail-style viewer where a user opens their *own* archived mailbox (and their deputy's), searches it, saves messages to PDF, and forwards them. This manual documents the newer **case-based eDiscovery workspace** (`occ-search`) aimed at reviewers and legal teams, organized around **cases**, **custodians**, **tags**, **legal holds**, and **exports**. Both are branded "Search". Where a concept from the User Guide maps onto — or differs from — this app, a *Reconciliation note* explains it, and [§16.6](#166-reconciliation-with-the-user-guide-april-2025) summarizes all of them.
+> **Two "Search" experiences — which one is this?** The official **User Guide – Search (April 2025)** documents the **end-user archive Search**: a webmail-style viewer where a user opens their *own* archived mailbox (and their deputy's), searches it, saves messages to PDF, and forwards them. This manual documents the newer **case-based eDiscovery workspace** (`occ-search`) aimed at reviewers and legal teams, organized around **cases**, **custodians**, **tags**, and **exports**. Both are branded "Search". Where a concept from the User Guide maps onto — or differs from — this app, a *Reconciliation note* explains it, and [§16.6](#166-reconciliation-with-the-user-guide-april-2025) summarizes all of them.
 
 ---
 
@@ -98,8 +99,7 @@ OCC Search uses the **same role model as the Cloud Portal** (see [portal-manual 
 
 - **Client Search Reviewer** — read-only search access; browse, search, preview, and (where granted) tag.
 - **Search Manager** — full search domain across the tenant's cases: create/edit/delete cases and criteria.
-- **Client Manager** / **Client Administrator** — broader tenant administration, including user/role management. **Client Administrator** (client-scoped, with `four-eyes.read` / `four-eyes.manage`) configures the four‑eyes toggle — not Super/System Administrator. See [portal-manual §10](./portal-manual.md#10-administration-configuration) / [§10.2](./portal-manual.md#102-four-eyes-two-person-approval).
-- **System Administrator** / **Super Administrator** — cross-tenant administration. They do **not** use the client-scoped **4-Eyes** configuration tab (portal excludes Super/System Admin from that tab).
+- **Client Manager** / **Client Administrator** / **System Administrator** / **Super Administrator** — progressively broader administration, including user/role management and (for Client Administrator and above) the four‑eyes toggle.
 
 **Search-relevant permissions** (features hide or disable based on these):
 
@@ -109,7 +109,7 @@ OCC Search uses the **same role model as the Cloud Portal** (see [portal-manual 
 - **Search & browse:** `search.execute`, `search.browse`
 - **Tags:** `tags.read`, `tags.assign`, `tags.manage`
 - **Exports:** `exports.read`, `exports.create`, `exports.download`, `exports.delete`
-- **Legal holds:** `holds.create`, `holds.read`, `holds.release`, `holds.retry`; **case-holds:** `case-holds.read`, `case-holds.create`, `case-holds.delete`
+- **Legal holds:** `holds.create`, `holds.read`, `holds.release`, `holds.retry`; **case-holds:** `case-holds.read`, `case-holds.create`, `case-holds.delete` — defined in the catalogue, but the feature they gate is **not available** ([§12](#12-legal-holds))
 - **Audit:** `audit-logs.read`
 
 When you lack a permission, the corresponding tab, button, or action is hidden or disabled (often with an explanatory tooltip, e.g. *"You don't have permission to save criteria"*). No error dialogs are shown for missing permissions.
@@ -134,7 +134,7 @@ The hub lists every case you can access in a table with columns:
 - **Quick search:** the box **"Search cases by name or description…"** filters the list client-side by name and description.
 - **Default sort:** newest first (by Created, descending).
 - **Per-case actions** (permission-gated): **Open case**, **Edit case**, **Delete archived case**, and **Change case status** (**Reopen case** / **Close case** / **Archive case**).
-- Case cards also show custodian, archive, and hold counts, reviewers, and *"created by {name}"*.
+- Case cards also show custodian and archive counts, reviewers, and *"created by {name}"*. (A hold badge exists in the card's code but is never populated — see [§12](#12-legal-holds).)
 - **Empty states:** *"No cases yet"*, *"No cases assigned"*, or *"No cases match those filters."*
 
 **Case statuses and what they allow:**
@@ -172,11 +172,36 @@ Click **Create case** (**"Creating…"**). On success you return to the hub with
 
 ### 5.2 Edit a case
 
-Requires `cases.update`. Open the edit dialog from a case card or the detail drawer's edit button. All wizard fields are editable. Selecting a sensitive location again triggers the four‑eyes approval flow. Success: *"Case "{name}" updated."* Archived cases are read-only and cannot be edited.
+Requires `cases.update`. Open **Edit case** from a case card or the detail drawer's header. **Archived cases are read-only** — the button is disabled with a tooltip explaining why.
+
+Unlike the creation wizard, editing presents everything on one form:
+
+| Field | Notes |
+|---|---|
+| **Case name** | Required. *"Visible in the case hub and on all audit entries."* Length-limited — over the limit you get *"Keep it under {max} characters."* |
+| **Case description** | Optional. *"Context for reviewers & auditors."* Also length-limited. |
+| **Date range start / end** | Both optional — *"Earliest / Latest message date to include in this case."* An end before the start is rejected: *"End date can't be before start date."* |
+| **Archive locations** | *"Archive locations available for this tenant to search."* Locations flagged **Sensitive archive** re-trigger four-eyes ([§15.1](#151-four-eyes-approval-for-sensitive-cases)). |
+| **Custodians** | *"Mailboxes and OneDrive users discoverable in this tenant."* |
+| **Case cooperation** | Case managers and reviewers — see [§15.3](#153-assignments). |
+
+**Save** stays disabled until something actually changes (the button reads **No changes** until then). Success: *"Case "{name}" updated."*; failure: *"Failed to save case."*
+
+> **If assignments fail to load, edit with care.** The dialog warns: *"Couldn't load current assignments. You can still edit other fields; assignment changes may overwrite what's on the server."* Save anyway only if you're not touching cooperation, or re-open the dialog once the load succeeds.
+
+Each picker (locations, custodians, users) loads from the server and offers a **Retry** control if it fails, so a transient error doesn't force you to abandon the edit.
 
 ### 5.3 Delete a case
 
-Requires `cases.delete`. A case must be **Archived** first. The confirmation dialog (*"Delete case permanently"*) shows the case's stats and requires ticking **"I understand this action can't be undone."** Success: *"Case "{name}" deleted."*
+Requires `cases.delete`, and the case must be **Archived** first — otherwise you're told *"Only archived cases can be deleted. Close and archive this case first."*
+
+The dialog is headed **Destructive action** → **Delete case permanently**, and states the scope plainly:
+
+> *"You're about to permanently remove this case and every saved criterion, tag application, and audit linkage attached to it. This cannot be undone."*
+
+It shows what you're about to lose — **Created**, **Reviewers** (*"{n} assigned"*), **Custodians**, and **Locations** — and you must tick **"I understand this action can't be undone."** before the delete button enables. Success: *"Case "{name}" deleted."*; failure: *"Failed to delete case."*
+
+> Deleting removes the case and its review work — criteria, tag applications, audit linkage. It does **not** delete the underlying archived messages, which live in the archive, not in the case.
 
 ### 5.4 Change status
 
@@ -318,7 +343,7 @@ Open a message to see the **preview dialog**. Navigate between messages with the
 > - **Save to PDF / Print:** open the email so the preview is expanded and readable, click **"Drucken" (Print)**, choose filters, and the email is rendered as a **PDF** in a pop-up that you can **save locally or print**.
 > - **Forward:** click **"Weiterleiten" (Forward)** in the preview — because the archive stores items **immutably**, this sends a copy of the archived email **to your own live mailbox**, where you work with it as usual.
 >
-> This case-based app doesn't provide per-message PDF/print or forward-to-mailbox; instead you preserve and take out messages in bulk via **Legal holds** ([§12](#12-legal-holds)) and **Export** to EML/MBOX ([§13](#13-exporting)).
+> This case-based app doesn't provide per-message PDF/print or forward-to-mailbox; instead you take messages out in bulk via **Export** to EML/MBOX ([§13](#13-exporting)). (Legal holds, the other half of this story in the product's design, are **not available** — see [§12](#12-legal-holds).)
 
 ---
 
@@ -344,30 +369,27 @@ In Advanced Search, the **Tags** field matches messages carrying **any** of the 
 
 ## 12. Legal holds
 
-Legal holds preserve custodian data while a case is active. Managed from the case detail drawer's holds panel.
+> ## ⚠️ Not available in the current application
+>
+> **Legal holds are not shipped.** There is no way to reach them in the app, and nothing you do in this area would preserve any data. Do not rely on OCC Search to place a litigation hold — use your Microsoft 365 / archive administration tooling for that, and treat this section as a description of planned functionality only.
 
-### 12.1 Apply a hold
-Requires `holds.create` + `case-holds.create`. The **"Apply legal hold"** dialog:
-- **Name** — e.g. *"Aurora — Custodian Hold."*
-- **Source** — the root node to preserve (*"Custodian roots scoped to this case."*).
-- **Hold type** — *"Where the preservation is applied":*
-  - **In Archive** — *"Prevent deletion from the archive only."*
-  - **In Place** — *"Preserve in the source mailbox (Exchange/M365)."*
-  - **Both** — *"Preserve everywhere."*
+The picture is this:
 
-Click **Apply hold**. Success: *"Hold "{name}" applied."*
+- **No hold UI is reachable.** The case detail drawer has a **Holds** tab in its source, but the tab is disabled — it isn't in the drawer's tab list, so it can never be opened. The hold badges on case cards are likewise never populated.
+- **There is no hold backend.** Unlike cases, tags, criteria, exports and audit — each of which has a service endpoint behind it — there are no hold endpoints and no hold API module at all.
+- **What exists is a demo.** The implementation present in the code keeps holds purely in the browser (seeded from fixture data and saved to local storage). Anything "applied" would live only in that one browser profile, invisible to colleagues and to the archive itself.
 
-### 12.2 Hold status & lifecycle
-Holds show a status badge:
-- **Active** — in effect.
-- **Released** — lifted (soft; no data purged). Metadata shows *" · Released {date}."*
-- **Failed** — the hold could not be applied.
+**The permissions do exist.** `holds.create`, `holds.read`, `holds.release`, `holds.retry` and `case-holds.read` / `case-holds.create` / `case-holds.delete` are all defined in the permission catalogue ([§3](#3-roles--permissions-reference)) and can be granted. Holding them grants nothing today — the permissions were defined ahead of the feature.
 
-Actions per hold (permission-gated):
-- **Release hold** (requires `holds.release`) → *"Hold released."*
-- **Retry hold** (requires `holds.retry`, shown when Failed) → *"Hold reactivated."*
+### 12.1 What the feature is intended to do *(not yet available)*
 
-The panel summarizes *"{count} hold(s) associated with this case."* Empty state: *"No legal holds applied"* — *"Apply a hold to preserve custodian data while this case is active."* Multiple holds per case are supported.
+For planning purposes, the unreleased implementation applies a named hold to a **source** (a custodian root scoped to the case), with a **hold type** choosing where preservation lands: **In Archive** (prevent deletion from the archive only), **In Place** (preserve in the source mailbox), or **Both**. A hold would then be **Active**, **Released** (lifted; no data purged) or **Failed**, with release and retry actions gated on `holds.release` / `holds.retry`, and multiple holds per case.
+
+Treat the above as a design sketch, not as behavior you can use or verify.
+
+### 12.2 Preserving data today
+
+Until holds ship, the way to take a defensible copy of material out of OCC Search is **Export** ([§13](#13-exporting)), which is fully implemented. Export produces EML/MBOX of the messages you select. Combine it with your organization's own retention controls in Microsoft 365 / the archive to prevent deletion at the source.
 
 ---
 
@@ -420,6 +442,8 @@ A right-side drawer (eyebrow **"Case details"**) opened from a case or via `/cas
 
 Header controls: **Edit case** (tooltip explains when disabled — *"You don't have permission to edit cases"* or *"Archived cases are read-only"*), **Refresh** (*"Refreshing from server…"*), and **Close drawer**.
 
+> **Two tabs are built but disabled.** The drawer's source also contains an **Assignments** tab and a **Holds** tab, neither of which is in the tab list — so neither can be opened. Assignments are managed from the edit dialog instead ([§15.3](#153-assignments)); legal holds are not available at all ([§12](#12-legal-holds)). If you've seen either tab described elsewhere, that documentation is ahead of the shipped app.
+
 ---
 
 ## 15. Administration
@@ -437,11 +461,30 @@ When a case includes a **protected (sensitive) archive location**, creating (or 
 
 ### 15.2 Reviewing the audit log
 
-The **Audit** tab (requires `audit-logs.read`) shows an immutable activity log for the case. Filter by **action**, **resource**, and a **From/To** date range, and use **Load older entries** to page back. Empty result: *"No audit entries match"* — *"Try widening the filters or date range."*
+The **Audit** tab of the case detail drawer (requires `audit-logs.read`) shows the activity log **for this case**: who did what and when — case created/updated, criteria saved or deleted, tags created and applied, assignments changed, exports started.
+
+**Filters:** an **action** picker (**Any action**), a **resource** picker (**Any resource**), and a **From** / **To** date range. **Load older entries** pages further back in time; while it works you see *"Loading audit log…"*, and on failure *"Couldn't load audit log."* with a **Retry**.
+
+**Reading the empty state carefully.** *"No audit entries match"* normally suggests *"Try widening the filters or date range."* But when the page it fetched contained entries belonging to **other cases**, the message instead reads: *"Try widening the filters, date range, or loading older entries — {count} tenant-wide entries on this page don't belong to this case."*
+
+That second message tells you something important about how the tab works: **the log is fetched tenant-wide and narrowed to this case in the browser**, one page at a time. So a case with little activity in a busy tenant can look empty even though its entries exist — they're simply further back than the page you've loaded. **Use "Load older entries" before concluding that nothing happened.** The resource filter is likewise applied to what's already loaded, not to the whole log.
+
+For the tenant-wide audit trail (all cases, plus portal activity), use the Cloud Portal's Audit Logs tab — see [portal-manual §10.5](./portal-manual.md#105-audit-logs).
 
 ### 15.3 Assignments
 
-Case managers and reviewers are assigned during case creation ([§5.1](#51-create-a-case-the-new-ediscovery-case-wizard)) and can be adjusted by editing the case. Assignment management requires `assignments.create` / `assignments.delete`.
+Assignments control **who can work on a case**. They're set in the **Case cooperation** section of the creation wizard ([§5.1](#51-create-a-case-the-new-ediscovery-case-wizard)) and changed by editing the case ([§5.2](#52-edit-a-case)); managing them requires `assignments.create` / `assignments.delete`.
+
+Two groups, each filtered to users who already hold the matching role:
+
+- **Case manager** — *"Owners accountable for the case."* Only users with the **Search Manager** role can be picked.
+- **Reviewers** — *"Browse, search, and tag the case's messages."* Only users with the **Search Reviewer** role, and anyone already picked as a manager is removed from the list.
+
+The form states the rule directly: *"Everyone you add here gets access to the case. Each picker is filtered by the user's role; the case's effective permissions still follow the role."* — **assigning someone doesn't grant them abilities their role lacks.** A reviewer added to a case still can't do manager-only things; if someone needs more, change their role in the Cloud Portal, not here.
+
+> **Assignments are best-effort.** The form warns: *"a failed assignment doesn't roll back the case."* A case can be created or saved successfully while one or more assignments silently fail — so after creating a case, re-open it and confirm the expected people are listed. If a user shows as **Unknown or unavailable**, their account was removed or is no longer visible to you.
+
+> **No separate Assignments tab.** An Assignments panel exists in the code, but its drawer tab is disabled — the edit dialog is the only place to change assignments. See [§14](#14-the-case-detail-drawer).
 
 ---
 
@@ -473,13 +516,17 @@ Deployment configuration is managed by your operators and is not exposed to end 
 - **Criterion** — a saved, reusable search.
 - **Archive location** — an indexed data source available to search; may be marked *sensitive/protected*.
 - **Item type** — mail, appointment, task, or note.
-- **Legal hold** — a preservation lock (In Archive / In Place / Both).
+- **Legal hold** — a preservation lock (In Archive / In Place / Both). **Not available in the app** — see [§12](#12-legal-holds).
 - **Deputy (Vertreter)** — a colleague whose archive you're permitted to see alongside your own (archive Search).
 - **Proxy access** — a delegated right to view/search another user's archive (see [§16.6](#166-reconciliation-with-the-user-guide-april-2025)).
 
 ### 16.6 Reconciliation with the User Guide (April 2025)
 
-The **User Guide – Search** documents the **end-user archive Search**; this manual documents the newer **case-based eDiscovery workspace** (`occ-search`). Where they differ:
+The **User Guide – Search** documents the **end-user archive Search**; this manual documents the newer **case-based eDiscovery workspace** (`occ-search`), as built.
+
+> **The User Guide does not bound this manual's scope.** Almost nothing in this app appears in the guide, so the table below flags differences for readers arriving from it — it never decides what gets documented or how fully. Everything the application does is written up from the application itself, and where a feature is **defined but not shipped** (legal holds, the disabled drawer tabs) this manual says so rather than describing it as working.
+
+Where the two differ:
 
 | Topic | User Guide (April 2025) | This app (`occ-search`) |
 |---|---|---|
@@ -491,10 +538,11 @@ The **User Guide – Search** documents the **end-user archive Search**; this ma
 | **Progressive search** | New **"Suche" tab keeps previous results** to refine further | Each tab defined by its own criteria; refine by adding criteria |
 | **Operators** | AND/OR/NOT/BUT/NEAR, `+`/`-`, quotes for phrase, default AND | Same free-text behavior; **Query preview** shows the expression |
 | **Automatic Search** | Toggle to auto-run on selection (can disable) | Quick search is debounced; compose in Advanced Search to run once |
-| **Single-message actions** | **Save to PDF / Print** and **Forward to your mailbox** | Not available; use **holds** + **export** (EML/MBOX) instead |
+| **Single-message actions** | **Save to PDF / Print** and **Forward to your mailbox** | Not available; use **export** (EML/MBOX) instead |
 | **Settings** | Preview options, chronological order, time format; language **EN/FR/ES/DE**; open another archive; log out | Language **EN/DE**; personalization is limited; sign out from the top bar |
 | **Further/legacy archives** | Access other/legacy archives (**MailStore, REDDOXX, Barracuda**) via delegated **proxy rights** | Modeled as case **custodians/assignments**; proxy rights are configured centrally (see the portal manual's Proxy Rights) |
-| **Tags / legal holds / bulk export** | Not documented | Core features ([§11](#11-tagging), [§12](#12-legal-holds), [§13](#13-exporting)) |
+| **Tags / bulk export** | Not documented | Core features ([§11](#11-tagging), [§13](#13-exporting)) |
+| **Legal holds** | Not documented | Permissions defined, feature **not available** ([§12](#12-legal-holds)) |
 
 > **Proxy / legacy archives.** If you've been delegated access to another mailbox's archive — including old **MailStore / REDDOXX / Barracuda** archives — the archive Search shows those folders under your own start page, and you can view, filter, search, forward, and print them just like your own. In the case-based app, that access is expressed by adding those mailboxes as **custodians** on a case; delegated proxy rights themselves are set up by an administrator (via support) and are documented in the portal manual.
 
@@ -515,5 +563,4 @@ The **User Guide – Search** documents the **end-user archive Search**; this ma
 - **No results.** Check the case scope (custodians, locations, date range), your selected folder, and any active quick-filter. Remember the workspace starts clean each visit.
 - **"Export is unavailable."** Your selection includes tasks or calendar events, which can't be exported. Deselect them and export only messages.
 - **An export never finishes.** Watch its status in the **Exports** tab and use **Refresh**; if it shows **Failed**, start a new export.
-- **A legal hold shows "Failed."** Use **Retry hold** to reattempt; if it keeps failing, check that the source/custodian is still in scope.
 - **A tab/button/action is missing.** You don't hold the required permission (hover for a tooltip explaining why). Ask an administrator to review your role.
