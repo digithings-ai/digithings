@@ -112,6 +112,117 @@ describe("ByokCliFlow", () => {
     fireEvent.keyDown(keyInput, { key: "Enter" });
     await waitFor(() => expect(screen.getByText(/free \(1\)/)).toBeInTheDocument());
   });
+
+  it("pings at the key step for OpenAI and populates the model picker from the live list", async () => {
+    // Two distinct response shapes needed: the openrouter live-catalog
+    // prefetch fires on mount (provider defaults to "openrouter" before any
+    // click) and must not be confused with the byok/test key-step ping.
+    const fetchSpy = vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/api/byok/models")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ ok: true, free: [], opensource: [], flagship: [], all: [] }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            model: "gpt-4o-mini",
+            models: [
+              { id: "gpt-4o-mini", label: "gpt-4o-mini" },
+              { id: "gpt-4o", label: "gpt-4o" },
+            ],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<ByokCliFlow onClose={() => {}} onActivate={() => {}} />);
+
+    fireEvent.click(screen.getByText("openai"));
+    const keyInput = screen.getByLabelText("Paste API key, then Enter");
+    fireEvent.change(keyInput, { target: { value: "sk-test-1234" } });
+    fireEvent.keyDown(keyInput, { key: "Enter" });
+
+    // The ping fires as soon as the key step advances — not after a model
+    // is picked. Two total fetch calls: the openrouter mount-time prefetch,
+    // then this key-step ping.
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(2));
+    const [testUrl] = fetchSpy.mock.calls[1] as [string];
+    expect(testUrl).toContain("/api/byok/test");
+    expect(await screen.findByText("gpt-4o")).toBeInTheDocument();
+    expect(screen.getByText("gpt-4o-mini")).toBeInTheDocument();
+  });
+
+  it("falls back to preset models when the key-step ping fails for Anthropic, without a user-visible error", async () => {
+    const fetchSpy = vi.fn().mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ ok: false, error: "Incorrect API key" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    render(<ByokCliFlow onClose={() => {}} onActivate={() => {}} />);
+
+    fireEvent.click(screen.getByText("anthropic"));
+    const keyInput = screen.getByLabelText("Paste API key, then Enter");
+    fireEvent.change(keyInput, { target: { value: "sk-ant-test" } });
+    fireEvent.keyDown(keyInput, { key: "Enter" });
+
+    expect(await screen.findByText("claude-sonnet-4-20250514")).toBeInTheDocument();
+    expect(screen.queryByText("Incorrect API key")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["openai", "sk-test-1234", "gpt-4o"],
+    ["anthropic", "sk-ant-test", "claude-3-5-haiku-20241022"],
+    ["gemini", "AIzaTest", "gemini-2.0-flash"],
+  ] as const)(
+    "completes %s with exactly one /api/byok/test call, reusing the key-step ping at activation",
+    async (providerName, key, model) => {
+      const fetchSpy = vi.fn().mockImplementation((url: string) => {
+        if (String(url).includes("/api/byok/models")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ ok: true, free: [], opensource: [], flagship: [], all: [] }),
+              { status: 200, headers: { "content-type": "application/json" } },
+            ),
+          );
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true, model, models: [{ id: model, label: model }] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      });
+      vi.stubGlobal("fetch", fetchSpy);
+      const onActivate = vi.fn();
+      render(<ByokCliFlow onClose={() => {}} onActivate={onActivate} />);
+
+      fireEvent.click(screen.getByText(providerName));
+      const keyInput = screen.getByLabelText("Paste API key, then Enter");
+      fireEvent.change(keyInput, { target: { value: key } });
+      fireEvent.keyDown(keyInput, { key: "Enter" });
+
+      // Wait for the key-step ping to resolve (the live model appears)
+      // before clicking — this is what makes reuse-at-activation
+      // deterministic instead of racing a fast human click against the
+      // in-flight prefetch.
+      const modelOption = await screen.findByText(model);
+      fireEvent.click(modelOption);
+
+      await waitFor(() => expect(onActivate).toHaveBeenCalledWith(key, providerName, model));
+      const testCalls = fetchSpy.mock.calls.filter(([u]) => String(u).includes("/api/byok/test"));
+      expect(testCalls).toHaveLength(1);
+    },
+  );
 });
 
 // Regression for the final-review Important finding: the digichat_byok_pref

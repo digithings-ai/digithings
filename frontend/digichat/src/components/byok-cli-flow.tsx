@@ -16,6 +16,7 @@ import {
   byokRequiresModel,
   moveListIndex,
   validateBYOKKey,
+  validateBYOKModel,
 } from "@/hooks/use-byok-key";
 import {
   byokActivationGate,
@@ -27,6 +28,18 @@ import { cn } from "@/lib/utils";
 type Step = "provider" | "key" | "model" | "validating" | "done";
 
 const CUSTOM_MODEL = "__custom__";
+
+/** Providers whose validation ping already returns a live `models` list and
+ * whose upstream call never reads the `model` parameter (#2347) — so the
+ * ping can (and should) fire as soon as the key is submitted, instead of
+ * waiting for a model to be picked. OpenRouter has its own public-catalog
+ * prefetch (no key needed); x.ai has no live fetch and still needs a model
+ * up front — neither belongs in this list. */
+const LIVE_PING_MODEL_PROVIDERS: readonly BYOKProvider[] = ["openai", "anthropic", "gemini"];
+
+function wantsKeyStepPing(provider: BYOKProvider): boolean {
+  return LIVE_PING_MODEL_PROVIDERS.includes(provider);
+}
 
 function TermLine({
   marker,
@@ -197,6 +210,12 @@ export function ByokCliFlow({
   const [customModel, setCustomModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ping, setPing] = useState<ByokPingResult | null>(null);
+  /** Result of the OpenAI/Anthropic/Gemini key-step ping (see
+   * LIVE_PING_MODEL_PROVIDERS). Cached here so model selection can reuse it
+   * instead of pinging a second time — the single-round-trip contract in
+   * #2347. Reset on provider change / clear / restart, same as `ping`. */
+  const [keyPing, setKeyPing] = useState<ByokPingResult | null>(null);
+  const [keyPingPending, setKeyPingPending] = useState(false);
   type LiveBuckets = {
     free: ByokModelOption[];
     opensource: ByokModelOption[];
@@ -214,6 +233,10 @@ export function ByokCliFlow({
   const aliveRef = useRef(true);
 
   const tieredOptions = provider === "openrouter" && liveModels ? liveModels : null;
+  const liveKeyStepModels: ByokModelOption[] | null =
+    wantsKeyStepPing(provider) && keyPing?.ok && keyPing.models && keyPing.models.length > 0
+      ? keyPing.models.map((m) => ({ id: m.id, label: m.label }))
+      : null;
 
   const toggleCustom = useCallback((id: string) => {
     setCustomIds((prev) => {
@@ -232,6 +255,9 @@ export function ByokCliFlow({
           : tieredOptions[tier];
       return [...list.map((m) => m.id), CUSTOM_MODEL];
     }
+    if (liveKeyStepModels) {
+      return [...liveKeyStepModels.map((m) => m.id), CUSTOM_MODEL];
+    }
     const presets = [...byokModelPresets(provider)];
     if (!byokRequiresModel(provider)) {
       return ["", ...presets, CUSTOM_MODEL];
@@ -244,6 +270,9 @@ export function ByokCliFlow({
     if (m === CUSTOM_MODEL) return "custom…";
     if (tieredOptions) {
       return tieredOptions.all.find((o) => o.id === m)?.label ?? m;
+    }
+    if (liveKeyStepModels) {
+      return liveKeyStepModels.find((o) => o.id === m)?.label ?? m;
     }
     return m;
   });
@@ -306,6 +335,8 @@ export function ByokCliFlow({
     setModelHi(0);
     setError(null);
     setPing(null);
+    setKeyPing(null);
+    setKeyPingPending(false);
     setCustomIds(new Set());
     setStep("key");
   }, []);
@@ -318,6 +349,15 @@ export function ByokCliFlow({
     }
     setError(null);
     setStep("model");
+    if (wantsKeyStepPing(provider)) {
+      setKeyPing(null);
+      setKeyPingPending(true);
+      void pingByokKey(inputKey, provider, "", { requireModel: false }).then((result) => {
+        if (!aliveRef.current) return;
+        setKeyPingPending(false);
+        setKeyPing(result);
+      });
+    }
   }, [inputKey, provider]);
 
   const runValidateAndActivate = useCallback(
@@ -326,6 +366,21 @@ export function ByokCliFlow({
       if (gateFormat) {
         setError(gateFormat);
         setStep("key");
+        return;
+      }
+      // Single-round-trip contract (#2347): if the key-step ping already
+      // succeeded for this provider, reuse it directly instead of pinging
+      // /api/byok/test a second time for model selection.
+      if (wantsKeyStepPing(provider) && keyPing?.ok) {
+        const modelFormatErr = validateBYOKModel(chosenModel, provider);
+        if (modelFormatErr) {
+          setError(modelFormatErr);
+          return;
+        }
+        setError(null);
+        setPing(keyPing);
+        onActivate(inputKey.trim(), provider, chosenModel.trim());
+        setStep("done");
         return;
       }
       setError(null);
@@ -343,7 +398,7 @@ export function ByokCliFlow({
       onActivate(inputKey.trim(), provider, chosenModel.trim());
       setStep("done");
     },
-    [inputKey, provider, onActivate],
+    [inputKey, provider, onActivate, keyPing],
   );
 
   const selectModel = useCallback(
@@ -373,6 +428,8 @@ export function ByokCliFlow({
     setInputKey("");
     setModel("");
     setPing(null);
+    setKeyPing(null);
+    setKeyPingPending(false);
     setError(null);
     setCustomModel(false);
     setCustomIds(new Set());
@@ -383,6 +440,8 @@ export function ByokCliFlow({
     setInputKey("");
     setModel("");
     setPing(null);
+    setKeyPing(null);
+    setKeyPingPending(false);
     setError(null);
     setCustomModel(false);
     setCustomIds(new Set());
@@ -434,6 +493,14 @@ export function ByokCliFlow({
             <TermLine marker="·">
               <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
                 fetching live model catalog…
+              </span>
+            </TermLine>
+          ) : null}
+
+          {wantsKeyStepPing(provider) && keyPingPending ? (
+            <TermLine marker="·">
+              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                fetching live model list…
               </span>
             </TermLine>
           ) : null}
