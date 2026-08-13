@@ -109,6 +109,18 @@ def check_env_vars() -> bool:
     return all_ok
 
 
+# openrouter/auto (OpenRouter's own auto-router) has been observed returning empty
+# completions in isolated bursts independent of the phase-model routing path — the same
+# failure class digillm's _EMPTY_RETRY_MAX/_EMPTY_RETRY_DELAY already self-heals for real
+# pipeline calls (digillm/src/digillm/client.py). This bare ping predates digillm import
+# (it's the fast, dependency-free first check), so it retries locally instead of pulling
+# digillm in just for this. Empty-completion daily failures since 2026-08-11 (#1633) were
+# this check hard-failing the preflight on a single unretried empty response while the real
+# digillm-routed checks below (3/3b/4, which do retry) passed cleanly every time.
+_OPENROUTER_PING_RETRY_MAX = 3
+_OPENROUTER_PING_RETRY_DELAY = 5.0
+
+
 def check_openrouter(model: str = "openrouter/auto") -> bool:
     print(_bold("\n2. OpenRouter connectivity"))
     api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
@@ -118,24 +130,38 @@ def check_openrouter(model: str = "openrouter/auto") -> bool:
     try:
         from openai import OpenAI
 
-        t0 = time.monotonic()
         client = OpenAI(
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
         )
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": "Reply with the single word: ok"}],
-            max_tokens=5,
-            temperature=0,
-        )
+        t0 = time.monotonic()
+        content = ""
+        attempt = 0
+        while True:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": "Reply with the single word: ok"}],
+                max_tokens=5,
+                temperature=0,
+            )
+            content = resp.choices[0].message.content or ""
+            if content.strip() or attempt >= _OPENROUTER_PING_RETRY_MAX:
+                break
+            attempt += 1
+            print(
+                f"        empty response from {model} "
+                f"(retry {attempt}/{_OPENROUTER_PING_RETRY_MAX}); "
+                f"backing off {_OPENROUTER_PING_RETRY_DELAY:.1f}s"
+            )
+            time.sleep(_OPENROUTER_PING_RETRY_DELAY)
         elapsed = time.monotonic() - t0
-        content = resp.choices[0].message.content or ""
         ok = bool(content.strip())
         return check(
             f"OpenRouter {model}",
             ok,
-            f"{elapsed:.1f}s — response: {content.strip()!r}" if ok else "empty response",
+            f"{elapsed:.1f}s — response: {content.strip()!r}"
+            if ok
+            else f"empty response after {attempt + 1} attempt(s)",
         )
     except (
         OSError,
