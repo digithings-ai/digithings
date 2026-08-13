@@ -429,13 +429,30 @@ def run_digigraph_workflow_streaming(
             stream_mode=["updates", "custom"],
             version="v2",
             durability="sync",
+            subgraphs=True,
         ):
             if cancel_event is not None and cancel_event.is_set():
                 event_queue.put(("done", None))
                 return
             if part["type"] == "custom":
+                # "custom" parts are NOT filtered by ns: research_node and
+                # research_brief_builder_node run inside the compiled "research"
+                # subgraph (graph.py builds it via build_research_subgraph() and adds
+                # it as a single node), so every _safe_stream_writer() write from
+                # _run_document_rag_path (tool_call, tool_result, content, reasoning,
+                # round_boundary) arrives here with a non-empty ns -- without
+                # subgraphs=True above, LangGraph drops these silently before they
+                # ever reach this loop.
                 event_type, data = part["data"]
                 stream_callback(event_type, data)
+                continue
+            if part["ns"]:
+                # subgraphs=True also makes "updates" parts start arriving for nodes
+                # INSIDE the research subgraph (ns=("research:<uuid>",)), which would
+                # double-report a graph_update trace event for both the inner node's
+                # completion and the outer "research" node's completion. Only
+                # top-level graph updates (ns == ()) are reported as graph_update
+                # trace events; this does not affect the "custom" branch above.
                 continue
             update = part["data"]
             event_queue.put(

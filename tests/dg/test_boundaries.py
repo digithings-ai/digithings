@@ -72,7 +72,9 @@ def test_zero_hit_tool_result_reaches_browser_as_a_rag_sources_trace() -> None:
     """
     queue: Queue = Queue()
 
-    def fake_stream(initial, config=None, stream_mode=None, version=None, durability=None):
+    def fake_stream(
+        initial, config=None, stream_mode=None, version=None, durability=None, subgraphs=None
+    ):
         # Simulate the tool loop's get_stream_writer() call (research.py's
         # stream_callback) for a digisearch call that ran but found nothing,
         # arriving as a stream_mode=["updates","custom"], version="v2" custom part:
@@ -137,7 +139,9 @@ def test_round_boundary_reaches_browser_as_its_own_trace_type() -> None:
     """
     queue: Queue = Queue()
 
-    def fake_stream(initial, config=None, stream_mode=None, version=None, durability=None):
+    def fake_stream(
+        initial, config=None, stream_mode=None, version=None, durability=None, subgraphs=None
+    ):
         # Simulate run_tools's on_tool_step("round_boundary", ...) (fired after a
         # round streamed narration content alongside its tool_calls) arriving as a
         # stream_mode=["updates","custom"], version="v2" custom part:
