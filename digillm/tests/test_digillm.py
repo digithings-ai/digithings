@@ -770,7 +770,9 @@ def test_round_limit_exhausted_emits_signal_and_forces_final_answer() -> None:
 
     responses = [
         _mock_response("", tool_calls=[tc]),  # round 0: still calling tools
-        _mock_response("", tool_calls=[tc]),  # round 1 (last, max_tool_rounds=2): still calling tools
+        _mock_response(
+            "", tool_calls=[tc]
+        ),  # round 1 (last, max_tool_rounds=2): still calling tools
         _mock_response("forced final answer"),  # post-loop forced completion
     ]
     fake_client = MagicMock()

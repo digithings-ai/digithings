@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import time
-from typing import Any
+from typing import Any  # score:allow
 
 import httpx
 from digibase.http import outbound_service_headers
@@ -86,9 +86,7 @@ def supervisor_node(state: WorkflowState) -> dict:
             namespace = (subject, "prefs")
             if state.get("response_language"):
                 # Explicit this-turn value -- persist it for future threads.
-                store.put(
-                    namespace, "response_language", {"language": state["response_language"]}
-                )
+                store.put(namespace, "response_language", {"language": state["response_language"]})
             else:
                 # No value this turn -- fall back to a prior thread's preference, if any.
                 item = store.get(namespace, "response_language")
