@@ -8,9 +8,11 @@ from typing import Any
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
 
+from digigraph.circuit_breaker import CircuitBreaker, CircuitBreakerOpen
 from digigraph.vertical_orchestrator._common import HUB_CLIENT_ERRORS, log_manifest_fetch_failure
 
 _MANIFEST_CACHE: dict[str, list[dict[str, Any]]] = {}
+_cb = CircuitBreaker("digisearch_hub", failure_threshold=5, recovery_timeout=30.0)
 
 
 def _cache_key(base_url: str, index_config: dict[str, Any] | None) -> str:
@@ -68,10 +70,19 @@ def invoke_digisearch_tool(
         "arguments": arguments,
         "default_index_name": default_index_name,
     }
-    with sync_client(timeout=120.0) as client:
-        r = client.post(url, json=payload, headers=headers)
-        r.raise_for_status()
-    body = r.json()
+    try:
+        with _cb, sync_client(timeout=120.0) as client:
+            r = client.post(url, json=payload, headers=headers)
+            r.raise_for_status()
+            body = r.json()
+    except CircuitBreakerOpen:
+        return {"ok": False, "error": "digisearch circuit open; downstream unavailable"}
+    except HUB_CLIENT_ERRORS as e:
+        # A real (non-circuit-open) downstream failure also counts as a breaker
+        # failure -- CircuitBreaker.__exit__ already recorded it above -- but must
+        # still surface as this function's normal ok:False contract rather than
+        # raise, matching every other failure path here (see "invalid_response").
+        return {"ok": False, "error": f"digisearch invoke failed: {e}"}
     if not isinstance(body, dict):
         return {"ok": False, "error": "invalid_response"}
     return body
