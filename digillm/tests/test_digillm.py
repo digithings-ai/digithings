@@ -718,6 +718,81 @@ def test_round_with_content_and_tool_calls_emits_round_boundary() -> None:
     assert kinds.index("round_boundary") < kinds.index("tool_call")
 
 
+def test_sequential_tool_error_becomes_recoverable_result() -> None:
+    """A raised exception from a sequential (non-parallel) tool call must not abort the
+    whole run — it must become a tool-result content string, exactly like the parallel
+    dispatch branch's existing ``except (RuntimeError, OSError, ValueError, TypeError,
+    KeyError)`` 3 lines above the sequential branch — so the model gets a turn to react
+    instead of the caller seeing a bare traceback."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    responses = [
+        _mock_response("", tool_calls=[tc]),
+        _mock_response("recovered"),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    def execute_tool(name: str, args: dict) -> str:
+        raise ValueError("boom")
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool,
+        )
+    assert out == "recovered"
+    second_call_messages = fake_client.chat.completions.create.call_args_list[1].kwargs["messages"]
+    tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+    assert tool_msgs, "expected a tool-role message to reach the model"
+    assert "boom" in tool_msgs[0]["content"]
+
+
+def test_round_limit_exhausted_emits_signal_and_forces_final_answer() -> None:
+    """When every round through max_tool_rounds keeps requesting tools, run_tools must
+    still return a real answer (forcing one tool-free completion, existing behavior)
+    AND tell the caller the round budget was exhausted, not just fall through silently —
+    today there is no signal at all that a workflow is routinely maxing out its budget."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    responses = [
+        _mock_response("", tool_calls=[tc]),  # round 0: still calling tools
+        _mock_response("", tool_calls=[tc]),  # round 1 (last, max_tool_rounds=2): still calling tools
+        _mock_response("forced final answer"),  # post-loop forced completion
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=2,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == "forced final answer"
+    signals = [p for k, p in steps if k == "round_limit_exhausted"]
+    assert signals == [{"max_tool_rounds": 2}]
+
+
 def test_round_boundary_not_emitted_on_the_non_streaming_path_without_content() -> None:
     """Regression pin for the non-streaming branch specifically (test above already
     covers it, but this isolates it): tool_calls with NO content must still fire no

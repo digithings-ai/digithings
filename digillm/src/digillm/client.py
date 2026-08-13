@@ -2140,7 +2140,15 @@ def run_tools(
             for tc_id, name, args in parsed:
                 if on_tool_step is not None:
                     on_tool_step("tool_call", {"name": name, "arguments": args})
-                ordered.append(((tc_id, name, args), execute_tool(name, args)))
+                try:
+                    result = execute_tool(name, args)
+                except (RuntimeError, OSError, ValueError, TypeError, KeyError) as e:
+                    # Mirror the parallel branch's except-tuple 3 lines above (line 167) —
+                    # a raised exception here must become a recoverable tool result, not
+                    # abort the whole run and discard every tool result already gathered
+                    # this round.
+                    result = {"content": str(e)}
+                ordered.append(((tc_id, name, args), result))
 
         for (tc_id, name, args), result in ordered:
             if on_tool_step is not None:
@@ -2161,6 +2169,17 @@ def run_tools(
                     "content": _compact_tool_message_content(msg_content),
                 }
             )
+
+    # Reaching here means every round through max_tool_rounds still returned tool_calls
+    # (any round with no tool_calls returns early above) — the budget is genuinely
+    # exhausted, not just "the model happened to stop."
+    logger.warning(
+        "run_tools: exhausted max_tool_rounds=%d without a final answer; forcing one "
+        "tool-free completion",
+        max_tool_rounds,
+    )
+    if on_tool_step is not None:
+        on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
 
     # Hit max rounds with no final content: force one more answer without tools.
     if not content and len(current) > len(messages):
