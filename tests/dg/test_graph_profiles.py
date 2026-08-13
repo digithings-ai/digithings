@@ -102,6 +102,26 @@ def reset_workflow_graph_cache():
 
 
 @pytest.mark.unit
+def test_build_workflow_graph_has_a_store(reset_workflow_graph_cache) -> None:
+    """Cross-thread memory (Store) is distinct from the checkpointer (thread-scoped) --
+    the compiled graph must have one so nodes can call get_store() successfully instead
+    of silently no-op'ing."""
+    graph = build_workflow_graph()
+    assert graph.store is not None
+
+
+@pytest.mark.unit
+def test_get_store_defaults_to_in_memory(monkeypatch: pytest.MonkeyPatch) -> None:
+    import digigraph.graph.graph as _graph_module
+    from digigraph.graph.graph import get_store
+
+    monkeypatch.delenv("DIGI_CHECKPOINTER", raising=False)
+    _graph_module._store_instance = None
+    store = get_store()
+    assert type(store).__name__ == "InMemoryStore"
+
+
+@pytest.mark.unit
 def test_backtest_and_optimize_nodes_have_retry_policy(reset_workflow_graph_cache) -> None:
     """A single dropped network packet must not fail the whole backtest/optimize run —
     RetryPolicy scoped to httpx.RequestError (transient network failures) only, never

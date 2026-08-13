@@ -26,6 +26,8 @@ _workflow_graph_lock = threading.Lock()
 _workflow_graph_cache: object | None = None
 # Hold context managers so they are not garbage-collected (sqlite/postgres).
 _cm_holders: list[object] = []
+_store_lock = threading.Lock()
+_store_instance: object | None = None
 
 WORKFLOW_PROFILES = frozenset({"full_stack", "research_rag", "quant_backtest", "plan_execute"})
 
@@ -178,6 +180,50 @@ def get_checkpointer():
         return _checkpointer_instance
 
 
+def get_store():
+    """Return a process-wide Store for cross-thread, per-subject memory.
+
+    Distinct from the checkpointer above, which is scoped to a single thread_id: this is
+    for values that should survive a user opening a brand-new thread (e.g. a response-
+    language preference). Mirrors DIGI_CHECKPOINTER's kind selection where it makes
+    sense: DIGI_CHECKPOINTER=postgres gets a real PostgresStore (same conn string,
+    reusing _bounded_conn_string's connect-timeout/keepalive bounds); every other kind
+    (memory/sqlite/unset) gets an InMemoryStore. LangGraph ships no first-class Store
+    equivalent of SqliteSaver, so mapping "sqlite" to InMemoryStore here is a documented,
+    same-process choice -- not a silent degradation the way an unreachable postgres
+    connection is for get_checkpointer() (that one is deliberately loud; see the
+    ImportError/missing-URI branch below, which matches that same discipline).
+    """
+    global _store_instance
+    raw = (os.environ.get("DIGI_CHECKPOINTER") or "").strip().lower()
+    with _store_lock:
+        if _store_instance is not None:
+            return _store_instance
+        if raw == "postgres":
+            conn_string = os.environ.get("DIGI_CHECKPOINTER_POSTGRES_URI", "").strip()
+            if conn_string:
+                try:
+                    from langgraph.store.postgres import PostgresStore
+
+                    cm = PostgresStore.from_conn_string(_bounded_conn_string(conn_string))
+                    _cm_holders.append(cm)
+                    _store_instance = cm.__enter__()
+                    _store_instance.setup()
+                except ImportError:
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).warning(
+                        "langgraph-checkpoint-postgres not installed; falling back to "
+                        "InMemoryStore for cross-thread memory. Install with: "
+                        "pip install 'digigraph[checkpoint-postgres]'"
+                    )
+        if _store_instance is None:
+            from langgraph.store.memory import InMemoryStore
+
+            _store_instance = InMemoryStore()
+        return _store_instance
+
+
 def resolve_workflow_profile() -> str:
     try:
         p = DigiProjectConfig.load().get_workflow_profile()
@@ -287,6 +333,7 @@ def build_workflow_graph():
     builder.add_edge("optimize", END)
 
     checkpointer = get_checkpointer()
+    store = get_store()
     interrupt_after: list[str] | None = None
     if (os.environ.get("DIGI_INTERRUPT_AFTER_RESEARCH", "").strip().lower()) in (
         "1",
@@ -295,7 +342,9 @@ def build_workflow_graph():
     ):
         # Interrupt after the research subgraph completes (outer node name is still "research").
         interrupt_after = ["research"]
-    compiled = builder.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)
+    compiled = builder.compile(
+        checkpointer=checkpointer, store=store, interrupt_after=interrupt_after
+    )
     with _workflow_graph_lock:
         _workflow_graph_cache = compiled
     return compiled

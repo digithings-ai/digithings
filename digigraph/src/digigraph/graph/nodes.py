@@ -6,10 +6,12 @@ import json
 import logging
 import os
 import time
+from typing import Any
 
 import httpx
 from digibase.http import outbound_service_headers
 from digibase.http_client import sync_client
+from langgraph.config import get_store
 
 from digigraph.graph.research import _safe_stream_writer, research_node
 from digigraph.graph.state import WorkflowState
@@ -71,9 +73,28 @@ def supervisor_node(state: WorkflowState) -> dict:
         payload={"node": "supervisor", "depth_remaining": depth},
     )
     writer(("trace", ev.model_dump()))
+
+    updates: dict[str, Any] = {}
+    subject = state.get("digi_subject")
+    if subject:
+        namespace = (subject, "prefs")
+        store = get_store()
+        if state.get("response_language"):
+            # Explicit this-turn value -- persist it for future threads.
+            store.put(namespace, "response_language", {"language": state["response_language"]})
+        else:
+            # No value this turn -- fall back to a prior thread's preference, if any.
+            item = store.get(namespace, "response_language")
+            if item is not None:
+                updates["response_language"] = item.value.get("language")
+
     if depth <= 0:
-        return {"error": "supervisor: max routing depth exceeded", "supervisor_depth_remaining": 0}
-    return {"supervisor_depth_remaining": depth - 1, "supervisor_route": "research"}
+        return {
+            **updates,
+            "error": "supervisor: max routing depth exceeded",
+            "supervisor_depth_remaining": 0,
+        }
+    return {**updates, "supervisor_depth_remaining": depth - 1, "supervisor_route": "research"}
 
 
 def strategy_validator_node(state: WorkflowState) -> dict:

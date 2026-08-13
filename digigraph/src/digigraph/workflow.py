@@ -72,6 +72,8 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["vault_path_prefix"] = req.vault_path_prefix
     if req.research_system_prompt_override:
         initial["research_system_prompt_override"] = req.research_system_prompt_override
+    if req.digi_subject:
+        initial["digi_subject"] = req.digi_subject
     # Unlike the three fields above, response_language is a user-toggleable per-turn
     # preference, not a static tenant-derived value — it must be set unconditionally
     # (even to None) so switching back to English on a later turn actually clears a

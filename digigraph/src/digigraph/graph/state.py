@@ -60,3 +60,7 @@ class WorkflowState(TypedDict, total=False):
     # Optional supervisor / routing (when DIGI_SUPERVISOR=1).
     supervisor_depth_remaining: int
     supervisor_route: str | None
+    # Authenticated subject (JWT sub / digikey identity) for cross-thread Store lookups
+    # (see graph.get_store()). None for unauthenticated/dev requests -- store lookups are
+    # skipped entirely in that case, never keyed on a placeholder subject.
+    digi_subject: str | None

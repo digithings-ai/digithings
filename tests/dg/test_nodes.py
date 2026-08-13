@@ -322,6 +322,45 @@ class TestResearchNode:
 
 
 @pytest.mark.unit
+class TestSupervisorNode:
+    """supervisor_node: per-subject response_language preference round-trip via Store."""
+
+    def test_supervisor_node_persists_and_recalls_response_language_per_subject(
+        self,
+    ) -> None:
+        """A response_language preference set on one thread must be recallable on a
+        brand-new thread for the same subject -- this is exactly the gap store-based
+        cross-thread memory closes: workflow.py clears response_language every turn so a
+        client can override it, but there was previously no cross-thread fallback, so a new
+        thread for the same authenticated subject lost the preference entirely."""
+        from digigraph.graph.nodes import supervisor_node
+        from digigraph.graph.state import WorkflowState
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.store.memory import InMemoryStore
+
+        store = InMemoryStore()
+        g: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+        g.add_node("supervisor", supervisor_node)
+        g.add_edge(START, "supervisor")
+        g.add_edge("supervisor", END)
+        compiled = g.compile(store=store)
+
+        # Turn 1, thread A: subject sets a preference explicitly.
+        compiled.invoke(
+            {"digi_subject": "user-42", "response_language": "de"},
+            config={"configurable": {"thread_id": "thread-a"}},
+        )
+
+        # Turn 2, brand-new thread B, same subject, client omits response_language entirely
+        # (e.g. a fresh chat session) -- the preference must still come back.
+        out = compiled.invoke(
+            {"digi_subject": "user-42"},
+            config={"configurable": {"thread_id": "thread-b"}},
+        )
+        assert out.get("response_language") == "de"
+
+
+@pytest.mark.unit
 class TestBacktestNode:
     """backtest_node: digiquant success, timeout, 5xx, malformed response."""
 
