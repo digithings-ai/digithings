@@ -62,15 +62,24 @@ function defaultModel(provider: ProviderId): string {
  * Remove any leftover durable BYOK key from prior builds. The key must never
  * live in localStorage — it now lives only in React state for the tab
  * session (see `useProviderSettings`), matching digichat's
- * `purgeDurableByokKeys()` pattern.
+ * `purgeDurableByokKeys()` pattern (including the `typeof window` guard and
+ * clearing sessionStorage too, in case a future build ever writes there).
+ *
+ * Called unconditionally on every digithings-web page load from
+ * `components/LegacyByokPurge.tsx` (mounted from the root layout) — not just
+ * from `useProviderSettings`, whose only consumer (`DigiChatSession`) isn't
+ * rendered by every page (`/chat` and `/chat/occ` render `ChatEmbedShell`
+ * instead). See #2348.
  *
  * Exported (alongside the two helpers below) purely so tests can exercise
  * this module's storage behavior directly — `useProviderSettings` calls
  * hooks internally and so can't be invoked outside a React render.
  */
 export function purgeLegacyApiKey(): void {
+  if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+    window.sessionStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
     /* private mode / SSR */
   }
@@ -142,6 +151,10 @@ export function validateProviderKey(key: string, provider: ProviderId): string |
     case "xai":
       if (!trimmed.startsWith("xai-")) return "x.ai keys start with xai-.";
       break;
+    default: {
+      const _exhaustive: never = provider;
+      return _exhaustive;
+    }
   }
   return null;
 }

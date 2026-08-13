@@ -17,13 +17,20 @@ describe("providerSettings", () => {
     setItemSpy = vi.fn((k: string, v: string) => {
       store.set(k, v);
     });
-    vi.stubGlobal("localStorage", {
+    // One shared store standing in for both localStorage and sessionStorage,
+    // plus a `window` stub carrying both -- mirrors digichat's
+    // `use-byok-key.test.ts` setup, needed now that `purgeLegacyApiKey` reads
+    // `window.localStorage` / `window.sessionStorage` (#2348 finding 6).
+    const storageLike = {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: setItemSpy,
       removeItem: (k: string) => {
         store.delete(k);
       },
-    });
+    };
+    vi.stubGlobal("localStorage", storageLike);
+    vi.stubGlobal("sessionStorage", storageLike);
+    vi.stubGlobal("window", { localStorage: storageLike, sessionStorage: storageLike });
   });
 
   afterEach(() => {
@@ -106,6 +113,22 @@ describe("providerSettings", () => {
       const settings = readFromStorage();
       expect(settings.apiKey).toBe("");
       expect(settings.isSet).toBe(false);
+    });
+  });
+
+  describe("purge also clears sessionStorage and guards SSR (#2348 minor finding 6)", () => {
+    it("removes the legacy key from sessionStorage too, not just localStorage", () => {
+      store.set("digichat:api_key", "sk-leaked");
+      purgeLegacyApiKey();
+      expect(store.has("digichat:api_key")).toBe(false);
+      // Confirms the sessionStorage-qualified removeItem path actually ran,
+      // not just the localStorage one.
+      expect(sessionStorage.getItem("digichat:api_key")).toBeNull();
+    });
+
+    it("no-ops without throwing when window is undefined (SSR)", () => {
+      vi.stubGlobal("window", undefined);
+      expect(() => purgeLegacyApiKey()).not.toThrow();
     });
   });
 
