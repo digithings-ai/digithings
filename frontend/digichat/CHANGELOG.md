@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.1.0...digichat-v1.2.0) (2026-08-13)
+
+
+### Features
+
+* **digichat,digiweb:** bring mermaid/code-block rendering to the primary chat page ([98c41d4](https://github.com/digithings-ai/digithings/commit/98c41d459a3f39b537caa06a60c71302ed85f690))
+* **digichat,digiweb:** bring mermaid/code-block rendering to the primary chat page ([f6ecb04](https://github.com/digithings-ai/digithings/commit/f6ecb043dd1acd0bff084d008af209eeab52c305)), closes [#2320](https://github.com/digithings-ai/digithings/issues/2320)
+* **digigraph:** make the chat agentic — model-driven retrieval, locate-then-load, enforced tenant scope ([#2295](https://github.com/digithings-ai/digithings/issues/2295)) ([15940d9](https://github.com/digithings-ai/digithings/commit/15940d948857740bbc69fd9bdf71371d6240d87e))
+* **digigraph:** promote agentic chat to develop ([155cbcb](https://github.com/digithings-ai/digithings/commit/155cbcbfdf65af14e2e3ac2a91ddb163e19e0dfd))
+* **digigraph:** promote agentic chat to develop ([#2302](https://github.com/digithings-ai/digithings/issues/2302)) ([155cbcb](https://github.com/digithings-ai/digithings/commit/155cbcbfdf65af14e2e3ac2a91ddb163e19e0dfd))
+
+
+### Bug Fixes
+
+* 2 P0 findings from full-UI-suite impeccable critique (invisible button text + free-turn-on-error) ([5e37663](https://github.com/digithings-ai/digithings/commit/5e3766346e867c6a89f582a99f631e3485b18427))
+* Controls (/controls) findings from the full-UI-suite critique ([bc838a1](https://github.com/digithings-ai/digithings/commit/bc838a1079b2a70b4f44536efcb42c265624023c))
+* **digichat:** assign locked-contact mailto: href client-side ([#2226](https://github.com/digithings-ai/digithings/issues/2226)) ([#2228](https://github.com/digithings-ai/digithings/issues/2228)) ([dd42166](https://github.com/digithings-ai/digithings/commit/dd42166195b855c880be6b1f13ddfc6e05af12b6))
+* **digichat:** do not map digivault batch errors as hit counts ([708a870](https://github.com/digithings-ai/digithings/commit/708a870fa9a77c44ed7b04d1966228d29b12d543))
+* **digichat:** don't spend a free embed turn on a failed/errored send ([95c6b93](https://github.com/digithings-ai/digithings/commit/95c6b93892acc236c1ccfd07fd6a55fe40c9afe0)), closes [#2246](https://github.com/digithings-ai/digithings/issues/2246)
+* **digichat:** mark a truncated activity snippet with an ellipsis ([7617f8a](https://github.com/digithings-ai/digithings/commit/7617f8a09e1f49c3c86fc3100f766e19de443932))
+* **digichat:** mark a truncated activity snippet with an ellipsis ([8243245](https://github.com/digithings-ai/digithings/commit/824324585fa1641ee2057f37546c8dea52e58685)), closes [#2316](https://github.com/digithings-ai/digithings/issues/2316)
+* **digichat:** split a round's narration from the final answer on round_boundary ([04940a3](https://github.com/digithings-ai/digithings/commit/04940a35388ddaf17f38aaa66ef6597bfd609c68))
+* **digichat:** split a round's narration from the final answer on round_boundary ([028a835](https://github.com/digithings-ai/digithings/commit/028a8351e8c6adc5c896159cd2dc7c7785f36b8b))
+* **digiweb:** Controls page findings — money-color reuse, dropdown focus loss, unlabeled toggle ([e5d12ce](https://github.com/digithings-ai/digithings/commit/e5d12ce469a1fa2fec6e68688709375abac76583)), closes [#2246](https://github.com/digithings-ai/digithings/issues/2246) [#2248](https://github.com/digithings-ai/digithings/issues/2248)
+
 ## [1.1.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.0.0...digichat-v1.1.0) (2026-08-11)
 
 
