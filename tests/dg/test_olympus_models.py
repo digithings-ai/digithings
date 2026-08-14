@@ -29,7 +29,6 @@ _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 # for open-weight models. Web-search/grounding slugs keep ``:online``/perplexity below.
 _CHEAP_PHASE_MODELS = frozenset(
     {
-        "openrouter/deepseek/deepseek-chat",
         "openrouter/deepseek/deepseek-v4-flash",  # #1622: 1M ctx, tools + strict json_schema
         # deepseek-r1 removed from every phase pool (#1622): CoT output is not reliably
         # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
@@ -40,9 +39,10 @@ _CHEAP_PHASE_MODELS = frozenset(
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        # #2368 (2026-08-14): all pooled slugs are the latest generation per vendor.
-        # gemini-3.7-flash: native PDF/image vision. gpt-5.6-luna: mid-tier OpenAI.
-        # deepseek-v4-pro: mid-cost reasoning bump, gate-proven in the quality tier.
+        # #2368 (2026-08-14): latest generation per vendor where cost allows — grok-4.3
+        # stays on balanced (grok-4.5 is quality-only). gemini-3.7-flash: native PDF/
+        # image vision. gpt-5.6-luna: mid-tier OpenAI. deepseek-v4-pro: mid-cost
+        # reasoning bump, gate-proven and also pooled on quality.
         "openrouter/google/gemini-3.7-flash",
         "openrouter/openai/gpt-5.6-luna",
         "openrouter/x-ai/grok-4.3",
@@ -612,7 +612,7 @@ def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
     resolved = get_model_for_phase("hermes/portfolio/deliberation-NVDA")
     assert resolved is not None
-    assert tier_allows_phase_model(resolved, "cheap")
+    assert resolved in _CHEAP_PHASE_MODELS
 
 
 @pytest.mark.unit

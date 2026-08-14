@@ -26,13 +26,14 @@ reads identically to "model can't do strict JSON" (caught on
 false}`` field was tried as a more surgical fix and reverted: OpenRouter rejects it
 outright with HTTP 400 ("Reasoning is mandatory for this endpoint and cannot be
 disabled") on endpoints that treat reasoning as inherent (``gemini-3.7-flash``,
-``grok-4.6``), and combined with ``provider.require_parameters`` below it also 404'd
+``grok-4.5``), and combined with ``provider.require_parameters`` below it also 404'd
 four unrelated slugs that never declared ``reasoning`` as a supported parameter at
 all (``deepseek/deepseek-chat``, ``llama-4-maverick``, ``gpt-4o``, ``gpt-4o-mini`` —
 run 31840424733). Raising ``max_tokens`` instead adds no new parameter, so it can't
 interact with ``require_parameters``, and works uniformly across reasoning-mandatory,
-reasoning-optional, and non-reasoning slugs alike. The full sweep still costs well
-under a cent — the cap only bounds spend on slugs that actually reason at length.
+reasoning-optional, and non-reasoning slugs alike. The full sweep costs on the order
+of a few cents — nine distinct bare slugs x two live calls each, several against
+frontier-tier models at up to 2000 max_tokens.
 
 Usage:
     OPENROUTER_API_KEY=... python3 scripts/validate_olympus_pools.py
@@ -198,9 +199,9 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
         )
         if resp.status_code != 200:
             return f"json_schema call HTTP {resp.status_code}: {resp.text[:160]}"
-        content = ((resp.json().get("choices") or [{}])[0].get("message") or {}).get(
-            "content"
-        ) or ""
+        choice = (resp.json().get("choices") or [{}])[0]
+        content = (choice.get("message") or {}).get("content") or ""
+        finish_reason = choice.get("finish_reason")
         if content.strip():
             break
     else:
@@ -208,6 +209,8 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
+        if finish_reason == "length":
+            return f"json_schema output truncated at max_tokens (finish_reason=length); body: {content[:120]}"
         return f"json_schema output is not valid JSON ({exc}); body: {content[:120]}"
     if "answer" not in parsed:
         return f"json_schema output missing required key 'answer': {content[:120]}"
