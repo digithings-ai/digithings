@@ -77,28 +77,37 @@ tiers:
     allowed_models:
       # #2368 (2026-08-14): deepseek/deepseek-chat (V3) dropped here too — see the
       # ``cheap`` tier note above for the pricing rationale.
+      # #2368 (2026-08-14) follow-up: gemini-2.5-flash -> gemini-3.7-flash across this
+      # tier ($0.375/$1.875 per 1M vs $0.30/$2.50 — pricier on input, 25% cheaper on
+      # output; net favorable for output-heavy research/reasoning calls) plus native
+      # PDF/image vision, useful for filing- and chart-heavy phases. deepseek-v4-pro
+      # ($0.435/$0.87 per 1M) added to research/reasoning as a mid-cost reasoning bump
+      # — already gate-proven in the ``quality`` tier below, so lower risk than a new
+      # model here.
       extraction:
         - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
         - "openrouter/deepseek/deepseek-v4-flash"
+        - "openrouter/deepseek/deepseek-v4-pro"
         # z-ai/glm-5 removed 2026-07-20: endpoint gate record over 4 runs was
         # pass/fail/pass/fail — empty bodies under strict json_schema even with a
         # retry (the #1006 empty-completion class). Re-add a GLM only after
         # glm-5.2/glm-5-turbo passes the gate consistently.
         - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
         - "openrouter/x-ai/grok-4.3"
         - "openrouter/openai/gpt-4o-mini"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-flash"
+        - "openrouter/deepseek/deepseek-v4-pro"
         - "openrouter/x-ai/grok-4.3"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
-      - "openrouter/google/gemini-2.5-flash:online"
+      - "openrouter/google/gemini-3.7-flash:online"
       - "openrouter/openai/gpt-4o-mini:online"
 
   quality:
@@ -108,10 +117,19 @@ tiers:
     allowed_models:
       # #2368 (2026-08-14): deepseek/deepseek-chat (V3) dropped here too — see the
       # ``cheap`` tier note above for the pricing rationale.
+      # #2368 (2026-08-14) follow-up: gemini-2.5-flash -> gemini-3.7-flash in
+      # ``extraction`` for native PDF/image vision (filing- and chart-heavy phases);
+      # 3 other members in this pool absorb the risk if the gate rejects it. grok-4.3
+      # -> grok-4.6 in research/reasoning ($2/$6 per 1M vs $1.25/$2.50 — pricier, but
+      # this tier is capability- not cost-constrained; xAI's live X/Twitter corpus is
+      # the differentiator for financial-sentiment analysis). glm-5.2 ($0.50/$3.15 per
+      # 1M) added to ``reasoning`` only — PENDING the endpoint gate: glm-5 failed it
+      # twice (pass/fail/pass/fail, empty bodies under strict json_schema, 2026-07-20);
+      # pull this entry back out if glm-5.2 fails validate_olympus_pools.py too.
       extraction:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/openai/gpt-4o-mini"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
         - "openrouter/anthropic/claude-sonnet-4.6"
       research:
         - "openrouter/deepseek/deepseek-v4-pro"
@@ -119,20 +137,23 @@ tiers:
         - "openrouter/anthropic/claude-sonnet-4.6"
         # No Gemini Pro entry: the endpoint gate failed three Pro variants in a row
         # (2.5-pro: non-JSON under strict json_schema; 3-pro-preview: 404 rotated out;
-        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-2.5-flash is the one
-        # gate-proven Google slug — it carries Google coverage here.
-        - "openrouter/google/gemini-2.5-flash"
-        - "openrouter/x-ai/grok-4.3"
+        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-3.7-flash (2026-08-14,
+        # replacing the gate-proven gemini-2.5-flash) carries Google coverage here —
+        # pending re-validation by validate_olympus_pools.py like glm-5.2 above.
+        - "openrouter/google/gemini-3.7-flash"
+        - "openrouter/x-ai/grok-4.6"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-pro"
         - "openrouter/anthropic/claude-sonnet-4.6"
         - "openrouter/openai/gpt-4o"
-        - "openrouter/x-ai/grok-4.3"
+        - "openrouter/x-ai/grok-4.6"
+        - "openrouter/z-ai/glm-5.2"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/openai/gpt-4o:online"
       - "openrouter/deepseek/deepseek-r1:online"
       - "openrouter/anthropic/claude-sonnet-4.6:online"
+      - "openrouter/x-ai/grok-4.6:online"
 
 phase_capabilities:
   macro: research

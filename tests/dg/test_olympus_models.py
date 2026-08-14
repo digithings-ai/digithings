@@ -40,19 +40,23 @@ _CHEAP_PHASE_MODELS = frozenset(
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        "openrouter/google/gemini-2.5-flash",
+        # #2368 (2026-08-14): gemini-2.5-flash -> gemini-3.7-flash; deepseek-v4-pro added
+        # as a mid-cost reasoning bump (already gate-proven in the quality tier).
+        "openrouter/google/gemini-3.7-flash",
         "openrouter/openai/gpt-4o-mini",
         "openrouter/x-ai/grok-4.3",
+        "openrouter/deepseek/deepseek-v4-pro",  # #1622
     }
 )
 
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
-        "openrouter/deepseek/deepseek-v4-pro",  # #1622
         "openrouter/openai/gpt-4o",
         "openrouter/anthropic/claude-sonnet-4.6",
-        "openrouter/google/gemini-2.5-flash",
-        "openrouter/x-ai/grok-4.3",
+        # #2368 (2026-08-14) follow-up: grok-4.3 -> grok-4.6, glm-5.2 added (reasoning-only,
+        # pending validate_olympus_pools.py re-validation after glm-5's prior gate failures).
+        "openrouter/x-ai/grok-4.6",
+        "openrouter/z-ai/glm-5.2",
     }
 )
 
@@ -64,10 +68,11 @@ _WEB_SEARCH_MODELS = frozenset(
         "openrouter/deepseek/deepseek-v4-flash:online",  # #1622
         "openrouter/deepseek/deepseek-r1:online",
         "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/google/gemini-2.5-flash:online",
+        "openrouter/google/gemini-3.7-flash:online",
         "openrouter/openai/gpt-4o-mini:online",
         "openrouter/openai/gpt-4o:online",
         "openrouter/anthropic/claude-sonnet-4.6:online",
+        "openrouter/x-ai/grok-4.6:online",
     }
 )
 
