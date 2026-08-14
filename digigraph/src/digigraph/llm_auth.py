@@ -29,8 +29,10 @@ import os
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, NamedTuple  # score:allow untyped any — Starlette Request kept loose
+from urllib.parse import urlsplit
 
 from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 
 # Single source of truth for the BYOK provider allowlist — see
@@ -63,6 +65,42 @@ def _resolve_byok_catalog_path() -> Path:
 _BYOK_CATALOG_PATH = _resolve_byok_catalog_path()
 
 
+class _ByokCatalogEntry(BaseModel):
+    """Strict schema for one ``config/byok-providers.json`` entry.
+
+    ``strict=True`` rejects type-coercion surprises a plain ``dict.get()`` walk
+    would silently accept — a JSON string ``"false"`` for ``requiresModel``
+    (Python's ``bool("false") is True``) or a JSON ``null`` for ``id``
+    (``str(None).lower() == "none"``, which would collide with a real future
+    provider literally named "none"). ``baseUrl`` is additionally restricted to
+    absolute ``https://`` URLs: this value is where ``push_byok_header`` sends
+    the user's own BYOK key (see module docstring), so an ``http://`` catalog
+    entry would transmit that key in cleartext (CWE-319).
+    """
+
+    model_config = ConfigDict(strict=True)
+
+    id: str
+    baseUrl: str
+    requiresModel: bool = False
+
+    @field_validator("id")
+    @classmethod
+    def _id_non_empty(cls, v: str) -> str:
+        normalized = v.strip().lower()
+        if not normalized:
+            raise ValueError("id must be a non-empty string")
+        return normalized
+
+    @field_validator("baseUrl")
+    @classmethod
+    def _https_only(cls, v: str) -> str:
+        parsed = urlsplit(v)
+        if parsed.scheme != "https" or not parsed.netloc:
+            raise ValueError(f"baseUrl must be an absolute https:// URL, got: {v!r}")
+        return v
+
+
 def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
     if not path.exists():
         raise FileNotFoundError(f"BYOK provider catalog not found at {path}")
@@ -74,13 +112,18 @@ def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
         raise ValueError(f"BYOK provider catalog at {path} must be a non-empty JSON array")
     base_urls: dict[str, str] = {}
     model_required: set[str] = set()
+    seen_ids: set[str] = set()
     for entry in raw:
-        if not isinstance(entry, dict) or "id" not in entry or "baseUrl" not in entry:
-            raise ValueError(f"BYOK provider catalog entry missing id/baseUrl: {entry!r}")
-        provider_id = str(entry["id"]).strip().lower()
-        base_urls[provider_id] = str(entry["baseUrl"])
-        if bool(entry.get("requiresModel")):
-            model_required.add(provider_id)
+        try:
+            parsed_entry = _ByokCatalogEntry.model_validate(entry)
+        except ValidationError as e:
+            raise ValueError(f"BYOK provider catalog entry invalid: {entry!r}: {e}") from e
+        if parsed_entry.id in seen_ids:
+            raise ValueError(f"BYOK provider catalog has duplicate id: {parsed_entry.id!r}")
+        seen_ids.add(parsed_entry.id)
+        base_urls[parsed_entry.id] = parsed_entry.baseUrl
+        if parsed_entry.requiresModel:
+            model_required.add(parsed_entry.id)
     return base_urls, frozenset(model_required)
 
 
