@@ -40,9 +40,11 @@ _CHEAP_PHASE_MODELS = frozenset(
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        # #2368 (2026-08-14): gemini-2.5-flash -> gemini-3.7-flash; deepseek-v4-pro added
-        # as a mid-cost reasoning bump (already gate-proven in the quality tier).
-        "openrouter/google/gemini-3.7-flash",
+        # #2368 (2026-08-14): deepseek-v4-pro added as a mid-cost reasoning bump (already
+        # gate-proven in the quality tier). gemini-2.5-flash -> gemini-3.7-flash was tried
+        # and REVERTED same day (validate_olympus_pools.py run 31813373584: non-JSON output
+        # under strict json_schema) — gemini-2.5-flash stays.
+        "openrouter/google/gemini-2.5-flash",
         "openrouter/openai/gpt-4o-mini",
         "openrouter/x-ai/grok-4.3",
         "openrouter/deepseek/deepseek-v4-pro",  # #1622
@@ -53,10 +55,10 @@ _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
         "openrouter/openai/gpt-4o",
         "openrouter/anthropic/claude-sonnet-4.6",
-        # #2368 (2026-08-14) follow-up: grok-4.3 -> grok-4.6, glm-5.2 added (reasoning-only,
-        # pending validate_olympus_pools.py re-validation after glm-5's prior gate failures).
+        # #2368 (2026-08-14) follow-up: grok-4.3 -> grok-4.6 (gate-proven, kept). glm-5.2 was
+        # added to reasoning-only and then REVERTED same day (run 31813373584: empty body
+        # twice under strict json_schema — the same #1006/glm-5 failure class) — no GLM entry.
         "openrouter/x-ai/grok-4.6",
-        "openrouter/z-ai/glm-5.2",
     }
 )
 
