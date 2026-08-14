@@ -130,6 +130,7 @@ jobs:
               - 'agents.yml'
               - 'agents/**'
               - '.github/workflows/test-score.yml'
+              - 'config/**'
             e2e_contract:
               - 'tests/test_e2e.py'
               - 'tests/test_e2e_contract.py'
@@ -175,6 +176,7 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - 'config/**'
               - '.release-please-manifest.json'
               - 'release-please-config.json'
               - 'frontend/digichat/package.json'

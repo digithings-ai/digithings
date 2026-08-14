@@ -9,8 +9,11 @@ request its own, stricter budget on top of the general per-path rate limit.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import digigraph.server as server
 import pytest
+from digigraph.rate_limit import RateLimiter
 from starlette.requests import Request
 
 
@@ -34,8 +37,6 @@ def _make_request(client_host: str = "203.0.113.9") -> Request:
 def _fresh_limiter(monkeypatch):
     """Each test gets its own limiter instance and a small, deterministic budget
     so cases don't share sliding-window state with each other or the real default."""
-    from digigraph.rate_limit import RateLimiter
-
     monkeypatch.setattr(server, "_require_tool_calls_limiter", RateLimiter())
     monkeypatch.setattr(server, "_REQUIRE_TOOL_CALLS_RATE_LIMIT", (2, 60))
     monkeypatch.delenv("DIGI_DISABLE_RATE_LIMIT", raising=False)
@@ -79,3 +80,57 @@ class TestRequireToolCallsBudget:
         req = _make_request()
         for _ in range(10):
             assert server._enforce_require_tool_calls_budget(True, req) is None
+
+
+class TestWorkflowEndpointBudget:
+    """POST /workflow's WorkflowRequest.require_tool_calls reaches the identical
+    tool_choice="required" spend-amplification path as chat (via
+    require_tool_calls_for_workflow) but, before this fix, was never metered by this
+    budget -- only the general 10 req/min /workflow limit applied (#2361 finding 7 gap).
+
+    FastAPI TestClient requests are exempt from RateLimiter (client host ==
+    'testclient', see rate_limit.py), so this calls the route function directly with a
+    real Request -- the same technique the unit tests above use -- rather than going
+    through TestClient.
+    """
+
+    def test_within_budget_reaches_workflow(self):
+        from digigraph.models import WorkflowRequest, WorkflowResult
+
+        req = WorkflowRequest(prompt="Build me a stat-arb on tech", require_tool_calls=True)
+        http_req = _make_request("203.0.113.60")
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            m.return_value = WorkflowResult(success=True, message="", backtest_result={})
+            result = server.api_run_digigraph_workflow(http_req, req)
+        assert result is m.return_value
+        m.assert_called_once()
+
+    def test_over_budget_returns_429_without_reaching_workflow(self):
+        from digigraph.models import WorkflowRequest, WorkflowResult
+        from fastapi.responses import JSONResponse
+
+        req = WorkflowRequest(prompt="Build me a stat-arb on tech", require_tool_calls=True)
+        http_req = _make_request("203.0.113.61")
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            m.return_value = WorkflowResult(success=True, message="", backtest_result={})
+            # Budget is (2, 60) per _fresh_limiter -- first two calls pass through.
+            server.api_run_digigraph_workflow(http_req, req)
+            server.api_run_digigraph_workflow(http_req, req)
+            result = server.api_run_digigraph_workflow(http_req, req)
+        assert isinstance(result, JSONResponse)
+        assert result.status_code == 429
+        assert m.call_count == 2
+
+    def test_require_tool_calls_false_never_limited(self):
+        """A plain workflow request (require_tool_calls unset) never consults this
+        budget -- it's still bounded by the general per-path /workflow limit only."""
+        from digigraph.models import WorkflowRequest, WorkflowResult
+
+        req = WorkflowRequest(prompt="Build me a stat-arb on tech")
+        http_req = _make_request("203.0.113.62")
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            m.return_value = WorkflowResult(success=True, message="", backtest_result={})
+            for _ in range(5):
+                result = server.api_run_digigraph_workflow(http_req, req)
+                assert result is m.return_value
+        assert m.call_count == 5

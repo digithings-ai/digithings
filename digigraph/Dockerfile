@@ -41,10 +41,12 @@ COPY digigraph/src ./digigraph/src
 # resolves to /app/config/byok-providers.json under this image's WORKDIR/layout.
 # Bake it in so a raw ghcr.io/.../digigraph image boots with zero configuration;
 # still overridable via a volume mount at /app/config or DIGI_CONFIG_PATH — but
-# that mount must supply BOTH byok-providers.json and model_modes.yaml. Either
-# file missing from the mounted directory shadows this baked-in copy (the mount
-# replaces the whole directory, it does not merge with it) and digigraph fails
-# loud at startup (_load_byok_catalog raises by design — no silent fallback).
+# that mount replaces the whole directory, it does not merge with this baked-in
+# copy, so it should supply BOTH byok-providers.json and model_modes.yaml. A
+# mount missing byok-providers.json crashes digigraph at startup
+# (_load_byok_catalog raises by design — no silent fallback); a mount missing
+# model_modes.yaml does NOT crash — model_config.py's loader silently falls
+# back to a hardcoded default model instead. Supply both regardless.
 COPY config/byok-providers.json ./config/byok-providers.json
 # ECharts → SVG (optional): install JS deps for render_svg path; safe to fail if lockfile missing
 RUN if [ -f digigraph/src/digigraph/tools/analytics/visualization/echarts/package-lock.json ]; then \

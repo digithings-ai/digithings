@@ -409,6 +409,13 @@ def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> W
     digiclaw custom skill: run_digigraph_workflow.
     Phase 0: user idea → backtest via digiquant → result in < 10s.
     """
+    # WorkflowRequest.require_tool_calls is body-only (no X-Require-Tool-Calls header,
+    # unlike ChatCompletionRequest -- see models.py), but it reaches the identical
+    # tool_choice="required" spend-amplification path via require_tool_calls_for_workflow,
+    # so it needs the same dedicated budget as /v1/chat/completions (#2361 finding 7 gap).
+    limited = _enforce_require_tool_calls_budget(req.require_tool_calls, http_request)
+    if limited is not None:
+        return limited
     rid = _resolve_request_id(http_request)
     if rid and not (req.request_id and str(req.request_id).strip()):
         req = req.model_copy(update={"request_id": rid})
