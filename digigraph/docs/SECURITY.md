@@ -28,6 +28,10 @@ Orchestrator tools (RAG, delegate agents) can be restricted:
 
 Precedence: explicit request list → project config → env → unrestricted (all registered tools).
 
+## Tool-choice requirement
+
+A second, independent gate — `agents.require_tool_calls` — forces `tool_choice="required"` on every tool-calling turn for deployments that must never answer from parametric knowledge alone (e.g. OCC's retrieval dependency). Its precedence is the OPPOSITE of the allowlist above, deliberately: project config / `DIGI_REQUIRE_TOOL_CALLS` win over a request-level or `X-Require-Tool-Calls` value trying to turn it off — a request can only raise the requirement, never lower one the deployment already mandated. Unlike the allowlist (bounded by the tool registry, so a full override can't expand what's callable), this flag has no such ceiling, and `/v1/chat/completions` is reachable by callers outside digichat's control — a full override here would let any caller defeat an operator's mandatory tool-forcing policy with one field or header. See `digigraph/src/digigraph/tool_policy.require_tool_calls_for_workflow`.
+
 ## Code execution
 
 `data_engineer_agent` / `execute_python_on_datasets` runs user code in a **subprocess** with static rejection of `import os`, `open(`, `exec(`, etc. when **`DIGI_ALLOW_CODE_EXEC=true`**. This is not a full capability sandbox — treat as dev-only.

@@ -638,6 +638,7 @@ def _stream_completions_progressive(
     session_id: str | None,
     openwebui_format: bool = False,
     allowed_tools: list[str] | None = None,
+    require_tool_calls: bool | None = None,
     request_id: str | None = None,
     workflow_extras: dict | None = None,
     suppress_tool_stream: bool = False,
@@ -654,6 +655,7 @@ def _stream_completions_progressive(
         "prompt": prompt,
         "session_id": session_id,
         "allowed_tools": allowed_tools,
+        "require_tool_calls": require_tool_calls,
         "request_id": request_id,
     }
     if workflow_extras:
@@ -804,6 +806,22 @@ def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) ->
     return None
 
 
+def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Request) -> bool | None:
+    """Per-request tool_choice='required' signal from JSON body or X-Require-Tool-Calls header.
+
+    None = no request-level signal; the deployment-grain floor (project config /
+    DIGI_REQUIRE_TOOL_CALLS) still applies downstream in require_tool_calls_for_workflow.
+    """
+    if req.require_tool_calls is not None:
+        return req.require_tool_calls
+    h = (request.headers.get("X-Require-Tool-Calls") or "").strip().lower()
+    if h in ("1", "true", "yes"):
+        return True
+    if h in ("0", "false", "no"):
+        return False
+    return None
+
+
 def _resolve_session_id(req: ChatCompletionRequest, request: Request) -> str | None:
     """Session id from body, then X-Session-Id, then X-Thread-Id. Ensures digistore/checkpoint are per-conversation when client sends it."""
     sid = getattr(req, "session_id", None)
@@ -869,6 +887,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     if subject:
         session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
+    require_tool_calls = _resolve_require_tool_calls_chat(req, request)
     suppress_tool_stream = _resolve_suppress_tool_stream(request)
     openwebui_format = _resolve_openwebui_format(req, request)
     request_id = _resolve_request_id(request)
@@ -896,6 +915,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 session_id,
                 openwebui_format=openwebui_format,
                 allowed_tools=allowed_tools,
+                require_tool_calls=require_tool_calls,
                 request_id=request_id,
                 workflow_extras=wf_extras,
                 suppress_tool_stream=suppress_tool_stream,
@@ -916,6 +936,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             prompt=prompt,
             session_id=session_id,
             allowed_tools=allowed_tools,
+            require_tool_calls=require_tool_calls,
             request_id=request_id,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))

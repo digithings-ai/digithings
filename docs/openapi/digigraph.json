@@ -40,6 +40,18 @@
             "title": "Openwebui Format",
             "type": "boolean"
           },
+          "require_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional per-request signal that this completion needs tool_choice='required'. Also accepted via X-Require-Tool-Calls header. Combined with project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS as a FLOOR (any true value wins) \u2014 unlike allowed_tools, this can only raise the requirement, never lower one the deployment already mandates.",
+            "title": "Require Tool Calls"
+          },
           "session_id": {
             "anyOf": [
               {
@@ -291,6 +303,18 @@
             ],
             "description": "Correlates audit logs and outbound HTTP (X-Request-ID). Set from X-Request-ID on HTTP or generated for MCP.",
             "title": "Request Id"
+          },
+          "require_tool_calls": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional per-request signal that this workflow needs tool_choice='required'. Combined with project agents.require_tool_calls and env DIGI_REQUIRE_TOOL_CALLS as a FLOOR (any true value wins) \u2014 unlike allowed_tools, this can only raise the requirement, never lower one the deployment already mandates.",
+            "title": "Require Tool Calls"
           },
           "research_filters": {
             "anyOf": [

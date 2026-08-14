@@ -9,6 +9,9 @@ covered by digillm/tests/test_digillm.py.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from digigraph.llm_auth import (
     BYOK_ROUTABLE_PROVIDERS,
@@ -23,6 +26,8 @@ from digigraph.llm_auth import (
 
 from digillm import get_byok as digillm_get_byok
 from digillm import get_proxy_key as digillm_get_proxy_key
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class _Headers:
@@ -205,12 +210,12 @@ class TestByokProviderGuard:
     which providers a key is actually spent on, and server.py refuses the rest.
     """
 
-    @pytest.mark.parametrize("provider", ["openai", "openrouter", "gemini", "anthropic"])
+    @pytest.mark.parametrize("provider", ["openai", "openrouter", "gemini", "anthropic", "xai"])
     def test_routed_providers_are_supported(self, provider: str) -> None:
         assert byok_provider_supported(provider)
         assert provider in BYOK_ROUTABLE_PROVIDERS
 
-    @pytest.mark.parametrize("provider", ["xai", "", "nonsense"])
+    @pytest.mark.parametrize("provider", ["", "nonsense"])
     def test_unrouted_providers_are_refused(self, provider: str) -> None:
         """Each of these would otherwise have been billed to the operator."""
         assert not byok_provider_supported(provider)
@@ -246,7 +251,7 @@ class TestByokGuardOverHttp:
 
         return TestClient(app)
 
-    @pytest.mark.parametrize("provider", ["xai", "nonsense"])
+    @pytest.mark.parametrize("provider", ["nonsense"])
     def test_an_unroutable_key_is_refused_not_silently_swallowed(self, provider: str) -> None:
         res = self._client().get(
             "/healthz", headers={"x-byok-key": "sk-secret", "x-byok-provider": provider}
@@ -259,7 +264,7 @@ class TestByokGuardOverHttp:
         # And it must never echo the key back.
         assert "sk-secret" not in res.text
 
-    @pytest.mark.parametrize("provider", ["gemini", "anthropic", "openrouter"])
+    @pytest.mark.parametrize("provider", ["gemini", "anthropic", "openrouter", "xai"])
     def test_model_required_for_non_openai(self, provider: str) -> None:
         res = self._client().get(
             "/healthz", headers={"x-byok-key": "sk-ok", "x-byok-provider": provider}
@@ -274,6 +279,7 @@ class TestByokGuardOverHttp:
             ("openrouter", "openai/gpt-4o-mini"),
             ("gemini", "gemini-2.5-flash"),
             ("anthropic", "claude-sonnet-4-6"),
+            ("xai", "grok-4-3"),
         ],
     )
     def test_a_routable_key_passes_through(self, provider: str, model: str) -> None:
@@ -286,3 +292,117 @@ class TestByokGuardOverHttp:
     def test_no_byok_header_is_untouched(self) -> None:
         """The guard must only fire when a key is actually present."""
         assert self._client().get("/healthz").status_code == 200
+
+
+@pytest.mark.unit
+class TestByokCatalogLoad:
+    """The catalog is loaded once at import time and fails loudly, not silently.
+
+    DEVIATION FROM THE ORIGINAL TASK SPEC — see task-a2-report.md for detail:
+    the originally-specified test drove this through
+    ``importlib.reload(llm_auth)`` with ``monkeypatch.setattr(llm_auth,
+    "_BYOK_CATALOG_PATH", ...)``. That pattern is self-contradictory against
+    the loader's own (correct, and required) production behavior — a
+    module-level constant unconditionally recomputed from ``Path(__file__)``
+    on every exec — and was confirmed empirically, not just by inspection:
+    the first ``importlib.reload`` inside ``pytest.raises`` recomputes the
+    *real* catalog path before ``_load_byok_catalog`` ever sees the
+    monkeypatched one, so the expected exception never fires. Making the
+    module remember the monkeypatched path across reload (e.g. a
+    ``globals().get(...)`` guard) fixes that, but then the very next line in
+    the same test — the "restore the real module state" reload — reloads
+    again while the monkeypatch is *still active* (monkeypatch only undoes
+    at fixture teardown, after the test body returns) and raises the same
+    exception a second time, uncaught, failing the test outright. Nothing in
+    the module's own state can tell that second reload apart from the
+    first. Both variants were run against this exact test file to confirm
+    before choosing this replacement.
+
+    So this class instead drives ``_load_byok_catalog`` directly — the exact
+    function ``_BYOK_BASE_URLS``/``BYOK_MODEL_REQUIRED_PROVIDERS`` are built
+    from at import time (see the unconditional module-level call right below
+    its definition) — which exercises the identical fail-loud behavior
+    without the reload/monkeypatch contradiction.
+    """
+
+    def test_missing_catalog_file_raises(self, tmp_path) -> None:
+        from digigraph.llm_auth import _load_byok_catalog
+
+        with pytest.raises(FileNotFoundError):
+            _load_byok_catalog(tmp_path / "does-not-exist.json")
+
+    def test_malformed_catalog_raises(self, tmp_path) -> None:
+        from digigraph.llm_auth import _load_byok_catalog
+
+        bad = tmp_path / "byok-providers.json"
+        bad.write_text("not json", encoding="utf-8")
+        with pytest.raises(ValueError):
+            _load_byok_catalog(bad)
+
+
+@pytest.mark.unit
+class TestByokCatalogPathResolution:
+    """``DIGI_CONFIG_PATH`` override for the catalog path (deploy distribution fix).
+
+    ``_resolve_byok_catalog_path`` is a plain function of ``os.environ`` — unlike
+    ``_BYOK_CATALOG_PATH`` (computed once at import), calling it fresh per-test
+    sidesteps the reload/monkeypatch contradiction documented on
+    ``TestByokCatalogLoad`` above.
+    """
+
+    def test_unset_env_resolves_to_repo_config(self, monkeypatch) -> None:
+        """With no override, resolution must still land on the repo's real catalog —
+        this is the path digigraph actually imports with in local dev/tests."""
+        monkeypatch.delenv("DIGI_CONFIG_PATH", raising=False)
+        from digigraph.llm_auth import _BYOK_CATALOG_PATH, _resolve_byok_catalog_path
+
+        resolved = _resolve_byok_catalog_path()
+        assert resolved == _REPO_ROOT / "config" / "byok-providers.json"
+        assert resolved.exists()
+        # And this is exactly what the module computed at import time.
+        assert _BYOK_CATALOG_PATH == resolved
+
+    def test_digi_config_path_override_wins(self, tmp_path, monkeypatch) -> None:
+        """Set DIGI_CONFIG_PATH → the loader reads from THAT directory, not the repo default."""
+        from digigraph.llm_auth import _load_byok_catalog, _resolve_byok_catalog_path
+
+        override_dir = tmp_path / "custom-config"
+        override_dir.mkdir()
+        catalog = [{"id": "openai", "baseUrl": "https://example-override.test/v1"}]
+        (override_dir / "byok-providers.json").write_text(json.dumps(catalog), encoding="utf-8")
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(override_dir))
+        resolved = _resolve_byok_catalog_path()
+        assert resolved == override_dir / "byok-providers.json"
+        assert resolved != _REPO_ROOT / "config" / "byok-providers.json"
+
+        base_urls, _ = _load_byok_catalog(resolved)
+        assert base_urls == {"openai": "https://example-override.test/v1"}
+
+    def test_missing_file_still_raises_with_override_set(self, tmp_path, monkeypatch) -> None:
+        """The fail-loud guarantee (#existing behavior) must survive the override path too."""
+        from digigraph.llm_auth import _load_byok_catalog, _resolve_byok_catalog_path
+
+        empty_dir = tmp_path / "empty-config"
+        empty_dir.mkdir()
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(empty_dir))
+        resolved = _resolve_byok_catalog_path()
+        with pytest.raises(FileNotFoundError):
+            _load_byok_catalog(resolved)
+
+
+@pytest.mark.unit
+class TestByokCatalogVendoredCopy:
+    """The infra/digichat-release vendored copy must never silently drift from the
+    canonical repo-root catalog — that drift is exactly how #FIX-1 broke two of
+    three real deploy targets (baked/mounted images shipping a stale or missing
+    catalog while the repo-root copy moved on)."""
+
+    def test_vendored_copy_matches_canonical_catalog(self) -> None:
+        canonical = _REPO_ROOT / "config" / "byok-providers.json"
+        vendored = _REPO_ROOT / "infra" / "digichat-release" / "config" / "byok-providers.json"
+        assert canonical.exists(), canonical
+        assert vendored.exists(), vendored
+        assert json.loads(canonical.read_text(encoding="utf-8")) == json.loads(
+            vendored.read_text(encoding="utf-8")
+        )

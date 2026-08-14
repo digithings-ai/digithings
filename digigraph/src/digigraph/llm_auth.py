@@ -24,27 +24,69 @@ accepts ``Request`` objects.
 
 from __future__ import annotations
 
+import json
+import os
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Any, NamedTuple  # score:allow untyped any — Starlette Request kept loose
 
 from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
 
-# BYOK speaks directly to the provider (bypassing the LiteLLM proxy).
-_OPENAI_BYOK_BASE_URL = "https://api.openai.com/v1"
-_OPENROUTER_BYOK_BASE_URL = "https://openrouter.ai/api/v1"
-_GEMINI_BYOK_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
-_ANTHROPIC_BYOK_BASE_URL = "https://api.anthropic.com/v1/"
+
+# Single source of truth for the BYOK provider allowlist — see
+# docs/superpowers/specs/2026-08-13-digichat-byok-model-catalog-design.md.
+# Loaded ONCE at import time (not the mtime-recheck-per-call pattern
+# model_config.py uses for model_modes.yaml — this changes at the pace of a
+# code review, not a redeploy). A missing or malformed catalog raises here,
+# crashing the process at startup — loud and immediate in deploy health
+# checks, rather than a running process that silently 400s every BYOK
+# request. See the design spec's Error handling section for why this
+# deliberately differs from model_config.py's own reload behavior.
+#
+# Path resolution honors ``DIGI_CONFIG_PATH`` when set (the same env var
+# model_config.py's loaders read — see its ``_load_model_modes``), so an
+# operator who points the service at a config directory gets the catalog
+# from there instead of a hardcoded, image-layout-dependent guess. Falling
+# back to a bare ``Path(DIGI_CONFIG_PATH or "config")`` (model_config.py's
+# own pattern) would NOT work here when the var is unset: that resolves
+# relative to CWD, whereas this fallback must keep resolving to
+# ``<repo>/config`` for local dev, editable installs, and tests regardless
+# of the process's working directory — hence the ``__file__``-relative
+# fallback is kept unchanged and only used when the env var is absent.
+def _resolve_byok_catalog_path() -> Path:
+    config_dir_override = os.environ.get("DIGI_CONFIG_PATH")
+    if config_dir_override:
+        return Path(config_dir_override) / "byok-providers.json"
+    return Path(__file__).resolve().parents[3] / "config" / "byok-providers.json"
+
+
+_BYOK_CATALOG_PATH = _resolve_byok_catalog_path()
+
+
+def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
+    if not path.exists():
+        raise FileNotFoundError(f"BYOK provider catalog not found at {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"BYOK provider catalog at {path} is not valid JSON: {e}") from e
+    if not isinstance(raw, list) or not raw:
+        raise ValueError(f"BYOK provider catalog at {path} must be a non-empty JSON array")
+    base_urls: dict[str, str] = {}
+    model_required: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, dict) or "id" not in entry or "baseUrl" not in entry:
+            raise ValueError(f"BYOK provider catalog entry missing id/baseUrl: {entry!r}")
+        provider_id = str(entry["id"]).strip().lower()
+        base_urls[provider_id] = str(entry["baseUrl"])
+        if bool(entry.get("requiresModel")):
+            model_required.add(provider_id)
+    return base_urls, frozenset(model_required)
+
 
 # The one table: a provider here is routed to its own endpoint with the user's key.
-_BYOK_BASE_URLS: dict[str, str] = {
-    "openai": _OPENAI_BYOK_BASE_URL,
-    "openrouter": _OPENROUTER_BYOK_BASE_URL,
-    "gemini": _GEMINI_BYOK_BASE_URL,
-    "anthropic": _ANTHROPIC_BYOK_BASE_URL,
-}
+_BYOK_BASE_URLS, BYOK_MODEL_REQUIRED_PROVIDERS = _load_byok_catalog(_BYOK_CATALOG_PATH)
 BYOK_ROUTABLE_PROVIDERS = tuple(_BYOK_BASE_URLS)
-# Providers that require X-BYOK-Model (OpenAI may use the mode default).
-BYOK_MODEL_REQUIRED_PROVIDERS = frozenset({"openrouter", "gemini", "anthropic"})
 
 
 def byok_provider_supported(provider: str) -> bool:

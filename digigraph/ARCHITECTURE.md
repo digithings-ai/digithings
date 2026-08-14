@@ -225,6 +225,7 @@ real node executions rather than compiled graph nodes.
 | `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
 | `digi_subject` | `str \| None` | JWT subject; namespaces the cross-thread Store (see §5.5) and the checkpoint `thread_id`. Client-writable on `WorkflowRequest`, but `server.py`'s `_digi_fields_from_request` unconditionally overwrites it — to the verified `auth.subject` when present and non-empty, else `None` (no auth, or an auth object with an empty subject claim) — before it reaches graph state; see §6.10 |
 | `allowed_tool_names` | `list[str] \| None` | Tool allowlist; `None` = unrestricted |
+| `require_tool_calls` | `bool` | Deployment-grain `tool_choice="required"` mandate — see `tool_policy.require_tool_calls_for_workflow`. **Must** be declared — LangGraph drops undeclared keys. |
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
 | `strategy_params` | `dict[str, Any]` | Optional pre-filled digiquant parameters |
@@ -262,6 +263,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `session_id` | `str \| None` | Maps to LangGraph `thread_id` |
 | `request_id` | `str \| None` | Taken from `X-Request-ID` when omitted |
 | `allowed_tools` | `list[str] \| None` | Overrides project/env allowlist |
+| `require_tool_calls` | `bool \| None` | Combined with project config / env as a FLOOR — can only raise, never lower, the deployment's mandate; see 4.1 |
 | `trading_profile` | `dict \| None` | Maps to `optimization_constraints` |
 | `strategy_params` | `dict \| None` | Skip LLM param extraction |
 | `research_filters` | `list[dict] \| None` | Injected into digisearch calls |
@@ -312,6 +314,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
+| `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
 
 ---
 
@@ -573,6 +576,34 @@ When an allowlist is active, `execute()` in `registry.py:106` rejects denied too
 
 An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. `None` means unrestricted.
 
+#### 6.2.1 Tool Choice Requirement
+
+`agents.require_tool_calls` (bool, default `false`) forces `tool_choice="required"`
+on every tool-calling turn in `research_node`'s `run_tools()` call — for deployments
+(e.g. OCC) that depend on multi-round tool calls for retrieval and should never
+silently answer from parametric knowledge alone. Resolved as a **floor**, not an
+override, by `tool_policy.require_tool_calls_for_workflow()`: project config or
+`DIGI_REQUIRE_TOOL_CALLS` wins over a request/`X-Require-Tool-Calls` header value
+of `false` — deliberately the opposite precedence from `agents.allowed_tools`,
+since this flag has no registry-bounded ceiling the way a tool allowlist does.
+
+Forcing `tool_choice="required"` also changes the cost and failure shape of the
+round budget described above. With it off, `tool_calls` can come back empty and
+`run_tools()` returns early, so `max_tool_rounds` is a ceiling the model rarely
+exhausts; with it on, a tool-enabled round returning empty `tool_calls` is no
+longer treated as an early final answer — `run_tools()` raises instead, so a
+provider that ignores the `required` hint doesn't get to silently answer without
+calling a tool. A compliant model still hits every round in the budget, so with
+`research.py`'s current `max_tool_rounds=4` a request with `require_tool_calls:
+true` makes 4 tool rounds plus one tool-free wrap-up completion — 5 total — only
+when the last round's own narration was empty; when that round already carried
+non-empty content, it's returned directly with no wrap-up, for 4. Either way,
+not the fixed 5 this used to claim. It also changes what happens when a model
+can't comply at the provider level: a provider that rejects forced tool use for
+that model outright now returns a hard error for the whole request, rather than
+the model quietly answering without tools the way a tool-incapable model
+degrades today.
+
 ### 6.3 Code Execution Gate
 
 `policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
@@ -672,7 +703,9 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 Four modes — **`llm_mode` is access/cost policy, not a product catalog**: `free` (resolved model must be free-tier: OpenRouter `:free` or local Ollama), `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`. **Actual model id** comes from (in order) `agents.llm` → `DIGI_LLM_PROVIDER`/`DIGI_LLM_MODEL` → LiteLLM alias / deploy config — **not** a shared `model_modes.yaml` `free:` pin (OpenRouter free roster rotates). `llm_mode: free` without an explicit pin raises a clear error (`set agents.llm or DIGI_LLM_MODEL`); non-`:free` (non-Ollama) pins are refused. Having `OPENROUTER_API_KEY` set alone does **not** auto-swap digigraph chat onto paid Olympus models — Olympus/Atlas use `get_model_for_phase()`.
 
-**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1/`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`.
+**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic, x.ai. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`. This allowlist (`_BYOK_BASE_URLS` / `BYOK_ROUTABLE_PROVIDERS` / `BYOK_MODEL_REQUIRED_PROVIDERS`) is no longer a hand-edited Python dict — it loads from `config/byok-providers.json` once at import time, and a missing or malformed catalog raises there, crashing the process at startup rather than silently 400ing every BYOK request. Path resolution honors `DIGI_CONFIG_PATH` when set (falling back to a `__file__`-relative repo path otherwise), and the same catalog file is vendored into `infra/digichat-release/config/byok-providers.json` so the Cloudflare stack image and the Profile A self-host compose target — which bake/mount `infra/digichat-release/config` rather than the repo-root `config/` — get it too; a test (`TestByokCatalogVendoredCopy`) pins the two copies as parsed-JSON-equal (not byte-for-byte — a whitespace reformat of either file would still pass) so they cannot silently diverge in content.
+
+`config/byok-providers.json` is the source of truth for the BYOK allowlist **specifically** — i.e. which providers a user-supplied key is actually routed to and spent on. It is not a general provider-base-URL registry for the monorepo: `digillm`'s own `_EXTERNAL_PROVIDERS` table (`digillm/src/digillm/client.py`) is a deliberately separate table serving a different, non-BYOK concern — routing on the *operator's* keys — and `digillm` is a standalone installable library that must not reach for repo-root config. The two tables are not kept in lockstep and are not expected to be: `_EXTERNAL_PROVIDERS` has no `openai` entry at all (operator OpenAI calls don't go through this table), and its `anthropic` base URL still carries a trailing slash that the BYOK catalog deliberately dropped — harmless on both sides, since `digillm/src/digillm/client.py`'s own base-URL comparison strips trailing slashes and the OpenAI-compatible client normalizes it internally regardless — but proof the two lists already diverge in fields where it happens not to matter. Do not "fix" `_EXTERNAL_PROVIDERS` to import from the BYOK catalog.
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
@@ -825,6 +858,7 @@ digigraph:
 | `DIGI_WORKFLOW_PROFILE` | `full_stack` | Workflow profile when not set in project config |
 | `DIGI_RESEARCH_BRIEF` | (unset → YAML / default on) | Override `agents.research_brief`: `0`/`false` skips ResearchBrief post-pass |
 | `DIGI_ALLOWED_TOOLS` | (empty) | Comma-separated allowlist (env fallback) |
+| `DIGI_REQUIRE_TOOL_CALLS` | (empty) | Force `tool_choice="required"` deployment-wide: `1`/`true` |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
 | `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |

@@ -404,6 +404,10 @@ class DigiProjectConfig:
         """Whether to use plan-and-execute: after create_plan tool, run executor and then synthesis."""
         return bool(self.agents.get("planning_mode"))
 
+    def get_require_tool_calls(self) -> bool:
+        """Whether this deployment's tool loop must force tool_choice='required'. From agents.require_tool_calls."""
+        return bool(self.agents.get("require_tool_calls"))
+
     def get_allowed_tools(self) -> list[str]:
         """Orchestrator tool names allowed for this project (empty if unset). From agents.allowed_tools."""
         raw = self.agents.get("allowed_tools")

@@ -14,7 +14,11 @@ from digigraph.graph import build_workflow_graph
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
 from digigraph.thread_scope import workflow_thread_id
-from digigraph.tool_policy import allowed_tool_names_for_workflow, state_list_from_frozen
+from digigraph.tool_policy import (
+    allowed_tool_names_for_workflow,
+    require_tool_calls_for_workflow,
+    state_list_from_frozen,
+)
 
 __all__ = [
     "run_digigraph_workflow",
@@ -58,6 +62,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     names = state_list_from_frozen(frozen)
     if names is not None:
         initial["allowed_tool_names"] = names
+    initial["require_tool_calls"] = require_tool_calls_for_workflow(req, cfg=cfg)
     if req.trading_profile:
         initial["trading_profile"] = req.trading_profile
     if req.strategy_params:

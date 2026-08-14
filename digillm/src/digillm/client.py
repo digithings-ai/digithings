@@ -1974,6 +1974,7 @@ def run_tools(
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
+    tool_choice: str | ToolArguments = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
     parallel_safe_tools: set[str] | None = None,
     stream_deltas: bool = False,
@@ -1988,6 +1989,8 @@ def run_tools(
         execute_tool: ``execute_tool(name, arguments) -> str | {"content": str, ...}``.
         temperature:  Sampling temperature.
         max_tool_rounds: Maximum tool rounds before forcing a final answer.
+        tool_choice:  Passed to every turn's completion call ("auto" default;
+            "required" forces a tool call every round). See :func:`completion`.
         on_tool_step: Optional callback invoked with ``("tool_call", {name,
             arguments})`` before each call and ``("tool_result", {name, content,
             ...})`` after. Also receives ``("round_boundary", {round_idx,
@@ -2000,10 +2003,10 @@ def run_tools(
             ``round_boundary`` is the only callback that exposes that narration.
             Receives ``("round_limit_exhausted", {max_tool_rounds})`` once when
             ``max_tool_rounds`` is exhausted (every round through the budget still
-            returned tool_calls). This fires regardless of what happens next: a
-            forced tool-free completion only actually runs when the last round's
-            content was empty; when that content was non-empty, it is returned
-            directly as the final answer instead, with no forced completion.
+            returned tool_calls), immediately before a forced tool-free completion
+            synthesizes the final answer from the full transcript -- including
+            that last round's own tool results, which its own narration (written
+            before those tools ran) cannot reflect.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
@@ -2012,7 +2015,11 @@ def run_tools(
             ``("content", delta)`` for each answer chunk and ``("reasoning",
             delta)`` for each reasoning chunk (reasoning models). Defaults to
             False (one non-streaming call per turn); tool execution is unaffected
-            either way.
+            either way. Exception: when ``tool_choice="required"``, a tool-enabled
+            round's deltas are buffered and released as one end-of-round batch
+            instead of live per-token, since a delta already streamed can't be
+            un-streamed if that round then turns out to have no tool_calls and
+            gets rejected (see ``_produce_turn``'s docstring below).
         search_parameters: Optional xAI Live Search descriptor (see
             :func:`completion`). Attached only to the **first** tool round so a
             multi-round loop doesn't re-search (and re-bill); ignored on the
@@ -2036,6 +2043,19 @@ def run_tools(
         Streams content/reasoning deltas to ``on_tool_step`` when ``stream_deltas`` is
         set; otherwise makes a single non-streaming call. ``include_search`` attaches
         ``search_parameters`` to this turn (first round only).
+
+        When this turn is tool-enabled (``turn_tools`` set) and ``tool_choice ==
+        "required"``, content/reasoning deltas are buffered instead of published live,
+        released only once this turn's own ``tool_calls`` come back non-empty. A delta
+        already streamed to ``on_tool_step`` can't be un-streamed, so once the caller's
+        fail-closed check (below) rejects a turn that came back with no tool_calls,
+        buffering is what keeps that turn's narration from ever reaching a consumer
+        that would otherwise have shown it as an accepted answer. Trading live
+        per-token delivery for that is only worth it under the explicit
+        ``require_tool_calls`` opt-in floor -- the tool-free wrap-up completion
+        (``turn_tools=None``) and the default ``tool_choice="auto"`` path are
+        unaffected and keep streaming deltas live, per the round_boundary comment
+        below.
         """
         if stream_deltas:
             if include_search and search_parameters is not None:
@@ -2043,30 +2063,50 @@ def run_tools(
                 # streaming callers don't assume web grounding happened.
                 logger.warning("Live Search not supported on the streaming tool loop; skipping")
 
+            gate_required = bool(turn_tools) and tool_choice == "required"
+            buffered: list[tuple[str, str]] = []
+
             def _on_content(delta: str) -> None:
-                if on_tool_step and delta:
+                if on_tool_step is None or not delta:
+                    return
+                if gate_required:
+                    buffered.append(("content", delta))
+                else:
                     on_tool_step("content", delta)
 
             def _on_reasoning(delta: str) -> None:
-                if on_tool_step and delta:
+                if on_tool_step is None or not delta:
+                    return
+                if gate_required:
+                    buffered.append(("reasoning", delta))
+                else:
                     on_tool_step("reasoning", delta)
 
-            return _stream_completion_one_turn(
+            content, tool_calls = _stream_completion_one_turn(
                 model,
                 turn_messages,
                 temperature=temperature,
                 tools=turn_tools,
-                tool_choice="auto",
+                tool_choice=tool_choice,
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
             )
+            if gate_required and on_tool_step is not None and tool_calls:
+                # Requirement satisfied this round -- release the buffered narration in
+                # original order, same as the ungated live path would have delivered it.
+                for kind, delta in buffered:
+                    on_tool_step(kind, delta)
+            # else (gate_required and no tool_calls): discard the buffer silently --
+            # the caller raises immediately on seeing empty tool_calls (below), before
+            # this content could otherwise be mistaken for an accepted answer.
+            return content, tool_calls
         return _message_from_response(
             completion(
                 model,
                 turn_messages,
                 temperature=temperature,
                 tools=turn_tools,
-                tool_choice="auto",
+                tool_choice=tool_choice,
                 search_parameters=search_parameters if include_search else None,
             )
         )
@@ -2076,6 +2116,20 @@ def run_tools(
         # multi-round tool loop doesn't re-search (and re-bill) every round.
         content, tool_calls = _produce_turn(current, tools, include_search=round_idx == 0)
         if not tool_calls:
+            if tool_choice == "required":
+                # tool_choice="required" is a floor a deployment opted into (see
+                # digigraph.tool_policy.require_tool_calls_for_workflow) specifically so a
+                # tool-enabled turn can never silently answer without calling a tool. A
+                # provider that honors tool_choice shouldn't reach this branch at all; one
+                # that returns content anyway is a fail-open path we must not paper over by
+                # returning that content as if it were a legitimate final answer.
+                # NOTE: this does not extend to the tool-free wrap-up completion below (after
+                # the round budget is exhausted) — that call passes tools=None, so neither
+                # _produce_turn branch puts tool_choice on the wire for it.
+                raise RuntimeError(
+                    "run_tools: tool_choice='required' but the model returned no tool_calls "
+                    f"in round {round_idx}"
+                )
             return content or ""
 
         if on_tool_step is not None and content:
@@ -2178,10 +2232,9 @@ def run_tools(
 
     # Reaching here means every round through max_tool_rounds still returned tool_calls
     # (any round with no tool_calls returns early above) — the budget is genuinely
-    # exhausted, not just "the model happened to stop." Whether that forces an extra
-    # tool-free completion depends on whether the last round left narration content
-    # (see below) — this log/signal fires either way, so its wording must not imply
-    # the forced completion unconditionally follows.
+    # exhausted, not just "the model happened to stop." A forced tool-free completion
+    # unconditionally follows below (see its own comment) — this log/signal always
+    # precedes it.
     #
     # Guard against max_tool_rounds <= 0: `range(max_tool_rounds)` above is then empty,
     # so the for loop body never ran a single round — there is nothing to have
@@ -2196,10 +2249,20 @@ def run_tools(
         if on_tool_step is not None:
             on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
 
-    # Hit max rounds with no final content: force one more answer without tools.
-    # Otherwise the last round's own narration content IS the final answer -- no
-    # forced completion follows (see docstring above / round_limit_exhausted note).
-    if not content and len(current) > len(messages):
+    # Force one more answer without tools, unconditionally -- not only when the last
+    # round's own narration was empty. That narration is written *before* its
+    # tool_calls are executed, so it can never reflect what those tools actually
+    # returned; returning it directly would silently discard the tool results this
+    # same round just appended to `current` (CodeRabbit follow-up review on PR #2361,
+    # confirmed real: a round narrates a plan, calls a tool, the tool's result lands
+    # in `current`, and the stale pre-execution narration used to be returned as if
+    # it were the answer that used that result). Always synthesize from the full
+    # transcript instead.
+    #
+    # `len(current) > len(messages)` is the max_tool_rounds<=0 guard from above: if no
+    # round ever ran, there is no tool result to synthesize from, and `content` (used
+    # in the fallback below) was never assigned this call.
+    if len(current) > len(messages):
         current.append(
             {
                 "role": "user",

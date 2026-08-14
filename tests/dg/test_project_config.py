@@ -83,6 +83,18 @@ def test_digi_project_config_allowed_tools() -> None:
 
 
 @pytest.mark.unit
+def test_digi_project_config_require_tool_calls_true() -> None:
+    cfg = DigiProjectConfig({"agents": {"require_tool_calls": True}})
+    assert cfg.get_require_tool_calls() is True
+
+
+@pytest.mark.unit
+def test_digi_project_config_require_tool_calls_defaults_false() -> None:
+    cfg = DigiProjectConfig({"agents": {}})
+    assert cfg.get_require_tool_calls() is False
+
+
+@pytest.mark.unit
 def test_digi_project_config_always_retrieve_tools() -> None:
     cfg = DigiProjectConfig(
         {"agents": {"always_retrieve_tools": ["digisearch", "digivault_search_notes"]}}
