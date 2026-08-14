@@ -84,6 +84,8 @@ Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations.service_midd
 
 Rate limits are per-IP (sliding window, in-process `deque`). The `X-Forwarded-For` header is trusted for IP extraction — see Section 6 (Security Analysis) for implications.
 
+A request that opts into `require_tool_calls=true` (body field or `X-Require-Tool-Calls` header — see §6.2.1) is metered by a **second, stricter** per-IP budget on top of the 10 req/min above: `_enforce_require_tool_calls_budget` in `server.py`, default 3 req/min, overridable via `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX`. Forcing `tool_choice="required"` reliably exhausts all `max_tool_rounds` completions instead of returning after one — a ~4-5x LLM-spend multiplier any caller with plain `digigraph:chat` scope can opt into per request — so the two budgets are checked independently and either can 429 the request. A deployment that itself mandates `require_tool_calls` via project config / `DIGI_REQUIRE_TOOL_CALLS` isn't newly constrained by this: the budget only meters a request's own opt-in signal, not the resolved floor.
+
 ### 3.2 MCP Tools
 
 The MCP server (`mcp_server.py`, FastMCP) exposes:
@@ -859,6 +861,7 @@ digigraph:
 | `DIGI_RESEARCH_BRIEF` | (unset → YAML / default on) | Override `agents.research_brief`: `0`/`false` skips ResearchBrief post-pass |
 | `DIGI_ALLOWED_TOOLS` | (empty) | Comma-separated allowlist (env fallback) |
 | `DIGI_REQUIRE_TOOL_CALLS` | (empty) | Force `tool_choice="required"` deployment-wide: `1`/`true` |
+| `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX` | `3` | Per-IP req/min budget for requests opting into `require_tool_calls=true` (see §3.1) |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
 | `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |

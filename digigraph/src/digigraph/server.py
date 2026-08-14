@@ -171,6 +171,34 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
 
+# A request/header-level `require_tool_calls=true` (see _resolve_require_tool_calls_chat)
+# forces tool_choice="required", which reliably exhausts all max_tool_rounds completions
+# instead of returning after one -- a ~4-5x LLM-spend multiplier any caller holding plain
+# digigraph:chat scope can opt into per request (the deployment-mandated floor is separate
+# and not what this limits). Give that class of request its own, stricter budget on top of
+# the general per-path limit above; both checks apply and either can 429 the request.
+_require_tool_calls_limiter = _RateLimiter()
+_REQUIRE_TOOL_CALLS_RATE_LIMIT: tuple[int, int] = (
+    int(os.environ.get("DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX", "3")),
+    60,
+)
+
+
+def _enforce_require_tool_calls_budget(
+    require_tool_calls: bool | None, request: Request
+) -> JSONResponse | None:
+    """429 if this IP is over budget for `require_tool_calls=true` requests.
+
+    Only requests that actually opt into the escalation (see
+    _resolve_require_tool_calls_chat) are metered here -- a deployment that mandates
+    require_tool_calls itself via project config / DIGI_REQUIRE_TOOL_CALLS has already
+    accepted that cost for every request and isn't what this budget defends against.
+    """
+    if not require_tool_calls:
+        return None
+    max_req, window = _REQUIRE_TOOL_CALLS_RATE_LIMIT
+    return _require_tool_calls_limiter.check(request, max_req, window)
+
 
 @app.middleware("http")
 async def gated_sensitive_endpoints(request: Request, call_next):
@@ -888,6 +916,9 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
         session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
     require_tool_calls = _resolve_require_tool_calls_chat(req, request)
+    limited = _enforce_require_tool_calls_budget(require_tool_calls, request)
+    if limited is not None:
+        return limited
     suppress_tool_stream = _resolve_suppress_tool_stream(request)
     openwebui_format = _resolve_openwebui_format(req, request)
     request_id = _resolve_request_id(request)
