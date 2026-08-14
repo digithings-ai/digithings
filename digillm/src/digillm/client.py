@@ -2015,7 +2015,11 @@ def run_tools(
             ``("content", delta)`` for each answer chunk and ``("reasoning",
             delta)`` for each reasoning chunk (reasoning models). Defaults to
             False (one non-streaming call per turn); tool execution is unaffected
-            either way.
+            either way. Exception: when ``tool_choice="required"``, a tool-enabled
+            round's deltas are buffered and released as one end-of-round batch
+            instead of live per-token, since a delta already streamed can't be
+            un-streamed if that round then turns out to have no tool_calls and
+            gets rejected (see ``_produce_turn``'s docstring below).
         search_parameters: Optional xAI Live Search descriptor (see
             :func:`completion`). Attached only to the **first** tool round so a
             multi-round loop doesn't re-search (and re-bill); ignored on the
@@ -2039,6 +2043,19 @@ def run_tools(
         Streams content/reasoning deltas to ``on_tool_step`` when ``stream_deltas`` is
         set; otherwise makes a single non-streaming call. ``include_search`` attaches
         ``search_parameters`` to this turn (first round only).
+
+        When this turn is tool-enabled (``turn_tools`` set) and ``tool_choice ==
+        "required"``, content/reasoning deltas are buffered instead of published live,
+        released only once this turn's own ``tool_calls`` come back non-empty. A delta
+        already streamed to ``on_tool_step`` can't be un-streamed, so once the caller's
+        fail-closed check (below) rejects a turn that came back with no tool_calls,
+        buffering is what keeps that turn's narration from ever reaching a consumer
+        that would otherwise have shown it as an accepted answer. Trading live
+        per-token delivery for that is only worth it under the explicit
+        ``require_tool_calls`` opt-in floor -- the tool-free wrap-up completion
+        (``turn_tools=None``) and the default ``tool_choice="auto"`` path are
+        unaffected and keep streaming deltas live, per the round_boundary comment
+        below.
         """
         if stream_deltas:
             if include_search and search_parameters is not None:
@@ -2046,15 +2063,26 @@ def run_tools(
                 # streaming callers don't assume web grounding happened.
                 logger.warning("Live Search not supported on the streaming tool loop; skipping")
 
+            gate_required = bool(turn_tools) and tool_choice == "required"
+            buffered: list[tuple[str, str]] = []
+
             def _on_content(delta: str) -> None:
-                if on_tool_step and delta:
+                if on_tool_step is None or not delta:
+                    return
+                if gate_required:
+                    buffered.append(("content", delta))
+                else:
                     on_tool_step("content", delta)
 
             def _on_reasoning(delta: str) -> None:
-                if on_tool_step and delta:
+                if on_tool_step is None or not delta:
+                    return
+                if gate_required:
+                    buffered.append(("reasoning", delta))
+                else:
                     on_tool_step("reasoning", delta)
 
-            return _stream_completion_one_turn(
+            content, tool_calls = _stream_completion_one_turn(
                 model,
                 turn_messages,
                 temperature=temperature,
@@ -2063,6 +2091,15 @@ def run_tools(
                 on_content_delta=_on_content,
                 on_reasoning_delta=_on_reasoning,
             )
+            if gate_required and on_tool_step is not None and tool_calls:
+                # Requirement satisfied this round -- release the buffered narration in
+                # original order, same as the ungated live path would have delivered it.
+                for kind, delta in buffered:
+                    on_tool_step(kind, delta)
+            # else (gate_required and no tool_calls): discard the buffer silently --
+            # the caller raises immediately on seeing empty tool_calls (below), before
+            # this content could otherwise be mistaken for an accepted answer.
+            return content, tool_calls
         return _message_from_response(
             completion(
                 model,

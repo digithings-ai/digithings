@@ -1137,6 +1137,68 @@ def test_stream_deltas_forwards_tool_choice_required() -> None:
     assert first_call_kwargs["tool_choice"] == "required"
 
 
+def test_stream_deltas_required_tool_choice_never_leaks_rejected_content() -> None:
+    """A tool_choice='required' round that streams narration/reasoning but comes
+    back with no tool_calls must not have leaked those deltas to on_tool_step
+    before run_tools raises. A delta already streamed can't be un-streamed, so
+    the fail-closed check alone isn't enough -- this pins the buffer-then-discard
+    fix (CodeRabbit follow-up review on the fail-closed fix itself, PR #2361)."""
+    round1 = [
+        _stream_chunk(reasoning="Thinking it over..."),
+        _stream_chunk(content="Let me think about this "),
+        _stream_chunk(content="without calling a tool."),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1]
+    seen: list[tuple[str, Any]] = []
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(RuntimeError, match="tool_choice='required'"):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool=lambda name, args: "unused",
+                on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+                stream_deltas=True,
+                tool_choice="required",
+            )
+    # The rejected narration/reasoning must never have reached the caller's callback.
+    assert not any(kind in ("content", "reasoning") for kind, _ in seen)
+
+
+def test_stream_deltas_required_tool_choice_releases_content_when_tool_called() -> None:
+    """Narration alongside a SATISFIED tool_choice='required' round (tool_calls
+    present) must still reach on_tool_step -- buffering only discards a rejected
+    round's deltas, it must not silently eat a legitimate one's."""
+    round1 = [
+        _stream_chunk(content="I will "),
+        _stream_chunk(content="check that."),
+        _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup", arguments="{}")]),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1]
+    seen: list[tuple[str, Any]] = []
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+            stream_deltas=True,
+            tool_choice="required",
+            max_tool_rounds=1,
+        )
+    # Only one round in budget, and its own narration was non-empty, so it's
+    # returned directly -- no forced wrap-up (see run_tools' docstring).
+    assert out == "I will check that."
+    assert [p for k, p in seen if k == "content"] == ["I will ", "check that."]
+
+
 def test_stream_deltas_default_false_uses_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without stream_deltas, turns are produced by the non-streaming chat_completion."""
     fn = MagicMock()
