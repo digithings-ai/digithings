@@ -1171,14 +1171,24 @@ def test_stream_deltas_required_tool_choice_never_leaks_rejected_content() -> No
 def test_stream_deltas_required_tool_choice_releases_content_when_tool_called() -> None:
     """Narration alongside a SATISFIED tool_choice='required' round (tool_calls
     present) must still reach on_tool_step -- buffering only discards a rejected
-    round's deltas, it must not silently eat a legitimate one's."""
+    round's deltas, it must not silently eat a legitimate one's.
+
+    max_tool_rounds=1 means the round budget is exhausted right after this one
+    tool-calling round, which now unconditionally forces the tool-free wrap-up
+    completion (CodeRabbit follow-up review on PR #2361: the round's own
+    narration was written before its tool_calls ran, so it can't reflect what
+    "check that" actually returned -- returning it directly would discard the
+    tool result this round just appended). The wrap-up's own content ("Final
+    answer using tool result.") is what run_tools must return, not the earlier
+    narration -- though that narration must still have been delivered live."""
     round1 = [
         _stream_chunk(content="I will "),
         _stream_chunk(content="check that."),
         _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup", arguments="{}")]),
     ]
+    round2 = [_stream_chunk(content="Final answer using tool result.")]
     fake_client = MagicMock()
-    fake_client.chat.completions.create.side_effect = [round1]
+    fake_client.chat.completions.create.side_effect = [round1, round2]
     seen: list[tuple[str, Any]] = []
 
     tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
@@ -1193,10 +1203,20 @@ def test_stream_deltas_required_tool_choice_releases_content_when_tool_called() 
             tool_choice="required",
             max_tool_rounds=1,
         )
-    # Only one round in budget, and its own narration was non-empty, so it's
-    # returned directly -- no forced wrap-up (see run_tools' docstring).
-    assert out == "I will check that."
-    assert [p for k, p in seen if k == "content"] == ["I will ", "check that."]
+    assert out == "Final answer using tool result."
+    # The tool-calling round's narration was still delivered (buffering releases it
+    # once tool_calls is confirmed) -- it's just no longer what run_tools returns.
+    assert [p for k, p in seen if k == "content"] == [
+        "I will ",
+        "check that.",
+        "Final answer using tool result.",
+    ]
+    assert any(k == "round_limit_exhausted" for k, _ in seen)
+    # Second call is the tool-free wrap-up: no tools attached, so tool_choice
+    # never reaches its wire even though the outer tool_choice is still "required".
+    second_call_kwargs = fake_client.chat.completions.create.call_args_list[1][1]
+    assert "tools" not in second_call_kwargs
+    assert "tool_choice" not in second_call_kwargs
 
 
 def test_stream_deltas_default_false_uses_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
