@@ -92,11 +92,16 @@ def search_local_vault(
         # note.rel_path often includes .md; vault_path in hits historically used rel_path
         path_for_prefix = rel[:-3] if rel.endswith(".md") else rel
         if prefix:
+            # Every clause must respect the "/" boundary — a bare `rel.startswith(prefix)`
+            # would also match a sibling path that merely shares the same characters
+            # (path_prefix="clients/acme" matching "clients/acme-evil/..."), leaking one
+            # tenant's notes into another's search results (#2358). d1_store.py and
+            # supabase_store.py already enforce the boundary the same way; keep this in
+            # sync with those.
             if not (
                 path_for_prefix == prefix
                 or path_for_prefix.startswith(prefix + "/")
                 or rel.startswith(prefix + "/")
-                or rel.startswith(prefix)
             ):
                 continue
         path = Path(vault.root) / note.rel_path
