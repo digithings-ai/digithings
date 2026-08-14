@@ -378,6 +378,93 @@ describe("POST /api/chat", () => {
     expect(body.error).toBe("byok_model_required");
   });
 
+  // #2351: byokNeedsModel is now byokRequiresModel(byokProvider) from the shared
+  // frontend/digichat/src/lib/byok-providers.ts module instead of a hand-written
+  // OR-chain — these three cover the other requiresModel:true providers the old
+  // OR-chain also happened to list (anthropic/gemini/xai), proving the swap kept
+  // every one of them gated exactly as before.
+  it("returns 400 when Anthropic BYOK missing model", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-ant-test",
+          "x-byok-provider": "anthropic",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("byok_model_required");
+  });
+
+  it("returns 400 when Gemini BYOK missing model", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "AIza-test",
+          "x-byok-provider": "gemini",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("byok_model_required");
+  });
+
+  it("returns 400 when x.ai BYOK missing model", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "xai-test",
+          "x-byok-provider": "xai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("byok_model_required");
+  });
+
+  // OpenAI is the one requiresModel:false provider today — byokRequiresModel
+  // must still exempt it after the OR-chain → shared-predicate swap (#2351).
+  it("does not require a model for OpenAI BYOK (byokRequiresModel exemption)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-test",
+          "x-byok-provider": "openai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-BYOK-Key"]).toBe("sk-test");
+    expect(call?.headers?.["X-BYOK-Provider"]).toBe("openai");
+    expect(call?.headers?.["X-BYOK-Model"]).toBeUndefined();
+  });
+
   describe("trial_form gate", () => {
     const trialCtx = {
       tenantSlug: "datatap",
