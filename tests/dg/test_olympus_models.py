@@ -46,8 +46,13 @@ _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
         # 31813373584 failed it with a bare "H" under strict json_schema. Root cause was the
         # gate, not the model — max_tokens: 64 with reasoning left enabled let hidden
         # reasoning_content consume the whole budget before the visible answer got past its
-        # first character. Fixed by sending reasoning: {"enabled": false} on the gate's live
-        # calls; re-added here once that fix passed the gate.
+        # first character. A first fix attempt (reasoning: {"enabled": false} on the gate's
+        # live calls) made things worse (run 31840424733): gemini-3.7-flash and grok-4.6
+        # reject that field outright ("Reasoning is mandatory ... cannot be disabled"), and
+        # combined with provider.require_parameters it also 404'd 4 unrelated slugs that
+        # never declared reasoning support. Real fix: drop the reasoning field and raise
+        # max_tokens to 2000 instead — see scripts/validate_olympus_pools.py. Re-added here
+        # once that fix passed the gate.
         "openrouter/google/gemini-3.7-flash",
         "openrouter/openai/gpt-4o-mini",
         "openrouter/x-ai/grok-4.3",

@@ -85,9 +85,14 @@ tiers:
       # 31813373584 failed it with a bare "H" under strict json_schema. Root cause was
       # the gate, not the model — ``max_tokens: 64`` with reasoning left enabled let
       # gemini-3.7-flash's hidden ``reasoning_content`` consume the whole budget before
-      # the visible answer got past its first character. Fixed by sending
-      # ``reasoning: {"enabled": false}`` on the gate's live calls; re-added here once
-      # that fix passed the gate.
+      # the visible answer got past its first character. A first fix attempt sent
+      # ``reasoning: {"enabled": false}`` on the gate's live calls and made things
+      # worse (run 31840424733): gemini-3.7-flash and grok-4.6 both reject that field
+      # outright ("Reasoning is mandatory for this endpoint and cannot be disabled"),
+      # and combined with ``provider.require_parameters`` it also 404'd 4 unrelated
+      # slugs that never declared ``reasoning`` support. Real fix: drop the
+      # ``reasoning`` field entirely and raise ``max_tokens`` to 2000 instead — see
+      # scripts/validate_olympus_pools.py. Re-added here once that fix passed the gate.
       extraction:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/google/gemini-3.7-flash"
@@ -130,9 +135,15 @@ tiers:
       # validate_olympus_pools.py run 31813373584 failed it with a bare "H" under
       # strict json_schema. Root cause was the gate, not the model — ``max_tokens: 64``
       # with reasoning left enabled let hidden ``reasoning_content`` consume the whole
-      # budget before the visible answer got past its first character. Fixed by
-      # sending ``reasoning: {"enabled": false}`` on the gate's live calls; re-added
-      # here once that fix passed the gate. glm-5.2 stays out — its failure mode
+      # budget before the visible answer got past its first character. A first fix
+      # attempt sending ``reasoning: {"enabled": false}`` on the gate's live calls
+      # made things worse (run 31840424733): gemini-3.7-flash and grok-4.6 both reject
+      # that field outright ("Reasoning is mandatory ... cannot be disabled"), and
+      # combined with ``provider.require_parameters`` it also 404'd 4 unrelated slugs
+      # that never declared ``reasoning`` support. Real fix: drop the ``reasoning``
+      # field and raise ``max_tokens`` to 2000 instead — see
+      # scripts/validate_olympus_pools.py. Re-added here once that fix passed the
+      # gate. glm-5.2 stays out — its failure mode
       # (empty body twice) matches glm-5's pre-existing pass/fail/pass/fail record, a
       # separate and less clear-cut case; re-evaluate it independently.
       extraction:

@@ -17,12 +17,22 @@ pooled in ``config/olympus_models.yaml`` (plus ``openrouter/`` pins in
    the body must be non-empty and parse as JSON with the requested key.
 
 Requires ``OPENROUTER_API_KEY``. Without it the script prints a notice and exits 0 so
-non-secret CI contexts skip gracefully. Live calls use ``max_tokens<=64`` and
-``reasoning: {"enabled": false}`` — without the latter, a reasoning-capable slug can
-burn the whole budget on hidden ``reasoning_content`` and get cut off one character
-into the visible answer, which reads identically to "model can't do strict JSON"
-(caught on ``google/gemini-3.7-flash``, which returned a bare ``"H"`` under the old
-payload). The full sweep costs well under a cent.
+non-secret CI contexts skip gracefully. Live calls use ``max_tokens=2000``: a
+reasoning-capable slug bills hidden ``reasoning_content`` out of the same budget as
+the visible answer, and a tight cap (previously 64) can let reasoning consume the
+whole thing, cutting the response off one character into the visible answer — which
+reads identically to "model can't do strict JSON" (caught on
+``google/gemini-3.7-flash``, which returned a bare ``"H"``). A ``reasoning: {"enabled":
+false}`` field was tried as a more surgical fix and reverted: OpenRouter rejects it
+outright with HTTP 400 ("Reasoning is mandatory for this endpoint and cannot be
+disabled") on endpoints that treat reasoning as inherent (``gemini-3.7-flash``,
+``grok-4.6``), and combined with ``provider.require_parameters`` below it also 404'd
+four unrelated slugs that never declared ``reasoning`` as a supported parameter at
+all (``deepseek/deepseek-chat``, ``llama-4-maverick``, ``gpt-4o``, ``gpt-4o-mini`` —
+run 31840424733). Raising ``max_tokens`` instead adds no new parameter, so it can't
+interact with ``require_parameters``, and works uniformly across reasoning-mandatory,
+reasoning-optional, and non-reasoning slugs alike. The full sweep still costs well
+under a cent — the cap only bounds spend on slugs that actually reason at length.
 
 Usage:
     OPENROUTER_API_KEY=... python3 scripts/validate_olympus_pools.py
@@ -157,9 +167,8 @@ def check_tools_call(client: httpx.Client, slug: str) -> str | None:
                 "model": slug,
                 "messages": [{"role": "user", "content": "Call record_answer with answer='ok'."}],
                 "tools": [_TOOL],
-                "max_tokens": 64,
+                "max_tokens": 2000,
                 "provider": {"require_parameters": True},
-                "reasoning": {"enabled": False},
             },
         )
         if resp.status_code != 200:
@@ -183,9 +192,8 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
                 "model": slug,
                 "messages": [{"role": "user", "content": "Answer with the single word ok."}],
                 "response_format": _JSON_SCHEMA,
-                "max_tokens": 64,
+                "max_tokens": 2000,
                 "provider": {"require_parameters": True},
-                "reasoning": {"enabled": False},
             },
         )
         if resp.status_code != 200:
