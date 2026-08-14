@@ -842,7 +842,7 @@ digigraph:
 | `OPENAI_API_KEY` | (from `.env`) | API key for LLM proxy (fallback to `LITELLM_PROXY_API_KEY`) |
 | `LITELLM_PROXY_API_KEY` | (from `.env`) | LiteLLM bearer; overrides `OPENAI_API_KEY` for proxy calls |
 | `DIGI_LLM_MODE` | `test` | LLM model tier: `test` / `medium` / `best` |
-| `DIGI_CONFIG_PATH` | `/app/config` | Directory containing `model_modes.yaml` |
+| `DIGI_CONFIG_PATH` | `/app/config` | Directory containing `model_modes.yaml` **and** `byok-providers.json` — a mount that supplies one but not the other crashes digigraph at startup (`_load_byok_catalog` fails loud, by design; see the BYOK spend path note above) |
 | `DIGI_PROJECT_CONFIG` | (empty) | Path to project YAML (optional) |
 | `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
