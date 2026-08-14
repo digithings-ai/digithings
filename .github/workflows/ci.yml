@@ -81,6 +81,8 @@ jobs:
               - 'digigraph/**'
               - 'tests/dg/**'
               - '.github/workflows/test-digigraph.yml'
+              - 'config/**'
+              - 'infra/digichat-release/config/**'
             digillm:
               - 'digillm/**'
               - '.github/workflows/test-digillm.yml'

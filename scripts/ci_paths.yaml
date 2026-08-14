@@ -49,6 +49,16 @@ digigraph:
   - digigraph/**
   - tests/dg/**
   - .github/workflows/test-digigraph.yml
+  # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
+  # mcp_servers.yaml, olympus_models.yaml -- all read by tests/dg/*), and
+  # infra/digichat-release/config/ is its vendored copy for the Profile A release
+  # (kept in sync by TestByokCatalogVendoredCopy). Without these entries a
+  # config-only edit runs no digigraph job at all -- including the one test that
+  # guards the two copies against drifting -- and byok-providers.json now raises
+  # at import on malformed content, so a bad catalog-only edit could merge fully
+  # green and then crash-loop digigraph in production (#2361 finding 8).
+  - config/**
+  - infra/digichat-release/config/**
 
 # digillm and digifetch each keep their tests inside the component (digillm/tests,
 # digifetch/tests) rather than under the repo-root tests/ tree. So neither has a
