@@ -1348,6 +1348,49 @@ def test_structured_completion_strict_schema_lists_every_property_as_required() 
     assert schema["additionalProperties"] is False
 
 
+class _Address(BaseModel):
+    city: str
+    # Defaulted nested field — plain model_json_schema() omits it from required.
+    country: str = "US"
+
+
+class _PersonNested(BaseModel):
+    name: str
+    address: _Address
+
+
+def test_structured_completion_strict_schema_forces_required_through_nested_defs() -> None:
+    """#2353 claims recursive required-forcing through $defs/items/anyOf. Flat
+    optional coverage alone would miss nested Atlas/digest schemas that still
+    400 on OpenAI-family providers when a child property is omitted from
+    required."""
+    captured: dict[str, Any] = {}
+
+    def fake_create(_client: Any, **kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return _mock_response('{"name": "X", "address": {"city": "Berlin", "country": "DE"}}')
+
+    with patch.object(client_mod, "_create_with_retry", side_effect=fake_create):
+        with patch.object(client_mod, "get_client_for_model", return_value=MagicMock()):
+            digillm.structured_completion(
+                "gpt-4o-mini", [{"role": "user", "content": "x"}], _PersonNested
+            )
+    schema = captured["response_format"]["json_schema"]["schema"]
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["additionalProperties"] is False
+
+    # Nested object may live under $defs / $ref (OpenAI strict helper) or inline.
+    defs = schema.get("$defs") or schema.get("definitions") or {}
+    nested_candidates = [defs[k] for k in defs if "Address" in k] if defs else []
+    if not nested_candidates:
+        addr = schema["properties"].get("address")
+        assert isinstance(addr, dict)
+        nested_candidates = [addr]
+    for nested in nested_candidates:
+        assert set(nested["required"]) == set(nested["properties"])
+        assert nested.get("additionalProperties") is False
+
+
 def test_structured_completion_non_strict_keeps_plain_schema() -> None:
     """strict=False must NOT force-list optional fields into `required` — it uses
     plain `model_json_schema()`, which omits defaulted fields."""
