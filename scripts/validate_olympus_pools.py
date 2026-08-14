@@ -17,8 +17,12 @@ pooled in ``config/olympus_models.yaml`` (plus ``openrouter/`` pins in
    the body must be non-empty and parse as JSON with the requested key.
 
 Requires ``OPENROUTER_API_KEY``. Without it the script prints a notice and exits 0 so
-non-secret CI contexts skip gracefully. Live calls use ``max_tokens<=64`` — the full
-sweep costs well under a cent.
+non-secret CI contexts skip gracefully. Live calls use ``max_tokens<=64`` and
+``reasoning: {"enabled": false}`` — without the latter, a reasoning-capable slug can
+burn the whole budget on hidden ``reasoning_content`` and get cut off one character
+into the visible answer, which reads identically to "model can't do strict JSON"
+(caught on ``google/gemini-3.7-flash``, which returned a bare ``"H"`` under the old
+payload). The full sweep costs well under a cent.
 
 Usage:
     OPENROUTER_API_KEY=... python3 scripts/validate_olympus_pools.py
@@ -155,6 +159,7 @@ def check_tools_call(client: httpx.Client, slug: str) -> str | None:
                 "tools": [_TOOL],
                 "max_tokens": 64,
                 "provider": {"require_parameters": True},
+                "reasoning": {"enabled": False},
             },
         )
         if resp.status_code != 200:
@@ -180,6 +185,7 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
                 "response_format": _JSON_SCHEMA,
                 "max_tokens": 64,
                 "provider": {"require_parameters": True},
+                "reasoning": {"enabled": False},
             },
         )
         if resp.status_code != 200:

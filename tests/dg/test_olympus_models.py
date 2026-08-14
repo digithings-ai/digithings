@@ -41,10 +41,14 @@ _CHEAP_PHASE_MODELS = frozenset(
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
         # #2368 (2026-08-14): deepseek-v4-pro added as a mid-cost reasoning bump (already
-        # gate-proven in the quality tier). gemini-2.5-flash -> gemini-3.7-flash was tried
-        # and REVERTED same day (validate_olympus_pools.py run 31813373584: non-JSON output
-        # under strict json_schema) — gemini-2.5-flash stays.
-        "openrouter/google/gemini-2.5-flash",
+        # gate-proven in the quality tier). gemini-2.5-flash -> gemini-3.7-flash for native
+        # PDF/image vision. Briefly reverted same day: validate_olympus_pools.py run
+        # 31813373584 failed it with a bare "H" under strict json_schema. Root cause was the
+        # gate, not the model — max_tokens: 64 with reasoning left enabled let hidden
+        # reasoning_content consume the whole budget before the visible answer got past its
+        # first character. Fixed by sending reasoning: {"enabled": false} on the gate's live
+        # calls; re-added here once that fix passed the gate.
+        "openrouter/google/gemini-3.7-flash",
         "openrouter/openai/gpt-4o-mini",
         "openrouter/x-ai/grok-4.3",
         "openrouter/deepseek/deepseek-v4-pro",  # #1622

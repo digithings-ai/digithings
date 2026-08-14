@@ -77,17 +77,20 @@ tiers:
     allowed_models:
       # #2368 (2026-08-14): deepseek/deepseek-chat (V3) dropped here too — see the
       # ``cheap`` tier note above for the pricing rationale.
-      # #2368 (2026-08-14) follow-up: tried gemini-2.5-flash -> gemini-3.7-flash across
-      # this tier for native PDF/image vision (filing- and chart-heavy phases), plus
+      # #2368 (2026-08-14) follow-up: gemini-2.5-flash -> gemini-3.7-flash across this
+      # tier for native PDF/image vision (filing- and chart-heavy phases), plus
       # deepseek-v4-pro ($0.435/$0.87 per 1M) added to research/reasoning as a mid-cost
       # reasoning bump — already gate-proven in the ``quality`` tier below.
-      # gemini-3.7-flash REVERTED same day: validate_olympus_pools.py run 31813373584
-      # failed it — json_schema output is not valid JSON ("H..." instead of
-      # {"answer": ...}). Back to gemini-2.5-flash (gate-proven) until a later
-      # gemini-3.7-flash endpoint revision passes strict json_schema.
+      # gemini-3.7-flash briefly reverted same day: validate_olympus_pools.py run
+      # 31813373584 failed it with a bare "H" under strict json_schema. Root cause was
+      # the gate, not the model — ``max_tokens: 64`` with reasoning left enabled let
+      # gemini-3.7-flash's hidden ``reasoning_content`` consume the whole budget before
+      # the visible answer got past its first character. Fixed by sending
+      # ``reasoning: {"enabled": false}`` on the gate's live calls; re-added here once
+      # that fix passed the gate.
       extraction:
         - "openrouter/deepseek/deepseek-v4-flash"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
@@ -98,14 +101,14 @@ tiers:
         # retry (the #1006 empty-completion class). Re-add a GLM only after
         # glm-5.2/glm-5-turbo passes the gate consistently.
         - "openrouter/meta-llama/llama-4-maverick"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
         - "openrouter/x-ai/grok-4.3"
         - "openrouter/openai/gpt-4o-mini"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/deepseek/deepseek-v4-pro"
         - "openrouter/x-ai/grok-4.3"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
       - "openrouter/google/gemini-3.7-flash:online"
@@ -118,21 +121,24 @@ tiers:
     allowed_models:
       # #2368 (2026-08-14): deepseek/deepseek-chat (V3) dropped here too — see the
       # ``cheap`` tier note above for the pricing rationale.
-      # #2368 (2026-08-14) follow-up: tried gemini-2.5-flash -> gemini-3.7-flash in
-      # ``extraction``/``research`` for native PDF/image vision, and added glm-5.2
-      # ($0.50/$3.15 per 1M) to ``reasoning`` pending the endpoint gate. grok-4.3 ->
-      # grok-4.6 in research/reasoning ($2/$6 per 1M vs $1.25/$2.50 — pricier, but this
-      # tier is capability- not cost-constrained; xAI's live X/Twitter corpus is the
+      # #2368 (2026-08-14) follow-up: gemini-2.5-flash -> gemini-3.7-flash in
+      # ``extraction``/``research`` for native PDF/image vision. grok-4.3 -> grok-4.6 in
+      # research/reasoning ($2/$6 per 1M vs $1.25/$2.50 — pricier, but this tier is
+      # capability- not cost-constrained; xAI's live X/Twitter corpus is the
       # differentiator for financial-sentiment analysis) — gate-proven, kept.
-      # gemini-3.7-flash and glm-5.2 BOTH REVERTED same day: validate_olympus_pools.py
-      # run 31813373584 failed both — gemini-3.7-flash returned non-JSON under strict
-      # json_schema, glm-5.2 returned an empty body twice (the same #1006/glm-5 class
-      # of failure that got glm-5 itself removed 2026-07-20). Back to gemini-2.5-flash
-      # (gate-proven); no GLM entry until a build passes the gate consistently.
+      # gemini-3.7-flash briefly reverted same day alongside glm-5.2 (see below):
+      # validate_olympus_pools.py run 31813373584 failed it with a bare "H" under
+      # strict json_schema. Root cause was the gate, not the model — ``max_tokens: 64``
+      # with reasoning left enabled let hidden ``reasoning_content`` consume the whole
+      # budget before the visible answer got past its first character. Fixed by
+      # sending ``reasoning: {"enabled": false}`` on the gate's live calls; re-added
+      # here once that fix passed the gate. glm-5.2 stays out — its failure mode
+      # (empty body twice) matches glm-5's pre-existing pass/fail/pass/fail record, a
+      # separate and less clear-cut case; re-evaluate it independently.
       extraction:
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/openai/gpt-4o-mini"
-        - "openrouter/google/gemini-2.5-flash"
+        - "openrouter/google/gemini-3.7-flash"
         - "openrouter/anthropic/claude-sonnet-4.6"
       research:
         - "openrouter/deepseek/deepseek-v4-pro"
@@ -140,10 +146,9 @@ tiers:
         - "openrouter/anthropic/claude-sonnet-4.6"
         # No Gemini Pro entry: the endpoint gate failed three Pro variants in a row
         # (2.5-pro: non-JSON under strict json_schema; 3-pro-preview: 404 rotated out;
-        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-3.7-flash also failed
-        # it 2026-08-14 (non-JSON output) — gemini-2.5-flash (gate-proven) carries
-        # Google coverage here instead.
-        - "openrouter/google/gemini-2.5-flash"
+        # 3.1-pro-preview: empty body twice, 2026-07-20). gemini-3.7-flash carries
+        # Google coverage here instead (see reasoning-budget fix note above).
+        - "openrouter/google/gemini-3.7-flash"
         - "openrouter/x-ai/grok-4.6"
       reasoning:
         - "openrouter/deepseek/deepseek-v4-pro"
