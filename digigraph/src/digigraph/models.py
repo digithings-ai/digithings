@@ -149,11 +149,20 @@ class WorkflowRequest(BaseModel):
     digisearch_index: str | None = Field(
         None,
         title="digisearch index",
-        description="Per-request digisearch index override (X-Digi-Corpus-Index / tenant map).",
+        description=(
+            "Per-request digisearch index. Client-writable on this model but, when "
+            "DIGI_TENANT_CORPUS_MAP is set, overwritten server-side from the "
+            "authenticated tenant's map entry (headers/body cannot select another "
+            "tenant's corpus). When the map is unset, X-Digi-Corpus-Index may set it."
+        ),
     )
     vault_path_prefix: str | None = Field(
         None,
-        description="Per-request digivault path prefix (X-Digi-Vault-Prefix / tenant map).",
+        description=(
+            "Per-request digivault path prefix. Same trust rule as digisearch_index: "
+            "map is authoritative when configured; otherwise X-Digi-Vault-Prefix may "
+            "set it. digivault also enforces tenant→prefix server-side."
+        ),
     )
     research_system_prompt_override: str | None = Field(
         None,

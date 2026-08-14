@@ -491,3 +491,67 @@ def test_resolve_require_tool_calls_chat_none_when_absent() -> None:
 
     req = ChatCompletionRequest(messages=[])
     assert _resolve_require_tool_calls_chat(req, _Req()) is None
+
+
+@pytest.mark.unit
+class TestCorpusTrustBoundary:
+    """CWE-639 regression: when DIGI_TENANT_CORPUS_MAP is set, client body/headers
+    must not select another tenant's digisearch index (digisearch has no
+    server-side tenant→index bind). Mirrors digivault's enforce_tenant_path_prefix."""
+
+    @staticmethod
+    def _fake_request(
+        *,
+        digi_auth: object | None,
+        headers: dict[str, str] | None = None,
+    ) -> SimpleNamespace:
+        state = SimpleNamespace(digi_auth=digi_auth, digi_bearer=None)
+        return SimpleNamespace(state=state, headers=headers or {})
+
+    def test_map_overwrites_body_and_hostile_headers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        monkeypatch.setenv(
+            "DIGI_TENANT_CORPUS_MAP",
+            (
+                '{"digithings":{"digisearchIndex":"digithings_docs",'
+                '"vaultPathPrefix":"clients/digithings"},'
+                '"occ":{"digisearchIndex":"occ_help",'
+                '"vaultPathPrefix":"clients/online-compliance-center"}}'
+            ),
+        )
+        auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+        req = WorkflowRequest(
+            prompt="hi",
+            digisearch_index="occ_help",
+            vault_path_prefix="clients/online-compliance-center",
+        )
+        out = _with_digi_request_context(
+            self._fake_request(
+                digi_auth=auth,
+                headers={
+                    "x-digi-corpus-index": "occ_help",
+                    "x-digi-vault-prefix": "clients/online-compliance-center",
+                },
+            ),
+            req,
+        )
+        assert out.digisearch_index == "digithings_docs"
+        assert out.vault_path_prefix == "clients/digithings"
+
+    def test_map_clears_body_when_tenant_unmapped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        monkeypatch.setenv(
+            "DIGI_TENANT_CORPUS_MAP",
+            '{"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/occ"}}',
+        )
+        auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+        req = WorkflowRequest(prompt="hi", digisearch_index="occ_help")
+        out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
+        assert out.digisearch_index is None
+        assert out.vault_path_prefix is None
