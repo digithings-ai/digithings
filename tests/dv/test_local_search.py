@@ -92,3 +92,29 @@ def test_search_local_vault_query_sensitive_top_docs(tmp_path: Path) -> None:
     assert auth[0].vault_path != rag[0].vault_path
     assert "auth" in auth[0].vault_path
     assert "rag" in rag[0].vault_path
+
+
+@pytest.mark.unit
+def test_search_local_vault_path_prefix_does_not_leak_sibling_tenant(tmp_path: Path) -> None:
+    """Regression test for #2358.
+
+    A path_prefix of "clients/acme" must not match notes under a sibling
+    directory that merely shares the same characters, e.g. "clients/acme-evil".
+    A bare `rel.startswith(prefix)` fallback (pre-fix) would match both.
+    """
+    root = tmp_path / "vault"
+    root.mkdir()
+    v = Vault(root)
+    v.create_note(
+        "secret",
+        subdir="clients/acme-evil",
+        frontmatter={"title": "Acme Evil confidential plan"},
+        body="Acme Evil confidential merger acquisition roadmap secret plan.",
+    )
+    hits = search_local_vault(
+        v,
+        "Acme Evil confidential merger acquisition roadmap secret plan",
+        limit=5,
+        path_prefix="clients/acme",
+    )
+    assert hits == []
