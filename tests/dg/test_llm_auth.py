@@ -341,6 +341,112 @@ class TestByokCatalogLoad:
 
 
 @pytest.mark.unit
+class TestByokCatalogValidation:
+    """Strict per-entry validation (CWE-319 + coercion-bug hardening).
+
+    Each defect here was independently confirmed by a live reproduction script
+    in CodeRabbit's review of this catalog-loading rewrite: a plain
+    ``dict.get()`` walk let a JSON string ``"false"`` for ``requiresModel``
+    coerce to ``True`` (``bool("false") is True``), let a JSON ``null`` for
+    ``id`` collide with a real provider literally named "none"
+    (``str(None).lower() == "none"``), and accepted a non-``https://``
+    ``baseUrl`` — which is where the user's own BYOK key gets sent
+    (:func:`digigraph.llm_auth.push_byok_header`), so a plaintext ``http://``
+    entry would transmit that key in cleartext.
+    """
+
+    def _write_catalog(self, tmp_path, entries: list) -> Path:
+        path = tmp_path / "byok-providers.json"
+        path.write_text(json.dumps(entries), encoding="utf-8")
+        return path
+
+    def test_duplicate_id_rejected(self, tmp_path) -> None:
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(
+            tmp_path,
+            [
+                {"id": "openai", "baseUrl": "https://a.example/v1"},
+                {"id": "openai", "baseUrl": "https://b.example/v1"},
+            ],
+        )
+        with pytest.raises(ValueError, match="duplicate id"):
+            _load_byok_catalog(catalog)
+
+    def test_http_base_url_rejected(self, tmp_path) -> None:
+        """CWE-319: an http:// baseUrl would send the user's BYOK key in cleartext."""
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(
+            tmp_path, [{"id": "openai", "baseUrl": "http://insecure.example/v1"}]
+        )
+        with pytest.raises(ValueError):
+            _load_byok_catalog(catalog)
+
+    def test_non_https_scheme_rejected(self, tmp_path) -> None:
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(tmp_path, [{"id": "openai", "baseUrl": "file:///etc/passwd"}])
+        with pytest.raises(ValueError):
+            _load_byok_catalog(catalog)
+
+    def test_non_boolean_requires_model_rejected(self, tmp_path) -> None:
+        """Strict mode: a JSON string must not silently coerce (bool("false") is True)."""
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(
+            tmp_path,
+            [{"id": "openai", "baseUrl": "https://a.example/v1", "requiresModel": "false"}],
+        )
+        with pytest.raises(ValueError):
+            _load_byok_catalog(catalog)
+
+    def test_null_id_rejected(self, tmp_path) -> None:
+        """str(None).lower() == "none" must not silently become a routable provider id."""
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(tmp_path, [{"id": None, "baseUrl": "https://a.example/v1"}])
+        with pytest.raises(ValueError):
+            _load_byok_catalog(catalog)
+
+    def test_empty_id_rejected(self, tmp_path) -> None:
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(tmp_path, [{"id": "   ", "baseUrl": "https://a.example/v1"}])
+        with pytest.raises(ValueError):
+            _load_byok_catalog(catalog)
+
+    def test_requires_model_omitted_defaults_false(self, tmp_path) -> None:
+        """Backward compatible: an entry may omit requiresModel entirely (defaults False)."""
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(
+            tmp_path, [{"id": "openai", "baseUrl": "https://a.example/v1"}]
+        )
+        base_urls, model_required = _load_byok_catalog(catalog)
+        assert base_urls == {"openai": "https://a.example/v1"}
+        assert model_required == frozenset()
+
+    def test_http_catalog_via_digi_config_path_override_still_rejected(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """The https-only guard applies on the DIGI_CONFIG_PATH override path too, not
+        only the repo-default path — a self-hoster pointing at their own config dir
+        gets the same protection."""
+        from digigraph.llm_auth import _load_byok_catalog, _resolve_byok_catalog_path
+
+        override_dir = tmp_path / "custom-config"
+        override_dir.mkdir()
+        catalog = [{"id": "openai", "baseUrl": "http://insecure-override.example/v1"}]
+        (override_dir / "byok-providers.json").write_text(json.dumps(catalog), encoding="utf-8")
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(override_dir))
+        resolved = _resolve_byok_catalog_path()
+        with pytest.raises(ValueError):
+            _load_byok_catalog(resolved)
+
+
+@pytest.mark.unit
 class TestByokCatalogPathResolution:
     """``DIGI_CONFIG_PATH`` override for the catalog path (deploy distribution fix).
 
