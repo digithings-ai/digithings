@@ -53,20 +53,20 @@ tiers:
       # #1622: deepseek-v4-flash (Apr 2026, MIT, 1M ctx, $0.09/$0.18 per 1M) added to all
       # pools; deepseek-r1 (CoT breaks strict json_schema, #1617) and llama-4-maverick
       # (empty completions under strict json_schema, #1006) dropped from ``reasoning``.
+      # #2368 (2026-08-14): deepseek/deepseek-chat (V3, $0.2574/$1.029 per 1M) dropped
+      # across all tiers — dominated on price by deepseek-v4-flash ($0.0679/$0.168 per
+      # 1M, ~4-6x cheaper, same vendor, gate-proven in every pool it already occupied).
+      # Daily pipeline cost lever, not a capability change.
       extraction:
-        - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
-        - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/meta-llama/llama-4-maverick"
       reasoning:
-        - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
-      - "openrouter/deepseek/deepseek-chat:online"
       - "openrouter/deepseek/deepseek-v4-flash:online"
       - "openrouter/meta-llama/llama-4-maverick:online"
 
@@ -75,14 +75,14 @@ tiers:
       allowed_models: "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,z-ai/*,openai/gpt-4o-mini*,perplexity/*"
       cost_quality_tradeoff: 7
     allowed_models:
+      # #2368 (2026-08-14): deepseek/deepseek-chat (V3) dropped here too — see the
+      # ``cheap`` tier note above for the pricing rationale.
       extraction:
-        - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/google/gemini-2.5-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/meta-llama/llama-4-maverick"
       research:
-        - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
         # z-ai/glm-5 removed 2026-07-20: endpoint gate record over 4 runs was
         # pass/fail/pass/fail — empty bodies under strict json_schema even with a
@@ -98,7 +98,6 @@ tiers:
         - "openrouter/google/gemini-2.5-flash"
     web_search_models:
       - "openrouter/perplexity/sonar"
-      - "openrouter/deepseek/deepseek-chat:online"
       - "openrouter/google/gemini-2.5-flash:online"
       - "openrouter/openai/gpt-4o-mini:online"
 
@@ -107,8 +106,9 @@ tiers:
       allowed_models: "deepseek/*,meta-llama/*,mistralai/*,openai/*,google/*,anthropic/*,x-ai/*,z-ai/*,perplexity/*"
       cost_quality_tradeoff: 0
     allowed_models:
+      # #2368 (2026-08-14): deepseek/deepseek-chat (V3) dropped here too — see the
+      # ``cheap`` tier note above for the pricing rationale.
       extraction:
-        - "openrouter/deepseek/deepseek-chat"
         - "openrouter/deepseek/deepseek-v4-flash"
         - "openrouter/openai/gpt-4o-mini"
         - "openrouter/google/gemini-2.5-flash"

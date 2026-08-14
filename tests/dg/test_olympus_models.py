@@ -598,16 +598,17 @@ def test_pipeline_phase_slugs_resolve_to_openrouter(
 
 @pytest.mark.unit
 def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The deliberation worker slug routes to the tier research pool — OpenRouter (the #991
-    401 guard) and JSON/tool-capable. It must NOT use the reasoning pool, whose deepseek-r1
-    returns prose and broke json.loads for the H6 turns (#993)."""
+    """The deliberation worker slug resolves to an OpenRouter (the #991 401 guard),
+    JSON/tool-capable model — research-pool-equivalent capability. It must NOT resolve to a
+    reasoning-pool-only model like deepseek-r1, whose prose output broke json.loads for the
+    H6 turns (#993). ``hermes/portfolio/deliberation-`` is pinned in ``model_modes.yaml`` (see
+    ``test_deliberation_pinned_to_json_reliable_deepseek_chat``), so the pinned model need not
+    also sit in the live ``research`` pool — that pool is cost-tuned independently (#2368)."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    cfg = model_config._load_olympus_models()
-    assert (
-        get_model_for_phase("hermes/portfolio/deliberation-NVDA")
-        in cfg.tiers["cheap"].allowed_models["research"]
-    )
+    resolved = get_model_for_phase("hermes/portfolio/deliberation-NVDA")
+    assert resolved is not None
+    assert tier_allows_phase_model(resolved, "cheap")
 
 
 @pytest.mark.unit
