@@ -628,6 +628,9 @@ def _apply_byok_model_override(resolved: str) -> str:
             user_model[len("anthropic/") :] if user_model.startswith("anthropic/") else user_model
         )
         return f"anthropic/{slug}"
+    if provider == "xai":
+        slug = user_model[len("xai/") :] if user_model.startswith("xai/") else user_model
+        return f"xai/{slug}"
     return resolved
 
 
