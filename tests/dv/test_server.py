@@ -761,12 +761,18 @@ def test_orchestrator_invoke_search_notes_empty_path_prefix_still_requires_prefi
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """#2239 second review, Important finding (row 1 of the 5-row matrix): a healthy
-    `D1_DATABASE_MAP` plus an empty-ish caller-supplied `path_prefix` (`""`, coalesced
-    to `None` by server.py's `... or None` handling) must still be treated exactly like
-    an omitted `path_prefix` — `ok=False` with the actionable message, short-circuiting
-    before the store is even opened. This used to succeed unscoped whenever the fake
-    store happened not to raise, because the check only fired reactively inside an
-    `except D1StoreError` — the hoisted check now fires unconditionally."""
+    `D1_DATABASE_MAP` plus an empty-ish caller-supplied `path_prefix` (`""`) must never
+    reach the store unscoped. The invariant this pins is that it short-circuits before
+    the store is even opened; it used to succeed unscoped whenever the fake store
+    happened not to raise, because the check only fired inside an `except D1StoreError`.
+
+    The *shape* of the rejection changed with the #2407 follow-up. server.py used to
+    coalesce a present-but-empty prefix to `None` (`... or None`) and let the D1
+    "path_prefix is required" branch catch it — which fails closed on D1 but failed
+    *open* on the local-vault and Supabase backends, where a `None` prefix means
+    "search everything" (the #2359 fail-open). A present prefix that normalizes to
+    empty is now a 400 at the point of parsing, uniformly across all three backends.
+    Omitting `path_prefix` entirely is still how a caller opts out of scoping."""
     monkeypatch.delenv("DIGIVAULT_ROOT", raising=False)
     _set_d1_env(monkeypatch, '{"clients/digithings": "db-1"}')
     called: dict = {}
@@ -778,15 +784,16 @@ def test_orchestrator_invoke_search_notes_empty_path_prefix_still_requires_prefi
 
     monkeypatch.setattr(server, "_open_d1_store", lambda prefix: _FakeD1())
 
-    resp = server.orchestrator_invoke(
-        server.OrchestratorInvokeRequest(
-            tool="digivault_search_notes",
-            arguments={"query": "jwt", "path_prefix": ""},
-        ),
-        _fake_request(),
-    )
-    assert resp.ok is False
-    assert resp.error == "path_prefix is required when the D1 backend is configured"
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "jwt", "path_prefix": ""},
+            ),
+            _fake_request(),
+        )
+    assert exc.value.status_code == 400
+    assert "normalizes to empty" in str(exc.value.detail)
     assert called == {}  # _open_d1_store must never be reached
 
 
@@ -1878,3 +1885,72 @@ def test_orchestrator_invoke_get_note_single_path_unchanged_when_vault_paths_abs
     assert resp.data == note.model_dump(mode="json")
     assert "notes" not in resp.data
     assert "errors" not in resp.data
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("empty_prefix", ["", "/", "   ", "///", ".md", ".md.md"])
+def test_orchestrator_invoke_search_notes_rejects_empty_normalizing_prefix_at_endpoint(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, empty_prefix: str
+) -> None:
+    """#2407 follow-up review, finding 1: the local-vault fail-open was still live.
+
+    Hardening `search_local_vault` alone did not close it, because server.py collapsed
+    a present-but-empty prefix to `None` *before* `resolve_path_prefix` ever saw it —
+    so "/", "   ", "///" and ".md" each still returned every note in the root with
+    `DIGI_TENANT_CORPUS_MAP` unset. This drives the endpoint, not the library, which is
+    where that gap hid.
+    """
+    root = tmp_path / "vault"
+    root.mkdir()
+    v = Vault(root)
+    v.create_note(
+        "secret",
+        subdir="clients/acme",
+        frontmatter={"title": "Acme confidential plan"},
+        body="Acme confidential merger acquisition roadmap secret plan.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+
+    with pytest.raises(HTTPException) as exc:
+        server.orchestrator_invoke(
+            server.OrchestratorInvokeRequest(
+                tool="digivault_search_notes",
+                arguments={"query": "Acme confidential merger", "path_prefix": empty_prefix},
+            ),
+            _fake_request(),
+        )
+    # 400 from either layer. ".md.md" survives the endpoint's single
+    # normalize_vault_path pass (it strips one suffix, leaving ".md"), then hits
+    # resolve_path_prefix's own pass inside search_local_vault -- defense in depth,
+    # so both wordings are accepted here.
+    assert exc.value.status_code == 400
+    assert "empty" in str(exc.value.detail)
+
+
+@pytest.mark.unit
+def test_orchestrator_invoke_search_notes_omitted_prefix_still_searches(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Omitting path_prefix remains the deliberate opt-out from scoping."""
+    root = tmp_path / "vault"
+    root.mkdir()
+    v = Vault(root)
+    v.create_note(
+        "secret",
+        subdir="clients/acme",
+        frontmatter={"title": "Acme confidential plan"},
+        body="Acme confidential merger acquisition roadmap secret plan.",
+    )
+    monkeypatch.setenv("DIGIVAULT_ROOT", str(root))
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
+
+    resp = server.orchestrator_invoke(
+        server.OrchestratorInvokeRequest(
+            tool="digivault_search_notes",
+            arguments={"query": "Acme confidential merger"},
+        ),
+        _fake_request(),
+    )
+    assert resp.ok is True
+    assert resp.data["hits"]
