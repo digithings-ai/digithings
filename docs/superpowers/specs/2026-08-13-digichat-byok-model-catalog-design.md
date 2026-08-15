@@ -1,4 +1,4 @@
-# DigiChat BYOK model & provider catalog — design
+# digichat BYOK model & provider catalog — design
 
 - **Date:** 2026-08-13
 - **Issue:** [#201](https://github.com/digithings-ai/digithings/issues/201) — "[FEATURE] Model selector settings panel — multi-provider BYOK"
