@@ -441,10 +441,11 @@ def _run_document_rag_path(
     # The model drives retrieval: it chooses whether to search, writes its own query,
     # and may follow a digisearch hit with digivault_get_note to read the whole note.
     # 4 rounds is enough for locate -> load -> answer with one retry. This bounds
-    # tool-calling rounds, not the completion count outright: run_tools fires one
-    # extra tool-free completion when the round budget is exhausted with no final
-    # content (digillm/src/digillm/client.py:2138-2147), so a fully-exhausted budget
-    # costs up to 5 completions per turn (this used to be exactly 1).
+    # tool-calling rounds, not the completion count outright: run_tools unconditionally
+    # fires one extra tool-free completion to synthesize a final answer once the round
+    # budget is exhausted (digillm/src/digillm/client.py, run_tools' post-loop handling),
+    # so a fully-exhausted budget costs exactly 5 completions per turn (this used to be
+    # exactly 1).
     content = run_tools(
         model=get_model_for_mode(),
         messages=[
@@ -455,6 +456,7 @@ def _run_document_rag_path(
         execute_tool=execute_search,
         max_tool_rounds=4,
         on_tool_step=stream_callback,
+        tool_choice="required" if state.get("require_tool_calls") else "auto",
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
@@ -653,6 +655,22 @@ def research_node(state: WorkflowState) -> dict:
             if err_code:
                 out["error_code"] = err_code
             return out
+
+    # Scope warning, not a guard. `require_tool_calls` is wired into exactly one
+    # tool loop -- the document RAG path above. This path, and the sub-agent runners
+    # under digigraph/agents/*, run at tool_choice="auto" regardless. An operator who
+    # sets DIGI_REQUIRE_TOOL_CALLS=true as a grounding mandate would otherwise get a
+    # silent no-op here (e.g. DIGISEARCH_URL unset, so _digisearch_available() is
+    # False and every request falls through). Log it rather than fail the request:
+    # the flag is advisory outside the RAG path today. Central enforcement is #2384.
+    if state.get("require_tool_calls"):
+        logger.warning(
+            "require_tool_calls=true but this request took the quant/augmented path, "
+            "which does not enforce tool_choice; the grounding mandate is not applied "
+            "(is_document_mode=%s, digisearch_available=%s)",
+            is_document_mode,
+            _digisearch_available(),
+        )
 
     _req_rid = state.get("request_id")
     _norm_rid = None if _req_rid is None else (str(_req_rid).strip() or None)

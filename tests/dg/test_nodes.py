@@ -241,6 +241,7 @@ class TestResearchNode:
             execute_tool,
             max_tool_rounds: int,
             on_tool_step,
+            tool_choice: str = "auto",
         ) -> str:
             # Simulate one digillm tool round: a digisearch call that finds nothing.
             on_tool_step("tool_call", {"name": "digisearch", "arguments": {"query": "jwt"}})
@@ -358,6 +359,44 @@ class TestSupervisorNode:
             config={"configurable": {"thread_id": "thread-b"}},
         )
         assert out.get("response_language") == "de"
+
+    def test_supervisor_node_store_prefs_are_isolated_across_subjects(self) -> None:
+        """Store namespace is (digi_subject, \"prefs\") — subject B must never recall or
+        overwrite subject A's response_language on a shared InMemoryStore. Complements
+        TestDigiSubjectTrustBoundary (auth overwrite) by pinning the Store side of the
+        same IDOR surface after #2354."""
+        from digigraph.graph.nodes import supervisor_node
+        from digigraph.graph.state import WorkflowState
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.store.memory import InMemoryStore
+
+        store = InMemoryStore()
+        g: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+        g.add_node("supervisor", supervisor_node)
+        g.add_edge(START, "supervisor")
+        g.add_edge("supervisor", END)
+        compiled = g.compile(store=store)
+
+        compiled.invoke(
+            {"digi_subject": "user-a", "response_language": "de"},
+            config={"configurable": {"thread_id": "thread-a"}},
+        )
+
+        out_b = compiled.invoke(
+            {"digi_subject": "user-b"},
+            config={"configurable": {"thread_id": "thread-b"}},
+        )
+        assert out_b.get("response_language") != "de"
+
+        compiled.invoke(
+            {"digi_subject": "user-b", "response_language": "fr"},
+            config={"configurable": {"thread_id": "thread-b2"}},
+        )
+        out_a = compiled.invoke(
+            {"digi_subject": "user-a"},
+            config={"configurable": {"thread_id": "thread-a2"}},
+        )
+        assert out_a.get("response_language") == "de"
 
     def test_supervisor_node_does_not_crash_outside_a_real_graph_invocation(self) -> None:
         """Finding 3 (IMPORTANT, final whole-branch review): supervisor_node must stay
