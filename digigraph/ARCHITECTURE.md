@@ -975,7 +975,9 @@ This complements digismith's LangSmith tracing with operational metrics visible 
 
 ### 12.8 X-Forwarded-For Validation
 
-**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs). `X-Forwarded-For` is honored only when the direct client is in that set; otherwise the limiter uses `request.client.host`.
+**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs, matched via `ipaddress` so entries and observed peers are compared as parsed addresses, not raw strings). `X-Forwarded-For` is honored only when the direct client is in that set, walking the chain from the right and skipping trusted hops to find the first non-trusted, IP-parseable entry; otherwise the limiter uses `request.client.host`.
+
+Operators must list **every** hop between the internet and this service, not just the innermost reverse proxy — e.g. a CDN edge in front of an internal load balancer needs the CDN's own egress ranges in `DIGI_TRUSTED_PROXIES` too. Omitting an intermediate hop makes it look like a non-trusted entry, so the limiter returns that hop's own address (not the true client) as the bucket key, coarsely grouping every client behind the omitted hop into one bucket.
 
 ## Observability
 
