@@ -67,7 +67,7 @@ export function QuantComparisonStrip(props: {
   if (rows.length < 1) return null;
 
   return (
-    <Card className="mb-2 overflow-x-auto border-border/50 bg-black/25 p-3 text-xs">
+    <Card className="mb-2 overflow-x-auto border-border/50 bg-term-bg p-3 text-xs">
       <div className="mb-2 font-medium text-muted-foreground">
         Quant runs in this thread ({rows.length})
       </div>

@@ -1,4 +1,4 @@
-"""SlidingWindowChunker - overlapping fixed windows."""
+"""Sliding-window chunker with overlap."""
 
 from __future__ import annotations
 

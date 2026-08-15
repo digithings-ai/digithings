@@ -1,12 +1,27 @@
-# DigiBase
+---
+title: digibase
+type: module
+status: reviewed
+created: 2026-04-19
+tags:
+  - support
+  - library
+relevance:
+  - digigraph
+  - digiquant
+  - digisearch
+  - digismith
+  - digikey
+---
+# digibase
 
-> Shared infrastructure library — the utilities every DigiThings service uses, kept minimal and dependency-free.
+> Shared infrastructure library — the utilities every digithings service uses, kept minimal and dependency-free.
 
-**What it is:** DigiBase is a shared Python library that provides the common infrastructure patterns every DigiThings service needs: standardized error envelopes, outbound HTTP correlation headers, audit log redaction, optional OpenTelemetry wiring. It is imported as a library — not deployed as a service.
+**What it is:** digibase is a shared Python library that provides the common infrastructure patterns every digithings service needs: standardized error envelopes, outbound HTTP correlation headers, audit log redaction, optional OpenTelemetry wiring. It is imported as a library — not deployed as a service.
 
-**Design principle:** Side-effect-free on import. Zero runtime dependencies beyond the optional extras. If DigiBase grows into a service, something has gone wrong in the architecture.
+**Design principle:** Side-effect-free on import. Zero runtime dependencies beyond the optional extras. If digibase grows into a service, something has gone wrong in the architecture.
 
-**Scope clarification:** DigiBase is intentionally minimal. The "data-plane broker" role (managing Postgres/Redis credentials per tenant) that was discussed in earlier roadmap versions is now owned by DigiStore. DigiBase stays a library.
+**Scope clarification:** digibase is intentionally minimal. The "data-plane broker" role (managing Postgres/Redis credentials per tenant) that was discussed in earlier roadmap versions is now owned by digistore. digibase stays a library.
 
 **Current state:** v0.1 shipped. 7 source files: error envelopes, outbound HTTP headers, audit redaction, Prometheus metrics instrumentation, optional OTel wiring. Fully tested.
 

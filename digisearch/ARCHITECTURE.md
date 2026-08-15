@@ -1,4 +1,4 @@
-# DigiSearch Architecture
+# digisearch Architecture
 
 **Component:** `digisearch`
 **Port:** 8002 (HTTP); 8765 (MCP, `digisearch-mcp` profile)
@@ -25,18 +25,18 @@
 
 ## 1. Overview
 
-DigiSearch is the centralized RAG (Retrieval-Augmented Generation) and document-search component of the DigiThings stack. It owns the complete retrieval pipeline: document ingestion, parsing, chunking, embedding, vector indexing, hybrid keyword/vector search, reranking, and result normalization.
+digisearch is the centralized RAG (Retrieval-Augmented Generation) and document-search component of the digithings stack. It owns the complete retrieval pipeline: document ingestion, parsing, chunking, embedding, vector indexing, hybrid keyword/vector search, reranking, and result normalization.
 
 ### Role in the ecosystem
 
-DigiSearch is consumed as a **vertical** under DigiGraph (the hub). DigiGraph registers DigiSearch as an orchestrator connector and delegates tool calls to it via HTTP. DigiSearch may also be reached directly by:
+digisearch is consumed as a **vertical** under digigraph (the hub). digigraph registers digisearch as an orchestrator connector and delegates tool calls to it via HTTP. digisearch may also be reached directly by:
 
-- **DigiFlow** (Langflow) — via REST or MCP
+- **digiflow** (Langflow) — via REST or MCP
 - **CLI operators** — via the `digisearch` Typer CLI
-- **DigiClaw MCP clients** — via MCP attachment at `http://127.0.0.1:8765/mcp`
+- **digiclaw MCP clients** — via MCP attachment at `http://127.0.0.1:8765/mcp`
 - **Power users** — directly at `http://127.0.0.1:8002`
 
-In the federated hub model (`DIGI_HUB_MODE=federated`), DigiGraph exposes the `digisearch`, `digisearch_fetch_all`, and optionally `digisearch_research_delegate` tool names to its LLM. The tool schemas and dispatch logic live **entirely in DigiSearch**, not DigiGraph — which is the correct separation of concern.
+In the federated hub model (`DIGI_HUB_MODE=federated`), digigraph exposes the `digisearch`, `digisearch_fetch_all`, and optionally `digisearch_research_delegate` tool names to its LLM. The tool schemas and dispatch logic live **entirely in digisearch**, not digigraph — which is the correct separation of concern.
 
 ### RAG pipeline
 
@@ -58,6 +58,7 @@ DigiIndex.add() — persists chunks + embeddings
   ▼ (at query time)
 query_index() router
   ├─ AzureAISearchBackend  (BM25 + vector natively, OData filters)
+  ├─ VectorizeBackend      (Cloudflare Vectorize v2 REST API, cosine, remote-only)
   ├─ ChromaBackend         (cosine ANN, Chroma where-clause filters)
   └─ in-memory stub        (substring; tests only)
   ▼
@@ -70,7 +71,7 @@ POST /query → QueryResponse
 
 ### Multi-backend strategy
 
-DigiSearch uses a **backend registry** pattern (`search/_stub.py`). Backends register as callables `(Query, index_name) -> SearchResponse | None`. The router tries them in registration order (Azure first, then Chroma). Returning `None` means "not configured here; try next." This lets the same codebase serve both an Azure-hosted enterprise deployment and a local Chroma-on-disk deployment with zero code changes — only environment variables differ.
+digisearch uses a **backend registry** pattern (`search/_stub.py`). Backends register as callables `(Query, index_name) -> SearchResponse | None`. The router tries them in registration order (Azure first, then Vectorize, then Chroma). Returning `None` means "not configured here; try next." This lets the same codebase serve an Azure-hosted enterprise deployment, a local Chroma-on-disk deployment, or a Cloudflare Vectorize remote-index deployment with zero code changes — only environment variables differ.
 
 The in-memory stub (`DIGISEARCH_ALLOW_STUB=1`) is permanently last and exists for unit tests only. Startup enforcement (`_require_real_search_backend`) prevents the stub from activating in production.
 
@@ -82,7 +83,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 
 | Module | Status | Source |
 |--------|--------|--------|
-| Core models (`Document`, `Chunk`, `Query`, `Result`, `SearchResponse`) | Implemented | `core/models.py` |
+| Core models (`Document`, `Chunk`, `Query`, `Result`, `SearchResponse`, `Segment`) | Implemented | `core/models.py` |
 | `DigiSearchConfig` YAML/TOML loader with `${VAR}` substitution | Implemented | `core/config.py` |
 | Evidence metadata normalization + Chroma serialization | Implemented | `core/evidence_metadata.py` |
 | Standard hit normalization (`normalize_query_hit`) | Implemented | `core/standard_hits.py` |
@@ -97,8 +98,8 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | `DigiIndex` abstract interface | Implemented | `indexes/base.py` |
 | `ChromaBackend` (persistent + in-memory) | Implemented | `indexes/backends/chroma.py` |
 | `AzureAISearchBackend` (`query_azure`) | Implemented | `indexes/backends/azure_search.py` |
-| `FAISSBackend` | Stub / placeholder | `indexes/backends/` |
-| Other cloud backends (Pinecone, Qdrant, etc.) | Stub / placeholder | `indexes/backends/` |
+| `VectorizeBackend` (Cloudflare Vectorize v2 REST) | Implemented | `indexes/backends/vectorize.py` |
+| `MiniLMEmbedder` (local ONNX, 384-dim) | Implemented | `embedding/providers/minilm.py` |
 | `HippoRAGBackend`, `PageIndexBackend` | Experimental stubs | `indexes/backends/` |
 | `HybridSearcher` (RRF fusion) | Implemented | `search/hybrid.py` |
 | `Reranker` (Cohere, BGE) | Implemented | `search/reranker.py` |
@@ -131,13 +132,13 @@ All paths under the FastAPI app in `server.py`. Base URL: `http://digisearch:800
 
 #### `GET /health` and `GET /healthz`
 
-Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"status": "ok", "service": "digisearch"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and DigiGraph startup dependency.
+Public (no auth). Both endpoints are rate-limit-exempt. `/health` returns `{"status": "ok", "service": "digisearch"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe for load balancers and k8s (see AGENTS.md "Liveness vs status"). Used by Docker healthcheck and digigraph startup dependency.
 
 **Gap:** Does not probe backend connectivity. A backend can be offline and both endpoints return 200. See [Redesign Recommendations](#12-redesign-recommendations).
 
 #### `GET /azure_status`
 
-Returns Azure AI Search configuration and reachability status. Calls `get_document_count()` to verify the connection. Not authenticated — leaks configuration state.
+Returns Azure AI Search configuration and reachability status. Calls `get_document_count()` to verify the connection. Requires `digisearch:query` scope via `DigiAuthMiddleware` (`digikey.integrations.service_middleware.digisearch_path_scopes`).
 
 #### `POST /query`
 
@@ -169,7 +170,7 @@ Key request fields:
 | `format` | `str` | `default` \| `table` (markdown table in `response.formatted`) |
 | `workspace_id` | `str?` | Tenant/workspace isolation hint |
 
-Response includes `backend` field: `azure_ai_search` | `chroma` | `stub`.
+Response includes `backend` field: `vectorize` | `azure_ai_search` | `chroma` | `stub`.
 
 #### `POST /ingest`
 
@@ -180,7 +181,7 @@ Request:  IngestRequest { source: str, index_name: str, doc_type: str?, metadata
 Response: IngestResponse { doc_id, chunks_created, index_name, status }
 ```
 
-Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (RecursiveChunker, 512/64) → merge doc metadata into chunks → add to backend.
+Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (`SegmentAwareChunker`, falling back to `RecursiveChunker` when the parser found no segments — see §4 Segmentation) → merge doc metadata into chunks → add to backend.
 
 **Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. There is no URL-based ingest in the production path.
 
@@ -200,7 +201,7 @@ Returns HTTP 501. Per-document delete is not implemented.
 
 Auth required (`digisearch:query` scope). Rate limited: 30 req/min.
 
-Returns OpenAI-style tool definitions for DigiGraph orchestration. Accepts optional `index_config` body to specialize tool schemas (filterable_fields, facetable_fields, result_metadata_fields).
+Returns OpenAI-style tool definitions for digigraph orchestration. Accepts optional `index_config` body to specialize tool schemas (filterable_fields, facetable_fields, result_metadata_fields).
 
 Returns 2 or 3 tools:
 - `digisearch` — standard search with pagination
@@ -211,7 +212,7 @@ Returns 2 or 3 tools:
 
 Auth required (`digisearch:query` scope). Rate limited: 10 req/min.
 
-Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, or `digisearch_research_delegate`. The hub calls this to execute search without importing DigiSearch Python code directly.
+Dispatches one named tool: `digisearch`, `digisearch_fetch_all`, or `digisearch_research_delegate`. The hub calls this to execute search without importing digisearch Python code directly.
 
 #### `POST /v1/research_turn`
 
@@ -247,7 +248,11 @@ Entry point: `digisearch` (Typer). All defined in `cli.py`.
 | `digisearch index build --config <path>` | Build/re-index (stub — prints guidance) |
 | `digisearch index inspect --index <name>` | Inspect stub index chunk counts |
 
-**Note:** CLI ingest uses the stub backend, not Chroma or Azure. For production ingest via CLI, operators must use `POST /ingest` via the HTTP API or call backend-specific code directly.
+**Note:** CLI ingest routes through `route_add_chunks` — Chroma when `CHROMA_PATH` /
+`CHROMA_HOST` is set (Profile A seed), otherwise the in-memory stub only when
+`DIGISEARCH_ALLOW_STUB=1`. Chunk metadata always inherits `Document.source` as
+`source` / `path` / `source_url` (plus a basename `title` when missing) via
+`merge_document_metadata_into_chunks` so citation UIs are not UUID-only.
 
 ---
 
@@ -264,7 +269,8 @@ Document
 ├── source: str                # file path, URL, or identifier
 ├── doc_type: str              # "pdf", "html", "docx", "markdown", "csv", "plaintext"
 ├── metadata: dict[str, Any]   # normative evidence keys + parser-extracted fields
-└── chunks: list[Chunk]        # populated after chunking
+├── chunks: list[Chunk]        # populated after chunking
+└── segments: list[Segment]    # structural units (PDF page, md section); empty = unstructured
 ```
 
 ### `Chunk`
@@ -316,12 +322,12 @@ SearchResponse
 ├── results: list[Result]
 ├── facets: dict[str, list[{value, count}]]?  # Azure facet counts
 ├── total_count: int?          # full match count when include_total_count=True
-└── backend: str?              # "azure_ai_search" | "chroma" | "stub"
+└── backend: str?              # "vectorize" | "azure_ai_search" | "chroma" | "stub"
 ```
 
 ### Standard JSON hit shape
 
-`normalize_query_hit()` in `core/standard_hits.py` converts `Result` to the portable dict shape that all consumers (DigiGraph, DigiChat, MCP) depend on:
+`normalize_query_hit()` in `core/standard_hits.py` converts `Result` to the portable dict shape that all consumers (digigraph, digichat, MCP) depend on:
 
 | Key | Type | Notes |
 |-----|------|-------|
@@ -358,6 +364,36 @@ Defined in `core/evidence_metadata.py`. These keys SHOULD appear on both `Docume
 
 **Chroma serialization constraint:** ChromaDB only accepts `str`, `int`, `float`, `bool` in metadata. Lists are serialized as comma-joined strings at ingest by `normalize_metadata_for_chroma()`. Tag fields (`asset_class_tags`, `methodology_tags`) cannot be matched by Chroma's native `$in` — they are excluded from `chroma_where` translation and handled by `filter_apply.py` post-retrieval. This two-pass approach over-fetches and post-filters, which increases latency and may miss results if `fetch_n` is insufficient.
 
+#### Segmentation
+
+`Document.segments` is an opt-in structural overlay. `ingestion/segmenters/heading.py`
+splits markdown text at ATX heading boundaries (`#`/`##`/`###` — any level up to
+`max_split_level`, default 3) into breadcrumb-labeled `Segment`s, and returns `[]` when
+no qualifying heading is present.
+
+On digisearch's own ingest path (`ParserRegistry` → `parse()`), two parsers populate
+`Document.segments`:
+
+- `PDFParser` emits one segment per page (`page:12`).
+- `MarkdownParser` runs its content through `heading_segments()` (`heading:Title >
+  Section`).
+
+`HTMLParser` does **not** populate segments: it extracts plain text via BeautifulSoup's
+`get_text()`, which discards all tag structure, so no ATX heading markers survive for
+`heading_segments()` to find — running it over that output would always return `[]`.
+Everything else (CSV, DOCX, short plaintext, headingless markdown) also leaves
+`segments` empty and behaves exactly as before.
+
+Separately, the `scripts/docs_onboard/` vault-writing pipeline (not digisearch's ingest
+path) applies `heading_segments()` itself to `html_to_markdown()` output and to
+OpenAPI-derived markdown — see that package's own docs, not this one.
+
+`SegmentAwareChunker` chunks within segments and never across them: a segment at or
+under `DEFAULT_CHUNK_CHARS` (2000 chars ≈ 512 tokens) becomes exactly one chunk;
+only oversized segments are sub-split by the inner chunker. Every chunk carries
+`segment_label` and `segment_index` in its metadata so citations can name the page
+or section.
+
 ---
 
 ## 5. Internal Architecture
@@ -369,14 +405,14 @@ digisearch/src/digisearch/
 │
 ├── server.py                  # FastAPI app: HTTP endpoints, rate limiting, correlation IDs
 ├── mcp_server.py              # FastMCP: MCP tool server (port 8765)
-├── orchestrator_tools.py      # OpenAI-style tool manifest for DigiGraph orchestration
+├── orchestrator_tools.py      # OpenAI-style tool manifest for digigraph orchestration
 ├── cli.py                     # Typer CLI (digisearch)
 ├── ingest_worker.py           # Bulk ingest placeholder (not implemented)
 ├── http_client.py             # HTTP client helpers for callers (query_digisearch, format_results_table)
-├── client.py                  # DigiSearch Python client
+├── client.py                  # digisearch Python client
 │
 ├── core/
-│   ├── models.py              # Document, Chunk, Query, Result, SearchResponse
+│   ├── models.py              # Document, Chunk, Query, Result, SearchResponse, Segment
 │   ├── config.py              # DigiSearchConfig, YAML/TOML loader, ${VAR} substitution
 │   ├── evidence_metadata.py   # Evidence tier system, Chroma normalization, sidecar loading
 │   ├── standard_hits.py       # normalize_query_hit(), STANDARD_HIT_KEYS, backend labels
@@ -390,7 +426,8 @@ digisearch/src/digisearch/
 │   ├── cache.py               # EmbeddingCache (SQLite, keyed by SHA-256 content hash)
 │   ├── batch.py               # BatchEmbedder (batch_size=100, retry, linear backoff)
 │   └── providers/
-│       └── openai.py          # OpenAIEmbedder (others: azure_openai, cohere, huggingface, ollama)
+│       ├── openai.py          # OpenAIEmbedder (others: azure_openai, cohere, huggingface, ollama)
+│       └── minilm.py          # MiniLMEmbedder (local ONNX, 384-dim; Vectorize's default embedder)
 │
 ├── embeddings/
 │   └── config.py              # EmbeddingModelSpec (model_id, dimensions, version)
@@ -400,7 +437,9 @@ digisearch/src/digisearch/
 │   └── backends/
 │       ├── chroma.py          # ChromaBackend (cosine HNSW, persistent or in-memory)
 │       ├── azure_search.py    # AzureAISearchBackend (query_azure, _build_odata_filter)
-│       └── faiss.py           # FAISSBackend (stub)
+│       ├── vectorize.py       # VectorizeBackend (Cloudflare Vectorize v2 REST API)
+│       ├── vectorize_errors.py # VectorizeBackendError (isolated so it survives a broken vectorize.py import)
+│       └── faiss.py           # FAISSBackend (stub — not registered for production)
 │
 ├── search/
 │   ├── _stub.py               # Backend registry + router; in-memory stub (test only)
@@ -431,6 +470,62 @@ digisearch/src/digisearch/
     └── edgar_sample_export.py # EDGAR-CORPUS slice exporter (dev/test only)
 ```
 
+### Lazy package surface and install extras
+
+`digisearch/__init__.py` is **lazy** ([PEP 562](https://peps.python.org/pep-0562/)
+module `__getattr__`). The package top level imports nothing heavy at
+`import digisearch` time — the public client surface is resolved on first
+attribute access via a `_LAZY = {name: module}` table:
+
+| Public name | Resolved from |
+|-------------|---------------|
+| `digisearch` | `digisearch.client` |
+| `Chunk`, `Document`, `Query`, `Result`, `Segment` | `digisearch.core.models` |
+
+**Contract (do not regress):**
+
+- `from digisearch import digisearch` (and `Chunk`/`Document`/`Query`/`Result`)
+  keeps working — `__getattr__` imports the backing module on demand and caches
+  the result in module `globals()`, so the cost is paid at most once.
+- Importing a **leaf submodule** (e.g. `digisearch.ingestion.parsers.pdf` or
+  `digisearch.ingestion.registry`) must **not** import `digisearch.client` nor
+  the `[server]` stack (`fastapi`, `uvicorn`, `mcp`, `typer`, `digikey`). The
+  parser import chain is deliberately light: `pdf.py → core.models +
+  ingestion.base` (no `[server]` stack). The parser's own third-party dep
+  (pdfplumber/pymupdf) is **try-imported at module scope** (guarded by
+  `try/except ImportError`), so the module imports cleanly even when the dep is
+  absent and becomes *functional* only once `[ingestion]` is installed.
+- `__all__`, `__getattr__`, and `__dir__` are all defined; a `TYPE_CHECKING`
+  block re-imports the names so static type-checkers and IDEs still resolve
+  them. Any name **not** in `_LAZY` raises `AttributeError` as usual.
+- Enforced by `tests/ds/test_parsers.py::test_*_imports_without_server_stack`,
+  which import the parser in a **fresh subprocess** and assert the forbidden
+  modules are absent from `sys.modules` (a subprocess is required so sibling
+  tests that load the server stack don't pollute the measurement).
+
+#### Install extras
+
+The base install is intentionally **light** — only what the importable library
+core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
+
+| Extra | Adds | Needed by |
+|-------|------|-----------|
+| _(base)_ | `polars`, `pydantic`, `pyyaml`, `httpx`, `digibase` | core models/config/client, parser import chain |
+| `[server]` | `fastapi`, `uvicorn[standard]`, `mcp`, `typer`, `digikey`, `python-json-logger` | `server.py`, `mcp_server.py`, `cli.py`, `digisearch.logging`, digikey auth middleware |
+| `[ingestion]` | `beautifulsoup4`, `python-docx`, `pdfplumber`, `chardet` | functional parsers (html/docx/pdf/plaintext); `polars` for the CSV parser is already in base |
+| `[chroma]` | `chromadb` | Chroma backend |
+| `[azure]` | `azure-search-documents`, `azure-core` | Azure AI Search backend |
+| `[embedding]` | `openai` | OpenAI embedder |
+| `[agent]` | `langgraph` | research-turn graph (§11) |
+| `[dev]` | `[server]` + `[ingestion]` + pytest/ruff/langgraph | CI + local dev (so every dev install exercises and pip-audits the full shipped surface) |
+
+The **running service** installs `digisearch[server,ingestion,azure,chroma]`
+(see [Docker](#10-docker-and-mcp-composition)) so it retains every dependency it
+relied on before the split (the service additionally now ships pdfplumber for
+PDF ingest, which the old `[azure,chroma]`-only image lacked). A consumer that
+only wants a parser can `pip install digisearch[ingestion]` without dragging in
+the server stack.
+
 ### Pluggable backend pattern
 
 The backend registry in `search/_stub.py` uses a simple callable list pattern:
@@ -448,9 +543,95 @@ query_index(query, index_name):
   # fall through to stub or empty
 ```
 
-Azure is registered first (preferred), Chroma second, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
+Azure is registered first (preferred), then Vectorize, then Chroma, stub last. Adding a new backend requires only calling `register_backend()` at import time. There is no configuration-driven selection — the first configured backend wins.
 
-**Weakness:** if Azure is misconfigured (credentials present but wrong), the Azure backend raises, logs a warning, returns `None`, and silently falls through to Chroma. Operators may not notice that a production query is served by the wrong backend.
+**Weakness:** if Azure is misconfigured (credentials present but wrong), the Azure backend raises, logs a warning, returns `None`, and silently falls through to Chroma. Operators may not notice that a production query is served by the wrong backend. Vectorize is deliberately exempt from this fall-through — see below.
+
+#### Vectorize (remote index)
+
+`indexes/backends/vectorize.py` implements `DigiIndex` over the Cloudflare
+Vectorize v2 REST API. `search/_stub.py`'s `_vectorize_backend` activates it
+ahead of Chroma whenever `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` are
+both set (non-empty after `.strip()`) — canonical names shared with D1
+(#2239 credential rename: same Cloudflare account + token authorizes both);
+each falls back to the legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`,
+then `D1_ACCOUNT_ID`/`D1_API_TOKEN`, names when unset (`_first_env`), so the
+rename is zero-downtime. This is what the production Cloudflare Container uses
+(`frontend/digithings-stack-cloudflare/container/` unsets `CHROMA_PATH` and
+skips the Chroma seed once Vectorize is configured).
+
+It exists because Cloudflare Container disk is ephemeral: a container-local
+Chroma index has to be rebuilt from scratch on every cold boot. With Vectorize
+the container holds no corpus at all and only issues queries against the
+remote index that `scripts/vectorize_sync.py` maintains from an operator
+machine or CI.
+
+Two operational notes. First, upsert and query share one embedding model:
+`scripts/vectorize_sync.py` embeds with an explicit `MiniLMEmbedder()`, and
+`VectorizeBackend.query()` falls back to the same class (`MINILM_MODEL_ID =
+"all-MiniLM-L6-v2-384"`, 384 dimensions) as its process-wide default embedder
+whenever no `embedding_provider` is injected and `Query.embedding` is absent —
+this is also the model `ChromaBackend` embeds with internally, so a Chroma-built
+and a Vectorize-built index over the same corpus are directly comparable. The
+`embedding_model` stamp in vector metadata and the mismatch guard
+(`assert_index_model()`, which probes one existing vector before a sync and
+refuses to upsert under a different model) both live in `vectorize_sync.py`,
+not in `VectorizeBackend` itself — a chunk added through the generic
+`POST /ingest` → `route_add_chunks` path is not stamped or checked this way.
+
+Second, unlike `ChromaBackend.query`, which catches its errors and returns
+`[]`, a Vectorize failure propagates. `VectorizeBackend.query()` raises a plain
+`RuntimeError` on an HTTP error status or an HTTP-200-with-`success: false`
+body; `_vectorize_backend` then wraps *any* exception from that call —
+including an `ImportError` while importing `VectorizeBackend` itself — as
+`VectorizeBackendError` (defined in `vectorize_errors.py`, a separate module so
+the type stays importable even when `vectorize.py`'s own import fails).
+`VectorizeBackendError` is deliberately absent from `query_index()`'s
+`_BACKEND_ERRORS` tuple, so it is never swallowed and never falls through to
+Chroma: for a remote index, a silent empty result is indistinguishable to a
+user from "the docs do not mention that."
+
+Chunk text rides in vector metadata (`content`), because Vectorize returns
+only ids, scores and metadata on query — there is no document store behind
+this backend to reconstruct it from.
+
+Third, the index name is not a free choice. `_stub.py`'s `_vectorize_backend`
+passes digisearch's `index_name` straight into the Vectorize URL with no
+translation, so the Vectorize index **must be named exactly** what the
+digisearch server for that tenant is configured with — `DIGISEARCH_INDEX` /
+the `DIGI_TENANT_CORPUS_MAP` entry, both set in
+`frontend/digithings-stack-cloudflare/wrangler.toml`. Today that value is
+underscore-form (`digithings_docs`, `occ_help`) to match the hardcoded Chroma
+collection names in `container/seed_chroma.sh` — renaming either side without
+renaming the other breaks that pairing outright.
+
+**Verified 2026-08-11:** Cloudflare's docs give **advisory** naming guidance
+— [get-started/intro](https://developers.cloudflare.com/vectorize/get-started/intro/)
+states in prose that "a good index name is: a combination of lowercase
+and/or numeric ASCII characters, shorter than 32 characters, starts with a
+letter, and uses dashes (-) instead of spaces" — but no enforced charset or
+regex is published, and there is a real 64-byte length cap that both
+`digithings_docs` and `occ_help` clear. This is not a claim that underscores
+are documented as supported, and it is not a claim the docs are silent on
+the matter — both would be false. Empirically, underscore index
+names are accepted: `npx wrangler vectorize create digithings_docs
+--dimensions=384 --metric=cosine` and the equivalent call for `occ_help` both
+succeeded against the live account, and `npx wrangler vectorize list` shows
+both indexes at 384 dimensions, cosine metric. No rename of
+`DIGISEARCH_INDEX`, the corpus map, or the Chroma collection names is
+needed — `digithings_docs` / `occ_help` remain the single canonical name on
+both sides of the pairing.
+
+Fourth, `VectorizeBackend.query()` clamps `top_k` to `MAX_TOP_K` (50) and logs
+a warning when it does, but a caller paging through results with `page_size >
+50` (e.g. `digisearch_fetch_all`, see §Orchestrator dispatch pattern below)
+sees a short page and — for every other backend — correctly reads that as "no
+more results." Against Vectorize it is ambiguous: the page really might be the
+last one, or it might just be capped at 50. `api_orchestrator_invoke` sets
+`OrchestratorFetchAllData.possibly_truncated=True` when it detects this
+pattern so the caller can tell the two apart; it does not implement real
+pagination against Vectorize (that needs `Query.skip` support the backend
+does not have — a design decision, not fixed here).
 
 ### Embedding cache layer
 
@@ -480,23 +661,23 @@ RRF_score(rank, k=60) = 1 / (60 + rank)
 
 Default `alpha = 0.6` (60% weight on vector results). The RRF constant `k=60` is hardcoded and not configurable.
 
-**Important:** The `HybridSearcher` class is not what the production server actually uses. The server delegates to `query_index()` which calls the registered backends (Azure or Chroma) directly. Azure supports native hybrid (BM25 + vector) internally. Chroma does not support BM25 natively — the `HybridSearcher` would need to be wired at a higher level for Chroma-based hybrid. The current server uses `mode` as a passthrough hint to the backend, but Chroma only supports ANN (cosine distance) — `mode="keyword"` or `mode="hybrid"` on a Chroma backend falls back to vector-only.
+**Important:** The `HybridSearcher` class is not what the production server actually uses. The server delegates to `query_index()` which calls the registered backends (Azure, Vectorize, or Chroma) directly. Azure supports native hybrid (BM25 + vector) internally. Neither Chroma nor Vectorize supports BM25 natively — the `HybridSearcher` would need to be wired at a higher level for hybrid on either. The current server uses `mode` as a passthrough hint to the backend, but Chroma and Vectorize only support ANN (cosine distance) — `mode="keyword"` or `mode="hybrid"` on either backend falls back to vector-only.
 
 ### Orchestrator dispatch pattern
 
-DigiGraph registers DigiSearch via `POST /v1/orchestrator_tools`. When an LLM calls one of the tool names, DigiGraph calls `POST /v1/orchestrator_invoke` with `{tool, arguments, default_index_name}`. The dispatch code in `server.py` (`api_orchestrator_invoke`) maps tool names to internal query logic. This means:
+digigraph registers digisearch via `POST /v1/orchestrator_tools`. When an LLM calls one of the tool names, digigraph calls `POST /v1/orchestrator_invoke` with `{tool, arguments, default_index_name}`. The dispatch code in `server.py` (`api_orchestrator_invoke`) maps tool names to internal query logic. This means:
 
-- Tool schemas are owned and versioned by DigiSearch
-- DigiGraph has no search logic — it is a pass-through hub
+- Tool schemas are owned and versioned by digisearch
+- digigraph has no search logic — it is a pass-through hub
 - `digisearch_fetch_all` performs server-side pagination in a while loop (page size 500) and returns the full collected set in a single response, which can be very large
 
 ---
 
 ## 6. Security Analysis
 
-### DigiKey JWT auth scopes
+### digikey JWT auth scopes
 
-DigiSearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. The middleware validates DigiKey JWTs and enforces path-to-scope mappings defined in `digisearch_path_scopes`.
+digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. The middleware validates digikey JWTs and enforces path-to-scope mappings defined in `digisearch_path_scopes`.
 
 | Endpoint | Required scope |
 |----------|---------------|
@@ -506,16 +687,16 @@ DigiSearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 | `POST /v1/orchestrator_invoke` | `digisearch:query` |
 | `POST /v1/research_turn` | `digisearch:query` |
 | `GET /health` | Public |
-| `GET /azure_status` | Public |
+| `GET /azure_status` | `digisearch:query` |
 | `GET /indexes`, `GET /indexes/{name}` | (unclear — not in server auth logic) |
 
-**Gap:** `GET /azure_status` is unauthenticated and leaks backend configuration state (endpoint URL validity, index name, reachability). Should require at minimum a read scope or be restricted to internal networks.
+**Gap:** `GET /azure_status` still returns reachability detail to any caller with `digisearch:query`; consider restricting to internal networks or a dedicated ops scope.
 
-### Multi-tenant isolation gap
+### Multi-tenant isolation
 
-`workspace_id` is accepted on `POST /query` and stored in `Query.workspace_id` but **none of the backend implementations enforce it at query time**. The field is passed into `Query` and then ignored by both `ChromaBackend.query()` and `query_azure()`. There is no index prefix routing, ACL filter injection, or collection scoping based on `workspace_id`.
+When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation. **Vectorize applies no filter at all** — `VectorizeBackend.query()` sends only `{vector, topK, returnMetadata, returnValues}` and does not consult `Query.filters`, so `workspace_id` isolation is not enforced for this backend today.
 
-This means a caller with a valid `digisearch:query` JWT can omit `workspace_id` (or supply any value) and receive results from any tenant's data in the index. For single-tenant deployments this is acceptable; for multi-tenant enterprise deployments this is a critical data isolation failure.
+Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
 ### Filter injection risks
 
@@ -602,7 +783,7 @@ The default `alpha=0.6` in `HybridSearcher` is a reasonable starting point biase
 - The RRF constant `k=60` is hardcoded; lower values (e.g. `k=20`) favor top-ranked results more strongly
 - For the Chroma backend, `mode` is passed as a hint but Chroma only supports vector search — the keyword leg is absent, making alpha irrelevant
 
-For Azure AI Search, the service uses its own internal hybrid ranking. The DigiSearch `mode` parameter maps to `query_type="simple"` in all cases — there is no `"semantic"` or `"vector"` query type being set. This means Azure's BM25 is always active and DigiSearch does not currently unlock Azure's native vector search or semantic ranker modes.
+For Azure AI Search, the service uses its own internal hybrid ranking. The digisearch `mode` parameter maps to `query_type="simple"` in all cases — there is no `"semantic"` or `"vector"` query type being set. This means Azure's BM25 is always active and digisearch does not currently unlock Azure's native vector search or semantic ranker modes.
 
 ### Embedding cache hit rates
 
@@ -615,7 +796,7 @@ Hit rate degrades when:
 
 ### Chunking strategy impact on retrieval quality
 
-The default `RecursiveChunker(chunk_size=512, chunk_overlap=64)` is a safe general-purpose default. Impact considerations:
+The default `RecursiveChunker(chunk_size=2000, chunk_overlap=250)` (character-based, ≈512 tokens at ~4 chars/token — see `DEFAULT_CHUNK_CHARS`/`DEFAULT_CHUNK_OVERLAP` in `ingestion/chunkers/recursive.py`) is a safe general-purpose default. Impact considerations:
 
 - **Too small (< 128 tokens):** chunks lose context; recall suffers on paraphrase queries
 - **Too large (> 1024 tokens):** chunks dilute relevance scores; precision suffers
@@ -635,54 +816,49 @@ For SEC filings (EDGAR corpus), recursive chunking with headers preserved (`Recu
 
 The reranker is not wired into the production `POST /query` path. It is available as a class but callers must instantiate and invoke it explicitly. It is not part of the `query_index()` router.
 
-### FAISS vs Chroma for large corpora
+### Index backends (production inventory)
 
-| Criterion | Chroma (current default) | FAISS (placeholder) |
-|-----------|--------------------------|---------------------|
-| Query latency (1M vecs) | ~10–50ms | ~1–5ms |
-| Memory footprint | Higher (SQLite overhead) | Lower (pure binary) |
-| Metadata filtering | Chroma `where` clause | Requires pre-filtering |
-| Persistence | SQLite + HNSW files | `.faiss` + `.pkl` files |
-| Write concurrency | Single writer | Single writer |
-| Production readiness | Limited (no sharding) | Limited (no HTTP server) |
+**Production:** Chroma (local persistent or HTTP), Azure AI Search, and Cloudflare Vectorize (`VectorizeBackend`) — the production Cloudflare Container runs Vectorize exclusively (Chroma is unset once remote-index credentials resolve: canonical `CLOUDFLARE_ACCOUNT_ID`/`CLOUDFLARE_API_TOKEN`, then legacy `VECTORIZE_ACCOUNT_ID`/`VECTORIZE_API_TOKEN`, then `D1_ACCOUNT_ID`/`D1_API_TOKEN` as a supported fallback for the same account/token pair); Docker Compose deployments still default to Chroma.
 
-For the target use case (DigiClone research corpus, tens to hundreds of thousands of chunks), Chroma's performance is adequate. For a large email corpus (millions of items), Azure AI Search is the appropriate backend.
+**Not in production:** `FAISSBackend` (`indexes/backends/faiss.py`) and `PineconeBackend` are unregistered stubs — do not enable without a new ADR and registry wiring.
+
+For corpora beyond ~1M chunks, prefer Azure AI Search; Chroma is appropriate for single-tenant workloads up to roughly 500K–1M chunks (see §8 scaling notes above).
 
 ---
 
 ## 9. Integration Points
 
-### Orchestrator tools contract with DigiGraph
+### Orchestrator tools contract with digigraph
 
-DigiGraph calls DigiSearch via two HTTP routes:
+digigraph calls digisearch via two HTTP routes:
 
 1. `POST /v1/orchestrator_tools` — fetches tool schemas, optionally specializing them with index metadata (filterable fields, facetable fields, result columns, complex field structures). The hub caches these and presents them to the LLM.
 
 2. `POST /v1/orchestrator_invoke` — dispatches tool execution. The hub passes `{tool, arguments, default_index_name}` and receives `{ok, service, tool, data}`.
 
-The contract is versioned by `{"tools": [...], "version": 1}` in the tools response. DigiGraph should treat unknown tool names from `/v1/orchestrator_tools` gracefully.
+The contract is versioned by `{"tools": [...], "version": 1}` in the tools response. digigraph should treat unknown tool names from `/v1/orchestrator_tools` gracefully.
 
-`DIGISEARCH_INDEX` env on DigiGraph controls the default index name. When `DIGI_HUB_MODE=federated`, DigiGraph registers DigiSearch as a connector tool that the LLM can call directly.
+`DIGISEARCH_INDEX` env on digigraph controls the default index name. When `DIGI_HUB_MODE=federated`, digigraph registers digisearch as a connector tool that the LLM can call directly.
 
-### DigiClaw MCP attachment
+### digiclaw MCP attachment
 
-DigiClaw may attach to the DigiSearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `digisearch_research_turn` (when `[agent]` is installed).
+digiclaw may attach to the digisearch MCP server at `http://127.0.0.1:8765/mcp` (loopback, `digisearch-mcp` Docker profile). Tools available: `digisearch_query`, `digisearch_research_turn` (when `[agent]` is installed).
 
 MCP clients (Langflow, IDE tools) attach to the same server. There is no per-client auth on the MCP server itself — access control is purely at network level (loopback binding).
 
-### DigiFlow integration
+### digiflow integration
 
-DigiFlow (Langflow) connects at `http://digisearch:8002` (HTTP) or MCP. Standard `POST /query` with `format=table` for display-ready results. DigiFlow can also import the `DigiSearch` Python client directly if running in the same process.
+digiflow (Langflow) connects at `http://digisearch:8002` (HTTP) or MCP. Standard `POST /query` with `format=table` for display-ready results. digiflow can also import the `digisearch` Python client directly if running in the same process.
 
 ### Sidecar YAML metadata loading
 
-At ingest time (both `POST /ingest` and CLI `digisearch ingest`), DigiSearch looks for a sidecar file at `{stem}.yaml` or `{stem}.yml` next to the source file. The sidecar `metadata:` block (or flat normative keys at root) is loaded first, then merged with parser-extracted metadata, then with the request body `metadata` field. The request body wins on conflicts.
+At ingest time (both `POST /ingest` and CLI `digisearch ingest`), digisearch looks for a sidecar file at `{stem}.yaml` or `{stem}.yml` next to the source file. The sidecar `metadata:` block (or flat normative keys at root) is loaded first, then merged with parser-extracted metadata, then with the request body `metadata` field. The request body wins on conflicts.
 
 This allows a document corpus to be annotated with evidence tier, DOI, venue, and tags without embedding metadata in the document itself.
 
 ### `DIGI_EXTRACT_STRATEGY_AFTER_DOCUMENT_RAG`
 
-When `DIGI_EXTRACT_STRATEGY_AFTER_DOCUMENT_RAG=1` is set on DigiGraph, DigiGraph performs structured extraction of `strategy_name` and `symbols` after receiving RAG context from DigiSearch. This is a DigiGraph concern — DigiSearch is unaware of it.
+When `DIGI_EXTRACT_STRATEGY_AFTER_DOCUMENT_RAG=1` is set on digigraph, digigraph performs structured extraction of `strategy_name` and `symbols` after receiving RAG context from digisearch. This is a digigraph concern — digisearch is unaware of it.
 
 ---
 
@@ -731,6 +907,8 @@ docker compose --profile digisearch-mcp up
 |----------|---------|---------|
 | `CHROMA_PATH` | _(unset)_ | Path to persistent Chroma data directory; activates Chroma backend |
 | `CHROMA_HOST` | _(unset)_ | Chroma HTTP server host; activates Chroma backend (remote mode) |
+| `CLOUDFLARE_ACCOUNT_ID` | _(unset)_ | Cloudflare account id owning both the Vectorize indexes and the D1 databases (canonical, #2239 credential rename); with `CLOUDFLARE_API_TOKEN`, activates Vectorize and takes priority over Chroma. Falls back to legacy `VECTORIZE_ACCOUNT_ID`, then `D1_ACCOUNT_ID`, when unset. |
+| `CLOUDFLARE_API_TOKEN` | _(unset)_ | Cloudflare API token for the Vectorize v2 REST API (same token also authorizes D1). Falls back to legacy `VECTORIZE_API_TOKEN`, then `D1_API_TOKEN`, when unset. |
 | `AZURE_SEARCH_ENDPOINT` | _(unset)_ | Azure AI Search service endpoint URL |
 | `AZURE_SEARCH_API_KEY` | _(unset)_ | Azure AI Search admin or query key |
 | `AZURE_SEARCH_INDEX_NAME` | _(unset)_ | Default Azure index name |
@@ -749,13 +927,13 @@ docker compose --profile digisearch-mcp up
 | `COHERE_API_KEY` | _(unset)_ | Cohere key for CohereEmbedder / CohereReranker |
 | `DIGI_CORS_ORIGINS` / `DIGISEARCH_CORS_ORIGINS` | (empty) | Comma-separated CORS allowed origins; legacy `DIGI_ALLOWED_ORIGINS` still honored |
 | `DIGI_DISABLE_RATE_LIMIT` | `0` | Disable per-IP rate limiting (testing) |
-| `DIGIKEY_JWKS_URL` | _(required)_ | DigiKey JWKS endpoint for JWT validation |
+| `DIGIKEY_JWKS_URL` | _(required)_ | digikey JWKS endpoint for JWT validation |
 | `DIGIKEY_ISSUER` | _(required)_ | JWT issuer |
 | `DIGIKEY_AUDIENCE` | _(required)_ | JWT audience |
 
 ### MCP server startup
 
-The MCP server is started via `digisearch mcp --port 8765` (CLI) or the `digisearch-mcp` Docker profile. Default transport: streamable HTTP. The server runs `FastMCP("DigiSearch")` from the `mcp` package.
+The MCP server is started via `digisearch mcp --port 8765` (CLI) or the `digisearch-mcp` Docker profile. Default transport: streamable HTTP. The server runs `FastMCP("digisearch")` from the `mcp` package.
 
 In the current implementation, `_digisearch_client` is only set by calling `create_mcp_with_indexes(client)` explicitly. The `mcp_server.py` module-level setup does not call this automatically — tools fall back to the stub unless caller code wires the client at startup.
 
@@ -782,6 +960,7 @@ The current graph is minimal: `node_plan` validates input, `node_retrieve` calls
 
 - **Chroma:** route to a named collection per workspace (`{workspace_id}_{index_name}`) or inject `{"workspace_id": workspace_id}` as a mandatory `where` clause
 - **Azure:** inject an OData filter clause `(workspace_id eq '{workspace_id}')` for all queries
+- **Vectorize:** `VectorizeBackend.query()` sends no filter field today; post-filter matches by `metadata.workspace_id`, route to a per-workspace index, or adopt the Vectorize API's own metadata-filter support if applicable
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
 
 Without this, `workspace_id` is decorative.
@@ -856,7 +1035,7 @@ ARQ (async Redis queue) is the lightest-weight option and avoids the Celery brok
 
 ### (d) Add `/v1/health/detailed` with backend connectivity checks
 
-**Problem:** `GET /health` always returns 200 regardless of backend state. DigiGraph and monitoring cannot distinguish "service up but backend offline" from "fully healthy."
+**Problem:** `GET /health` always returns 200 regardless of backend state. digigraph and monitoring cannot distinguish "service up but backend offline" from "fully healthy."
 
 **Recommendation:**
 
@@ -914,9 +1093,9 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 ### Structured logging (#215)
 
-All DigiSearch entrypoints (`server.py`, `mcp_server.py`, `ingest_worker.py`) call `digisearch.logging.configure_logging()` at startup. The helper installs a `python-json-logger` stream handler on the root logger that renames `asctime`/`levelname` to `timestamp`/`level`, stamps every record with `service="digisearch"`, and attaches the `RequestIdLogFilter` from `digibase.http` (#213) so `request_id` is always present (defaults to `"-"` outside a request).
+All digisearch entrypoints (`server.py`, `mcp_server.py`, `ingest_worker.py`) call `digisearch.logging.configure_logging()` at startup. The helper installs a `python-json-logger` stream handler on the root logger that renames `asctime`/`levelname` to `timestamp`/`level`, stamps every record with `service="digisearch"`, and attaches the `RequestIdLogFilter` from `digibase.http` (#213) so `request_id` is always present (defaults to `"-"` outside a request).
 
-Every record emitted by a DigiSearch hot path includes the following JSON keys:
+Every record emitted by a digisearch hot path includes the following JSON keys:
 
 | Key | Source |
 | --- | --- |

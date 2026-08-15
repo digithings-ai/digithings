@@ -1,27 +1,6 @@
 "use client";
 
-/**
- * ChatPanel — modern-terminal chat pane.
- *
- * Preserves all plumbing untouched:
- *   - `useChat` + transport + prepareSendMessagesRequest (BYOK headers,
- *     X-Digichat-Session)
- *   - onMessagesCommit / onTitleDerived wiring
- *   - Part-by-part rendering (text / reasoning / tool-invocation /
- *     data-digigraphTrace / fenced-JSON → ECharts)
- *
- * Visual changes only:
- *   - Terminal row layout: `>` marker for user, `▸` for assistant, with
- *     prose content next to the marker.
- *   - Tool-calls render as inline `.dc-term-chip` pills with collapsible
- *     detail below.
- *   - Sources collapse uses `.dc-sources` styling.
- *   - Input bar adopts the `.app-input` primitive with a slash-glyph
- *     indicator when text starts with `/`.
- *   - Client-side slash-command parsing: `onSlashCommand` may be passed by
- *     the parent; returns `true` if it handled the command. Unknown
- *     commands are rendered as an assistant-style system note.
- */
+/** Terminal-styled chat pane — `useChat` transport, markdown/trace/chart parts, slash commands. */
 
 import {
   useCallback,
@@ -38,8 +17,6 @@ import {
   isTextUIPart,
   type UIMessage,
 } from "ai";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { ArrowDown, Copy, RefreshCw, Square, Wrench, Key } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,163 +25,35 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { QuantComparisonStrip } from "@/components/quant-comparison-strip";
+import { ByokCliFlow } from "@/components/byok-cli-flow";
 import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
-import type { DigigraphTracePayload } from "@/lib/stream-digigraph-trace";
-import { useBYOKKey } from "@/hooks/use-byok-key";
+import { p } from "@/lib/base-path";
+import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
+import { byokRequiresModel, useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { ChatActivities } from "@digithings/digichat-ui";
+import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
 
-const markdownComponents = {
-  code(props: {
-    className?: string;
-    children?: React.ReactNode;
-    inline?: boolean;
-    node?: unknown;
-  }) {
-    const { className, children, inline } = props;
-    const text = Array.isArray(children)
-      ? children.join("")
-      : typeof children === "string"
-        ? children
-        : "";
-    const isFenced = !inline && /language-json/i.test(className ?? "");
-    if (isFenced) {
-      const spec = parseChartEnvelope(text);
-      if (spec) {
-        return <EChartsCard spec={spec} />;
-      }
-    }
-    return <code className={className}>{children}</code>;
-  },
+const MAX_INPUT_LINES = 5;
+
+// The one digichat-specific fence shape the shared <ChatMarkdown> renderer
+// (also used by digichat's own /embed, digithings-web, and digiweb — mermaid,
+// syntax-highlighted code with copy, LaTeX) has no reason to know about: a
+// ```json block whose content parses as a chart envelope renders as a live
+// chart instead of source text. Everything else — including a ```json block
+// that is NOT a chart spec — falls through to the shared renderer's own
+// default handling (undefined return), which now means it gets real syntax
+// highlighting instead of the bare, unstyled <code> this used to render.
+const renderChartCodeBlock: CodeBlockOverride = (lang, code) => {
+  if (lang !== "json") return undefined;
+  const spec = parseChartEnvelope(code);
+  return spec ? <EChartsCard spec={spec} /> : undefined;
 };
 
 function messagePlainText(message: UIMessage): string {
   if (!message.parts?.length) return "";
   return message.parts.filter(isTextUIPart).map((p) => p.text).join("");
-}
-
-function isDigigraphTracePart(part: unknown): part is { type: "data-digigraphTrace"; data: DigigraphTracePayload } {
-  return (
-    !!part &&
-    typeof part === "object" &&
-    "type" in part &&
-    (part as { type: string }).type === "data-digigraphTrace"
-  );
-}
-
-function tierLabel(metadata: Record<string, unknown>): string | null {
-  const t = metadata.evidence_tier ?? metadata["evidence_tier"];
-  if (typeof t === "string" && t.trim()) return t;
-  const pr = metadata.peer_reviewed;
-  if (pr === true) return "peer_reviewed";
-  return null;
-}
-
-function RagSourcesTrace({ sources }: { sources: unknown[] }) {
-  if (!sources.length) return null;
-  return (
-    <details className="dc-sources">
-      <summary>sources · {sources.length}</summary>
-      <div className="space-y-2 border-t border-border/30 px-3 py-2">
-        {sources.map((raw, idx) => {
-          const s = raw as Record<string, unknown>;
-          const meta = (s.metadata as Record<string, unknown>) || {};
-          const tier = tierLabel(meta);
-          const title = (meta.title as string) || (meta.doi_or_arxiv as string) || "";
-          const sid = (s.source_id as string) || (s.doc_id as string) || `#${idx + 1}`;
-          const year = meta.publication_year;
-          return (
-            <div
-              key={`${sid}-${idx}`}
-              className="rounded-md border border-border/35 bg-black/25 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground"
-            >
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="font-mono text-[10px] text-foreground/90">{sid}</span>
-                {tier ? (
-                  <Badge variant="outline" className="text-[9px] font-normal">
-                    {tier}
-                  </Badge>
-                ) : null}
-                {typeof year === "number" ? (
-                  <span className="text-[10px] opacity-80">{year}</span>
-                ) : null}
-              </div>
-              {title ? <p className="mt-1 text-foreground/80">{title}</p> : null}
-              {typeof s.snippet === "string" && s.snippet ? (
-                <p className="mt-1 line-clamp-4 opacity-90">{s.snippet}</p>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-    </details>
-  );
-}
-
-function ResearchBriefTrace({
-  brief,
-  questions,
-}: {
-  brief: unknown;
-  questions: unknown;
-}) {
-  if (!brief || typeof brief !== "object") return null;
-  const b = brief as Record<string, unknown>;
-  const themes = b.themes as Array<Record<string, unknown>> | undefined;
-  const qs = Array.isArray(questions) ? (questions as string[]) : [];
-  return (
-    <details className="dc-sources">
-      <summary>research brief</summary>
-      <div className="space-y-2 border-t border-border/30 px-3 py-2 text-[11px] text-muted-foreground">
-        {themes?.length ? (
-          <ul className="list-inside list-disc space-y-1">
-            {themes.slice(0, 8).map((t, i) => (
-              <li key={i}>
-                <span className="font-medium text-foreground/85">{String(t.label || "")}</span>
-                {t.summary ? ` — ${String(t.summary).slice(0, 220)}` : ""}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        {qs.length ? (
-          <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide">
-              Next questions
-            </p>
-            <ul className="list-inside list-decimal space-y-1">
-              {qs.slice(0, 12).map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-      </div>
-    </details>
-  );
-}
-
-function DigigraphTraceBlock({ data }: { data: DigigraphTracePayload | undefined }) {
-  if (!data?.type) return null;
-  const payload = data.payload as Record<string, unknown> | undefined;
-  if (data.type === "rag_sources" && payload?.sources && Array.isArray(payload.sources)) {
-    return <RagSourcesTrace sources={payload.sources} />;
-  }
-  if (data.type === "graph_update" && payload?.research_brief) {
-    return <ResearchBriefTrace brief={payload.research_brief} questions={payload.profiling_questions} />;
-  }
-  const svc = typeof data.service === "string" && data.service.trim() ? data.service.trim() : null;
-  return (
-    <details className="dc-sources">
-      <summary>
-        trace: {data.type}
-        {svc ? <span className="ml-2 font-mono text-[10px]">{svc}</span> : null}
-      </summary>
-      <pre className="max-h-48 overflow-auto border-t border-border/40 p-2 font-mono text-[10px]">
-        {JSON.stringify(data, null, 2)}
-      </pre>
-    </details>
-  );
 }
 
 function toolLabel(part: unknown): string {
@@ -222,18 +71,21 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
   if (message.role === "user") {
     const text = messagePlainText(message);
     return (
-      <div className="prose prose-invert prose-sm max-w-none text-[var(--text-primary)]">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {text}
-        </ReactMarkdown>
-      </div>
+      <ChatMarkdown
+        source={text}
+        renderCodeBlock={renderChartCodeBlock}
+        className="text-[var(--text-primary)]"
+      />
     );
   }
 
+  const activities = messageActivities(message);
   return (
     <div className="space-y-3">
+      {activities.length ? <ChatActivities activities={activities} /> : null}
       {message.parts.map((part, i) => {
         const isLast = i === message.parts.length - 1;
+        if (part.type === ACTIVITY_PART_TYPE || part.type === "data-digigraphTrace") return null;
         if (isReasoningUIPart(part)) {
           return (
             <Collapsible key={i} className="rounded-lg border border-border/60 bg-muted/30">
@@ -250,17 +102,15 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
         }
         if (isTextUIPart(part)) {
           return (
-            <div
+            <ChatMarkdown
               key={i}
+              source={part.text}
+              renderCodeBlock={renderChartCodeBlock}
               className={cn(
-                "prose prose-invert prose-sm max-w-none text-[var(--text-primary)]",
+                "text-[var(--text-primary)]",
                 isLast && isStreaming && "dc-term-streaming",
               )}
-            >
-              <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                {part.text}
-              </ReactMarkdown>
-            </div>
+            />
           );
         }
         if (part.type === "tool-invocation" || part.type === "dynamic-tool") {
@@ -272,15 +122,12 @@ function MessageBody({ message, isStreaming }: { message: UIMessage; isStreaming
                 <span className="truncate">{label}</span>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-black/35 p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
+                <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-border/40 bg-term-bg p-3 font-mono text-[11px] leading-relaxed text-muted-foreground">
                   {JSON.stringify(part, null, 2)}
                 </pre>
               </CollapsibleContent>
             </Collapsible>
           );
-        }
-        if (isDigigraphTracePart(part)) {
-          return <DigigraphTraceBlock key={i} data={part.data} />;
         }
         return null;
       })}
@@ -297,6 +144,8 @@ export type ChatPanelProps = {
   onMessagesCommit: (threadId: string, messages: UIMessage[]) => void;
   onTitleDerived?: (threadId: string, title: string) => void;
   headerSlot?: React.ReactNode;
+  byokMode?: boolean;
+  onByokModeChange?: (open: boolean) => void;
   /**
    * Slash-command hook. Receives the raw text (starts with `/`).
    * Return true if the command was handled — the panel will NOT send it
@@ -313,6 +162,8 @@ export function ChatPanel({
   onMessagesCommit,
   onTitleDerived,
   headerSlot,
+  byokMode = false,
+  onByokModeChange,
   onSlashCommand,
 }: ChatPanelProps) {
   const [text, setText] = useState("");
@@ -321,12 +172,19 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
   const [showJump, setShowJump] = useState(false);
-  const { key: byokKey, provider: byokProvider, isSet: byokIsSet } = useBYOKKey();
+  const {
+    key: byokKey,
+    provider: byokProvider,
+    model: byokModel,
+    isSet: byokIsSet,
+    setKey: setByokKey,
+    clearKey: clearByokKey,
+  } = useBYOKKey();
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport<UIMessage>({
-        api: "/api/chat",
+        api: p("/api/chat"),
         credentials: "include",
         prepareSendMessagesRequest: ({ messages, id, body, headers }) => {
           const h = new Headers(headers as HeadersInit | undefined);
@@ -334,6 +192,9 @@ export function ChatPanel({
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
+            if (byokRequiresModel(byokProvider) && byokModel.trim()) {
+              h.set("X-BYOK-Model", byokModel.trim());
+            }
           }
           return {
             body: { ...(typeof body === "object" && body !== null ? body : {}), id, messages },
@@ -341,7 +202,7 @@ export function ChatPanel({
           };
         },
       }),
-    [threadId, byokKey, byokProvider],
+    [threadId, byokKey, byokProvider, byokModel],
   );
 
   const { messages, sendMessage, status, stop, error, regenerate } =
@@ -397,8 +258,15 @@ export function ChatPanel({
   useLayoutEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
+    const style = getComputedStyle(ta);
+    const lineHeight = parseFloat(style.lineHeight) || 21;
+    const padding =
+      parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+    const maxHeight = lineHeight * MAX_INPUT_LINES + padding;
     ta.style.height = "0px";
-    ta.style.height = `${Math.min(ta.scrollHeight, 220)}px`;
+    const next = Math.min(ta.scrollHeight, maxHeight);
+    ta.style.height = `${next}px`;
+    ta.style.overflowY = ta.scrollHeight > maxHeight ? "auto" : "hidden";
   }, [text]);
 
   const pushSystemNote = useCallback((msg: string) => {
@@ -426,7 +294,11 @@ export function ChatPanel({
           return;
         }
         if (name === "/model") {
-          pushSystemNote("model selector is part of /settings.");
+          pushSystemNote("model selector is part of /key.");
+          return;
+        }
+        if (name === "/key" || name === "/settings") {
+          onByokModeChange?.(true);
           return;
         }
         if (onSlashCommand && onSlashCommand(t)) {
@@ -439,7 +311,7 @@ export function ChatPanel({
       setText("");
       await sendMessage({ text: t });
     },
-    [text, busy, sendMessage, onSlashCommand, pushSystemNote],
+    [text, busy, sendMessage, onSlashCommand, onByokModeChange, pushSystemNote],
   );
 
   const onCopyMessage = useCallback(async (m: UIMessage) => {
@@ -462,11 +334,11 @@ export function ChatPanel({
 
       <div className="relative min-h-0 flex-1">
         <div ref={scrollRef} className="h-full overflow-y-auto rounded-md border border-border/40 dc-term-pane">
-          {messages.length === 0 && systemNotes.length === 0 ? (
+          {messages.length === 0 && systemNotes.length === 0 && !byokMode ? (
             <div className="dc-term-row dc-term-row-assistant">
               <span className="dc-term-marker">▸</span>
               <div className="dc-term-body" style={{ color: "var(--text-secondary)" }}>
-                DigiChat ready. Ask a question or type <code className="font-mono">/help</code> for commands.
+                digichat ready. Ask a question or type <code className="font-mono">/help</code> for commands.
               </div>
             </div>
           ) : null}
@@ -536,11 +408,30 @@ export function ChatPanel({
 
           {error ? (
             <div className="dc-term-row dc-term-row-assistant">
-              <span className="dc-term-marker" style={{ color: "var(--accent-digikey)" }}>✗</span>
-              <div className="dc-term-body" style={{ color: "var(--accent-digikey)" }}>
+              {/* error state rides the four-state system (--down) — a livery is an identity, never a semantic (canon §16) */}
+              <span className="dc-term-marker" style={{ color: "var(--down)" }}>✗</span>
+              <div className="dc-term-body" style={{ color: "var(--down)" }}>
                 {error.message}
               </div>
             </div>
+          ) : null}
+
+          {byokMode ? (
+            <ByokCliFlow
+              onClose={() => onByokModeChange?.(false)}
+              onActivate={(key, provider, model) => {
+                setByokKey(key, provider, model);
+                onByokModeChange?.(false);
+              }}
+              onClear={clearByokKey}
+              active={
+                byokIsSet
+                  ? { provider: byokProvider, model: byokModel }
+                  : null
+              }
+              initialProvider={byokProvider}
+              initialModel={byokModel}
+            />
           ) : null}
         </div>
 
@@ -576,10 +467,10 @@ export function ChatPanel({
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Type a message, or / for commands"
+          placeholder="ask digichat"
           className="app-input-field"
           rows={1}
-          disabled={busy}
+          disabled={busy || byokMode}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -622,7 +513,7 @@ export function ChatChrome({
   return (
     <header className="app-topbar">
       {leading}
-      <span className="app-topbar-title">{threadTitle || "DigiChat"}</span>
+      <span className="app-topbar-title">{threadTitle || "digichat"}</span>
       <span className="app-topbar-meta">{userSubtitle}</span>
     </header>
   );

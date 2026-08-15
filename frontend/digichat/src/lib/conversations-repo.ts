@@ -120,27 +120,29 @@ export async function replaceConversationMessages(
 
   if (!ok.length) return false;
 
-  await db
-    .delete(conversationMessages)
-    .where(eq(conversationMessages.conversationId, params.conversationId));
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(conversationMessages)
+      .where(eq(conversationMessages.conversationId, params.conversationId));
 
-  if (params.messages.length > 0) {
-    await db.insert(conversationMessages).values(
-      params.messages.map((m, sequence) => ({
-        conversationId: params.conversationId,
-        sequence,
-        payload: { ...m } as Record<string, unknown>,
-      }))
-    );
-  }
+    if (params.messages.length > 0) {
+      await tx.insert(conversationMessages).values(
+        params.messages.map((m, sequence) => ({
+          conversationId: params.conversationId,
+          sequence,
+          payload: { ...m } as Record<string, unknown>,
+        }))
+      );
+    }
 
-  await db
-    .update(conversations)
-    .set({
-      updatedAt: new Date(),
-      ...(params.title !== undefined ? { title: params.title } : {}),
-    })
-    .where(eq(conversations.id, params.conversationId));
+    await tx
+      .update(conversations)
+      .set({
+        updatedAt: new Date(),
+        ...(params.title !== undefined ? { title: params.title } : {}),
+      })
+      .where(eq(conversations.id, params.conversationId));
+  });
 
   return true;
 }

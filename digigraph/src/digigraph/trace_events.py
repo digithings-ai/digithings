@@ -1,4 +1,4 @@
-"""Versioned trace events for DigiGraph streaming (DigiChat, observability)."""
+"""Versioned trace events for digigraph streaming (digichat, observability)."""
 
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ TraceEventType = Literal[
     "code_block",
     "span",
     "graph_update",
+    "round_boundary",
 ]
 
 
 class RagSourceItem(BaseModel):
-    """One citation from DigiSearch-style results."""
+    """One citation from digisearch-style results."""
 
     source_id: str | None = Field(
         default=None,
@@ -26,7 +27,9 @@ class RagSourceItem(BaseModel):
     )
     doc_id: str | None = None
     score: float | None = None
-    snippet: str | None = Field(default=None, description="Short content preview; not full row payload.")
+    snippet: str | None = Field(
+        default=None, description="Short content preview; not full row payload."
+    )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -36,7 +39,7 @@ def rag_sources_from_results(
     max_items: int = 20,
     snippet_len: int = 400,
 ) -> list[dict[str, Any]]:
-    """Build RAG citation list for trace/UI from DigiSearch result dicts (redacted size)."""
+    """Build RAG citation list for trace/UI from digisearch result dicts (redacted size)."""
     out: list[dict[str, Any]] = []
     for r in results[:max_items]:
         if not isinstance(r, dict):
@@ -66,11 +69,15 @@ def rag_sources_from_results(
     return out
 
 
-def merge_rag_sources_accumulator(acc: list[dict[str, Any]], new_items: list[dict[str, Any]] | None) -> None:
+def merge_rag_sources_accumulator(
+    acc: list[dict[str, Any]], new_items: list[dict[str, Any]] | None
+) -> None:
     """Append *new_items* to *acc*, de-duplicating by source_id then doc_id."""
     if not new_items:
         return
-    seen = {x.get("source_id") or x.get("doc_id") for x in acc if x.get("source_id") or x.get("doc_id")}
+    seen = {
+        x.get("source_id") or x.get("doc_id") for x in acc if x.get("source_id") or x.get("doc_id")
+    }
     for item in new_items:
         if not isinstance(item, dict):
             continue

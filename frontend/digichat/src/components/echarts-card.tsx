@@ -21,8 +21,9 @@ import { cn } from "@/lib/utils";
  * - Supported chart types = whatever ECharts itself supports (bar, line,
  *   scatter, pie, etc.). The spec IS the ECharts option — no adapter layer.
  *
- * Security: the spec is JSON, never HTML. We do not pass custom formatters,
- * so ECharts option objects have no XSS surface here.
+ * Security: the spec is JSON, never HTML. parseChartEnvelope strips
+ * formatter keys before the spec reaches setOption, so untrusted chart
+ * options cannot inject HTML via ECharts tooltip/label formatters.
  */
 export function EChartsCard({
   spec,
@@ -86,7 +87,7 @@ function EChartsRenderer({
   return (
     <Card
       className={cn(
-        "overflow-hidden border-border/40 bg-black/20 p-2",
+        "overflow-hidden border-border/40 bg-term-bg p-2",
         className,
       )}
     >
@@ -118,7 +119,7 @@ function ChartFailedCard({
           View raw JSON
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-border/40 bg-black/30 p-2 font-mono text-[11px]">
+          <pre className="mt-2 max-h-64 overflow-auto rounded-md border border-border/40 bg-term-bg p-2 font-mono text-[11px]">
             {JSON.stringify(spec, null, 2)}
           </pre>
         </CollapsibleContent>

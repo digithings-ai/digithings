@@ -1,0 +1,57 @@
+# Asset-class buckets for the WHOLE book — the non-equity sleeves that GICS
+# `sectors.yaml` does not cover, plus the broad-equity / international / cash sleeves.
+#
+# Consumed by `olympus/hermes/sector_map.py`. Equity single-names and GICS sector
+# ETFs (XLK, XLV, …) are bucketed from `sectors.yaml`; this file covers everything
+# else. Tickers are matched case-insensitively. Lists need not be exhaustive — an
+# unlisted ticker resolves to the "unknown" bucket (a conservative default that the
+# sizer treats as its own concentration bucket).
+#
+# Each entry: a coarse `asset_class` (for exposure roll-ups) and the `sector_bucket`
+# slug used for concentration control (max_sector_pct). Keep both kebab/UPPER-stable;
+# downstream code and stored rows key off these exact strings.
+
+asset_classes:
+  equity-broad:
+    asset_class: EQUITY
+    label: US Broad Equity
+    tickers: [SPY, VOO, IVV, VTI, QQQ, QQQM, DIA, IWM, IWB, IJH, IJR, MDY, RSP, VT, SPLG, SCHX, SCHB]
+
+  international:
+    asset_class: INTERNATIONAL
+    label: International / EM Equity
+    tickers:
+      [EFA, VEA, IEFA, VXUS, VWO, EEM, IEMG, EWJ, EWA, EWG, EWU, EWY, EWT, EWZ,
+       FXI, MCHI, ASHR, CSI, INDA, VGK, EWC, EWH, EWP, EWQ, EWL, EZU, EWW, EPP]
+
+  fixed-income:
+    asset_class: FIXED_INCOME
+    label: Fixed Income
+    tickers:
+      [BIL, SHV, SHY, SGOV, VGSH, IEF, VGIT, TLT, VGLT, GOVT, EDV, BND, AGG, SCHZ,
+       LQD, VCIT, VCSH, HYG, JNK, USHY, TIP, VTIP, SCHP, MBB, MUB, EMB, BNDX, TLH, IEI]
+
+  commodity:
+    asset_class: COMMODITY
+    label: Commodities
+    tickers:
+      [IAU, GLD, GLDM, SGOL, SLV, SIVR, PPLT, PALL, CPER, USO, BNO, DBO, UNG, DBC,
+       PDBC, DJP, GSG, DBA, CORN, WEAT, URA, COMT]
+
+  crypto:
+    asset_class: CRYPTO
+    label: Crypto
+    tickers:
+      [IBIT, FBTC, GBTC, BITO, BITB, ARKB, HODL, ETHA, ETHE, FETH, ETH-USD, BTC-USD,
+       SOL-USD, ADA-USD, AVAX-USD, BCH-USD, DOGE-USD, DOT-USD, LINK-USD, LTC-USD,
+       NEAR-USD, TRX-USD, XMR-USD, XRP-USD, ATOM-USD, BNB-USD, BTC, ETH, SOL, BNB, XRP]
+
+  fx:
+    asset_class: FX
+    label: Currency
+    tickers: [UUP, UDN, FXE, FXY, FXB, FXF, FXC, FXA, CYB]
+
+  cash:
+    asset_class: CASH
+    label: Cash
+    tickers: [CASH]

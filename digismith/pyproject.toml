@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digismith"
 version = "0.1.0"
-description = "DigiSmith – LangSmith-aligned observability helpers for DigiThings"
+description = "digismith – LangSmith-aligned observability helpers for digithings"
 readme = "ARCHITECTURE.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -19,7 +19,14 @@ dependencies = [
 [project.optional-dependencies]
 langsmith = ["langsmith>=0.1"]
 otel = ["digibase[otel]"]
-dev = ["pytest>=8", "pytest-cov>=4", "httpx>=0.27", "ruff>=0.8"]
+dev = ["httpx>=0.27"]
+
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies], which
+# needs --extra/--all-extras) -- so these tools are always present in digismith's own venv
+# regardless of which extras a given `uv sync` invocation requests. Bounds match CLAUDE.md's
+# "Dependency version bounds": tools whose output gates CI are capped to their current major.
+dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -28,6 +35,29 @@ where = ["src"]
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.format]
+# Markdown is not source — see the root ruff.toml and #1705. This component config
+# overrides the root for this tree, so the exclusion has to be restated here.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# Explicit rule selection — see the root ruff.toml and #1701. This component config
+# overrides the root for this tree, so the selection has to be restated here.
+select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
+
 [tool.pytest.ini_options]
+# pythonpath must list the repo root plus every workspace sibling that src/digismith or
+# tests/dsm imports directly (digibase) -- not just "src". Reason: when pytest is invoked
+# with no path args from *inside* digismith/ (e.g. `cd digismith && uv run pytest -m
+# unit`), its rootdir/config search starts at cwd and stops at the first ancestor with a
+# recognized config -- this file -- so it never walks up to the repo-root pytest.ini,
+# which carries the full list (". digibase/src digillm/src digikey/src ..."). Repo root
+# is also needed directly: tests/dsm/test_metrics_endpoint.py does
+# `from tests.conftest import assert_prom_metrics_labels`. If that's the only thing
+# putting a sibling's editable install (or the repo root) on sys.path, the omission
+# silently resolves imports against whatever global site-packages another interpreter
+# has instead of the workspace's editable copy -- see digigraph's #2127 for the
+# digillm/CallPurpose ImportError this exact gap caused there. Listing them here is both
+# the fix and the safety net.
 testpaths = ["../tests/dsm"]
-pythonpath = ["src"]
+pythonpath = ["..", "src", "../digibase/src"]

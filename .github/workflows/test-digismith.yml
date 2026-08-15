@@ -1,0 +1,30 @@
+name: "Test: digismith"
+
+# Installs from the committed uv.lock rather than resolving fresh (#1714).
+#
+# Verified equivalent: "28 passed" on develop under pip (run 30503444075) and
+# 28 passed from the lock.
+#
+# `pip install cryptography` dropped as redundant — it arrives via digikey,
+# which declares `cryptography>=42`.
+on:
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Ruff
+        run: uv run --frozen --no-sync ruff check digismith/src
+
+      - name: Pytest
+        run: uv run --frozen --no-sync pytest tests/dsm/ -m unit -v --tb=short

@@ -1,5 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EMBED_FREE_TURN_LIMIT, emit, readTurns, writeTurns } from "./embed-gate";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  EMBED_FREE_TURN_LIMIT,
+  emit,
+  readTrialUnlocked,
+  readTurns,
+  resetLiveTrialUnlockedForTests,
+  resolveEmbedHost,
+  shouldChargeGateOnSettle,
+  writeTrialUnlocked,
+  writeTurns,
+  writeChatAccessToken,
+  readChatAccessToken,
+} from "./embed-gate";
 
 type Store = Map<string, string>;
 
@@ -26,6 +38,7 @@ function installLocalStorage(store: Store = new Map()): Store {
 describe("embed-gate storage", () => {
   beforeEach(() => {
     installLocalStorage();
+    resetLiveTrialUnlockedForTests();
   });
 
   it("returns 0 when no entry exists", () => {
@@ -68,6 +81,84 @@ describe("embed-gate storage", () => {
   });
 });
 
+describe("embed-gate trial-unlock persistence", () => {
+  beforeEach(() => {
+    installLocalStorage();
+    resetLiveTrialUnlockedForTests();
+  });
+
+  it("defaults to false when nothing is stored", () => {
+    expect(readTrialUnlocked("https://digithings.ai")).toBe(false);
+  });
+
+  it("round-trips the unlock flag and survives a simulated remount", () => {
+    writeTrialUnlocked("https://digithings.ai", true);
+    // A "remount" is just re-reading storage from scratch — there's no React
+    // state left over, exactly like a fresh page load after a reload.
+    resetLiveTrialUnlockedForTests();
+    expect(readTrialUnlocked("https://digithings.ai")).toBe(true);
+  });
+
+  it("clears on writeTrialUnlocked(host, false)", () => {
+    writeTrialUnlocked("https://digithings.ai", true);
+    writeTrialUnlocked("https://digithings.ai", false);
+    expect(readTrialUnlocked("https://digithings.ai")).toBe(false);
+  });
+
+  it("isolates the unlock flag per host origin", () => {
+    writeTrialUnlocked("https://digithings.ai", true);
+    expect(readTrialUnlocked("https://digiquant.io")).toBe(false);
+  });
+
+  it("keeps unlock in the live mirror when localStorage is blocked", () => {
+    // @ts-expect-error — deliberately broken storage
+    globalThis.localStorage = {
+      getItem: () => {
+        throw new Error("blocked");
+      },
+      setItem: () => {
+        throw new Error("blocked");
+      },
+      removeItem: () => {
+        throw new Error("blocked");
+      },
+    };
+    expect(readTrialUnlocked("x")).toBe(false);
+    expect(() => writeTrialUnlocked("x", true)).not.toThrow();
+    // Same-tab unlock must still work so a frozen transport can send the header.
+    expect(readTrialUnlocked("x")).toBe(true);
+  });
+});
+
+describe("resolveEmbedHost", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("prefers an explicit host over any client-side detection, even during SSR", () => {
+    expect(resolveEmbedHost("https://explicit.example.com")).toBe(
+      "https://explicit.example.com",
+    );
+  });
+
+  it("falls back to document.referrer's origin when no explicit host is given", () => {
+    vi.stubGlobal("window", {});
+    vi.stubGlobal("document", { referrer: "https://parent.example.com/some/page" });
+    expect(resolveEmbedHost()).toBe("https://parent.example.com");
+  });
+
+  it("never falls back to the iframe's own origin — reports 'unknown' when both referrer and window.parent access fail", () => {
+    vi.stubGlobal("document", { referrer: "" });
+    vi.stubGlobal("window", {
+      location: { origin: "https://digichat-own-origin.example.com" },
+      get parent(): never {
+        throw new Error("cross-origin, as expected in production");
+      },
+    });
+    expect(resolveEmbedHost()).toBe("unknown");
+  });
+});
+
 describe("embed-gate constants + analytics", () => {
   it("exposes the free-tier limit as 3", () => {
     expect(EMBED_FREE_TURN_LIMIT).toBe(3);
@@ -84,5 +175,31 @@ describe("embed-gate constants + analytics", () => {
       console.log = originalLog;
     }
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat access token", () => {
+  beforeEach(() => {
+    installLocalStorage();
+  });
+
+  it("round-trips a token per host", () => {
+    writeChatAccessToken("https://dev.datatap.stream", "abc.def");
+    expect(readChatAccessToken("https://dev.datatap.stream")).toBe("abc.def");
+    expect(readChatAccessToken("https://other.example")).toBeNull();
+  });
+
+  it("returns null when nothing was stored", () => {
+    expect(readChatAccessToken("https://dev.datatap.stream")).toBeNull();
+  });
+});
+
+describe("shouldChargeGateOnSettle", () => {
+  it("charges a turn that settled without an error", () => {
+    expect(shouldChargeGateOnSettle(false)).toBe(true);
+  });
+
+  it("never charges a turn that settled with an error — a failed/errored send must not spend a free turn", () => {
+    expect(shouldChargeGateOnSettle(true)).toBe(false);
   });
 });

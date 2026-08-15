@@ -1,4 +1,4 @@
-"""Prometheus metrics helper for DigiThings FastAPI services.
+"""Prometheus metrics helper for digithings FastAPI services.
 
 Provides :func:`install_metrics` which mounts a ``/metrics`` endpoint and an ASGI
 middleware that records standard HTTP metrics (request count, duration, in-flight)
@@ -141,7 +141,7 @@ def _match_route_template(app: FastAPI, scope: Scope) -> str:
     for route in app.router.routes:
         try:
             match, _ = route.matches(scope)
-        except Exception:
+        except (TypeError, AttributeError, ValueError):
             continue
         if match == Match.FULL:
             template = getattr(route, "path", None)

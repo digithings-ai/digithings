@@ -1,4 +1,4 @@
-"""In-process token-bucket rate limiter for DigiKey auth-sensitive routes.
+"""In-process token-bucket rate limiter for digikey auth-sensitive routes.
 
 Applied selectively (via FastAPI dependency) to the key-issuance and
 JWT-mint endpoints. Exempt routes — ``/health``, ``/healthz``,
@@ -13,7 +13,7 @@ Design
 * An :class:`asyncio.Lock` guards bucket mutation so concurrent awaits on
   the same event loop stay consistent.
 * Pure in-process. Cross-process sharing (multi-worker / multi-instance)
-  is a documented follow-up; a Redis- or DigiBase-backed store is the
+  is a documented follow-up; a Redis- or digibase-backed store is the
   intended upgrade path (see ``ARCHITECTURE.md`` §"Rate limiting").
 * On breach: HTTP 429, JSON body ``{"detail": "rate_limited",
   "retry_after": N}``, plus a ``Retry-After: N`` header.
@@ -27,6 +27,7 @@ Configuration
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import math
 import os
@@ -86,7 +87,7 @@ class TokenBucketRateLimiter:
     def client_ip(request: Request) -> str:
         """Best-effort client IP extraction.
 
-        ``X-Forwarded-For`` is trusted only because DigiKey sits behind a
+        ``X-Forwarded-For`` is trusted only because digikey sits behind a
         loopback-bound deployment; in production the reverse proxy should be
         the only thing setting this header.
         """
@@ -110,6 +111,18 @@ class TokenBucketRateLimiter:
         drop = len(items) // 2 or 1
         for k, _ in items[:drop]:
             self._buckets.pop(k, None)
+
+    @staticmethod
+    def rate_limit_key(request: Request) -> str:
+        """Bucket key: API key prefix when present, else client IP (REM-104)."""
+        auth = (request.headers.get("authorization") or "").strip()
+        if auth.lower().startswith("bearer "):
+            token = auth[7:].strip()
+            if token:
+                # Bucket per API key (hashed id) — independent of client IP (REM-104).
+                digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+                return f"key:{digest}"
+        return f"ip:{TokenBucketRateLimiter.client_ip(request)}"
 
     async def check(self, key: str) -> tuple[bool, float]:
         """Consume one token for ``key``.
@@ -168,7 +181,7 @@ async def rate_limit_dependency(request: Request) -> None:
     Scoped via ``Depends(rate_limit_dependency)`` on protected routes only.
     """
     limiter = get_limiter()
-    key = limiter.client_ip(request)
+    key = limiter.rate_limit_key(request)
     allowed, retry_after = await limiter.check(key)
     if allowed:
         return

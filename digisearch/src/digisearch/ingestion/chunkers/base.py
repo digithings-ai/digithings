@@ -1,4 +1,4 @@
-"""Abstract Chunker interface."""
+"""Chunker ABC."""
 
 from __future__ import annotations
 

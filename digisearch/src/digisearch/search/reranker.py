@@ -26,6 +26,7 @@ class Reranker:
     def _rerank_cohere(self, query: str, results: list[Result], n: int) -> list[Result]:
         try:
             import os
+
             import cohere
             client = cohere.Client(os.environ.get("COHERE_API_KEY", ""))
             docs = [r.chunk.content for r in results]

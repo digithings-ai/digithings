@@ -1,8 +1,8 @@
-# DigiQuant Architecture
+# digiquant Architecture
 
 **Version:** 0.1.x
 **Last updated:** 2026-03-29
-**Audience:** Engineers, reviewers, and agents working on or integrating with DigiQuant.
+**Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
 
@@ -25,26 +25,26 @@
 
 ## 1. Overview
 
-DigiQuant is the deterministic quant engine of the DigiThings stack. Its primary role is to own and execute the ordered pipeline: **validate → backtest → optimize → export**. No other service in the stack is permitted to make performance claims (Sharpe, PnL, trade count) without a result originating from this service.
+digiquant is the deterministic quant engine of the digithings stack. Its primary role is to own and execute the ordered pipeline: **validate → backtest → optimize → export**. No other service in the stack is permitted to make performance claims (Sharpe, PnL, trade count) without a result originating from this service.
 
-DigiQuant operates as an internal vertical in the federated hub model. Typical callers are:
+digiquant operates as an internal vertical in the federated hub model. Typical callers are:
 
-- **DigiGraph** (orchestration hub) — calls via HTTP orchestrator endpoints and dispatches tool invocations through `/v1/orchestrator_invoke`
-- **MCP clients** (IDE, Claude Desktop, DigiClaw) — attach directly via `streamable-http` or `stdio` transport on port 8767
+- **digigraph** (orchestration hub) — calls via HTTP orchestrator endpoints and dispatches tool invocations through `/v1/orchestrator_invoke`
+- **MCP clients** (IDE, Claude Desktop, digiclaw) — attach directly via `streamable-http` or `stdio` transport on port 8767
 - **Power users** — call HTTP endpoints directly or use the `digiquant` CLI
-- **DigiClaw** (heartbeat service) — polls `/check_drift` for ADDM-triggered re-optimization
+- **digiclaw** (heartbeat service) — polls `/check_drift` for ADDM-triggered re-optimization
 
 ### NautilusTrader Integration
 
 NautilusTrader is the sole backtest and live-trade execution engine. Its key properties relevant to architecture:
 
 - **Rust core** for the event loop, order book, and fill simulation — Python strategies attach via the Actor/MessageBus pattern
-- **`BacktestEngine`** is the synchronous entrypoint; DigiQuant calls `engine.run()` in the current thread
+- **`BacktestEngine`** is the synchronous entrypoint; digiquant calls `engine.run()` in the current thread
 - **Bar-driven** by default: OHLCV data is fed through `BarDataWrangler` and replayed bar-by-bar to the strategy's `on_bar()` callback
 - **`TestInstrumentProvider.equity()`** is used for simulation instruments; no real market microstructure (no bid/ask spread, no partial fills) in the default configuration
 - **Optional dependency**: installed via `digiquant[nautilus]`. The backtest entry point falls through to `None` if `nautilus_trader` is not importable.
 
-The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in DigiQuant (CSV loading, account report parsing, result assembly) uses Polars.
+The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documented exception to the "Polars only" rule. Nautilus's `BarDataWrangler.process()` requires a pandas DataFrame with a `timestamp` UTC index. All other data handling in digiquant (CSV loading, account report parsing, result assembly) uses Polars.
 
 **Version pinning:** `nautilus_trader` is pinned to `>=1.190,<2` in `pyproject.toml`. The 2.x series introduced an async-first API surface with breaking changes to `BacktestEngine.run()` and the Actor registration model.
 
@@ -53,7 +53,7 @@ The Polars-to-pandas boundary in `nautilus_runner.py` is a deliberate, documente
 
 ### Pipeline Ownership
 
-DigiQuant owns the ordered quant workflow internally via a LangGraph `StateGraph` in `digiquant/src/digiquant/graph/pipeline.py`. This graph is not the same as DigiGraph's supervisor — it is a local, synchronous, domain-specific pipeline that ensures validate runs before backtest, backtest before optimize, and optimize before export. DigiGraph is the external orchestration hub that decides *when* to call DigiQuant, not *how* DigiQuant sequences its own steps.
+digiquant owns the ordered quant workflow internally via a LangGraph `StateGraph` in `digiquant/src/digiquant/graph/pipeline.py`. This graph is not the same as digigraph's supervisor — it is a local, synchronous, domain-specific pipeline that ensures validate runs before backtest, backtest before optimize, and optimize before export. digigraph is the external orchestration hub that decides *when* to call digiquant, not *how* digiquant sequences its own steps.
 
 ---
 
@@ -121,11 +121,12 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `addm.py` | Rolling Sharpe Z-score drift detection |
 | `audit.py` | JSONL append-only audit log |
 | `mcp_server.py` | FastMCP server wrapping `service.py` |
-| `orchestrator_tools.py` | OpenAI-style tool manifest for DigiGraph |
+| `orchestrator_tools.py` | OpenAI-style tool manifest for digigraph |
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
 | `tradingview.py` | PyneCore stubs (not implemented) |
 | `data/loader.py` | Polars OHLCV CSV loading and synthetic data generation |
 | `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
+| `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`frontend/digiquant-web` `/strategies` routes on digiquant.io) |
 | `sweep.py` | Grid sweep loop (not VectorBT fast path) |
 | `cli.py` | `digiquant backtest | optimize | export` CLI |
 
@@ -135,7 +136,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 
 ### REST Endpoints
 
-All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations`. The `/health` endpoint is public; all others require a valid DigiKey JWT with the appropriate scope.
+All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations`. The `/health` endpoint is public; all others require a valid digikey JWT with the appropriate scope.
 
 #### Synchronous endpoints
 
@@ -161,7 +162,7 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 | `GET` | `/backtest/{job_id}/result` | `digiquant:backtest` | Final `BacktestResult` (202 if still running) |
 | `GET` | `/v1/jobs/{job_id}/status` | `digiquant:backtest` | Job lifecycle: `running` | `completed` | `failed` |
 
-#### Orchestrator endpoints (DigiGraph hub dispatch)
+#### Orchestrator endpoints (digigraph hub dispatch)
 
 | Method | Path | Auth Scope | Description |
 |---|---|---|---|
@@ -195,8 +196,70 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_run_optimize` | Runs parameter optimization (grid/bayesian/random) |
 | `digiquant_export` | Exports strategy config to a target artifact |
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
+| `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
+| `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
+| `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 
-The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by DigiGraph's hub dispatch to alias the pipeline call.
+The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
+
+#### Slapper tearsheet pipeline
+
+The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by digiquant's own pipeline:
+
+1. **Price** — `scripts/fetch_coinbase.py` pulls daily Coinbase OHLCV (CCXT) into `data/price-history/<TICKER>.csv` (matches TradingView's Coinbase series).
+2. **Backtest** — `scripts/generate_tearsheets.py` runs each strategy through the NautilusTrader engine, extracts round-trip trades from the positions report, and builds a TradingView-style percent-of-equity compounding equity curve + All/Long/Short stats, emitting `TearsheetData` JSON (`tearsheet_data.from_nautilus_run`) into `frontend/digiquant-web/public/strategies/`. Each strategy's backtest runs in its **own spawned process** (#1389): NautilusTrader's Rust logging can only initialize once per process (`log::set_boxed_logger`), so a second in-process `BacktestEngine` aborts the interpreter with a logger re-init panic (SIGABRT). Isolation also contains any engine crash to its strategy — the script collects per-strategy success/failure, prints an OK/FAILED summary line per strategy, and exits non-zero if **any** strategy failed. On a partial failure, `index.json` keeps the prior entry for each failed strategy (so digiquant.io does not lose a live strategy card); a fully successful full run rewrites `index.json` as before.
+3. **Validation** — `scripts/validation/pine_backtest.py` is a Pine-faithful replica of TradingView's fill model used as a parity oracle; `scripts/validation/compare_tv.py` matches our entries to a TradingView export (entry date + direction, broken down by signal family).
+
+Structural settings (symbol, capital, sizing, 2018 trade window, precision) live in the **public** `strategies/settings.json`; proprietary indicator calibrations live in the **gitignored** `strategies/calibrations.json` (shape shown in `calibrations.example.json`). The `SlapperConfig.trade_start` gate mirrors Pine's `in_date_range` so warmup uses earlier bars while reported trades match the TradingView window.
+
+**Tearsheet schema 1.1** (`tearsheet_data.SCHEMA_VERSION`) adds two back-compatible fields the renderer can opt into:
+
+- `ohlc_bars: list[OHLCBar]` (`{t,o,h,l,c}`) — full-history candlesticks for the price chart. Note this spans the **entire** price series, while `equity_curve`/`trades` are scoped to the `trade_start` window — the renderer must not assume a shared x-axis. Defaults to `[]`; absent on 1.0 fixtures and on adapter paths with no bars.
+- Per-trade signal type carried in `TradeRecord.entry_label` on the Nautilus path. `SlapperStrategy` records each entry's signal family in a metadata-only side-channel (`_signal_log`, keyed by `(entry_date, direction)`) — pure metadata, never fed back into a trade decision. `generate_tearsheets._entry_label` joins it onto round-trip trades and maps to the Pine display taxonomy (`MR Long`/`Trend Long`/`MR&T Long`/`Reversal Long` + Short variants), matching `scripts/validation/pine_backtest.py`. A join miss falls back to `""`.
+
+**Tearsheet schema 1.2** adds `signal_delay_days: int` (default `0`, back-compatible) — see the public signal delay below.
+
+Existing published fixtures stay at older schema versions (no `ohlc_bars`, blank `entry_label`, no `signal_delay_days`) until regenerated, so consumers must tolerate all versions.
+
+**Public signal delay (#1462).** The public tearsheets lag reality by **3 calendar days** ("backtested strategies running live — signals delayed 3 days") to protect strategy IP: on a single-asset long/flat strategy a current equity curve trivially leaks the live position. The mechanism is an **end-date shift, not redaction** — `generate_tearsheets.py --signal-delay-days N` truncates the OHLCV frame (`apply_signal_delay`, cutoff = newest cached bar minus N calendar days) *before* the backtest, so the entire tearsheet is generated as if run N days ago. Every artifact (equity curve, drawdown, trade log, open-position state, headline metrics, `period_end`) is self-consistent by construction; there is no per-field redaction logic to get wrong. The lag is declared honestly: the static JSON, the `index.json` entry, and the `strategy_tearsheets` metrics all carry `signal_delay_days`, and a payload note states the as-of date. `generated_at` stays the true generation timestamp (the delay is marketed openly, not hidden). Default is `0` (exact no-op) for internal/undelayed runs; the scheduled pipeline (`pipeline-digiquant-tearsheets.yml`) passes `--signal-delay-days 3`. Side effect: the `_PUBLISHED_BASELINE` drift warning compares exact trade counts, so a trade opened within the delay window can transiently warn — informational only. Tests: `tests/dq/test_tearsheet_signal_delay.py`.
+
+**digiquant.io consumption** — the landing page, strategy library (`/strategies`), and tearsheet views read **live from Supabase `strategy_tearsheets`** at runtime (#1069): the client fetches the row via the shared anon browser client (`frontend/digiquant-web/lib/live/`), so a fresh nightly upsert updates the site with **no rebuild or redeploy**. The static-JSON artifacts under `public/strategies/` were removed. Build-time still needs the *route list* (`generateStaticParams` in `app/strategies/[id]/page.tsx` hardcodes the three Slapper slugs); the public env (`NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY`) must be set in the Cloudflare Pages build for the client to light up.
+
+Regenerate only when calibrations are available from **one** of:
+
+1. **Local file** — `digiquant/src/digiquant/strategies/calibrations.json` (gitignored)
+2. **Supabase** — `strategy_calibrations` table (service-role read; upload via `scripts/sync_strategy_calibrations.py`)
+
+Without real calibrations, `SlapperStrategy` falls back to `calibrations.example.json` placeholder values and produces **wrong** trade counts (e.g. ~264 BTC trades instead of ~79). `generate_tearsheets.py` exits unless you pass `--allow-example-calibrations`.
+
+**Daily pipeline (intended):**
+
+```bash
+python digiquant/scripts/fetch_coinbase.py --through-yesterday
+python digiquant/scripts/generate_tearsheets.py --from-supabase --push-supabase --signal-delay-days 3
+# No git commit — the DB is the delivery; the site reads strategy_tearsheets live.
+```
+
+`--from-supabase` loads fitted params from `strategy_calibrations`. `--push-supabase` upserts the **full tearsheet payload** into `strategy_tearsheets.metrics` — the complete `TearsheetData` (headline metrics, equity/drawdown curves, OHLC bars, trades) plus a derived `current_signal` (position / last signal date / last price) and the index extras (`label`/`kind`/`avg_trade_pct`) — and refreshes the normalized `strategy_signals` row. digiquant.io reads that one anon-readable row live, so updating it updates the site with no deploy. The scheduled job (`pipeline-digiquant-tearsheets.yml`) is the same three steps: fetch → generate `--push-supabase --signal-delay-days 3`, no repo write.
+
+**One-time upload** (after optimizing in TradingView):
+
+```bash
+# Credentials: CORE_SUPABASE_* or legacy SUPABASE_URL + SUPABASE_SERVICE_KEY
+# (Atlas local runs: digiquant/src/digiquant/atlas/config/.env)
+cp /path/to/your/calibrations.json digiquant/src/digiquant/strategies/calibrations.json
+python digiquant/scripts/sync_strategy_calibrations.py --verify
+python digiquant/scripts/verify_strategy_calibrations_rls.py
+```
+
+The separate `pipeline-digiquant-prices.yml` job feeds **Supabase price_history**
+for Atlas/Olympus and owns `position_events` writes at the market open; it does
+**not** regenerate these public tearsheets. Two UTC crons cover New York daylight
+and standard time. `market_open_gate.py` selects the season-correct cron and keeps
+it valid after the open even when GitHub delivers it late, while rejecting the
+wrong-season duplicate and pre-open execution.
+
+Each `index.json` entry carries a `kind` slug (`long_short`, `long_only`, …) from `settings.json` for library filters as the catalog grows.
 
 ---
 
@@ -328,7 +391,9 @@ Each strategy in the registry is a `Strategy` subclass (which inherits from `Act
 5. After `run()` completes, `engine.trader.generate_order_fills_report()` and `generate_account_report()` provide structured output
 6. `engine.dispose()` frees internal resources
 
-DigiQuant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One engine instance is created per backtest run and disposed immediately after metric extraction. There is no engine reuse across runs.
+digiquant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One engine instance is created per backtest run and disposed immediately after metric extraction. There is no engine reuse across runs.
+
+**Default position sizing is instrument-aware.** The venue starts with `STARTING_BALANCE_USD` ($1M) cash. When a caller does not pass `trade_size`, `_build_engine()` derives one via `_default_trade_size()`: `floor(STARTING_BALANCE_USD * DEFAULT_NOTIONAL_FRACTION / first_bar_price)`, clamped to a minimum of 1 unit. This keeps per-trade notional at a fixed fraction (default 2%) of equity rather than a fixed unit count. A fixed count (the old `Decimal(1000)`) silently over-leveraged high-priced instruments — 1000 BTC units at ~$10k+ on a $1M account is 10–100x leverage, so Nautilus halted the whole run with `AccountBalanceNegative` after a handful of bars and returned a misleading 1-trade result. An explicit caller `trade_size` always overrides the default. Regression coverage: `tests/dq/test_default_trade_size.py`.
 
 ### Strategy Registry
 
@@ -367,7 +432,7 @@ Audit events are written explicitly in `server.py` after `run_backtest`, `run_op
 
 ## 6. Security Analysis
 
-### DigiKey JWT Scopes
+### digikey JWT Scopes
 
 Access control is enforced by `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. Scope requirements per path, as defined in `digiquant_path_scopes()`:
 
@@ -378,7 +443,7 @@ Access control is enforced by `DigiAuthMiddleware` from `digikey.integrations.se
 | `digiquant:backtest` + `digiquant:optimize` | `/run_pipeline`, `/v1/workflow`, `/v1/orchestrator_invoke` |
 | None (public) | `/health`, `/docs`, `/redoc`, `/openapi.json` |
 
-When DigiKey is not configured or `DIGI_API_KEY` is not set, the middleware may fall through to unauthenticated access depending on the middleware implementation. Production deployments must set DigiKey JWKS URL and audience.
+When digikey is not configured or `DIGI_API_KEY` is not set, the middleware may fall through to unauthenticated access depending on the middleware implementation. Production deployments must set digikey JWKS URL and audience.
 
 ### Strategy Sandboxing Gap
 
@@ -398,7 +463,7 @@ CORS is configured via the shared `digibase.cors.install_cors(app, service="digi
 
 The `audit_log()` function redacts payload keys containing `password`, `api_key`, `token`, or `secret`. This is a substring match, so it catches variations like `api_key_prefix` or `access_token`. However, secrets could leak through non-obvious keys (e.g., `bearer`, `credential`, `auth`) or through nested dicts (redaction only applies to the top-level `payload` dict, not recursively). The redaction list is hardcoded and cannot be extended without code changes.
 
-The audit JSONL file is world-readable if default filesystem permissions apply. In Docker, the file is mounted at `./digiquant/results/audit` and shared with the DigiGraph and DigiClaw containers. Access controls on this directory should be reviewed.
+The audit JSONL file is world-readable if default filesystem permissions apply. In Docker, the file is mounted at `./digiquant/results/audit` and shared with the digigraph and digiclaw containers. Access controls on this directory should be reviewed.
 
 ---
 
@@ -427,6 +492,8 @@ The synchronous `/run_backtest` endpoint has no server-side timeout. A large dat
 Strategy registrations are ephemeral — they exist only in the process memory of the running server. There is no database of strategy versions, no immutable record of which strategy code produced a given `run_id`. A `run_id` in the audit log cannot be reproduced without the same code commit, same data, and same parameters. The audit log records `strategy_name` and `symbols`, not the strategy source hash or a code version.
 
 The in-process backtest job table (`_backtest_jobs`) has a documented 5-minute TTL but no active cleanup task. Jobs accumulate until the process restarts.
+
+The digiquant strategy store (#1064; see [§ digiquant Data Layer](#digiquant-data-layer--strategy-store--shared-data-1064)) now provides the durable substrate for per-strategy config, fitted calibration, trades, tearsheets, and live signals. Wiring `service_run_backtest` / the Slapper recompute job to persist canonical run records there (strategy git sha, params hash, data fingerprint) is the remaining step toward reproducible `run_id`s — tracked by #1067/#1068.
 
 ---
 
@@ -460,25 +527,25 @@ JSON export is near-instant (file write of a small JSON object). The `nautilus_b
 
 ## 9. Integration Points
 
-### Orchestrator Tools Contract with DigiGraph
+### Orchestrator Tools Contract with digigraph
 
-DigiGraph discovers DigiQuant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 6 tools. DigiGraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*", "arguments": {...}}`.
+digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 6 tools. digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*", "arguments": {...}}`.
 
 The manifest is built by `build_orchestrator_tool_manifest()` in `orchestrator_tools.py`. It is static (not dynamically generated from Pydantic schemas), which creates a risk of schema drift if `BacktestRequest` or `PipelineRequest` evolves without a corresponding update to the manifest.
 
 The `_normalize_symbols()` helper in `server.py` normalizes symbols in `v1_orchestrator_invoke` (uppercase, strip whitespace, filter empty) to prevent common LLM formatting artifacts from causing validation failures.
 
-### DigiKey Auth Middleware
+### digikey Auth Middleware
 
-`DigiAuthMiddleware` from `digikey.integrations.service_middleware` is mounted as an ASGI middleware before route handlers. It validates JWT Bearer tokens against the DigiKey JWKS endpoint (`DIGIKEY_JWKS_URL`), checks issuer (`DIGIKEY_ISSUER`), audience (`DIGIKEY_AUDIENCE`), and required scopes via `digiquant_path_scopes()`. When DigiKey is not available or misconfigured, the middleware behavior depends on the DigiKey package's failure mode.
+`DigiAuthMiddleware` from `digikey.integrations.service_middleware` is mounted as an ASGI middleware before route handlers. It validates JWT Bearer tokens against the digikey JWKS endpoint (`DIGIKEY_JWKS_URL`), checks issuer (`DIGIKEY_ISSUER`), audience (`DIGIKEY_AUDIENCE`), and required scopes via `digiquant_path_scopes()`. When digikey is not available or misconfigured, the middleware behavior depends on the digikey package's failure mode.
 
-### DigiSmith Tracing
+### digismith Tracing
 
-OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_name="digiquant")` from `digibase.otel`. This instruments all FastAPI routes with spans. The OTEL exporter is configured via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When the endpoint is not set, tracing is a no-op. DigiQuant does not explicitly add custom span attributes with `workflow_id`, `request_id`, or `session_id` — these would need to be added from `request.state.request_id` (set by the correlation ID middleware) if tracing is actively used.
+OpenTelemetry instrumentation is set up via `setup_otel_fastapi(app, service_name="digiquant")` from `digibase.otel`. This instruments all FastAPI routes with spans. The OTEL exporter is configured via the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var. When the endpoint is not set, tracing is a no-op. digiquant does not explicitly add custom span attributes with `workflow_id`, `request_id`, or `session_id` — these would need to be added from `request.state.request_id` (set by the correlation ID middleware) if tracing is actively used.
 
-### DigiClaw Heartbeat and ADDM Drift Detection
+### digiclaw Heartbeat and ADDM Drift Detection
 
-The DigiClaw heartbeat container calls `GET /check_drift?strategy_id=mean_reversion_tech` on a schedule (currently every 30 minutes based on the Compose command `sleep 1800`). The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. Since `record_sharpe()` is never called by any production code path (no backtest or optimize endpoint calls it), the history is always empty and `check_drift()` always returns `implemented=False` with the message that insufficient observations exist. The ADDM loop is effectively inoperative in the current implementation.
+The digiclaw heartbeat container calls `GET /check_drift?strategy_id=…` on a schedule. The `check_drift()` function in `addm.py` performs a rolling Sharpe Z-score calculation against in-process history built by `record_sharpe()`. The HTTP handler accepts optional `current_sharpe` (wired from digiclaw when available) and `service_run_backtest()` records Sharpe after successful backtests. With fewer than three observations, `check_drift()` still returns `implemented=False`; operators must feed history via backtests or explicit `current_sharpe` before drift detection is meaningful. History is in-process only (not durable across restarts).
 
 ---
 
@@ -493,8 +560,6 @@ digiquant:
   build:
     context: .
     dockerfile: digiquant/Dockerfile
-    args:
-      NAUTILUS: ${NAUTILUS:-1}
   image: digi-digiquant:latest
   container_name: digi-digiquant
   ports:
@@ -507,16 +572,16 @@ digiquant:
     digikey:
       condition: service_healthy
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/health"]
-    interval: 30s
+    test: ["CMD", "curl", "-f", "http://127.0.0.1:8001/healthz"]
+    interval: 15s
     timeout: 5s
     retries: 3
     start_period: 10s
 ```
 
-The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the DigiGraph and DigiClaw containers at `./digiquant/results/audit`.
+The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
 
-`NAUTILUS=1` (default) enables the NautilusTrader dependency installation in the Dockerfile. Set `NAUTILUS=0` for a lighter image that returns `None` from `run_nautilus_backtest()`.
+The image always installs `digiquant[nautilus]` (NautilusTrader + Polars pipeline). It does **not** download upstream Nautilus test CSVs at build time — market samples for backtests are under `digiquant/data/` (compose-mounted). Optional Nautilus package fixtures for local unit tests: `python digiquant/scripts/fetch_nautilus_test_data.py`.
 
 ### Environment Variables
 
@@ -530,7 +595,7 @@ The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies
 | `DIGIQUANT_STRATEGY_SPECS_PATH` | `""` | Path to YAML file with custom/tenant param specs |
 | `EXPORT_OUTPUT_DIR` | `digiquant/results/exports` | Allowed root for export artifact writes |
 | `AUDIT_LOG_PATH` | `digiquant/results/audit/events.jsonl` | JSONL audit log path |
-| `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | DigiKey JWKS endpoint |
+| `DIGIKEY_JWKS_URL` | `http://digikey:8005/.well-known/jwks.json` | digikey JWKS endpoint |
 | `DIGIKEY_ISSUER` | `http://digikey:8005` | JWT issuer |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | JWT audience |
 | `DIGIKEY_PUBLIC_KEY_PEM` | `""` | Inline PEM for offline JWT verification |
@@ -552,7 +617,7 @@ The MCP server shares no state with the HTTP server. Both use `service.py` as th
 
 ### NautilusTrader Data Volume
 
-NautilusTrader's backtest engine holds all bar data in memory. There is no on-disk Nautilus data store; the DigiQuant data volume contains only OHLCV CSV files loaded by `data/loader.py`. Nautilus's own persistence layer (Parquet catalog, `BacktestNode` data infrastructure) is not used — DigiQuant uses the lighter `BacktestEngine` directly.
+NautilusTrader's backtest engine holds all bar data in memory. There is no on-disk Nautilus data store; the digiquant data volume contains only OHLCV CSV files loaded by `data/loader.py`. Nautilus's own persistence layer (Parquet catalog, `BacktestNode` data infrastructure) is not used — digiquant uses the lighter `BacktestEngine` directly.
 
 ---
 
@@ -566,9 +631,9 @@ The `sweep.py` module currently implements a plain Python loop that calls `run_b
 
 No ML or RL code exists. The approved packages (Qlib, FinRL, XGBoost) are named in `ARCHITECTURE.md` but have no implementation path. Adding them requires: feature engineering on OHLCV data (Polars transforms), model training as a pipeline step, signal → strategy wiring into the Nautilus actor pattern, and a new `ml_backtest` optimization method. This is a significant architectural addition, not a drop-in.
 
-### ADDM Drift Detection (Currently Non-Operational)
+### ADDM Drift Detection (In-Process; Persistence Gap)
 
-The `check_drift()` function exists and implements rolling Sharpe Z-score statistics correctly, but `record_sharpe()` is never called by any production code path. The ADDM loop is inoperative because there is no mechanism to feed Sharpe observations from completed backtests into the in-process history. A minimal fix requires calling `record_sharpe(result.strategy_name, result.sharpe_ratio)` in `audit_log()` or at the end of `service_run_backtest()`. A robust fix requires persisting history to Postgres so it survives process restarts and is accessible across replicas.
+`addm.py` implements rolling Sharpe Z-score drift detection. `service_run_backtest()` calls `record_sharpe()` when `sharpe_ratio` is present; `GET /check_drift` accepts optional `current_sharpe` and returns `implemented=False` until at least three observations exist for the strategy. History lives in an in-process `deque` — it is lost on restart and is not shared across replicas. Remaining work: persist history (Postgres or Redis), wire digiclaw to pass `current_sharpe`, and productize re-optimization when `drift_detected=true`.
 
 ### Remote Worker Delegation
 
@@ -584,7 +649,7 @@ There is no sandbox for strategy code. This gap is documented in `ARCHITECTURE.m
 
 ### Persistent Run History
 
-Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is append-only and not queryable. There is no `GET /runs/{run_id}` endpoint. Run history for comparison (A/B backtests) requires either a DigiQuant-owned store (SQLite/Postgres) or a shared DigiChat Postgres table. This gap blocks the "compare runs" user journey described in `DIGIQUANT_CHAT_PRODUCT_GAP.md`.
+Each `BacktestResult` has a `run_id` but no persistent store. The audit JSONL is append-only and not queryable. There is no `GET /runs/{run_id}` endpoint. Run history for comparison (A/B backtests) requires either a digiquant-owned store (SQLite/Postgres) or a shared digichat Postgres table. This gap blocks the "compare runs" user journey described in `DIGIQUANT_CHAT_PRODUCT_GAP.md`.
 
 ---
 
@@ -607,7 +672,7 @@ The `ProcessPoolExecutor` path already exists for grid/random optimization; exte
 
 **Problem:** `run_id` is not reproducible; strategy code version is not recorded; no run comparison is possible.
 
-**Recommendation:** Emit a canonical run record from `service_run_backtest()` and `service_run_optimize()` to a Postgres table (or DigiBase when available). The run record should include: `run_id`, `strategy_name`, `strategy_git_sha` (from `__version__` or git tag), `params_hash` (SHA-256 of sorted params JSON), `symbols`, `data_fingerprint` (SHA-256 of first/last row of CSV), `result_json`, `created_at`. This enables `GET /runs/{run_id}` for reproducibility checks and a comparison endpoint (`GET /runs?strategy_name=&symbols=`) for the DigiChat A/B workflow.
+**Recommendation:** Emit a canonical run record from `service_run_backtest()` and `service_run_optimize()` to a Postgres table (or digibase when available). The run record should include: `run_id`, `strategy_name`, `strategy_git_sha` (from `__version__` or git tag), `params_hash` (SHA-256 of sorted params JSON), `symbols`, `data_fingerprint` (SHA-256 of first/last row of CSV), `result_json`, `created_at`. This enables `GET /runs/{run_id}` for reproducibility checks and a comparison endpoint (`GET /runs?strategy_name=&symbols=`) for the digichat A/B workflow.
 
 ### (c) Async Job Queue for Long Backtests (Avoid HTTP Timeout)
 
@@ -625,15 +690,15 @@ The synchronous paths (`/run_backtest`, `/run_optimize`) should be kept for back
 
 The `_run_trial()` function in `optimize.py` is already structured as a top-level picklable callable — it can be decorated with `@ray.remote` or `@celery_app.task` with minimal changes.
 
-### (e) ADDM Real Implementation (Not Stub)
+### (e) ADDM Persistence and Heartbeat Wiring
 
-**Problem:** `record_sharpe()` is never called; `check_drift()` always returns `implemented=False`; the DigiClaw heartbeat loop produces no value.
+**Problem:** Sharpe history is in-process only; digiclaw may skip drift checks when no digikey bearer is configured (`drift_check_skipped`), even though `/check_drift` is implemented.
 
-**Recommendation:** Three changes, in order:
+**Recommendation:**
 
-1. Call `record_sharpe(result.strategy_name, result.sharpe_ratio)` at the end of `service_run_backtest()` when `result.sharpe_ratio is not None`. This makes ADDM operational immediately with zero additional infrastructure.
-2. Persist the rolling Sharpe history to a Postgres table (or Redis sorted set) keyed by `strategy_id`. The current in-process `deque` is lost on restart, making the drift detector reset on every deploy.
-3. Wire `check_drift()` return value back to DigiGraph: when `drift_detected=True`, DigiGraph should enqueue a re-optimization job for the affected strategy with the same data and constraints as the original baseline run. Currently, DigiClaw calls `/check_drift` but discards the result.
+1. Persist rolling Sharpe history to Postgres or Redis keyed by `strategy_id` so restarts and replicas share state.
+2. Pass `current_sharpe` from the heartbeat when a baseline metric is available.
+3. When `drift_detected=True`, enqueue re-optimization with strategy-specific symbols (replace hardcoded `["AAPL", "MSFT", "GOOGL"]` in `digiclaw` heartbeat).
 
 ### (f) Prometheus Metrics for Backtest Throughput and Optimization Convergence
 
@@ -647,7 +712,7 @@ The `_run_trial()` function in `optimize.py` is already structured as a top-leve
 - `digiquant_job_queue_size` (gauge) — tracks in-flight async jobs
 - `digiquant_rate_limit_rejections_total` (counter, labeled by `path`) — identifies rate limit pressure
 
-These metrics complement DigiSmith's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
+These metrics complement digismith's LLM-level tracing by providing infrastructure-level observability on the compute-intensive quant path.
 
 ## Observability
 
@@ -657,30 +722,814 @@ This service exposes a Prometheus `/metrics` endpoint (counter, histogram, in-fl
 
 All HTTP request bodies are typed with Pydantic v2 models using `ConfigDict(extra="forbid")`, which rejects unknown fields with HTTP 422 at the framework boundary. Shared validation-error shape lives in `digibase.errors`.
 
-## Atlas Sub-graph Integration (ADR-0009)
+## Atlas + Hermes Sub-graphs (ADR-0009 + ADR-0015 + ADR-0020)
 
-The DigiQuant Atlas research pipeline migrated from standalone
-skills + Supabase scripts into a DigiGraph sub-graph in issue #176.
-The sub-graph lives in `apps/digiquant-atlas/src/digiquant_atlas/` and
-composes DigiGraph's generic research-agent + pipeline-builder primitives
-into a 9-phase deterministic pipeline.
+digiquant ships two sibling sub-graphs that compose end-to-end on **one daily topology**
+([#930](https://github.com/digithings-ai/digithings/issues/930), spec
+[`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md)):
 
-- Entry point: `digiquant_atlas.graph.build_atlas_graph(run_type, deps, watchlist)`
-  plus `digiquant_atlas.graph.AtlasInput` — the stable contract DigiClaw
-  (#219) invokes on schedule.
-- Three run modes: `baseline` (Sunday), `delta` (Mon–Sat with triage
-  carry-forward), `monthly` (month-end synthesis).
-- Persistence per ADR-0009: writes to existing Supabase `documents` /
-  `daily_snapshots` tables via `supabase_io.publish_document` /
-  `publish_daily_snapshot`. The legacy `scripts/publish_document.py` and
-  `scripts/materialize_snapshot.py` are frozen — marked as such in their
-  headers.
-- Skills as injected context: each phase node loads a `SKILL.md` file and
-  passes it to the DigiGraph generic research agent alongside a Pydantic
-  output model. No prompt ports; skills stay authoritative as Markdown.
-  11 near-duplicate sector skills were collapsed into one templated
-  `sector-research` skill + `config/sectors.yaml`.
+- **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. **A0–A4:**
+  preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.
+  Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
+  `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
+  merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
+  appends) and fail-soft list indices (past-end set → append; OOR remove → no-op),
+  and a segment whose patch cannot merge falls back to full-mode regeneration
+  instead of carrying + degrading the run (#1641). That fallback is **counted, not
+  silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
+  `atlas.telemetry.merge_fallback_breakdown` — registered through the #1736
+  `register_breakdown_contributor` seam — projects it into the diagnostics
+  `breakdown` as a non-gating `merge_fallback` key, the same shape as
+  `circuit_breaker_skips`. Run
+  status is unchanged — a fallback that then succeeds in full mode is still `ok` —
+  but a segment that paid for a patch call *and* a full regeneration is now visible
+  to a cost audit.
+
+  **Content identity (#1749/#1751).** A merge can succeed structurally and change nothing:
+  the model emits `set` ops whose values already hold, or declares `status="skipped"`.
+  `edit_mode/content_identity.py` owns that question and the two provenance keys that record
+  the answer, both in `documents.payload` (jsonb, no migration):
+  `content_unchanged` and `unchanged_since`. `MergeStats.content_changed` carries the verdict
+  — `ops_applied` counts ops *submitted*, so a patch can report six applied ops and change
+  nothing, which is what 54 of 69 frozen production rows did. Four consequences:
+
+  * `_run_edit_segment` stamps the merged body — `mark_unchanged` **propagates** the prior
+    chain's `unchanged_since` rather than resetting it; `clear_unchanged` is the matching
+    reset, needed because `apply_ops` copies the prior body.
+  * `PriorPublished.content_date` (`None` when the row carries no marker) feeds
+    `resolve_edit_mode`, which measures `gap_days` from the content date. Before this, a
+    no-op republish wrote a fresh `documents` row and `prior.date` followed it, so the gap was
+    1 on every run of a frozen chain and §5.3.2's `OLYMPUS_STALE_FULL_DAYS` hard cap could
+    never fire — `alt-politician-signals` published five rows carrying one body across seven
+    days at `gap_days=1` each. **This is not the verbatim guard §5.3.1 rejects** (ADR-0019 Q1,
+    *won't do*): the trigger is still purely elapsed days, only its input is corrected. The
+    markers are prospective — no already-published row carries one.
+  * `SegmentFreshness.source` is three-way: `today`, `frozen` (ran, changed nothing, `as_of`
+    is the content's own date), `baseline` (not regenerated). Keep
+    `atlas/snapshot.py`'s copy in lockstep — it is the read-path validator, `extra="forbid"`,
+    so a value the writer emits but that `Literal` omits is a ValidationError on every later
+    read.
+  * `atlas.telemetry.content_freeze_breakdown` projects `state.content_freezes` into
+    `breakdown` as a non-gating `content_freeze` key. `segments_ok` is deliberately
+    **unchanged** — it counts segments that produced a row today, which stays true of a frozen
+    one, and it is read by `atlas_run_health` (041), `run-episodes.ts` and three frontend
+    components.
+
+  Scoped to segments. The digest's equivalent freeze was fixed by #1559's
+  `carried_from`/`continuity` markers on the synthesis-carry path. The dominant cause was unguarded `Literal[...]` axes, so
+  `SegmentReport` normalizes LLM synonyms for **every** Literal field of every
+  subclass generically (`_normalize_literal_axes`): an unrecognized value degrades to
+  `None` on an Optional axis and is still rejected on a required one (`growth` /
+  `inflation` have no non-directional member, so coercing them would invent a macro
+  call that Phases 4–7 consume as fact). A field that declares its own
+  `mode="before"` validator (`bias`, `data_quality`, `flow_direction`) keeps
+  ownership of its vocabulary and is skipped by the generic pass.
+- **Hermes** (`digiquant/src/digiquant/olympus/hermes/`) — thesis-aware portfolio loop.
+  **H1–H9:** market thesis review → exploration → vehicle map → opportunity screener →
+  unified asset analyst (×N) → PM↔analyst deliberation (×N) → PM direction memo →
+  deterministic risk sizing (H8 / legacy 7E) → `commit_run` terminal booking.
+  Split from Atlas in epic #471 per [ADR-0015](../docs/adr/0015-atlas-vs-hermes.md);
+  topology canonical in [ADR-0020](../docs/adr/0020-olympus-mvp-daily-delta.md).
+  **H4 is the sole fan-out cap chokepoint** — `roster_cap.capped_tickers` bounds the
+  H5/H6 roster width to `max(ATLAS_MAX_ANALYSTS, len(prior_book))`; the prior book is
+  the only sanctioned overshoot (#936) and thesis vehicles are prioritised within the
+  cap rather than exempt from it (#1767). The `build_h5_asset_analyst` /
+  `build_h6_deliberation` compile-time builders also call it, but are test-only —
+  `graph.py` wires the runtime `build_h5_from_state` / `build_h6_from_state` fan-outs.
+  Roster width lands in `atlas_run_diagnostics.breakdown` via
+  `hermes/roster_diagnostics.roster_breakdown`.
+
+The handoff seam is `digiquant.olympus.atlas.snapshot.DigestPayload` — the only symbol
+Hermes imports from Atlas runtime.
+
+**Not in v1:** `OLYMPUS_HERMES_LITE`, `build_hermes_phases_lite`, `run_type=baseline|delta`
+graph forks, `phase7cd` bull/bear stack, phase9 evolution LLM on the daily path, or a
+`monthly` synthesis cron. Operator full refresh uses `--refresh-scope all` (Sunday cron
+sets this automatically) — not a separate graph.
+
+#### Responsibility boundary (Atlas research vs Hermes positioning)
+
+Atlas **discovers and summarizes** market state. Hermes **translates research into
+investment theses, maps vehicles, deliberates, sizes, and books positions**. The digest
+must never carry portfolio tilts or trade verbs — `thesis_tracker` and
+`portfolio_recommendations` are deprecated and zeroed on every new run (#927). Digest
+`edit` mode patches the prior materialized snapshot; carried segments use `skip` (shallow
+carry) or feed triage hints without full re-synthesis.
+
+```mermaid
+flowchart TB
+  subgraph Atlas["Atlas A0–A4 — research"]
+    A0["A0 preflight + preflight_reflect"]
+    A1["A1 triage → skip/edit/full signals"]
+    A2["A2 phases 1–5 segments"]
+    A3["A3 phase6 consolidate"]
+    A4["A4 phase7 digest"]
+    A0 --> A1 --> A2 --> A3 --> A4
+  end
+
+  subgraph Hermes["Hermes H1–H9 — thesis-first"]
+    H1["H1 thesis review"]
+    H2["H2 market thesis exploration"]
+    H3["H3 thesis vehicle map"]
+    H4["H4 opportunity screener"]
+    H5["H5 asset analyst ×N"]
+    H6["H6 deliberation ×N"]
+    H7["H7 PM direction memo"]
+    H8["H8 risk sizing (7E)"]
+    H9["H9 commit_run"]
+    H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> H9
+  end
+
+  A4 -->|"DigestPayload"| H1
+```
+
+**Live graph** (`build_hermes_graph` → `build_hermes_phases_thesis`): Atlas A0–A4 →
+Hermes H1–H9 in-graph; chain terminal `publish_phase` flushes Atlas research artifacts
+only — Hermes terminal persist is **H9 `commit_run`** (positions, nav, theses sync,
+portfolio brief, `decision_log` append). Beliefs distillation runs **on demand**
+(`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`), not on the daily graph.
+
+#### Day-over-day continuity contract (#859)
+
+Supabase is the system of record. Preflight loads **pointers and slim summaries**;
+phases **fetch** full history on demand via `query_data` / MCP — nothing stuffs
+multi-day document dumps into every prompt.
+
+```mermaid
+flowchart LR
+  subgraph persist["Persisted (Supabase)"]
+    DS["daily_snapshots"]
+    DOC["documents<br/>segments + digests"]
+    POS["positions"]
+    TH["theses"]
+    NAV["nav_history"]
+    PMET["portfolio_metrics"]
+    DL["decision_log"]
+    ADOC["documents<br/>analyst/* deliberation/*"]
+  end
+
+  subgraph preflight["preflight.load_*"]
+    PC["PriorContext"]
+  end
+
+  subgraph atlas["Atlas phases"]
+    A1["1–5 research"]
+    A6["6 bias"]
+    A7["7 digest"]
+  end
+
+  subgraph hermes["Hermes H1–H9"]
+    H5["H5 analysts"]
+    H7["H7 PM direction"]
+    H8["H8 risk sizing"]
+    H9["H9 commit_run"]
+  end
+
+  DS --> PC
+  DOC --> PC
+  POS --> PC
+  TH --> PC
+  NAV --> PC
+  PMET --> PC
+  DL --> PC
+  ADOC --> PC
+
+  PC --> A1
+  PC --> H5
+  PC --> H7
+  A1 --> A6 --> A7 --> H5 --> H7 --> H8 --> H9
+  H9 --> POS
+  H9 --> TH
+  H9 --> NAV
+```
+
+| Field | Source table | Loaded in | In prompt | Fetch on demand |
+| --- | --- | --- | --- | --- |
+| `last_snapshots` | `daily_snapshots` | `load_prior_context` | last 2 bias rows (filtered per node) | older snapshots via `query_data` |
+| `latest_segments` | `documents` | `load_prior_context` | own segment + declared extras only (#696) | full segment body by `document_key` |
+| `prior_book` / `current_weights` | `positions` | `load_prior_book` | PM + risk: weights + held names | entry prices via `positions` tool |
+| `prior_analyst_by_ticker` | `documents` (`analyst/*`) | `load_prior_analyst_summaries` | slim excerpt for **held** tickers | full analyst payload by key |
+| `prior_deliberation_by_ticker` | `documents` (`deliberation/*`) | `load_prior_deliberation_summaries` | slim carry (net_stance, conviction_delta, conclusion excerpt) for **held** tickers; injected as H6 `prior_deliberation` (#925) | full transcript by `document_key` |
+| `active_theses` | `theses` | `load_active_theses_rows` | H1–H3 + H7 PM | thesis history via `theses` tool |
+| `portfolio_performance` | `nav_history` + `portfolio_metrics` | `load_portfolio_performance_snapshot` | latest NAV + metrics pointer | full NAV series via `nav_history` tool |
+| `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |
+| `phase7c_analysts` | in-run state (`phase_hermes.asset_analysts`) | — | today's fan-out only | prior day → `prior_analyst_by_ticker` |
+
+`portfolio_metrics` persists two distinct return horizons. `pnl_pct` is the daily
+portfolio return. `net_return_pct` is the simple return between the first and latest
+stored NAV observations; `benchmark_return_pct` uses the first and latest benchmark
+closes available inside that NAV date range; `relative_return_pct` is their arithmetic
+difference in percentage points. All metric writers use
+`digiquant.olympus.performance_returns.calculate_performance_returns`; frontend clients
+must read these fields when present. The Olympus Performance view fills only missing
+fields with the same deterministic first/latest calculation over live `nav_history` and
+the benchmark closes inside that exact NAV window, and labels the result as a live-history
+or mixed fallback. Rows in
+`position_attribution` retain their own stored calculation window and are not presented
+as inception-to-date contribution. Its cumulative contribution chart instead applies each
+position snapshot's prior weight to the next interval's price return and overlays the exact
+NAV-rebased portfolio return.
+
+##### Risk-metric scale contract (#1748, migration 058)
+
+`portfolio_metrics.volatility` and `.max_drawdown` are **percent**, like every other
+`_pct`-shaped column on the table: `18.4` is 18.4% annualized volatility and `-12.5` is a
+12.5% peak-to-trough decline. All three writers now agree —
+`hermes/portfolio_materialize.py` (phase 9d) and `scripts/atlas/refresh_performance_metrics.py`
+already multiplied by 100, and `scripts/atlas/update_tearsheet.py` does so via
+`compute_nav_risk_metrics`, which is the only place that arithmetic lives in that script.
+`sharpe` is a ratio, computed against the fraction-scale volatility, and is unaffected.
+
+Migration 058 widens the two CHECK constraints to match (`volatility` 0–1000,
+`max_drawdown` -100–0). The pre-058 bounds were fraction-scaled (`<= 10`, `>= -1`), which
+the two percent writers could not satisfy: both are gated on `nav_history` reaching
+`_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
+PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
+non-increasing. New writers of these columns must emit percent; readers may take the stored
+value directly (`frontend/olympus/lib/portfolio-risk-metrics.ts` maps them onto
+`annVolPct` / `maxDrawdownPct` unchanged).
+
+Known wart, deliberately not changed here: `computed_from` carries
+`DEFAULT 'tearsheet'` (migration 012) and phase 9d upserts without setting it, so a phase-9d
+row inserted before any `refresh_script` row for that date is labelled `tearsheet`. That
+label also suppresses the `refresh_performance_metrics.py` overwrite guard.
+
+#### Canonical market-thesis identity (#1615)
+
+`theses.topic_key` identifies one durable market opinion independently of its daily title,
+evidence, criteria, or confidence. H2 receives the full active thesis register and every
+proposal declares `action=create|update`. An update preserves the active row's `thesis_id`
+and `topic_key`; a create uses a topic absent from both the active register and the current
+H2 output. `validate_market_thesis_proposals` rejects ID/topic collisions before
+persistence, while migration 056's partial unique `(date, topic_key)` index prevents more
+than one nonterminal market thesis for a topic on a date. The migration also consolidates
+the legacy CTA and Advanced Materials duplicate clusters and rewires their relationships.
+Different wording or evidence is an update, never a new opinion. H2 creates start as
+`ACTIVE`; updates preserve H1's same-run lifecycle decision, falling back to the prior
+nonterminal status when H1 emitted no update. A `PAUSED` topic remains the same opinion and
+cannot be replaced with a new ID.
+
+#### Canonical instrument metadata (#1615)
+
+`instruments` is the security master for every ticker tracked by `positions` or
+`price_history`. Migration 055 backfills existing symbols and a `positions` trigger inserts
+a non-destructive placeholder for every newly booked ticker. The daily
+`digiquant prices fetch-quotes --instrument-metadata --supabase` job resolves Yahoo's best
+available long name plus instrument type, exchange, currency, country, sector, and industry;
+Olympus `sector_map` remains authoritative for the coarse `asset_class` and risk `category`.
+Provider failures never overwrite a resolved row.
+
+**Excluded from `latest_segments`:** `analyst/*` and `deliberation/*` keys — loaded
+separately so research nodes never pay the per-ticker decision-artifact token tax.
+
+### Atlas (research)
+
+- Entry point: `digiquant.olympus.atlas.graph.build_atlas_graph(deps, watchlist)`
+  plus `digiquant.olympus.atlas.graph.AtlasInput` (`cadence=daily`, `refresh_scope`).
+- **One daily topology** — triage always runs; per-segment `skip`/`edit`/`full` via
+  `resolve_edit_mode` + triage signals. Operator full refresh: `refresh_scope=all`
+  or Sunday cron (see `.github/workflows/pipeline-olympus.yml`).
+- Skills under `digiquant/src/digiquant/olympus/atlas/skills/` (alt-data, institutional,
+  macro, asset-class, equity, sector-research, digest, …).
+  Loaded via `digiquant.olympus.atlas.skills.load_skill`.
+  **Two shared instruction blocks are appended at the loader, not copied into the ~20 SKILL.md
+  files** — a single chokepoint cannot drift between them. `EDIT_SCHEMA_CONSTRAINTS` (#1740) goes
+  on edit skills only; `QUANTITATIVE_FINDING_RULES` (#1750) goes on **both** variants, because
+  the undated-number defect it addresses appeared on the FULL path (the frozen XLV block came
+  from a baseline run, which forces `resolve_edit_mode → full`). `Finding.as_of` is the field
+  those rules target: optional and lenient by necessity — edit-mode re-validates bodies derived
+  from prior published rows, so a required field would raise on all ~660 existing rows and #1641
+  would convert each into a full regeneration, and #1740 showed a strict constraint on an
+  informational field discards the whole patch. It makes a quoted figure auditable; it cannot
+  tell whether the figure is real.
+- Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
+- Terminal `publish_phase` is wired only when `deps.publish` is provided;
+  the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).
+
+### Hermes (thesis-aware portfolio loop)
+
+- Entry points:
+  - `digiquant.olympus.hermes.chain.run_atlas_then_hermes(atlas_input, deps)` —
+    end-to-end: Atlas (no publish) → Hermes H1–H9 → `publish_phase` (Atlas only).
+    Cron: `python -m digiquant.olympus.hermes.chain --cadence daily`
+    (`.github/workflows/pipeline-olympus.yml`).
+  - `digiquant.olympus.hermes.graph.build_hermes_graph(watchlist, deps)` plus
+    `python -m digiquant.olympus.hermes.graph --from-digest <state.json>` for
+    isolated Hermes runs.
+- Skills under `digiquant/src/digiquant/olympus/hermes/skills/` (thesis, market-thesis-exploration,
+  thesis-vehicle-map, opportunity-screener, asset-analyst, deliberation, pm-direction, …).
+  Each LLM node loads `*-full.md` or `*-edit.md` per `resolve_edit_mode`.
+- Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
+  `digiquant.olympus.hermes.schemas.load_schema`.
+- **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
+  **H8** (`phase7e_risk_sizing`) is the sole weight owner. **H9** (`commit_run`) is the
+  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append.
+
+#### Risk-sizing layer (Pillar 2)
+
+Implements the FinPos direction/sizing split: **H7** owns direction + conviction +
+narrative; **H8** deterministic code owns sizing, caps, and risk.
+
+- `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
+  conviction + stance into final target weights: select (conv ≥ bar, buy/hold) → raw
+  weights (conviction-∝ × inverse-vol, or fractional-Kelly) → position caps → sector caps
+  → correlation de-dup → ex-ante vol-target (√(wᵀΣw), pure-Python) → drawdown-breaker scale
+  → round-DOWN to grid → cash residual. Every reduction is **reduce-only / cash-first**:
+  freed weight becomes cash, never redistributed up (re-breaching the cap). A pair with no
+  estimated correlation falls back to an **asset-class bucket** ρ (`_bucket_corr`: equity↔bond
+  ≈0, equity↔equity≈0.8; UNKNOWN class stays ρ=1.0 conservative) rather than full-correlation —
+  the #934 over-cashing fix. `SizingCaps.from_preferences` reads `config/portfolio.json`
+  constraints.
+- `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
+  control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
+  cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
+  international / equity-broad / cash). `asset_classes.yaml` is authoritative on conflict
+  (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
+  `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
+- `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
+  `PMDirectionMemo` conviction ranks, per-ticker vol from `price_technicals`, and
+  `sector_map` buckets; calls `size_portfolio`; writes `phase_hermes.sized_book`.
+  Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors.
+  Real pairwise correlations load from `price_history` via `get_return_correlations`
+  (look-ahead-guarded); a pair with no estimate uses the asset-class bucket fallback (#934).
+  The sized book passes through `turnover.apply_turnover_to_sized_book` (#934).
+- `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
+  `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
+  gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
+  to the floor at the hard drawdown — only ever *reduces* gross, never levers up);
+  `breaker_scale_from_nav_history` reads the recent `nav_history` window (look-ahead-guarded,
+  fail-soft → 1.0). phase7e feeds the scale into `size_portfolio`. Thresholds come from
+  `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
+  `breaker_max_reduction`; defaults −8% / −20% / 0.5).
+
+#### Run robustness + telemetry (Pillar 1B)
+
+- `digillm.telemetry` defines the provider-agnostic `NodeRunRecord`, `ProviderCallRecord`,
+  `ProviderAttemptRecord`, and `ArtifactRef` vocabulary. Migration
+  `067_olympus_provider_telemetry.sql` owns the corresponding private normalized ledger in the
+  `core` Supabase project. The records distinguish graph work, logical calls/cache outcomes, and
+  physical attempts without storing prompts, responses, search text, secrets, or raw exceptions.
+  Producer event times and database `recorded_at` remain distinct; unavailable token usage or cost
+  stays NULL. #1955 produces physical attempts at the transport boundary and #1963 the generic
+  logical-call lineage; #1978 supplies the node identity that lineage hangs from, so logical calls
+  are produced in process — not merely producible — for every call originating inside a
+  `build_pipeline` node.
+- `digiquant.olympus.atlas.provider_telemetry` — the durable writer for that ledger (#1979).
+  `flush_run_telemetry` drains the `digigraph.usage` buffers and appends them in foreign-key
+  order: node runs, then logical calls with parents ahead of children, then physical attempts.
+  Called from `hermes/chain.py`'s `finally`, ahead of both `write_row` and `_usage.reset()` —
+  `reset()` clears the buffers a later flush would read, and going first is what makes the
+  detailed and aggregate writes independent in both directions without altering the aggregate
+  path.
+  - **Quarantine, not insertion.** A record whose foreign-key referent is absent from the same
+    flush is counted and reported as incomplete coverage, never submitted. This is a reachable
+    path, not a theoretical guard, and it has two sources. The beliefs-distillation fold runs
+    outside any graph node, so its provider calls are orphaned when it runs — which is *not*
+    every run: `should_distill_beliefs` gates it on `refresh_scope == "beliefs"` or an unfolded
+    backlog above `OLYMPUS_BELIEFS_BACKLOG` (default 20). And a run with no `DiagnosticsDeps` has
+    no run identifier at all, so no node runs and no logical calls are produced *at the source*.
+    A flush can therefore carry attributed and orphaned records together, which is why
+    eligibility is decided per record rather than per flush.
+  - **Reconciliation direction is the signal.** `usage.record` gates only on capture being
+    active, while a `ProviderCallRecord` also needs an open node scope, so the aggregate counts
+    calls the detailed side structurally cannot see. Detail *below* the aggregate is therefore
+    explainable; detail *above* it is not, and only double-counting could produce it. An unknown
+    key never suppresses a mismatch reported on a different key — those are orthogonal facts.
+  - **Validation is the gate.** The ledger revokes `UPDATE`/`DELETE`/`TRUNCATE` from every role
+    and rejects them by trigger besides, so a bad row is permanent. Every record is re-validated
+    through its Pydantic model immediately before insert; a failure is counted and dropped. A
+    tier that fails cascades to its dependents as quarantine, and a batch that lands partially
+    is reported as permanently inconsistent, because no correction is possible.
+  - **Reconciliation reports three states, not two.** `reconciled`, `mismatched` (known and
+    wrong), and `unavailable` (unknown). Missing provider usage or cost yields `unavailable` and
+    a quantified shortfall — never a fabricated zero, and never an exact-billing claim.
+  - **Failure is fail-soft throughout.** A flush failure cannot change the run's return value,
+    its exit code, the portfolio commit, or the `atlas_run_diagnostics` row. No reader is cut
+    over to these tables; the aggregate remains the active read path (plan Invariant 14).
+- `digiquant.olympus.atlas.diagnostics` — writes one `atlas_run_diagnostics` row per run
+  **attempt** (`write_row`, keyed on `(run_id, attempt)`, fail-soft): fresh/carried/failed
+  segment counts from
+  state + the `digigraph.usage` LLM snapshot (calls/tokens/sources). `summarize_run` derives
+  a `status` (`ok`/`degraded`/`failed`); a carry with reason `NODE_FAILED_REASON` counts as a
+  failure, a deliberate carry does not.
+- The same writer bulk-upserts ordered `usage_snapshot.events` into
+  `olympus_run_events` on `(run_id, attempt, sequence)`. Rewrites reconcile stale higher
+  sequences; a snapshot with no `events` key preserves the prior trace, while an explicitly
+  empty list clears it. Malformed events are skipped and every cleanup/upsert remains fail-soft.
+- Migration `066_olympus_run_events.sql` keeps the base table private (RLS, no policies,
+  public-role grants revoked). The definer-rights `olympus_run_event_trace` view exposes only
+  fixed operation metadata, timing/status/retries, source counts, and bounded shape summaries.
+  Token/cost fields remain operator-only. Prompts, tool values/results, document bodies,
+  credentials, PII-heavy values, model output, and reasoning are not columns. **Migration 066
+  is human-gated and must not be applied to the live Supabase project without review.**
+- `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
+  phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
+  reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
+  captured (`usage.start`/`snapshot`/`reset`) across the whole run.
+- `cli_main` exits non-zero when `is_degraded` (failed-segment share > `ATLAS_DEGRADED_RUN_PCT`,
+  default 50%) so CI's outer retry fires on a starved run — one bad sector does not trip it.
+- **Technicals freshness (Pillar 1F).** `data/prices/refresh.recompute_technicals_from_history`
+  recomputes `price_technicals` from raw OHLCV in `price_history` (look-ahead-guarded,
+  network-free, idempotent). Preflight may call this when stale (`ATLAS_REFRESH_ON_DEMAND`).
+  The daily prices cron (`pipeline-digiquant-prices.yml`) is the primary freshness mechanism.
+  Three contracts the recompute must honour (#1752):
+  - **Read window ≠ write window.** The read spans `[write_start − warmup_days, as_of]`; only
+    rows on or after `write_start` are upserted. Every rolling indicator has a warm-up prefix
+    (`sma_200` / `zscore_200` need 200 bars) where the value is genuinely `NULL`, and
+    `upsert_price_technicals` is a coalesce-free PostgREST bulk upsert — writing a warm-up row
+    *replaces* a stored good value with `NULL`. Defaults: `WARMUP_CALENDAR_DAYS = 320`
+    (≈200 sessions), `DEFAULT_WRITE_WINDOW_DAYS = 30`. `since=` moves the write floor for a
+    repair. Residual, by design: a ticker whose inception falls inside the warm-up read window
+    has no 200 bars, so its leading rows carry `NULL` long-window values — first writes, not
+    clobbers.
+  - **The `price_history` read is paginated.** PostgREST caps a rangeless response at 1 000
+    rows, so one request over ~250 tickers × ~350 days returned ~4 bars per ticker — every one
+    below `MIN_BARS` — and the recompute silently processed nothing. Paging is ordered
+    `(ticker, date)`; a date-only order lets same-date rows shuffle between pages.
+  - **Non-session rows are dropped first**, against `trading_calendar` via
+    `_utils.fetch_trading_days` + `filter_rows_by_trading_days` (fail-soft: no calendar rows →
+    compute on all rows, with a warning). `price_history` carries weekend bars for some
+    tickers; without the filter they become technicals the cron path would never write.
+- **Technicals repair (#1752).** `python -m digiquant prices recompute-technicals` drives the
+  same core from the CLI: reads `price_history`, writes `price_technicals`, no network fetch and
+  no CSV cache. `--since` bounds the *write*, `--dry-run` computes and reports without writing.
+  Exposed as `mode: repair-technicals` on `pipeline-digiquant-backfill.yml`. This is the repair
+  path for the NULL long-window bands that `compute-technicals` wrote from its ephemeral 1-year
+  cache; `compute-technicals` itself keeps its cache-sourced contract and is unchanged.
+- **Market-clock schedules are DST-aware (#1775).** Every deadline in
+  `pipeline-digiquant-prices.yml` is an ET wall-clock event (09:30 open, 16:00 close) while
+  GitHub cron is fixed UTC, so each schedule is the **union** of the two ET offsets:
+  intraday `*/15 13-21`, EOD `25 21` (after the close in both, off the 15-minute grid so it
+  never shares a minute with an intraday tick, done before `pipeline-atlas-metrics.yml`'s
+  `0 22`). One-sided constraints are solved by the window alone; the two-sided at-open
+  constraint cannot be — the offsets differ by exactly one hour — so **both** `35 13` and
+  `35 14` ship and an `at-open-clock` gate job admits whichever is 09:35 ET. That gate is
+  inline in the YAML on purpose: these jobs check out `ref: main` (#1626), so a repo-side
+  helper would lag the schedule it guards by one promotion. Invariants are asserted in
+  `tests/scripts/test_prices_cron_dst.py` against derived ET times in both offsets.
+- **Fed rate-decision odds (#21).** `data/prices/fed_probabilities` ingests FOMC probabilities
+  into `macro_series_observations`. Ingested by `.github/workflows/pipeline-olympus.yml` (daily,
+  before research) via `python -m digiquant prices fetch-macro --sources fedprob`.
+  Preflight injects `market_context["fed_odds"]`; phase6 consolidates into the bias row.
+
+### Persistence
+
+Per ADR-0009: Atlas research writes via `publish_phase` (`documents`, `daily_snapshots`).
+Hermes terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `theses`,
+portfolio brief, `decision_log`). `preflight_reflect` resolves due `decision_log` rows daily;
+beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_document.py`
+and `materialize_snapshot.py` are frozen.
+
+Skills as injected context: each phase loads a `SKILL.md` file and passes
+it to digigraph's generic research agent alongside a Pydantic output
+model. No prompt ports; skills stay authoritative as Markdown. 11
+near-duplicate sector skills were collapsed into one templated
+`sector-research` skill + `config/sectors.yaml`.
 
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
-decision; `~/.claude/plans/1-yes-use-the-crispy-sky.md` for the full
-migration plan.
+decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
+
+## digiquant Data Layer — Strategy Store + Shared Data (#1064)
+
+The digiquant shared backend is the **`core`** Supabase project — the project historically
+used by Olympus/Atlas (`config.toml project_id "digiquant-atlas"`, rooted at
+`digiquant/supabase/`), repurposed (renamed `core`) as the suite-wide backend rather than a
+separate project, because the `digiquant.io` org is free-tier (2-project limit) and both
+slots are taken (Olympus + the confidential twelve-x). The shared market datasets
+(`price_history`, `price_technicals`, `trading_calendar`, `macro_series_observations`)
+already live here; #1064 only **adds** the strategy store. See
+`docs/adr/0021-digiquant-supabase-project-topology.md`.
+
+**Connection.** Accessor `digiquant.data.store` (`build_digiquant_client` + Polars-friendly
+helpers in `strategies.py`). Credentials resolve the standardized `CORE_SUPABASE_URL` /
+`CORE_SUPABASE_SERVICE_KEY` ([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)),
+falling back to the legacy `*_DIGIQUANT` and shared `SUPABASE_URL` /
+`SUPABASE_SERVICE_ROLE_KEY` names — one project today, a zero-code split if the store ever
+graduates onto its own project.
+
+**Strategy store** (added by [`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql))
+
+- `strategies` — `id`, `symbol`, `label`, `engine`, `config` jsonb, `enabled`, `version`. Public-readable.
+- `strategy_calibrations` — **private** 1:1 sidecar holding fitted `calibration` jsonb. Service-role-only.
+- `strategy_trades` — executed trade history (entry/exit ts, side, prices, qty, pnl, return_pct).
+- `strategy_tearsheets` — latest tearsheet payload per strategy (`metrics`, `equity_curve`, `as_of`).
+- `strategy_signals` — current state per strategy (`position` long/flat/short, `last_signal_date`, `last_price`).
+
+**Shared data layer.** `price_history`, `price_technicals`, `trading_calendar`,
+`macro_series_observations` already reside in `core` (no migration needed). `#1065`'s
+cross-project price copy is therefore **superseded**. `#1066` adds a shared
+`economic_calendar` (migration `047`, mirroring twelve-x's `fx_economic_calendar`
+incl. `event_datetime_utc` + the impact CHECK + unique `external_id`): the twelve-x
+ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the Olympus
+twelve-x **events tab reads it via the main Olympus client** (`getUpcomingEvents` in
+`frontend/olympus/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
+read goes live only once the repointed ingest has populated `core`.
+
+**RLS.** Every strategy-store table RLS-enabled. Public reference + tearsheet tables grant
+`anon SELECT USING (true)`; writers use the service role (RLS bypass). `strategy_calibrations`
+has no anon policy — anon reads return an empty set (not a permission error) while the service
+role keeps full access (mirrors the `atlas_run_diagnostics` idiom, migration 033). Run
+`get_advisors(type="security")` after applying; expect zero `rls_disabled_in_public` findings.
+
+**Grants — RLS is no longer the only write gate (#1757).** Migration
+[`supabase/migrations/060_lock_public_write_grants.sql`](supabase/migrations/060_lock_public_write_grants.sql)
+revokes `INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER` from `PUBLIC`, `anon` and
+`authenticated` on **all tables in schema `public`** and narrows `ALTER DEFAULT PRIVILEGES`
+with the same list, so new relations inherit read-only instead of Supabase's bootstrap
+`GRANT ALL`. Before it, the *published* anon JWT held full DML on all 35 base tables plus
+two views, and RLS-with-no-write-policy was the single layer denying writes — one already
+exploitable: `atlas_run_health` (migration 041) is auto-updatable and deliberately
+`security_invoker = false`, so an unauthenticated `DELETE` through it ran as `postgres` and
+erased every `atlas_run_diagnostics` row. `service_role` is untouched — it is the only
+writer. When adding a public view, pair `GRANT SELECT` with an explicit `REVOKE` (050/052
+do; 041/018 did not) and never use `REVOKE ALL` in the default-privileges statement: it
+would strip `SELECT` and `safeSelect` renders a PostgREST 42501 as an empty panel, not an
+error. See [`supabase/SCHEMA.md`](supabase/SCHEMA.md) "Grants" for the residuals and for why
+the statement must not carry a `FOR ROLE` clause.
+
+**Private provider telemetry (#1951).** Migration
+[`supabase/migrations/067_olympus_provider_telemetry.sql`](supabase/migrations/067_olympus_provider_telemetry.sql)
+adds `olympus_node_runs`, `olympus_provider_calls`, and `olympus_provider_attempts`. All three are
+service-role-only, RLS-enabled with no policies, and append-only: `service_role` receives only
+`SELECT`/`INSERT`, while database triggers reject `UPDATE` and `DELETE`. The schema stores generic
+artifact references but no provider payload. It is prospective only; no historical attempts or
+costs are inferred from `atlas_run_diagnostics` aggregates. Task #1963 does not write these tables:
+it establishes in-process logical purpose, parentage, cache status, exact observable attempt count,
+and artifact disposition; Task 1.5 owns durable persistence and reconciliation.
+
+**Live price fan-out + public portfolio surface (#1461/#1462).** Migration
+[`supabase/migrations/050_public_portfolio_views.sql`](supabase/migrations/050_public_portfolio_views.sql)
+adds digiquant.io's public read surface to this project's single migration chain: three
+curated anon-readable views — `public_portfolio_positions`, `public_nav_history`,
+`public_price_latest` — exposing performance metrics only (never
+`rationale`/`pm_notes`/risk parameters; user ruling 2026-07-10, #1462). They pair with
+the `supabase/functions/prices-live/` Deno edge function, which polls Finnhub
+server-side (key held as a Supabase secret; **live since 2026-07-13** on a 60s pg_cron
+schedule) and upserts one row per ticker into `public.prices_live` (migration `063`),
+which browsers read over Realtime `postgres_changes`. Crypto
+quotes take the other lane — streamed client-side from Coinbase's public WebSocket. See
+[`supabase/README.md`](supabase/README.md) for the two-lane design, pg_cron + pg_net
+scheduling, and the one-time setup steps, and [`supabase/SCHEMA.md`](supabase/SCHEMA.md)
+for the view and table inventory.
+
+**Invocation is rate-limited, not authorized — the shared secret was withdrawn (migration
+`064`, superseding #1756).** `verify_jwt: true` was never authorization: it proves the caller
+holds *a* project key, and the anon key ships in plaintext in every digiquant.io bundle. So
+anyone can invoke `prices-live`, and the harm available to them is to exhaust Finnhub's free
+tier (60 calls/min) out from under the 60s cron — the feed then goes stale for every real
+visitor. That is a **rate** problem, not an **identity** problem, and #1756's
+`x-prices-live-secret` / `PRICES_LIVE_INVOKE_SECRET` header answered the wrong one at the cost
+of a real operational credential to store, embed in `cron.job`, rotate and lose. It is gone.
+[`supabase/migrations/064_prices_live_lease.sql`](supabase/migrations/064_prices_live_lease.sql)
+replaces it with an **atomic claim**: every invocation calls
+`public.claim_prices_live_refresh(50)` before touching a symbol, which is ONE conditional
+`UPDATE` of the single-row `public.prices_live_lease` (`WHERE id = 1 AND claimed_at <
+clock_timestamp() - <min_age>`, returning `FOUND`). Concurrent callers block on that row, then
+re-evaluate the predicate against the committed new value under READ COMMITTED and match zero
+rows — exactly one winner per window, for any arrival pattern. Losers get `200
+{"skipped": "not claimed"}` and fetch nothing. The caller **fails closed**: an RPC error, a
+thrown exception, or any `data` that is not exactly `true` all mean not-claimed, so deploying
+the function ahead of the migration fetches nothing rather than everything. `MAX_SYMBOLS = 40`
+at one fetch per 50s is 48 Finnhub calls/min against the 60/min tier (a rate over the claim
+window, not a cap on an arbitrary sliding minute); raising `MAX_SYMBOLS` or lowering
+`MIN_REFRESH_SECONDS` breaks that and a test asserts the product.
+
+*The rejected design, because it is the one a reader will propose.* A freshness check —
+`select max(updated_at) from prices_live`, skip if young — is **read-then-act and protects
+nothing**. `updated_at` is written by the upsert *after* the whole fetch loop (40 symbols ×
+150 ms ≈ 6 seconds), so for those ~6s every concurrent invocation reads the same stale
+timestamp, all pass the check, and all fetch: ten parallel requests become ~400 Finnhub calls.
+It is not a narrow race a tighter threshold would shrink, and a sequential test of it passes
+perfectly — which is why the design survives review. Advisory locks cannot substitute either:
+the protected region is a ~6s fetch in Deno that outlives the RPC, and PostgREST returns the
+pooled session at commit. Test-and-consume in one statement or there is no guard.
+
+*What the rate guard does and does not cover.* Unauthorized callers are **not blocked** — they reach
+the function and get a `200`. What they cannot do is exceed the legitimate refresh rate, so
+invoking the endpoint gains an attacker nothing beyond a Supabase function invocation: a caller
+who *wins* a claim causes the same real Finnhub fetch and the same correct upsert the cron
+would have. `verify_jwt` stays **on** as a cheap outer layer. Two things this deliberately does
+not cover. (1) **Invocation volume itself is unprotected** — ten thousand calls a minute yield
+ten thousand `skipped` responses, each still costing an edge-function invocation and a claim
+round-trip, and only Supabase's platform rate limiting bounds that; what is bounded here is the
+metered Finnhub spend. (2) **Direct RPC access would starve the feed**, which is why `064`
+revokes `EXECUTE` from `PUBLIC`/`anon`/`authenticated` and grants it to `service_role` only:
+every winning call advances `claimed_at`, so a caller hitting the RPC directly — no edge
+function, no Finnhub call, no cost — could win every window and leave the cron nothing to
+claim, a denial of *freshness* cheaper than the quota attack. The REVOKE is half the control.
+
+**The live equity transport is a table, not a broadcast channel (#1807).** The feed used to
+ride the Realtime *broadcast* topic `prices:live`, and that was forgeable: broadcast
+messages are client-authored, delivery is a bare INSERT into `realtime.messages`, Supabase
+grants `anon` INSERT on that table, and the anon key ships in plaintext in every
+digiquant.io bundle — so anyone could publish forged quotes straight onto the feed,
+bypassing the edge function, and whatever gate it carried, entirely.
+[`supabase/migrations/063_prices_live_table.sql`](supabase/migrations/063_prices_live_table.sql)
+moves the transport onto `public.prices_live`: the publisher upserts one row per ticker
+(`functions/prices-live/index.ts`) and the browser subscribes to `postgres_changes` on that
+table (`frontend/digiquant-web/lib/live/useLivePrices.ts`). **Neither end passes
+`config: { private: true }` any more, deliberately** — that flag routes authorization back
+through RLS on `realtime.messages`, which we can never police.
+
+*Why the textbook fix was withdrawn.* The obvious patch — RLS policies on
+`realtime.messages` plus private channels on both ends — was written as migration `062`, then
+proved **impossible to apply**. It never reached production (no `olympus_schema_migrations`
+row; two `db-migrate` runs failed on it), so it was deleted and the number burned. `realtime.messages` is
+owned by `supabase_realtime_admin`, a role with zero members over which zero roles hold
+admin option; our connection is `postgres` (`rolsuper = false`, not a member), and on
+PostgreSQL 17.6 `CREATEROLE` no longer implies admin over pre-existing roles. `CREATE
+POLICY` requires ownership, so it raises `42501` for us permanently — including from the
+dashboard SQL editor, which runs as the same role. Verified read-only against the live
+project on 2026-08-01. The `supabase_realtime` publication and every `public` table *are*
+owned by `postgres`, which is exactly why `063` is appliable and `062` was not.
+
+*Security posture, stated precisely.* The forgery hole is **abandoned, not policed**.
+`prices:live` remains an open, anon-writable broadcast topic on this project permanently —
+`anon`'s INSERT grant on `realtime.messages` is platform-managed and cannot be revoked. It
+is harmless only because **nothing subscribes to it any more**. The control is
+`public.prices_live`: RLS enabled with exactly one policy (`FOR SELECT TO anon,
+authenticated USING (true)`), **no** write policy for any role (absent policy = deny), and
+the write grants revoked from `PUBLIC`/`anon`/`authenticated` with `service_role` the sole
+writer. Because `postgres_changes` events originate from the WAL, a client cannot inject
+one at all — forgery becomes impossible rather than merely disallowed. See
+[`supabase/README.md`](supabase/README.md) for the migration-first rollout runbook and the
+subscribe snippet (the topic must be unique per hook instance — `RealtimeClient.channel()`
+dedupes by topic, and a shared one silently kills the lane for every consumer), and
+[`supabase/SCHEMA.md`](supabase/SCHEMA.md) for the table inventory.
+
+## digisearch Integration (#199)
+
+Finalized Atlas research documents in Supabase `documents` are indexed
+into digisearch's vector store so the Kairos exploration agent and
+digichat can semantically search the research library.
+
+**Helper module:** `digisearch/src/digisearch/atlas_ingest.py`
+
+- `ingest_atlas_payload(row, *, index_name=None)` — pure function: takes a
+  pre-fetched `documents` row dict, runs it through the standard
+  `RecursiveChunker(512, 64)` (same as `POST /ingest`), stamps Atlas
+  metadata onto each chunk, and upserts into the configured digisearch
+  index. Returns an `IndexedDocument` summary.
+- `ingest_atlas_document(client, date, document_key, *, index_name=None)` —
+  Supabase-aware wrapper: fetches the row by `(date, document_key)` then
+  forwards to the pure helper. Returns `None` when the row is absent so
+  late or out-of-order triggers no-op rather than raise.
+- `fetch_atlas_row(client, date, document_key)` — read-only single-row
+  selector mirroring the access pattern in `supabase_io.load_prior_context`.
+
+**Index name:** the default index for Atlas research is `"atlas"`,
+overridable via the `DIGISEARCH_ATLAS_INDEX` env var. Keep it separate
+from the generic `"default"` index so cross-tenant queries cannot leak.
+
+**Chunk metadata stamped at ingest:**
+
+| Key | Source | Filter use |
+| --- | --- | --- |
+| `source` | constant `"atlas"` | tag every Atlas chunk |
+| `date` | row `date` (`YYYY-MM-DD`) | `eq` match |
+| `date_ordinal` | derived `int YYYYMMDD` | range `gt/ge/lt/le` |
+| `doc_type` | row `doc_type` | `eq` (e.g. `Daily Digest`) |
+| `segment` | row `segment` | `eq` (e.g. `technology`) |
+| `sector` | row `sector` | `eq` (analyst notes) |
+| `run_type` | row `run_type` (legacy column) | `eq` — historical rows may show `baseline`/`delta`; new daily runs use `cadence=daily` |
+| `category` | row `category` | `eq` (default `research`) |
+| `document_key` | row `document_key` | `eq` natural key |
+| `title` | row `title` | display only |
+| `asset_class` | hoisted from `payload.asset_class` | `eq` |
+
+`date_ordinal` exists because the in-memory stub and the Chroma backend
+compare numerically for `gt/ge/lt/le` — ISO date strings would fail
+coercion and silently drop the filter. Callers should pass integers like
+`20260420` to the MCP tool's `date_from_ymd` / `date_to_ymd` args.
+
+**MCP tool:** `search_strategies(query, top_k, date_from_ymd, date_to_ymd,
+doc_type, segment, sector, run_type, index_name)` in
+`digisearch/src/digisearch/mcp_server.py`. Returns up to `top_k` typed
+hits with shape `{chunk_id, doc_id, score, content, content_length,
+metadata}`. The tool defaults to the Atlas index and AND-combines all
+non-null filters via digisearch's structured-filter pipeline (`Query.filters
+= {"structured": [...]}`); empty filter args become a plain hybrid search.
+
+**Idempotency:** `ingest_atlas_payload` derives both `Document.id` and
+chunk ids deterministically from `(date, document_key)`. Re-ingesting the
+same row replaces the prior chunks rather than appending duplicates — the
+contract every test in `tests/ds/test_atlas_ingest.py` asserts. The same
+deterministic ids let the Chroma backend's id-collision upsert behavior do
+the same job in production.
+
+**Triggering — current state (pull-based):** Atlas's `publish_phase`
+(`digiquant/src/digiquant/olympus/atlas/phases/publish_phase.py`)
+writes to Supabase. A poller or follow-up explicit call is responsible
+for driving `ingest_atlas_document` against each `(date, document_key)`
+returned in `state.published`.
+
+**Punted — digistore eventing (#57):** real-time Atlas publish →
+digisearch reindex via digistore events is out of scope for #199 because
+digistore is not yet implemented. Once it lands, the natural wiring is
+either (a) call `ingest_atlas_document` directly at the end of
+`publish_phase`, or (b) push the natural keys onto a queue that
+`ingest_worker.py` (currently a placeholder per
+`digisearch/ARCHITECTURE.md`) drains.
+
+---
+
+<!-- #1736 -->
+## Run health telemetry — `atlas_run_diagnostics` (#1736)
+
+`digiquant/src/digiquant/olympus/atlas/diagnostics.py` derives **two** verdicts from a
+finished run's state, and they are deliberately not the same signal:
+
+Call-level transparency is a separate relation from this aggregate health row. Migration 066
+adds the ordered `olympus_run_events` base table and curated `olympus_run_event_trace` view;
+historical diagnostics rows are not backfilled because aggregate counters cannot reconstruct
+individual calls, ordering, retries, or timing without fabrication.
+
+| Field | Question | Consumers |
+|---|---|---|
+| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/olympus` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
+
+`status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
+the column, but both frontend readers string-match, so a new value would silently fall
+through to "unknown". `retry_signal` is frozen at the pre-#1736 rules; `is_degraded()`
+returns it, which is why that function's name no longer matches the health verdict.
+
+### One row per retry ATTEMPT, not per workflow run (#1762)
+
+`pipeline-olympus.yml` retries the chain up to `MAX_OUTER_ATTEMPTS=3` times **inside one job**,
+so every attempt sees the same `GITHUB_RUN_ID`. That was the entire upsert key, so the last
+attempt — usually the cheap checkpoint-resumed one — replaced the expensive attempt's tokens,
+cost, `status` and `error_summary`. 28 of 54 production rows were affected.
+
+The forensic tell is `created_at`: `_row()` omits it, so `ON CONFLICT DO UPDATE` preserved the
+*first* insert's value while replacing everything else, leaving rows whose creation predates
+their own `started_at`. **Keep omitting it** — that asymmetry is what made the corruption
+detectable and is the only way a future collision would be visible.
+
+- The attempt number reaches Python through exactly one channel: `OLYMPUS_ATTEMPT`, exported
+  per attempt by the workflow's retry loop and read by `chain._outer_attempt()` (defaults to 1,
+  tolerant of a malformed value — telemetry must never kill a run). Guarded by
+  `tests/scripts/test_pipeline_olympus_attempt.py`, because dropping the export restores the
+  defect with no error anywhere and no symptom but a cost figure that is quietly a floor.
+- `run_id` is **unchanged** and still the resume handle — `chain._thread_base = resume_run_id or
+  run_id` builds the LangGraph checkpoint thread from it, and `--resume-run-id` takes a bare
+  `GITHUB_RUN_ID`. The attempt is a separate column precisely so the telemetry key and the
+  resume key cannot drift apart.
+- Migration `065` swaps the primary key to `(run_id, attempt)` and appends `attempt` to the
+  `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
+  columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
+  provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
+- `frontend/olympus/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
+  `recovered` outcome were built on the assumption that attempts are distinct rows. It orders by
+  `attempt` where usable and falls back to `created_at` for `0`-sentinel rows.
+  `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
+
+**Escalation rules on `status`** (each records itself in `breakdown.degraded_reasons`):
+any failed research segment (STRICT — supersedes the `ATLAS_DEGRADED_RUN_PCT` share rule for
+health purposes), more than `_HERMES_DEGRADED_PCT_DEFAULT` of the run's Hermes deliberations
+failed, and `atlas_research_produced and not book_committed` (the no-book gate — closes the
+residual detection hole behind #1766, which the #1555 commit gate misses because it only
+fires once a book has *materialized*).
+
+### Spend alert — the one breakdown key that is NOT a contributor (#1764)
+
+`ATLAS_SPEND_ALERT_USD` (default $10) is a warning threshold on one chain invocation. Over it,
+`breakdown.spend_alert` is written, a warning is logged, and `_emit_ci_warning` raises a GitHub
+Actions `::warning::` annotation — the annotation is the part that makes this an alert rather
+than a record, since a jsonb key and a log line are both passive.
+
+**Alert only, by the owner's explicit decision.** Nothing in this path touches `status`,
+`retry_signal`, or the exit code. A mid-run abort would leave a partially-published run, and
+#1749/#1751 established that partial states are where the silent-staleness defects live. There
+are tests pinning the negative property; do not relax them into a ceiling without a new decision.
+
+It is computed in `_row` rather than through `register_breakdown_contributor` because **that seam
+is `state -> dict` and spend does not live in state** — it arrives in the `digigraph.usage`
+snapshot, which is only in scope at that call site. `models`, `by_kind` and `cached_tokens` set
+the precedent for a usage-derived breakdown key. Widening `summarize_run` to carry usage was
+considered and rejected: two of its three callers want only `retry_signal` and have no usage to
+pass. `diagnostics` imports `telemetry` lazily inside `_row` because `telemetry` imports
+`register_breakdown_contributor` from `diagnostics` — a module-level import is a cycle.
+
+Scope limit to state honestly when reading the key: the threshold is **per invocation, not per
+day**. `digigraph.usage` is process-global and `chain` calls `start()` once per process, so three
+outer-retry attempts at $6 each do not trip a $10 threshold on an $18 day. Since #1762 the day's
+true total *is* recoverable (`sum(est_cost_usd) … GROUP BY run_date` now sums across attempts),
+but that needs a query, so a daily aggregate belongs in a separate check.
+
+### Extending `breakdown` — use the seam, not a new edit site
+
+`breakdown` is schema-free jsonb, so a new telemetry key needs no migration. Register a
+contributor rather than editing `summarize_run`:
+
+```python
+from digiquant.olympus.atlas.diagnostics import register_breakdown_contributor
+
+register_breakdown_contributor(lambda state: {"roster": _roster_tally(state)})
+```
+
+Contributors are pure, fail-soft (an exception is logged and swallowed), may not overwrite an
+existing key, and run **once per run** inside `_segment_counts`. Note the split:
+`_segment_totals` is the pure counter used by `atlas_research_produced`, which the chain calls
+*mid-run* to gate Hermes — contributors must never see that half-populated state.

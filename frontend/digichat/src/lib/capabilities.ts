@@ -3,9 +3,9 @@
  * Env: DIGICHAT_ENABLED_SERVICES=digigraph,digisearch,digiquant,digismith
  */
 export function getEnabledServiceIds(): string[] {
-  const raw = process.env.DIGICHAT_ENABLED_SERVICES?.trim();
+  const envVar = process.env.DIGICHAT_ENABLED_SERVICES;
   const fallback = "digigraph,digisearch,digiquant,digismith";
-  const s = raw || fallback;
+  const s = envVar === undefined ? fallback : envVar;
   return [...new Set(s.split(",").map((x) => x.trim()).filter(Boolean))];
 }
 

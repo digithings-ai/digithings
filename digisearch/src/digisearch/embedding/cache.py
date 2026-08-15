@@ -29,8 +29,18 @@ class EmbeddingCache:
             )
         return self._conn
 
+    def _model_namespace(self) -> str:
+        """Prefix cache keys with provider identity so model swaps invalidate hits (REM-103)."""
+        model_id = getattr(self.provider, "model_id", None) or getattr(
+            self.provider, "model", None
+        )
+        if model_id:
+            return f"{model_id}:{self.provider.dimensions}"
+        return f"{type(self.provider).__name__}:{self.provider.dimensions}"
+
     def _hash(self, text: str) -> str:
-        return hashlib.sha256(text.encode("utf-8")).hexdigest()
+        payload = f"{self._model_namespace()}\0{text}"
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def get(self, texts: list[str]) -> tuple[list[list[float] | None], list[int]]:
         """Get cached embeddings. Returns (list of embedding or None, indices to compute).

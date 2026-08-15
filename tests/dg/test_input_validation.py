@@ -1,4 +1,4 @@
-"""Pydantic v2 HTTP input-validation tests for DigiGraph.
+"""Pydantic v2 HTTP input-validation tests for digigraph.
 
 Covers:
 - Malformed JSON and missing required fields → 422 with Pydantic-formatted error body.
@@ -11,9 +11,9 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from digigraph.server import app
 from fastapi.testclient import TestClient
 
-from digigraph.server import app
 from tests.digi_test_jwt import auth_headers
 
 
@@ -56,6 +56,23 @@ class TestWorkflowValidation:
             m.return_value = WorkflowResult(success=True, message="Done", backtest_result={})
             r = client.post("/workflow", json={"prompt": "hello"})
         assert r.status_code == 200
+
+
+@pytest.mark.unit
+class TestChatCompletionValidation:
+    """POST /v1/chat/completions → ChatCompletionRequest (extra='forbid')."""
+
+    def test_extra_field_rejected(self, client: TestClient) -> None:
+        r = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "sitaas-rag",
+                "messages": [{"role": "user", "content": "hi"}],
+                "evil_field": True,
+            },
+        )
+        assert r.status_code == 422
+        assert r.json().get("error", {}).get("code") == "validation_error"
 
 
 @pytest.mark.unit

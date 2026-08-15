@@ -3,7 +3,7 @@
   "private": true,
   "workspaces": [
     "frontend/*",
-    "apps/*/frontend"
+    "frontend/digiweb/*"
   ],
   "scripts": {
     "lint": "npm --workspaces --if-present run lint",

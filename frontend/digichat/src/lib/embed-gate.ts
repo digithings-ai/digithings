@@ -1,26 +1,36 @@
-/**
- * Client-side free-tier gate for the /embed route.
- *
- * Counts user turns (one per submitted question) in localStorage, keyed by the
- * host origin that iframed us. Once the counter hits `limit`, the gate is
- * "closed" and the caller should reveal the BYOK input / paywall card.
- *
- * A BYOK key (even when the gate is closed) always unlocks unlimited turns —
- * that policy is applied by the consumer (see `embed/page.tsx`), not here.
- *
- * Analytics is a no-op emitter today; leaves a single call-site for future
- * vendor wiring without touching every component.
- */
+/** Embed free-tier turn counter (localStorage, per host origin). See `embed/page.tsx` for BYOK unlock. */
 
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { logStorageFailure } from "@/lib/storage-debug";
+import { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT } from "@/lib/embed-turn-limits";
 
-export const EMBED_FREE_TURN_LIMIT = 3;
+export { EMBED_FREE_TURN_LIMIT, EMBED_TRIAL_TURN_LIMIT };
 const STORAGE_PREFIX = "digichat_embed_turns:";
+const TRIAL_UNLOCK_STORAGE_PREFIX = "digichat_embed_trial_unlocked:";
 
-/** Resolve the host-origin key this embed is running under. */
-export function resolveEmbedHost(): string {
+/**
+ * Session-local mirror of the trial-unlock flag. Needed because `useChat`
+ * freezes its transport on first render (#1339): `prepareSendMessagesRequest`
+ * cannot see a React `trialUnlocked` prop that flips later. Reading this map
+ * (and localStorage) at send time is the same pattern as `readEmbedUrlAuth`.
+ * Survives private-mode localStorage failures for the current tab only.
+ */
+const liveTrialUnlocked = new Set<string>();
+
+/**
+ * Resolve the host-origin key this embed is running under.
+ *
+ * @param explicitHost - The embedding page's own origin, passed via the
+ * iframe src's `?host=` param (see embed/page.tsx). Always prefer this: the
+ * embedding site always knows its own origin reliably, whereas client-side
+ * detection below is inherently unreliable for real cross-origin embeds
+ * (#1372) — kept only as a fallback for embed snippets that predate the
+ * `?host=` param.
+ */
+export function resolveEmbedHost(explicitHost?: string | null): string {
+  if (explicitHost) return explicitHost;
   // In SSR / tests, fall back to a stable default.
   if (typeof window === "undefined") return "unknown";
   try {
@@ -30,12 +40,14 @@ export function resolveEmbedHost(): string {
     // referrer may be malformed or cross-origin-blocked
   }
   try {
-    // Accessing window.parent.location will throw for cross-origin iframes;
-    // that's expected in production. The referrer branch above handles that
-    // case; this is only useful for same-origin dev embeds.
+    // Accessing window.parent.location will throw for cross-origin iframes —
+    // that's the expected case in production (#1372): a genuine embed is
+    // always cross-origin, so this branch is only ever useful for same-origin
+    // dev embeds. Never fall back to window.location.origin here — that's
+    // this app's OWN origin, never a signal about who is embedding it.
     return window.parent.location.origin;
   } catch {
-    return window.location.origin;
+    return "unknown";
   }
 }
 
@@ -49,7 +61,8 @@ export function readTurns(host: string): number {
     if (!raw) return 0;
     const n = Number.parseInt(raw, 10);
     return Number.isFinite(n) && n >= 0 ? n : 0;
-  } catch {
+  } catch (err) {
+    logStorageFailure("readTurns", err);
     return 0;
   }
 }
@@ -57,9 +70,75 @@ export function readTurns(host: string): number {
 export function writeTurns(host: string, value: number): void {
   try {
     localStorage.setItem(storageKey(host), String(Math.max(0, value)));
-  } catch {
-    // private mode / storage disabled — fall through silently
+  } catch (err) {
+    logStorageFailure("writeTurns", err);
   }
+}
+
+function trialUnlockStorageKey(host: string): string {
+  return `${TRIAL_UNLOCK_STORAGE_PREFIX}${host}`;
+}
+
+/**
+ * Persisted trial-form unlock flag (localStorage, per host origin) — mirrors
+ * readTurns/writeTurns above. Without this, `trialUnlocked` would live only
+ * in React state while the turn counter it overrides is persisted: after any
+ * reload a registered visitor's counter still reads >= limit but the unlock
+ * that raised the limit is gone, permanently re-gating them (see page.tsx).
+ */
+export function readTrialUnlocked(host: string): boolean {
+  if (liveTrialUnlocked.has(host)) return true;
+  try {
+    return localStorage.getItem(trialUnlockStorageKey(host)) === "1";
+  } catch (err) {
+    logStorageFailure("readTrialUnlocked", err);
+    return false;
+  }
+}
+
+export function writeTrialUnlocked(host: string, value: boolean): void {
+  if (value) {
+    liveTrialUnlocked.add(host);
+  } else {
+    liveTrialUnlocked.delete(host);
+  }
+  try {
+    if (value) {
+      localStorage.setItem(trialUnlockStorageKey(host), "1");
+    } else {
+      localStorage.removeItem(trialUnlockStorageKey(host));
+    }
+  } catch (err) {
+    logStorageFailure("writeTrialUnlocked", err);
+  }
+}
+
+const CHAT_ACCESS_TOKEN_PREFIX = "digichat_embed_chat_token:";
+
+function chatAccessTokenKey(host: string): string {
+  return `${CHAT_ACCESS_TOKEN_PREFIX}${host}`;
+}
+
+/** Chat-access token for this embed host. Same storage discipline as the unlock flag. */
+export function readChatAccessToken(host: string): string | null {
+  try {
+    return localStorage.getItem(chatAccessTokenKey(host));
+  } catch {
+    return null;
+  }
+}
+
+export function writeChatAccessToken(host: string, token: string): void {
+  try {
+    localStorage.setItem(chatAccessTokenKey(host), token);
+  } catch {
+    // Blocked storage — the send-time read returns null and the free quota applies.
+  }
+}
+
+/** Test hook — clears the in-memory unlock mirror (localStorage is per-test). */
+export function resetLiveTrialUnlockedForTests(): void {
+  liveTrialUnlocked.clear();
 }
 
 export type EmbedGate = {
@@ -75,19 +154,62 @@ export type EmbedGate = {
 };
 
 /**
+ * Whether a gated send that has just settled (its chat hook's busy/streaming
+ * state flipped back to false) should actually charge one free-tier turn.
+ *
+ * `increment()` above is documented "call after a successful user turn" —
+ * this is that contract, made an explicit, independently-testable predicate.
+ * embed-client.tsx's chat.send() is fire-and-forget (useChat's sendMessage
+ * has no success/failure return), so the caller can only know the outcome
+ * once busy goes false again; at that point `hasError` (from the same chat
+ * hook) is the only signal distinguishing a real answer from a failed turn.
+ * Without this check, a failed send still spent one of the visitor's 3 free
+ * turns — confirmed live: 3 consecutive backend failures fully exhausted the
+ * quota with zero real answers delivered, permanently gating a visitor who
+ * got no value at all.
+ */
+export function shouldChargeGateOnSettle(hasError: boolean): boolean {
+  return !hasError;
+}
+
+/**
  * Hook: free-tier gate counter.
  *
  * @param byokUnlocked - when true, `locked` is always false regardless of count.
+ * @param explicitHost - see resolveEmbedHost(); the embedding page's own origin.
  * @param limit - override for tests; default EMBED_FREE_TURN_LIMIT.
  */
 export function useEmbedGate(
   byokUnlocked: boolean,
+  explicitHost?: string | null,
   limit: number = EMBED_FREE_TURN_LIMIT,
 ): EmbedGate {
-  // Lazy initializers run once on mount (client-only in a "use client"
-  // component tree). Avoids a setState-in-effect cascade.
-  const [host] = useState<string>(() => resolveEmbedHost());
-  const [turns, setTurns] = useState<number>(() => readTurns(host));
+  // explicitHost arrives asynchronously (resolved from a searchParams Promise
+  // in the caller), so this must react to it changing rather than capture it
+  // once at mount — a one-shot useState lazy initializer would freeze on
+  // whatever explicitHost was on the very first render (undefined), silently
+  // reintroducing #1372 for every message sent afterward.
+  const host = useMemo(() => resolveEmbedHost(explicitHost), [explicitHost]);
+  // Adjust state during render when `host` changes, rather than in an effect
+  // (react-hooks/set-state-in-effect) — this is React's documented pattern
+  // for "resetting state when a prop changes" without an extra render pass.
+  const [turnsFor, setTurnsFor] = useState<{ host: string; turns: number }>(() => ({
+    host,
+    turns: readTurns(host),
+  }));
+  if (turnsFor.host !== host) {
+    setTurnsFor({ host, turns: readTurns(host) });
+  }
+  const turns = turnsFor.turns;
+  const setTurns = useCallback(
+    (updater: number | ((prev: number) => number)) => {
+      setTurnsFor((prev) => ({
+        host: prev.host,
+        turns: typeof updater === "function" ? updater(prev.turns) : updater,
+      }));
+    },
+    [],
+  );
 
   const increment = useCallback(() => {
     setTurns((prev) => {
@@ -95,12 +217,12 @@ export function useEmbedGate(
       writeTurns(host, next);
       return next;
     });
-  }, [host]);
+  }, [host, setTurns]);
 
   const reset = useCallback(() => {
     writeTurns(host, 0);
     setTurns(0);
-  }, [host]);
+  }, [host, setTurns]);
 
   const locked = !byokUnlocked && turns >= limit;
 

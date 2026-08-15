@@ -1,4 +1,4 @@
-"""DigiKey FastAPI service."""
+"""digikey FastAPI service."""
 
 from __future__ import annotations
 
@@ -8,16 +8,16 @@ import secrets
 import time
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
-
 from digibase.cors import install_cors
 from digibase.errors import register_fastapi_error_handlers
 from digibase.http import install_request_id_logging, install_request_id_middleware
 from digibase.metrics import install_metrics
+from fastapi import Depends, FastAPI, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from digikey import __version__, blocklist
+from digikey.blocklist_rehydrate import rehydrate_blocklist_from_db
 from digikey.crypto_keys import load_or_create_signing_key
 from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
@@ -29,7 +29,21 @@ from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys,
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="DigiKey", version=__version__)
+app = FastAPI(
+    title="digikey",
+    version=__version__,
+    description=(
+        "JWT + scoped API-key auth plane for digithings. "
+        "Issues short-lived RS256 JWTs, publishes JWKS, and administers opaque API keys. "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
+    openapi_tags=[
+        {"name": "health", "description": "Liveness probes (auth-exempt)."},
+        {"name": "jwks", "description": "Public signing keys for JWT verification."},
+        {"name": "oauth", "description": "Token exchange (API key → JWT)."},
+        {"name": "admin", "description": "Key issue/revoke (requires DIGIKEY_ADMIN_TOKEN)."},
+    ],
+)
 register_rate_limit_handler(app)
 install_metrics(app, service="digikey", version=__version__)
 install_cors(app, service="digikey")
@@ -44,11 +58,25 @@ def _startup() -> None:
     init_db()
     if not admin_token():
         logger.warning("DIGIKEY_ADMIN_TOKEN is unset — POST /v1/admin/keys returns 503")
+    try:
+        blocklist.assert_blocklist_ready()
+    except blocklist.BlocklistUnavailable as e:
+        logger.error("%s", e)
+        raise
     if not blocklist.is_configured():
         logger.warning(
             "DIGIKEY_BLOCKLIST_REDIS_URL is unset — JWT revocation blocklist disabled "
             "(tokens issued before revoke_at will remain valid until exp)",
         )
+    else:
+        try:
+            rehydrate_blocklist_from_db(session_factory)
+        except blocklist.BlocklistUnavailable as e:
+            logger.error("blocklist rehydrate failed: %s", e)
+            raise
+        except Exception as e:
+            logger.error("blocklist rehydrate failed: %s", e)
+            raise RuntimeError("blocklist rehydrate failed") from e
     if not (os.environ.get("DIGIKEY_PRIVATE_KEY_PEM") or "").strip():
         if os.environ.get("DIGIKEY_ALLOW_EPHEMERAL_KEY", "0").strip().lower() in (
             "1",
@@ -61,25 +89,26 @@ def _startup() -> None:
             )
 
 
-@app.get("/health")
+@app.get("/health", tags=["health"], summary="Legacy health check")
 def health() -> dict[str, str]:
     """Legacy health check (kept for back-compat)."""
     return {"status": "ok", "service": "digikey"}
 
 
-@app.get("/healthz")
+@app.get("/healthz", tags=["health"], summary="Liveness probe")
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
     Returns HTTP 200 with ``{"ok": true}``. Intended for load-balancer and
-    k8s liveness checks. For richer cross-service diagnostics, call DigiSmith's
+    k8s liveness checks. For richer cross-service diagnostics, call digismith's
     ``/v1/status``.
     """
     return {"ok": True}
 
 
-@app.get("/.well-known/jwks.json")
+@app.get("/.well-known/jwks.json", tags=["jwks"], summary="JWKS public keys")
 def jwks() -> dict[str, Any]:
+    """Return the RS256 public JWK set used to verify digikey-issued JWTs."""
     return public_jwks(_private_key, _kid)
 
 
@@ -113,6 +142,8 @@ class AdminIssueResponse(BaseModel):
     "/v1/admin/keys",
     response_model=AdminIssueResponse,
     dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Issue API key",
 )
 def admin_issue_key(body: AdminIssueBody, request: Request) -> AdminIssueResponse:
     _require_admin(request)
@@ -173,6 +204,8 @@ def _jwt_ttl() -> int:
     response_model=TokenResponse,
     response_model_exclude_none=True,
     dependencies=[Depends(rate_limit_dependency)],
+    tags=["oauth"],
+    summary="Exchange API key or BFF session for JWT",
 )
 def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
     ttl = _jwt_ttl()
@@ -272,6 +305,8 @@ class RevokeResponse(BaseModel):
     "/v1/admin/keys/{key_id}/revoke",
     response_model=RevokeResponse,
     dependencies=[Depends(rate_limit_dependency)],
+    tags=["admin"],
+    summary="Revoke API key",
 )
 def admin_revoke_key(key_id: str, request: Request) -> RevokeResponse:
     """Revoke a key and blocklist all live JWTs issued from it (ADR-0007)."""

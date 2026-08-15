@@ -1,4 +1,4 @@
-"""Smoke test: DigiQuant exposes /metrics with service/version/environment labels."""
+"""Smoke test: digiquant exposes /metrics with service/version/environment labels."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import pytest
 
 pytest.importorskip("nautilus_trader")
 
-from fastapi.testclient import TestClient  # noqa: E402
+from digiquant.server import app
+from fastapi.testclient import TestClient
 
-from digiquant.server import app  # noqa: E402
-from tests.conftest import assert_prom_metrics_labels  # noqa: E402
+from tests.conftest import assert_prom_metrics_labels
 
 pytestmark = pytest.mark.unit
 

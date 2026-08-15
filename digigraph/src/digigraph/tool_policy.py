@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 
+from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.models import WorkflowRequest
+from digigraph.policy import _env_truthy
 from digigraph.project_config import DigiProjectConfig
 
 
@@ -21,8 +23,12 @@ def allowed_tool_names_for_workflow(
     if req.allowed_tools is not None:
         return frozenset(t.strip() for t in req.allowed_tools if t and str(t).strip())
 
-    cfg = cfg or DigiProjectConfig.load()
-    from_cfg = cfg.get_allowed_tools()
+    if cfg is None:
+        try:
+            cfg = DigiProjectConfig.load()
+        except PROJECT_CONFIG_ERRORS:
+            cfg = None
+    from_cfg = cfg.get_allowed_tools() if cfg is not None else []
     if from_cfg:
         return frozenset(str(t).strip() for t in from_cfg if str(t).strip())
 
@@ -33,6 +39,36 @@ def allowed_tool_names_for_workflow(
             return frozenset(parts)
 
     return None
+
+
+def require_tool_calls_for_workflow(
+    req: WorkflowRequest,
+    cfg: DigiProjectConfig | None = None,
+) -> bool:
+    """Whether this workflow must force tool_choice='required'.
+
+    Resolved as a FLOOR, not an override (deliberately unlike
+    allowed_tool_names_for_workflow's most-specific-wins precedence): a
+    request-level True can only ADD the requirement, never remove one the
+    deployment already mandates via project config or env. allowed_tools is
+    safe to fully override per-request because the resolved set is still
+    bounded by the tool registry (a caller can't invoke what was never
+    wired); require_tool_calls has no such ceiling — it's a bare bool that
+    directly controls tool_choice, and digigraph's own /v1/chat/completions
+    is reachable by callers outside digichat's control (Open WebUI-compatible
+    clients), so a full override would let any caller defeat an operator's
+    mandatory tool-forcing policy with one field/header.
+    """
+    if cfg is None:
+        try:
+            cfg = DigiProjectConfig.load()
+        except PROJECT_CONFIG_ERRORS:
+            cfg = None
+    if cfg is not None and bool(cfg.get_require_tool_calls()):
+        return True
+    if _env_truthy("DIGI_REQUIRE_TOOL_CALLS"):
+        return True
+    return bool(req.require_tool_calls)
 
 
 def state_list_from_frozen(names: frozenset[str] | None) -> list[str] | None:

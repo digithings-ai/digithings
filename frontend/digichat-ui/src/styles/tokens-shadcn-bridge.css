@@ -1,0 +1,17 @@
+/**
+ * Maps shadcn/Tailwind theme vars to digichat-ui token names for digichat /embed.
+ * Import after shadcn theme vars are defined.
+ */
+.dark,
+.light {
+  --ink: var(--foreground);
+  --ink-soft: color-mix(in srgb, var(--foreground) 72%, transparent);
+  --ink-mute: var(--muted-foreground);
+  --hair: var(--border);
+  --surface: var(--background);
+  --bg: var(--background);
+  --on-accent: var(--accent-foreground);
+  --accent-weak: color-mix(in srgb, var(--accent) 13%, transparent);
+  --ease: ease;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}

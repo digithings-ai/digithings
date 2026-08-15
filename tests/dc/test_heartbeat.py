@@ -1,4 +1,4 @@
-"""Integration-style tests for DigiClaw heartbeat (Phase 3)."""
+"""Integration-style tests for digiclaw heartbeat (Phase 3)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,46 @@ import os
 from pathlib import Path
 
 import pytest
+
+
+@pytest.mark.unit
+def test_main_exits_nonzero_when_services_unhealthy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """main() returns 1 when health pings fail (REM-073)."""
+    audit_path = tmp_path / "events.jsonl"
+    monkeypatch.setenv("AUDIT_LOG_PATH", str(audit_path))
+    monkeypatch.setenv("DIGIGRAPH_URL", "http://127.0.0.1:9")  # likely closed port
+    monkeypatch.setenv("DIGIQUANT_URL", "http://127.0.0.1:9")
+    from digiclaw.heartbeat_runner import main
+
+    assert main() == 1
+
+
+@pytest.mark.unit
+def test_heartbeat_checklist_finds_digiclaw_docs_path() -> None:
+    from digiclaw.heartbeat_runner import _heartbeat_checklist_path
+
+    path = _heartbeat_checklist_path()
+    assert path is not None
+    assert path.name == "HEARTBEAT.md"
+    assert path.is_file()
+
+
+@pytest.mark.unit
+def test_heartbeat_checklist_respects_digi_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """REM-072: Docker mounts repo at DIGI_WORKSPACE=/workspace."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("DIGI_WORKSPACE", str(repo_root))
+    from digiclaw.heartbeat_runner import _heartbeat_checklist_path
+
+    path = _heartbeat_checklist_path()
+    assert path is not None
+    assert path == repo_root / "digiclaw" / "docs" / "HEARTBEAT.md"
 
 
 @pytest.mark.unit

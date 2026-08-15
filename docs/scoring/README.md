@@ -1,4 +1,4 @@
-# Scoring Rubrics — DigiThings Agentic Development
+# Scoring Rubrics — digithings Agentic Development
 
 Agents use these rubrics to **self-score** code changes before opening a pull request. Scores are honest assessments, not optimistic guesses. The PR template (`.github/PULL_REQUEST_TEMPLATE.md`) references these thresholds.
 
@@ -8,10 +8,12 @@ Agents use these rubrics to **self-score** code changes before opening a pull re
 
 | Rubric | File | Target Score | Block Merge If |
 |--------|------|-------------|----------------|
-| Security | [SECURITY.md](SECURITY.md) | ≥ 8 / 10 | < 7 |
-| Quality | [QUALITY.md](QUALITY.md) | ≥ 8 / 10 | < 7 |
-| Optimization | [OPTIMIZATION.md](OPTIMIZATION.md) | ≥ 7 / 10 | < 6 |
-| Accuracy | [ACCURACY.md](ACCURACY.md) | ≥ 9 / 10 | < 8 |
+| Security | [SECURITY.md](SECURITY.md) | ≥ 8 / 10 | < 8 |
+| Quality | [QUALITY.md](QUALITY.md) | ≥ 8 / 10 | < 8 |
+| Optimization | [OPTIMIZATION.md](OPTIMIZATION.md) | ≥ 7 / 10 | < 7 |
+| Accuracy | [ACCURACY.md](ACCURACY.md) | ≥ 9 / 10 | < 9 |
+
+Thresholds match [`agents.yml`](../../agents.yml) `scoring_gate` and root `CLAUDE.md` (Security ≥8, Quality ≥8, Optimization ≥7, Accuracy ≥9).
 
 ---
 
@@ -45,7 +47,7 @@ A code PR is eligible for reviewer fast-track when:
 
 A code PR **requires human review** when:
 - Any score is below target
-- The PR touches auth, crypto, live-trading, DigiKey signing keys, or DigiClaw execution gates
+- The PR touches auth, crypto, live-trading, digikey signing keys, or digiclaw execution gates
 - Novel architecture is introduced that isn't described in an existing ARCHITECTURE.md
 
 ---

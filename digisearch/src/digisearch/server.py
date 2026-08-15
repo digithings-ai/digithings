@@ -1,9 +1,12 @@
-"""DigiSearch HTTP API for DigiGraph and DigiFlow (query, ingest, Azure/Chroma backends)."""
+"""digisearch HTTP API for digigraph and digiflow (query, ingest, Azure/Chroma backends)."""
 
 from __future__ import annotations
 
 import logging
 import os
+import time as _time
+from collections import deque as _deque
+from threading import Lock as _Lock
 from typing import Any
 
 from digibase.cors import install_cors
@@ -14,9 +17,18 @@ from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
 from digisearch import __version__
+from digisearch.agent.pipeline_models import ResearchTurnOutput
 from digisearch.core.models import Query
+from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
+from digisearch.ingest_paths import resolve_ingest_source
 from digisearch.logging import configure_logging
-from digisearch.search._stub import add_chunks, query_index
+from digisearch.orchestrator_tools import (
+    TOOL_DIGISEARCH,
+    TOOL_DIGISEARCH_FETCH_ALL,
+    TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+    OpenAIToolDict,
+)
+from digisearch.search._stub import _first_env, query_index, route_add_chunks
 
 configure_logging()
 
@@ -27,9 +39,21 @@ from pydantic import BaseModel, ConfigDict, Field
 logger = logging.getLogger(__name__)
 
 
+def _resolve_fetch_all_max(requested: int | None) -> int:
+    """Clamp fetch-all result cap to server default and hard ceiling."""
+    default_max = int(os.environ.get("DIGISEARCH_FETCH_ALL_DEFAULT_MAX", "2000"))
+    hard_ceiling = int(os.environ.get("DIGISEARCH_FETCH_ALL_HARD_CEILING", "10000"))
+    cap = requested if requested is not None else default_max
+    return min(max(cap, 1), hard_ceiling)
+
+
 app = FastAPI(
-    title="DigiSearch",
-    description="RAG, document search for Digi ecosystem. MCP tools for DigiGraph/DigiFlow.",
+    title="digisearch",
+    description=(
+        "RAG and document search for digithings: ingest, query, indexes, and research turns. "
+        "MCP tools and orchestrator manifests for digigraph. "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
 )
 install_metrics(app, service="digisearch", version=__version__)
@@ -39,33 +63,38 @@ app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisea
 
 @app.on_event("startup")
 def _require_real_search_backend() -> None:
-    """Fail startup unless Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
+    """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
         "true",
         "yes",
     )
     if allow_stub:
-        logger.warning("DigiSearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
+        logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
+        return
+    # Canonical-first, legacy-fallback (#2239 credential rename) -- same precedence
+    # `_vectorize_backend` uses, so this startup gate can never disagree with the
+    # backend it's gating.
+    if _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID") and _first_env(
+        "CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"
+    ):
         return
     from digisearch.indexes.backends import azure_search as _az
 
     azure_ok = False
     try:
         azure_ok = _az.is_azure_configured()
-    except Exception:
-        pass
+    except (OSError, ImportError, AttributeError, RuntimeError, TypeError) as exc:
+        logger.warning("Azure backend probe failed at startup: %s", exc)
+        azure_ok = False
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
-            "DigiSearch requires a real backend: set AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
+            "digisearch requires a real backend: set CLOUDFLARE_ACCOUNT_ID+CLOUDFLARE_API_TOKEN "
+            "(or legacy VECTORIZE_*/D1_* names), AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 
-
-import time as _time
-from collections import deque as _deque
-from threading import Lock as _Lock
 
 _rl_windows: dict[str, _deque] = {}
 _rl_lock = _Lock()
@@ -204,7 +233,7 @@ class QueryResponse(BaseModel):
     )
     backend: str | None = Field(
         default=None,
-        description="Index backend that served the query: azure_ai_search | chroma | stub",
+        description="Index backend that served the query: vectorize | azure_ai_search | chroma | stub",
     )
 
 
@@ -250,7 +279,7 @@ class ResearchTurnRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and DigiGraph (kept for back-compat)."""
+    """Legacy health check for Docker and digigraph (kept for back-compat)."""
     return {"status": "ok", "service": "digisearch"}
 
 
@@ -258,7 +287,7 @@ def health() -> dict[str, str]:
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
-    Returns HTTP 200 with ``{"ok": true}``. Pair with DigiSmith's ``/v1/status``
+    Returns HTTP 200 with ``{"ok": true}``. Pair with digismith's ``/v1/status``
     for richer diagnostics.
     """
     return {"ok": True}
@@ -268,7 +297,7 @@ def healthz() -> dict[str, bool]:
 def azure_status() -> dict[str, bool | str]:
     """Check if Azure AI Search is configured and reachable."""
     try:
-        from digisearch.indexes.backends.azure_search import is_azure_configured, _get_client
+        from digisearch.indexes.backends.azure_search import _get_client, is_azure_configured
 
         if not is_azure_configured():
             return {
@@ -283,23 +312,25 @@ def azure_status() -> dict[str, bool | str]:
         return {"configured": True, "reachable": True, "message": "ok"}
     except ImportError:
         return {"configured": False, "message": "Install digisearch[azure] for Azure backend"}
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, TypeError) as e:
         return {"configured": True, "reachable": False, "message": str(e)[:200]}
 
 
 def _build_query_filters(req: QueryRequest) -> dict[str, Any]:
     """Build Query.filters from request: either raw odata or structured list."""
-    from digisearch.core.filter_validator import validate_odata_filter
+    from digisearch.core.workspace_filter import build_query_filters
 
-    filters: dict[str, Any] = {}
-    if req.filter and req.filter.strip():
-        try:
-            filters["odata"] = validate_odata_filter(req.filter.strip())
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if req.filters:
-        filters["structured"] = req.filters
-    return filters
+    try:
+        workspace_id = (
+            req.workspace_id.strip() if req.workspace_id and req.workspace_id.strip() else None
+        )
+        return build_query_filters(
+            filter_raw=req.filter,
+            filters_struct=req.filters,
+            workspace_id=workspace_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def run_query(req: QueryRequest) -> QueryResponse:
@@ -383,6 +414,41 @@ class OrchestratorInvokeRequest(BaseModel):
     )
 
 
+class OrchestratorToolsResponse(BaseModel):
+    """Response for POST /v1/orchestrator_tools (SIMP-020)."""
+
+    tools: list[OpenAIToolDict]
+    version: int = 1
+
+
+class OrchestratorFetchAllData(BaseModel):
+    """Payload for ``digisearch_fetch_all`` orchestrator invoke (SIMP-020)."""
+
+    results: list[dict[str, Any]]
+    total: int
+    query: str
+    index_name: str
+    possibly_truncated: bool = Field(
+        default=False,
+        description=(
+            "True when a page came back capped at the Vectorize backend's per-query "
+            "match limit before this tool's own total/max_results check ended pagination "
+            "-- `total` above may undercount the actual number of matches. Chroma/Azure "
+            "pages never set this; only Vectorize's fixed per-query cap can trigger it."
+        ),
+    )
+
+
+class OrchestratorInvokeResponse(BaseModel):
+    """Response for POST /v1/orchestrator_invoke (SIMP-020)."""
+
+    ok: bool
+    service: str | None = None
+    tool: str | None = None
+    data: QueryResponse | OrchestratorFetchAllData | ResearchTurnOutput | None = None
+    error: str | None = None
+
+
 def _research_turn_available() -> bool:
     try:
         from digisearch.agent.pipeline import run_research_turn  # noqa: F401
@@ -393,15 +459,15 @@ def _research_turn_available() -> bool:
 
 
 @app.post("/v1/orchestrator_tools")
-def api_orchestrator_tools(req: OrchestratorToolsRequest) -> dict[str, Any]:
-    """Return OpenAI-style tool definitions owned by DigiSearch (for DigiGraph orchestration)."""
+def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsResponse:
+    """Return OpenAI-style tool definitions owned by digisearch (for digigraph orchestration)."""
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
 
     tools = build_orchestrator_tool_manifest(
         req.index_config,
         include_research_delegate=_research_turn_available(),
     )
-    return {"tools": tools, "version": 1}
+    return OrchestratorToolsResponse(tools=tools)
 
 
 def _query_request_from_digisearch_args(
@@ -444,15 +510,15 @@ def _query_request_from_digisearch_args(
 
 
 @app.post("/v1/orchestrator_invoke")
-def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
-    """Execute one DigiSearch orchestrator tool by name (hub dispatch)."""
+def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
+    """Execute one digisearch orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
     default_idx = (
         req.default_index_name or os.environ.get("DIGISEARCH_INDEX", "default") or "default"
     ).strip()
 
-    if tool == "digisearch":
+    if tool == TOOL_DIGISEARCH:
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
         qreq = _query_request_from_digisearch_args(
@@ -464,19 +530,20 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             include_total_count=bool(args.get("include_total_count", False)),
         )
         if not qreq.text.strip():
-            return {"ok": False, "error": "query is required"}
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
         resp = run_query(qreq)
-        return {
-            "ok": True,
-            "service": "digisearch",
-            "tool": tool,
-            "data": resp.model_dump(mode="json"),
-        }
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=resp,
+        )
 
-    if tool == "digisearch_fetch_all":
-        page_size = 500
+    if tool == TOOL_DIGISEARCH_FETCH_ALL:
+        page_size = min(100, _resolve_fetch_all_max(None))
         max_results_raw = args.get("max_results")
-        max_results = int(max_results_raw) if isinstance(max_results_raw, int) else None
+        requested_max = int(max_results_raw) if isinstance(max_results_raw, int) else None
+        max_results = _resolve_fetch_all_max(requested_max)
         qtext = str(args.get("query") or "").strip()
         idx = (args.get("index_name") or default_idx or "default").strip() or "default"
         mode = str(args.get("mode") or "hybrid")
@@ -486,11 +553,12 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
         columns = args.get("columns") if isinstance(args.get("columns"), list) else None
         order_by = args.get("order_by") if isinstance(args.get("order_by"), list) else None
         if not qtext:
-            return {"ok": False, "error": "query is required"}
+            return OrchestratorInvokeResponse(ok=False, error="query is required")
         all_results: list[dict] = []
         skip = 0
         total_so_far = 0
         total_estimate: int | None = None
+        possibly_truncated = False
         while True:
             qreq = _query_request_from_digisearch_args(
                 {
@@ -516,6 +584,31 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             all_results.extend(results)
             total_so_far += len(results)
             total_estimate = payload.get("total")
+            # I4: Vectorize clamps any query to MAX_TOP_K (50) matches regardless of
+            # the requested page_size. A page landing at exactly that cap while a
+            # bigger page was requested is indistinguishable from "no more results"
+            # by the len(results) < page_size check below -- it means this backend
+            # cannot even see whether more matches exist, let alone page to them
+            # (VectorizeBackend.query() does not consult Query.skip). Flag it rather
+            # than let the caller believe `total` is exhaustive.
+            if (
+                payload.get("backend") == "vectorize"
+                and page_size > _VECTORIZE_MAX_TOP_K
+                and len(results) == _VECTORIZE_MAX_TOP_K
+            ):
+                possibly_truncated = True
+                logger.warning(
+                    "digisearch_fetch_all page capped at Vectorize's per-query limit "
+                    "(%d matches, page_size=%d requested); result set may be incomplete",
+                    _VECTORIZE_MAX_TOP_K,
+                    page_size,
+                    extra={
+                        "operation": "digisearch_fetch_all",
+                        "outcome": "clamped",
+                        "index_name": idx,
+                        "backend": "vectorize",
+                    },
+                )
             if total_estimate is not None and total_so_far >= int(total_estimate):
                 break
             if max_results is not None and total_so_far >= max_results:
@@ -524,19 +617,20 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             if len(results) < page_size:
                 break
             skip += page_size
-        return {
-            "ok": True,
-            "service": "digisearch",
-            "tool": tool,
-            "data": {
-                "results": all_results,
-                "total": len(all_results),
-                "query": qtext,
-                "index_name": idx,
-            },
-        }
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=OrchestratorFetchAllData(
+                results=all_results,
+                total=len(all_results),
+                query=qtext,
+                index_name=idx,
+                possibly_truncated=possibly_truncated,
+            ),
+        )
 
-    if tool == "digisearch_research_delegate":
+    if tool == TOOL_DIGISEARCH_RESEARCH_DELEGATE:
         try:
             from digisearch.agent.pipeline import run_research_turn
         except ImportError as e:
@@ -546,7 +640,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             ) from e
         msg = str(args.get("user_message") or "").strip()
         if not msg:
-            return {"ok": False, "error": "user_message is required"}
+            return OrchestratorInvokeResponse(ok=False, error="user_message is required")
         idx = (args.get("index_name") or default_idx or "default").strip() or "default"
         top_raw = args.get("top_k", 10)
         top_k = int(top_raw) if isinstance(top_raw, int) else 10
@@ -561,14 +655,19 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> dict[str, Any]:
             "session_id": args.get("session_id"),
         }
         body = run_research_turn(payload)
-        return {"ok": True, "service": "digisearch", "tool": tool, "data": body}
+        return OrchestratorInvokeResponse(
+            ok=True,
+            service="digisearch",
+            tool=tool,
+            data=ResearchTurnOutput.model_validate(body),
+        )
 
     raise HTTPException(status_code=400, detail=f"Unknown orchestrator tool: {tool!r}")
 
 
-@app.post("/v1/research_turn")
-def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
-    """Run one DigiSearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
+@app.post("/v1/research_turn", response_model=ResearchTurnOutput)
+def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
+    """Run one digisearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
     try:
         from digisearch.agent.pipeline import run_research_turn
     except ImportError as e:
@@ -576,19 +675,20 @@ def api_research_turn(req: ResearchTurnRequest) -> dict[str, Any]:
             status_code=503,
             detail=f"Install digisearch[agent] for /v1/research_turn: {e}",
         ) from e
-    return run_research_turn(req.model_dump(mode="json"))
+    return ResearchTurnOutput.model_validate(run_research_turn(req.model_dump(mode="json")))
 
 
 @app.post("/ingest", response_model=IngestResponse)
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
-    from pathlib import Path
-
     try:
-        from digisearch.ingestion.chunkers.recursive import RecursiveChunker
+        from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
         from digisearch.ingestion.registry import ParserRegistry
 
-        path = Path(req.source)
+        try:
+            path = resolve_ingest_source(req.source)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not path.exists():
             raise HTTPException(status_code=404, detail=f"Source file not found: {req.source}")
         registry = ParserRegistry()
@@ -607,11 +707,14 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         if req.metadata:
             merged = {**merged, **req.metadata}
         doc.metadata = merged
-        chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64)
+        chunker = SegmentAwareChunker()
         chunks = chunker.chunk(doc)
         merge_document_metadata_into_chunks(doc, chunks)
         doc.chunks = chunks
-        add_chunks(req.index_name, chunks)
+        try:
+            route_add_chunks(req.index_name, chunks)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
         return IngestResponse(
             doc_id=doc.id,
             chunks_created=len(chunks),
@@ -625,7 +728,7 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
             status_code=503,
             detail=f"Ingestion backend unavailable (missing dependency: {e}). Install digisearch[parsers].",
         )
-    except Exception as e:
+    except (OSError, ValueError, RuntimeError, TypeError) as e:
         logger.error("Ingestion failed for source '%s': %s", req.source, e)
         raise HTTPException(
             status_code=503,
@@ -657,7 +760,7 @@ def delete_document(name: str, doc_id: str) -> dict:
     """Delete document from index (not implemented)."""
     raise HTTPException(
         status_code=501,
-        detail="Per-document delete is not implemented for this DigiSearch deployment",
+        detail="Per-document delete is not implemented for this digisearch deployment",
     )
 
 

@@ -1,9 +1,8 @@
-"""Unit tests for DigiSearch."""
+"""Unit tests for digisearch."""
 
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.models import Chunk, Query
 from digisearch.search import add_chunks, query_index
 

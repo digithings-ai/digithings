@@ -7,8 +7,8 @@ from typing import Any
 
 import polars as pl
 
-from digigraph.tools.analytics.load import load_dataset
 from digigraph.tools.analytics.analysis._helpers import _artifacts_dir, _next_filename
+from digigraph.tools.analytics.load import load_dataset
 
 
 def _corr_polars(df: pl.DataFrame) -> dict:
@@ -56,10 +56,11 @@ def correlation_matrix(
     image_path = None
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
     except ImportError:
-        pass
+        pass  # matplotlib optional; correlation matrix still returned
     else:
         arr = [[matrix.get(c1, {}).get(c2, 0) for c2 in numeric] for c1 in numeric]
         out_dir = _artifacts_dir(dataset_path)

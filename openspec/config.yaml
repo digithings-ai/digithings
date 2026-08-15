@@ -1,0 +1,16 @@
+project: digithings
+version: "1"
+
+specs_dir: openspec/specs
+changes_dir: openspec/changes
+archive_dir: openspec/changes/archive
+
+domains:
+  - digigraph
+  - digiquant/atlas
+  - digiquant/hermes
+  - digisearch
+  - digikey
+  - digismith
+  - digibase
+  - digiclaw

@@ -1,4 +1,4 @@
-"""Pydantic v2 HTTP input-validation tests for DigiKey request bodies."""
+"""Pydantic v2 HTTP input-validation tests for digikey request bodies."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Shared CORS middleware installer for DigiThings FastAPI services.
+"""Shared CORS middleware installer for digithings FastAPI services.
 
 Exposes :func:`install_cors` which reads an explicit allowlist from the
 environment and applies Starlette's :class:`CORSMiddleware` with a fixed,
@@ -63,7 +63,7 @@ def install_cors(app: FastAPI, service: str) -> None:
     """Install CORS middleware on *app* using the allowlist for *service*.
 
     The allowlist is resolved at call time via :func:`resolve_cors_origins`.
-    ``allow_credentials=True`` is set because DigiChat forwards the DigiKey
+    ``allow_credentials=True`` is set because digichat forwards the digikey
     bearer cookie/session on cross-origin fetches; methods/headers are the
     minimum set used across the stack.
     """

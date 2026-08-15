@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download a small slice of EDGAR-CORPUS (Hugging Face) to markdown for DigiSearch.
+"""Download a small slice of EDGAR-CORPUS (Hugging Face) to markdown for digisearch.
 
 Requires: pip install -e "./digisearch[edgar-corpus]"
 

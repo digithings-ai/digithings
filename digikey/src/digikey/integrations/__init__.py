@@ -3,8 +3,8 @@
 from digikey.integrations.service_middleware import (
     attach_digi_auth_middleware,
     bearer_from_request,
-    digikey_auth_active,
     digigraph_path_scopes,
+    digikey_auth_active,
     digiquant_path_scopes,
     digisearch_path_scopes,
 )

@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from decimal import Decimal
 
-import pandas as pd
-
-from nautilus_trader.config import PositiveFloat
-from nautilus_trader.config import PositiveInt
-from nautilus_trader.config import StrategyConfig
+from nautilus_trader.config import PositiveFloat, PositiveInt, StrategyConfig
 from nautilus_trader.indicators import BollingerBands
-from nautilus_trader.model.data import Bar
-from nautilus_trader.model.enums import OrderSide
-from nautilus_trader.model.enums import TimeInForce
-from nautilus_trader.model.data import BarType
+from nautilus_trader.model.data import Bar, BarType
+from nautilus_trader.model.enums import OrderSide, TimeInForce
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
@@ -53,7 +48,7 @@ class BollingerMR(Strategy):
         if self.config.request_bars:
             self.request_bars(
                 self.config.bar_type,
-                start=self._clock.utc_now() - pd.Timedelta(days=1),
+                start=self._clock.utc_now() - timedelta(days=1),
             )
         self.subscribe_bars(self.config.bar_type)
 

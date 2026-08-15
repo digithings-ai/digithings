@@ -1,0 +1,136 @@
+provider: xai
+last_checked: 2026-08-15
+source: agent-research
+
+free_tier:
+  available: false             # no permanently-free model; credits-only scheme
+  tier_type: credits
+  credit_amount_usd: 25.00     # $25 signup credits + opt-in $150/mo data-sharing = up to $175/mo
+  credit_expiry_days: null
+  privacy_warning: "Data-sharing opt-in ($150/mo credit) allows xAI to train on prompts."
+  signup_required: true
+  cc_required: false
+  models: []
+  rate_limits:
+    rpm: null
+    rpd: null
+    tpm: null
+    input_tpm: null
+    concurrent_requests: null
+    reset_window: null
+
+paid_tier:
+  available: true
+  models:
+    - name: grok-4.6           # launched 2026-08-12; supersedes grok-4.5, agent/coding-focused; knowledge cutoff 2026-02-01
+      context_window: 500000
+      max_input_tokens: 500000
+      max_output_tokens: null
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: 4.00     # >=200k tokens
+      cost_per_1m_output: 6.00
+      cost_per_1m_output_long: 12.00   # >=200k tokens
+      cost_per_1m_input_cached: null
+      status: active
+    - name: grok-4.5           # launched 2026-07-08; superseded by grok-4.6 (2026-08-12) as flagship; not yet available in EU
+      context_window: 500000
+      max_input_tokens: 500000
+      max_output_tokens: null
+      cost_per_1m_input: 2.00
+      cost_per_1m_input_long: 4.00     # >=200k tokens
+      cost_per_1m_output: 6.00
+      cost_per_1m_output_long: 12.00   # >=200k tokens
+      cost_per_1m_input_cached: null
+      status: active
+    - name: grok-4-3           # default redirect for all retired model slugs since May 15 2026
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: null
+      cost_per_1m_input: 1.25
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 2.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: grok-4-20
+      context_window: 2097152
+      max_input_tokens: 2097152
+      max_output_tokens: null
+      cost_per_1m_input: 1.25    # CORRECTED 2026-07-19: was $2/$6, which turned out to be a mis-attribution of grok-4.5's price
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 2.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active
+    - name: grok-4-1-fast      # retired May 15 2026; redirects to grok-4-3
+      context_window: 2097152
+      max_input_tokens: 2097152
+      max_output_tokens: null
+      cost_per_1m_input: 0.20
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 0.50
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: deprecated
+    - name: grok-3             # retired May 15 2026; hard full retirement 2026-08-15 (slug stops working entirely after that date)
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: null
+      cost_per_1m_input: 3.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 15.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: deprecated
+    - name: grok-4             # retired May 15 2026
+      context_window: 131072
+      max_input_tokens: 131072
+      max_output_tokens: null
+      cost_per_1m_input: 3.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 15.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: deprecated
+  batching:
+    available: true
+    discount_pct: 50
+    max_batch_size: null
+    turnaround_hours: null
+    notes: "50% discount on batch jobs"
+  prompt_caching:
+    available: false
+    min_cacheable_tokens: null
+    ttl_seconds: null
+    cost_per_1m_cached_writes: null
+    cost_per_1m_cached_reads: null
+    notes: null
+
+capabilities:
+  tool_calling: true
+  structured_output: true
+  thinking_mode: true          # grok-4-3 has configurable reasoning effort (none/low/medium/high)
+  streaming: true
+  vision: true
+  embeddings: false
+  modalities: [text, image, video]   # grok-4-3 added native video input
+
+data_privacy:
+  trains_on_free_tier: null
+  retention_days: null
+  zero_retention_on_paid: false
+  gdpr_compliant: false
+  soc2: false
+
+reliability:
+  known_instability: false
+  requires_backoff: false
+  geographic_restrictions: []
+
+verification:
+  method: skipped
+  probe_prompt: null
+  probe_model_alias: null
+  github_secret_key: null
+
+notes: "MATERIAL CHANGE 2026-08-15: grok-4.6 launched 2026-08-12 (SpaceXAI), superseding grok-4.5 as the flagship — pitched as agent/coding-focused, frontier on coding/knowledge/STEM, same $2/$6 per 1M under 200K-token prompts and $4/$12 >=200K as grok-4.5, 500K context, knowledge cutoff 2026-02-01. Available on the xAI API, OpenRouter (`x-ai/grok-4.6`), Cursor, Grok Build, Vercel, and Cloudflare. grok-4.5 retained below as still-active (not yet confirmed deprecated) rather than removed outright. Prior entry (unchanged): grok-4.5 launched 2026-07-08 (xAI's first release since the SpaceXAI/Cursor deal) — pitched by Musk as 'Opus-class', not yet available in the EU. CORRECTION (2026-07-19, still valid): grok-4-20's price was previously mis-recorded as $2/$6 (that figure actually belongs to grok-4.5) — corrected to its confirmed $1.25/$2.50. grok-3, already deprecated since the May 15 2026 slug retirement, has a confirmed hard full-retirement date of 2026-08-15 — after that the slug stops resolving entirely rather than redirecting. A 'Grok Build 0.1' SKU (256K ctx, $1.00/$2.00 <200k, $2.00/$4.00 >=200k) was also spotted in current lineups, likely tied to an agentic/coding product — not added to this snapshot pending confirmation of its exact purpose. CRITICAL (unchanged) — grok-4-1-fast RETIRED May 15 2026 (all old slugs redirect to grok-4-3 at $1.25/$2.50 — a 6× price increase over grok-4-1-fast's old rate). No permanently-free model — xAI offers $25 signup credits + up to $150/mo via data-sharing opt-in (confirmed unchanged). Tool calls: X/Live/Web Search $5/1k successful calls, File Attachments $10/1k, Collections Search $2.50/1k. Key needed: XAI_API_KEY at console.x.ai. No probe run (method: skipped)."

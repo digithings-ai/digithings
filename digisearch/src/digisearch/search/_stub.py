@@ -1,8 +1,14 @@
-"""Search index router with pluggable backend registry.
+"""Search index router with pluggable backend registry (DESLOP-016 / SIMP-021).
 
-Backends are tried in registration order. Azure/Chroma return :class:`SearchResponse`
-(including empty lists) when they handle the query.
-When ``DIGISEARCH_ALLOW_STUB=1`` (tests only), an in-memory substring index may run last.
+Backends are tried in registration order: Azure, then Vectorize, then Chroma.
+Vectorize/Azure/Chroma return :class:`SearchResponse` when configured. Vectorize is
+the authoritative remote index once configured, so a failure there raises
+``VectorizeBackendError`` (deliberately not a member of ``_BACKEND_ERRORS``) which
+propagates out of :func:`query_index` instead of falling through to Chroma and
+silently answering from a different corpus. Azure/Chroma failures still fall
+through on error -- they are optional local backends, not authoritative ones.
+In-memory stub runs only when ``DIGISEARCH_ALLOW_STUB=1`` (tests); stub branches
+are intentional fail-closed test hooks, not dead code.
 """
 
 from __future__ import annotations
@@ -13,18 +19,34 @@ import time
 from typing import Callable
 
 from digisearch.core.models import Chunk, Query, SearchResponse
-from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB
+from digisearch.core.standard_hits import BACKEND_CHROMA, BACKEND_STUB, BACKEND_VECTORIZE
+from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Backend registry
-# Each entry is a callable (query, index_name) -> SearchResponse | None.
-# Return None (or an empty-results response) to signal "not handled"; the
-# router will try the next backend.
-# ---------------------------------------------------------------------------
 _BackendFn = Callable[[Query, str], "SearchResponse | None"]
 _backends: list[_BackendFn] = []
+
+_BACKEND_ERRORS = (ImportError, OSError, RuntimeError, TypeError, ValueError)
+
+
+def _first_env(*names: str) -> str:
+    """Return the first non-empty, stripped env var among ``names``.
+
+    Canonical-first, legacy-fallback precedence (#2239 credential rename): Vectorize
+    and D1 now share one Cloudflare account + token, so every credential read here
+    tries ``CLOUDFLARE_ACCOUNT_ID``/``CLOUDFLARE_API_TOKEN`` (wrangler's own
+    conventional names) first, then the legacy ``VECTORIZE_*``/``D1_*`` names — kept
+    working so the deployed Worker's live secrets need no coordinated rotation before
+    this ships (zero-downtime rename). Same shape as
+    ``digivault.supabase_store._first_env``; duplicated locally rather than imported
+    across the digisearch/digivault package boundary.
+    """
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
 
 
 def register_backend(fn: _BackendFn) -> _BackendFn:
@@ -38,11 +60,6 @@ def _clear_backends() -> None:
     _backends.clear()
 
 
-# ---------------------------------------------------------------------------
-# Built-in backends
-# ---------------------------------------------------------------------------
-
-
 @register_backend
 def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
     """Azure AI Search backend. Active when AZURE_SEARCH_ENDPOINT is configured."""
@@ -54,16 +71,53 @@ def _azure_backend(query: Query, index_name: str) -> SearchResponse | None:
         return query_azure(query, index_name)
     except ImportError:
         return None
-    except Exception as exc:
+    except _BACKEND_ERRORS as exc:
         logger.warning("Azure backend error: %s", exc)
         return None
 
 
 @register_backend
+def _vectorize_backend(query: Query, index_name: str) -> SearchResponse | None:
+    """Cloudflare Vectorize backend. Active when CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN
+    are set (falls back to the legacy VECTORIZE_*, then D1_*, names -- see `_first_env`).
+
+    Vectorize is the authoritative remote index once configured: any failure here
+    (HTTP error, application-level failure, missing dependency) is wrapped as
+    `VectorizeBackendError` and re-raised. That type is deliberately absent from
+    `_BACKEND_ERRORS`, so `query_index` cannot catch it and fall through to Chroma --
+    a configured, failing remote index must never be answered from a different
+    corpus with no error surfaced to the caller.
+
+    The `VectorizeBackend` import itself lives inside the `try` (not just the query
+    call) so an `ImportError` there -- a missing dependency, a broken transitive
+    import -- is wrapped the same as every other failure. `VectorizeBackendError` is
+    imported at module level from `vectorize_errors` (not from `vectorize` itself)
+    precisely so it stays available to wrap that failure: a failed
+    `from vectorize import VectorizeBackend, VectorizeBackendError` binds neither
+    name, so referencing `VectorizeBackendError` in the `except` clause would raise
+    `UnboundLocalError` instead if it were imported from the same failing module.
+    """
+    account_id = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    api_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    if not account_id or not api_token:
+        return None
+
+    try:
+        from digisearch.indexes.backends.vectorize import VectorizeBackend
+
+        backend = VectorizeBackend(index_name, account_id=account_id, api_token=api_token)
+        results = backend.query(query)
+    except Exception as exc:
+        # str(exc) carries the underlying failure detail (e.g. "vectorize query
+        # failed (500): boom"); VectorizeBackend never puts the API token in a
+        # raised message, so re-raising it here cannot leak one either.
+        raise VectorizeBackendError(str(exc)) from exc
+    return SearchResponse(results=list(results), facets=None, backend=BACKEND_VECTORIZE)
+
+
+@register_backend
 def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
     """ChromaDB backend. Active when CHROMA_PATH or CHROMA_HOST is set."""
-    import os
-
     chroma_path = os.environ.get("CHROMA_PATH")
     chroma_host = os.environ.get("CHROMA_HOST")
     if not chroma_path and not chroma_host:
@@ -71,19 +125,21 @@ def _chroma_backend(query: Query, index_name: str) -> SearchResponse | None:
     try:
         from digisearch.indexes.backends.chroma import ChromaBackend
 
-        backend = ChromaBackend(name=index_name, persist_path=chroma_path)
+        port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
+        backend = ChromaBackend(
+            name=index_name,
+            persist_path=chroma_path,
+            chroma_host=chroma_host,
+            chroma_port=int(port_raw),
+        )
         results = backend.query(query)
         return SearchResponse(results=list(results), facets=None, backend=BACKEND_CHROMA)
     except ImportError:
         return None
-    except Exception as exc:
+    except _BACKEND_ERRORS as exc:
         logger.warning("Chroma backend error: %s", exc)
         return None
 
-
-# ---------------------------------------------------------------------------
-# In-memory stub (last resort)
-# ---------------------------------------------------------------------------
 
 _stub_index: dict[str, list[Chunk]] = {"default": []}
 
@@ -94,7 +150,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     for backend in _backends:
         try:
             resp = backend(query, index_name)
-        except Exception as exc:
+        except _BACKEND_ERRORS as exc:
             logger.warning(
                 "Backend %s raised unexpectedly: %s",
                 backend.__name__,
@@ -152,6 +208,7 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     )
     from digisearch.core.filter_apply import chunk_metadata_matches
     from digisearch.core.models import Result
+    from digisearch.core.workspace_filter import chunk_matches_workspace
 
     structured = None
     fd = query.filters or {}
@@ -165,6 +222,8 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
             continue
         if structured and not chunk_metadata_matches(structured, c.metadata):
             continue
+        if not chunk_matches_workspace(c.metadata, query.workspace_id):
+            continue
         rank += 1
         out.append(Result(chunk=c, score=0.9, rank=rank))
         if len(out) >= query.top_k:
@@ -172,9 +231,87 @@ def query_index(query: Query, index_name: str = "default") -> SearchResponse:
     return SearchResponse(results=out, facets=None, backend=BACKEND_STUB)
 
 
-def add_chunks(index_name: str, chunks: list[Chunk]) -> None:
-    """Add chunks to stub index."""
+def _stub_add_chunks(index_name: str, chunks: list[Chunk]) -> None:
+    """Add chunks to in-memory stub index (tests / DIGISEARCH_ALLOW_STUB only)."""
     _stub_index.setdefault(index_name, []).extend(chunks)
+
+
+def route_add_chunks(index_name: str, chunks: list[Chunk]) -> str | None:
+    """Route ingest to Vectorize when configured, else Chroma; stub only when
+    DIGISEARCH_ALLOW_STUB=1.
+
+    Returns backend id (``vectorize`` / ``chroma`` / ``stub``) or raises when no
+    backend is available.
+    """
+    if not chunks:
+        return None
+
+    vectorize_account = _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID")
+    vectorize_token = _first_env("CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN")
+    if vectorize_account and vectorize_token:
+        from digisearch.indexes.backends.vectorize import VectorizeBackend
+
+        backend = VectorizeBackend(
+            index_name, account_id=vectorize_account, api_token=vectorize_token
+        )
+        backend.add(chunks)
+        return BACKEND_VECTORIZE
+
+    chroma_path = os.environ.get("CHROMA_PATH")
+    chroma_host = os.environ.get("CHROMA_HOST")
+    if chroma_host and not chroma_path:
+        try:
+            from digisearch.indexes.backends.chroma import ChromaBackend
+
+            port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
+            backend = ChromaBackend(
+                name=index_name,
+                chroma_host=chroma_host,
+                chroma_port=int(port_raw),
+            )
+            backend.add(chunks)
+            return BACKEND_CHROMA
+        except ImportError as exc:
+            raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
+        except _BACKEND_ERRORS as exc:
+            logger.error("Chroma HTTP ingest failed for index %s: %s", index_name, exc)
+            raise
+    if chroma_path:
+        try:
+            from digisearch.indexes.backends.chroma import ChromaBackend
+
+            port_raw = os.environ.get("CHROMA_PORT", "8000").strip() or "8000"
+            backend = ChromaBackend(
+                name=index_name,
+                persist_path=chroma_path,
+                chroma_host=chroma_host,
+                chroma_port=int(port_raw),
+            )
+            backend.add(chunks)
+            return BACKEND_CHROMA
+        except ImportError as exc:
+            raise RuntimeError("Chroma backend unavailable; install digisearch[chroma]") from exc
+        except _BACKEND_ERRORS as exc:
+            logger.error("Chroma ingest failed for index %s: %s", index_name, exc)
+            raise
+
+    allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if allow_stub:
+        _stub_add_chunks(index_name, chunks)
+        return BACKEND_STUB
+
+    raise RuntimeError(
+        "No ingest backend configured: set CHROMA_PATH/CHROMA_HOST or DIGISEARCH_ALLOW_STUB=1 (tests)"
+    )
+
+
+def add_chunks(index_name: str, chunks: list[Chunk]) -> None:
+    """Add chunks via :func:`route_add_chunks` (Vectorize, Chroma, or stub)."""
+    route_add_chunks(index_name, chunks)
 
 
 def get_stub_index() -> dict[str, list[Chunk]]:

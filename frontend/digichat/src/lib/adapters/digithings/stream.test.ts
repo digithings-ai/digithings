@@ -1,0 +1,468 @@
+import { it, expect, vi, afterEach } from "vitest";
+import type { UIMessage } from "ai";
+import {
+  createDigigraphTraceStreamResponse,
+  digigraphErrorToEmbedPayload,
+} from "./stream";
+import {
+  parseEmbedChatError,
+  shouldSuggestByokOnEmbedError,
+} from "@/lib/embed-chat-error";
+
+afterEach(() => vi.restoreAllMocks());
+
+const userMessage = (text: string) =>
+  ({ id: "u1", role: "user", parts: [{ type: "text", text }] }) as UIMessage;
+
+// A 500 body from digigraph can carry stack traces, internal hostnames, and
+// prompt echoes. Streaming it verbatim to an anonymous embed visitor publishes
+// all of that; the detail belongs in the server log.
+it("does not stream the upstream error body to the browser", async () => {
+  const secret = "Traceback: psycopg2 connect to db.internal:5432 failed";
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(secret, { status: 500, statusText: "Internal Server Error" })
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).not.toContain(secret);
+  expect(body).not.toContain("db.internal");
+  expect(body).toMatch(/unavailable|try again/i);
+  expect(errorLog).toHaveBeenCalled();
+});
+
+// The authenticated path emits only data-digichatActivity spans from the typed mapper.
+it("never emits data-digigraphTrace on the authenticated path", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "external_activity",
+                  payload: { label: "Searching…", status: "in_progress" },
+                  workflow_id: "wf-1",
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).not.toContain('"type":"data-digigraphTrace"');
+  expect(body).toContain('"type":"data-digichatActivity"');
+  expect(body).toContain('"operation":"chat"');
+  expect(body).not.toContain('"workflow_id"');
+});
+
+it("posts the full multi-turn history to digigraph chat completions", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })
+  );
+
+  const messages = [
+    { id: "1", role: "user", parts: [{ type: "text", text: "first" }] },
+    { id: "2", role: "assistant", parts: [{ type: "text", text: "reply" }] },
+    { id: "3", role: "user", parts: [{ type: "text", text: "second" }] },
+  ] as UIMessage[];
+
+  await createDigigraphTraceStreamResponse({
+    messages,
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+
+  expect(fetchSpy).toHaveBeenCalled();
+  const init = fetchSpy.mock.calls[0]?.[1] as { body?: string };
+  const payload = JSON.parse(init.body ?? "{}") as {
+    messages?: Array<{ role: string; content: string }>;
+  };
+  expect(payload.messages).toHaveLength(3);
+  expect(payload.messages?.map((m) => m.content)).toEqual(["first", "reply", "second"]);
+});
+
+// On the embed path with activityDetail: "off", neither the legacy part nor
+// the gated activity span should be emitted — this prevents disclosure of
+// internal payload fields like workflow_id to anonymous visitors.
+it("suppresses both parts on the embed path with activityDetail off", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "external_activity",
+                  payload: { label: "Searching…", status: "in_progress" },
+                  workflow_id: "wf-internal-1",
+                  request_id: "req-internal-1",
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  // Neither part present on embed path with activityDetail: off.
+  expect(body).not.toContain('"type":"data-digigraphTrace"');
+  expect(body).not.toContain('"type":"data-digichatActivity"');
+  // Regression test: internal payload fields must not leak.
+  expect(body).not.toContain("wf-internal-1");
+  expect(body).not.toContain("req-internal-1");
+  expect(body).not.toContain('"workflow_id"');
+  expect(body).not.toContain('"request_id"');
+});
+
+// On the embed path with activityDetail: "full", the activity span should be
+// emitted (gated), but the legacy part must NOT be emitted — it is
+// authenticated-path-only.
+it("emits the activity span but not the legacy part on the embed path with activityDetail full", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "external_activity",
+                  payload: { label: "Searching…", status: "in_progress" },
+                  workflow_id: "wf-1",
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+
+  // Activity span present on embed path with activityDetail: full.
+  expect(body).toContain('"type":"data-digichatActivity"');
+  expect(body).toContain('"operation":"chat"');
+  // But legacy part is NOT emitted on embed path.
+  expect(body).not.toContain('"type":"data-digigraphTrace"');
+  expect(body).not.toContain('"workflow_id"');
+});
+
+it("emits rich retrieve activity for rag_sources on the gated path", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_trace: {
+                  v: 1,
+                  type: "rag_sources",
+                  payload: {
+                    sources: [
+                      {
+                        source_id: "doc-1",
+                        snippet: "hello",
+                        metadata: { title: "Auth", evidence_tier: "tier_a", publication_year: 2023 },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  expect(body).toContain('"type":"data-digichatActivity"');
+  expect(body).toContain('"operation":"retrieve"');
+  expect(body).toContain('"tier":"tier_a"');
+  expect(body).toContain('"year":2023');
+  expect(body).not.toContain('"type":"data-digigraphTrace"');
+});
+
+it("maps digigraph_error code to embed-chat-error payload", () => {
+  const payload = digigraphErrorToEmbedPayload({
+    code: "free_quota_exceeded",
+    message: "Free-tier model quota is exhausted.",
+  });
+  expect(JSON.parse(payload)).toEqual({
+    error: "free_quota_exceeded",
+    message: "Free-tier model quota is exhausted.",
+  });
+});
+
+it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async () => {
+  const quotaMessage =
+    "Free-tier model quota is exhausted. Add your own API key (BYOK) to continue.";
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                digigraph_error: {
+                  code: "free_quota_exceeded",
+                  message: quotaMessage,
+                },
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).toContain("free_quota_exceeded");
+  expect(body).toContain(quotaMessage);
+  const errorChunk = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6))
+    .find((raw) => raw.includes("free_quota_exceeded"));
+  expect(errorChunk).toBeTruthy();
+  const parsed = JSON.parse(errorChunk!) as { type?: string; errorText?: string };
+  expect(parsed.type).toBe("error");
+  const embedErr = parseEmbedChatError(new Error(parsed.errorText));
+  expect(embedErr?.code).toBe("free_quota_exceeded");
+  expect(
+    shouldSuggestByokOnEmbedError({
+      llmAccess: "free_then_byok",
+      gateMode: "ungated",
+      errorCode: embedErr?.code,
+    }),
+  ).toBe(true);
+});
+
+it("strips Open WebUI tool dumps from streamed answer text", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({
+          choices: [
+            {
+              delta: {
+                content:
+                  "<details><summary>Tool</summary>dump</details>\n\nClean answer.",
+              },
+            },
+          ],
+        })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } },
+    ),
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  expect(body).toContain("Clean answer.");
+  expect(body).not.toContain("<details>");
+});
+
+// #2306 follow-up: narration written alongside a round's tool calls (e.g. "I will
+// load the full notes now.") must not concatenate with the final answer in the
+// same visible text part. Confirmed live in production before this fix: the two
+// read as one continuous, self-contradicting block.
+it("splits narration from the final answer into separate text parts on round_boundary", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "I will load the notes." } }] })}\n\n`,
+        `data: ${JSON.stringify({
+          choices: [
+            { delta: { digigraph_trace: { v: 1, type: "round_boundary", payload: { round_idx: 0 } } } },
+          ],
+        })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Here is the real answer." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  const events = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("data: ") && l !== "data: [DONE]")
+    .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+
+  const textStarts = events.filter((e) => e.type === "text-start");
+  const textEnds = events.filter((e) => e.type === "text-end");
+  // Two distinct text parts: the narration, and the real answer.
+  expect(textStarts).toHaveLength(2);
+  expect(textEnds).toHaveLength(2);
+  const [firstId, secondId] = textStarts.map((e) => e.id);
+  expect(firstId).not.toBe(secondId);
+
+  const deltasFor = (id: unknown) =>
+    events
+      .filter((e) => e.type === "text-delta" && e.id === id)
+      .map((e) => e.delta)
+      .join("");
+  expect(deltasFor(firstId)).toBe("I will load the notes.");
+  expect(deltasFor(secondId)).toBe("Here is the real answer.");
+
+  // The round_boundary trace itself must render no visible activity chip.
+  expect(body).not.toContain("round_boundary");
+});
+
+// A normal single-round exchange (no tool calls at all) must be completely
+// unaffected: exactly one text part, same as before this change.
+it("keeps a single unbroken text part when no round_boundary ever fires", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello " } }] })}\n\n`,
+        `data: ${JSON.stringify({ choices: [{ delta: { content: "there." } }] })}\n\n`,
+        "data: [DONE]\n\n",
+      ].join(""),
+      { status: 200, headers: { "content-type": "text/event-stream" } }
+    )
+  );
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+  const body = await new Response(res.body).text();
+  const events = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith("data: ") && l !== "data: [DONE]")
+    .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+
+  expect(events.filter((e) => e.type === "text-start")).toHaveLength(1);
+  expect(events.filter((e) => e.type === "text-end")).toHaveLength(1);
+  expect(events.filter((e) => e.type === "text-start")[0]?.id).toBe("assistant-main");
+});
+
+it("opts digigraph out of Open WebUI format on the dogfood stream path", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })
+  );
+
+  await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "full",
+  });
+
+  expect(fetchSpy).toHaveBeenCalled();
+  const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+  const headers = new Headers(init.headers);
+  expect(headers.get("X-Suppress-Tool-Stream")).toBe("1");
+  expect(headers.get("X-Response-Format")).toBe("plain");
+});

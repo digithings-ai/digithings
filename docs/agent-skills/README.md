@@ -1,4 +1,4 @@
-# Agent skills (DigiThings)
+# Agent skills (digithings)
 
 Small **task recipes** for coding agents. Cursor stores skills under the user skill directory or project rules; Codex uses `$CODEX_HOME/skills`. This folder is the **canonical copy in git**.
 

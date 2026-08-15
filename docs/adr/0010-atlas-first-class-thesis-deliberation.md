@@ -3,8 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-04-20
 - **Deciders:** Chris Stefan (founder), Atlas Wave 1 worktree agents
-- **Related:** [ADR-0008 Atlas research schema](0008-atlas-research-schema.md), [ADR-0009 Atlas Supabase persistence](0009-atlas-supabase-persistence.md)
-- **Supersedes:** nothing. Complements ADR-0009.
+- **Related:** [ADR-0008 Atlas research schema](0008-atlas-research-schema.md), [ADR-0011 Atlas Supabase persistence](0011-atlas-supabase-persistence.md)
+- **Supersedes:** nothing. Complements ADR-0011.
 
 ## Context
 
@@ -26,7 +26,7 @@ but it is expensive for four classes of query we now need:
 4. **"Which analyst covers AAPL today"** is a 1-row query that today requires
    scanning all `asset_recommendation` documents for the date.
 
-Wave 1 of the Atlas → DigiGraph migration moves the Hermes sub-graph
+Wave 1 of the Atlas → digigraph migration moves the Hermes sub-graph
 (deliberation round-loop, deep-dive recess, PM memo) into first-class
 LangGraph state. That work creates the natural opportunity to also land
 structured persistence alongside the existing documents-only writes.

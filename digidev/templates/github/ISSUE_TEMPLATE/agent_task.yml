@@ -1,0 +1,79 @@
+name: Agent task
+description: Scoped task for a coding agent (Cursor, Claude Code, Copilot, etc.)
+title: "[agent] "
+labels: ["agent-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use labels such as `component:<name>` and `risk:low` / `risk:med` / `risk:high`.
+        Execution tiers: `exec:copilot` (housekeeping), `exec:cursor` (clear spec), `exec:claude` (judgment / human-gated).
+  - type: dropdown
+    id: component
+    attributes:
+      label: Primary component
+      options:
+        - {{COMPONENTS_DROPDOWN}}
+        - other
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk
+      options:
+        - low
+        - med
+        - high
+    validations:
+      required: true
+  - type: dropdown
+    id: exec
+    attributes:
+      label: Execution tier
+      description: "Minimum-capability ceiling. copilot = triggered housekeeping only; cursor = one-paragraph spec, clear acceptance; claude = judgment, cross-module, or human-gated."
+      options:
+        - copilot
+        - cursor
+        - claude
+    validations:
+      required: true
+  - type: dropdown
+    id: model
+    attributes:
+      label: Model
+      description: "sonnet = standard tasks; opus = complex/high-risk tasks requiring deeper reasoning"
+      options:
+        - sonnet
+        - opus
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One paragraph — what should be true when this is done?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist the agent can verify (tests, behavior, docs).
+      placeholder: "- [ ] ...\n- [ ] Unit tests pass\n- [ ] ARCHITECTURE.md updated if interface changed"
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Documentation
+      description: Which files must be updated (paths or doc names)?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context / links
+      description: PRs, ADRs, ARCHITECTURE sections, logs — optional.
+    validations:
+      required: false

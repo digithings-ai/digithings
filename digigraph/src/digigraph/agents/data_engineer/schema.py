@@ -10,9 +10,19 @@ DATA_ENGINEER_AGENT_TOOL = {
         "parameters": {
             "type": "object",
             "properties": {
-                "dataset_ref": {"type": "string", "description": "Path or ref to the primary dataset."},
-                "task": {"type": "string", "description": "What to compute, e.g. 'add a column that is the sum of columns A and B'."},
-                "additional_dataset_refs": {"type": "array", "items": {"type": "string"}, "description": "Optional extra datasets (as df_1, df_2, ...)."},
+                "dataset_ref": {
+                    "type": "string",
+                    "description": "Path or ref to the primary dataset.",
+                },
+                "task": {
+                    "type": "string",
+                    "description": "What to compute, e.g. 'add a column that is the sum of columns A and B'.",
+                },
+                "additional_dataset_refs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional extra datasets (as df_1, df_2, ...).",
+                },
                 "options": {"type": "object", "description": "Optional overrides."},
             },
             "required": ["dataset_ref", "task"],

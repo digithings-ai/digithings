@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "digiquant"
 version = "0.1.0"
-description = "DigiQuant – high-perf Nautilus + Polars quant pipeline (Digi Ecosystem)"
+description = "digiquant – high-perf Nautilus + Polars quant pipeline (Digi Ecosystem)"
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -21,24 +21,104 @@ dependencies = [
     "langgraph>=0.2",
 ]
 [project.optional-dependencies]
-nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28"]
+nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28", "statsmodels>=0.14"]
+indicators = ["statsmodels>=0.14", "numpy>=1.26"]
 visualization = ["plotly>=6.3.1"]
 data = ["yfinance>=0.2", "curl-cffi>=0.15.0"]
+prices = [
+    "yfinance>=0.2",
+    "requests>=2.28",
+    "pyyaml>=6",
+    "supabase>=2.0",
+    "python-dotenv>=1",
+    "pyarrow>=15",
+    # Trading-calendar source for trading_calendar table (ADR-0013, issue #337).
+    # exchange_calendars returns pandas DataFrames; calendar_sync.py flattens
+    # them to dicts at the boundary so the rest of the pipeline stays Polars-only.
+    "exchange_calendars>=4.5",
+]
+# Atlas research pipeline runtime. The atlas sub-package also imports
+# `digigraph` (workspace-local, not on PyPI) — install via
+# scripts/install-workspace.sh or `pip install -e ./digigraph` first.
+atlas = [
+    "PyYAML>=6",
+    "jsonschema>=4.21",
+    "python-dotenv>=1",
+    "httpx>=0.27",
+    "supabase>=2.0",
+]
 optimize = ["optuna>=3.0"]
+# M2 Liquidity strategy: global M2 money-supply from FRED + FX rates from yfinance.
+# Requires FRED_API_KEY (free) for live fetches; unit tests mock the clients.
+m2 = ["fredapi>=0.5", "yfinance>=0.2"]
 all = ["digiquant[nautilus]"]
-dev = ["pytest>=8", "pytest-cov>=4", "ruff>=0.8"]
-mcp = ["mcp>=1.2"]
+# Pulls in atlas runtime deps too, so `pytest tests/dq/atlas/` works whenever
+# digigraph is also on the path (via install-workspace.sh or editable install).
+# Test/lint tooling (pytest, ruff, ...) lives in [dependency-groups] below, not
+# here -- a uv dependency-group syncs by default with plain `uv sync`, while an
+# optional-dependencies extra needs --extra dev / --all-extras. Bundling pytest
+# into this extra meant `uv sync --all-packages` (no --all-extras) silently left
+# pytest out of digiquant's venv, and `uv run pytest` fell through to whatever
+# `pytest` happened to be on PATH instead -- see the digillm/CallPurpose
+# shadowing investigation for the same failure mode in digigraph.
+dev = ["digiquant[atlas]", "digiquant[indicators]", "digiquant[m2]"]
+# Upper-bounded: mcp 2.0 removed `mcp.server.fastmcp`, which both MCP servers
+# import (see #1705). Lift the bound only together with a migration to the 2.x API.
+mcp = ["mcp>=1.2,<2"]
 otel = ["digibase[otel]"]
 
 [project.scripts]
 digiquant = "digiquant.cli:main"
 
+[dependency-groups]
+# Synced by default with plain `uv sync` (unlike [project.optional-dependencies],
+# which needs --extra/--all-extras) -- so pytest is always present in digiquant's
+# own venv regardless of which extras a given `uv sync` invocation requests.
+# Bounds match CLAUDE.md's "Dependency version bounds": tools whose output gates
+# CI are capped to their current major.
+dev = ["pytest>=8,<10", "pytest-cov>=4,<8", "ruff>=0.16,<0.17"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+# Skills, templates, config, and docs live alongside the engine packages
+# (digiquant.olympus.atlas, digiquant.olympus.hermes) so they ship inside the wheel —
+# pip-installs are self-contained, no path-walking outside the package.
+# See issue #486 for the consolidation rationale.
+"digiquant.olympus.atlas" = [
+    "skills/**/*.md",
+    "templates/**/*.json",
+    "config/**/*.yaml",
+    "config/**/*.yml",
+    "config/**/*.md",
+    "config/**/*.json",
+    "config/**/*.example",
+    "docs/**/*.md",
+]
+"digiquant.olympus.hermes" = [
+    "skills/**/*.md",
+    "templates/**/*.json",
+    "docs/**/*.md",
+]
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Atlas legacy scripts (pandas/yfinance, migrated from apps/digiquant-atlas/scripts/
+# in #316) opt out of the strict Polars-only lint rules. They are not actively
+# maintained — slated for further trim in subsequent atlas-engine cleanup.
+extend-exclude = ["scripts/atlas"]
+
+[tool.ruff.format]
+# Markdown is not source — see the root ruff.toml and #1705. This component config
+# overrides the root for this tree, so the exclusion has to be restated here.
+exclude = ["*.md"]
+
+[tool.ruff.lint]
+# Explicit rule selection — see the root ruff.toml and #1701. This component config
+# overrides the root for this tree, so the selection has to be restated here.
+select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
 
 [tool.ruff.lint.per-file-ignores]
 # Service entrypoint imports after dotenv/sys.path bootstrap — by design.
@@ -49,5 +129,19 @@ target-version = "py312"
 "**/__init__.py" = ["F401"]
 
 [tool.pytest.ini_options]
-testpaths = ["test"]
-pythonpath = ["src"]
+# Monorepo tests live at repo root tests/dq/; from digiquant/: `pytest` picks these up; or `make test-unit` from repo root.
+testpaths = ["../tests/dq"]
+#
+# pythonpath must list the repo root plus every workspace sibling that src/digiquant or
+# tests/dq imports directly (digibase, digigraph, digikey, digillm) -- not just "src". Reason:
+# when pytest is invoked with no path args from *inside* digiquant/ (e.g.
+# `cd digiquant && uv run pytest -m unit`), its rootdir/config search starts at cwd and
+# stops at the first ancestor with a recognized config -- this file -- so it never walks
+# up to the repo-root pytest.ini, which carries the full list (". digibase/src digillm/src
+# digikey/src ..."). If that's the only thing putting a sibling's editable install (or the
+# repo root, needed for `from tests.conftest import ...` / `from tests.dq...` in the shared
+# test suite) on sys.path, the omission silently resolves imports against whatever global
+# site-packages that other interpreter has instead of the workspace's editable copy.
+# Listing them here is both the fix and the safety net. See digigraph's fix for the
+# original root-cause writeup (digillm/CallPurpose ImportError).
+pythonpath = ["..", "src", "../digibase/src", "../digigraph/src", "../digikey/src", "../digillm/src"]

@@ -14,20 +14,25 @@
  * applies the nearest layout, so this layout composes under the root in the
  * App Router. That keeps Tailwind classnames working without duplicating
  * token definitions here.
+ *
+ * `dc-embed-shell` is the hook for the readable-measure rule in globals.css:
+ * the shell itself stays full-bleed (the tenant background paints edge to
+ * edge) and only the `.dc-session` column inside it is capped and centred,
+ * exactly as digithings.ai/chat does it.
  */
 
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 export const metadata: Metadata = {
-  title: "DigiChat",
-  description: "Embedded DigiChat preview.",
+  title: "digichat",
+  description: "Embedded digichat preview.",
   robots: { index: false, follow: false },
 };
 
 export default function EmbedLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-dvh w-full flex-col bg-background text-foreground">
+    <div className="dc-embed-shell flex h-dvh w-full flex-col overflow-hidden bg-background text-foreground">
       {children}
     </div>
   );

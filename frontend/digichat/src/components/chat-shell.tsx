@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * ChatShell — authenticated chat chrome for DigiChat.
+ * ChatShell — authenticated chat chrome for digichat.
  *
- * #273: Rewritten to consume @digithings/design-system/app-shell-terminal
+ * #273: Rewritten to consume @digithings/design/app-shell-terminal
  * classes natively in React (CSS classes are the primitive's contract; the
  * primitive's vanilla-JS `initAppShell` would clobber React state by
  * imperatively rewriting the host's innerHTML, so we render the same DOM
@@ -23,7 +23,6 @@ import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { ChatPanel } from "@/components/chat-panel";
-import { BYOKSettingsPanel } from "@/components/byok-settings-panel";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,17 +36,18 @@ import {
   type ChatThreadState,
 } from "@/lib/thread-local";
 import { cn } from "@/lib/utils";
+import { p } from "@/lib/base-path";
 
 type RemoteSummary = { id: string; title: string; updatedAt: string };
 
 const SLASH_REFERENCE: Array<{ cmd: string; hint: string }> = [
   { cmd: "/help", hint: "list commands" },
-  { cmd: "/key", hint: "BYOK settings" },
+  { cmd: "/key", hint: "BYOK (CLI)" },
   { cmd: "/model", hint: "<id>" },
   { cmd: "/clear", hint: "clear thread" },
   { cmd: "/scope", hint: "show JWT scopes" },
   { cmd: "/history", hint: "focus sidebar" },
-  { cmd: "/settings", hint: "open settings" },
+  { cmd: "/settings", hint: "alias for /key" },
 ];
 
 function groupByDate(threads: ChatThreadState[]): Array<{ label: string; items: ChatThreadState[] }> {
@@ -88,7 +88,7 @@ export function ChatShell({
   const [serverPersistence, setServerPersistence] = useState(false);
   const [ready, setReady] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [byokMode, setByokMode] = useState(false);
 
   const threadsRef = useRef(threads);
   useEffect(() => {
@@ -104,7 +104,7 @@ export function ChatShell({
       if (!t) return;
 
       if (!t.remote) {
-        const cr = await fetch("/api/conversations", {
+        const cr = await fetch(p("/api/conversations"), {
           method: "POST",
           credentials: "include",
           headers: { "content-type": "application/json" },
@@ -116,7 +116,7 @@ export function ChatShell({
       }
 
       const snap = threadsRef.current.find((x) => x.id === threadId) ?? t;
-      await fetch(`/api/conversations/${threadId}`, {
+      await fetch(p(`/api/conversations/${threadId}`), {
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -146,7 +146,7 @@ export function ChatShell({
       let remote: RemoteSummary[] = [];
       let pers = false;
       try {
-        const r = await fetch("/api/conversations", { credentials: "include" });
+        const r = await fetch(p("/api/conversations"), { credentials: "include" });
         if (r.ok) {
           const j = (await r.json()) as {
             serverPersistence?: boolean;
@@ -194,7 +194,7 @@ export function ChatShell({
       const t = threads.find((x) => x.id === id);
       if (t?.remote && !t.hydrated) {
         try {
-          const r = await fetch(`/api/conversations/${id}`, { credentials: "include" });
+          const r = await fetch(p(`/api/conversations/${id}`), { credentials: "include" });
           if (r.ok) {
             const j = (await r.json()) as { title: string; messages: UIMessage[] };
             setThreads((prev) =>
@@ -216,7 +216,7 @@ export function ChatShell({
         }
       }
       setActiveId(id);
-      setSettingsOpen(false);
+      setByokMode(false);
     },
     [threads],
   );
@@ -239,7 +239,7 @@ export function ChatShell({
       return next;
     });
     setActiveId(id);
-    setSettingsOpen(false);
+    setByokMode(false);
   }, [userId]);
 
   const deleteThread = useCallback(
@@ -247,7 +247,7 @@ export function ChatShell({
       const t = threadsRef.current.find((x) => x.id === id);
       if (t?.remote && serverPersistence) {
         try {
-          await fetch(`/api/conversations/${id}`, { method: "DELETE", credentials: "include" });
+          await fetch(p(`/api/conversations/${id}`), { method: "DELETE", credentials: "include" });
         } catch {
           /* ignore */
         }
@@ -340,21 +340,29 @@ export function ChatShell({
     [userId, scheduleServerSave],
   );
 
-  // Cmd+/ toggles sidebar; Esc closes the settings pane.
+  // Cmd+/ toggles sidebar; Esc closes BYOK configure mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const meta = e.metaKey || e.ctrlKey;
       if (meta && e.key === "/") {
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLInputElement ||
+          active instanceof HTMLTextAreaElement ||
+          (active instanceof HTMLElement && active.isContentEditable)
+        ) {
+          return;
+        }
         e.preventDefault();
         setCollapsed((v) => !v);
-      } else if (e.key === "Escape" && settingsOpen) {
+      } else if (e.key === "Escape" && byokMode) {
         e.preventDefault();
-        setSettingsOpen(false);
+        setByokMode(false);
       }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [settingsOpen]);
+  }, [byokMode]);
 
   const grouped = useMemo(() => groupByDate(threads), [threads]);
   const subtitle = userEmail ?? displayName ?? userId ?? "Signed in";
@@ -374,7 +382,7 @@ export function ChatShell({
           <div className="dc-sidebar-brand">
             <div className="dc-sidebar-brand-mark">DT</div>
             <div>
-              <div className="dc-sidebar-brand-name">DigiChat</div>
+              <div className="dc-sidebar-brand-name">digichat</div>
               <div className="dc-sidebar-brand-version">v0.1 · digithings</div>
             </div>
           </div>
@@ -408,6 +416,7 @@ export function ChatShell({
                         <DropdownMenuTrigger
                           aria-label={`Actions for ${t.title}`}
                           onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
                           className="text-muted-foreground hover:text-foreground"
                         >
                           <MoreHorizontal className="size-3.5" />
@@ -464,7 +473,7 @@ export function ChatShell({
               type="button"
               className="dc-sidebar-cmd"
               style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => signOut({ callbackUrl: p("/embed") })}
             >
               <span>sign out</span>
               <span aria-hidden>⏻</span>
@@ -475,8 +484,18 @@ export function ChatShell({
 
       <div className="app-shell-main-col">
         <header className="app-topbar">
-          <span className="app-topbar-title">{activeThread.title || "DigiChat"}</span>
+          <span className="app-topbar-title">{activeThread.title || "New chat"}</span>
           <span className="app-topbar-meta">
+            <button
+              type="button"
+              onClick={() => setByokMode(true)}
+              className="underline-offset-2 hover:underline"
+              style={{ background: "transparent", border: "none", color: "inherit", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit" }}
+              aria-label="Configure bring your own key"
+            >
+              bring your own key
+            </button>
+            {" · "}
             {subtitle} · <button
               type="button"
               onClick={() => setCollapsed((v) => !v)}
@@ -490,52 +509,30 @@ export function ChatShell({
         </header>
 
         <main className="app-main">
-          {settingsOpen ? (
-            <div className="dc-settings-pane">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-3)" }}>
-                <h2 style={{ margin: 0, fontSize: 14, fontFamily: "var(--font-family-mono)", color: "var(--text-primary)" }}>
-                  settings
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setSettingsOpen(false)}
-                  className="dc-sidebar-cmd"
-                  style={{ background: "transparent", border: "1px solid var(--border-color)", padding: "4px 10px", cursor: "pointer" }}
-                  aria-label="Close settings (Esc)"
-                >
-                  close · esc
-                </button>
-              </div>
-              <BYOKSettingsPanel inline />
-            </div>
-          ) : (
-            <ChatPanel
-              key={`${activeThread.id}-${activeThread.hydrateVersion}`}
-              threadId={activeThread.id}
-              threadTitle={activeThread.title}
-              initialMessages={activeThread.messages}
-              onMessagesCommit={onMessagesCommit}
-              onTitleDerived={onTitleDerived}
-              onSlashCommand={(cmd) => {
-                const [name] = cmd.trim().split(/\s+/);
-                if (name === "/clear") {
-                  clearActiveThread();
-                  return true;
-                }
-                if (name === "/key" || name === "/settings") {
-                  setSettingsOpen(true);
-                  return true;
-                }
-                if (name === "/history") {
-                  setCollapsed(false);
-                  const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
-                  first?.focus();
-                  return true;
-                }
-                return false;
-              }}
-            />
-          )}
+          <ChatPanel
+            key={`${activeThread.id}-${activeThread.hydrateVersion}`}
+            threadId={activeThread.id}
+            threadTitle={activeThread.title}
+            initialMessages={activeThread.messages}
+            onMessagesCommit={onMessagesCommit}
+            onTitleDerived={onTitleDerived}
+            byokMode={byokMode}
+            onByokModeChange={setByokMode}
+            onSlashCommand={(cmd) => {
+              const [name] = cmd.trim().split(/\s+/);
+              if (name === "/clear") {
+                clearActiveThread();
+                return true;
+              }
+              if (name === "/history") {
+                setCollapsed(false);
+                const first = document.querySelector<HTMLElement>(".dc-sidebar-thread");
+                first?.focus();
+                return true;
+              }
+              return false;
+            }}
+          />
         </main>
       </div>
     </div>

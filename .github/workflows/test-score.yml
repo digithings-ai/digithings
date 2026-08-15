@@ -1,0 +1,50 @@
+name: "Test: score PR diff"
+
+on:
+  workflow_call:
+
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Score staged PR diff
+        # No dependency install: scripts/score.py imports only the standard
+        # library, so the `pip install -U pip` that used to head this step
+        # installed nothing the job needed. Verified by AST-walking the script's
+        # imports against sys.stdlib_module_names — zero third-party modules.
+        # Nothing to lock here, so this gate stays on the runner's Python (#1715).
+        run: |
+          git fetch origin "${{ github.base_ref }}"
+          # Exclusions (beyond docs/reviews + docs/superpowers):
+          #   frontend/**            — out of score's scope; the rubric is Python-oriented
+          #                            and misfires on JS/CSS (CLAUDE.md), e.g. `regex.exec()`
+          #                            flagged as "bare exec() code injection".
+          #   scripts/{claude-,}hooks/** and digidev/*.example.yml — these DEFINE the
+          #                            live-trading detection regex, so the live-trading
+          #                            detector self-matches its own pattern definition.
+          # These only bite on large mixed diffs (e.g. develop→main promotions); a normal
+          # PR rarely touches them. digidev's one .py file is still scored (only the
+          # example config is excluded). See #1443.
+          git diff "origin/${{ github.base_ref }}...HEAD" -- . \
+            ':(exclude)docs/reviews/**' ':(exclude)docs/superpowers/**' \
+            ':(exclude)frontend/**' \
+            ':(exclude)scripts/claude-hooks/**' ':(exclude)scripts/hooks/**' \
+            ':(exclude)digidev/*.example.yml' \
+            > /tmp/pr-code.diff || true
+          if [ -s /tmp/pr-code.diff ]; then
+            python3 scripts/score.py --diff-file /tmp/pr-code.diff
+            python3 scripts/score.py --diff-file /tmp/pr-code.diff --format json > /tmp/score.json
+            python3 -c "import json; d=json.load(open('/tmp/score.json')); print('Score dimensions (thresholds: security≥8 quality≥8 optimization≥7 accuracy≥9):'); [print(f\"  {k}: {v['score']}/10 {'PASS' if v['passed'] else 'FAIL'}\") for k,v in d.get('dimensions', {}).items()]"
+          else
+            echo "score: no code diff outside docs/reviews"
+          fi

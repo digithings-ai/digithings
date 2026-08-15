@@ -1,0 +1,26 @@
+# Root build context is shared by every service compose builds with `context: .`
+# (digikey, digigraph, digiquant, digismith, digiclaw, digichat). Their
+# Dockerfiles COPY the service source dirs, so exclude only what no image needs.
+.git
+.github
+.worktrees
+.claude
+.playwright-mcp
+node_modules
+**/node_modules
+**/.next
+**/out
+dist
+data
+docs
+projects
+openspec
+tests
+scripts
+agents
+frontend/digithings
+frontend/digiquant
+**/*.log
+.env
+.env.*
+!.env.example

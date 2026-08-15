@@ -1,0 +1,83 @@
+/* ==========================================================================
+   @digithings/web — Marquee structural CSS (components/marquee/Marquee).
+   Import AFTER the token bridge, in the app's globals.css:
+     @import "tailwindcss";
+     @import "@digithings/design/tokens.css";
+     @import "@digithings/web/styles/web-theme.css";
+     @import "@digithings/web/styles/marquee.css";
+     @source "<path-to>/digiweb/web/src/components/marquee";
+   The @source line is load-bearing (path relative to the app's globals.css):
+   the component carries token-backed item utilities, and Tailwind does not scan
+   package sources on its own.
+
+   Utilities in <Marquee/> carry the item chip type/color and the accent dot.
+   This file holds only what must stay CSS: the overflow + edge-fade mask, the
+   seamless-loop geometry + keyframes, pause-on-hover, and the reduced-motion
+   stop — the drift never gates content; the strip reads statically. Loop
+   duration comes from --mq-speed (set inline by the component, default 34s).
+
+   Loop geometry is load-bearing: the content renders twice as two .mq-group
+   spans and the track translates exactly -50% per cycle. The inter-item gap
+   lives INSIDE each group (gap + an equal padding-right); the track itself has
+   no gap, so half the track width is exactly one period and the wrap point is
+   invisible. A track-level gap would offset the period by gap/2 and make every
+   loop visibly jump.
+   ========================================================================== */
+
+.mq-row {
+  overflow: hidden;
+  /* edge fade: the strip reads as continuing past both sides. Mask colors are
+     opacity stops, not palette (migrate-vs-leave: masks stay CSS). */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+}
+
+.mq-track {
+  display: inline-flex;
+  width: max-content;
+  will-change: transform;
+}
+
+/* one full copy of the content; padding-right doubles as the wrap gap so the
+   -50% translate lands exactly one period on (see header comment) */
+.mq-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.2rem;
+  padding-right: 2.2rem;
+  white-space: nowrap;
+}
+
+.mq-track--left {
+  animation: mq-left var(--mq-speed, 34s) linear infinite;
+}
+
+.mq-track--right {
+  animation: mq-right var(--mq-speed, 34s) linear infinite;
+}
+
+.mq-row:hover .mq-track {
+  animation-play-state: paused;
+}
+
+@keyframes mq-left {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes mq-right {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mq-track--left,
+  .mq-track--right {
+    animation: none;
+  }
+}

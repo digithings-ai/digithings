@@ -1,0 +1,9 @@
+# Local secrets/config for `wrangler pages dev` (auto-loaded from this directory).
+# Copy to `.dev.vars` (gitignored) and fill in. NEVER commit `.dev.vars`.
+#
+# Marketing /chat no longer uses the Pages OpenRouter digivault Function.
+# Point the static site at digichat Node (digigraph stack) via build-time:
+#   NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=https://digichat.digithings.ai
+# See infra/digichat-digithings/README.md.
+#
+# The retired POST /api/chat Function returns 410; these keys are unused for chat.
