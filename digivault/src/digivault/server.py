@@ -709,7 +709,16 @@ def orchestrator_invoke(
             except D1StoreError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
         elif (os.environ.get("DIGIVAULT_ROOT") or "").strip():
-            hits = search_local_vault(_open_vault(), query, limit=limit, path_prefix=path_prefix)
+            try:
+                hits = search_local_vault(
+                    _open_vault(), query, limit=limit, path_prefix=path_prefix
+                )
+            except ValueError as exc:
+                # `resolve_path_prefix` rejects a non-None prefix that normalizes
+                # to empty ("/", "   ", "///", ".md") rather than failing open and
+                # searching the whole root. That is a caller bug, so 400 — not the
+                # 500 an unhandled ValueError would otherwise produce.
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         else:
             hits = _open_supabase_store().search(query, limit=limit, path_prefix=path_prefix)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}

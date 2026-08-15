@@ -221,6 +221,10 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
     }
     return jsonResponse(result, result.ok ? 200 : 400);
   } catch (e) {
-    return jsonResponse({ ok: false, error: abortMessage(e) }, 500);
+    // Sanitize here too, not just on the upstream-error paths. A fetch/network
+    // failure message can quote the request URL, and Gemini's key rides in that
+    // URL (`...models?key=`), so an unsanitized `e.message` echoes the caller's
+    // key straight back in a 500 body.
+    return jsonResponse({ ok: false, error: sanitizeUpstreamError(abortMessage(e), key) ?? "Request failed" }, 500);
   }
 }
