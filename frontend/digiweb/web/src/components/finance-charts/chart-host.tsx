@@ -197,6 +197,14 @@ export function useFinanceChart(
     const chart: IChartApi = createChart(host, {
       autoSize: true,
       ...financeChartOptions(palette, crosshairLabel),
+      // These are display specimens embedded in scrolling prose (design
+      // reference / marketing surfaces), never a live dashboard — see this
+      // file's own docblock. A reader's wheel/touch scroll landing on the
+      // canvas should keep moving the page, not pan/zoom a chart nobody
+      // asked to interact with. useLightweightChart (lw-chart.tsx), the
+      // dashboard-facing sibling, is untouched and keeps full pan/zoom.
+      handleScroll: { mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false },
+      handleScale: { axisPressedMouseMove: false, mouseWheel: false, pinch: false },
       // Reduced motion: no kinetic-scroll inertia (the final state is the
       // same chart — panning still works, it just stops with the pointer).
       ...(reducedMotion ? { kineticScroll: { touch: false, mouse: false } } : {}),

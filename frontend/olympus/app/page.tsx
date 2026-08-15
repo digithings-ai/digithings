@@ -1,15 +1,17 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
-import AtlasLoader from '@/components/AtlasLoader';
-import { MoveHero } from '@/components/today/move-hero';
-import { WhatToWatch } from '@/components/today/what-to-watch';
-import { BookStrip } from '@/components/today/book-strip';
-import { TodaySummaries } from '@/components/today/today-summaries';
+import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { EmptyState } from '@digithings/web';
+import PageSkeleton from '@/components/page-skeleton';
+import {
+  DailyBriefWorkspace,
+  type BriefRunHealth,
+} from '@/components/today/daily-brief-workspace';
 
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
 
@@ -21,8 +23,8 @@ function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
 }
 
 /**
- * Portfolio vs benchmark over the aligned window (first NAV snap date → last NAV
- * snap date, clipped to available benchmark history). `startDate` keeps the label
+ * Portfolio vs benchmark over the aligned return window (first portfolio point →
+ * last portfolio point, clipped to available benchmark history). `startDate` keeps the label
  * honest ("since {date}", not a dishonest "inception").
  */
 function inceptionVsBenchmark(
@@ -50,31 +52,64 @@ function inceptionVsBenchmark(
 
 export default function OverviewPage() {
   const { data, loading, error } = useDashboard();
+  const dashboardDate = data?.portfolio?.meta.last_updated ?? null;
+  const [runHealth, setRunHealth] = useState<BriefRunHealth | null>();
+
+  useEffect(() => {
+    if (!dashboardDate) return;
+    let cancelled = false;
+
+    void fetchAtlasRunDiagnostics()
+      .then((runs) => {
+        if (cancelled) return;
+        const latestForDate = runs.find((run) => run.run_date === dashboardDate) ?? null;
+        setRunHealth(
+          latestForDate
+            ? {
+                status: latestForDate.status,
+                runDate: latestForDate.run_date,
+                finishedAt: latestForDate.finished_at,
+                segmentsOk: latestForDate.segments_ok,
+                segmentsTotal: latestForDate.segments_total,
+                segmentsCarried: latestForDate.segments_carried,
+                segmentsFailed: latestForDate.segments_failed,
+              }
+            : null
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setRunHealth(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardDate]);
 
   const benchmarkBlurb = useMemo(() => {
     if (!data?.portfolio?.snapshots?.length || !data.benchmarks) return null;
     return inceptionVsBenchmark(data.portfolio.snapshots, data.benchmarks);
   }, [data]);
 
-  if (loading) return <AtlasLoader />;
+  if (loading) return <PageSkeleton />;
   if (error || !data)
     return (
       <div className={`${SUBPAGE_MAX} py-12`}>
-        <div className="glass-card mx-auto max-w-md px-6 py-8 text-center">
-          <h2 className="font-display text-2xl tracking-tight text-ink">
-            Couldn&rsquo;t load your dashboard
-          </h2>
-          <p className="mt-2 text-sm leading-relaxed text-ink-mute">
-            {error || 'The latest data did not come through. This is usually temporary.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06]"
-          >
-            Try again
-          </button>
-        </div>
+        <EmptyState
+          variant="error"
+          className="mx-auto max-w-md"
+          title="Couldn’t load your dashboard"
+          body={error || 'The latest data did not come through. This is usually temporary.'}
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-ink/[0.06]"
+            >
+              Try again
+            </button>
+          }
+        />
       </div>
     );
 
@@ -102,60 +137,67 @@ export default function OverviewPage() {
     }
   }
 
-  const navSnaps = portfolio.snapshots ?? [];
-  const navIndex = navSnaps.length ? navSnaps[navSnaps.length - 1].nav : null;
-  const navFirst = navSnaps.length ? navSnaps[0].nav : null;
+  const performanceHistory = portfolio.snapshots ?? [];
+  // The book's own as-of (latest performance-history point) — deliberately NOT
+  // latestDate (the digest date): research publishes daily even when the
+  // book-persistence half is frozen (#1555), and book surfaces must carry
+  // their own date rather than borrow the digest's freshness.
+  const bookAsOf = performanceHistory.length
+    ? performanceHistory[performanceHistory.length - 1].date
+    : null;
+  const latestPortfolioValue = performanceHistory.length
+    ? performanceHistory[performanceHistory.length - 1].nav
+    : null;
+  const initialPortfolioValue = performanceHistory.length ? performanceHistory[0].nav : null;
   const sincePct =
-    navIndex != null && navFirst != null && navFirst > 0
-      ? (navIndex / navFirst - 1) * 100
+    latestPortfolioValue != null && initialPortfolioValue != null && initialPortfolioValue > 0
+      ? (latestPortfolioValue / initialPortfolioValue - 1) * 100
       : null;
-  const sinceDate = navSnaps.length ? navSnaps[0].date : null;
-  // Daily delta + benchmark are gated on ≥2 NAV points (empty-state discipline).
+  const sinceDate = performanceHistory.length ? performanceHistory[0].date : null;
+  // Daily return + benchmark are gated on at least two persisted points.
   const dailyRet =
-    navSnaps.length >= 2
-      ? ((navSnaps[navSnaps.length - 1].nav - navSnaps[navSnaps.length - 2].nav) /
-          navSnaps[navSnaps.length - 2].nav) *
+    performanceHistory.length >= 2
+      ? ((performanceHistory[performanceHistory.length - 1].nav -
+          performanceHistory[performanceHistory.length - 2].nav) /
+          performanceHistory[performanceHistory.length - 2].nav) *
         100
       : null;
 
   return (
-    <div className={`${SUBPAGE_MAX} space-y-5 py-4 md:py-7`}>
-      <MoveHero
+    <div className={`${SUBPAGE_MAX} py-4 md:py-7`}>
+      <DailyBriefWorkspace
         regime={strategy.regime}
         regimeLabel={regimeLabel}
         headline={strategy.summary || null}
         confidence={strategy.theses?.[0]?.confidence ?? null}
-        asOf={latestDate}
+        digestDate={latestDate}
+        bookDate={bookAsOf}
         runType={runTypeLabel}
         actions={rebalanceActions}
         rationaleByTicker={rationaleByTicker}
-        nav={{
-          index: navIndex,
+        returns={{
           sincePct,
           sinceDate,
           dailyPct: dailyRet,
           benchTicker: benchmarkBlurb?.ticker ?? null,
           excessPct: benchmarkBlurb?.excessPct ?? null,
         }}
-      />
-
-      <WhatToWatch
+        metrics={{
+          maxDrawdown:
+            data.server_portfolio_metrics?.max_drawdown ?? data.calculated?.max_drawdown ?? null,
+          volatility:
+            data.server_portfolio_metrics?.volatility ?? data.calculated?.volatility ?? null,
+        }}
+        investedPct={
+          data.server_portfolio_metrics?.invested_pct ?? data.calculated?.total_invested ?? null
+        }
+        positions={positions}
         actionables={strategy.actionableItems ?? []}
         risks={strategy.riskItems ?? []}
-        asOfDate={latestDate}
-      />
-
-      <BookStrip
-        positions={positions}
-        investedPct={data.server_portfolio_metrics?.invested_pct ?? null}
-        asOfDate={latestDate}
-      />
-
-      <TodaySummaries
-        positions={positions}
         theses={strategy.theses ?? []}
-        readSummary={strategy.summary ?? null}
-        asOfDate={latestDate}
+        contextBullets={data.snapshot_context_bullets ?? []}
+        latestEvent={data.position_events?.[0] ?? null}
+        runHealth={latestDate ? runHealth : null}
       />
     </div>
   );

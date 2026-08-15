@@ -15,8 +15,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import TypeVar
+from typing import (  # score:allow untyped any — raw JSON-schema dict shape
+    Any,
+    TypeVar,
+)
 
 from pydantic import BaseModel
 
@@ -25,6 +29,22 @@ from digillm.client import ChatCompletionMessage, completion
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+_to_strict_json_schema: Callable[[type[BaseModel]], dict[str, Any]] | None
+try:
+    # The OpenAI SDK's own strict-schema normalizer (used internally by
+    # ``client.beta.chat.completions.parse()``): fills in ``additionalProperties: false``
+    # when absent AND force-lists every property (recursively, through $defs/items/anyOf/
+    # allOf) in ``required`` — a hard requirement of OpenAI-family strict-schema providers
+    # that plain ``model_json_schema()`` does not satisfy for fields with defaults. Without
+    # this, a strict-schema provider 400s with "'required' is required to be supplied
+    # and to be an array including every key in properties" (confirmed against the
+    # live OpenRouter API investigating twelve-x's Aug 2026 digest staleness).
+    # Private module (leading underscore, not re-exported by ``openai.lib``) — degrade
+    # rather than crash if a future SDK release moves or removes it.
+    from openai.lib._pydantic import to_strict_json_schema as _to_strict_json_schema
+except ImportError:  # pragma: no cover - exercised only on an incompatible openai SDK
+    _to_strict_json_schema = None
 
 
 def structured_completion(
@@ -38,10 +58,10 @@ def structured_completion(
 ) -> T:
     """Call the LLM and return a validated instance of ``output_type``.
 
-    Builds a json_schema ``response_format`` from ``output_type`` (via
-    ``model_json_schema()``), calls :func:`completion`, strips markdown code
-    fences that some providers wrap around JSON, narrows to the outermost
-    ``{...}`` object, then validates with ``output_type.model_validate``.
+    Builds a json_schema ``response_format`` from ``output_type``, calls
+    :func:`completion`, strips markdown code fences that some providers wrap
+    around JSON, narrows to the outermost ``{...}`` object, then validates
+    with ``output_type.model_validate``.
 
     Args:
         model:       Model string (provider-prefix routing applies).
@@ -49,7 +69,12 @@ def structured_completion(
         output_type: Pydantic model class to validate and return.
         temperature: Sampling temperature.
         max_tokens:  Optional token cap.
-        strict:      Sets the json_schema ``strict`` flag (OpenAI/Gemini honor it).
+        strict:      Sets the json_schema ``strict`` flag (OpenAI/Gemini honor it) and,
+                     when true, normalizes the schema to what strict mode actually
+                     requires (``additionalProperties: false`` + every property listed
+                     in ``required``, recursively) via the OpenAI SDK's own
+                     ``to_strict_json_schema``. Falls back to a plain
+                     ``output_type.model_json_schema()`` if that helper is unavailable.
 
     Returns:
         A validated instance of ``output_type``.
@@ -59,11 +84,23 @@ def structured_completion(
         pydantic.ValidationError: when the response fails schema validation.
         json.JSONDecodeError: when the response is not valid JSON.
     """
+    if strict and _to_strict_json_schema is not None:
+        schema = _to_strict_json_schema(output_type)
+    else:
+        if strict:
+            logger.warning(
+                "structured_completion: openai.lib._pydantic.to_strict_json_schema "
+                "unavailable (incompatible openai SDK version) — falling back to a loose "
+                "schema; strict-schema providers may reject requests for %s with a missing "
+                "'required' entries error.",
+                output_type.__name__,
+            )
+        schema = output_type.model_json_schema()
     response_format = {
         "type": "json_schema",
         "json_schema": {
             "name": output_type.__name__,
-            "schema": output_type.model_json_schema(),
+            "schema": schema,
             "strict": strict,
         },
     }
@@ -73,7 +110,7 @@ def structured_completion(
         model,
         messages,
         temperature=temperature,
-        response_format=response_format,  # type: ignore[arg-type]
+        response_format=response_format,
         max_tokens=max_tokens,
     )
     raw = (resp.choices[0].message.content or "").strip() if resp.choices else ""
@@ -109,7 +146,7 @@ def resolve_model(
     Resolution is fully caller-driven — digillm hardcodes no config location.
     Provide either an explicit ``modes`` mapping or a YAML ``path`` whose top
     level is a ``mode -> model`` mapping (or contains a ``defaults:`` sub-mapping,
-    matching DigiThings' ``model_modes.yaml`` shape). ``modes`` wins over ``path``.
+    matching digithings' ``model_modes.yaml`` shape). ``modes`` wins over ``path``.
 
     Args:
         mode:    Desired mode (case-insensitive); typically one of test/medium/best.
@@ -145,7 +182,7 @@ def _load_modes_yaml(path: str | Path | None) -> dict[str, str]:
         logger.warning("model modes file not found: %s", p)
         return {}
     try:
-        import yaml  # noqa: PLC0415 — lazy import; only the path branch needs PyYAML
+        import yaml  # lazy import; only the path branch needs PyYAML
     except ImportError as e:  # pragma: no cover - depends on optional extra
         raise RuntimeError(
             "resolve_model(path=...) requires PyYAML. Install with: pip install 'digillm[modes]'"

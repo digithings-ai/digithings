@@ -13,7 +13,7 @@ export function isSlapperStrategy(strategy: string): boolean {
 /** Homepage carousel copy — shared across the slapper library (no per-asset names). */
 export function strategyLibraryDescription(): string[] {
   return [
-    "A pre-built strategy library: custom systems researched, backtested, and calibrated on the DigiQuant stack. Mean-reversion signals at local extremes work alongside a medium-horizon trend layer, tuned for long and short participation from either layer or both.",
+    "A pre-built strategy library: custom systems researched, backtested, and calibrated on the digiquant stack. Mean-reversion signals at local extremes work alongside a medium-horizon trend layer, tuned for long and short participation from either layer or both.",
     "The catalog ships with liquid majors first and grows as new assets clear the same pipeline — each release uses the same methodology with asset-specific tuning.",
   ];
 }

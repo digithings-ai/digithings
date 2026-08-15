@@ -8,6 +8,12 @@
 # and the chat README notes for the production root-directory caveat. This
 # wrangler.toml is primarily for LOCAL `wrangler pages dev`, which serves the
 # Next export in `out/` together with the auto-discovered `functions/` dir.
+#
+# wrangler is NOT vendored. It used to be hoisted into the root node_modules as a
+# transitive of the deleted frontend/digichat-cloudflare workspace, so `npx wrangler`
+# resolved to a locked 4.x; since 2026-08-06 it fetches the current release instead.
+# Nothing automated depends on it — no workflow, script, or Makefile target calls
+# wrangler — so pin it here only if a local version skew ever bites.
 
 name = "digithings-web"
 compatibility_date = "2024-09-23"

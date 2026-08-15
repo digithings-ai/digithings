@@ -47,10 +47,32 @@ jobs:
         run: |
           set -euo pipefail
           url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSL -o /tmp/gitleaks.tgz "$url"
-          # Checksum verification guards against tampered release assets.
-          # If this step fails after a version bump, recompute SHA256 and
-          # update GITLEAKS_SHA256.
+          # Retry flags are load-bearing -- do not "simplify" them away. On
+          # 2026-08-12 this download failed four times across two workflows
+          # (`curl: (22) ... 503` and `curl: (56) Connection died`), each time
+          # killing the job at install so the scan never ran at all. A red that
+          # never inspected the diff teaches people to re-run reflexively, which
+          # is how a real finding eventually gets waved through.
+          #   --retry alone is NOT enough: curl's "transient error" set is
+          #   timeouts and HTTP 408/429/500/502/503/504, so a connection reset
+          #   (exit 56) is not retried without --retry-all-errors.
+          #   curl's own man page calls --retry-all-errors a "sledgehammer"
+          #   because retries can duplicate sent/received data. That warning
+          #   does not apply here: this is an idempotent GET of an immutable
+          #   release asset to a file that each attempt overwrites, and the
+          #   result is checksum-verified below before anything executes it.
+          # (The "tried 5 times" in the old logs was curl's internal
+          # connection-reuse retry, a different mechanism -- --retry itself
+          # defaults to 0, i.e. this had no retry configured at all.)
+          # Accepted trade: --retry-all-errors also retries PERMANENT failures,
+          # so a wrong version/asset name (404) costs ~10s of pointless retries
+          # before it reports. Measured, deliberate, and cheap next to a false
+          # red that needs a human to notice and re-run.
+          curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 --max-time 120 -o /tmp/gitleaks.tgz "$url"
+          # Checksum verification guards against tampered release assets, and is
+          # what makes the retry above safe. If this step fails after a version
+          # bump, recompute SHA256 and update GITLEAKS_SHA256.
           actual="$(sha256sum /tmp/gitleaks.tgz | awk '{print $1}')"
           if [ "$actual" != "$GITLEAKS_SHA256" ]; then
             echo "checksum mismatch: expected $GITLEAKS_SHA256 got $actual" >&2

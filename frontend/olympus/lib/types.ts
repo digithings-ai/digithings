@@ -11,6 +11,7 @@ import type { TableRow } from './database.types';
 
 export type SnapshotRow = TableRow<'daily_snapshots'>;
 export type PositionRow = TableRow<'positions'>;
+export type InstrumentRow = TableRow<'instruments'>;
 export type ThesisRow = TableRow<'theses'>;
 export type DocumentRow = TableRow<'documents'>;
 export type NavHistoryRow = TableRow<'nav_history'>;
@@ -21,9 +22,27 @@ export type PortfolioMetricsRow = TableRow<'portfolio_metrics'>;
 // ---------------------------------------------------------------------------
 
 /** A single holding as returned to components. */
+export interface InstrumentDetails {
+  ticker: string;
+  official_name: string;
+  instrument_type: string | null;
+  asset_class: string | null;
+  category: string | null;
+  sector: string | null;
+  industry: string | null;
+  exchange: string | null;
+  currency: string | null;
+  country: string | null;
+  provider: string;
+  provider_metadata: TableRow<'instruments'>['provider_metadata'];
+  source_updated_at: string;
+}
+
 export interface Position {
   ticker: string;
   name: string;
+  /** Canonical provider-sourced identity and classification, when migration 055 is present. */
+  instrument?: InstrumentDetails | null;
   type: 'LONG' | 'SHORT';
   weight_actual: number;
   /** Snapshot target weight from digest `proposed_positions` when present (for target vs actual). */
@@ -57,6 +76,8 @@ export interface Position {
 /** Active investment thesis as returned to components. */
 export interface Thesis {
   id: string;
+  /** Durable opinion identity; multiple active rows with one key represent one research view. */
+  topic_key?: string | null;
   name: string;
   vehicle: string | null;
   invalidation: string | null;
@@ -209,6 +230,23 @@ export interface ServerPortfolioMetrics {
  */
 export interface AtlasRunDiagnostics {
   run_id: string;
+  /**
+   * Outer-retry attempt within one workflow run, 1-based (#1762). `pipeline-olympus.yml`
+   * retries the chain up to 3 times inside ONE job, so `run_id` is identical across attempts
+   * and used to be the whole key — the last attempt's row overwrote the earlier ones, which
+   * is why `groupRunEpisodes` saw one row per date and reported `attempts: 1` for dates that
+   * actually took three.
+   *
+   * `0` means the row predates per-attempt keying (migration 065) and MAY be a collapsed
+   * multi-attempt row. Never render 0 as "attempt 1" — 28 of the 54 rows extant at migration
+   * time were provably a later attempt that destroyed its predecessor.
+   *
+   * Optional and nullable because both states are real: `undefined` when a caller builds the
+   * object without it (or reads a view that predates 065), `null` when the source had nothing
+   * usable. `run-episodes.ts` coalesces both to "unknown" and orders by `created_at` instead —
+   * it never guesses 1.
+   */
+  attempt?: number | null;
   run_type: string | null;
   run_date: string | null;
   model: string | null;
@@ -430,11 +468,68 @@ export interface PerformanceMetrics {
 }
 
 // ---------------------------------------------------------------------------
-// Component-level prop interfaces
+// Ticker dossier (#1562 PR2) — the unified per-ticker analyst payload
 // ---------------------------------------------------------------------------
 
-export interface MiniCalendarProps {
-  dates: string[];
-  selected: string | null;
-  onSelect: (date: string) => void;
+/**
+ * The H5 unified analyst output (`documents.payload` where
+ * `document_key = 'analyst/{TICKER}'`), mirrored from the backend Pydantic model
+ * `digiquant/.../hermes/models/analyst.py:AnalystPayload`. `conviction_score` is
+ * SIGNED (ge=-5 le=5) — render with `SignedConvictionBadge`, never clamp or feed
+ * it into the unsigned `ConvictionMeter`. `price_targets` is a free-form
+ * label→number dict (keys vary call to call — "primary/support/secondary",
+ * "lower/upper", "bull_case/base_case/bear_case", …) so it must be rendered
+ * generically, never destructured by fixed key.
+ */
+export interface AnalystPayload {
+  ticker: string;
+  conviction_score: number;
+  stance: string;
+  thesis: string;
+  risks: string;
+  sources: string[];
+  fundamentals: string;
+  technicals: string;
+  headwinds: string[];
+  tailwinds: string[];
+  bull_case: string;
+  bear_case: string;
+  price_targets: Record<string, number | string> | null;
+  expectations: string;
+  fingerprint_news_hash: string;
+  /** Itemized evidence block (#1672) — conviction_score is DERIVED from these counts
+   *  backend-side; render the counts so the derivation is auditable. Null on legacy docs. */
+  evidence: AnalystEvidence | null;
+}
+
+/** #1672 evidence assessment — mirrors hermes/models/analyst.py:EvidenceAssessment. */
+export interface AnalystEvidence {
+  independent_confirming_signals: number | null;
+  contradicting_signals: number | null;
+  catalyst_within_horizon: boolean | null;
+  trend_alignment: string;
+  evidence_quality: string;
+}
+
+/** The `analyst_coverage` pointer row for one ticker — index only, never a freshness source. */
+export interface TickerCoverage {
+  date: string | null;
+  thesis_ids: string[];
+  current_recommendation_key: string | null;
+  /** Pointer refresh timestamp — NOT the underlying doc's content age (#1562 §0). */
+  last_updated: string | null;
+}
+
+/** Everything the ticker dossier route (`/portfolio/tickers?ticker=`) needs, one ticker at a time. */
+export interface TickerDossier {
+  ticker: string;
+  /** Latest `analyst/{TICKER}` payload, or null when no analyst doc exists for this ticker. */
+  analyst: AnalystPayload | null;
+  /** The analyst doc's `date` column — the real content-freshness source (never `coverage.last_updated`). */
+  analystDate: string | null;
+  coverage: TickerCoverage | null;
+  /** All `decision_log` rows for this ticker, newest `run_date` first. */
+  decisions: TableRow<'decision_log'>[];
+  /** Latest stored book-attribution window for this ticker. */
+  latestAttribution: TableRow<'position_attribution'> | null;
 }

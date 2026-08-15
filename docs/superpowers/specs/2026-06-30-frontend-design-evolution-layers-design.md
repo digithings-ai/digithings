@@ -17,7 +17,7 @@ This document extends epic #1200 with patterns from Graphite, Cursor, and x.ai t
 | Layer | Top 3 additions to epic #1200 | Priority |
 |-------|------------------------------|----------|
 | **A — Marketing** | HorizontalScrollBand, FaqAccordion + PricingMatrix, ClosingCtaBand | P1–P2 |
-| **B — Product** | Olympus status strip, DigiChat embed chrome, twelve-x filter density | P2 |
+| **B — Product** | Olympus status strip, digichat embed chrome, twelve-x filter density | P2 |
 | **C — Primitives** | HorizontalScrollBand, HeroFeaturePicker, FaqAccordion | P1 |
 | **D — Copy/IA** | `COPY_GUIDE.md`, per-surface section maps, literal CTA library | P1 (docs) |
 
@@ -64,7 +64,7 @@ Cross-layer conclusions after auditing Graphite, Cursor, and x.ai against our v7
 | E8 | COPY_GUIDE.md | D | P1 |
 | E9 | TrustStrip integration logos | A/C | P2 |
 | E10 | CaseStudyCard (content-gated) | C | P3 |
-| E11 | Olympus status dot → DigiSmith | B | P3 |
+| E11 | Olympus status dot → digismith | B | P3 |
 
 Parent epic: [#1200](https://github.com/digithings-ai/digithings/issues/1200).
 
@@ -178,14 +178,14 @@ Parent epic: [#1200](https://github.com/digithings-ai/digithings/issues/1200).
 | One white pill CTA per view | x.ai | Multiple competing buttons | Audit panels; one filled primary per view |
 | Literal tab labels | Cursor | Some abbreviated tabs | Document in #1220; no abbreviations |
 | Enter-only motion | Graphite | — | `reveal-up` on panel mount; **no scroll pin** |
-| Status indicator | Graphite footer | None | Optional: wire footer dot to DigiSmith `/v1/status` (new issue, P3) |
+| Status indicator | Graphite footer | None | Optional: wire footer dot to digismith `/v1/status` (new issue, P3) |
 
 **Approaches for glass migration:**
 - **A (recommended):** Incremental — new components flat only; migrate top 5 glass surfaces per PR.
 - **B:** Big-bang CSS override — risky visual regression.
 - **C:** Keep glass on charts only — inconsistent with xAI direction.
 
-### DigiChat (`frontend/digichat/`)
+### digichat (`frontend/digichat/`)
 
 **Existing issues:** #240 tokens, #1218 product-as-hero.
 
@@ -289,7 +289,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 
 ### Literal CTA library
 
-| Pattern | digithings.ai | digiquant.io | DigiChat | Olympus |
+| Pattern | digithings.ai | digiquant.io | digichat | Olympus |
 |---------|---------------|--------------|----------|---------|
 | Primary | `ask digichat` | `open olympus` | `sign in` / `new chat` | context action |
 | Secondary | `read docs` → | `browse strategies` → | `view on github` → | `export` / `run` |
@@ -303,7 +303,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 |---------|------------|
 | digithings.ai | `open core · self-hosted · MCP-first · BYOK` |
 | digiquant.io | `MIT license · NautilusTrader · tearsheets from real backtests` |
-| DigiChat | `bring your own key · audit log on by default` |
+| digichat | `bring your own key · audit log on by default` |
 
 ### Per-surface section maps
 
@@ -339,7 +339,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 - **sub:** "Backtest · optimize · paper · live — NautilusTrader under the hood."
 - **primary:** `open olympus` · **secondary:** `browse strategies` →
 
-#### DigiChat (Cursor product-as-hero)
+#### digichat (Cursor product-as-hero)
 
 1. Nav — minimal: brand · sign in · theme
 2. **Chat chrome = hero** — no marketing h1 above terminal
@@ -388,7 +388,7 @@ ProductFrame, BentoGrid, TrustStrip, reveal-up, ScrollyFeatures, StatCounter, Ch
 | E8 | `frontend/digiweb/design/COPY_GUIDE.md` | D | P1 | none (docs) |
 | E9 | TrustStrip integration logo variant | A/C | P2 | #1204 |
 | E10 | Shared CaseStudyCard (content-gated) | C | P3 | #1203, E1 |
-| E11 | Olympus footer status dot → DigiSmith | B | P3 | #1216 |
+| E11 | Olympus footer status dot → digismith | B | P3 | #1216 |
 
 **Note:** Layer D originally listed integration logos under optional defer; renumbered to **E9** so **E8** stays the COPY_GUIDE docs deliverable.
 

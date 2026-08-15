@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi.testclient import TestClient
 import pytest
-
 from digismith.server import app
+from fastapi.testclient import TestClient
 
 _client = TestClient(app)
 

@@ -1,12 +1,11 @@
-"""CORS allowlist tests for DigiSmith (uses shared digibase.cors helper)."""
+"""CORS allowlist tests for digismith (uses shared digibase.cors helper)."""
 
 from __future__ import annotations
 
 import pytest
+from digibase.cors import install_cors
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-from digibase.cors import install_cors
 
 SERVICE = "digismith"
 

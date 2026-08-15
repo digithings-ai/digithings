@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
-import { resetEmbedTenantRegistryForTests } from "@/lib/embed-tenants";
 
 vi.mock("@/lib/request-auth", () => ({
   requireDigiChatAuth: vi.fn(),
@@ -17,6 +16,11 @@ vi.mock("@/lib/bff-rate-limit", () => ({
 
 vi.mock("@/lib/embed-ip-rate-limit", () => ({
   checkEmbedIpRateLimit: vi.fn(() => ({ allowed: true, retryAfterSec: 0 })),
+  clientIpForRateLimit: vi.fn(() => "127.0.0.1"),
+}));
+
+vi.mock("@/lib/adapters/foundry/stream", () => ({
+  createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
 }));
 
 vi.mock("@/lib/digigraph-upstream", () => ({
@@ -61,6 +65,9 @@ import { resolveChatTenantContext } from "@/lib/chat-route-context";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
+import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
+import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
+import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText } from "ai";
 
 describe("POST /api/chat", () => {
@@ -76,6 +83,8 @@ describe("POST /api/chat", () => {
     });
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
+    resetEmbedTrialQuotaForTests();
+    vi.mocked(createFoundryStreamResponse).mockClear();
   });
 
   afterEach(() => {
@@ -141,6 +150,26 @@ describe("POST /api/chat", () => {
     expect(call?.abortSignal?.aborted).toBe(false);
   });
 
+  it("forwards the full multi-turn messages array to streamText", async () => {
+    const messages = [
+      { id: "1", role: "user", parts: [{ type: "text", text: "first" }] },
+      { id: "2", role: "assistant", parts: [{ type: "text", text: "reply" }] },
+      { id: "3", role: "user", parts: [{ type: "text", text: "second" }] },
+    ];
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ messages }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      messages?: unknown[];
+    };
+    expect(call?.messages).toHaveLength(3);
+  });
+
   it("returns 429 when rate limited", async () => {
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 30 });
     const res = await POST(
@@ -154,7 +183,7 @@ describe("POST /api/chat", () => {
   });
 
   it("returns 429 when the anonymous embed IP limiter blocks", async () => {
-    process.env.DIGICHAT_EMBED_ENABLED = "1";
+    process.env.DIGICHAT_LEGACY_EMBED_ENABLED = "1";
     vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
     vi.mocked(checkBffRateLimit).mockClear();
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
@@ -190,7 +219,7 @@ describe("POST /api/chat", () => {
     expect(checkEmbedIpRateLimit).not.toHaveBeenCalled();
   });
 
-  it("routes OpenRouter BYOK through DigiGraph with BYOK headers", async () => {
+  it("routes OpenRouter BYOK through digigraph with BYOK headers", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
         method: "POST",
@@ -215,6 +244,121 @@ describe("POST /api/chat", () => {
     expect(call?.headers?.["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
   });
 
+  it("forwards OCC corpus headers from digigraph embed backend config", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "occ",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "occ",
+        gateMode: "ungated",
+        theme: "dark",
+        attribution: false,
+        token: "tok",
+        backend: {
+          type: "digigraph",
+          digisearchIndex: "occ_help",
+          vaultPathPrefix: "clients/online-compliance-center",
+        },
+        activityDetail: "full",
+      },
+    });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://occ.digithings.ai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "policy?" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Tenant"]).toBe("occ");
+    expect(call?.headers?.["X-Digi-Corpus-Index"]).toBe("occ_help");
+    expect(call?.headers?.["X-Digi-Vault-Prefix"]).toBe(
+      "clients/online-compliance-center"
+    );
+  });
+
+  it("forwards X-Digi-Language to digigraph upstream headers", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-language": "de",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Language"]).toBe("de");
+  });
+
+  it("omits X-Digi-Language from upstream headers when the request sends English", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-digi-language": "en",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-Digi-Language"]).toBeUndefined();
+  });
+
+  it("passes responseLanguage to the Foundry adapter", async () => {
+    vi.mocked(resolveChatTenantContext).mockResolvedValue({
+      tenantSlug: "foundry-tenant",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "foundry-tenant",
+        gateMode: "ungated",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+        activityDetail: "full",
+      },
+    });
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-embed-host": "https://foundry-tenant.digithings.ai",
+          "x-digi-language": "fr",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(createFoundryStreamResponse).mock.calls.at(-1)?.[0] as {
+      responseLanguage?: string;
+    };
+    expect(call?.responseLanguage).toBe("fr");
+  });
+
   it("returns 400 when OpenRouter BYOK missing model", async () => {
     const res = await POST(
       new Request("http://localhost/api/chat", {
@@ -233,107 +377,174 @@ describe("POST /api/chat", () => {
     const body = await res.json();
     expect(body.error).toBe("byok_model_required");
   });
-});
 
-const RELAY_REGISTRY = JSON.stringify({
-  "datatapstream.com": {
-    slug: "datatapstream",
-    backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
-    gateMode: "ungated",
-    token: "datatapstream-secret",
-  },
-});
-
-function relaySse(frames: string[]): Response {
-  const encoder = new TextEncoder();
-  return new Response(
-    new ReadableStream({
-      start(c) {
-        for (const f of frames) c.enqueue(encoder.encode(f));
-        c.close();
-      },
-    }),
-    { status: 200 }
-  );
-}
-
-describe("external-relay embed tenants", () => {
-  beforeEach(() => {
-    process.env = { ...process.env, DIGICHAT_TRACE_UI: "0" };
-    vi.mocked(requireDigiChatAuth).mockResolvedValue(unauthorizedResponse);
-    vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
-  });
-
-  afterEach(() => {
-    vi.unstubAllEnvs();
-    vi.unstubAllGlobals();
-    resetEmbedTenantRegistryForTests();
-  });
-
-  it("streams from the configured relay without touching DigiGraph auth", async () => {
-    vi.stubEnv("DIGICHAT_EMBED_TENANTS", RELAY_REGISTRY);
-    resetEmbedTenantRegistryForTests();
-    const fetchMock = vi.fn().mockResolvedValue(
-      relaySse([
-        'event: conversation\ndata: {"type":"conversation","conversationId":"c1"}\n\n',
-        'event: text-delta\ndata: {"type":"text-delta","delta":"Hi"}\n\n',
-        'event: done\ndata: {"type":"done"}\n\n',
-      ])
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
+  // #2351: byokNeedsModel is now byokRequiresModel(byokProvider) from the shared
+  // frontend/digichat/src/lib/byok-providers.ts module instead of a hand-written
+  // OR-chain — these three cover the other requiresModel:true providers the old
+  // OR-chain also happened to list (anthropic/gemini/xai), proving the swap kept
+  // every one of them gated exactly as before.
+  it("returns 400 when Anthropic BYOK missing model", async () => {
     const res = await POST(
-      new Request("http://127.0.0.1/api/chat", {
+      new Request("http://localhost/api/chat", {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          "x-embed-host": "https://datatapstream.com",
-          "x-embed-token": "datatapstream-secret",
-          "x-external-conversation": "c-prev",
+          "x-byok-key": "sk-ant-test",
+          "x-byok-provider": "anthropic",
         },
         body: JSON.stringify({
-          messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] }],
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
         }),
       })
     );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("byok_model_required");
+  });
 
+  it("returns 400 when Gemini BYOK missing model", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "AIza-test",
+          "x-byok-provider": "gemini",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("byok_model_required");
+  });
+
+  it("returns 400 when x.ai BYOK missing model", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "xai-test",
+          "x-byok-provider": "xai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe("byok_model_required");
+  });
+
+  // OpenAI is the one requiresModel:false provider today — byokRequiresModel
+  // must still exempt it after the OR-chain → shared-predicate swap (#2351).
+  it("does not require a model for OpenAI BYOK (byokRequiresModel exemption)", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-test",
+          "x-byok-provider": "openai",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
     expect(res.status).toBe(200);
-    const text = await new Response(res.body).text();
-    expect(text).toContain('"delta":"Hi"');
-    // The relay was called with the echoed conversation id and the latest message:
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://relay.example.com/api/digichat",
-      expect.objectContaining({
-        body: JSON.stringify({ conversationId: "c-prev", message: "hello" }),
-      })
-    );
-    // No DIGIGRAPH_* / DIGIKEY_* env was set in this test — reaching a 200
-    // proves resolveDigigraphUpstreamAuth was never invoked on this path.
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-BYOK-Key"]).toBe("sk-test");
+    expect(call?.headers?.["X-BYOK-Provider"]).toBe("openai");
+    expect(call?.headers?.["X-BYOK-Model"]).toBeUndefined();
   });
 
-  it("still enforces the per-IP embed limiter for an external-relay tenant", async () => {
-    vi.stubEnv("DIGICHAT_EMBED_TENANTS", RELAY_REGISTRY);
-    resetEmbedTenantRegistryForTests();
-    vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 45 });
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
+  describe("trial_form gate", () => {
+    const trialCtx = {
+      tenantSlug: "datatap",
+      ownerUserSub: "embed:anonymous",
+      embedConfig: {
+        slug: "datatap",
+        gateMode: "trial_form",
+        theme: "light",
+        attribution: false,
+        token: "tok",
+        backend: { type: "foundry", projectEndpoint: "https://x/", agentName: "a" },
+        activityDetail: "labels",
+      },
+    };
 
-    const res = await POST(
-      new Request("http://127.0.0.1/api/chat", {
+    function trialReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-embed-host": "https://datatapstream.com",
-          "x-embed-token": "datatapstream-secret",
-        },
-        body: JSON.stringify({
-          messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "hello" }] }],
-        }),
-      })
-    );
+        headers: { "content-type": "application/json", "x-embed-host": "https://datatap.stream", ...headers },
+        body: JSON.stringify({ messages: [{ role: "user", parts: [{ type: "text", text: "hi" }] }] }),
+      });
+    }
 
-    expect(res.status).toBe(429);
-    expect(fetchMock).not.toHaveBeenCalled();
+    beforeEach(() => {
+      vi.mocked(resolveChatTenantContext).mockResolvedValue(trialCtx as never);
+    });
+
+    it(`allows the first ${EMBED_FREE_TURN_LIMIT} turns (server cap) then returns 402 trial_gate without calling Foundry`, async () => {
+      // The server-side cap is deliberately looser than the client-advertised
+      // free-3 (EMBED_FREE_TURN_LIMIT, see embed-turn-limits.ts) — it's
+      // a backstop against localStorage/incognito bypass, not the primary
+      // enforcement, so this exercises the route with that cap.
+      for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) {
+        const ok = await POST(trialReq());
+        expect(ok.status).toBe(200);
+      }
+      const gated = await POST(trialReq());
+      expect(gated.status).toBe(402);
+      expect(gated.headers.get("content-type")).toBe("application/json");
+      expect(await gated.json()).toMatchObject({ error: "trial_gate" });
+      // Foundry called once per allowed turn, never on the gated turn.
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT);
+    });
+
+    it("honors X-Embed-Trial-Unlock to allow turns past the free limit", async () => {
+      for (let i = 0; i < EMBED_FREE_TURN_LIMIT; i++) await POST(trialReq());
+      const unlocked = await POST(trialReq({ "x-embed-trial-unlock": "1" }));
+      expect(unlocked.status).toBe(200);
+      expect(createFoundryStreamResponse).toHaveBeenCalledTimes(EMBED_FREE_TURN_LIMIT + 1);
+    });
+
+    it("fails open when the quota check throws, so the turn still reaches the backend", async () => {
+      const quotaModule = await import("@/lib/embed-turn-quota");
+      const spy = vi
+        .spyOn(quotaModule, "isOverEmbedTrialLimit")
+        .mockImplementation(() => {
+          throw new Error("boom");
+        });
+      try {
+        const res = await POST(trialReq());
+        expect(res.status).toBe(200);
+        expect(createFoundryStreamResponse).toHaveBeenCalledTimes(1);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("skips the quota entirely when the client IP is unknown, so a broken ingress fails open rather than collapsing every visitor into one bucket", async () => {
+      const { clientIpForRateLimit } = await import("@/lib/embed-ip-rate-limit");
+      const spy = vi.mocked(clientIpForRateLimit).mockReturnValue("unknown");
+      try {
+        // Even well past the server cap, every "unknown"-IP request succeeds —
+        // the quota is never consulted for a non-identity IP (route.ts).
+        for (let i = 0; i < EMBED_FREE_TURN_LIMIT + 2; i++) {
+          const res = await POST(trialReq());
+          expect(res.status).toBe(200);
+        }
+      } finally {
+        spy.mockReturnValue("127.0.0.1");
+      }
+    });
   });
 });

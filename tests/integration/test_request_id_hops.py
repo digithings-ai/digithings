@@ -2,7 +2,7 @@
 
 Gives us confidence that the *mechanics* of middleware + outbound helper
 survive chaining, not just each service in isolation. Three bare FastAPI apps
-stand in for DigiChat/DigiGraph/DigiSearch — the real service code already
+stand in for digichat/digigraph/digisearch — the real service code already
 exercises the same primitives at unit level; what we're asserting here is
 that the id survives two hops of service-to-service forwarding when each hop
 uses :func:`digibase.http.outbound_service_headers`.
@@ -14,14 +14,12 @@ import asyncio
 
 import httpx
 import pytest
-from fastapi import FastAPI, Request
-
 from digibase.http import (
     current_request_id,
     install_request_id_middleware,
     outbound_service_headers,
 )
-
+from fastapi import FastAPI, Request
 
 pytestmark = pytest.mark.unit
 
@@ -63,7 +61,7 @@ def _middle_app(leaf: FastAPI, seen: list[str]) -> FastAPI:
 
 
 def _entry_app(middle: FastAPI, seen: list[str]) -> FastAPI:
-    """Hop 1 — simulates DigiChat BFF originating the request."""
+    """Hop 1 — simulates digichat BFF originating the request."""
     app = FastAPI()
     install_request_id_middleware(app)
 

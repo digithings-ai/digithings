@@ -1,0 +1,125 @@
+# digithings Profile A stack on Cloudflare Containers (Workers Paid).
+# One multi-process Container: digikey + digigraph + digisearch + digivault + LiteLLM.
+# Public hostnames (auth still required on APIs):
+#   graph.digithings.ai → digigraph :8000
+#   key.digithings.ai   → digikey   :8005
+# digisearch / digivault / LiteLLM stay loopback-only inside the Container.
+#
+# HUMAN GATE — infra/network: these hostnames expose digigraph + digikey to the
+# public internet (JWT/BFF still required). Secrets via `wrangler secret put` only.
+name = "digithings-stack"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# Custom domains (enabled after workers.dev /healthz returned 200).
+# Human gate: public digigraph + digikey; JWT/BFF still required on APIs.
+[[routes]]
+pattern = "graph.digithings.ai"
+zone_name = "digithings.ai"
+custom_domain = true
+
+[[routes]]
+pattern = "key.digithings.ai"
+zone_name = "digithings.ai"
+custom_domain = true
+
+[[containers]]
+class_name = "DigiStackContainer"
+# Build context is monorepo root (two levels up from this package).
+image = "../../Dockerfile.digithings-stack-cloudflare"
+max_instances = 5
+# Multi-process Profile A needs real RAM/disk (lite = 256MiB is far too small).
+instance_type = "standard-2"
+
+# Ops SSH (wrangler containers ssh) — ed25519 debug key (private key not in repo).
+[[containers.authorized_keys]]
+name = "stack-debug"
+public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOWKJSXCImobvGW1hFjW5VV4mSM5ZnFoC/sTsW/cdFD9 digithings-stack-debug"
+
+[[durable_objects.bindings]]
+name = "STACK"
+class_name = "DigiStackContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DigiStackContainer"]
+
+# Secrets (wrangler secret put) — never commit values:
+#   DIGIKEY_BFF_TOKEN
+#   DIGIKEY_PRIVATE_KEY_PEM   # stable RS256; do not use ephemeral in prod
+#   DIGIKEY_ADMIN_TOKEN       # optional; for key issue / ops
+#   GROQ_API_KEY / OPENROUTER_API_KEY / OPENAI_API_KEY  (as needed by LiteLLM)
+#   LITELLM_PROXY_API_KEY     # optional shared proxy key
+#   CLOUDFLARE_ACCOUNT_ID     # Cloudflare account id owning both the Vectorize indexes and
+#                             # the D1 databases -- canonical name (wrangler's own convention,
+#                             # #2239 credential rename: Vectorize and D1 share one account).
+#   CLOUDFLARE_API_TOKEN      # Token for both Vectorize and D1 access (same account, same
+#                             # token). For D1 access via D1Store.query() (POST
+#                             # .../d1/database/{id}/query, digivault/src/digivault/d1_store.py)
+#                             # -- confirm the token's scope actually authorizes that POST
+#                             # before relying on it; if not, use a token with D1 write/edit
+#                             # scope instead.
+#   D1_DATABASE_MAP           # {"clients/digithings":"<id>","clients/online-compliance-center":"<id>"}
+#
+# TRAP -- CLOUDFLARE_API_TOKEN is ALSO wrangler's own authentication variable.
+# Sourcing .env before running wrangler (`set -a; . ../../.env; set +a`) exports it,
+# wrangler then stops using your `wrangler login` OAuth session and authenticates as
+# that token instead. Since this token carries only Vectorize + D1 permissions and not
+# Workers, every `wrangler secret put` / `wrangler deploy` fails with:
+#
+#   A request to the Cloudflare API (/accounts/<id>/workers/scripts/...) failed.
+#   Authentication error [code: 10000]
+#
+# which reads like a broken token but is actually the wrong identity. Unset it for
+# wrangler's own process; the secret VALUE still reaches it on stdin, which is a
+# separate channel from the environment:
+#
+#   printf '%s' "$VALUE" | env -u CLOUDFLARE_API_TOKEN npx wrangler secret put NAME
+#
+# Keep CLOUDFLARE_ACCOUNT_ID exported -- wrangler uses it to pick the account, and
+# without it the fallback lookup needs a User->Memberships scope this token lacks.
+#
+# Legacy (still read as a fallback by the container's Python side -- see
+# digivault/src/digivault/server.py's _d1_credentials and
+# digisearch/src/digisearch/search/_stub.py's _first_env -- so this rename is
+# zero-downtime; safe to delete once CLOUDFLARE_ACCOUNT_ID/CLOUDFLARE_API_TOKEN
+# are set and verified working):
+#   VECTORIZE_ACCOUNT_ID
+#   VECTORIZE_API_TOKEN
+#   D1_ACCOUNT_ID
+#   D1_API_TOKEN
+#
+# After deploy, retarget digichat Worker secrets:
+#   DIGIGRAPH_INTERNAL_URL=https://graph.digithings.ai
+#   DIGIKEY_URL=https://key.digithings.ai
+#   DIGIKEY_BFF_TOKEN=<same as stack>
+
+[vars]
+DIGIKEY_ISSUER = "https://key.digithings.ai"
+DIGIKEY_AUDIENCE = "digi-ecosystem"
+DIGIKEY_ALLOW_EPHEMERAL_KEY = "0"
+DIGIKEY_ALLOW_DEV_GLOBAL = "0"
+DIGIVAULT_URL = "http://127.0.0.1:8004"
+DIGISEARCH_URL = "http://127.0.0.1:8002"
+# Chat-only Profile A — digiquant / digismith HTTP are not in this Container.
+DIGIQUANT_URL = ""
+DIGISMITH_URL = ""
+OPENAI_API_BASE = "http://127.0.0.1:4000/v1"
+DIGI_CONFIG_PATH = "/app/config"
+DIGI_PROJECT_CONFIG = "/app/config/digiproject.yaml"
+# Belt-and-suspenders with digiproject.yaml (research_rag, no backtest agent).
+DIGI_WORKFLOW_PROFILE = "research_rag"
+# Fallback only: tool_policy.py prefers agents.allowed_tools from the baked
+# digiproject.yaml and reads this ONLY when that config fails to load. Keep the
+# two in sync anyway -- a stale value here silently drops a tool on the one path
+# where nothing else can, and the model gets a refusal mid-loop (#2295).
+DIGI_ALLOWED_TOOLS = "digisearch,digivault_search_notes,digivault_get_note"
+DIGI_LLM_MODE = "test"
+CHROMA_PATH = "/data/chroma"
+DIGIVAULT_ROOT = "/data/vault"
+DIGIKEY_DATABASE_URL = "sqlite:////data/digikey.db"
+DIGISEARCH_INDEX = "digithings_docs"
+# Defense-in-depth corpus map (headers from digichat still win).
+DIGI_TENANT_CORPUS_MAP = "{\"digithings\":{\"digisearchIndex\":\"digithings_docs\",\"vaultPathPrefix\":\"clients/digithings\"},\"occ\":{\"digisearchIndex\":\"occ_help\",\"vaultPathPrefix\":\"clients/online-compliance-center\"}}"

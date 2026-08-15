@@ -1,7 +1,7 @@
 # Model list and mode selection (for agents)
 
-**Part of [DigiThings](../README.md) (digithings.ai).**  
-**Purpose:** Central place for LLM model config used by DigiGraph and other components. Agents should update the model list when new Ollama Cloud (or other) models appear so model selection stays self-updating.
+**Part of [digithings](../README.md) (digithings.ai).**  
+**Purpose:** Central place for LLM model config used by digigraph and other components. Agents should update the model list when new Ollama Cloud (or other) models appear so model selection stays self-updating.
 
 ## Files
 
@@ -13,7 +13,7 @@
 ## Caching (two layers)
 
 1. **LiteLLM proxy** — `config/litellm.yaml` sets **`litellm_settings.cache`** (default: **local** TTL cache). Optional **`litellm-cache`** Docker profile + **`REDIS_URL`** and **`cache_params.type: redis`** for Redis-backed cache across restarts/replicas. See the repo root `README.md` and `Makefile` for Docker Compose usage.
-2. **DigiGraph in-process** — Non-tool, non-streaming `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in `digigraph/llm.py`. This is **additional** to proxy caching, not a substitute.
+2. **digigraph in-process** — Non-tool, non-streaming `chat_completion` calls may hit **`DIGI_LLM_CACHE_*`** in `digigraph/llm.py`. This is **additional** to proxy caching, not a substitute.
 
 ## Router fallbacks
 
@@ -27,7 +27,7 @@ Set in `.env`:
 - **`medium`** – Balanced quality/speed.
 - **`best`** – Largest/best for hard tasks.
 
-DigiGraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, it falls back to `test` and then to the env `OLLAMA_MODEL` or a built-in default.
+digigraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_modes.yaml`. If the file is missing or the mode is unset, it falls back to `test` and then to the env `OLLAMA_MODEL` or a built-in default.
 
 ## How agents should update the model list
 
@@ -45,7 +45,7 @@ DigiGraph reads `DIGI_LLM_MODE` and picks the default model from `config/model_m
    - Ensure at least one model remains in `defaults` for each of `test`, `medium`, `best`.
 
 4. **After editing**  
-   - Restart the stack (`docker compose up -d`) so LiteLLM and DigiGraph reload config.  
+   - Restart the stack (`docker compose up -d`) so LiteLLM and digigraph reload config.  
    - No code change is required for new models; only config and (if needed) this doc.
 
 ## Future: router (Claw-style)

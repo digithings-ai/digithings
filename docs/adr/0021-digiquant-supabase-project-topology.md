@@ -1,4 +1,4 @@
-# ADR 0021: DigiQuant Supabase Topology — Consolidate the Shared Backend into the "core" Project
+# ADR 0021: digiquant Supabase Topology — Consolidate the Shared Backend into the "core" Project
 
 **Status:** accepted
 **Date:** 2026-06-25
@@ -9,7 +9,7 @@ Epic [#1063](https://github.com/digithings-ai/digithings/issues/1063) introduces
 **strategy store** (per-strategy config, fitted calibration, executed trades, tearsheets,
 live signals) to back DB-driven live tearsheets ([#1069](https://github.com/digithings-ai/digithings/issues/1069)),
 and treats the market datasets (`price_history`, `price_technicals`, `trading_calendar`,
-`economic_calendar`) as a **shared DigiQuant data layer** repurposable across the suite
+`economic_calendar`) as a **shared digiquant data layer** repurposable across the suite
 (Olympus, twelve-x, the Slapper book).
 
 [#1064](https://github.com/digithings-ai/digithings/issues/1064)'s first acceptance
@@ -29,7 +29,7 @@ Two facts make consolidation the pragmatic choice rather than a compromise:
 
 ## Decision
 
-**Repurpose the existing Olympus/Atlas project as the unified DigiQuant shared backend,
+**Repurpose the existing Olympus/Atlas project as the unified digiquant shared backend,
 renamed `core`** (Supabase display name; `config.toml` keeps the stable local alias
 `project_id "digiquant-atlas"`). twelve-x stays a separate project.
 
@@ -74,7 +74,7 @@ renamed `core`** (Supabase display name; `config.toml` keeps the stable local al
 1. **A dedicated third Supabase project** (the original #1064 wording). Rejected: blocked by
    the free-tier 2-project limit; would require a paid upgrade. This was the initial plan
    until the constraint surfaced.
-2. **Drop twelve-x to free a slot for a dedicated DigiQuant project.** Rejected: twelve-x
+2. **Drop twelve-x to free a slot for a dedicated digiquant project.** Rejected: twelve-x
    holds confidential data and is a deliberately separate project.
 3. **A separate Postgres schema inside `core`** (e.g. `strategy.*`). Rejected as needless:
    `public` + per-table RLS already gives the isolation the strategy store needs, and a

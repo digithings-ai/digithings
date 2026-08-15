@@ -1,6 +1,6 @@
 # Repository inventory (complete accounting)
 
-**Purpose:** Account for **every intentional path** in **digiquant-atlas** before DigiThings migration — what ships, what is local-only, and what must never be committed.
+**Purpose:** Account for **every intentional path** in **digiquant-atlas** before digithings migration — what ships, what is local-only, and what must never be committed.
 
 **Scope:** **Git-tracked** content (source of truth: `git ls-files`). **Gitignored** paths are listed separately with expected role.
 
@@ -17,7 +17,7 @@ git ls-files | awk -F/ '{print $1}' | sort | uniq -c | sort -rn
 
 ## 1. Top-level map (tracked)
 
-| Path | Files (approx.) | Role | Ship to DigiThings Wave 1? |
+| Path | Files (approx.) | Role | Ship to digithings Wave 1? |
 |------|-----------------|------|----------------------------|
 | `frontend/` | 107 | Next.js App Router UI, static export to Pages today | **Yes** — core app |
 | `scripts/` | 80 | Python + shell operators, DB-first pipeline | **Yes** |
@@ -190,6 +190,6 @@ Use this after structural changes or before Wave 1 copy:
 
 - **Production secrets** — only `*.example` and docs
 - **Full `node_modules`** / **`.next`** — install per `frontend/package.json`
-- **DigiThings / digigraph code** — lives in sibling `../digithings`
+- **digithings / digigraph code** — lives in sibling `../digithings`
 
 When this inventory drifts, update § 1 counts and the checklist in § 5.

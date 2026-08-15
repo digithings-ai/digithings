@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Collection
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
+
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
@@ -17,11 +20,14 @@ from digiquant.olympus.atlas.phases._node_factory import (
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.focus_roster import (
+    fanout_ticker,
     focus_roster_tickers,
     ticker_in_focus_roster,
     with_fanout_ticker,
 )
 from digiquant.olympus.hermes.models.deliberation import (
+    CARRY_FINGERPRINT_SKIP,
+    CARRY_LLM_FAILURE,
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     DeliberationSummary,
@@ -157,7 +163,8 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             phase_inputs=pm_inputs,
             shared_context=_shared_context(
                 state,
-                context_keys=(f"analyst/{ticker}",),
+                # Atlas digest = the curated cross-checked read (#1674); analyst doc = the case.
+                context_keys=(f"analyst/{ticker}", "digest", "digest-delta"),
                 data_layer_scope="portfolio",
             ),
             output_model=DeliberationPmTurn,
@@ -224,7 +231,9 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             skill_text=analyst_skill,
             phase_inputs=analyst_inputs,
             shared_context=_shared_context(
-                state, context_keys=(f"analyst/{ticker}",), data_layer_scope="ticker"
+                state,
+                context_keys=(f"analyst/{ticker}", "digest", "digest-delta"),
+                data_layer_scope="ticker",
             ),
             output_model=DeliberationAnalystTurn,
             phase_slug=f"h6_analyst_response-{ticker}",
@@ -288,6 +297,8 @@ def _h6_node_factory(ticker: str):
                     conviction_delta=int(prior.get("conviction_delta") or 0),
                     transcript=[],
                     carried=True,
+                    # Benign: nothing moved, so the prior debate still stands (#925).
+                    carry_reason=CARRY_FINGERPRINT_SKIP,
                 )
                 return {
                     "phase_hermes": PhaseHermesState(
@@ -295,7 +306,42 @@ def _h6_node_factory(ticker: str):
                     )
                 }
 
-        summary = run_deliberation_loop(state, ticker)
+        try:
+            summary = run_deliberation_loop(state, ticker)
+        except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
+            stance_map = {"buy": "bullish", "sell": "bearish"}
+            logger.warning(
+                "H6 deliberation LLM failed for %s (%s: %s); carrying analyst stance",
+                ticker,
+                type(exc).__name__,
+                exc,
+            )
+            fallback = DeliberationSummary(
+                ticker=ticker,
+                # NOT converged: no PM challenge ran, so there is no debate to converge.
+                # Reporting ``converged=True`` here is what let a crashed deliberation reach
+                # H7/H8 and the published document as a settled two-sided debate (#1742).
+                converged=False,
+                conclusion=str(analyst.get("thesis") or f"carried analyst stance: {stance}"),
+                net_stance=stance_map.get(stance, "neutral"),  # type: ignore[arg-type]
+                conviction_delta=0,
+                transcript=[],
+                carried=True,
+                carry_reason=CARRY_LLM_FAILURE,
+            )
+            return {
+                "phase_hermes": PhaseHermesState(
+                    deliberation_summaries={ticker: fallback.model_dump(mode="json")}
+                ),
+                "errors": [
+                    PhaseError(
+                        phase=PHASE_NAME,
+                        node=f"{NODE_ID}-{ticker}",
+                        message=f"deliberation LLM failed; carried analyst stance: {exc}"[:500],
+                        retryable=False,
+                    )
+                ],
+            }
         result: dict[str, Any] = {
             "phase_hermes": PhaseHermesState(
                 deliberation_summaries={ticker: summary.model_dump(mode="json")}
@@ -361,4 +407,5 @@ def build_h6_from_state() -> FanOutPhase:
         worker=NodeSpec(name=f"{NODE_ID}-worker", run=_worker),
         items=focus_roster_tickers,
         with_item=with_fanout_ticker,
+        item_key=fanout_ticker,
     )

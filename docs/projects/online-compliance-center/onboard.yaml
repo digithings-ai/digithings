@@ -1,0 +1,28 @@
+# Online Compliance Center (OCC) — docs_onboard manifest (client #1).
+#
+# INGEST HOLD: lifted 2026-08-10 by owner decision (public documentation, no
+# confidentiality restriction) — NOT a written approval from the OCC client;
+# see docs/projects/online-compliance-center/GAPLOG.md for the exact record.
+# --dry-run is always allowed for local/demo validation (see GAPLOG.md).
+# Corpus is one-shot / static for the digithings.ai/chat/occ demo — re-run only
+# when help content changes. Dogfood (#2037) is merged; pipeline is approved.
+#
+# See SCOPE.md, README.md, and docs/superpowers/plans/2026-08-10-occ-client-chat.md.
+client: online-compliance-center
+seed_url: https://help.online-compliance-center.com/
+allowed_hosts:
+  - help.online-compliance-center.com
+max_pages: 80
+max_depth: 4
+sinks: [vault, search]
+digisearch_index: occ_help
+vault_subdir: clients/online-compliance-center
+static_sources: docs/projects/online-compliance-center/sources/manual-docs.yaml
+docs_path_prefixes:
+  - /index.php
+skip_path_prefixes:
+  - /index.php/kontakt
+  - /index.php/administrator
+  - /administrator
+  - /api
+  - /component

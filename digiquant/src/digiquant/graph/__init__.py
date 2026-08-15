@@ -1,4 +1,4 @@
-"""DigiQuant internal LangGraph: ordered validate → backtest → optimize → export."""
+"""digiquant internal LangGraph: ordered validate → backtest → optimize → export."""
 
 from digiquant.graph.pipeline import build_pipeline_graph, run_quant_workflow
 

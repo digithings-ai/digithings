@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
-from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed client + tool args
+from datetime import UTC, date, datetime
+from typing import (  # score:allow untyped any — scored-lint suppression: duck-typed client + tool args
+    Any,
+    Callable,
+)
 
 from digiquant.olympus.atlas.data.queries import (
-    get_macro_series,
     get_etf_flows_proxy,
     get_fed_rate_probabilities,
+    get_macro_series,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
@@ -180,7 +183,7 @@ def build_data_tool_dispatcher(
     ``allowed_tables`` narrows the tables ``query_data`` may read (e.g. market-data
     only for blinded analyst nodes); ``None`` keeps the full read whitelist.
     """
-    as_of = run_date or date.today()
+    as_of = run_date or datetime.now(UTC).date()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str:
         try:
@@ -238,7 +241,7 @@ def build_data_tool_dispatcher(
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
-        except Exception as exc:  # noqa: BLE001 — tool errors are returned to the model, not raised
+        except Exception as exc:  # tool errors are returned to the model, not raised
             logger.warning("data tool %s failed: %s", name, exc)
             return f"Error: {name} failed: {exc}"
 

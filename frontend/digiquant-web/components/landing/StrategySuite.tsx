@@ -45,13 +45,16 @@ import { chartFullSpan, clipOhlc } from "@/components/tearsheet/series";
 import { avgTradePct, cagrPct, tradesPerYear } from "@/components/tearsheet/stats";
 import { symbolBase } from "@/components/tearsheet/strategy-names";
 import { type StrategyIndexEntry, type TearsheetData } from "@/components/tearsheet/types";
-import index from "@/public/strategies/index.json";
+import { fetchStrategyIndex, fetchTearsheet as fetchTearsheetLive } from "@/lib/live/strategies";
 
 const SLAPPER_ORDER = ["btc_slapper", "eth_slapper", "sol_slapper"] as const;
-const ALL_STRATS = index as StrategyIndexEntry[];
-const STRATEGIES = SLAPPER_ORDER.map(
-  (id) => ALL_STRATS.find((s) => s.strategy === id) ?? ALL_STRATS[0],
-).filter(Boolean) as StrategyIndexEntry[];
+
+/** Order the live index into the BTC → ETH → SOL spotlight sequence. */
+function orderSlappers(all: StrategyIndexEntry[]): StrategyIndexEntry[] {
+  return SLAPPER_ORDER.map((id) => all.find((s) => s.strategy === id)).filter(
+    (s): s is StrategyIndexEntry => Boolean(s),
+  );
+}
 
 const PREVIEW_PANE_H = 220;
 const PREVIEW_LOOKBACK = "6m" as const;
@@ -103,9 +106,9 @@ async function fetchTearsheet(strategyId: string): Promise<TearsheetData | null>
   loadStatus.set(strategyId, "loading");
   notifyTearsheetSubscribers();
 
-  const promise = fetch(`/strategies/${strategyId}.json`)
-    .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-    .then((d: TearsheetData) => {
+  const promise = fetchTearsheetLive(strategyId)
+    .then((d: TearsheetData | null) => {
+      if (!d) throw new Error("live store returned no tearsheet");
       tearsheetCache.set(strategyId, d);
       loadStatus.set(strategyId, "loaded");
       notifyTearsheetSubscribers();
@@ -158,6 +161,91 @@ function Kpi({ label, value, className }: { label: string; value: ReactNode; cla
       <span className="ts-kpi-label">{label}</span>
       <span className="ts-kpi-value">{value}</span>
     </div>
+  );
+}
+
+/**
+ * Placeholder card shown before the strategy index itself (`fetchStrategyIndex`)
+ * has resolved -- keeps <DeckStack/>'s rail at a constant length of
+ * SLAPPER_ORDER.length from the very first render (server included), so its
+ * wrapper structure never changes shape once the real index lands. Without
+ * this, zero <DeckCard>s existed until the client-only index fetch resolved,
+ * and DeckStack's rail-length-dependent branch flipped shape mid-session --
+ * a textbook "external changing data with no snapshot sent with the HTML"
+ * hydration mismatch (#2244). `strategyId` (e.g. "btc_slapper") gives an
+ * honest label before the real symbol is known.
+ */
+function StrategyCardSkeleton({ strategyId }: { strategyId: string }) {
+  const label = strategyId.split("_")[0]?.toUpperCase() || strategyId;
+  return (
+    <>
+      <header className="ts-header">
+        <div className="ts-header-main">
+          {/* h3, not h1: this card is always embedded under the homepage's
+              own hero h1 and this section's h2 ("Research-grade systems,
+              ready to explore.") -- never a standalone page (that's
+              tearsheet-view.tsx's TearsheetView, whose own h1 is genuinely
+              page-level on /strategies/[id]). The .ts-h1/.ts-h1-with-logo
+              classes are purely visual grammar, shared by name only; the
+              heading level is chosen per call site, not by the class. */}
+          <h3 className="ts-h1 ts-h1-with-logo">
+            <span className="dqss-logo-skeleton" aria-hidden="true" />
+            <span>{label}</span>
+          </h3>
+          <div className="ts-meta">
+            <span className="dqss-meta-skeleton" aria-hidden="true" />
+          </div>
+        </div>
+      </header>
+
+      <div className="dqss-preview-position">
+        <div className="dqss-position-skeleton" aria-hidden="true" />
+      </div>
+
+      <KpiStrip primary ariaLabel="Headline performance">
+        <Kpi label="CAGR" value={<span className="dqss-kpi-skeleton" aria-hidden="true" />} />
+        <Kpi
+          label="Max drawdown"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-medium"
+          label="Profit factor"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-medium"
+          label="Win rate"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Avg trade return"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+        <Kpi
+          className="dqss-kpi-optional"
+          label="Trades / yr"
+          value={<span className="dqss-kpi-skeleton" aria-hidden="true" />}
+        />
+      </KpiStrip>
+
+      <div className="ts-mode-bar dqss-preview-mode" aria-hidden="true" />
+
+      <section className="ts-panel ts-tab-stack dqss-preview-panel" aria-label="Loading">
+        <div className="dqss-preview-pane">
+          <div className="dqss-preview-pane-layer dqss-preview-chart-pane">
+            <div className="ts-chart dqss-preview-chart">
+              <div className="dqss-chart-skeleton" aria-hidden="true" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <p className="dqss-preview-footer">
+        <span className="dqss-full-skeleton" aria-hidden="true" />
+      </p>
+    </>
   );
 }
 
@@ -219,7 +307,9 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
     <>
       <header ref={headerRef} className="ts-header">
         <div className="ts-header-main">
-          <h1 className="ts-h1 ts-h1-with-logo">
+          {/* h3, not h1 -- see StrategyCardSkeleton's comment above: this
+              card is always homepage-embedded, never a standalone page. */}
+          <h3 className="ts-h1 ts-h1-with-logo">
             <AssetLogoFor
               strategy={entry.strategy}
               symbol={entry.symbol}
@@ -227,7 +317,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
               className="ts-header-logo"
             />
             <span>{title}</span>
-          </h1>
+          </h3>
           <div className="ts-meta">
             <LiveMetricsBadge generatedAt={data?.generated_at ?? entry.generated_at} />
             <span className="ts-chip">{symbol}</span>
@@ -299,6 +389,7 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
                     view={view6m}
                     fullSpan={fullSpan}
                     compact
+                    ariaLabel={`${entry.strategy} preview candlestick chart`}
                   />
                 ) : (
                   <div className="dqss-chart-empty">
@@ -329,8 +420,19 @@ const StrategyTearsheetCard = memo(function StrategyTearsheetCard({
 });
 
 export function StrategySuite() {
+  const [strategies, setStrategies] = useState<StrategyIndexEntry[]>([]);
+
   useEffect(() => {
-    prefetchAllTearsheets(STRATEGIES.map((s) => s.strategy));
+    let alive = true;
+    void fetchStrategyIndex().then((all) => {
+      if (!alive) return;
+      const ordered = orderSlappers(all);
+      setStrategies(ordered);
+      prefetchAllTearsheets(ordered.map((s) => s.strategy));
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   return (
@@ -341,7 +443,7 @@ export function StrategySuite() {
             <span className="kicker">{"// pre-built strategy library"}</span>
             <h2 className="dq-title">Research-grade systems, ready to explore.</h2>
             <p className="dq-sub">
-              Browse calibrated backtests from the DigiQuant library — equity, drawdown, trade
+              Browse calibrated backtests from the digiquant library — equity, drawdown, trade
               logs, and full tearsheets for every release. More assets join the catalog as they
               clear the pipeline.
             </p>
@@ -354,15 +456,32 @@ export function StrategySuite() {
           </Link>
         </div>
 
+        {/* SLAPPER_ORDER (fixed at 3), not strategies.map(...): the card
+            count stays constant across the whole session, so a real card
+            swaps in per-slot as its data lands instead of the deck's slot
+            count changing shape after mount. Verified NOT to fix #2244's
+            hydration flake by itself (see the issue for the full
+            investigation) -- kept because it is still a genuine correctness/
+            UX improvement in its own right (no empty-then-populated flash). */}
         <DeckStack
           ariaLabel="Strategy tearsheets"
-          rail={STRATEGIES.map((s) => symbolBase(s.symbol))}
+          rail={SLAPPER_ORDER.map((id) => {
+            const entry = strategies.find((s) => s.strategy === id);
+            return entry ? symbolBase(entry.symbol) : id.split("_")[0]?.toUpperCase() || id;
+          })}
         >
-          {STRATEGIES.map((entry) => (
-            <DeckCard key={entry.strategy} className="dqss-card">
-              <StrategyTearsheetCard entry={entry} />
-            </DeckCard>
-          ))}
+          {SLAPPER_ORDER.map((id) => {
+            const entry = strategies.find((s) => s.strategy === id);
+            return (
+              <DeckCard key={id} className="dqss-card">
+                {entry ? (
+                  <StrategyTearsheetCard entry={entry} />
+                ) : (
+                  <StrategyCardSkeleton strategyId={id} />
+                )}
+              </DeckCard>
+            );
+          })}
         </DeckStack>
       </div>
     </section>

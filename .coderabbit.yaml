@@ -1,0 +1,54 @@
+# CodeRabbit repository configuration.
+#
+# Deliberately minimal. CodeRabbit resolves settings individually with the
+# precedence YAML > Repository > Organization, so every key set here takes the
+# setting away from the organization UI permanently. Only `base_branches` is
+# pinned below; review profile, tooling and everything else stay under org
+# control on purpose.
+#
+# WHY THIS FILE EXISTS
+#
+# CodeRabbit auto-reviews only the repository's DEFAULT branch unless told
+# otherwise, and this repo's default is `develop`. Everything else was being
+# skipped silently, with only a "Review skipped — Auto reviews are disabled on
+# base/target branches other than the default branch" comment to show for it.
+#
+# That default is wrong for this repo's branching model twice over:
+#
+#   1. Two-hop backend work is `task/<N>-slug` -> `module/<component>` ->
+#      `develop`. CLAUDE.md is explicit that review belongs at the TASK PR
+#      ("that is the whole reason review belongs at the task PR and not at the
+#      promotion") — and the task PR is exactly the one being skipped. The
+#      module -> develop umbrella PR that did get reviewed is an accumulation
+#      of already-merged work, which the same doc argues is the worst moment to
+#      review. Net effect: two-hop components (digigraph, digikey, digiquant,
+#      digisearch, digismith, digibase, digiclaw, digichat) got no automatic
+#      review at any useful point, while one-hop components routed straight to
+#      `develop` did. Nobody chose that asymmetry.
+#
+#   2. Promotion PRs into `main` were skipped too — verified on #2242, #2232
+#      and #2231, each carrying a skip notice and zero reviews. That is the
+#      highest-stakes PR class in the repo.
+#
+# `base_branches` is ADDITIVE — the docs describe it as "Base branches (other
+# than the default branch) to review" — so `develop` keeps its automatic review
+# and these are added. Regex is supported and the values are matched as regex,
+# hence the `.*` forms rather than globs.
+#
+# Note this only restores the AUTOMATIC net. `ci-review-coverage.yml` remains
+# satisfiable by a `reviewed:agent` label plus an in-session findings comment,
+# and `@coderabbitai review` still forces a review on any PR.
+#
+# To check which layer supplied a given setting, comment `@coderabbitai
+# configuration` on any PR — the resolved YAML is annotated with its source.
+# An organization Global Override outranks even this file.
+reviews:
+  auto_review:
+    base_branches:
+      # Promotion PRs (develop -> main). Skipped before; see #2231/#2232/#2242.
+      - "main"
+      # Task PRs in the two-hop model (task/<N>-slug -> module/<component>).
+      # Covers all eight module branches in scripts/project_routing.json.
+      - "module/.*"
+      # Release branches per the taxonomy in BRANCHING.md (release/vX.Y.Z).
+      - "release/.*"

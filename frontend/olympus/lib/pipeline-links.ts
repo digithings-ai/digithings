@@ -6,7 +6,7 @@ import type { PipelineDayData } from './pipeline-graph-data';
  * "open day D, expand stage S, focus node N." Keyed off `document_key`, NOT the
  * legacy `path` field. Six consumers depend on this exact shape; do not drift.
  */
-export type PipelineStage = 'inputs' | 'research' | 'synthesis' | 'selection' | 'decision';
+export type PipelineStage = 'inputs' | 'research' | 'synthesis' | 'selection' | 'decision' | 'learning';
 
 /**
  * The digest is published under different `document_key`s depending on
@@ -37,7 +37,7 @@ export function buildPipelineHref(opts: {
   return qs ? `/pipeline?${qs}` : '/pipeline';
 }
 
-const PIPELINE_STAGES: readonly PipelineStage[] = ['inputs', 'research', 'synthesis', 'selection', 'decision'];
+const PIPELINE_STAGES: readonly PipelineStage[] = ['inputs', 'research', 'synthesis', 'selection', 'decision', 'learning'];
 
 /** Parse URLSearchParams into typed pipeline navigation params. Unknown stage values are omitted. */
 export function parsePipelineParams(sp: URLSearchParams): { date?: string; stage?: PipelineStage; node?: string } {
@@ -55,10 +55,11 @@ export function parsePipelineParams(sp: URLSearchParams): { date?: string; stage
 export function leafDocumentKey(subStepId: string, branch?: string): string | null {
   switch (subStepId) {
     case 'macro': return 'macro';
-    case 'consolidate': return 'sector-scorecard';
+    case 'scorecard': return 'sector-scorecard';
     case 'digest': return 'digest';
     case 'pm-direction': return 'pm-direction-memo';
     case 'risk-sizing': return 'pm-rebalance';
+    case 'beliefs': return 'beliefs';
     case 'analysts': return branch ? `analyst/${branch}` : null;
     case 'deliberation': return branch ? `deliberation/${branch}` : null;
     case 'commit': return branch ? `commit-run/${branch}` : null;
@@ -71,8 +72,9 @@ export function stageForDocumentKey(documentKey: string): PipelineStage | null {
   const k = documentKey.toLowerCase();
   if ((DIGEST_DOCUMENT_KEYS as readonly string[]).includes(k)) return 'synthesis';
   if (k.startsWith('analyst/') || k.startsWith('deliberation/')) return 'selection';
-  if (k === 'pm-direction-memo' || k === 'pm-rebalance' || k === 'risk-debate') return 'selection';
+  if (k === 'pm-direction-memo' || k === 'pm-rebalance') return 'selection';
   if (k.startsWith('commit-run/')) return 'decision';
+  if (k === 'beliefs') return 'learning';
   if (
     k.startsWith('alt-') ||
     k.startsWith('inst-') ||
@@ -82,6 +84,5 @@ export function stageForDocumentKey(documentKey: string): PipelineStage | null {
   ) {
     return 'research';
   }
-  if (k === 'preflight' || k.startsWith('market-data')) return 'inputs';
   return null;
 }

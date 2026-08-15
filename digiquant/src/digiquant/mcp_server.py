@@ -1,4 +1,4 @@
-"""DigiQuant MCP server: backtest, optimize, export, strategy catalog.
+"""digiquant MCP server: backtest, optimize, export, strategy catalog.
 
 Run::
 
@@ -34,7 +34,7 @@ def _require_mcp() -> type:
 
 def create_mcp_server() -> Any:
     _require_mcp()
-    mcp = FastMCP("DigiQuant")
+    mcp = FastMCP("digiquant")
 
     @mcp.tool()
     def digiquant_list_strategies() -> str:
@@ -158,7 +158,7 @@ def create_mcp_server() -> Any:
         try:
             client = build_client(SupabaseConfig.from_env())
             result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -175,7 +175,7 @@ def create_mcp_server() -> Any:
         try:
             client = build_client(SupabaseConfig.from_env())
             result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -193,7 +193,7 @@ def create_mcp_server() -> Any:
         """Read rows from a whitelisted Olympus table (JSON).
 
         Exposes the same read-only, table-scoped reader the in-process Hermes
-        agents use, so external agents (DigiChat / Kairos) can fetch the paper
+        agents use, so external agents (digichat / Kairos) can fetch the paper
         book and market data by key (#925). Allowed tables: ``positions``,
         ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
@@ -217,7 +217,7 @@ def create_mcp_server() -> Any:
                 desc=desc,
                 limit=limit,
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -281,7 +281,7 @@ def create_mcp_server() -> Any:
                     "last": df["timestamp"][-1],
                     "path": str(path),
                 }
-            except Exception as exc:  # noqa: BLE001 — surface per-symbol, never crash
+            except Exception as exc:  # surface per-symbol, never crash
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
 
@@ -324,7 +324,7 @@ def create_mcp_server() -> Any:
                 prefer_supabase=False,
                 allow_example=allow_example_calibrations,
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller
+        except Exception as exc:  # surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
         settings = gt.load_settings()
@@ -381,7 +381,7 @@ def create_mcp_server() -> Any:
             return json.dumps(
                 compare(strategy, ohlcv_csv, tv_export_csv, start_date), indent=2, default=str
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller
+        except Exception as exc:  # surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
     return mcp
@@ -393,7 +393,7 @@ def run_mcp(
     port: int = 8767,
 ) -> None:
     mcp = create_mcp_server()
-    logger.info("Starting DigiQuant MCP server on %s:%d (transport=%s)", host, port, transport)
+    logger.info("Starting digiquant MCP server on %s:%d (transport=%s)", host, port, transport)
     mcp.run(transport=transport, host=host, port=port)
 
 
@@ -401,7 +401,7 @@ if __name__ == "__main__":
     import argparse
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    parser = argparse.ArgumentParser(description="DigiQuant MCP server")
+    parser = argparse.ArgumentParser(description="digiquant MCP server")
     parser.add_argument("--stdio", action="store_true", help="Use stdio transport (Claude Desktop)")
     parser.add_argument("--host", default=os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1"))
     parser.add_argument(

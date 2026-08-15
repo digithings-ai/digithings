@@ -1,4 +1,4 @@
-"""Crossref API: resolve DOI → structured metadata for DigiSearch sidecars."""
+"""Crossref API: resolve DOI → structured metadata for digisearch sidecars."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from digisearch.core.evidence_metadata import (
     EVIDENCE_TIER_WORKING_PAPER,
 )
 
-_USER_AGENT = "DigiSearch/0.1 (https://github.com/digithings-ai/digithings; research indexing; +https://digithings.ai)"
+_USER_AGENT = "digisearch/0.1 (https://github.com/digithings-ai/digithings; research indexing; +https://digithings.ai)"
 
 
 def _normalize_doi(doi: str) -> str:
@@ -35,7 +35,7 @@ def fetch_crossref_work(doi: str, timeout: float = 30.0) -> dict[str, Any]:
 
 
 def work_to_evidence_metadata(msg: dict[str, Any]) -> dict[str, Any]:
-    """Map Crossref work JSON to DigiSearch normative metadata keys."""
+    """Map Crossref work JSON to digisearch normative metadata keys."""
     title = msg.get("title")
     if isinstance(title, list) and title:
         title = str(title[0])

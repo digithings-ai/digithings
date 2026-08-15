@@ -209,8 +209,8 @@ One model per H-phase. Each is validated against the schema under [`templates/sc
 
 - **Schema:** [`market-thesis-exploration.schema.json`](../../hermes/templates/schemas/market-thesis-exploration.schema.json).
 - **Fields (body):** `executive_digest_pointer: str`, `deeper_dives: list[str]`, `theses: list[ThesisProposal]`.
-- **`ThesisProposal`:** `thesis_id` (≤32), `title` (≤200), `direction`, `statement` (≤4000), `validation_criteria: list[str]` (required, ≥1), `invalidation_criteria: list[str]` (required, ≥1), optional `headwinds / tailwinds / bull_case / bear_case`.
-- **Validation:** `thesis_id` unique within the run; direction ∈ {`long`, `short`, `pair`, `hedge`, `avoid`}.
+- **`ThesisProposal`:** `thesis_id` (≤32), stable lowercase `topic_key` (≤64), `action ∈ {create, update}`, `existing_thesis_id` (required and equal to `thesis_id` on update), `title` (≤200), `direction`, `statement` (≤4000), `validation_criteria: list[str]` (required, ≥1), `invalidation_criteria: list[str]` (required, ≥1), optional `headwinds / tailwinds / bull_case / bear_case`.
+- **Validation:** compare every proposal with `active_theses`; updates preserve the existing ID/topic, creates use a genuinely absent topic, and both `thesis_id` and `topic_key` are unique within the run. Different wording, evidence, confidence, or catalyst detail is an update, not a new opinion. Direction ∈ {`long`, `short`, `pair`, `hedge`, `avoid`}.
 
 ### 4.3 `ThesisVehicleMap` (phase_h3)
 
@@ -269,7 +269,7 @@ Each H-phase's Supabase adapter (to be added in W2-A) writes to both `documents`
 | Phase | `documents` row (`doc_type`) | First-class table(s) |
 |-------|-----------------|----------------------|
 | `phase_h1_thesis_review` | `'Thesis Review'` (payload = full output; requires migration 025 — see §5.1) | `theses` — upsert one row per `ThesisStatusUpdate` (`(date, thesis_id)` key); update **only canonical columns** present in migration 001: `status`, `invalidation`, `notes`, `vehicle`. Per-day evidence trail lives in the `'Thesis Review'` **document payload** (`body.reviewed_theses[].evidence[]`) — it is NOT duplicated into a relational column. There is no `evidence_log` column on `theses`, and we do not add one: the document is the right home for the narrative evidence list. |
-| `phase_h2_market_thesis_exploration` | `'Market Thesis Exploration'` | `theses` — insert one row per new `ThesisProposal` with `status='ACTIVE'`. |
+| `phase_h2_market_thesis_exploration` | `'Market Thesis Exploration'` | `theses` — create one `ACTIVE` row or update one canonical row per `topic_key`; updates preserve H1's same-run lifecycle status (or the prior nonterminal status when H1 emitted no update). Migration 056 enforces one nonterminal market topic per date. |
 | `phase_h3_thesis_vehicle_map` | `'Thesis Vehicle Map'` | `thesis_vehicles` — one row per `(thesis_id, ticker)` with `rationale`, `exclusion_reasons`, `candidate_rank` (derived from position in `candidate_tickers`), `user_mandate_notes`, `source_exploration_key` = the `documents.key` of the h2 output. |
 | `phase_h4_opportunity_screener` | `'Opportunity Screen'` (requires migration 025 — see §5.1) | `analyst_coverage` — upsert `(date, ticker)` for each `RosterPick`; set `thesis_ids`, `analyst_role='roster'`. |
 | `phase_h5_asset_analyst` | `'Asset Recommendation'` (one per ticker) | `analyst_coverage` — update `current_recommendation_key` + `last_updated`. |

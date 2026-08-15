@@ -3,13 +3,13 @@
 - **Status:** Accepted (2026-04-19)
 - **Amendment (2026-04-27):** the `apps/digiquant-atlas/frontend/` carve-out is removed. Atlas's frontend moved to `frontend/atlas/` ([#300](https://github.com/digithings-ai/digithings/issues/300)) as part of folding Atlas into the `digiquant` module ([#297](https://github.com/digithings-ai/digithings/issues/297)). The root `package.json` workspace glob is now just `frontend/*`; the `apps/*/frontend` entry was dropped.
 - **Supersedes (in part):** [ADR-0002 — domain unification](0002-domain-unification.md)
-- **Superseded (in part) by:** [ADR-0018 — DigiChat path routing](0018-digichat-path-routing.md) — the `chat.digithings.ai` domain target shown in this ADR's directory diagram and "Amendment to ADR-0002" section is replaced by path-based routing at `digithings.ai/chat`. The `frontend/` umbrella structure and workspace decision are unaffected.
+- **Superseded (in part) by:** [ADR-0018 — digichat path routing](0018-digichat-path-routing.md) — the `chat.digithings.ai` domain target shown in this ADR's directory diagram and "Amendment to ADR-0002" section is replaced by path-based routing at `digithings.ai/chat`. The `frontend/` umbrella structure and workspace decision are unaffected.
 - **Related epic:** [#254](https://github.com/digithings-ai/digithings/issues/254)
 - **Parent epic:** [#235](https://github.com/digithings-ai/digithings/issues/235)
 
 ## Context
 
-The DigiThings repo shipped three web surfaces in three different
+The digithings repo shipped three web surfaces in three different
 hybrid states:
 
 1. `website/` — committed to the monorepo, deployed to `digithings.ai`
@@ -43,7 +43,7 @@ The remaining two — [#240](https://github.com/digithings-ai/digithings/issues/
 
 ## Decision
 
-Unify all DigiThings web frontends under a single `frontend/` umbrella
+Unify all digithings web frontends under a single `frontend/` umbrella
 in the existing monorepo, backed by an npm workspace and a
 `@digithings/design` package.
 
@@ -112,7 +112,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
   follow-up against `apps/digiquant-atlas/frontend/`.
 - Physical relocation of Atlas frontend to `frontend/atlas/`. Keeping
   it nested under the research project is fine for now.
-- Digiquant.io separate Pages deploy. The current `static.yml` only
+- digiquant.io separate Pages deploy. The current `static.yml` only
   publishes `frontend/digithings/`. Parallel workflow for
   `frontend/digiquant/` → digiquant.io is tracked under epic #9.
 

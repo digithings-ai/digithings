@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Start DigiKey, DigiQuant, DigiSearch, DigiSmith, DigiGraph (+ optional LiteLLM) on the same ports as Docker Compose
-# (8005 DigiKey, 8000–8003, 4000). No containers. DigiChat: `make digichat-dev`.
+# Start digikey, digiquant, digisearch, digismith, digigraph (+ optional LiteLLM) on the same ports as Docker Compose
+# (8005 digikey, 8000–8003, 4000). No containers. digichat: `make digichat-dev`.
 #
 # Prerequisites (repo-root .venv recommended):
 #   pip install -e ./digibase \
@@ -73,12 +73,12 @@ append_pid() { echo "$1" >> "$PIDFILE"; }
 export DIGIKEY_DATABASE_URL="${DIGIKEY_DATABASE_URL:-sqlite:///${ROOT}/.local_digikey.sqlite}"
 export DIGIKEY_ALLOW_EPHEMERAL_KEY="${DIGIKEY_ALLOW_EPHEMERAL_KEY:-1}"
 export DIGIKEY_ALLOW_DEV_GLOBAL="${DIGIKEY_ALLOW_DEV_GLOBAL:-1}"
-echo "Starting DigiKey on http://127.0.0.1:${PORT_DK} ..."
+echo "Starting digikey on http://127.0.0.1:${PORT_DK} ..."
 "$PYTHON" -m uvicorn digikey.server:app --host 127.0.0.1 --port "$PORT_DK" &
 append_pid $!
 sleep 2
 if ! curl -sf "http://127.0.0.1:${PORT_DK}/health" >/dev/null; then
-  echo "DigiKey health failed. PIDs in $PIDFILE — ./scripts/stop_stack_local.sh"
+  echo "digikey health failed. PIDs in $PIDFILE — ./scripts/stop_stack_local.sh"
   exit 1
 fi
 
@@ -135,14 +135,14 @@ if [ -z "${CHROMA_PATH:-}" ]; then
   export DIGISEARCH_ALLOW_STUB="${DIGISEARCH_ALLOW_STUB:-1}"
 fi
 
-echo "Starting DigiQuant on http://127.0.0.1:${PORT_QUANT} ..."
+echo "Starting digiquant on http://127.0.0.1:${PORT_QUANT} ..."
 env PYTHONPATH="$PYTHONPATH" DIGIQUANT_DATA_DIR="$DIGIQUANT_DATA_DIR" \
   DIGIKEY_JWKS_URL="$DIGIKEY_JWKS_URL" DIGIKEY_ISSUER="$DIGIKEY_ISSUER" DIGIKEY_AUDIENCE="$DIGIKEY_AUDIENCE" \
   "$PYTHON" -m uvicorn digiquant.server:app --host 127.0.0.1 --port "$PORT_QUANT" &
 append_pid $!
 sleep 1
 
-echo "Starting DigiSearch on http://127.0.0.1:${PORT_SEARCH} ..."
+echo "Starting digisearch on http://127.0.0.1:${PORT_SEARCH} ..."
 env PYTHONPATH="$PYTHONPATH" \
   DIGIKEY_JWKS_URL="$DIGIKEY_JWKS_URL" DIGIKEY_ISSUER="$DIGIKEY_ISSUER" DIGIKEY_AUDIENCE="$DIGIKEY_AUDIENCE" \
   CHROMA_PATH="${CHROMA_PATH:-}" DIGISEARCH_ALLOW_STUB="${DIGISEARCH_ALLOW_STUB:-}" \
@@ -150,13 +150,13 @@ env PYTHONPATH="$PYTHONPATH" \
 append_pid $!
 sleep 1
 
-echo "Starting DigiSmith on http://127.0.0.1:${PORT_SMITH} ..."
+echo "Starting digismith on http://127.0.0.1:${PORT_SMITH} ..."
 env PYTHONPATH="$PYTHONPATH" \
   "$PYTHON" -m uvicorn digismith.server:app --host 127.0.0.1 --port "$PORT_SMITH" &
 append_pid $!
 sleep 1
 
-echo "Starting DigiGraph on http://127.0.0.1:${PORT_GRAPH} ..."
+echo "Starting digigraph on http://127.0.0.1:${PORT_GRAPH} ..."
 env PYTHONPATH="$PYTHONPATH" \
   DIGIQUANT_URL="http://127.0.0.1:${PORT_QUANT}" \
   DIGIQUANT_DATA_DIR="$DIGIQUANT_DATA_DIR" \
@@ -185,14 +185,14 @@ fi
 
 echo ""
 echo "Local stack is up (standard ports, no Docker)."
-echo "  DigiKey:    http://127.0.0.1:${PORT_DK}/health  (issue keys: python -m digikey.cli issue-key ...)"
+echo "  digikey:    http://127.0.0.1:${PORT_DK}/health  (issue keys: python -m digikey.cli issue-key ...)"
 echo "  LiteLLM:    http://127.0.0.1:${LLM_PORT}/health   (OPENAI_API_BASE=$OPENAI_API_BASE)"
-echo "  DigiQuant:  http://127.0.0.1:${PORT_QUANT}/health"
-echo "  DigiSearch: http://127.0.0.1:${PORT_SEARCH}/health"
-echo "  DigiSmith:  http://127.0.0.1:${PORT_SMITH}/health"
-echo "  DigiGraph:  http://127.0.0.1:${PORT_GRAPH}/health"
+echo "  digiquant:  http://127.0.0.1:${PORT_QUANT}/health"
+echo "  digisearch: http://127.0.0.1:${PORT_SEARCH}/health"
+echo "  digismith:  http://127.0.0.1:${PORT_SMITH}/health"
+echo "  digigraph:  http://127.0.0.1:${PORT_GRAPH}/health"
 echo ""
-echo "DigiChat (Next.js, hot reload):"
+echo "digichat (Next.js, hot reload):"
 echo "  make digichat-dev"
 echo "  See docs/LOCAL_STACK.md — set DIGIKEY_URL=http://127.0.0.1:${PORT_DK} , DIGIGRAPH_INTERNAL_URL=http://127.0.0.1:${PORT_GRAPH}"
 echo ""

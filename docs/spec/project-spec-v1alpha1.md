@@ -7,7 +7,7 @@
 
 ## Overview
 
-A *DigiProject* is a self-contained deployment of the DigiThings stack customised for a specific use-case (tenant, domain, or product). The project YAML (`config.yaml` or `digiproject.yaml`) is the single source of truth for all runtime tunables that differ from the defaults.
+A *DigiProject* is a self-contained deployment of the digithings stack customised for a specific use-case (tenant, domain, or product). The project YAML (`config.yaml` or `digiproject.yaml`) is the single source of truth for all runtime tunables that differ from the defaults.
 
 The spec is intentionally minimal for Phase 1: every field is optional, and every default produces a valid (if uncustomised) deployment.
 
@@ -15,7 +15,7 @@ The spec is intentionally minimal for Phase 1: every field is optional, and ever
 
 ## Loading
 
-DigiGraph loads the project config from:
+digigraph loads the project config from:
 
 1. `DIGI_PROJECT_CONFIG` env var (absolute path or path relative to the working directory)
 2. Fallback: `config/digi_project.yaml` in the working directory
@@ -39,9 +39,22 @@ project:
 agents:
   enabled:                # List of agent IDs to activate (default: ["research"])
     - research            # Only "research" is supported in Phase 1
-  llm_mode: string        # "test" | "medium" | "best" (default: env DIGI_LLM_MODE or "test")
+  llm_mode: string        # "free" | "test" | "medium" | "best" (default: env DIGI_LLM_MODE or "test")
+                          # policy only: free = must resolve to OpenRouter :free / ollama; refuse paid IDs
+                          # free does NOT pick a model from model_modes.yaml — set agents.llm (or DIGI_LLM_*)
+  llm:                    # required when llm_mode is free; optional pin for other modes (wins over defaults)
+    provider: string      # openrouter | openai | ollama | gemini | anthropic | litellm
+    model: string         # provider-native id, e.g. openai/gpt-oss-20b:free (operator-chosen; roster rotates)
+    api_key_env: string   # optional; default from provider registry (never put secrets in YAML)
   planning_mode: bool     # Enable plan-then-execute flow (default: false)
   workflow_profile: string # Workflow graph profile name (default: "default")
+  research_brief: bool    # Run ResearchBrief post-pass after answer (default: true; env DIGI_RESEARCH_BRIEF)
+  always_retrieve_tools:  # Deprecated/inert (#2240): used to prefetch these tools before
+                          # the LLM turn and strip them from tools_for_llm; that prefetch
+                          # was removed so the model decides retrieval itself. The key
+                          # still parses (DigiProjectConfig.get_always_retrieve_tools())
+                          # but nothing calls it.
+    - digisearch
   allowed_tools:          # Restrict tool names available to the research node (default: all)
     - digisearch
     - visualization_agent
@@ -49,10 +62,10 @@ agents:
   research_system_prompt: |
     # Custom system prompt for the research node.
     # Replaces the default quant-extraction prompt.
-    # When set, the node runs in document-mode RAG (tool loop + DigiSearch).
+    # When set, the node runs in document-mode RAG (tool loop + digisearch).
     # When omitted, quant strategy extraction is used.
 
-run_data_dir: string      # Absolute path to session dataset storage (default: null — disables Digistore).
+run_data_dir: string      # Absolute path to session dataset storage (default: null — disables digistore).
                           # In Docker: mount a named volume here (e.g. /data/run).
                           # When set, enables the sitaas_rag skill:
                           #   digistore_list, digistore_profile, visualization_agent,
@@ -60,7 +73,7 @@ run_data_dir: string      # Absolute path to session dataset storage (default: n
                           #   data_engineer_agent (+ DIGI_ALLOW_CODE_EXEC=1 for data_engineer).
 
 indexes_dir: string       # Directory of index *.yaml files (default: null — no indexes).
-                          # Each file becomes one DigiSearch index tool.
+                          # Each file becomes one digisearch index tool.
                           # Path is relative to DIGI_PROJECT_CONFIG's parent directory.
 
 mcp:
@@ -70,9 +83,9 @@ mcp:
     - digigraph_workflow
 
 services:
-  digisearch_url: string  # DigiSearch base URL (default: env DIGISEARCH_URL)
+  digisearch_url: string  # digisearch base URL (default: env DIGISEARCH_URL)
   litellm_url: string     # LiteLLM / LLM proxy URL (default: env OPENAI_API_BASE)
-  digiquant_url: string   # DigiQuant base URL (default: env DIGIQUANT_URL)
+  digiquant_url: string   # digiquant base URL (default: env DIGIQUANT_URL)
 ```
 
 ---
@@ -100,9 +113,24 @@ services:
       "additionalProperties": false,
       "properties": {
         "enabled":               { "type": "array",  "items": { "type": "string" } },
-        "llm_mode":              { "type": "string",  "enum": ["test", "medium", "best"] },
+        "llm_mode":              { "type": "string",  "enum": ["free", "test", "medium", "best"] },
+        "llm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["provider", "model"],
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": ["openrouter", "openai", "ollama", "gemini", "anthropic", "litellm"]
+            },
+            "model": { "type": "string", "minLength": 1 },
+            "api_key_env": { "type": "string", "minLength": 1 }
+          }
+        },
         "planning_mode":         { "type": "boolean" },
         "workflow_profile":      { "type": "string" },
+        "research_brief":        { "type": "boolean" },
+        "always_retrieve_tools": { "type": "array",  "items": { "type": "string" } },
         "allowed_tools":         { "type": "array",  "items": { "type": "string" } },
         "research_system_prompt":{ "type": "string" }
       }
@@ -137,7 +165,8 @@ services:
 
 | Field | Env override | Notes |
 |---|---|---|
-| `agents.llm_mode` | `DIGI_LLM_MODE` | Project YAML wins if set |
+| `agents.llm_mode` | `DIGI_LLM_MODE` | Project YAML wins if set (`free` \| `test` \| `medium` \| `best`). Policy only — not a model slug. |
+| `agents.llm.provider` / `agents.llm.model` | `DIGI_LLM_PROVIDER` / `DIGI_LLM_MODEL` | YAML wins when set; env fills gaps. **Required for `llm_mode: free`.** API keys stay in env only. |
 | `run_data_dir` | `DIGI_RUN_DATA_DIR` | Env wins if set; YAML is fallback |
 | `services.digisearch_url` | `DIGISEARCH_URL` | Env wins |
 | `services.litellm_url` | `OPENAI_API_BASE` | Env wins |
@@ -145,7 +174,7 @@ services:
 | `mcp.enabled` | — | YAML only |
 | `indexes_dir` | — | YAML only |
 
-DigiGraph reads the project config on every request (cached by mtime). No restart required for non-secret field changes.
+digigraph reads the project config on every request (cached by mtime). No restart required for non-secret field changes.
 
 ---
 
@@ -154,8 +183,8 @@ DigiGraph reads the project config on every request (cached by mtime). No restar
 | Capability | How to enable | How to disable |
 |---|---|---|
 | Custom research prompt (document RAG) | Set `agents.research_system_prompt` | Remove field → quant mode |
-| Digistore + delegate tools | Set `run_data_dir` | Remove field or set to `null` |
-| DigiSearch tool | Set `DIGISEARCH_URL` | Unset env var |
+| digistore + delegate tools | Set `run_data_dir` | Remove field or set to `null` |
+| digisearch tool | Set `DIGISEARCH_URL` | Unset env var |
 | Code execution (`data_engineer_agent`) | `run_data_dir` + `DIGI_ALLOW_CODE_EXEC=1` | Remove env var |
 | MCP server | `mcp.enabled: true` | `mcp.enabled: false` or remove |
 | Specific tools only | `agents.allowed_tools: [...]` | Remove field → all tools available |
@@ -207,7 +236,7 @@ destination.
 # projects/sitaas/config.yaml (gitignored — local only)
 project:
   name: sitas
-  description: "Sitaas: orchestration agent with DigiSearch document context."
+  description: "Sitaas: orchestration agent with digisearch document context."
   version: "0.1.0"
 
 agents:
@@ -231,7 +260,7 @@ services:
 
 This config activates:
 - Custom research prompt (document RAG mode)
-- Digistore + delegate agent tools (via `run_data_dir`)
+- digistore + delegate agent tools (via `run_data_dir`)
 - Multi-index discovery (via `indexes_dir`)
 - MCP server
 

@@ -1,0 +1,132 @@
+# Deploys the digithings.ai digichat Cloudflare Container -- the live
+# `/embed` widget behind digithings.ai/chat and digithings.ai/chat/occ
+# (see frontend/digichat-cloudflare/README.md). Before this workflow (#2199),
+# that deploy was manual-only (`npx wrangler deploy` from a developer machine
+# with Docker + `wrangler login`) -- verified no workflow anywhere ran it.
+#
+# This is a SEPARATE deploy target from publish-digichat-image.yml's GHCR
+# image: that image is for self-hosted/DataTap client compose deployments and
+# is never consumed here -- this Container builds fresh from
+# Dockerfile.digichat-cloudflare via Cloudflare's own build pipeline on
+# `wrangler deploy`, independent of anything pushed to GHCR.
+#
+# Gated on either signal actually being real, not on every incidental commit
+# under these paths:
+#   - digichat's own version (frontend/digichat/package.json) changed in this
+#     push -- the release-please signal a real digichat release just landed,
+#     mirroring publish-digichat-image.yml's existing idempotency check.
+#   - the Container wrapper itself changed (frontend/digichat-cloudflare/** or
+#     Dockerfile.digichat-cloudflare) -- that code has no version field and is
+#     not release-please-tracked at all, so a version-only gate would never
+#     redeploy a fix made purely to the wrapper.
+# `workflow_dispatch` always deploys: there is no `before` SHA to diff
+# against, and a human explicitly asking for a deploy should get one.
+#
+# Requires repo secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID -- NOT
+# yet present as of #2199. Until they're added (Settings -> Secrets and
+# variables -> Actions, or `gh secret set`), this workflow fails closed with a
+# wrangler auth error rather than deploying nothing silently. The token needs
+# at least Workers Scripts:Edit on the digithings.ai Cloudflare account.
+name: "Deploy: digichat Cloudflare Container"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/digichat/package.json"
+      - "frontend/digichat-cloudflare/**"
+      - "Dockerfile.digichat-cloudflare"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-digichat-cloudflare-container
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the gating step below diffs against `before`, which
+          # a shallow (default depth-1) clone would not have fetched.
+          fetch-depth: 0
+
+      - name: Decide whether a deploy is warranted
+        id: check
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "workflow_dispatch, first push, or unresolvable prior commit -- deploying."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+
+          if echo "$changed_files" | grep -qE '^(frontend/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)'; then
+            echo "Container wrapper itself changed -- deploying."
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          current_version=$(jq -r .version frontend/digichat/package.json)
+          if [ -z "$current_version" ] || [ "$current_version" = "null" ]; then
+            echo "frontend/digichat/package.json has no .version field -- refusing to guess." >&2
+            exit 1
+          fi
+          if git cat-file -e "$BEFORE:frontend/digichat/package.json" 2>/dev/null; then
+            prev_version=$(git show "$BEFORE:frontend/digichat/package.json" | jq -r .version)
+          else
+            prev_version=""
+          fi
+          echo "digichat version: ${prev_version:-<none>} -> $current_version"
+
+          if [ "$prev_version" != "$current_version" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "digichat version unchanged, and the wrapper itself didn't change -- nothing to deploy."
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.deploy == 'true'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install workspace dependencies
+        if: steps.check.outputs.deploy == 'true'
+        # frontend/digichat-cloudflare has no lockfile of its own -- it's an npm
+        # workspace under the root package-lock.json (see "workspaces" in the root
+        # package.json). `npm ci` must run at repo root so wrangler can resolve
+        # frontend/digichat-cloudflare/src/index.ts's `@cloudflare/containers`
+        # import when it bundles the Worker. Without this, wrangler 3.x (the
+        # version wrangler-action installed by default before this fix pinned
+        # wranglerVersion below) silently ignored `[[containers]]` and never tried
+        # to bundle that import at all; wrangler 4.x tries to build it for real and
+        # fails loudly with "Could not resolve '@cloudflare/containers'" if
+        # node_modules isn't there -- verified locally both ways.
+        run: npm ci
+
+      - name: Deploy
+        if: steps.check.outputs.deploy == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: frontend/digichat-cloudflare
+          command: deploy
+          # wrangler-action's own default (no `wranglerVersion` given) installed a
+          # hardcoded 3.90.0 on its first real run here (#2199), silently ignoring
+          # this project's own `"wrangler": "^4.28.0"` devDependency -- 3.x predates
+          # Cloudflare Containers entirely, so it printed "Unexpected fields found
+          # in top-level field: containers" and deployed only the Worker routing
+          # shell, never rebuilding the actual Container image. Pin to the same
+          # range package.json declares so both installs agree on what's supported.
+          wranglerVersion: "^4.28.0"

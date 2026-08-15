@@ -6,7 +6,6 @@ from datetime import date
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices.breadth import compute_breadth
 
 

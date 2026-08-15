@@ -1,4 +1,4 @@
-"""DigiKey scope policy for DigiVault routes.
+"""digikey scope policy for digivault routes.
 
 Defined here (not in ``digikey``) so the auth plane stays untouched — the
 middleware accepts any ``(method, path) -> scopes | None`` function. Reads need
@@ -35,6 +35,14 @@ def digivault_path_scopes(method: str, path: str) -> list[str] | None:
     # SCOPE_WRITE itself in the handler, keyed on the requested tool name, so a
     # read-only caller can't reach it via this shared endpoint.
     if path == "/v1/orchestrator_invoke":
+        return [SCOPE_READ]
+    # By-path note fetch is POST (the request body carries vault_path/path_prefix) but
+    # is a pure read — scope it like the GET routes, not like a mutation. path_prefix
+    # is still an enforced boundary; the handler returns 403 for an out-of-scope path.
+    # Gated on method == "POST" too, not just the path: only POST is registered today
+    # (every other verb 405s, so nothing is widened yet), but a bare path match would
+    # silently read-scope a future DELETE/PUT on the same literal path (#2239 review).
+    if path == "/v1/notes/by-path" and method == "POST":
         return [SCOPE_READ]
     if method in ("POST", "PUT", "PATCH", "DELETE"):
         return [SCOPE_WRITE]

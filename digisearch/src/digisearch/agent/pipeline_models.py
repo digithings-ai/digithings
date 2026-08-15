@@ -1,9 +1,9 @@
-"""Pydantic models for the DigiSearch research-turn LangGraph (SIMP-019/020)."""
+"""Pydantic models for the digisearch research-turn LangGraph (SIMP-019/020)."""
 
 from __future__ import annotations
 
 from operator import add
-from typing import Annotated, Any  # noqa: ANN401 — research turn state slots
+from typing import Annotated, Any  # score:allow untyped any — research turn state slots
 
 from pydantic import BaseModel, ConfigDict, Field
 

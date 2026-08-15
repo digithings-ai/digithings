@@ -1,8 +1,8 @@
-# Agent Guide: DigiGraph
+# Agent Guide: digigraph
 
 ## Purpose
 
-DigiGraph is the **orchestration hub** of DigiThings. It runs a LangGraph state machine that accepts user prompts, delegates research to DigiSearch and backtesting to DigiQuant via HTTP, and returns structured results through an OpenAI-compatible streaming API. It owns no domain logic — it coordinates verticals.
+digigraph is the **orchestration hub** of digithings. It runs a LangGraph state machine that accepts user prompts, delegates research to digisearch and backtesting to digiquant via HTTP, and returns structured results through an OpenAI-compatible streaming API. It owns no domain logic — it coordinates verticals.
 
 ---
 
@@ -36,14 +36,14 @@ Before making any change to `digigraph/`:
 Beyond root `AGENTS.md`:
 
 - **MCP-first**: Every new capability must be a discoverable tool registered in the orchestration registry. Never add logic directly to a LangGraph node.
-- **No tight coupling**: DigiGraph must never import DigiSearch or DigiQuant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
-- **State stays lean**: `WorkflowState` carries only refs and summaries. No full document bodies, no large DataFrames in state or LangGraph checkpoints. Use Digistore (`digistore.py`) for large data.
+- **No tight coupling**: digigraph must never import digisearch or digiquant Python packages. All vertical calls go through `POST /v1/orchestrator_invoke`.
+- **State stays lean**: `WorkflowState` carries only refs and summaries. No full document bodies, no large DataFrames in state or LangGraph checkpoints. Use digistore (`digistore.py`) for large data.
 - **Tool allowlist respected**: New tools must work correctly when `ToolContext.allowed_tool_names` is set to a subset. Never bypass the allowlist check.
 - **LLM routing via digillm**: All LLM calls go through `digigraph.llm_client` (`completion` / `completion_text` / `run_tools`), which wraps the `digillm` toolkit client. No direct OpenAI SDK `chat.completions.create()` calls.
 - **Never MemorySaver in production**: Default is fine for dev, but document `DIGI_CHECKPOINTER=postgres` for production.
 - **Checkpointer env**: Set `DIGI_CHECKPOINTER=memory|sqlite|postgres` explicitly in prod; `memory` does not survive restarts.
 - **MCP auth**: Bind MCP to loopback; set `DIGI_MCP_REQUIRE_AUTH=1` when exposing beyond localhost. The `workflow` tool refuses unauthenticated calls when auth is required.
-- **No PII in spans**: DigiSmith spans must not carry raw prompts, full document bodies, or bearer tokens. See `digismith/ARCHITECTURE.md` Section 4.
+- **No PII in spans**: digismith spans must not carry raw prompts, full document bodies, or bearer tokens. See `digismith/ARCHITECTURE.md` Section 4.
 
 ---
 
@@ -73,7 +73,7 @@ curl http://localhost:8000/test_llm
 
 ## SITAAS / Project-Mode Capabilities
 
-When a `digiproject.yaml` (or `config.yaml`) sets `run_data_dir`, DigiGraph operates in **project mode**. The `sitaas_rag` skill is activated, exposing additional tools beyond the base `search` skill.
+When a `digiproject.yaml` (or `config.yaml`) sets `run_data_dir`, digigraph operates in **project mode**. The `sitaas_rag` skill is activated, exposing additional tools beyond the base `search` skill.
 
 ### Full tool set (sitaas_rag skill)
 
@@ -95,7 +95,7 @@ When `stored_datasets` is in graph state, the research node prepends a `[Current
 
 ### ECharts rendering
 
-`visualization_agent` returns ECharts option JSON when the request includes `X-Response-Format: openwebui` or uses the `sitaas-rag` model endpoint. Without this header, it falls back to a PNG path. The frontend must handle the `echarts_option` key in the tool result to render the chart.
+`visualization_agent` prefers ECharts tools (`echarts_*`) that return `echarts_option` JSON (optional SVG via Node SSR). Matplotlib-style `plot_*` tools return `image_path`. Stream `<details>` / table chrome for those results requires explicit Open WebUI opt-in (`X-Response-Format: openwebui` or `openwebui_format=true`) — not `model=sitaas-rag` alone. Frontends that consume tool results directly should handle the `echarts_option` key.
 
 ---
 

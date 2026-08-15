@@ -15,7 +15,6 @@ const position = (over: Partial<Position>): Position => ({
 const base = {
   lastUpdated: '2026-06-23',
   positions: [position({ ticker: 'NVDA' }), position({ ticker: 'EWT', sector_bucket: 'International' })],
-  investedPct: 75,
   decisions: [{ ticker: 'IWM', run_date: '2026-06-23', stance: 'buy', conviction: 2, status: 'pending' } as unknown as TableRow<'decision_log'>],
   positionHistory: [], positionEvents: [], thesisById: new Map<string, Thesis>(),
   effHistoryDate: '2026-06-23', onSelectHistoryDate: () => {}, onClearHistoryDate: () => {},
@@ -24,16 +23,38 @@ const base = {
 };
 
 describe('AllocationsTab', () => {
-  it('renders the reconciliation strip with normalized invested/cash', () => {
+  it('derives exposure from the displayed position book, not stale metrics', () => {
     const html = renderToStaticMarkup(createElement(AllocationsTab, base));
-    expect(html).toContain('Invested');
-    expect(html).toContain('75.0%');
-    expect(html).toContain('Cash');
+    expect(html).toContain('invested');
+    expect(html).toContain('60.0%');
+    expect(html).not.toContain('75.0%');
+    expect(html).not.toContain('cash');
   });
 
-  it('renders the proposed-by-pipeline shelf for not-held decision tickers', () => {
+  it('keeps proposed unheld tickers in Pipeline rather than Holdings', () => {
     const html = renderToStaticMarkup(createElement(AllocationsTab, base));
-    expect(html).toContain('Proposed by the pipeline');
-    expect(html).toContain('IWM');
+    expect(html).not.toContain('Proposed by the pipeline');
+    expect(html).not.toContain('IWM');
+  });
+
+  it('uses a full-width ledger with positions and activity views', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsTab, base));
+    expect(html).toContain('data-region="workspace"');
+    expect(html).toContain('data-region="ledger"');
+    expect(html).not.toContain('data-region="context-rail"');
+    expect(html).toContain('Holdings view');
+  });
+
+  it('fills the available page height while keeping a minimum workspace height', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsTab, base));
+    expect(html).toContain(
+      'data-region="holdings-frame" class="flex min-h-[28rem] flex-1 flex-col overflow-hidden"',
+    );
+  });
+
+  it('passes position count to the command band', () => {
+    const html = renderToStaticMarkup(createElement(AllocationsTab, base));
+    expect(html).toContain('positions');
+    expect(html).toContain('>2<'); // two positions in base fixture
   });
 });

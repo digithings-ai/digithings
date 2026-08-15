@@ -3,24 +3,30 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node ./lib/sync-openapi.mjs",
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build",
+    "prebuild": "node ./lib/write-csp-headers.mjs && node ./lib/sync-openapi.mjs",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run",
+    "write-csp-headers": "node ./lib/write-csp-headers.mjs",
+    "sync-openapi": "node ./lib/sync-openapi.mjs"
   },
   "dependencies": {
     "@digithings/design": "*",
     "@digithings/digichat-ui": "*",
     "@digithings/web": "*",
-    "motion": "^12.23.12",
     "geist": "^1.5.1",
     "mermaid": "^11.16.0",
+    "motion": "^12.23.12",
     "next": "16.2.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
-    "simple-icons": "^15.18.0"
+    "simple-icons": "^15.18.0",
+    "swagger-ui-dist": "^5.30.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.7",
@@ -29,8 +35,10 @@
     "@types/react-dom": "^19.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
+    "happy-dom": "^20.11.1",
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.7",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.10"
   }
 }

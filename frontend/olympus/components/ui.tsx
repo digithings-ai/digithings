@@ -45,16 +45,22 @@ export function StatCard({
   valueClass = '',
 }: StatCardProps) {
   return (
-    <div className="glass-card p-6">
-      <div className="flex justify-between items-start">
-        <span className="text-xs font-semibold uppercase tracking-widest text-ink-mute">{label}</span>
-        {Icon && <Icon size={16} className={iconColor} />}
+    <div className="glass-card flex min-h-36 flex-col px-5 py-5">
+      <div className="flex items-start justify-between gap-3">
+        <span className="font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+          {label}
+        </span>
+        {Icon && <Icon size={15} className={iconColor} aria-hidden="true" />}
       </div>
-      <div className={`text-3xl font-bold tabular-nums mt-2 ${valueClass}`}>
+      <div
+        className={`mt-3 font-mono text-[clamp(1.55rem,3vw,2.1rem)] font-normal leading-none tabular-nums text-ink ${valueClass}`}
+      >
         {value}
       </div>
       {subtitle && (
-        <p className="text-xs text-ink-mute mt-2">{subtitle}</p>
+        <p className="mt-auto pt-3 font-mono text-[0.66rem] leading-relaxed text-ink-mute">
+          {subtitle}
+        </p>
       )}
     </div>
   );
@@ -82,7 +88,9 @@ export function Badge({ variant = 'default', ...props }: BadgeProps) {
 /** Section heading used inside pages */
 export function SectionTitle({ children, className = '' }: SectionTitleProps) {
   return (
-    <h3 className={`text-lg font-semibold mb-3 ${className}`}>{children}</h3>
+    <h3 className={`mb-3 font-display text-xl font-normal tracking-tight text-ink ${className}`}>
+      {children}
+    </h3>
   );
 }
 

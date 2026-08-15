@@ -6,7 +6,7 @@ line-length = 100
 target-version = "py312"
 
 # Trees we don't want linted as part of the main stack.
-#   apps/                       — downstream applications built on DigiThings.
+#   apps/                       — downstream applications built on digithings.
 #   digiquant/scripts/atlas/    — legacy operator scripts (pandas/yfinance), exempted
 #                                 from the Polars-only policy. Migrated from
 #                                 apps/digiquant-atlas/scripts/ in issue #316; not
@@ -25,6 +25,30 @@ extend-exclude = [
   "docs/openapi",
 ]
 
+[format]
+# Markdown is NOT source. ruff 0.16 began formatting Python code blocks inside
+# `.md` files — 0.15.8 reported "No Python files found" for the same paths — which
+# turned the atlas-graph format check red on unchanged docs (#1705, same unpinned
+# -upgrade root cause as #1701).
+#
+# The snippets in docs/ are illustrative specification excerpts with deliberate
+# alignment (aligned trailing comments, one-line field declarations kept readable).
+# Reformatting them makes the documentation worse: a commented field becomes a
+# three-line wrap, and aligned comment columns collapse. Documentation prose is
+# reviewed by humans, not compiled, so it is excluded from the formatter.
+exclude = ["*.md"]
+
+[lint]
+# Rule selection is EXPLICIT and version-independent on purpose. ruff 0.16 widened
+# its default selection from 59 rules to 413, which turned ~981 findings red across
+# the monorepo overnight on an unchanged codebase (see #1701). Leaving `select`
+# unset means the lint policy is whatever ruff happens to ship, so it is stated here
+# instead. These four groups are the selection this repo has always enforced.
+#
+# To adopt more, widen this list deliberately — one rule family per PR, with the
+# resulting fixes reviewed. Do not widen it by upgrading ruff.
+select = ["E4", "E7", "E9", "F", "I", "DTZ", "RUF100"]
+
 # Per-file-ignores are intentional exceptions, documented inline.
 [lint.per-file-ignores]
 # Service entrypoints import after bootstrap (dotenv load, sys.path fixes).
@@ -36,3 +60,17 @@ extend-exclude = [
 "digisearch/src/digisearch/ingestion/parsers/*.py" = ["F401"]
 # Tearsheet optionally uses plotly; guard is a try/import pattern ruff can't see through.
 "digiquant/src/digiquant/tearsheet.py" = ["F401"]
+# These fixtures construct NAIVE datetimes on purpose, because that is what the code
+# under test consumes and asserts — making them tz-aware would change what is being
+# tested, not fix a bug (#1707):
+#   test_technicals / test_trading_days_filter — naive `pl.Datetime` OHLCV columns;
+#     an aware value changes the Polars dtype to Datetime(time_zone="UTC").
+#   test_supabase_io — asserts _json_safe emits "2026-06-22T13:30:00"; an aware value
+#     would append "+00:00" and the assertion would be testing a different contract.
+#   test_strategy_store — `as_of` is serialized by production code under test.
+#   test_phase_tool_flags — stubs a freshness timestamp compared against naive values.
+"tests/dq/atlas/test_phase_tool_flags.py" = ["DTZ001"]
+"tests/dq/atlas/test_supabase_io.py" = ["DTZ001"]
+"tests/dq/data/test_technicals.py" = ["DTZ001"]
+"tests/dq/data/test_trading_days_filter.py" = ["DTZ001"]
+"tests/dq/store/test_strategy_store.py" = ["DTZ001"]

@@ -2,8 +2,7 @@
 
 from decimal import Decimal
 
-from nautilus_trader.examples.strategies.ema_cross import EMACross
-from nautilus_trader.examples.strategies.ema_cross import EMACrossConfig
+from nautilus_trader.examples.strategies.ema_cross import EMACross, EMACrossConfig
 
 from digiquant.strategies.registry import register
 

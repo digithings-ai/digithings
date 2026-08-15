@@ -1,9 +1,9 @@
 import { createOpenAI } from "@ai-sdk/openai";
 
 /**
- * OpenAI-compatible client pointed at DigiGraph (/v1).
+ * OpenAI-compatible client pointed at digigraph (/v1).
  * @param baseUrlOverride — optional base without /v1 (from ecosystem cookie).
- * @param upstreamApiKeyOverride — DigiKey JWT or DIGIGRAPH_UPSTREAM_API_KEY (required).
+ * @param upstreamApiKeyOverride — digikey JWT or DIGIGRAPH_UPSTREAM_API_KEY (required).
  */
 export function createDigiGraphClient(
   baseUrlOverride?: string | null,
@@ -22,22 +22,23 @@ export function createDigiGraphClient(
       "createDigiGraphClient: pass upstreamApiKeyOverride or set DIGIGRAPH_UPSTREAM_API_KEY"
     );
   }
-  const openwebui = process.env.DIGICHAT_OPENWEBUI_FORMAT !== "0";
+  const openwebui = process.env.DIGICHAT_OPENWEBUI_FORMAT === "1";
 
   return createOpenAI({
     name: "digigraph",
     baseURL: `${base}/v1`,
     apiKey,
-    headers: openwebui ? { "X-Response-Format": "openwebui" } : undefined,
+    headers: openwebui
+      ? { "X-Response-Format": "openwebui" }
+      : { "X-Response-Format": "plain" },
     fetch: async (url, init) => {
       if (!init?.body || typeof init.body !== "string") {
         return fetch(url, init);
       }
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
-        if (openwebui) {
-          parsed.openwebui_format = true;
-        }
+        // Explicit false opts digichat out of the legacy model=sitaas-rag Open WebUI default.
+        parsed.openwebui_format = openwebui;
         return fetch(url, { ...init, body: JSON.stringify(parsed) });
       } catch {
         return fetch(url, init);
@@ -69,5 +70,5 @@ export function digigraphUpstreamApiKey() {
 }
 
 export function digigraphOpenWebUIFormat() {
-  return process.env.DIGICHAT_OPENWEBUI_FORMAT !== "0";
+  return process.env.DIGICHAT_OPENWEBUI_FORMAT === "1";
 }

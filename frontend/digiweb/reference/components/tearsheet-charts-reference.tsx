@@ -1,20 +1,22 @@
 "use client";
 /**
  * Tearsheet charts — the print-grade tearsheet core: a 6-up KPI strip over
- * the tabbed SVG chart deck (candles with trade entry/exit markers + hover
- * cards, equity with a linear/log toggle, underwater drawdown, per-trade
- * P&L with the unrealized open leg, and the 3x3 returns matrix). All series
- * panes share ONE normalized ViewWindow — wheel-zoom or drag-pan any chart
- * and the others follow; lookback presets match back when a zoom lands on
- * one. The Download PDF button runs the real pipeline: flushSync re-renders
- * the same charts at full span, pins the light theme, and opens the system
- * print dialog — pure SVG is what makes the export crisp.
+ * a signed contribution stack with the exact portfolio-return line, then the
+ * tabbed SVG chart deck (candles with trade entry/exit markers + hover cards,
+ * equity with a linear/log toggle, underwater drawdown, per-trade P&L with
+ * the unrealized open leg, and the 3x3 returns matrix). All series panes share
+ * ONE normalized ViewWindow — wheel-zoom or drag-pan any chart and the others
+ * follow; lookback presets match back when a zoom lands on one. The Download
+ * PDF button runs the real pipeline: flushSync re-renders the same charts at
+ * full span, pins the light theme, and opens the system print dialog — pure
+ * SVG is what makes the export crisp.
  */
 import { useCallback, useMemo, useState } from "react";
 import {
   CandlestickChart,
   ChartLegend,
   ChartResetButton,
+  ContributionReturnChart,
   Kpi,
   KpiStrip,
   LOOKBACK_OPTIONS,
@@ -43,6 +45,15 @@ type ChartTab = "price" | "equity" | "drawdown" | "pnl" | "matrix";
 
 const CHART_H = 440;
 const D = TEARSHEET_DEMO;
+const CONTRIBUTION_POINTS = D.equity.slice(-18).map((point, index, points) => ({
+  t: point.t,
+  returnPct: (point.v / points[0].v - 1) * 100,
+  contributions: {
+    Quality: index * 0.16,
+    Momentum: index * 0.08 - (index > 11 ? (index - 11) * 0.13 : 0),
+    Hedges: index > 7 ? -(index - 7) * 0.06 : 0,
+  },
+}));
 
 function Toned({ v, children }: { v: number; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -62,6 +73,23 @@ export function TearsheetChartsReference() {
   const view = viewOverride ?? presetView;
   const chartView = printing ? PRINT_FULL_VIEW : view;
   const chartScale: ChartScale = printing ? "linear" : scale;
+
+  // ariaLabels must describe the visible window (lookback / pan), not always
+  // the full-history periodStart/periodEnd — screen readers otherwise hear
+  // full-span dates while the chart shows a subset.
+  const viewDateLabel = useMemo(() => {
+    if (!D.fullSpan || (chartView.lo <= 0 && chartView.hi >= 1)) {
+      return `${D.periodStart} to ${D.periodEnd}`;
+    }
+    const t0 = new Date(D.fullSpan[0]).getTime();
+    const t1 = new Date(D.fullSpan[1]).getTime();
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) {
+      return "visible chart range";
+    }
+    const start = new Date(t0 + chartView.lo * (t1 - t0)).toISOString().slice(0, 10);
+    const end = new Date(t0 + chartView.hi * (t1 - t0)).toISOString().slice(0, 10);
+    return `${start} to ${end}`;
+  }, [chartView]);
 
   const setViewFromChart = useCallback((v: ViewWindow) => {
     setViewOverride(v);
@@ -131,11 +159,20 @@ export function TearsheetChartsReference() {
 
   return (
     <div>
-      <div className="mb-[1rem] flex items-center justify-between gap-[1rem]">
+      <div className="mb-[1rem] flex flex-wrap items-center gap-[0.7rem]">
         <span className="ts-panel-label">{D.symbol} · {D.periodStart} → {D.periodEnd}</span>
+        {/* The KPI figures below are a deterministic random walk (demo-data.ts),
+            not a real backtest — an implausible number like a 92.62 profit
+            factor could otherwise read as a live bug rather than known-synthetic
+            filler. Same tag this reference site already uses elsewhere for
+            placeholder data (testimonial-wall-reference.tsx, docs-layout-
+            reference.tsx, terminal-budget-reference.tsx). */}
+        <span className="inline-block rounded-full border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+          Example data · not live
+        </span>
         <button
           type="button"
-          className="ts-reset"
+          className="ts-reset ml-auto"
           onClick={() =>
             runTearsheetPrint({
               documentTitle: "finance-tearsheet specimen — digiweb",
@@ -155,6 +192,24 @@ export function TearsheetChartsReference() {
         <Kpi label="Avg trade" value={<Toned v={kpis.avgTrade}>{fmtPct(kpis.avgTrade)}</Toned>} />
         <Kpi label="Trades / yr" value={fmtNum(kpis.tradesPerYear, 1)} />
       </KpiStrip>
+
+      <section className="ts-panel">
+        <div className="ts-panel-head">
+          <span className="ts-panel-label">Portfolio contribution</span>
+          <ChartLegend items={[{ kind: "line", label: "Portfolio return" }]} />
+        </div>
+        <div className="ts-chart" style={{ height: 360 }}>
+          <ContributionReturnChart
+            points={CONTRIBUTION_POINTS}
+            colors={{
+              Quality: "var(--accent)",
+              Momentum: "var(--warn)",
+              Hedges: "var(--down)",
+            }}
+            ariaLabel="Portfolio return contribution by factor: Quality, Momentum, and Hedges, over the trailing 18 periods, with the exact portfolio return overlaid"
+          />
+        </div>
+      </section>
 
       <section className="ts-panel ts-tab-stack">
         <div className="ts-panel-head">
@@ -234,21 +289,22 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
+                ariaLabel={`${D.symbol} candlestick price chart, ${chartScale} scale, with long and short trade entry and exit markers, ${viewDateLabel}`}
               />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "equity"}>
             <div className="ts-chart">
               {chartScale === "log" ? (
-                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve in dollars, log scale, ${viewDateLabel}`} />
               ) : (
-                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve, percent return, linear scale, ${viewDateLabel}`} />
               )}
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "drawdown"}>
             <div className="ts-chart">
-              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Drawdown, percent below peak equity, ${viewDateLabel}`} />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
@@ -260,6 +316,7 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
+                ariaLabel={`Per-trade profit and loss, percent, realized and open trades, ${viewDateLabel}`}
               />
             </div>
           </div>

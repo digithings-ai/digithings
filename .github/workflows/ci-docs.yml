@@ -4,19 +4,15 @@ name: "CI: docs"
 on:
   push:
     branches: [main, develop]
-  pull_request:
-    paths:
-      - "docs/**"
-      - "**/*.md"
-      - "agents.yml"
-      - "agents/**"
-      - ".cursor/**"
-      - ".github/copilot-instructions.md"
-      - "scripts/check_doc_links.py"
-      - "scripts/agents_init.py"
-      - ".github/workflows/ci-docs.yml"
-      - ".github/workflows/*.md"
-      - ".github/workflows/*.lock.yml"
+  # No path filter on pull_request: a workflow-level path filter means the
+  # check never posts a status on PRs outside these paths, and GitHub then
+  # blocks merge forever waiting on a check that will never run once this
+  # name is added to develop's required status checks (see CLAUDE.md §
+  # Branching model). Push keeps its path filter since that only affects
+  # direct-push runs, not PR-merge gating. The job itself is cheap
+  # (doc-link scan + agents-init --check), so running it unconditionally
+  # costs little.
+  pull_request: {}
 
 concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
@@ -30,49 +26,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install lint deps
-        run: python3 -m pip install pyyaml "pydantic>=2"
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # pyyaml and pydantic were installed unpinned here; both are locked now.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Check internal markdown links
-        run: python3 scripts/check_doc_links.py
+        run: uv run --frozen --no-sync python scripts/check_doc_links.py
 
-      - name: Lint the docs/vision DigiVault vault
-        run: make vault-check
+      - name: Lint the docs/vision digivault vault
+        # `uv run make` rather than bare `make`: the Makefile target invokes
+        # `python3` directly, and uv run puts the synced venv first on PATH so
+        # that resolves to the locked interpreter instead of the system one.
+        run: uv run --frozen --no-sync make vault-check
 
       - name: Verify generated files are in sync
-        run: python3 scripts/agents_init.py --check
+        run: uv run --frozen --no-sync python scripts/agents_init.py --check
 
-  ghaw-compile-check:
-    name: gh-aw compile check
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    # Only runs on PRs touching gh-aw .md source files or their .lock.yml outputs.
-    if: >
-      github.event_name == 'pull_request' &&
-      (contains(github.event.pull_request.changed_files, '.github/workflows/') &&
-       (endsWith(github.event.pull_request.head.repo.name, '') || true))
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install gh-aw extension
-        run: gh extension install github/gh-aw
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Compile gh-aw workflows
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # Compile all .md workflows — fail if compilation errors occur.
-          gh aw compile
-          # Verify lock files are up to date (no uncommitted diff).
-          if ! git diff --exit-code .github/workflows/*.lock.yml; then
-            echo "::error::gh-aw lock files are out of date. Run 'gh aw compile' locally and commit the updated .lock.yml files."
-            exit 1
-          fi
-          echo "All gh-aw workflows compiled successfully and lock files are up to date."

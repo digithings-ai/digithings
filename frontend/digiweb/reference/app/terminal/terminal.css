@@ -4,6 +4,9 @@
    terminal-budget-reference.tsx. The budget sidebar stays as CSS: its .on state
    (li.on) carries a 2-colour color-mix border that has no token utility. */
 
+/* Promoted to @digithings/web; must lead the file — CSS drops a late @import. */
+@import "@digithings/web/styles/terminal-loaders.css";
+
 .budget-shell {
   background: var(--surface);
   border: 1px solid var(--hair);
@@ -224,4 +227,32 @@
 .cs-copy.is-copied {
   color: var(--up);
   border-color: color-mix(in srgb, var(--up) 45%, var(--hair));
+}
+
+/* Step loaders — the house type-out, applied to waiting. Two product loaders
+   (<ContainerBootLoader>, <ChatResponseLoader>) share one engine,
+   <TerminalStepCaret>: the running step's label types out at the blinking
+   block cursor, holds, deletes, and the next one follows — the animated brand
+   lockup's grammar (AnimatedLockup, symbols family) applied to a wait.
+
+   PROMOTED. The `.tl-*` family now ships from @digithings/web so product apps
+   (digichat first) render these without forking them; the class names carried
+   over unchanged. The components in components/terminal/ are re-exports of the
+   shared implementation, and the rules arrive from the @import at the top of
+   this file — a second copy is exactly the drift this move removed. Only
+   .tl-stage below is still local: it frames the specimen, not a product.
+
+   The caret itself contributes NO rules in either place: it is
+   <ChatStreamCursor>, and chat-core.css owns its 7x14 accent block, its
+   steps(1) blink and its reduced-motion still. */
+
+/* Reference-page stage: the boot loader is a full-surface component, so the
+   specimen gives it a surface to fill instead of taking the viewport. */
+.tl-stage {
+  display: grid;
+  margin-top: 1.2rem;
+  min-height: 21rem;
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  overflow: hidden;
 }

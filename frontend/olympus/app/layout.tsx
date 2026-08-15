@@ -1,5 +1,6 @@
 import './globals.css';
 import { ReactNode } from 'react';
+import type { Metadata } from 'next';
 import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
 import { DashboardProvider } from '@/lib/dashboard-context';
 import { AppShellProvider } from '@/components/app-shell-context';
@@ -32,22 +33,45 @@ const fraunces = Fraunces({
   display: 'swap',
 });
 
-export const metadata = {
+export const metadata: Metadata = {
+  metadataBase: new URL('https://digiquant.io'),
+  applicationName: 'Olympus',
   title: 'Olympus — digiquant',
   description: 'digiquant Olympus — AI-orchestrated investment intelligence (Atlas research + Hermes analysis & PM)',
+  manifest: '/olympus/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Olympus',
+    statusBarStyle: 'black-translucent',
+  },
   icons: {
-    icon: '/olympus/favicon.svg',
-    shortcut: '/olympus/favicon.svg',
+    icon: [
+      { url: '/olympus/icons/olympus-app-dark.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
+      { url: '/olympus/icons/olympus-app-light.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: light)' },
+      { url: '/olympus/icons/olympus-app-32.png', type: 'image/png', sizes: '32x32' },
+    ],
+    shortcut: '/olympus/icons/olympus-app-32.png',
+    apple: [
+      { url: '/olympus/icons/olympus-app-touch-dark.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: dark)' },
+      { url: '/olympus/icons/olympus-app-touch-light.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: light)' },
+    ],
   },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={fraunces.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      // Font variables must live on <html>: globals.css re-declares --font-sans/--font-mono
+      // on :root via var(--font-geist-*), which resolves at the declaring element — variables
+      // scoped to <body> are invisible there and the tokens go invalid app-wide (#1538).
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`qn-blueprint-bg min-h-screen bg-bg text-ink antialiased ${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}>
+      <body className="qn-blueprint-bg min-h-screen bg-bg text-ink antialiased">
         <ThemeProvider>
           <MotionLayer />
           <DashboardProvider>

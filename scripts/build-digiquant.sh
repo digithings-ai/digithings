@@ -18,16 +18,19 @@ mkdir -p dist
 echo "--- installing workspaces ---"
 npm install --prefer-offline --no-audit --no-fund --include=optional
 
-# GHA/npm cache can omit platform optional deps (npm/cli#4828); Next + Tailwind v4 need these on Linux.
+# One binding installed by hand; build-digithings.sh carries the full rationale.
+#
+# @next/swc-linux-x64-gnu is locked, but kept deliberately: it must match the pinned
+# next version exactly, and if next can't find it, it fetches it at build time via
+# `yarn config get registry`, which crashes the yarn-less CF image ("Failed to get
+# registry from yarn"). Insurance on a live deploy path; do not tidy it away.
+#
+# @tailwindcss/oxide-linux-x64-gnu used to be installed here too; the root lock now
+# carries every installable oxide platform entry, so the install above supplies it.
 if [ "$(uname -s)" = "Linux" ]; then
-  echo "--- installing Linux native bindings (Next SWC + Tailwind/PostCSS) ---"
-  # @next/swc must match the pinned next version exactly; if it's absent, next
-  # tries to download it at build time via `yarn config get registry`, which
-  # crashes in the yarn-less CF image ("Failed to get registry from yarn").
+  echo "--- installing Linux native binding (Next SWC) ---"
   npm install \
     @next/swc-linux-x64-gnu@16.2.4 \
-    lightningcss-linux-x64-gnu@1.32.0 \
-    @tailwindcss/oxide-linux-x64-gnu@4.2.2 \
     --no-save --no-audit --no-fund
 fi
 
@@ -56,6 +59,10 @@ fi
 
 # 1. digiquant.io landing (Next.js static export) → dist/ root.
 echo "--- building digiquant-web (Next.js static export) ---"
+# The workspace's own `build` script passes --webpack -- same rationale as
+# digithings-web's build-digithings.sh (#2244): Turbopack production-builds
+# this home page into an intermittent React hydration error; webpack does
+# not. `next dev` is untouched; it never reproduced this.
 npm --workspace frontend/digiquant-web run build
 cp -r frontend/digiquant-web/out/. dist/
 
@@ -68,11 +75,18 @@ cp -r frontend/olympus/out/. dist/olympus/
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME
 
+# 4. Deploy build stamp (#1759). Pages serves a frozen deploy with a 200 and no
+# `last-modified`, so without a stamp in the export every smoke probe passes
+# forever and a Pages project that stopped building is invisible from outside.
+echo "--- writing dist/build-info.json ---"
+bash scripts/write-build-info.sh dist/build-info.json digiquant.io
+
 # Sanity: landing, a subsystem page, the root _headers, and Olympus must exist.
 [ -f dist/index.html ] || { echo "ERROR: dist/index.html missing — digiquant-web did not export" >&2; exit 1; }
 [ -f dist/subsystems/atlas/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
 [ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — Olympus did not export" >&2; exit 1; }
+[ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
 ls -la dist/

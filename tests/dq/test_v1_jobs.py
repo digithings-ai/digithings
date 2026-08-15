@@ -1,13 +1,13 @@
-"""DigiQuant /v1/jobs API (async backtest lifecycle)."""
+"""digiquant /v1/jobs API (async backtest lifecycle)."""
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 import pytest
+from digiquant.server import app
 from fastapi.testclient import TestClient
 
-from digiquant.server import app
 from tests.digi_test_jwt import auth_headers
 
 

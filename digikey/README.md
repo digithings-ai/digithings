@@ -1,4 +1,4 @@
-# DigiKey
+# digikey
 
 Central control plane for ecosystem API keys, scoped capabilities, and JWT exchange. See [ARCHITECTURE.md](ARCHITECTURE.md).
 

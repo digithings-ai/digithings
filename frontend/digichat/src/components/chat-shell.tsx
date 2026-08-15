@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * ChatShell — authenticated chat chrome for DigiChat.
+ * ChatShell — authenticated chat chrome for digichat.
  *
  * #273: Rewritten to consume @digithings/design/app-shell-terminal
  * classes natively in React (CSS classes are the primitive's contract; the
@@ -382,7 +382,7 @@ export function ChatShell({
           <div className="dc-sidebar-brand">
             <div className="dc-sidebar-brand-mark">DT</div>
             <div>
-              <div className="dc-sidebar-brand-name">DigiChat</div>
+              <div className="dc-sidebar-brand-name">digichat</div>
               <div className="dc-sidebar-brand-version">v0.1 · digithings</div>
             </div>
           </div>
@@ -473,7 +473,7 @@ export function ChatShell({
               type="button"
               className="dc-sidebar-cmd"
               style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
-              onClick={() => signOut({ callbackUrl: p("/login") })}
+              onClick={() => signOut({ callbackUrl: p("/embed") })}
             >
               <span>sign out</span>
               <span aria-hidden>⏻</span>

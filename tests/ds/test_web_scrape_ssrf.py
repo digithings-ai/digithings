@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.ingestion.web_scrape import filter_scrape_hrefs, is_allowed_scrape_url
 
 

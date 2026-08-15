@@ -1,4 +1,4 @@
-"""Map structured DigiSearch filters to ChromaDB ``where`` metadata clauses."""
+"""Map structured digisearch filters to ChromaDB ``where`` metadata clauses."""
 
 from __future__ import annotations
 

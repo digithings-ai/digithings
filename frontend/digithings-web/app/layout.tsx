@@ -5,6 +5,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Fraunces } from "next/font/google";
 import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/web";
+import { LegacyByokPurge } from "@/components/LegacyByokPurge";
 
 // Editorial serif for the v7 landing direction — self-hosted by next/font so it
 // works under `output: "export"` (no runtime CDN <link>). Mirrors digiquant-web.
@@ -20,23 +21,47 @@ const fraunces = Fraunces({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://digithings.ai"),
-  title: "digithings — an open-core agentic stack",
+  applicationName: "digithings",
+  title: "digithings — AI infrastructure in a glass box",
   description:
-    "An open-core agentic stack — research, retrieval, and chat behind one supervisor. Self-hosted, BYOK, audit-on by default. No vendor lock-in.",
-  // Scheme-aware favicon tiles, mirroring digiquant-web: the light tile on a
-  // dark browser chrome and vice versa, so the mark never reads as a flat box.
+    "Open-source, MIT-licensed AI infrastructure: nine modules that plug into the stack you already "
+    + "run — not a replacement for it. Self-hosted anywhere, your own keys and providers, every step "
+    + "traceable.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "digithings",
+    statusBarStyle: "black-translucent",
+  },
+  // Cache-busting paths ensure browsers leave the retired QR mark behind.
+  // Tabs follow the OS scheme; install/touch PNGs use the same compact `d` +
+  // cursor artwork rather than a browser-generated initial.
   icons: {
     icon: [
-      { url: "/favicon-qr-light.svg", media: "(prefers-color-scheme: dark)" },
-      { url: "/favicon-qr.svg", media: "(prefers-color-scheme: light)" },
-      { url: "/favicon-qr.svg" },
+      { url: "/icons/digi-app-dark.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
+      { url: "/icons/digi-app-light.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/icons/digi-app-32.png", type: "image/png", sizes: "32x32" },
+    ],
+    shortcut: "/icons/digi-app-32.png",
+    apple: [
+      { url: "/icons/digi-app-touch-dark.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: dark)" },
+      { url: "/icons/digi-app-touch-light.png", type: "image/png", sizes: "180x180", media: "(prefers-color-scheme: light)" },
     ],
   },
   openGraph: {
-    title: "digithings — an open-core agentic stack",
-    description: "Open-core agentic stack — research, retrieval, chat behind one supervisor. Self-hosted, BYOK, audit-on by default.",
+    title: "digithings — AI infrastructure in a glass box",
+    description:
+      "Open-source AI infrastructure you self-host: nine MIT-licensed modules that drop into the "
+      + "stack you already run. Your own keys and providers, every step traceable.",
     url: "https://digithings.ai",
-    images: ["/design/assets/og.png"],
+    images: [
+      {
+        url: "/og.png",
+        width: 1200,
+        height: 630,
+        alt: "digithings — AI infrastructure in a glass box you own.",
+      },
+    ],
     type: "website",
   },
 };
@@ -76,6 +101,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <div className="grain" aria-hidden="true" />
         <div className="glow" aria-hidden="true" />
+        <LegacyByokPurge />
         <MotionProvider>
           <ThemeProvider>
             <HashScrollManager />

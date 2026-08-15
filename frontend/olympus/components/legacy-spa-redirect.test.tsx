@@ -59,10 +59,10 @@ describe('legacy redirects → Pipeline grammar (F2)', () => {
     expect(replace).toHaveBeenCalledWith('/portfolio?tab=theses');
   });
 
-  it('Strategy (with thesis) still deep-links the thesis detail', () => {
+  it('Strategy (with thesis) still deep-links the thesis detail (query form, #1760)', () => {
     search = new URLSearchParams({ thesis: 'MT1' });
     renderToStaticMarkup(createElement(StrategyToAnalysisRedirectPage));
-    expect(replace).toHaveBeenCalledWith('/portfolio/theses/MT1');
+    expect(replace).toHaveBeenCalledWith('/portfolio/theses?thesis=MT1');
   });
 
   it('Research → /pipeline, preserving date', () => {

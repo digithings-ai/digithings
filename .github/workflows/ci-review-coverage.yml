@@ -1,0 +1,57 @@
+name: "CI: review coverage"
+
+# The mandatory gate before production. It does NOT review the promotion — a
+# promotion diff is an accumulation of already-merged work (PR #1877 was 52 files
+# and 12k lines), which is the most expensive review Cursor will quote and the
+# least actionable, since acting on a finding needs a fresh task PR plus another
+# promotion.
+#
+# It asserts the cheaper invariant: every commit reaching main was reviewed at its
+# own task PR, where a finding costs an amend.
+#
+# Deliberately not a required "Cursor Bugbot" status check on main. That check
+# reports `neutral` when the Cursor account hits its usage limit, and a required
+# check must report success — on 2026-08-05 that would have made all ten
+# promotions unmergeable, including the one carrying a fix for false copy already
+# live on digiquant.io. A metered third-party service must not hold a veto over
+# deploys, so this gate reads only the repository's own history, labels and
+# reviews, and a label or an approval always clears it.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: review-coverage-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review-coverage:
+    name: Every commit reaching main was reviewed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The range walk needs real history: a shallow clone would report an
+          # empty range and pass while reviewing nothing.
+          fetch-depth: 0
+
+      - name: Check review coverage of the promotion range
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          python3 scripts/check_review_coverage.py \
+            --base "origin/${BASE_REF}" \
+            --head "${HEAD_SHA}"

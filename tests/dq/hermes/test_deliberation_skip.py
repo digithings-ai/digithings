@@ -6,9 +6,7 @@ from datetime import date
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,

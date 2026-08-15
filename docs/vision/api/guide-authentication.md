@@ -2,7 +2,7 @@
 title: "Authentication — guide"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - guide

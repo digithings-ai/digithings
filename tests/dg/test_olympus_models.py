@@ -5,9 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-import pytest
-
 import digigraph.model_config as model_config
+import pytest
 from digigraph.model_config import (
     apply_olympus_openrouter_env,
     get_grounding_model,
@@ -30,27 +29,33 @@ _REPO_CONFIG = str(Path(__file__).parents[2] / "config")
 # for open-weight models. Web-search/grounding slugs keep ``:online``/perplexity below.
 _CHEAP_PHASE_MODELS = frozenset(
     {
-        "openrouter/deepseek/deepseek-chat",
-        "openrouter/deepseek/deepseek-r1",
+        "openrouter/deepseek/deepseek-v4-flash",  # #1622: 1M ctx, tools + strict json_schema
+        # deepseek-r1 removed from every phase pool (#1622): CoT output is not reliably
+        # strict JSON (#1617 master-digest JSONDecodeError). Re-adding it here must be a
+        # deliberate decision, not a drive-by.
         "openrouter/meta-llama/llama-4-maverick",
     }
 )
 
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
-        "openrouter/google/gemini-2.0-flash-001",
-        "openrouter/openai/gpt-4o-mini",
-        "openrouter/x-ai/grok-3-mini",
+        # #2368 (2026-08-14): latest generation per vendor where cost allows — grok-4.3
+        # stays on balanced (grok-4.6 is quality-only). gemini-3.7-flash: native PDF/
+        # image vision. gpt-5.6-luna: mid-tier OpenAI. deepseek-v4-pro: mid-cost
+        # reasoning bump, gate-proven and also pooled on quality.
+        "openrouter/google/gemini-3.7-flash",
+        "openrouter/openai/gpt-5.6-luna",
+        "openrouter/x-ai/grok-4.3",
+        "openrouter/deepseek/deepseek-v4-pro",  # #1622
     }
 )
 
 _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
     {
-        "openrouter/openai/gpt-4o",
-        "openrouter/anthropic/claude-sonnet-4",
-        "openrouter/google/gemini-2.5-flash",
-        "openrouter/google/gemini-2.5-pro",
-        "openrouter/x-ai/grok-3",
+        # #2368 (2026-08-14): latest-generation flagship slugs per vendor.
+        "openrouter/openai/gpt-5.6-sol",
+        "openrouter/anthropic/claude-sonnet-5",
+        "openrouter/x-ai/grok-4.6",
     }
 )
 
@@ -58,13 +63,13 @@ _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
 _WEB_SEARCH_MODELS = frozenset(
     {
         "openrouter/perplexity/sonar",
-        "openrouter/deepseek/deepseek-chat:online",
-        "openrouter/deepseek/deepseek-r1:online",
+        "openrouter/deepseek/deepseek-v4-flash:online",  # #1622
         "openrouter/meta-llama/llama-4-maverick:online",
-        "openrouter/google/gemini-2.0-flash-001:online",
-        "openrouter/openai/gpt-4o-mini:online",
-        "openrouter/openai/gpt-4o:online",
-        "openrouter/anthropic/claude-sonnet-4:online",
+        "openrouter/google/gemini-3.7-flash:online",
+        "openrouter/openai/gpt-5.6-luna:online",
+        "openrouter/openai/gpt-5.6-sol:online",
+        "openrouter/anthropic/claude-sonnet-5:online",
+        "openrouter/x-ai/grok-4.6:online",
     }
 )
 
@@ -108,7 +113,7 @@ def test_hermes_thesis_and_portfolio_slugs_route_openrouter(
 
 
 @pytest.mark.unit
-def test_deliberation_pinned_to_json_reliable_deepseek_chat(
+def test_deliberation_pinned_to_json_reliable_deepseek_v4_flash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression (Olympus daily, run 28014812240, #1006): H6 deliberation turns must emit
@@ -117,8 +122,8 @@ def test_deliberation_pinned_to_json_reliable_deepseek_chat(
     routed it to the cheap ``research`` pool — but that pool also contains ``llama-4-maverick``,
     which returns *empty* completions under STRICT json_schema, so the ~half of tickers hashing
     onto it still failed at char 0. Deliberation is now pinned (model_modes.yaml ``phase_models``)
-    to deepseek-chat — the json/tool-reliable open-weight model — for *every* ticker, bypassing
-    the pool hash. Never maverick, never r1.
+    to deepseek-v4-flash — the json/tool-reliable open-weight model — for *every* ticker,
+    bypassing the pool hash. Never maverick, never r1.
     """
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
@@ -132,12 +137,28 @@ def test_deliberation_pinned_to_json_reliable_deepseek_chat(
     ).split()
     for ticker in watchlist:
         model = get_model_for_phase(f"hermes/portfolio/deliberation-{ticker}")
-        assert model == "openrouter/deepseek/deepseek-chat", (
-            f"deliberation-{ticker} -> {model!r}, expected the pinned json-reliable deepseek-chat"
+        assert model == "openrouter/deepseek/deepseek-v4-flash", (
+            f"deliberation-{ticker} -> {model!r}, expected the pinned json-reliable "
+            "deepseek-v4-flash"
         )
         assert "maverick" not in model, f"deliberation-{ticker} routes to empty-prone maverick"
         assert "deepseek-r1" not in model, f"deliberation-{ticker} routes to prose-only r1"
         assert is_tool_use_capable_model(model)
+
+
+@pytest.mark.unit
+def test_master_digest_pinned_to_v4_flash(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1559/#1622: master-digest is pinned (model_modes.yaml) to deepseek-v4-flash.
+
+    Unpinned, the reasoning-pool hash landed on deepseek-r1, whose chain-of-thought
+    output broke strict json_schema (2026-07-18 digest JSONDecodeError → prior digest
+    carried forward). v4-flash's 1M context also removes the 64k synthesis ceiling
+    (#1559); the input budget remains as a cost bound. Never r1, never maverick.
+    """
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    model = get_model_for_phase("master-digest")
+    assert model == "openrouter/deepseek/deepseek-v4-flash"
+    assert is_tool_use_capable_model(model)
 
 
 @pytest.mark.unit
@@ -178,7 +199,7 @@ def test_balanced_tier_includes_mid_frontier_models(monkeypatch: pytest.MonkeyPa
     cfg = model_config._load_olympus_models()
     balanced = cfg.tiers["balanced"]
     research = balanced.allowed_models["research"]
-    assert any("gpt-4o-mini" in m for m in research)
+    assert any("gpt-5.6-luna" in m for m in research)
     assert any("gemini" in m for m in research)
     model = get_model_for_phase("macro")
     assert model is not None
@@ -292,7 +313,7 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
 ) -> None:
     # A bare (tool-capable) mid-tier slug is accepted as an override on balanced.
     (tmp_path / "model_modes.yaml").write_text(
-        'phase_models:\n  macro: "openrouter/openai/gpt-4o-mini"\n'
+        'phase_models:\n  macro: "openrouter/openai/gpt-5.6-luna"\n'
     )
     (tmp_path / "olympus_models.yaml").write_text(
         Path(_REPO_CONFIG, "olympus_models.yaml").read_text()
@@ -301,7 +322,7 @@ def test_phase_models_mid_tier_override_wins_on_balanced(
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "balanced")
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    assert get_model_for_phase("macro") == "openrouter/openai/gpt-4o-mini"
+    assert get_model_for_phase("macro") == "openrouter/openai/gpt-5.6-luna"
 
 
 @pytest.mark.unit
@@ -352,7 +373,7 @@ def test_phase_models_online_override_rejected(
     ("model", "flagship"),
     [
         ("openrouter/openai/gpt-5.5", True),
-        ("openrouter/anthropic/claude-sonnet-4", True),
+        ("openrouter/anthropic/claude-sonnet-4.6", True),
         ("openrouter/deepseek/deepseek-chat:online", False),
         ("openrouter/meta-llama/llama-4-maverick:online", False),
     ],
@@ -580,32 +601,36 @@ def test_pipeline_phase_slugs_resolve_to_openrouter(
 
 @pytest.mark.unit
 def test_deliberation_slug_routes_to_research_pool(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The deliberation worker slug routes to the tier research pool — OpenRouter (the #991
-    401 guard) and JSON/tool-capable. It must NOT use the reasoning pool, whose deepseek-r1
-    returns prose and broke json.loads for the H6 turns (#993)."""
+    """The deliberation worker slug resolves to an OpenRouter (the #991 401 guard),
+    JSON/tool-capable model — research-pool-equivalent capability. It must NOT resolve to a
+    reasoning-pool-only model like deepseek-r1, whose prose output broke json.loads for the
+    H6 turns (#993). ``hermes/portfolio/deliberation-`` is pinned in ``model_modes.yaml`` (see
+    ``test_deliberation_pinned_to_json_reliable_deepseek_v4_flash``), so the pinned model need
+    not also sit in the live ``research`` pool — that pool is cost-tuned independently (#2368).
+    """
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
-    cfg = model_config._load_olympus_models()
-    assert (
-        get_model_for_phase("hermes/portfolio/deliberation-NVDA")
-        in cfg.tiers["cheap"].allowed_models["research"]
-    )
+    resolved = get_model_for_phase("hermes/portfolio/deliberation-NVDA")
+    assert resolved is not None
+    assert resolved in _CHEAP_PHASE_MODELS
 
 
 @pytest.mark.unit
-def test_get_model_for_mode_uses_tier_reasoning_in_openrouter_deploy(
+def test_get_model_for_mode_does_not_auto_override_when_openrouter_key_set(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Defense-in-depth: with OPENROUTER_API_KEY set, a dev fallback (ollama/*) must be
-    replaced by an OpenRouter-routable tier reasoning model, never leak to the default
-    OpenAI client (which 401s)."""
+    """Having OPENROUTER_API_KEY alone must not swap digigraph chat onto Olympus paid models."""
     monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+    monkeypatch.setenv("DIGI_LLM_MODE", "test")
     monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
     resolved = get_model_for_mode()
-    assert resolved.startswith("openrouter/"), (
-        f"get_model_for_mode leaked non-OpenRouter fallback {resolved!r} in OpenRouter deploy"
-    )
+    # Dev/local defaults stay local unless agents.llm / DIGI_LLM_* pin OpenRouter.
+    assert not resolved.startswith("openrouter/") or ":free" in resolved
 
 
 @pytest.mark.unit
@@ -614,6 +639,9 @@ def test_get_model_for_mode_keeps_dev_default_without_openrouter_key(
 ) -> None:
     """Outside an OpenRouter deploy the legacy dev fallback is preserved (no behavior change)."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
     monkeypatch.setattr(model_config, "_model_modes_cache", None)
     resolved = get_model_for_mode()
     # model_modes.yaml defaults are dev models (ollama/*); not forced to OpenRouter here.

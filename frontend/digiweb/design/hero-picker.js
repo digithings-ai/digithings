@@ -1,5 +1,5 @@
 /**
- * DigiThings hero-picker — accessible icon-tab row that swaps a ProductFrame
+ * digithings hero-picker — accessible icon-tab row that swaps a ProductFrame
  * preview below the hero (Graphite "feature picker" pattern; WAI-ARIA "Tabs
  * with Automatic Activation").
  *

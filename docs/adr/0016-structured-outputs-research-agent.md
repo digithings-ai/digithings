@@ -68,7 +68,7 @@ validator is cheap and has no downside.
 
 ## Why `response_format` is not in `_stream_completion_one_turn`
 
-The streaming path (`chat_completion_with_tools` / DigiChat) is a tool-calling loop. Tools and
+The streaming path (`chat_completion_with_tools` / digichat) is a tool-calling loop. Tools and
 `response_format` are mutually exclusive, so the streaming path never sends `response_format`.
 The research agent uses the non-streaming `chat_completion` path with no tools.
 

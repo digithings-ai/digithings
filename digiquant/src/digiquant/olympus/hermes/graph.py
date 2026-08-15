@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
-from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer handle
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: opaque LangGraph checkpointer handle
+)
 
 from digigraph.graph.pipeline_builder import NodeSpec
-from digiquant.olympus.hermes.pipeline_builder import PipelinePhase, build_pipeline
 
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
@@ -31,6 +32,7 @@ from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
     build_risk_sizing_phase,
 )
 from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
+from digiquant.olympus.hermes.pipeline_builder import PipelinePhase, build_pipeline
 from digiquant.olympus.hermes.state import HermesState
 
 __all__ = [
@@ -89,7 +91,7 @@ def build_hermes_phases_thesis(
     *,
     watchlist: list[str],
     deps: HermesGraphDeps | None = None,
-    debate_rounds: int = 1,  # noqa: ARG001 — removed with 7CD; kept for CLI compat
+    debate_rounds: int = 1,  # removed with 7CD; kept for CLI compat
     held: Collection[str] = (),
 ) -> list[PipelinePhase]:
     """Thesis-first Hermes phases H1–H9 (PR 4d)."""

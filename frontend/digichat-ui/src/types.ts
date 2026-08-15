@@ -1,6 +1,12 @@
 import type { ReactNode } from "react";
 
-export type VaultHitSummary = { title: string; path: string };
+export type VaultHitSummary = {
+  title: string;
+  path: string;
+  tier?: string;
+  year?: number;
+  snippet?: string;
+};
 
 export type DigiChatActivity =
   | { kind: "status"; message: string }
@@ -13,7 +19,12 @@ export type DigiChatActivity =
       count: number;
     }
   | { kind: "reasoning"; text: string }
-  | { kind: "trace"; label: string; done: boolean };
+  | { kind: "trace"; label: string; done: boolean }
+  | {
+      kind: "brief";
+      themes: { label: string; summary: string }[];
+      questions?: string[];
+    };
 
 export type DigiChatMessage = {
   role: "user" | "assistant";
@@ -33,8 +44,8 @@ export type DigiChatSessionConfig = {
   suggestions?: string[];
   placeholder: string;
   showByok: boolean;
-  /** Collapsible status bar with wordmark + model (digithings-web /chat). */
-  showStatusBar?: boolean;
+  /** Inline "Add your API key" on error rows; default on for gated embeds. */
+  showByokOnError?: boolean;
   branding?: DigiChatBranding;
   ariaLabel?: string;
   className?: string;

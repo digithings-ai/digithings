@@ -9,6 +9,8 @@
       "Bash(make score)"
     ]
   },
+  "autoCompactEnabled": true,
+  "autoCompactWindow": 150000,
   "hooks": {
     "PreToolUse": [
       {

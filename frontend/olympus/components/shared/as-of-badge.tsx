@@ -46,7 +46,7 @@ export function AsOfBadge({
 }
 
 /** "2026-06-13" → "Jun 13". Falls back to the raw string on a parse miss. */
-function formatAsOf(date: string): string {
+export function formatAsOf(date: string): string {
   const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return date;
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

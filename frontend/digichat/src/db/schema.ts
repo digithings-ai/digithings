@@ -71,7 +71,7 @@ export const conversations = pgTable(
   ]
 );
 
-/** Saved DigiQuant backtest rows for comparison (DigiClone). */
+/** Saved digiquant backtest rows for comparison (digiclone). */
 export const quantRuns = pgTable(
   "quant_runs",
   {

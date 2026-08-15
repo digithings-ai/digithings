@@ -2,7 +2,7 @@
 title: "digiclaw — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - support
@@ -11,28 +11,29 @@ relevance:
 ---
 # digiclaw — API reference
 
-> The always-on agent runtime — heartbeats, scheduling, immutable audit.
+> The always-on agent runtime — heartbeats, scheduling, append-only audit.
 
 **Role:** Always-on runtime · heartbeat · audit · **Tier:** support
 
 ## Overview
 A heartbeat service that keeps agents running: Atlas runner scheduling and drift detection, calling digigraph over HTTP on an interval.
 
-Every action lands in an immutable audit log, and it runs no LLM of its own.
+Every action lands in an append-only audit log, and it runs no LLM of its own.
 
 ## Authentication
-CLI-only — no HTTP service. A heartbeat runner pings service health and appends an immutable audit log.
+CLI-only — no HTTP service / OpenAPI. Heartbeat runner pings service health and appends an immutable audit log. Container image: ghcr.io/digithings-ai/digiclaw (Compose profile heartbeat).
 
 
 ## Run locally
 ```bash
 python -m digiclaw            # one cycle
 docker compose --profile heartbeat up -d heartbeat
+# GHCR: docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml --profile heartbeat up -d
 ```
 
 ## Configuration
-- `DIGIGRAPH_URL`: DigiGraph base URL for health checks.
-- `DIGIQUANT_URL`: DigiQuant base URL for health + drift checks.
+- `DIGIGRAPH_URL`: digigraph base URL for health checks.
+- `DIGIQUANT_URL`: digiquant base URL for health + drift checks.
 - `DIGICLAW_DIGIKEY_API_KEY`: Key (digiquant:backtest+optimize) for auth-gated drift checks.
 - `AUDIT_LOG_PATH` (default `digiquant/results/audit/events.jsonl`): Append-only JSONL audit destination.
 - `REOPTIMIZE_STRATEGY` (default `mean_reversion_tech`): Strategy id for the drift check.

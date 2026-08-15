@@ -1,5 +1,5 @@
 ---
-title: DigiStore
+title: digistore
 type: module
 status: reviewed
 created: 2026-04-19
@@ -9,13 +9,13 @@ tags:
 relevance:
   - digivault
 ---
-# DigiStore
+# digistore
 
 > The storage abstraction layer — one interface for every backend, from SQLite to Supabase to S3.
 
-**What it is:** DigiStore is the unified storage abstraction layer for the DigiThings ecosystem. Every module that needs to persist data does so through DigiStore — which means the underlying storage backend can change without touching application code. DigiStore sits beneath DigiSearch (which indexes its contents) and above every specific storage technology.
+**What it is:** digistore is the unified storage abstraction layer for the digithings ecosystem. Every module that needs to persist data does so through digistore — which means the underlying storage backend can change without touching application code. digistore sits beneath digisearch (which indexes its contents) and above every specific storage technology.
 
-**The problem:** AI applications typically couple directly to specific storage solutions — Postgres queries hardcoded, S3 calls scattered through services, vector store SDK calls mixed into business logic. When requirements change (different client, different scale, different region), the coupling makes migration expensive. DigiStore decouples storage intent from storage implementation.
+**The problem:** AI applications typically couple directly to specific storage solutions — Postgres queries hardcoded, S3 calls scattered through services, vector store SDK calls mixed into business logic. When requirements change (different client, different scale, different region), the coupling makes migration expensive. digistore decouples storage intent from storage implementation.
 
 **Architecture — one interface, multiple backends:**
 - SQLite: local development, zero setup, no services required
@@ -32,12 +32,12 @@ relevance:
 - Structured data (thesis, portfolio weights, backtest results, user profiles, investment preferences) → Postgres/Supabase
 - Conversations, session artifacts, caches → SQLite (local) or Postgres (production)
 
-**Relationship to OpenBB:** OpenBB is the data retrieval layer (fetches live data from ~100 sources). DigiStore persists, caches, and serves what OpenBB retrieves. DigiStore does not replace OpenBB — it wraps it.
+**Relationship to OpenBB:** OpenBB is the data retrieval layer (fetches live data from ~100 sources). digistore persists, caches, and serves what OpenBB retrieves. digistore does not replace OpenBB — it wraps it.
 
-**Current state:** Exists as a thin session/dataset cache inside DigiGraph (Digistore). Expanded scope defined but not yet implemented as a standalone module.
+**Current state:** Exists as a thin session/dataset cache inside digigraph (digistore). Expanded scope defined but not yet implemented as a standalone module.
 
 **12-month roadmap:**
-- Standalone DigiStore module with clean backend registry
+- Standalone digistore module with clean backend registry
 - Full Supabase integration (strategies, research library, user profiles, Atlas data)
 - MinIO/S3 integration for file storage
 - OpenBB integration as the data retrieval layer

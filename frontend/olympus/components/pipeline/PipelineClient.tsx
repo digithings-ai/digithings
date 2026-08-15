@@ -1,20 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Files, ListTree } from 'lucide-react';
 import { buildPipelineDayData, fanoutIdForKey } from '@/lib/pipeline-graph-data';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import { PIPELINE_TOPOLOGY } from '@/lib/pipeline-topology';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
 import type { PipelineStage } from '@/lib/pipeline-links';
-import { DIGEST_DOCUMENT_KEYS, parsePipelineParams, resolvePresentDigestKey } from '@/lib/pipeline-links';
-import type { RegimeChip } from '@/lib/render-pipeline-payloads';
-import { regimeChipsFromMacroPayload, summarizeRecommendedPortfolio } from '@/lib/render-pipeline-payloads';
-import PipelineSummaryStrip from './PipelineSummaryStrip';
+import { parsePipelineParams, resolvePresentDigestKey } from '@/lib/pipeline-links';
 import PipelineDaySelector from './PipelineDaySelector';
 import PipelineCanvas from './PipelineCanvas';
 import PipelineNodeDetail from './PipelineNodeDetail';
+import PipelineArtifactLedger from './PipelineArtifactLedger';
+import PipelineTraceLedger from './PipelineTraceLedger';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -65,19 +65,25 @@ export default function PipelineClient() {
 
   const [selectedDate, setSelectedDate] = useState(params.date ?? today());
   const [availableDates, setAvailableDates] = useState<string[]>([selectedDate]);
+  // Only auto-snap the landing date while the user hasn't chosen one: seeding
+  // with UTC "today" opens on a date with zero documents every day between
+  // 00:00 UTC and the ~12:00 UTC run (US evenings) — snap to the latest real
+  // run instead. An explicit ?date= deep link or a selector click wins.
+  const dateExplicit = useRef(Boolean(params.date));
+  const [dayLoading, setDayLoading] = useState(true);
   const [dayData, setDayData] = useState<PipelineDayData>({
+    runRecorded: false,
     fanoutCounts: {},
     fanoutKeys: {},
     presentKeys: new Set(),
+    artifacts: [],
   });
 
-  // Summary strip state
-  const [headline, setHeadline] = useState<string | null>(null);
-  const [regimeChips, setRegimeChips] = useState<RegimeChip[]>([]);
-  const [decision, setDecision] = useState<string | null>(null);
-
   // Node detail
+  const [activeNode, setActiveNode] = useState<LaidOutNode | null>(null);
   const [activeDocumentKey, setActiveDocumentKey] = useState<string | null>(params.node ?? null);
+  const [artifactLedgerOpen, setArtifactLedgerOpen] = useState(false);
+  const [traceLedgerOpen, setTraceLedgerOpen] = useState(false);
 
   const initialExpansion = useMemo(
     () => buildInitialExpansion(params.stage, params.node),
@@ -90,12 +96,7 @@ export default function PipelineClient() {
     let cancelled = false;
 
     void (async () => {
-      // Reset before the fetch, not just on success — otherwise switching to a
-      // date with no digest/rebalance/macro doc silently keeps showing the
-      // PREVIOUS date's headline/decision/chips.
-      setHeadline(null);
-      setDecision(null);
-      setRegimeChips([]);
+      setDayLoading(true);
 
       try {
         const { createClient } = await import('@supabase/supabase-js');
@@ -107,64 +108,51 @@ export default function PipelineClient() {
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
         // Independent reads — run them together instead of one round-trip at a time.
-        const [datesRes, docsRes, digestRes, rebalanceRes, macroRes] = await Promise.all([
+        const [datesRes, docsRes] = await Promise.all([
+          // Run dates come from daily_snapshots (exactly one row per run day).
+          // Deriving them from `documents` selects EVERY row (~40-60/day), and
+          // the PostgREST 1000-row default cap silently truncated the oldest
+          // dates out of the 30-day window.
           supabase
-            .from('documents')
+            .from('daily_snapshots')
             .select('date')
             .gte('date', thirtyDaysAgo)
             .order('date', { ascending: false }),
-          supabase.from('documents').select('document_key').eq('date', selectedDate),
-          // The digest is published as `digest` on baseline days, `digest-delta`
-          // on delta days (the majority of days) — see DIGEST_DOCUMENT_KEYS.
           supabase
             .from('documents')
-            .select('payload')
-            .in('document_key', DIGEST_DOCUMENT_KEYS)
-            .eq('date', selectedDate)
-            .maybeSingle(),
-          supabase
-            .from('documents')
-            .select('payload')
-            .eq('document_key', 'pm-rebalance')
-            .eq('date', selectedDate)
-            .maybeSingle(),
-          supabase
-            .from('documents')
-            .select('payload')
-            .eq('document_key', 'macro')
-            .eq('date', selectedDate)
-            .maybeSingle(),
+            .select('document_key,title,doc_type,phase,category,segment,sector,run_type')
+            .eq('date', selectedDate),
         ]);
 
         if (cancelled) return;
 
-        if (datesRes.data) {
-          const uniqueDates = [...new Set((datesRes.data as { date: string }[]).map((r) => r.date))]
+        const uniqueDates = datesRes.data
+          ? [...new Set((datesRes.data as { date: string }[]).map((r) => r.date))]
             .sort()
-            .reverse();
-          if (uniqueDates.length > 0) setAvailableDates(uniqueDates);
+            .reverse()
+          : [];
+        if (uniqueDates.length > 0) {
+          setAvailableDates(uniqueDates);
+            // Landing-date snap: no explicit choice + the seeded date has no
+            // run → jump to the latest run. Runs at most once per load (after
+            // the snap, selectedDate IS in uniqueDates).
+            if (!dateExplicit.current && !uniqueDates.includes(selectedDate)) {
+              setSelectedDate(uniqueDates[0]);
+              return; // the effect re-runs for the snapped date
+            }
         }
 
         if (docsRes.data) {
-          setDayData(buildPipelineDayData(docsRes.data as { document_key: string }[]));
+          setDayData({
+            ...buildPipelineDayData(docsRes.data),
+            runRecorded: uniqueDates.includes(selectedDate),
+          });
         }
 
-        // Headline comes from the digest's structured `headline` field — pipeline
-        // documents leave `documents.content` empty and carry everything in `payload`.
-        const digestPayload = digestRes.data?.payload as Record<string, unknown> | undefined;
-        const headlineText = typeof digestPayload?.headline === 'string' ? digestPayload.headline.trim() : '';
-        if (headlineText) setHeadline(headlineText);
-
-        // Decision chip: summarize the day's PM rebalance book (target weights),
-        // not decision_log (a per-ticker analyst-call audit trail, not a per-day summary).
-        const summary = summarizeRecommendedPortfolio(rebalanceRes.data?.payload);
-        if (summary) {
-          setDecision(`${summary.holdingsCount} holdings · ${summary.investedPct.toFixed(0)}% invested`);
-        }
-
-        setRegimeChips(regimeChipsFromMacroPayload(macroRes.data?.payload));
       } catch {
         // Supabase not configured or no data — degrade gracefully
+      } finally {
+        if (!cancelled) setDayLoading(false);
       }
     })();
 
@@ -181,44 +169,123 @@ export default function PipelineClient() {
   }, [activeDocumentKey, dayData]);
 
   const handleNodeActivate = useCallback((node: LaidOutNode) => {
+    setArtifactLedgerOpen(false);
+    setTraceLedgerOpen(false);
+    setActiveNode(node);
     setActiveDocumentKey(node.documentKey ?? null);
   }, []);
 
-  return (
-    <div className="flex flex-col flex-1 min-h-0 min-w-0">
-      {/* Summary strip row */}
-      <div className="px-6 pb-3 flex flex-col gap-1">
-        <div className="flex items-center gap-3 flex-wrap">
-          <PipelineSummaryStrip
-            headline={headline}
-            regimeChips={regimeChips}
-            decision={decision}
-          />
-          <PipelineDaySelector
-            dates={availableDates}
-            value={selectedDate}
-            onChange={setSelectedDate}
-          />
-        </div>
-      </div>
+  const handleDetailClose = useCallback(() => {
+    setActiveNode(null);
+    setActiveDocumentKey(null);
+  }, []);
 
-      {/* Canvas + NodeDetail */}
-      <div className="flex flex-1 min-h-0 min-w-0">
+  const handleDateChange = useCallback((date: string) => {
+    dateExplicit.current = true;
+    setSelectedDate(date);
+  }, []);
+
+  const handleArtifactSelect = useCallback((documentKey: string) => {
+    setArtifactLedgerOpen(false);
+    setActiveNode(null);
+    setActiveDocumentKey(documentKey);
+  }, []);
+
+  const handleArtifactLedgerOpen = useCallback(() => {
+    setTraceLedgerOpen(false);
+    setArtifactLedgerOpen(true);
+  }, []);
+
+  const handleTraceLedgerOpen = useCallback(() => {
+    setArtifactLedgerOpen(false);
+    setActiveNode(null);
+    setActiveDocumentKey(null);
+    setTraceLedgerOpen(true);
+  }, []);
+
+  const noRunForDate = !dayLoading && dayData.runRecorded === false;
+
+  return (
+    <section
+      data-testid="pipeline-workspace"
+      aria-label="Daily decision pipeline"
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface"
+    >
+      <header
+        data-testid="pipeline-command-band"
+        className="flex min-h-12 flex-wrap items-center justify-end gap-y-2 border-y border-hair bg-surface px-3 py-2 md:flex-nowrap md:px-4"
+      >
+        <h1 className="sr-only">Pipeline</h1>
+        {noRunForDate && (
+          <p className="mr-auto font-mono text-xs text-ink-mute" role="status">
+            No run recorded — showing the expected pipeline.
+          </p>
+        )}
+        <button
+          type="button"
+          aria-label="Open all pipeline artifacts"
+          title="All artifacts"
+          onClick={handleArtifactLedgerOpen}
+          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 rounded-lg border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+        >
+          <Files size={15} aria-hidden />
+          <span className="hidden md:inline">All artifacts</span>
+          <span className="hidden tabular-nums text-ink-mute md:inline">{dayData.artifacts.length}</span>
+        </button>
+        <button
+          type="button"
+          aria-label="Open pipeline call trace"
+          title="Call trace"
+          onClick={handleTraceLedgerOpen}
+          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 rounded-lg border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+        >
+          <ListTree size={15} aria-hidden />
+          <span className="hidden md:inline">Call trace</span>
+        </button>
+        <PipelineDaySelector
+          dates={availableDates}
+          value={selectedDate}
+          onChange={handleDateChange}
+        />
+      </header>
+
+      <div
+        data-testid="pipeline-workflow"
+        className="flex min-h-[calc(100dvh-125px)] min-w-0 flex-1 flex-col md:min-h-0 md:flex-row"
+      >
         <PipelineCanvas
           day={dayData}
           initialExpansion={initialExpansion}
-          selectedNodeId={resolvedActiveDocumentKey ?? undefined}
+          selectedNodeId={activeNode?.id ?? resolvedActiveDocumentKey ?? undefined}
           onNodeActivate={handleNodeActivate}
         />
 
-        {resolvedActiveDocumentKey !== null && (
+        {artifactLedgerOpen && (
+          <PipelineArtifactLedger
+            artifacts={dayData.artifacts}
+            date={selectedDate}
+            selectedDocumentKey={resolvedActiveDocumentKey}
+            onSelect={handleArtifactSelect}
+            onClose={() => setArtifactLedgerOpen(false)}
+          />
+        )}
+
+        {traceLedgerOpen && (
+          <PipelineTraceLedger
+            date={selectedDate}
+            onClose={() => setTraceLedgerOpen(false)}
+          />
+        )}
+
+        {!artifactLedgerOpen && !traceLedgerOpen && (activeNode !== null || resolvedActiveDocumentKey !== null) && (
           <PipelineNodeDetail
+            node={activeNode}
             documentKey={resolvedActiveDocumentKey}
             date={selectedDate}
-            onClose={() => setActiveDocumentKey(null)}
+            onClose={handleDetailClose}
           />
         )}
       </div>
-    </div>
+    </section>
   );
 }

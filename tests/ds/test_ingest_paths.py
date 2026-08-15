@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from digisearch.ingest_paths import ingest_root, resolve_ingest_source
 
 

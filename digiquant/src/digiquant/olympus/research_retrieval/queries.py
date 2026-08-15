@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
+)
+
 from digiquant.olympus.atlas.decision_log import fetch_recent_lessons
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.research_retrieval.blinding import (
@@ -263,7 +266,7 @@ def query_research(
             )
             source = "documents"
             payload = row.get("payload") if isinstance(row, dict) else None
-    except Exception as exc:  # noqa: BLE001 — return structured error to tool caller
+    except Exception as exc:  # return structured error to tool caller
         logger.warning("query_research failed for %s: %s", key, exc)
         return {"error": f"query_research failed: {exc}"}
 
@@ -307,7 +310,7 @@ def query_portfolio(
             run_date=effective_as_of,
             watchlist=watchlist,
         )
-    except Exception as exc:  # noqa: BLE001 — return structured error to tool caller
+    except Exception as exc:  # return structured error to tool caller
         logger.warning("query_portfolio failed: %s", exc)
         return {"error": f"query_portfolio failed: {exc}"}
 

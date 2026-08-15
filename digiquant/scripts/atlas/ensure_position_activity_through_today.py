@@ -29,7 +29,8 @@ import argparse
 import os
 import subprocess
 import sys
-from datetime import date as dt_date, timedelta
+from datetime import UTC, datetime, timedelta
+from datetime import date as dt_date
 from pathlib import Path
 
 try:
@@ -72,12 +73,16 @@ def _next_calendar_day(iso: str) -> dt_date:
     return dt_date(y, m, d) + timedelta(days=1)
 
 
+def _script_dir() -> Path:
+    return Path(__file__).resolve().parent
+
+
 def main() -> int:
-    root = Path(__file__).resolve().parents[1]
+    script_dir = _script_dir()
     py = sys.executable
-    refresh = root / "scripts" / "refresh_performance_metrics.py"
-    backfill = root / "scripts" / "backfill_position_events.py"
-    reconcile = root / "scripts" / "reconcile_position_events_from_positions.py"
+    refresh = script_dir / "refresh_performance_metrics.py"
+    backfill = script_dir / "backfill_position_events.py"
+    reconcile = script_dir / "reconcile_position_events_from_positions.py"
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
@@ -99,7 +104,7 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="Print planned commands only")
     args = ap.parse_args()
 
-    through_s = args.through or dt_date.today().isoformat()
+    through_s = args.through or datetime.now(UTC).date().isoformat()
     through_d = dt_date.fromisoformat(through_s)
 
     sb = _sb()
@@ -161,7 +166,7 @@ def main() -> int:
         print(" ", " ".join(cmd))
         if args.dry_run:
             continue
-        r = subprocess.run(cmd, cwd=str(root), capture_output=False, text=True)
+        r = subprocess.run(cmd, cwd=str(script_dir), capture_output=False, text=True)
         if r.returncode != 0:
             print(f"❌ Step failed: {title} (exit {r.returncode})", file=sys.stderr)
             return r.returncode

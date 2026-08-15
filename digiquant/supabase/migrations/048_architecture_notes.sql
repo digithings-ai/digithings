@@ -2,11 +2,11 @@
 --
 -- Run with:  supabase db push   (or apply via MCP against this project).
 --
--- DigiThings architecture vault — the Supabase-backed twin of the DigiVault-managed
+-- digithings architecture vault — the Supabase-backed twin of the digivault-managed
 -- `docs/vision/` Obsidian vault. Mirrors the proven `knowledge_notes` shape (the
--- DigiQuant financial KB, migration 20260625, #1087) so the same DigiVault store
+-- digiquant financial KB, migration 20260625, #1087) so the same digivault store
 -- protocol + MCP read tools serve both vaults. Synced from docs/vision/ on every
--- push by scripts/sync_architecture_vault.py (DigiVault parses, digibase upserts).
+-- push by scripts/sync_architecture_vault.py (digivault parses, digibase upserts).
 --
 -- This powers the digithings.ai docs chat: the public Cloudflare Function reads it
 -- with the anon key (anon SELECT below) and searches via search_architecture_notes()
@@ -47,7 +47,7 @@ create table if not exists public.architecture_notes (
 );
 
 comment on table public.architecture_notes is
-    'DigiThings architecture vault: Obsidian-style notes (frontmatter + markdown body + [[wikilinks]]), DigiVault-managed, synced from docs/vision/ by scripts/sync_architecture_vault.py. anon SELECT for the digithings.ai docs chat; service_role writes. Mirrors knowledge_notes (#1087).';
+    'digithings architecture vault: Obsidian-style notes (frontmatter + markdown body + [[wikilinks]]), digivault-managed, synced from docs/vision/ by scripts/sync_architecture_vault.py. anon SELECT for the digithings.ai docs chat; service_role writes. Mirrors knowledge_notes (#1087).';
 
 create index if not exists idx_architecture_notes_fts
     on public.architecture_notes using gin (fts);

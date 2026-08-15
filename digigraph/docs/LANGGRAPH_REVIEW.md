@@ -1,18 +1,18 @@
-# DigiGraph vs LangGraph: Usage Review and Recommendations
+# digigraph vs LangGraph: Usage Review and Recommendations
 
-This document compares the current DigiGraph implementation to LangGraph’s design and capabilities, and suggests concrete improvements so we use the runtime correctly and take advantage of its features.
+This document compares the current digigraph implementation to LangGraph’s design and capabilities, and suggests concrete improvements so we use the runtime correctly and take advantage of its features.
 
 ---
 
 ## 1. What We Do Today (Summary)
 
-| Area | Current DigiGraph usage |
+| Area | Current digigraph usage |
 |------|-------------------------|
 | **Graph shape** | Optional `START → supervisor → research (compiled subgraph) → conditional validate_strategy → backtest → END`. Profiles (`graph.workflow_profile` / `DIGI_WORKFLOW_PROFILE`) skip the quant path for `research_rag`; document-only outputs skip backtest when there is no `strategy_name`. |
 | **State** | `WorkflowState` (TypedDict, `total=False`). Adds `workflow_profile`, optional supervisor fields, plus existing keys (prompt, session_id, strategy_name, symbols, research_note, research_response, backtest_result, error, stored_datasets, stream_callback). No reducers yet. |
 | **Invoke** | Non-streaming HTTP still uses `graph.invoke`. Streaming chat uses `graph.stream(..., stream_mode="updates")` + `graph.get_state` for the final merged state. |
 | **Checkpointing** | `DIGI_CHECKPOINTER=memory|sqlite|postgres`; **unset defaults to `memory`**. Set `DIGI_CHECKPOINTER=none` to compile without a checkpointer (breaks `thread_id` / thread API). |
-| **Streaming** | Hybrid: LangGraph `stream_mode="updates"` for graph-level trace; research subgraph still uses `stream_callback` / contextvar for tool_call, tool_result, content, and **trace** events (`TraceEventV1`). SSE chunks may include `choices[0].delta.digigraph_trace` for DigiChat. |
+| **Streaming** | Hybrid: LangGraph `stream_mode="updates"` for graph-level trace; research subgraph still uses `stream_callback` / contextvar for tool_call, tool_result, content, and **trace** events (`TraceEventV1`). SSE chunks may include `choices[0].delta.digigraph_trace` for digichat. |
 | **Interrupts / human-in-the-loop** | `DIGI_INTERRUPT_AFTER_RESEARCH=1` compiles with `interrupt_after=["research"]`; `POST /threads/{id}/resume` uses `Command` (see digigraph/ARCHITECTURE.md). |
 | **Multi-turn** | Each HTTP request is one `invoke()`. Conversation history is not in state; the research node sees only the current prompt. For Sitaas, “multi-turn” is effectively a new prompt per request; checkpointing preserves `stored_datasets` for the same thread_id across requests if the client reuses session_id. |
 
@@ -110,9 +110,9 @@ We have one flat graph. LangGraph supports subgraphs: a node can be another comp
 
 ### 3.7 Store (cross-thread memory)
 
-LangGraph’s **Store** (e.g. `InMemoryStore`, `PostgresStore`) is for data that spans threads (e.g. user preferences, global caches). We don’t use it; Digistore and run storage are session-scoped and keyed by session_id.
+LangGraph’s **Store** (e.g. `InMemoryStore`, `PostgresStore`) is for data that spans threads (e.g. user preferences, global caches). We don’t use it; digistore and run storage are session-scoped and keyed by session_id.
 
-**Recommendation:** Use the Store only if we need cross-session or cross-thread data (e.g. shared user profile, rate-limit state). For per-session datasets, Digistore + checkpointed `stored_datasets` is the right split.
+**Recommendation:** Use the Store only if we need cross-session or cross-thread data (e.g. shared user profile, rate-limit state). For per-session datasets, digistore + checkpointed `stored_datasets` is the right split.
 
 ### 3.8 Production checkpointers (implemented)
 

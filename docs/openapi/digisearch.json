@@ -1,0 +1,1284 @@
+{
+  "components": {
+    "schemas": {
+      "FunctionParametersSchema": {
+        "properties": {
+          "properties": {
+            "additionalProperties": true,
+            "title": "Properties",
+            "type": "object"
+          },
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required",
+            "type": "array"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "FunctionParametersSchema",
+        "type": "object"
+      },
+      "FunctionToolSchema": {
+        "description": "OpenAI function-tool ``function`` block (SIMP-036).",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/FunctionParametersSchema"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "title": "FunctionToolSchema",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IngestRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /ingest.",
+        "properties": {
+          "doc_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "pdf, html, docx, etc.",
+            "title": "Doc Type"
+          },
+          "index_name": {
+            "default": "default",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Document metadata (evidence_tier, doi_or_arxiv, etc.). Merged after sidecar YAML.",
+            "title": "Metadata"
+          },
+          "source": {
+            "description": "File path or URL",
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "IngestRequest",
+        "type": "object"
+      },
+      "IngestResponse": {
+        "description": "Response for POST /ingest.",
+        "properties": {
+          "chunks_created": {
+            "title": "Chunks Created",
+            "type": "integer"
+          },
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "index_name": {
+            "title": "Index Name",
+            "type": "string"
+          },
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "doc_id",
+          "chunks_created",
+          "index_name"
+        ],
+        "title": "IngestResponse",
+        "type": "object"
+      },
+      "OpenAIToolDict": {
+        "description": "OpenAI function-tool dict returned by ``POST /v1/orchestrator_tools``.",
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/FunctionToolSchema"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "function"
+        ],
+        "title": "OpenAIToolDict",
+        "type": "object"
+      },
+      "OrchestratorFetchAllData": {
+        "description": "Payload for ``digisearch_fetch_all`` orchestrator invoke (SIMP-020).",
+        "properties": {
+          "index_name": {
+            "title": "Index Name",
+            "type": "string"
+          },
+          "possibly_truncated": {
+            "default": false,
+            "description": "True when a page came back capped at the Vectorize backend's per-query match limit before this tool's own total/max_results check ended pagination -- `total` above may undercount the actual number of matches. Chroma/Azure pages never set this; only Vectorize's fixed per-query cap can trigger it.",
+            "title": "Possibly Truncated",
+            "type": "boolean"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "total",
+          "query",
+          "index_name"
+        ],
+        "title": "OrchestratorFetchAllData",
+        "type": "object"
+      },
+      "OrchestratorInvokeRequest": {
+        "description": "Request for POST /v1/orchestrator_invoke.",
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "default_index_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Index when arguments omit index_name (hub workflow default).",
+            "title": "Default Index Name"
+          },
+          "tool": {
+            "description": "digisearch | digisearch_fetch_all | digisearch_research_delegate",
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "OrchestratorInvokeRequest",
+        "type": "object"
+      },
+      "OrchestratorInvokeResponse": {
+        "description": "Response for POST /v1/orchestrator_invoke (SIMP-020).",
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueryResponse"
+              },
+              {
+                "$ref": "#/components/schemas/OrchestratorFetchAllData"
+              },
+              {
+                "$ref": "#/components/schemas/ResearchTurnOutput"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "OrchestratorInvokeResponse",
+        "type": "object"
+      },
+      "OrchestratorToolsRequest": {
+        "description": "Request for POST /v1/orchestrator_tools.",
+        "properties": {
+          "index_config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional hub index metadata (filterable_fields, index_name, \u2026) to specialize tool schemas.",
+            "title": "Index Config"
+          }
+        },
+        "title": "OrchestratorToolsRequest",
+        "type": "object"
+      },
+      "OrchestratorToolsResponse": {
+        "description": "Response for POST /v1/orchestrator_tools (SIMP-020).",
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/OpenAIToolDict"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "OrchestratorToolsResponse",
+        "type": "object"
+      },
+      "QueryRequest": {
+        "additionalProperties": false,
+        "description": "Request body for POST /query.",
+        "properties": {
+          "columns": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Metadata columns to return",
+            "title": "Columns"
+          },
+          "facets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Azure: facet expressions e.g. ['sourceType', 'itemType,count:20']",
+            "title": "Facets"
+          },
+          "filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw OData filter (when index allow_raw_filter)",
+            "title": "Filter"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Structured filters [{field, op, value}]",
+            "title": "Filters"
+          },
+          "format": {
+            "default": "default",
+            "description": "default | table \u2014 table returns formatted markdown in response.formatted",
+            "title": "Format",
+            "type": "string"
+          },
+          "highlight_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Azure: fields to highlight matches in (searchable fields)",
+            "title": "Highlight Fields"
+          },
+          "highlight_post_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Azure: tag after highlighted term e.g. '</em>'",
+            "title": "Highlight Post Tag"
+          },
+          "highlight_pre_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Azure: tag before highlighted term e.g. '<em>'",
+            "title": "Highlight Pre Tag"
+          },
+          "include_facets": {
+            "default": false,
+            "description": "When true, response.facets is populated (Azure only). Fields come from request.facets or the index config's facets list.",
+            "title": "Include Facets",
+            "type": "boolean"
+          },
+          "include_total_count": {
+            "default": false,
+            "description": "When true, total is full match count for pagination",
+            "title": "Include Total Count",
+            "type": "boolean"
+          },
+          "index_name": {
+            "default": "default",
+            "description": "Index/collection name",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "mode": {
+            "default": "hybrid",
+            "description": "keyword | vector | hybrid",
+            "title": "Mode",
+            "type": "string"
+          },
+          "order_by": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Azure: sort clauses e.g. ['sentDateTime desc', 'search.score() desc']",
+            "title": "Order By"
+          },
+          "response_mode": {
+            "default": "full",
+            "description": "full | summary \u2014 return full rows or data summary",
+            "title": "Response Mode",
+            "type": "string"
+          },
+          "skip": {
+            "default": 0,
+            "description": "Pagination offset (page size = top_k)",
+            "minimum": 0.0,
+            "title": "Skip",
+            "type": "integer"
+          },
+          "summarize_if_over": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "If result count > this, return summary instead of full",
+            "title": "Summarize If Over"
+          },
+          "text": {
+            "description": "Search query text",
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "top_k": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional tenant/workspace id for index isolation or filters (enterprise).",
+            "title": "Workspace Id"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "QueryRequest",
+        "type": "object"
+      },
+      "QueryResponse": {
+        "description": "Response for POST /query.",
+        "properties": {
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Index backend that served the query: vectorize | azure_ai_search | chroma | stub",
+            "title": "Backend"
+          },
+          "facets": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Facet counts by field when facets requested (Azure)",
+            "title": "Facets"
+          },
+          "formatted": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When format=table, markdown table string for display",
+            "title": "Formatted"
+          },
+          "index_name": {
+            "title": "Index Name",
+            "type": "string"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Data summary when response_mode=summary or over threshold",
+            "title": "Summary"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "results",
+          "query",
+          "index_name",
+          "total"
+        ],
+        "title": "QueryResponse",
+        "type": "object"
+      },
+      "ResearchTurnOutput": {
+        "description": "HTTP/MCP payload for one research turn (SIMP-019/020).",
+        "properties": {
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "formatted_context": {
+            "default": "",
+            "title": "Formatted Context",
+            "type": "string"
+          },
+          "index_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Name"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
+          },
+          "rag_sources": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Rag Sources",
+            "type": "array"
+          },
+          "results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "service": {
+            "default": "digisearch",
+            "title": "Service",
+            "type": "string"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "trace": {
+            "items": {
+              "$ref": "#/components/schemas/ResearchTurnTraceStep"
+            },
+            "title": "Trace",
+            "type": "array"
+          }
+        },
+        "title": "ResearchTurnOutput",
+        "type": "object"
+      },
+      "ResearchTurnRequest": {
+        "additionalProperties": false,
+        "description": "Request for POST /v1/research_turn (composite retrieval + citations).",
+        "properties": {
+          "filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Raw OData filter when index allows",
+            "title": "Filter"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Structured filters [{field, op, value}]",
+            "title": "Filters"
+          },
+          "index_name": {
+            "default": "default",
+            "description": "Index/collection name",
+            "title": "Index Name",
+            "type": "string"
+          },
+          "mode": {
+            "default": "hybrid",
+            "description": "keyword | vector | hybrid",
+            "title": "Mode",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional session id for tracing",
+            "title": "Session Id"
+          },
+          "top_k": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top K",
+            "type": "integer"
+          },
+          "user_message": {
+            "description": "User question or search intent",
+            "minLength": 1,
+            "title": "User Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_message"
+        ],
+        "title": "ResearchTurnRequest",
+        "type": "object"
+      },
+      "ResearchTurnTraceStep": {
+        "additionalProperties": false,
+        "description": "One research-turn trace entry.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "service": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "step": {
+            "title": "Step",
+            "type": "string"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          }
+        },
+        "required": [
+          "step",
+          "status"
+        ],
+        "title": "ResearchTurnTraceStep",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "RAG and document search for digithings: ingest, query, indexes, and research turns. MCP tools and orchestrator manifests for digigraph. Interactive docs: `/docs` (Swagger) and `/redoc`.",
+    "title": "digisearch",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/azure_status": {
+      "get": {
+        "description": "Check if Azure AI Search is configured and reachable.",
+        "operationId": "azure_status_azure_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "title": "Response Azure Status Azure Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Azure Status"
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Legacy health check for Docker and digigraph (kept for back-compat).",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. Pair with digismith's ``/v1/status``\nfor richer diagnostics.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
+    "/indexes": {
+      "get": {
+        "description": "List available indexes.",
+        "operationId": "list_indexes_indexes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response List Indexes Indexes Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Indexes"
+      }
+    },
+    "/indexes/{name}": {
+      "get": {
+        "description": "Get index metadata.",
+        "operationId": "get_index_indexes__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Index Indexes  Name  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Index"
+      }
+    },
+    "/indexes/{name}/documents/{doc_id}": {
+      "delete": {
+        "description": "Delete document from index (not implemented).",
+        "operationId": "delete_document_indexes__name__documents__doc_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "doc_id",
+            "required": true,
+            "schema": {
+              "title": "Doc Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Document Indexes  Name  Documents  Doc Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Document"
+      }
+    },
+    "/ingest": {
+      "post": {
+        "description": "Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails.",
+        "operationId": "api_ingest_ingest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Ingest"
+      }
+    },
+    "/query": {
+      "post": {
+        "description": "Search documents. Use format=table to get response.formatted as markdown table.",
+        "operationId": "api_query_query_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Query"
+      }
+    },
+    "/v1/orchestrator_invoke": {
+      "post": {
+        "description": "Execute one digisearch orchestrator tool by name (hub dispatch).",
+        "operationId": "api_orchestrator_invoke_v1_orchestrator_invoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestratorInvokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestratorInvokeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Orchestrator Invoke"
+      }
+    },
+    "/v1/orchestrator_tools": {
+      "post": {
+        "description": "Return OpenAI-style tool definitions owned by digisearch (for digigraph orchestration).",
+        "operationId": "api_orchestrator_tools_v1_orchestrator_tools_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestratorToolsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestratorToolsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Orchestrator Tools"
+      }
+    },
+    "/v1/research_turn": {
+      "post": {
+        "description": "Run one digisearch-owned research turn (LangGraph: plan \u2192 retrieve \u2192 aggregate).",
+        "operationId": "api_research_turn_v1_research_turn_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResearchTurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResearchTurnOutput"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Research Turn"
+      }
+    }
+  }
+}

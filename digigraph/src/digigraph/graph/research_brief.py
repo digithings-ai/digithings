@@ -13,11 +13,13 @@ from digigraph.graph.research import (
     _coerce_symbols_from_llm,
     _parse_llm_json_object,
     _pick_strategy_name,
+    _safe_stream_writer,
     _unwrap_quant_payload,
 )
 from digigraph.graph.state import WorkflowState
 from digigraph.llm_client import completion_text
 from digigraph.model_config import get_model_for_mode
+from digigraph.project_config import is_research_brief_enabled
 from digigraph.research_brief_models import (
     BRIEF_SYSTEM,
     ResearchBrief,
@@ -36,19 +38,6 @@ def _extract_enabled() -> bool:
         "true",
         "yes",
     )
-
-
-def _resolve_stream_callback(state: WorkflowState, config: dict | None) -> Any:
-    cb = None
-    if config and isinstance(config.get("configurable"), dict):
-        cb = config["configurable"].get("stream_callback")
-    if cb is None:
-        cb = state.get("stream_callback")
-    if cb is None:
-        from digigraph.graph.research import _stream_callback_ctx
-
-        cb = _stream_callback_ctx.get()
-    return cb
 
 
 def _legacy_json_extract_after_brief(
@@ -89,9 +78,14 @@ def _legacy_json_extract_after_brief(
     return None
 
 
-def research_brief_builder_node(state: WorkflowState, config: dict | None = None) -> dict[str, Any]:
+def research_brief_builder_node(state: WorkflowState) -> dict[str, Any]:
     """Emit ResearchBrief + merged profiling questions; optionally fill quant fields from brief or legacy extract."""
     if state.get("error"):
+        return {}
+    if not is_research_brief_enabled():
+        logger.debug(
+            "research_brief_builder skipped (agents.research_brief / DIGI_RESEARCH_BRIEF off)"
+        )
         return {}
     synthesis = (state.get("research_response") or "").strip()
     rag = state.get("rag_sources")
@@ -161,18 +155,17 @@ def research_brief_builder_node(state: WorkflowState, config: dict | None = None
         strategy_params=strategy_params,
     )
 
-    cb = _resolve_stream_callback(state, config)
-    if cb is not None and callable(cb):
-        ev = TraceEventV1(
-            type="graph_update",
-            workflow_id=state.get("workflow_id"),
-            request_id=state.get("request_id"),
-            session_id=state.get("session_id"),
-            payload={
-                "research_brief": out["research_brief"],
-                "profiling_questions": merged_profile_qs,
-            },
-        )
-        cb("trace", ev.model_dump())
+    writer = _safe_stream_writer()
+    ev = TraceEventV1(
+        type="graph_update",
+        workflow_id=state.get("workflow_id"),
+        request_id=state.get("request_id"),
+        session_id=state.get("session_id"),
+        payload={
+            "research_brief": out["research_brief"],
+            "profiling_questions": merged_profile_qs,
+        },
+    )
+    writer(("trace", ev.model_dump()))
 
     return out

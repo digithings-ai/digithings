@@ -4,9 +4,9 @@ Evaluate open agent PRs and emit actions for the daily PR finalizer workflow.
 
 States:
   ready_merge   — CI green, no blocking review, eligible paths → add automerge-agent
-  needs_fix     — CI failed or Copilot requested changes → dispatch fix agent
+  needs_fix     — CI failed → dispatch fix agent
   needs_human   — risk:high, needs-human, protected paths, or unresolved human review
-  waiting       — pending CI/review or PR too new
+  waiting       — pending CI or PR too new
   skip          — not an agent PR or already merged/closed
 """
 
@@ -23,7 +23,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/")
+AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/", "task/", "claude/")
+# Kept in sync with scripts/agent_pr_checks.py and
+# scripts/verify_agent_automerge_pr.py by hand (three separate copies of this
+# tuple — flagged by CodeRabbit on #2341 as worth centralizing; not done here
+# to keep this fix minimal, but the next branch-prefix change should define it
+# once and import it in all three places).
 COPILOT_REVIEW_LOGINS = frozenset({"copilot", "copilot-swe-agent", "copilot-swe-agent[bot]"})
 ISSUE_LINK_RE = re.compile(r"(?i)(?:fixes|closes|resolves)\s+#(\d+)")
 FINALIZER_MARKER = "**Agent PR finalizer**"
@@ -37,7 +42,7 @@ class PrAction:
     state: str
     reason: str
     issue_number: int | None = None
-    fix_via: str | None = None  # cursor | copilot | none
+    fix_via: str | None = None  # cursor | none
 
 
 def _gh_json(*args: str) -> object:
@@ -56,9 +61,28 @@ def _list_agent_prs(repo: str) -> list[dict]:
         "--limit",
         "100",
         "--json",
-        "number,headRefName,baseRefName,title,body,labels,createdAt,isDraft,mergeable,reviewRequests,reviews,statusCheckRollup",
+        "number,headRefName,baseRefName,title,body,labels,createdAt,isDraft,mergeable,"
+        "reviewRequests,reviews,statusCheckRollup,isCrossRepository",
     )
-    return [pr for pr in prs if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)]
+    # CWE-862 guard, same as agent-pr-autolabel.yml / agent-pr-automerge.yml: a
+    # branch name matching an agent prefix is not proof of origin, and this
+    # finalizer's ready_merge path does the same label-add + auto-merge those
+    # two workflows guard — this script just didn't have the check yet.
+    # isCrossRepository comes from the live PR object via the API, not the
+    # (attacker-controlled) branch name.
+    #
+    # Fail closed: require the field to be exactly `False`, not merely falsy.
+    # `.get(..., False)` treats a MISSING field the same as a confirmed
+    # same-repo PR — the one case where we can't confirm the PR isn't a fork,
+    # that reads as "trust it." A field GitHub always returns for this query
+    # shouldn't be missing in practice, but if it ever is, exclude rather than
+    # include (CodeRabbit finding on #2345).
+    return [
+        pr
+        for pr in prs
+        if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)
+        and pr.get("isCrossRepository") is False
+    ]
 
 
 def _issue_labels(repo: str, issue_number: int) -> list[str]:
@@ -91,27 +115,6 @@ def _ci_pending_or_failed(checks: list[dict]) -> tuple[bool, bool]:
         elif state not in {"SUCCESS", "SKIPPED", "NEUTRAL"}:
             pending = True
     return failed, pending
-
-
-def _copilot_review_state(reviews: list[dict], review_requests: list[dict]) -> str:
-    """Return approved | commented | changes_requested | pending | none."""
-    copilot_states: list[str] = []
-    for review in reviews:
-        login = (review.get("author", {}) or {}).get("login", "").lower()
-        if login not in {name.lower() for name in COPILOT_REVIEW_LOGINS}:
-            continue
-        copilot_states.append((review.get("state") or "").upper())
-    if "CHANGES_REQUESTED" in copilot_states:
-        return "changes_requested"
-    if "APPROVED" in copilot_states:
-        return "approved"
-    if copilot_states:
-        return "commented"
-    for req in review_requests:
-        login = (req.get("login") or "").lower()
-        if login in {name.lower() for name in COPILOT_REVIEW_LOGINS}:
-            return "pending"
-    return "none"
 
 
 def _human_review_blocking(reviews: list[dict]) -> bool:
@@ -193,13 +196,13 @@ def evaluate_pr(repo: str, pr: dict, *, fetch_base: bool) -> PrAction:
             "needs_fix",
             "merge conflicts",
             issue_number=issue_num,
-            fix_via="cursor" if branch.startswith("cursor/") else "copilot",
+            fix_via="cursor" if branch.startswith("cursor/") else "none",
         )
 
     checks = pr.get("statusCheckRollup") or []
     ci_failed, ci_pending = _ci_pending_or_failed(checks)
     if ci_failed:
-        via = "cursor" if branch.startswith("cursor/") else "copilot"
+        via = "cursor" if branch.startswith("cursor/") else "none"
         return PrAction(
             number,
             branch,
@@ -220,29 +223,6 @@ def evaluate_pr(repo: str, pr: dict, *, fetch_base: bool) -> PrAction:
             issue_number=issue_num,
             fix_via="none",
         )
-
-    copilot_state = _copilot_review_state(pr.get("reviews") or [], pr.get("reviewRequests") or [])
-    if copilot_state == "changes_requested":
-        via = "cursor" if branch.startswith("cursor/") else "copilot"
-        return PrAction(
-            number,
-            branch,
-            "needs_fix",
-            "Copilot requested changes",
-            issue_number=issue_num,
-            fix_via=via,
-        )
-    if copilot_state == "pending":
-        age = _pr_age_hours(pr["createdAt"])
-        if age < MIN_AGE_HOURS:
-            return PrAction(
-                number,
-                branch,
-                "waiting",
-                "Copilot review pending (young PR)",
-                issue_number=issue_num,
-            )
-        return PrAction(number, branch, "waiting", "Copilot review pending", issue_number=issue_num)
 
     if fetch_base:
         subprocess.run(
@@ -272,19 +252,21 @@ def evaluate_pr(repo: str, pr: dict, *, fetch_base: bool) -> PrAction:
             number, branch, "skip", "automerge-agent already set", issue_number=issue_num
         )
 
-    if copilot_state == "none" and _pr_age_hours(pr["createdAt"]) >= MIN_AGE_HOURS:
-        # eligible but review not requested yet — finalizer will request it
-        return PrAction(number, branch, "waiting", "request Copilot review", issue_number=issue_num)
+    if _pr_age_hours(pr["createdAt"]) < MIN_AGE_HOURS:
+        return PrAction(number, branch, "waiting", "PR too young", issue_number=issue_num)
 
-    if copilot_state in {"approved", "commented"}:
-        return PrAction(
-            number, branch, "ready_merge", "eligible for automerge", issue_number=issue_num
-        )
+    # No review gate here any more. It used to require a Copilot review, which can
+    # never arrive now the subscription has lapsed — that made ready_merge
+    # unreachable and parked every eligible PR at "waiting" forever. Review is
+    # enforced where it is actually checkable: `bugbot run` or /review on the task
+    # PR, recorded by a reviewed:* label, and asserted for the whole range by
+    # ci-review-coverage.yml before anything reaches main.
+    return PrAction(number, branch, "ready_merge", "eligible for automerge", issue_number=issue_num)
 
-    return PrAction(number, branch, "waiting", "unclassified", issue_number=issue_num)
 
-
-def evaluate_all(repo: str, *, fetch_base: bool = True, cursor_only: bool = False) -> list[PrAction]:
+def evaluate_all(
+    repo: str, *, fetch_base: bool = True, cursor_only: bool = False
+) -> list[PrAction]:
     prs = _list_agent_prs(repo)
     if cursor_only:
         prs = [pr for pr in prs if pr["headRefName"].startswith("cursor/")]
@@ -301,7 +283,7 @@ def main() -> int:
     parser.add_argument(
         "--cursor-only",
         action="store_true",
-        help="Only evaluate cursor/* PRs (copilot/* handled by gh-aw lifecycle)",
+        help="Only evaluate cursor/* PRs",
     )
     args = parser.parse_args()
 

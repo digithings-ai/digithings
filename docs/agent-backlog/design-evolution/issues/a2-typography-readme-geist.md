@@ -35,7 +35,7 @@ Align `frontend/digiweb/design/README.md` typography documentation with reality:
 ## Out of Scope
 
 - Changing actual `@font-face` imports in apps
-- DigiChat token migration (#240)
+- digichat token migration (#240)
 
 ## Dependencies
 

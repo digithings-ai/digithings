@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 
 /* ---------------------------------------------------------------------------
- * DigiThings design canon (#1403; supersedes the #273/#260 shadcn palette).
+ * digithings design canon (#1403; supersedes the #273/#260 shadcn palette).
  *
  * Token flow is now one-directional, canon-first:
  *   @digithings/design/tokens.css   — [data-theme] semantic tokens
@@ -38,7 +38,17 @@
    caret's animation shorthand when an element carries both .chat-cursor
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
+/* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
+   (~1 MB). This app renders <DigiChatSession>, so it reaches
+   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   reference deliberately do not import this. Must come AFTER chat-core.css. */
+@import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
+/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
+   an answer is still on its way. Also AFTER chat-core.css: the caret inside it
+   is <ChatStreamCursor>, so the block, blink and reduced-motion still all come
+   from there and this sheet only frames the line. */
+@import "@digithings/web/styles/terminal-loaders.css";
 /* Controls layer (#1419) — dress for the shared controls that
    src/components/ui/* now re-export (Button/Badge/Card/Input/Label/Avatar
    in controls-core, DropdownMenu/Sheet/Tooltip in controls-overlay).
@@ -57,6 +67,8 @@
 /* … and the utilities the shared behavioral controls carry (#1419) — the
    @source is load-bearing for controls-overlay's components. */
 @source "../../../digiweb/web/src/components/controls";
+/* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
+@source "../../../digiweb/web/src/components/terminal";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -133,7 +145,12 @@
   /* shadcn --accent intentionally NOT defined here — the canon token flows
      through (body livery resolves it to the digichat rose; see header). */
   --accent-foreground: var(--ink);
-  --destructive: var(--down);
+  /* --danger is the canon non-financial danger/error token (tokens.css) —
+     distinct from --down (P&L-only) on purpose, so a kill-switch/error state
+     and a genuine drawdown figure never share a color. This bridge used to
+     alias --destructive straight to --down; fixed alongside the same bug in
+     the reference app's controls/account pages (#2248). */
+  --destructive: var(--danger);
   /* Error copy sits on --destructive/10 tints, never on solid red, and
      rendered inherited ink pre-canon (the var was undefined) — keep ink. */
   --destructive-foreground: var(--ink);
@@ -164,6 +181,12 @@
   --text-secondary: var(--ink-soft);
   --border-color: var(--hair);
   --fg: var(--ink);
+  /* The colours above were re-pointed; the legacy font token was missed.
+     tokens.css:56 names JetBrains Mono / Fira Code / Space Mono — none of which
+     is loaded anywhere (no @font-face in frontend, no next/font import), so the
+     app-shell chrome and .dc-term-* fell through to the OS default mono while
+     the <pre> blocks beside them got Geist Mono. Same fix as olympus:101. */
+  --font-family-mono: var(--font-mono);
 }
 
 /*
@@ -200,15 +223,15 @@
 }
 
 /* ---------------------------------------------------------------------------
- * #273 — DigiChat modern-terminal chrome.
+ * #273 — digichat modern-terminal chrome.
  *
  * `.app-shell` scopes the brand `--accent` so the design primitives
- * pick up the DigiChat rose without disturbing shadcn's neutral `--accent` at
+ * pick up the digichat rose without disturbing shadcn's neutral `--accent` at
  * `:root`. `.dc-term-*` classes layer chat-specific affordances (message
  * rows, tool chips, sources accordion, streaming caret) on top of the
  * primitive palette.
  * ------------------------------------------------------------------------- */
-/* Brand accent for the DigiChat chrome — rose is the official livery
+/* Brand accent for the digichat chrome — rose is the official livery
    (ruled 2026-07-06, split off digiquant's shared cyan; tokens.css
    --accent-digichat is the single source). Still scoped to .app-shell
    so shadcn's neutral --accent hover stays authoritative elsewhere. */
@@ -292,6 +315,136 @@
   font-family: var(--font-family-mono);
   font-size: 11px;
   letter-spacing: 0.02em;
+}
+
+/* Inline BYOK terminal flow (session-only keys) */
+.dc-byok-flow {
+  margin-top: var(--space-3);
+}
+.dc-byok-prompt {
+  margin: 0 0 0.4rem;
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.dc-byok-option-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 28rem;
+  outline: none;
+}
+.dc-byok-option-list:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 2px;
+}
+.dc-byok-option {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.2rem 0.35rem;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.dc-byok-option:hover,
+.dc-byok-option-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.dc-byok-option-cursor {
+  display: inline-block;
+  width: 1ch;
+  color: var(--accent);
+  font-family: var(--font-family-mono);
+}
+.dc-byok-input {
+  display: block;
+  width: 100%;
+  max-width: 28rem;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-term, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  outline: none;
+}
+.dc-byok-input:focus {
+  border-color: var(--accent);
+}
+.dc-byok-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.dc-byok-action {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.dc-byok-action:hover {
+  color: var(--text-primary);
+}
+.dc-byok-action-danger {
+  color: var(--down, #e0654b);
+}
+
+.dc-byok-star {
+  margin: 0;
+  padding: 0 0.3rem 0 0;
+  border: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+.dc-byok-star:hover {
+  color: var(--accent);
+}
+
+.dc-byok-tier-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+}
+.dc-byok-tier-tab {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.dc-byok-tier-tab:hover {
+  color: var(--text-primary);
+}
+.dc-byok-tier-tab-active {
+  border-color: color-mix(in srgb, var(--accent, var(--fg)) 40%, var(--border-color));
+  background: color-mix(in srgb, var(--accent, var(--fg)) 12%, transparent);
+  color: var(--text-primary);
 }
 
 .dc-sources {
@@ -419,6 +572,79 @@
 @keyframes dc-settings-in {
   from { opacity: 0; transform: scale(0.98); }
   to   { opacity: 1; transform: scale(1); }
+}
+
+/* ---------------------------------------------------------------------------
+ * /embed readable measure.
+ *
+ * digichat-ui's `.dc-session-embed` (session.css) resets `max-width: none`, so
+ * the embed transcript ran full-bleed: in a 1280px+ iframe the lines spanned
+ * the whole viewport and read as a wall of text with no gutters.
+ *
+ * digithings.ai/chat solves this on `.dc-session` itself — `width: 100%;
+ * max-width: min(1080px, 96vw); margin: 0 auto` — and that is the grammar
+ * copied here, re-asserted at (0,2,0) so it outranks the embed reset. Scoped
+ * to `.dc-embed-shell` (embed/layout.tsx) so the app's own chat surfaces are
+ * untouched.
+ *
+ * The gutters are background, not padding on a fixed box: the shell stays
+ * 100% wide, so `bg-background` and the tenant accent still paint edge to
+ * edge, and only the column is capped. Selector targets `.dc-session` rather
+ * than `.dc-session-embed` so a tenant on `layout: "page"` centres identically.
+ *
+ * The `96vw` term is what keeps this safe at arbitrary iframe widths: below
+ * ~1125px the cap is proportional, never a fixed floor, so a 375px mobile
+ * iframe fills sensibly (~7px either side) and no width can produce
+ * horizontal scroll.
+ * ------------------------------------------------------------------------- */
+.dc-embed-shell .dc-session {
+  width: 100%;
+  max-width: min(1080px, 96vw);
+  margin-inline: auto;
+}
+
+/* digichat-ui's `.dc-session` sizes itself for a top-level page: `height:
+ * calc(100vh - var(--dq-nav-h, 62px) - 1.4rem)` and `min-height: 440px`, both
+ * written to clear a *real* nav bar above it. Inside `.dc-embed-shell` there is
+ * no nav — `--dq-nav-h` is never set, so it falls back to 62px regardless — so
+ * the calc always shaves off a phantom ~84px, and on a short iframe (embedded
+ * in a small viewport) the 440px floor pushes the session past the shell's
+ * actual height. `.dc-embed-shell` is `overflow-hidden` (embed/layout.tsx), so
+ * that overflow doesn't scroll — it clips, and the input textarea at the
+ * bottom of `.dc-session` is the first thing to go. Just fill the shell: it's
+ * already sized correctly (`h-dvh`), and `.dc-thread`'s own `flex: 1;
+ * min-height: 0` is what should absorb a short viewport, not a hard floor.
+ */
+.dc-embed-shell .dc-session {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Full-page embedder opt-out (?wide=1 — digithings.ai /chat, /chat/occ): the
+ * embed IS the page there, not a widget dropped into someone else's layout,
+ * so the 1080px readable-measure cap above has no host-page gutter to
+ * protect — it would just be a second, redundant cap stacked underneath
+ * whatever box the *host page* already sized. The gutter, and the bottom
+ * breathing room, are ChatEmbedShell's job now (digithings-web) — sized
+ * against the host page's own breakpoints, not a copy of them kept in sync
+ * across the iframe boundary. Same (0,2,0) specificity as the rule it
+ * overrides — source order (this comes after) breaks the tie. */
+.dc-embed-shell .dc-session--wide {
+  max-width: none;
+}
+
+/* Same opt-out, for background: `.dc-embed-shell` and `body` both paint an
+ * opaque `bg-background` by design (a lone <iframe> on an arbitrary host page
+ * needs its own backdrop). digithings.ai's own /chat and /chat/occ are the
+ * page, not a widget on someone else's layout — they want their fixed
+ * `.grain`/`.glow` (site.css) showing straight through. `data-wide` is set by
+ * embed-client.tsx (no prop path reaches the server-rendered shell div from
+ * here), `:has()` carries it up to `body`. */
+.dc-embed-shell[data-wide="1"] {
+  background: transparent;
+}
+body:has(.dc-embed-shell[data-wide="1"]) {
+  background: transparent;
 }
 
 .dc-grain {

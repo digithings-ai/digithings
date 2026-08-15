@@ -34,7 +34,7 @@ prices, positions, macro series, plus `get_market_breadth` and `get_vix_term_str
 
 ## Rules
 
-1. **Every `focus_roster` ticker** must appear exactly once in `roster` with `direction` long or flat.
+1. **Every `focus_roster` ticker** must appear exactly once in `roster` with `direction` long or flat. This **includes every held name** in `prior_book` / `current_weights` — an omitted held name is force-carried at its current weight by the system (#1649: positions are never silently exited); exiting a position REQUIRES an explicit `flat` entry.
 2. **`conviction_rank`** is ordinal across the full roster (1 = highest conviction). Ranks must be unique contiguous integers starting at 1.
 3. **`direction=long`** means you want exposure (including inverse ETFs for bearish views).
 4. **`direction=flat`** means no position — residual becomes cash after H8 sizing.

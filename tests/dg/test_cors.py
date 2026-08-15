@@ -1,4 +1,4 @@
-"""CORS allowlist tests for DigiGraph.
+"""CORS allowlist tests for digigraph.
 
 Exercises the shared :func:`digibase.cors.install_cors` helper as wired into
 ``digigraph.server``: an allowed origin receives an ``access-control-allow-origin``
@@ -8,10 +8,9 @@ reflection on preflight; a disallowed origin does not.
 from __future__ import annotations
 
 import pytest
+from digibase.cors import install_cors
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-from digibase.cors import install_cors
 
 SERVICE = "digigraph"
 

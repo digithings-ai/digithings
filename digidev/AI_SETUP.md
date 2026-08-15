@@ -135,7 +135,7 @@ digidev extends the tools you already have in Claude Code — it doesn't replace
 | Claude Code feature | How digidev uses it |
 |---|---|
 | **PreToolUse hooks** | 9 guard scripts — block unsafe writes, protect sensitive paths, enforce network rules |
-| **Subagents** (`.claude/agents/`) | 6 agents: spec-writer, pr-reviewer, component-router, security-reviewer, test-first-implementer, dictation-normalizer |
+| **Subagents** (`.claude/agents/`) | 4 agents: spec-writer, component-router, test-first-implementer, dictation-normalizer — PR/security review is deliberately left to the harness's own review tooling (Bugbot, `/review`-style fan-out, review plugins) rather than a bespoke subagent, to avoid multiple review paths competing |
 | **Skills** (`.claude/skills/`) | 6 skills: finish-task, score-and-fix, triage, worktree-task-start, write-acceptance-criteria, ci-triage |
 | **Slash commands** (`.claude/commands/`) | `/spec`, `/score`, `/task`, `/triage`, `/normalize` |
 | **MCP servers** | Reads/writes your Jira, Linear, Slack, Supabase directly from Claude Code |

@@ -22,19 +22,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            digibase/pyproject.toml
-            digigraph/pyproject.toml
-            digiquant/pyproject.toml
+          enable-cache: true
 
-      - name: Install Atlas + langsmith
-        run: |
-          bash scripts/install-workspace.sh digiquant
-          pip install -e "./digiquant[atlas]"
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # Replaces install-workspace.sh + `digiquant[atlas]`: the script existed to
+      # install siblings in topological order because they are not on PyPI, which
+      # a uv workspace handles natively. This job checks out the default ref, so
+      # the lock is present — unlike the pipelines pinned to `ref: main`.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Run LangSmith smoke
         env:
@@ -43,4 +41,4 @@ jobs:
           LANGSMITH_TRACING: "true"
           LANGSMITH_PROJECT: atlas-langsmith-smoke
         run: |
-          python digiquant/scripts/atlas/smoke_langsmith.py
+          uv run --frozen --no-sync python digiquant/scripts/atlas/smoke_langsmith.py

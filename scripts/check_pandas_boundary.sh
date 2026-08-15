@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fail when new `import pandas` appears outside the documented DigiQuant allowlist (REM-132).
+# Fail when new `import pandas` appears outside the documented digiquant allowlist (REM-132).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

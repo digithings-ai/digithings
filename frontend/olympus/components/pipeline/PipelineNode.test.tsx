@@ -53,7 +53,7 @@ describe('PipelineNode', () => {
     expect(html).not.toContain(rawBlue);
   });
 
-  describe('inert nodes (#1259 follow-up)', () => {
+  describe('explainable nodes without documents', () => {
     const leafNoData: LaidOutNode = {
       id: 'selection:thesis',
       kind: 'substep',
@@ -63,10 +63,10 @@ describe('PipelineNode', () => {
       y: 0,
       width: 160,
       height: 48,
-      // no documentKey — never resolves, nothing to expand
+      // no documentKey — opens topology guidance instead of a run document
     };
 
-    it('renders a leaf substep with no documentKey as visibly inert', () => {
+    it('keeps a leaf substep with no documentKey keyboard and pointer activatable', () => {
       const html = renderToStaticMarkup(
         createElement(PipelineNode, {
           node: leafNoData,
@@ -75,14 +75,36 @@ describe('PipelineNode', () => {
           onActivate: () => {},
         }),
       );
-      expect(html).toContain('cursor-default');
-      expect(html).toContain('aria-disabled="true"');
-      expect(html).toContain('No output for this step on this day');
-      expect(html).not.toContain('cursor-pointer');
-      // Inline style, not a Tailwind class — the `.glass-card.reveal-in` mount
-      // animation rule (app/globals.css) sets `opacity:1` with higher CSS
-      // specificity than an `opacity-50` utility class would have.
-      expect(html).toContain('opacity:0.5');
+      expect(html).toContain('cursor-pointer');
+      expect(html).toContain('tabindex="0"');
+      expect(html).not.toContain('aria-disabled');
+    });
+
+    it('document nodes use the same direct activation affordance', () => {
+      const html = renderToStaticMarkup(
+        createElement(PipelineNode, {
+          node: { ...leafNoData, documentKey: 'macro' },
+          expandable: false,
+          expanded: false,
+          onActivate: () => {},
+        }),
+      );
+      expect(html).toContain('cursor-pointer');
+      expect(html).not.toContain('aria-disabled');
+      expect(html).toContain('Persisted artifact');
+    });
+
+    it('surfaces a missing expected artifact as a warning status', () => {
+      const html = renderToStaticMarkup(
+        createElement(PipelineNode, {
+          node: { ...leafNoData, runStatus: 'expected-artifact-missing' },
+          expandable: false,
+          expanded: false,
+          onActivate: () => {},
+        }),
+      );
+      expect(html).toContain('Expected artifact missing');
+      expect(html).toContain('bg-warn');
     });
 
     it('does not render a fanout-parent substep as inert even without a documentKey', () => {

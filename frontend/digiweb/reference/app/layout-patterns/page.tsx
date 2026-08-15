@@ -37,8 +37,14 @@ export default function LayoutPage() {
           stays pixel-faithful at any width. The mono overlay tag names the crop without a caption.
         </p>
         <div className="pf-solo">
-          <ProductFrame tag="atlas · research">
-            <MockTearsheet />
+          <ProductFrame tag="mean_rev · SOL-USD">
+            <MockTearsheet
+              title="mean_rev · SOL-USD"
+              cagr="+38.5%"
+              maxDd="-22.0%"
+              profitFactor="2.58"
+              points="0,90 60,110 120,80 180,100 240,70 300,95 360,75 420,90 480,65 560,85"
+            />
           </ProductFrame>
         </div>
       </section>

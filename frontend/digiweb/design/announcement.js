@@ -1,5 +1,5 @@
 /**
- * DigiThings announcement-bar — Graphite-style 48px full-width notice above the
+ * digithings announcement-bar — Graphite-style 48px full-width notice above the
  * nav, content-gated. Renders ONLY when handed enabled content, so it is OFF by
  * default: empty / `{ enabled: false }` / missing text → nothing is rendered.
  * When `href` is set the whole bar is the link (a stretched-link overlay); the

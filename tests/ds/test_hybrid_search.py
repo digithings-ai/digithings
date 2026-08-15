@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.models import Chunk, Query, Result
 from digisearch.search.hybrid import HybridSearcher, _rrf_score
 from digisearch.search.multi_index import _rrf_merge
-
 
 # ---------------------------------------------------------------------------
 # Helpers

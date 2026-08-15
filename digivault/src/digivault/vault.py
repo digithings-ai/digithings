@@ -13,7 +13,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any  # noqa: ANN401 — frontmatter values are arbitrary YAML scalars/maps
+from typing import (
+    Any,  # score:allow untyped any — frontmatter values are arbitrary YAML scalars/maps
+)
 
 import yaml
 
@@ -202,13 +204,41 @@ class Vault:
         subdir: str = "",
     ) -> Note:
         """Create a new note ``<subdir>/<name>.md``. Fails if the name exists."""
+        return self.write_note(
+            name,
+            frontmatter=frontmatter,
+            body=body,
+            subdir=subdir,
+            overwrite=False,
+        )
+
+    def write_note(
+        self,
+        name: str,
+        *,
+        frontmatter: dict[str, Any] | None = None,
+        body: str = "",
+        subdir: str = "",
+        overwrite: bool = False,
+    ) -> Note:
+        """Create or optionally overwrite a note ``<subdir>/<name>.md``.
+
+        When ``overwrite`` is False (default), behaves like :meth:`create_note`
+        and raises if the stem already exists. When True, replaces the on-disk
+        file (and reindexes) so idempotent ingest re-runs can upsert by slug.
+        """
         self._require_writable()
         clean = name.strip()
         if not clean or "/" in clean or clean.startswith("."):
             raise VaultError(f"Invalid note name: {name!r}")
-        if clean in self._notes:
+        if clean in self._notes and not overwrite:
             raise VaultError(f"Note already exists: {clean!r}")
-        rel = f"{subdir.strip('/')}/{clean}.md" if subdir.strip("/") else f"{clean}.md"
+        if clean in self._notes and overwrite:
+            # Prefer the existing relative path so a re-run does not create a
+            # duplicate stem under a different subdir.
+            rel = self._notes[clean].rel_path
+        else:
+            rel = f"{subdir.strip('/')}/{clean}.md" if subdir.strip("/") else f"{clean}.md"
         path = self._safe_path(rel)
         path.parent.mkdir(parents=True, exist_ok=True)
         text = _fm.dump_frontmatter(frontmatter or {}, body)
@@ -216,7 +246,7 @@ class Vault:
         self.reindex()
         created = self._notes.get(clean)
         if created is None:  # pragma: no cover - defensive
-            raise VaultError(f"Failed to create note: {clean!r}")
+            raise VaultError(f"Failed to write note: {clean!r}")
         return created
 
     def set_frontmatter(self, name: str, updates: dict[str, Any]) -> Note:
