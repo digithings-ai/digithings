@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import time
 from collections import deque
@@ -11,6 +12,8 @@ from threading import Lock
 from digibase.errors import json_error_response
 from fastapi import Request
 from fastapi.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
 
 # RFC 6177 recommends providers assign end sites at least a /64, and commonly
 # a /56 or /48 -- NOT a bare /64 as a ceiling. A single client can trivially
@@ -63,9 +66,25 @@ class RateLimiter:
             if not entry:
                 continue
             try:
-                networks.append(ipaddress.ip_network(entry, strict=False))
+                # strict=True first: a CIDR with non-zero host bits (e.g. a
+                # typo'd "192.168.1.5/24" meant to be a single host) is
+                # rejected rather than silently widened to the whole
+                # "192.168.1.0/24" -- which would trust 254 addresses the
+                # operator never intended.
+                networks.append(ipaddress.ip_network(entry, strict=True))
             except ValueError:
-                continue
+                try:
+                    widened = ipaddress.ip_network(entry, strict=False)
+                except ValueError:
+                    continue
+                logger.warning(
+                    "DIGI_TRUSTED_PROXIES entry %r has host bits set for its prefix; "
+                    "trusting the whole %s network. If this was meant to be a single "
+                    "host, fix the prefix (e.g. /32 for IPv4, /128 for IPv6).",
+                    entry,
+                    widened,
+                )
+                networks.append(widened)
         return networks
 
     @staticmethod
@@ -78,6 +97,12 @@ class RateLimiter:
             addr = ipaddress.ip_address(ip)
         except ValueError:
             return False
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped is not None:
+            # A dual-stack listener reports an IPv4 proxy's peer address in
+            # ::ffff:a.b.c.d form (see _bucket_key's mapped-address handling
+            # above) -- compare by the embedded IPv4 address so a plain IPv4
+            # entry in DIGI_TRUSTED_PROXIES still matches it.
+            addr = addr.ipv4_mapped
         return any(addr in net for net in networks)
 
     def _get_ip(self, request: Request) -> str:
@@ -106,17 +131,24 @@ class RateLimiter:
                 for hop in reversed(hops):
                     if self._is_trusted(hop, networks):
                         continue
-                    # A hop that isn't a parseable IP address carries no
-                    # information -- it's neither one of our trusted proxies
-                    # nor a usable client address (e.g. a client-supplied
-                    # literal like "testclient", which check() would
-                    # otherwise treat as the FastAPI TestClient sentinel and
-                    # exempt from rate limiting entirely). Skip it and keep
-                    # looking left rather than returning it as-is.
+                    # This is the entry our nearest trusted proxy appended
+                    # for whatever it saw as its peer -- the boundary between
+                    # what we trust and what the original, unvalidated
+                    # caller supplied. If it isn't a parseable IP address
+                    # (e.g. a client-supplied literal like "testclient",
+                    # which check() would otherwise treat as the FastAPI
+                    # TestClient sentinel and exempt from rate limiting
+                    # entirely -- or an "ip:port" / "unknown" / hostname hop
+                    # from a proxy that formats XFF non-standardly), we
+                    # cannot trust anything at or past this position: the
+                    # entries to its left are exactly the attacker-supplied
+                    # portion the whole walk-from-the-right exists to
+                    # distrust. Stop here and fall back to the direct peer
+                    # rather than continuing left into that territory.
                     try:
                         ipaddress.ip_address(hop)
                     except ValueError:
-                        continue
+                        break
                     return hop
         return direct
 

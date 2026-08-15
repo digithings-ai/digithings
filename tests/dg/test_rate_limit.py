@@ -115,15 +115,18 @@ class TestGetIpTrustFollowUp:
         """X-Forwarded-For may legally appear as several separate header
         lines rather than one comma-joined line (RFC 9110 S5.3). Starlette's
         `Headers.get()` returns only the first such line -- using it would
-        silently drop every hop appended as its own line, including the real
-        client if it's the only thing on the dropped line."""
+        silently drop every hop on any later line.
+
+        Line 1 is just the trusted proxy's own address (as it would be if a
+        second trusted hop appended its own line); the real client only
+        appears at the end of line 2. `.get()`-only code sees line 1 alone
+        ("10.0.0.1", already trusted, no non-trusted hop left) and falls
+        back to the direct peer -- also "10.0.0.1" here -- so this data
+        genuinely distinguishes the two implementations, unlike a case where
+        the real client happens to sit on the first line regardless."""
         monkeypatch.setenv("DIGI_TRUSTED_PROXIES", "10.0.0.1")
         limiter = RateLimiter()
-        req = _make_request("10.0.0.1", xff_lines=["198.51.100.42", "10.0.0.1"])
-        # Two header lines: "198.51.100.42" (the real client) and "10.0.0.1"
-        # (our own trusted proxy, appended on its own line). Merged and read
-        # right-to-left, the trusted trailing entry is skipped and the real
-        # client is returned.
+        req = _make_request("10.0.0.1", xff_lines=["10.0.0.1", "198.51.100.42, 10.0.0.1"])
         assert limiter._get_ip(req) == "198.51.100.42"
 
     def test_spoofed_testclient_hop_is_not_returned(self, monkeypatch):
@@ -181,6 +184,33 @@ class TestGetIpTrustFollowUp:
         monkeypatch.setenv("DIGI_TRUSTED_PROXIES", "not-an-ip, 10.0.0.1")
         limiter = RateLimiter()
         req = _make_request("10.0.0.1", xff="198.51.100.42")
+        assert limiter._get_ip(req) == "198.51.100.42"
+
+    def test_unparseable_boundary_hop_falls_back_to_direct_not_further_left(self, monkeypatch):
+        """The first non-trusted hop is the boundary our trusted proxy itself
+        appended -- everything to its left is exactly the unvalidated,
+        attacker-supplied portion the walk-from-the-right exists to distrust.
+        If that boundary hop isn't a parseable IP (a proxy reporting
+        "ip:port", "unknown", or a hostname instead of a bare IP), the walk
+        must stop and fall back to the direct peer -- not keep walking left
+        into attacker-controlled entries, which would hand the attacker
+        their own spoofed leftmost value as the trusted client IP."""
+        monkeypatch.setenv("DIGI_TRUSTED_PROXIES", "10.0.0.1")
+        limiter = RateLimiter()
+        req = _make_request("10.0.0.1", xff="203.0.113.250, 198.51.100.42:53812")
+        # "198.51.100.42:53812" (ip:port, as some proxies format it) is the
+        # boundary hop and isn't a bare parseable IP -- must NOT fall through
+        # to the attacker-supplied "203.0.113.250" on its left.
+        assert limiter._get_ip(req) == "10.0.0.1"
+
+    def test_trusted_proxy_matching_normalizes_ipv4_mapped_ipv6(self, monkeypatch):
+        """A dual-stack listener reports an IPv4 proxy's peer address as
+        ::ffff:a.b.c.d. A plain IPv4 entry in DIGI_TRUSTED_PROXIES must still
+        recognize it as trusted -- otherwise every request through that
+        proxy looks untrusted and XFF is never consulted."""
+        monkeypatch.setenv("DIGI_TRUSTED_PROXIES", "10.0.0.1")
+        limiter = RateLimiter()
+        req = _make_request("::ffff:10.0.0.1", xff="198.51.100.42, 10.0.0.1")
         assert limiter._get_ip(req) == "198.51.100.42"
 
 
