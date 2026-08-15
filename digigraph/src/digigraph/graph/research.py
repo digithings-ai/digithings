@@ -441,10 +441,11 @@ def _run_document_rag_path(
     # The model drives retrieval: it chooses whether to search, writes its own query,
     # and may follow a digisearch hit with digivault_get_note to read the whole note.
     # 4 rounds is enough for locate -> load -> answer with one retry. This bounds
-    # tool-calling rounds, not the completion count outright: run_tools fires one
-    # extra tool-free completion when the round budget is exhausted with no final
-    # content (digillm/src/digillm/client.py:2138-2147), so a fully-exhausted budget
-    # costs up to 5 completions per turn (this used to be exactly 1).
+    # tool-calling rounds, not the completion count outright: run_tools unconditionally
+    # fires one extra tool-free completion to synthesize a final answer once the round
+    # budget is exhausted (digillm/src/digillm/client.py, run_tools' post-loop handling),
+    # so a fully-exhausted budget costs exactly 5 completions per turn (this used to be
+    # exactly 1).
     content = run_tools(
         model=get_model_for_mode(),
         messages=[

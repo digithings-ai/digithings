@@ -2000,10 +2000,10 @@ def run_tools(
             ``round_boundary`` is the only callback that exposes that narration.
             Receives ``("round_limit_exhausted", {max_tool_rounds})`` once when
             ``max_tool_rounds`` is exhausted (every round through the budget still
-            returned tool_calls). This fires regardless of what happens next: a
-            forced tool-free completion only actually runs when the last round's
-            content was empty; when that content was non-empty, it is returned
-            directly as the final answer instead, with no forced completion.
+            returned tool_calls), immediately before a forced tool-free completion
+            synthesizes the final answer from the full transcript -- including
+            that last round's own tool results, which its own narration (written
+            before those tools ran) cannot reflect.
         parallel_safe_tools: Optional set of tool names that may run concurrently;
             when *all* calls in a round are in this set (and there is more than
             one), they are dispatched in parallel. Defaults to fully sequential.
@@ -2178,10 +2178,9 @@ def run_tools(
 
     # Reaching here means every round through max_tool_rounds still returned tool_calls
     # (any round with no tool_calls returns early above) — the budget is genuinely
-    # exhausted, not just "the model happened to stop." Whether that forces an extra
-    # tool-free completion depends on whether the last round left narration content
-    # (see below) — this log/signal fires either way, so its wording must not imply
-    # the forced completion unconditionally follows.
+    # exhausted, not just "the model happened to stop." A forced tool-free completion
+    # unconditionally follows below (see its own comment) — this log/signal always
+    # precedes it.
     #
     # Guard against max_tool_rounds <= 0: `range(max_tool_rounds)` above is then empty,
     # so the for loop body never ran a single round — there is nothing to have
@@ -2196,10 +2195,17 @@ def run_tools(
         if on_tool_step is not None:
             on_tool_step("round_limit_exhausted", {"max_tool_rounds": max_tool_rounds})
 
-    # Hit max rounds with no final content: force one more answer without tools.
-    # Otherwise the last round's own narration content IS the final answer -- no
-    # forced completion follows (see docstring above / round_limit_exhausted note).
-    if not content and len(current) > len(messages):
+    # Force one more answer without tools, unconditionally -- not only when the last
+    # round's own narration was empty. That narration is written *before* its
+    # tool_calls are executed, so it can never reflect what those tools actually
+    # returned; returning it directly would silently discard the tool results this
+    # same round just appended to `current`. Always synthesize from the full
+    # transcript instead.
+    #
+    # `len(current) > len(messages)` is the max_tool_rounds<=0 guard from above: if no
+    # round ever ran, there is no tool result to synthesize from, and `content` (used
+    # in the fallback below) was never assigned this call.
+    if len(current) > len(messages):
         current.append(
             {
                 "role": "user",

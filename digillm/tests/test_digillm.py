@@ -795,6 +795,49 @@ def test_round_limit_exhausted_emits_signal_and_forces_final_answer() -> None:
     assert signals == [{"max_tool_rounds": 2}]
 
 
+def test_round_limit_exhausted_with_narration_still_synthesizes_from_tool_results() -> None:
+    """Last-round narration must not become the final answer when the round budget
+    is exhausted.
+
+    The narration is written *before* that round's tool_calls execute, so it can
+    never reflect the tool results just appended to the transcript. Returning it
+    directly (the old ``if not content`` guard) silently discarded those results —
+    a common digigraph chat path when the model narrates a plan on the final
+    allowed tool round (``max_tool_rounds=4``).
+    """
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    responses = [
+        _mock_response("Let me look that up.", tool_calls=[tc]),
+        _mock_response("Answer grounded in the tool result."),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "secret-tool-payload",
+            max_tool_rounds=1,
+        )
+
+    assert out == "Answer grounded in the tool result."
+    assert out != "Let me look that up."
+    # Wrap-up call must see the tool result and must not re-offer tools.
+    wrap_kwargs = fake_client.chat.completions.create.call_args_list[1].kwargs
+    assert "tools" not in wrap_kwargs
+    tool_msgs = [m for m in wrap_kwargs["messages"] if m.get("role") == "tool"]
+    assert tool_msgs and "secret-tool-payload" in tool_msgs[0]["content"]
+
+
 @pytest.mark.parametrize("max_tool_rounds", [0, -1])
 def test_max_tool_rounds_zero_never_emits_round_limit_exhausted(max_tool_rounds: int) -> None:
     """max_tool_rounds=0 (or negative) means the for loop's range() is empty -- zero
