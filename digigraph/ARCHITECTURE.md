@@ -82,7 +82,7 @@ The following is built and functional as of this architecture review (March 2026
 
 Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. Path-scope mappings are defined in `digigraph_path_scopes`. When `DIGIKEY_JWKS_URL` or `DIGIKEY_PUBLIC_KEY_PEM` is unset, the middleware operates in passthrough mode.
 
-Rate limits are per-IP (sliding window, in-process `deque`). The `X-Forwarded-For` header is trusted for IP extraction — see Section 6 (Security Analysis) for implications.
+Rate limits are per-IP (sliding window, in-process `deque`). `X-Forwarded-For` is honored only from a configured trusted proxy (`DIGI_TRUSTED_PROXIES`) and validated before use — see Section 12.8 for the extraction algorithm and Section 6 (Security Analysis) for the trust-boundary discussion.
 
 A request that opts into `require_tool_calls=true` (body field or `X-Require-Tool-Calls` header — see §6.2.1) is metered by a **second, stricter** per-IP budget on top of the 10 req/min above: `_enforce_require_tool_calls_budget` in `server.py`, default 3 req/min, overridable via `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX`. Forcing `tool_choice="required"` reliably exhausts all `max_tool_rounds` completions instead of returning after one — a ~4-5x LLM-spend multiplier any caller with plain `digigraph:chat` scope can opt into per request — so the two budgets are checked independently and either can 429 the request. A deployment that itself mandates `require_tool_calls` via project config / `DIGI_REQUIRE_TOOL_CALLS` isn't newly constrained by this: the budget only meters a request's own opt-in signal, not the resolved floor.
 
@@ -626,7 +626,7 @@ When a client disconnects from an SSE stream, the background thread (`run_digigr
 
 ### 6.7 Rate Limiter Trust Boundary
 
-The `RateLimiter._get_ip()` method trusts `X-Forwarded-For` without validation. A client can set `X-Forwarded-For: 1.2.3.4` to impersonate any IP and bypass per-IP rate limits. In a Docker Compose deployment behind a reverse proxy, this is acceptable only if the proxy strips or overrides the header before it reaches digigraph. Currently there is no proxy in the default Compose stack — digigraph is directly exposed on `127.0.0.1:8000`.
+`RateLimiter._get_ip()` (see §12.8) only consults `X-Forwarded-For` when the direct peer is in `DIGI_TRUSTED_PROXIES`; with that unset (the default), a client's `X-Forwarded-For` is ignored entirely and `request.client.host` is used, so `X-Forwarded-For: 1.2.3.4` cannot impersonate another IP. Setting `DIGI_TRUSTED_PROXIES` moves the trust boundary to whichever proxy hops are listed there — see §12.8 for the operational requirement to list every hop in the chain, not just the innermost one. Currently there is no proxy in the default Compose stack — digigraph is directly exposed on `127.0.0.1:8000` — so `DIGI_TRUSTED_PROXIES` should stay unset there.
 
 ### 6.8 MCP Server Auth Gap
 
@@ -975,7 +975,9 @@ This complements digismith's LangSmith tracing with operational metrics visible 
 
 ### 12.8 X-Forwarded-For Validation
 
-**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs). `X-Forwarded-For` is honored only when the direct client is in that set; otherwise the limiter uses `request.client.host`.
+**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs, matched via `ipaddress` so entries and observed peers are compared as parsed addresses, not raw strings). `X-Forwarded-For` is honored only when the direct client is in that set, walking the chain from the right and skipping trusted hops to find the first non-trusted, IP-parseable entry; otherwise the limiter uses `request.client.host`.
+
+Operators must list **every** hop between the internet and this service, not just the innermost reverse proxy — e.g. a CDN edge in front of an internal load balancer needs the CDN's own egress ranges in `DIGI_TRUSTED_PROXIES` too. Omitting an intermediate hop makes it look like a non-trusted entry, so the limiter returns that hop's own address (not the true client) as the bucket key, coarsely grouping every client behind the omitted hop into one bucket.
 
 ## Observability
 

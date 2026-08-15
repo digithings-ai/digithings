@@ -39,7 +39,10 @@ class TestWorkflow:
     """POST /workflow (run_digigraph_workflow)."""
 
     def test_returns_200_with_valid_prompt(self, client: TestClient) -> None:
-        with patch("digigraph.workflow.run_digigraph_workflow") as m:
+        # Patch target must match the name bound in digigraph.server (where the
+        # endpoint calls it), not digigraph.workflow (where it's defined) --
+        # patch() only rebinds the name in the module you tell it to.
+        with patch("digigraph.server.run_digigraph_workflow") as m:
             from digigraph.models import WorkflowResult
 
             m.return_value = WorkflowResult(
@@ -48,10 +51,14 @@ class TestWorkflow:
                 backtest_result={"status": "ok", "symbols": ["AAPL"]},
             )
             r = client.post("/workflow", json=SAMPLE_WORKFLOW_PAYLOAD)
+        m.assert_called_once()
         assert r.status_code == 200
         data = r.json()
         for field in SAMPLE_WORKFLOW_RESULT_FIELDS:
             assert field in data
+        assert data["success"] is True
+        assert data["message"] == "Done"
+        assert data["backtest_result"] == {"status": "ok", "symbols": ["AAPL"]}
 
     def test_calls_workflow_with_request_body(self, client: TestClient) -> None:
         with patch("digigraph.server.run_digigraph_workflow") as m:
