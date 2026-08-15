@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 
 /**
@@ -59,6 +59,54 @@ const RELEASES: Release[] = [
 export function ChangelogRailReference() {
   const railRef = useRef<HTMLDivElement | null>(null);
   const reduced = useReducedMotion();
+  // Boundary state for the arrow buttons — without it, clicking '›' past the
+  // last card (or '‹' before the first) does nothing with no visible cue,
+  // which reads as the control being broken rather than the strip being
+  // exhausted.
+  const [atStart, setAtStart] = useState(true);
+  const [atEnd, setAtEnd] = useState(false);
+  // .cr-track's own padding (2.2rem each side, for the edge-fade mask)
+  // combined with scroll-snap-align: start on the FIRST .cr-card means the
+  // browser's natural resting scrollLeft is NOT 0 — confirmed live:
+  // scrollTo({left: 0}) and even a negative value both settle back to
+  // ~35px. This is a start-only effect, not a symmetric one: scroll-snap
+  // has no "align: end" card to pull the far side inward, so the true
+  // maximum IS the theoretical scrollWidth - clientWidth (confirmed live:
+  // scrollTo({left: 999999}) settles within a sub-pixel of that value, not
+  // ~35px short of it as an earlier version of this comment incorrectly
+  // claimed). Comparing the start against a hardcoded 0 would leave the
+  // left arrow permanently enabled with nowhere further to scroll, so the
+  // true minimum is captured once on mount (before any user scrolling)
+  // instead of assumed.
+  const minScrollLeftRef = useRef<number | null>(null);
+
+  const updateBoundaries = () => {
+    const el = railRef.current;
+    if (!el) return;
+    if (minScrollLeftRef.current === null) minScrollLeftRef.current = el.scrollLeft;
+    const min = minScrollLeftRef.current;
+    const max = el.scrollWidth - el.clientWidth;
+    // Sub-pixel scroll widths make an exact equality check flaky; 1px slack.
+    setAtStart(el.scrollLeft <= min + 1);
+    setAtEnd(el.scrollLeft >= max - 1);
+  };
+
+  useEffect(() => {
+    updateBoundaries();
+    const el = railRef.current;
+    if (!el) return;
+    el.addEventListener("scroll", updateBoundaries, { passive: true });
+    // A resize (viewport, or a responsive breakpoint flip) changes
+    // clientWidth/scrollWidth without firing a scroll event, which would
+    // otherwise leave atStart/atEnd — and the arrows' disabled state —
+    // stale until the user happens to scroll again.
+    const observer = new ResizeObserver(updateBoundaries);
+    observer.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateBoundaries);
+      observer.disconnect();
+    };
+  }, []);
 
   const nudge = (dir: 1 | -1) => {
     railRef.current?.scrollBy({ left: dir * 300, behavior: reduced ? "auto" : "smooth" });
@@ -71,11 +119,23 @@ export function ChangelogRailReference() {
           <p className="kicker">{"// changelog rail"}</p>
           <h2 className="title">Content that scrolls sideways.</h2>
         </div>
-        <div className="flex gap-[0.4rem]" aria-hidden="true">
-          <button type="button" className="cr-arrow" onClick={() => nudge(-1)} aria-label="Scroll left">
+        <div className="flex gap-[0.4rem]">
+          <button
+            type="button"
+            className="cr-arrow"
+            onClick={() => nudge(-1)}
+            aria-label="Scroll left"
+            disabled={atStart}
+          >
             ‹
           </button>
-          <button type="button" className="cr-arrow" onClick={() => nudge(1)} aria-label="Scroll right">
+          <button
+            type="button"
+            className="cr-arrow"
+            onClick={() => nudge(1)}
+            aria-label="Scroll right"
+            disabled={atEnd}
+          >
             ›
           </button>
         </div>
@@ -87,7 +147,13 @@ export function ChangelogRailReference() {
       </p>
 
       <div className="cr-mask">
-        <div ref={railRef} className="cr-track" role="list" aria-label="Release notes">
+        <div
+          ref={railRef}
+          className="cr-track"
+          role="list"
+          aria-label="Release notes, scrollable horizontally"
+          tabIndex={0}
+        >
           {RELEASES.map((rel) => (
             <article key={rel.version} className="cr-card" role="listitem" tabIndex={0}>
               <div className="flex items-center justify-between">

@@ -156,6 +156,13 @@
   .ts-chart-tip-signal { color: var(--ink-mute); font-size: 0.62rem; letter-spacing: 0.04em; }
   .ts-chart-tip-dl { margin: 0; display: grid; gap: 0.22rem; }
   .ts-svg { width: 100%; height: 100%; display: block; overflow: hidden; }
+  /* Drag-pan now runs on Pointer Events (mouse + single-finger touch) — the
+     browser's own touch-scroll gesture must not compete with it, or a drag
+     starting on this element pans the page instead of (or as well as) the
+     chart. Scoped to .is-interactive only: a static/non-interactive chart
+     has no pointerdown handler and should keep ordinary page-scroll touch
+     behavior. */
+  .ts-svg.is-interactive { touch-action: pan-y; }
   .ts-grid { stroke: var(--hair); stroke-width: 1; }
   .ts-grid-zero { stroke: var(--hair-2); }
   .ts-axis { fill: var(--ink-mute); font-family: var(--font-mono); font-size: 11px; }
@@ -261,6 +268,19 @@
 .ts-seg-btn:first-child { border-left: none; }
 .ts-seg-btn:hover { color: var(--ink); }
 .ts-seg-btn.is-active { color: var(--accent); background: var(--accent-weak); }
+/* .ts-seg's own overflow:hidden (it clips square button corners to the
+   pill's rounded border-radius) leaves almost no clearance around each
+   button — the global :focus-visible rule's positive outline-offset (3px)
+   plus its 2px width need ~5px to render at all, and gets clipped away
+   here. An inset (negative-offset) ring instead draws entirely inside the
+   button's own border box, so it can never be clipped by the parent
+   regardless of how tight that clearance is — the standard fix for a
+   focus ring inside a clipped, rounded container. */
+.ts-seg-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
 .ts-seg-static .ts-seg-btn { pointer-events: none; cursor: default; }
 .ts-seg-compact .ts-seg-btn { font-size: 0.68rem; padding: 0.2rem 0.48rem; letter-spacing: 0.02em; }
 
@@ -617,11 +637,11 @@
     --hair-2: #cccccc;                      /* --hair-2 light = rgba(10,15,20,.18), opaque for print */
     --ink: #14181b;                         /* --ink light */
     --ink-soft: #5c636a;                    /* --ink-soft light */
-    --ink-mute: #8a9097;                    /* --ink-mute light */
-    --accent: #0e8c7f;                      /* --accent light */
-    --accent-weak: rgba(14, 140, 127, 0.1); /* --accent-weak light (.12 → .1 on paper) */
+    --ink-mute: #666c73;                    /* --ink-mute light (WCAG AA fix 2026-08-11) */
+    --accent: #0c7c71;                      /* --accent light (WCAG 1.4.3 fix, #2280) */
+    --accent-weak: rgba(12, 124, 113, 0.1); /* --accent-weak light (.12 → .1 on paper) */
     --on-accent: #ffffff;                   /* --on-accent light */
-    --up: #0e8c7f;                          /* --up light (paper phosphor) */
+    --up: #0c7c71;                          /* --up light (paper phosphor) */
     --down: #c9533b;                        /* --down light */
     --warn: #b5832a;                        /* --warn light */
   }

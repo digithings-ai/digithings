@@ -59,6 +59,10 @@ fi
 
 # 1. digiquant.io landing (Next.js static export) → dist/ root.
 echo "--- building digiquant-web (Next.js static export) ---"
+# The workspace's own `build` script passes --webpack -- same rationale as
+# digithings-web's build-digithings.sh (#2244): Turbopack production-builds
+# this home page into an intermittent React hydration error; webpack does
+# not. `next dev` is untouched; it never reproduced this.
 npm --workspace frontend/digiquant-web run build
 cp -r frontend/digiquant-web/out/. dist/
 

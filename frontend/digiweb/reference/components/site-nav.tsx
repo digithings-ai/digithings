@@ -38,9 +38,12 @@ const PAGES = [
 
 /** Shared top bar for the design-reference app. Each page holds one family
  *  of design elements; the bar is the only chrome shared across them.
- *  Below 901px the links collapse behind a hamburger that opens a full-width
- *  sheet with dialog semantics (Escape closes, backdrop closes, rows stay
- *  ≥44px touch targets) — the pattern mined from graphite's mobile nav. */
+ *  Below 901px the links — and the livery/type-suite pickers — collapse
+ *  behind a hamburger that opens a full-width sheet with dialog semantics
+ *  (Escape closes, backdrop closes, rows stay ≥44px touch targets) — the
+ *  pattern mined from graphite's mobile nav. The always-visible row never
+ *  has more than the brand mark, theme toggle, and hamburger to fit, so the
+ *  hamburger itself is never a collapse/clip candidate. */
 export function SiteNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -65,12 +68,14 @@ export function SiteNav() {
   const livery = useSyncExternalStore(subscribeLivery, getLiverySnapshot, getLiveryServerSnapshot);
   const typeTheme = useSyncExternalStore(subscribeType, getTypeSnapshot, getTypeServerSnapshot);
 
-  // Collapse to the hamburger whenever the inline links stop fitting — at any
-  // width, not a hardcoded breakpoint (the item count grows as pages are
-  // added). We compare the bar's content width (scrollWidth, which exceeds
-  // clientWidth once the nowrap row overflows) against the space available,
-  // and freeze the "required" width while collapsed so re-expanding uses the
-  // real requirement (+8px hysteresis) instead of the shrunken collapsed row.
+  // Collapse to the hamburger whenever the inline links (plus the livery/type
+  // pickers — both collapse together, see .site-nav.is-collapsed in
+  // globals.css) stop fitting — at any width, not a hardcoded breakpoint (the
+  // item count grows as pages are added). We compare the bar's content width
+  // (scrollWidth, which exceeds clientWidth once the nowrap row overflows)
+  // against the space available, and freeze the "required" width while
+  // collapsed so re-expanding uses the real requirement (+8px hysteresis)
+  // instead of the shrunken collapsed row.
   const navRef = useRef<HTMLElement | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const collapsedRef = useRef(false);
@@ -92,7 +97,23 @@ export function SiteNav() {
     return () => ro.disconnect();
   }, []);
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  // Close the sheet the moment the row stops being collapsed (e.g. a device
+  // rotation or window resize widens the bar past the fit threshold while
+  // the sheet is open) — same adjust-state-during-render pattern as the
+  // pathname handling above. Without this, the sheet's own livery/type-suite
+  // selects stay mounted and visible at the same time the main row's copies
+  // reappear, giving the visitor two live controls for the same setting.
+  const [lastCollapsed, setLastCollapsed] = useState(collapsed);
+  if (lastCollapsed !== collapsed) {
+    setLastCollapsed(collapsed);
+    if (!collapsed && open) setOpen(false);
+  }
+
+  // Boundary-checked, not a bare startsWith: /data would otherwise also read
+  // "current" on a hypothetical /data-v2 route (or any other sibling sharing
+  // the prefix) — match only the exact path or a path continuing after "/".
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <nav
@@ -175,6 +196,35 @@ export function SiteNav() {
                     </li>
                   ))}
                 </ul>
+
+                {/* Livery + type suite pickers collapse in here alongside the
+                    links (see .site-nav.is-collapsed in globals.css) — they
+                    are hidden from the always-visible row below the same
+                    breakpoint, so the row only ever needs to fit the brand
+                    mark, theme toggle, and this hamburger. */}
+                <div className="site-nav-sheet-controls">
+                  <label className="site-nav-livery">
+                    <span className="sr-only">Page livery</span>
+                    <select value={livery} onChange={(e) => applyLivery(e.target.value)}>
+                      {LIVERY_OPTIONS.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="site-nav-suite">
+                    <span className="sr-only">Type suite</span>
+                    <select value={typeTheme} onChange={(e) => applyType(e.target.value)}>
+                      {TYPE_SUITES.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
               </div>
             </>,
             document.body,

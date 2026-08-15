@@ -24,6 +24,8 @@ _workflow_graph_lock = threading.Lock()
 _workflow_graph_cache: object | None = None
 # Hold context managers so they are not garbage-collected (sqlite/postgres).
 _cm_holders: list[object] = []
+_store_lock = threading.Lock()
+_store_instance: object | None = None
 
 WORKFLOW_PROFILES = frozenset({"full_stack", "research_rag", "quant_backtest", "plan_execute"})
 
@@ -53,6 +55,20 @@ _CHECKPOINTER_CONN_BOUNDS: dict[str, int] = {
     "keepalives_interval": 10,
     "keepalives_count": 5,
 }
+
+# No node-level RetryPolicy on backtest/optimize (deliberate, not an oversight): both
+# nodes already catch httpx.RequestError (among other transient errors) INSIDE their own
+# function body via _DIGIQUANT_CLIENT_ERRORS (nodes.py) and return a normal error-state
+# dict rather than letting the exception propagate. LangGraph's node-level retry only
+# fires on an exception escaping the node function -- which never happens here, so a
+# RetryPolicy on these nodes would be pure dead code (it could never actually trigger).
+#
+# Letting httpx.RequestError propagate instead, so a real RetryPolicy *could* fire,
+# would introduce a duplicate-request risk: these are POST calls to digiquant with no
+# idempotency-key protection (only a correlation X-Request-ID), so a network-blip retry
+# could kick off two backtest/optimize runs. Adding real idempotency support to
+# digiquant is out of scope here -- a separate service, a separate body of work. See
+# tests/dg/test_graph_profiles.py::test_backtest_and_optimize_nodes_have_no_retry_policy.
 
 
 def _bounded_conn_string(conn_string: str) -> str:
@@ -90,6 +106,11 @@ def _bounded_conn_string(conn_string: str) -> str:
         return conn_string
 
 
+# Sync checkpointers (SqliteSaver/PostgresSaver, not the Async* variants) are correct
+# here because every call site in workflow.py is a plain `def` (FastAPI runs these off
+# the event loop in its own threadpool already). If any route here ever becomes
+# `async def`, the checkpointer selection below must move to AsyncSqliteSaver /
+# AsyncPostgresSaver in lockstep, or graph.compile(checkpointer=...) raises at runtime.
 def get_checkpointer():
     """
     Return a process-wide checkpointer for the current DIGI_CHECKPOINTER setting.
@@ -163,6 +184,58 @@ def get_checkpointer():
             except ImportError:
                 pass
         return _checkpointer_instance
+
+
+def get_store():
+    """Return a process-wide Store for cross-thread, per-subject memory.
+
+    Distinct from the checkpointer above, which is scoped to a single thread_id: this is
+    for values that should survive a user opening a brand-new thread (e.g. a response-
+    language preference). Mirrors DIGI_CHECKPOINTER's kind selection where it makes
+    sense: DIGI_CHECKPOINTER=postgres gets a real PostgresStore (same conn string,
+    reusing _bounded_conn_string's connect-timeout/keepalive bounds); every other kind
+    (memory/sqlite/unset) gets an InMemoryStore. LangGraph ships no first-class Store
+    equivalent of SqliteSaver, so mapping "sqlite" to InMemoryStore here is a documented,
+    same-process choice -- not a silent degradation the way an unreachable postgres
+    connection is for get_checkpointer() (that one is deliberately loud; see the
+    ImportError/missing-URI branch below, which matches that same discipline).
+    """
+    global _store_instance
+    raw = (os.environ.get("DIGI_CHECKPOINTER") or "").strip().lower()
+    with _store_lock:
+        if _store_instance is not None:
+            return _store_instance
+        if raw == "postgres":
+            conn_string = os.environ.get("DIGI_CHECKPOINTER_POSTGRES_URI", "").strip()
+            if conn_string:
+                try:
+                    from langgraph.store.postgres import PostgresStore
+
+                    cm = PostgresStore.from_conn_string(_bounded_conn_string(conn_string))
+                    _cm_holders.append(cm)
+                    _store_instance = cm.__enter__()
+                    _store_instance.setup()
+                except ImportError:
+                    import logging as _logging
+
+                    _logging.getLogger(__name__).warning(
+                        "langgraph-checkpoint-postgres not installed; falling back to "
+                        "InMemoryStore for cross-thread memory. Install with: "
+                        "pip install 'digigraph[checkpoint-postgres]'"
+                    )
+            else:
+                import logging as _logging
+
+                _logging.getLogger(__name__).warning(
+                    "DIGI_CHECKPOINTER=postgres but DIGI_CHECKPOINTER_POSTGRES_URI is "
+                    "unset; falling back to InMemoryStore for cross-thread memory (not "
+                    "persistent, not shared across replicas)."
+                )
+        if _store_instance is None:
+            from langgraph.store.memory import InMemoryStore
+
+            _store_instance = InMemoryStore()
+        return _store_instance
 
 
 def resolve_workflow_profile() -> str:
@@ -274,6 +347,7 @@ def build_workflow_graph():
     builder.add_edge("optimize", END)
 
     checkpointer = get_checkpointer()
+    store = get_store()
     interrupt_after: list[str] | None = None
     if (os.environ.get("DIGI_INTERRUPT_AFTER_RESEARCH", "").strip().lower()) in (
         "1",
@@ -282,7 +356,9 @@ def build_workflow_graph():
     ):
         # Interrupt after the research subgraph completes (outer node name is still "research").
         interrupt_after = ["research"]
-    compiled = builder.compile(checkpointer=checkpointer, interrupt_after=interrupt_after)
+    compiled = builder.compile(
+        checkpointer=checkpointer, store=store, interrupt_after=interrupt_after
+    )
     with _workflow_graph_lock:
         _workflow_graph_cache = compiled
     return compiled

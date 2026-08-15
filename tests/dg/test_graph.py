@@ -241,3 +241,66 @@ def test_bounded_conn_string_returns_input_unchanged_without_psycopg(monkeypatch
     monkeypatch.setitem(sys.modules, "psycopg.conninfo", None)
     raw = "postgresql://db.example.test/postgres"
     assert _graph_module._bounded_conn_string(raw) == raw
+
+
+@pytest.mark.unit
+def test_static_interrupt_after_pauses_but_resume_value_is_silently_dropped() -> None:
+    """Regression test for the digigraph HITL gap: server.py's /threads/{id}/resume
+    endpoint calls graph.invoke(Command(resume=resume_value), config=config)
+    (server.py:457-480), but digigraph wires ONLY a static, compile-time
+    interrupt_after=["research"] breakpoint (graph.py:277-285) -- no node calls
+    interrupt(). This proves BOTH halves of that gap on a graph built exactly the way
+    digigraph builds one (same compile(checkpointer=..., interrupt_after=[...]) shape):
+
+    1. interrupt_after really does pause execution (get_state().next shows the pending
+       node -- empirically confirmed this is NOT a no-op).
+    2. Command(resume=...)'s value is silently dropped: a node downstream of the pause
+       has no way to see it, because nothing is waiting on an interrupt() call to
+       receive it.
+
+    If a future fix replaces the static breakpoint with a real interrupt() call, THIS
+    test must start asserting the resume value DOES arrive -- if it is still green
+    after that change, the fix did not work.
+    """
+    from langgraph.checkpoint.memory import InMemorySaver
+    from langgraph.graph import END, START, StateGraph
+    from langgraph.types import Command
+    from typing_extensions import TypedDict
+
+    class _State(TypedDict, total=False):
+        step: str
+        approved: bool
+
+    def research(state: _State) -> dict:
+        return {"step": "researched"}
+
+    def validate(state: _State) -> dict:
+        # A real interrupt()-based node would read the resume value here via
+        # interrupt(...)'s return value. This node has no such call -- exactly
+        # digigraph's strategy_validator_node today -- so it can only ever see
+        # whatever was already in state, never what Command(resume=...) carried.
+        return {"step": "validated", "approved": state.get("approved", False)}
+
+    g: StateGraph[_State] = StateGraph(_State)
+    g.add_node("research", research)
+    g.add_node("validate", validate)
+    g.add_edge(START, "research")
+    g.add_edge("research", "validate")
+    g.add_edge("validate", END)
+    compiled = g.compile(checkpointer=InMemorySaver(), interrupt_after=["research"])
+
+    config = {"configurable": {"thread_id": "hitl-regression-1"}}
+    first = compiled.invoke({"step": "start"}, config=config)
+    assert first == {"step": "researched"}, "must pause before validate runs"
+
+    paused = compiled.get_state(config)
+    assert paused.next == ("validate",), (
+        f"expected the graph paused with 'validate' pending, got next={paused.next!r}"
+    )
+
+    resumed = compiled.invoke(Command(resume="approved-by-human"), config=config)
+    assert resumed == {"step": "validated", "approved": False}, (
+        "the resume value was silently dropped, exactly as digigraph's current wiring "
+        "does today -- if this assertion fails, someone added a real interrupt() call "
+        "and this test must be updated to assert the NEW, fixed behavior instead"
+    )

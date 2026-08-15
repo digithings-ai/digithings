@@ -1,9 +1,15 @@
+"use client";
+
 /**
  * Contents overview — the home-page index of every design family, each a card
- * linking to its page with a one-line blurb. The map that mirrors the top nav.
- * Static display template.
+ * linking to its page with a one-line blurb. The map that mirrors the top nav
+ * (the section copy says so directly) — so it uses the exact same
+ * isActive/aria-current pattern site-nav.tsx already solves current-page
+ * wayfinding with, rather than leaving its own "you are here" card
+ * indistinguishable from the other 12 links.
  */
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const FAMILIES = [
   { href: "/", label: "Foundations", blurb: "Livery system, feature picker, button & CTA states." },
@@ -22,6 +28,14 @@ const FAMILIES = [
 ] as const;
 
 export function ContentsOverview() {
+  const pathname = usePathname();
+  // Boundary-checked, not a bare startsWith: /data would otherwise also
+  // read "current" on a hypothetical /data-v2 route (or any other sibling
+  // sharing the prefix) — match only the exact path or a path continuing
+  // after a "/".
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+
   return (
     <section className="section-block contents-overview">
       <p className="kicker">{"// contents"}</p>
@@ -33,7 +47,12 @@ export function ContentsOverview() {
 
       <div className="mt-[1.2rem] grid grid-cols-[repeat(auto-fill,minmax(210px,1fr))] gap-[0.7rem]">
         {FAMILIES.map((f, i) => (
-          <Link key={f.href + f.label} href={f.href} className="co-card">
+          <Link
+            key={f.href + f.label}
+            href={f.href}
+            className="co-card"
+            aria-current={isActive(f.href) ? "page" : undefined}
+          >
             <span className="font-mono text-[0.6rem] tracking-[0.1em] text-accent">{String(i).padStart(2, "0")}</span>
             <span className="font-mono text-[0.95rem] text-ink">{f.label}</span>
             <span className="text-[0.8rem] leading-[1.4] text-ink-soft">{f.blurb}</span>

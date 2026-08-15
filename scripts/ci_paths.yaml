@@ -49,6 +49,16 @@ digigraph:
   - digigraph/**
   - tests/dg/**
   - .github/workflows/test-digigraph.yml
+  # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
+  # mcp_servers.yaml, olympus_models.yaml -- all read by tests/dg/*), and
+  # infra/digichat-release/config/ is its vendored copy for the Profile A release
+  # (kept in sync by TestByokCatalogVendoredCopy). Without these entries a
+  # config-only edit runs no digigraph job at all -- including the one test that
+  # guards the two copies against drifting -- and byok-providers.json now raises
+  # at import on malformed content, so a bad catalog-only edit could merge fully
+  # green and then crash-loop digigraph in production (#2361 finding 8).
+  - config/**
+  - infra/digichat-release/config/**
 
 # digillm and digifetch each keep their tests inside the component (digillm/tests,
 # digifetch/tests) rather than under the repo-root tests/ tree. So neither has a
@@ -154,6 +164,13 @@ score:
   - agents.yml
   - agents/**
   - .github/workflows/test-score.yml
+  # score.py's only.py restriction applies solely to its pandas/polars-specific
+  # patterns (scan() in scripts/score.py) -- every other pattern, including
+  # Security-dimension checks, scans ALL changed files regardless of extension.
+  # So a config/**-only PR (byok-providers.json, model_modes.yaml, etc.) still has
+  # content the Security >= 8 rubric should see; without this entry it never runs
+  # at all for such a PR (#2361 finding 8 follow-up).
+  - config/**
 
 e2e_contract:
   - tests/test_e2e.py
@@ -210,6 +227,14 @@ ruff_and_scripts:
   - agents/**
   - .github/workflows/ci.yml
   - scripts/ci_paths.yaml
+  # This job's "Validate model routing (config only)" step runs
+  # scripts/validate_model_routing.py --routing against the REAL
+  # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py
+  # only exercises synthetic tmp_path fixtures. Without this entry a malformed real
+  # model_modes.yaml (bad mode name, duplicate key, wrong type) merges fully green
+  # (#2361 finding 8 follow-up -- same gap class as the digigraph lane's config/** entry
+  # above, for a different consumer of the same file).
+  - config/**
   # tests/scripts/test_release_manifest_consistency.py reads these five, and `tests/**`
   # above only fires when the test itself is edited. Without them the guard is silent on
   # exactly the commits it exists to catch: both hand-cut digichat releases (d9b4f6fe,

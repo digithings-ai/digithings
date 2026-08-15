@@ -22,7 +22,7 @@ const METRICS: PerfMetric[] = [
 
 export function PerfMetricsReference() {
   return (
-    <section className="section-block perf-metrics-section">
+    <section className="section-block perf-metrics-section" id="perf-metrics">
       <p className="kicker">{"// performance metrics"}</p>
       <h2 className="title">The grade, at a glance.</h2>
       <p className="section-copy">

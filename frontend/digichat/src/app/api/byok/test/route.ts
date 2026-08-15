@@ -1,29 +1,29 @@
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import {
-  isOpenRouterKey,
   normalizeOpenRouterModel,
   OPENROUTER_API_BASE,
 } from "@/lib/byok-openrouter";
+import {
+  byokKeyPrefixError,
+  readByokProvider,
+  type BYOKProvider,
+} from "@/lib/byok-providers";
 import {
   isEmbedChatRequest,
   resolveEmbedChatTenant,
 } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
+import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { fetchWithTimeout, abortOrMessage } from "@/lib/fetch-with-timeout";
 
 export const maxDuration = 30;
 
-const TIMEOUT_MS = 10_000;
-
-type TestResult = { ok: boolean; model?: string; error?: string };
-
-type BYOKProvider = "openai" | "anthropic" | "openrouter" | "gemini";
-
-function readProvider(raw: string): BYOKProvider {
-  if (raw === "anthropic") return "anthropic";
-  if (raw === "openrouter") return "openrouter";
-  if (raw === "gemini") return "gemini";
-  return "openai";
-}
+type TestResult = {
+  ok: boolean;
+  model?: string;
+  models?: { id: string; label: string }[];
+  error?: string;
+};
 
 function rateLimitResponse(message: string, retryAfterSec: number): Response {
   return new Response(JSON.stringify({ ok: false, error: message }), {
@@ -44,9 +44,18 @@ function rateLimitResponse(message: string, retryAfterSec: number): Response {
  * Auth mirrors POST /api/chat: DigiChat session/machine key, OR a verified
  * anonymous embed request (`X-Embed-Host` / embed referer). Embed visitors on
  * digithings.ai / OCC must validate BYOK before session activation.
+ *
+ * Rate-limited on BOTH the embed-IP path AND the authenticated/session path —
+ * same unconditional-on-both-paths shape as GET /api/byok/models. Each call
+ * here makes an outbound credentialed request to a third-party provider using
+ * digichat's own egress, so an authenticated caller looping this route
+ * unthrottled was a real gap (unlike /api/byok/models, this route needs a key
+ * to do anything, but the egress cost is per-request regardless of whether
+ * the key turns out to be valid).
  */
 export async function POST(req: Request): Promise<Response> {
   const authResult = await requireDigiChatAuth(req);
+  let rateKey: string;
   if (authResult instanceof Response) {
     if (!isEmbedChatRequest(req)) return authResult;
     const embedCtx = resolveEmbedChatTenant(req);
@@ -58,10 +67,22 @@ export async function POST(req: Request): Promise<Response> {
         ipRate.retryAfterSec,
       );
     }
+    rateKey = `byok-test:embed:${embedCtx.tenantSlug}`;
+  } else {
+    rateKey = `byok-test:${authResult.tenantSlug}:${authResult.ownerUserSub}`;
+  }
+
+  const rate = checkBffRateLimit(rateKey);
+  if (!rate.allowed) {
+    return rateLimitResponse("Too many requests. Try again shortly.", rate.retryAfterSec);
   }
 
   const byokKey = req.headers.get("x-byok-key")?.trim() ?? "";
-  const provider = readProvider(req.headers.get("x-byok-provider")?.trim() ?? "openai");
+  // A missing/empty header defaults to "openai" (unchanged behavior). A
+  // *present but unrecognized* value is never silently coerced to "openai"
+  // — it fails explicitly below instead (#2351).
+  const rawProvider = req.headers.get("x-byok-provider")?.trim() ?? "";
+  const provider = rawProvider === "" ? "openai" : readByokProvider(rawProvider);
   const byokModel = normalizeOpenRouterModel(
     req.headers.get("x-byok-model")?.trim() ?? ""
   );
@@ -70,33 +91,26 @@ export async function POST(req: Request): Promise<Response> {
     return jsonResponse({ ok: false, error: "No BYOK key provided." }, 400);
   }
 
-  if (provider === "openai" && !byokKey.startsWith("sk-")) {
+  if (provider === null) {
     return jsonResponse(
-      { ok: false, error: "OpenAI keys must start with sk-." },
-      400
-    );
-  }
-  if (provider === "anthropic" && !byokKey.startsWith("sk-ant-")) {
-    return jsonResponse(
-      { ok: false, error: "Anthropic keys must start with sk-ant-." },
-      400
-    );
-  }
-  if (provider === "openrouter" && !isOpenRouterKey(byokKey)) {
-    return jsonResponse(
-      { ok: false, error: "OpenRouter keys must start with sk-or-." },
-      400
-    );
-  }
-  if (provider === "gemini" && !byokKey.startsWith("AI")) {
-    return jsonResponse(
-      { ok: false, error: "Gemini keys must start with AI." },
+      { ok: false, error: `Unknown BYOK provider: "${rawProvider}".` },
       400
     );
   }
 
-  const needsModel =
-    provider === "openrouter" || provider === "anthropic" || provider === "gemini";
+  const prefixError = byokKeyPrefixError(byokKey, provider);
+  if (prefixError) {
+    return jsonResponse({ ok: false, error: prefixError }, 400);
+  }
+
+  // Deliberately NOT derived from byokRequiresModel(provider) — that
+  // predicate answers a different question (does /api/chat need a model
+  // header). This gate answers only "does the *validation ping* need a
+  // model before it can run at all" — and none of testOpenAIKey,
+  // testAnthropicKey, testGeminiKey, or testOpenRouterKey read their model
+  // parameter. Only testXaiKey has no live-list call of its own, so x.ai is
+  // the one provider that still needs a model up front (#2347).
+  const needsModel = provider === "xai";
   if (needsModel && !byokModel) {
     return jsonResponse(
       {
@@ -116,26 +130,6 @@ export async function POST(req: Request): Promise<Response> {
   }
 }
 
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit
-): Promise<globalThis.Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function abortOrMessage(e: unknown): string {
-  if (e instanceof Error) {
-    return e.name === "AbortError" ? `Request timed out after ${TIMEOUT_MS / 1000} s.` : e.message;
-  }
-  return "Unknown error";
-}
-
 async function testKey(
   key: string,
   provider: BYOKProvider,
@@ -147,9 +141,11 @@ async function testKey(
     case "anthropic":
       return testAnthropicKey(key);
     case "openrouter":
-      return testOpenRouterKey(key, model);
+      return testOpenRouterKey(key);
     case "gemini":
       return testGeminiKey(key);
+    case "xai":
+      return testXaiKey(key);
     default: {
       const _exhaustive: never = provider;
       return _exhaustive;
@@ -169,7 +165,8 @@ async function testOpenAIKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `OpenAI returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    return { ok: true, model: data.data?.[0]?.id ?? "gpt-4o-mini" };
+    const models = (data.data ?? []).map((m) => ({ id: m.id, label: m.id }));
+    return { ok: true, model: models[0]?.id ?? "gpt-4o-mini", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
@@ -190,29 +187,17 @@ async function testAnthropicKey(key: string): Promise<TestResult> {
       return { ok: false, error: body.error?.message ?? `Anthropic returned HTTP ${resp.status}` };
     }
     const data = (await resp.json()) as { data?: { id: string }[] };
-    return { ok: true, model: data.data?.[0]?.id ?? "claude-3-haiku-20240307" };
+    const models = (data.data ?? []).map((m) => ({ id: m.id, label: m.id }));
+    return { ok: true, model: models[0]?.id ?? "claude-3-haiku-20240307", models };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
 }
 
-async function testOpenRouterKey(key: string, model: string): Promise<TestResult> {
-  const referer =
-    process.env.DIGICHAT_SITE_URL?.trim() || "https://digithings.ai";
+async function testOpenRouterKey(key: string): Promise<TestResult> {
   try {
-    const resp = await fetchWithTimeout(`${OPENROUTER_API_BASE}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "content-type": "application/json",
-        "HTTP-Referer": referer,
-        "X-OpenRouter-Title": "digichat",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: "user", content: "ping" }],
-        max_tokens: 1,
-      }),
+    const resp = await fetchWithTimeout(`${OPENROUTER_API_BASE}/key`, {
+      headers: { Authorization: `Bearer ${key}` },
     });
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as {
@@ -223,8 +208,17 @@ async function testOpenRouterKey(key: string, model: string): Promise<TestResult
         error: body.error?.message ?? `OpenRouter returned HTTP ${resp.status}`,
       };
     }
-    const data = (await resp.json()) as { model?: string };
-    return { ok: true, model: data.model ?? model };
+    const data = (await resp.json()) as {
+      data?: { limit?: number | null; usage?: number };
+    };
+    const limit = data.data?.limit;
+    const usage = data.data?.usage ?? 0;
+    // limit === null means unlimited/no cap on this key — only a finite,
+    // fully-consumed limit means "this key has no credit left."
+    if (typeof limit === "number" && usage >= limit) {
+      return { ok: false, error: "This OpenRouter key has no remaining credit." };
+    }
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
@@ -248,8 +242,29 @@ async function testGeminiKey(key: string): Promise<TestResult> {
       };
     }
     const data = (await resp.json()) as { models?: { name?: string }[] };
-    const first = data.models?.[0]?.name?.replace(/^models\//, "") ?? "gemini-2.0-flash";
-    return { ok: true, model: first };
+    const models = (data.models ?? [])
+      .map((m) => (m.name ?? "").replace(/^models\//, ""))
+      .filter(Boolean)
+      .map((id) => ({ id, label: id }));
+    return { ok: true, model: models[0]?.id ?? "gemini-2.0-flash", models };
+  } catch (e) {
+    return { ok: false, error: abortOrMessage(e) };
+  }
+}
+
+async function testXaiKey(key: string): Promise<TestResult> {
+  try {
+    const resp = await fetchWithTimeout("https://api.x.ai/v1/models", {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (!resp.ok) {
+      const body = (await resp.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      return { ok: false, error: body.error?.message ?? `x.ai returned HTTP ${resp.status}` };
+    }
+    const data = (await resp.json()) as { data?: { id: string }[] };
+    return { ok: true, model: data.data?.[0]?.id ?? "grok-4-3" };
   } catch (e) {
     return { ok: false, error: abortOrMessage(e) };
   }
