@@ -8,8 +8,15 @@ import { bucketOpenRouterModels, type OpenRouterCatalogEntry } from "@/lib/openr
 
 export const maxDuration = 15;
 
-/** Reject a response body larger than this before fully buffering/parsing it — see
- * the design spec's Error handling section on unbounded response size. */
+/** Reject a response body larger than this — see the design spec's Error handling
+ * section on unbounded response size.
+ *
+ * Two checks, and only the first avoids buffering: content-length is consulted
+ * before reading the body, but OpenRouter may respond chunked, in which case the
+ * header is absent and the second check runs only after resp.text() has already
+ * buffered everything. Acceptable here because the origin is a single fixed TLS
+ * endpoint, not attacker-chosen. Note the post-buffer check counts UTF-16 code
+ * units, so it admits up to ~2x this many bytes. */
 const MAX_RESPONSE_BYTES = 2_000_000; // 2 MB
 
 function jsonResponse(body: unknown, status: number): Response {

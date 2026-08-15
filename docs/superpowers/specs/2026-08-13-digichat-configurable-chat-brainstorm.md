@@ -1,4 +1,4 @@
-# DigiChat configurable chat experience — brainstorm (not a spec)
+# digichat configurable chat experience — brainstorm (not a spec)
 
 > Captured verbatim-intent from a dictated brainstorm during the BYOK provider/model
 > catalog work (Plan A/B). Explicitly deferred by the user to a separate session —

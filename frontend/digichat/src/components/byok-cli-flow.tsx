@@ -23,6 +23,7 @@ import {
   pingByokKey,
   type ByokPingResult,
 } from "@/lib/byok-ping";
+import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 
 type Step = "provider" | "key" | "model" | "validating" | "done";
@@ -290,7 +291,7 @@ export function ByokCliFlow({
   useEffect(() => {
     if (provider !== "openrouter" || liveModels || modelsFetchFailed) return;
     let cancelled = false;
-    fetch("/api/byok/models?provider=openrouter", { credentials: "include" })
+    fetch(p("/api/byok/models?provider=openrouter"), { credentials: "include" })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((data: LiveBuckets & { ok: boolean }) => {
         if (cancelled) return;
