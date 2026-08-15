@@ -263,7 +263,7 @@ def healthz() -> dict[str, bool]:
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
-    from digigraph.corpus_routing import resolve_corpus_override
+    from digigraph.corpus_routing import load_tenant_corpus_map, resolve_corpus_override
 
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
@@ -292,16 +292,27 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
             updates["digi_trace_project_id"] = auth.project_id
         if auth.jti:
             updates["digi_trace_jti"] = auth.jti
+    corpus_map = load_tenant_corpus_map()
     corpus = resolve_corpus_override(
         headers=http_request.headers,
         tenant_slug=tenant_from_auth,
+        corpus_map=corpus_map,
     )
-    if corpus.digisearch_index:
+    # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
+    # digisearch_index / vault_path_prefix / research_system_prompt_override must be
+    # written unconditionally so a client body value cannot survive into graph state
+    # (digisearch has no server-side tenant→index bind; digivault does for prefixes).
+    if corpus_map:
         updates["digisearch_index"] = corpus.digisearch_index
-    if corpus.vault_path_prefix:
         updates["vault_path_prefix"] = corpus.vault_path_prefix
-    if corpus.research_system_prompt:
         updates["research_system_prompt_override"] = corpus.research_system_prompt
+    else:
+        if corpus.digisearch_index:
+            updates["digisearch_index"] = corpus.digisearch_index
+        if corpus.vault_path_prefix:
+            updates["vault_path_prefix"] = corpus.vault_path_prefix
+        if corpus.research_system_prompt:
+            updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Per-request response language (X-Digi-Language) — a per-request signal, not a
     # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
     # Never interpolated into a prompt (resolve_language_directive only ever emits

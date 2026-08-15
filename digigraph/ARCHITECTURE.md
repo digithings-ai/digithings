@@ -856,7 +856,7 @@ digigraph:
 | `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
-| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). Headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` win when set. |
+| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). When unset (single-tenant), those headers may still select corpus. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |
 | `DIGI_ENABLE_THREAD_API` | `0` | Enable `/threads/*` and `/files/*` |
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |
