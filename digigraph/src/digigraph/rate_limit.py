@@ -28,6 +28,17 @@ logger = logging.getLogger(__name__)
 # same NAT), so IPv4 addresses are bucketed individually.
 _IPV6_BUCKET_PREFIX = 64
 
+# Number of check() calls between sweeps that drop fully-idle buckets from
+# `_windows`. Each bucket's own deque is already bounded to `max_requests`
+# entries by the popleft loop in check() -- the unbounded-growth risk is the
+# *number* of distinct buckets (one per IP, or /64 allocation, ever seen), not
+# any one bucket's size. A client hit once and never again leaves a
+# permanent entry with no later check() call against that same bucket to
+# clean it up. Sweeping on every call would make check() cost O(distinct
+# buckets) instead of O(1); this interval trades sweep frequency for that
+# per-call cost.
+_SWEEP_INTERVAL = 1000
+
 
 class RateLimiter:
     """Per-IP sliding-window rate limiter.
@@ -48,6 +59,7 @@ class RateLimiter:
         # bucket -> deque of request timestamps (monotonic float)
         self._windows: dict[str, deque[float]] = {}
         self._lock = Lock()
+        self._checks_since_sweep = 0
 
     @staticmethod
     def _parse_trusted_proxies(
@@ -76,6 +88,17 @@ class RateLimiter:
                 try:
                     widened = ipaddress.ip_network(entry, strict=False)
                 except ValueError:
+                    # Neither a valid IP/CIDR nor a widen-able one, e.g. a
+                    # typo like "10.0.0.999" or a bare hostname -- log it so a
+                    # misconfigured DIGI_TRUSTED_PROXIES entry shows up as a
+                    # diagnosable warning instead of silently never trusting
+                    # the proxy the operator intended.
+                    logger.warning(
+                        "DIGI_TRUSTED_PROXIES entry %r is neither a valid IP address "
+                        "nor a valid CIDR network; ignoring it. Fix or remove this "
+                        "entry -- as written it will never be trusted.",
+                        entry,
+                    )
                     continue
                 logger.warning(
                     "DIGI_TRUSTED_PROXIES entry %r has host bits set for its prefix; "
@@ -226,4 +249,24 @@ class RateLimiter:
                     headers={"Retry-After": str(window)},
                 )
             q.append(now)
+            self._checks_since_sweep += 1
+            if self._checks_since_sweep >= _SWEEP_INTERVAL:
+                self._checks_since_sweep = 0
+                self._evict_idle_buckets(cutoff)
         return None
+
+    def _evict_idle_buckets(self, cutoff: float) -> None:
+        """Drop buckets whose newest timestamp is already older than `cutoff`
+        -- i.e. no request from that bucket since the current window opened.
+        Must be called with `self._lock` held (see `check()`).
+
+        Assumes every `check()` call against this instance uses the same
+        `window` -- true for every call site in this codebase, each of which
+        owns a dedicated `RateLimiter()` instance (see server.py). A caller
+        that mixes windows on a single shared instance should use a separate
+        `RateLimiter` per window instead, the same way this codebase already
+        does for its general vs. `require_tool_calls` budgets.
+        """
+        idle = [key for key, q in self._windows.items() if q[-1] < cutoff]
+        for key in idle:
+            del self._windows[key]

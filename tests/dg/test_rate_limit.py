@@ -13,6 +13,9 @@ Follow-up fixes from the PR #2371 in-session review (#2375):
 
 from __future__ import annotations
 
+import logging
+import time
+
 import pytest
 from digigraph.rate_limit import RateLimiter
 from starlette.requests import Request
@@ -186,6 +189,21 @@ class TestGetIpTrustFollowUp:
         req = _make_request("10.0.0.1", xff="198.51.100.42")
         assert limiter._get_ip(req) == "198.51.100.42"
 
+    def test_invalid_trusted_proxies_entry_logs_a_warning(self, monkeypatch, caplog):
+        """A fully-invalid entry (neither a valid IP nor a valid CIDR, even
+        widened) is silently dropped -- but an operator needs a diagnostic
+        signal that a typo in DIGI_TRUSTED_PROXIES means the proxy they
+        intended to trust never actually got trusted (#2378 follow-up)."""
+        monkeypatch.setenv("DIGI_TRUSTED_PROXIES", "not-an-ip, 10.0.0.1")
+        limiter = RateLimiter()
+        with caplog.at_level(logging.WARNING, logger="digigraph.rate_limit"):
+            networks = limiter._parse_trusted_proxies("not-an-ip, 10.0.0.1")
+        assert len(networks) == 1
+        assert any(
+            "not-an-ip" in record.getMessage() and "never be trusted" in record.getMessage()
+            for record in caplog.records
+        )
+
     def test_unparseable_boundary_hop_falls_back_to_direct_not_further_left(self, monkeypatch):
         """The first non-trusted hop is the boundary our trusted proxy itself
         appended -- everything to its left is exactly the unvalidated,
@@ -283,3 +301,61 @@ class TestCheckIntegration:
         result = limiter.check(req2, max_requests=1, window=60)
         assert result is not None
         assert result.status_code == 429
+
+
+class TestWindowEviction:
+    """`_windows` grows one entry per distinct bucket ever seen and, before
+    this fix, never shrank -- a client hit once and never again left a
+    permanent dict entry with no later check() call to reclaim it (#2378).
+    `check()` now sweeps idle buckets out of `_windows` every
+    `_SWEEP_INTERVAL` calls, so a low interval makes the sweep observable in
+    a unit test without needing 1000 real calls."""
+
+    def test_idle_bucket_is_evicted_by_a_later_sweep(self, monkeypatch):
+        monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 1)
+        limiter = RateLimiter()
+        idle_req = _make_request("203.0.113.50")
+        # This call creates the bucket. With the interval patched to 1, it
+        # also triggers the very next sweep -- but this bucket's own entry is
+        # `now`, so it survives sweeping itself.
+        assert limiter.check(idle_req, max_requests=10, window=60) is None
+        assert "203.0.113.50" in limiter._windows
+        # Time doesn't actually advance in a unit test -- force this bucket's
+        # only entry to look like it aged out of a 60s window.
+        limiter._windows["203.0.113.50"][0] = time.monotonic() - 61
+        # A second call, from a different bucket, triggers the next sweep and
+        # must evict the now-idle bucket while keeping its own fresh one.
+        other_req = _make_request("203.0.113.51")
+        assert limiter.check(other_req, max_requests=10, window=60) is None
+        assert "203.0.113.50" not in limiter._windows
+        assert "203.0.113.51" in limiter._windows
+
+    def test_active_bucket_is_not_evicted_by_a_sweep(self, monkeypatch):
+        """A bucket with a recent request must survive a sweep even while
+        other buckets are being reclaimed."""
+        monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 1)
+        limiter = RateLimiter()
+        active_req = _make_request("203.0.113.52")
+        assert limiter.check(active_req, max_requests=10, window=60) is None
+        # A second call from the same bucket both re-uses it and triggers the
+        # next sweep -- the bucket must not evict itself.
+        assert limiter.check(active_req, max_requests=10, window=60) is None
+        assert "203.0.113.52" in limiter._windows
+
+    def test_sweep_does_not_run_before_the_interval_elapses(self, monkeypatch):
+        """With the default (large) interval, an idle bucket is left alone
+        until enough check() calls accumulate -- the sweep is periodic, not
+        per-call."""
+        monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 5)
+        limiter = RateLimiter()
+        idle_req = _make_request("203.0.113.53")
+        assert limiter.check(idle_req, max_requests=10, window=60) is None
+        limiter._windows["203.0.113.53"][0] = time.monotonic() - 61
+        other_req = _make_request("203.0.113.54")
+        # Calls 2-4 (of 5) must not trigger a sweep yet.
+        for _ in range(3):
+            assert limiter.check(other_req, max_requests=10, window=60) is None
+            assert "203.0.113.53" in limiter._windows
+        # The 5th call crosses the interval and sweeps.
+        assert limiter.check(other_req, max_requests=10, window=60) is None
+        assert "203.0.113.53" not in limiter._windows

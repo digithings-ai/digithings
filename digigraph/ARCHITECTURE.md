@@ -663,6 +663,8 @@ The `MemorySaver` default stores all thread state in a Python dict in the digigr
 - Multiple replicas have independent limits, so the effective rate is multiplied by the replica count
 - The lock is a single point of contention under high request rates
 
+Each bucket's own `deque` is already bounded to `max_requests` entries (the `popleft` loop in `check()` drops anything older than the current window), so the growth risk is the *number* of distinct buckets, not any one bucket's size — a client hit once and never again used to leave a permanent dict entry with nothing to reclaim it (#2378). `check()` now sweeps fully-idle buckets out of `_windows` every `_SWEEP_INTERVAL` (1000) calls, bounding the dict to roughly the number of distinct clients active within a sweep interval rather than every distinct client ever seen. The sweep assumes a single `RateLimiter` instance is always called with the same `window` — true for both instances in `server.py` (`_rate_limiter`, `_require_tool_calls_limiter`), each with exactly one call site.
+
 ### 7.3 Graph Compilation Per Request
 
 `build_workflow_graph()` is called inside `run_digigraph_workflow()` on every invocation. LangGraph compiles the graph (creates the `CompiledStateGraph` object, resolves edges and node references) on each call. This is unnecessary overhead — the compiled graph object is immutable and could be cached as a module-level singleton, reusing the shared checkpointer.
@@ -978,6 +980,8 @@ This complements digismith's LangSmith tracing with operational metrics visible 
 **Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs, matched via `ipaddress` so entries and observed peers are compared as parsed addresses, not raw strings). `X-Forwarded-For` is honored only when the direct client is in that set, walking the chain from the right and skipping trusted hops to find the first non-trusted, IP-parseable entry; otherwise the limiter uses `request.client.host`.
 
 Operators must list **every** hop between the internet and this service, not just the innermost reverse proxy — e.g. a CDN edge in front of an internal load balancer needs the CDN's own egress ranges in `DIGI_TRUSTED_PROXIES` too. Omitting an intermediate hop makes it look like a non-trusted entry, so the limiter returns that hop's own address (not the true client) as the bucket key, coarsely grouping every client behind the omitted hop into one bucket.
+
+A `DIGI_TRUSTED_PROXIES` entry that parses as neither a valid IP/CIDR nor a widen-able one (e.g. a typo like `10.0.0.999`) is dropped and logs a `logger.warning` naming the bad entry (#2378) — previously this failed silently, so a typo'd entry left the intended proxy permanently untrusted with no diagnostic trail.
 
 ## Observability
 
