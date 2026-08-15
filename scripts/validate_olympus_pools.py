@@ -26,7 +26,7 @@ reads identically to "model can't do strict JSON" (caught on
 false}`` field was tried as a more surgical fix and reverted: OpenRouter rejects it
 outright with HTTP 400 ("Reasoning is mandatory for this endpoint and cannot be
 disabled") on endpoints that treat reasoning as inherent (``gemini-3.7-flash``,
-``grok-4.5``), and combined with ``provider.require_parameters`` below it also 404'd
+``grok-4.6``), and combined with ``provider.require_parameters`` below it also 404'd
 four unrelated slugs that never declared ``reasoning`` as a supported parameter at
 all (``deepseek/deepseek-chat``, ``llama-4-maverick``, ``gpt-4o``, ``gpt-4o-mini`` —
 run 31840424733). Raising ``max_tokens`` instead adds no new parameter, so it can't

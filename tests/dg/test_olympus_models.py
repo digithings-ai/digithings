@@ -40,7 +40,7 @@ _CHEAP_PHASE_MODELS = frozenset(
 _BALANCED_PHASE_MODELS = _CHEAP_PHASE_MODELS | frozenset(
     {
         # #2368 (2026-08-14): latest generation per vendor where cost allows — grok-4.3
-        # stays on balanced (grok-4.5 is quality-only). gemini-3.7-flash: native PDF/
+        # stays on balanced (grok-4.6 is quality-only). gemini-3.7-flash: native PDF/
         # image vision. gpt-5.6-luna: mid-tier OpenAI. deepseek-v4-pro: mid-cost
         # reasoning bump, gate-proven and also pooled on quality.
         "openrouter/google/gemini-3.7-flash",
@@ -55,7 +55,7 @@ _QUALITY_PHASE_MODELS = _BALANCED_PHASE_MODELS | frozenset(
         # #2368 (2026-08-14): latest-generation flagship slugs per vendor.
         "openrouter/openai/gpt-5.6-sol",
         "openrouter/anthropic/claude-sonnet-5",
-        "openrouter/x-ai/grok-4.5",
+        "openrouter/x-ai/grok-4.6",
     }
 )
 
@@ -69,7 +69,7 @@ _WEB_SEARCH_MODELS = frozenset(
         "openrouter/openai/gpt-5.6-luna:online",
         "openrouter/openai/gpt-5.6-sol:online",
         "openrouter/anthropic/claude-sonnet-5:online",
-        "openrouter/x-ai/grok-4.5:online",
+        "openrouter/x-ai/grok-4.6:online",
     }
 )
 
