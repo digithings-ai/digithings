@@ -1,0 +1,11 @@
+# Static OCC user/admin manuals (markdown), relative to repo root.
+# Consumed by docs_onboard static ingest (Stage 3).
+# Generated from cloud-portal-ui + occ-search, reconciled with website PDFs
+# (Admin Guide OCC_02.2025.pdf and User Guide_Search_OCC.pdf).
+description: |
+  OCC Cloud Portal and Search end-user/administrator manuals, plus a short
+  index covering shared identity, roles, and permissions across both apps.
+globs:
+  - docs/projects/online-compliance-center/sources/manual/README.md
+  - docs/projects/online-compliance-center/sources/manual/portal-manual.md
+  - docs/projects/online-compliance-center/sources/manual/search-manual.md

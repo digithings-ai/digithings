@@ -244,11 +244,11 @@
 }
 
 .ff-field.is-error .ff-input {
-  border-color: color-mix(in srgb, var(--down) 60%, var(--hair));
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--hair));
 }
 
 .ff-field.is-error .ff-input:focus-visible {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--down) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
 }
 
 .ff-field.is-disabled {
@@ -296,7 +296,7 @@
   align-items: center;
   justify-content: center;
   font-size: 0.62rem;
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
 }
 
 .ff-check input:focus-visible + .ff-box,

@@ -39,6 +39,11 @@ echo "--- building digithings-web (Next.js static export) ---"
 export NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN="${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN:-https://digithings.ai}"
 echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # prebuild rewrites public/_headers frame-src from NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN
+# The workspace's own `build` script passes --webpack: Turbopack (Next 16's
+# build default) production-builds this home page into an intermittent React
+# hydration error (#2244) that never reproduces under webpack -- a known,
+# unresolved class of upstream Next.js/React bug (vercel/next.js#43159), not
+# an app bug. `next dev` is untouched; it never reproduced this.
 npm --workspace frontend/digithings-web run build
 
 # Assemble dist/ from the static export (includes /design/assets/og.png for the
@@ -86,12 +91,23 @@ echo "--- mirroring Pages Functions to repo root ---"
 rm -rf functions
 if [ -d frontend/digithings-web/functions ] && [ -n "$(find frontend/digithings-web/functions -type f 2>/dev/null | head -1)" ]; then
   cp -r frontend/digithings-web/functions functions
+  # Wrangler's functions bundler treats every file under functions/ as a route
+  # candidate. Test files (e.g. test.test.ts, colocated next to test.ts per
+  # this repo's convention) export no onRequest* handler today, so they don't
+  # currently register as a route -- but that's an accident of what they
+  # happen to export, not a guarantee. Strip them from the mirrored copy so
+  # it stays true by construction (#2348).
+  find functions -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) -delete
 else
   echo "ERROR: expected frontend/digithings-web/functions (digivault /api/chat)" >&2
   exit 1
 fi
 if [ ! -f functions/api/chat.ts ]; then
   echo "ERROR: functions/api/chat.ts missing after mirror" >&2
+  exit 1
+fi
+if find functions -type f -name "*.test.ts" 2>/dev/null | grep -q .; then
+  echo "ERROR: test files still present under functions/ after exclusion (#2348)" >&2
   exit 1
 fi
 

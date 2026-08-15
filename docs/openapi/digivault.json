@@ -306,6 +306,118 @@
         "title": "Note",
         "type": "object"
       },
+      "NoteByPathRequest": {
+        "additionalProperties": false,
+        "description": "Body for ``POST /v1/notes/by-path``: fetch one note whole by its exact vault path.",
+        "properties": {
+          "path_prefix": {
+            "description": "Enforced authorization boundary: vault_path must equal or fall under this prefix, or the request is rejected with 403. Required \u2014 D1_DATABASE_MAP may never carry a \"\" entry (see `_load_d1_database_map`'s guard), so an omitted path_prefix can never resolve to a corpus and would only ever 503 at request time; rejected here instead, at the schema boundary (422).",
+            "title": "Path Prefix",
+            "type": "string"
+          },
+          "vault_path": {
+            "description": "Exact vault_path to fetch",
+            "minLength": 1,
+            "title": "Vault Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vault_path",
+          "path_prefix"
+        ],
+        "title": "NoteByPathRequest",
+        "type": "object"
+      },
+      "NoteDetail": {
+        "description": "One note, whole: body and frontmatter together.\n\n``Note`` has frontmatter but no body; ``NoteRow``/``VaultSearchHit`` have a body but\nno frontmatter. ``digivault_get_note`` needs both, so this model exists.",
+        "properties": {
+          "body_markdown": {
+            "default": "",
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "frontmatter": {
+            "additionalProperties": true,
+            "title": "Frontmatter",
+            "type": "object"
+          },
+          "note_type": {
+            "default": "",
+            "title": "Note Type",
+            "type": "string"
+          },
+          "parent_doc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Doc"
+          },
+          "segment_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Index"
+          },
+          "segment_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Page/heading identity for a note that is one segment of a larger source document (set by scripts/vectorize_sync.py / the ingestion chunker at frontmatter['segment_label']). Surfaced here as a top-level field too \u2014 not only inside `frontmatter` \u2014 because the original task brief for `digivault_get_note` specified this exact returned shape (`{vault_path, title, body_markdown, frontmatter, segment_label}`); a consumer that trusted that shape and read `data['segment_label']` directly got nothing before this field existed.",
+            "title": "Segment Label"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "vault_path": {
+            "title": "Vault Path",
+            "type": "string"
+          },
+          "wikilinks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Wikilinks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "vault_path"
+        ],
+        "title": "NoteDetail",
+        "type": "object"
+      },
       "NoteList": {
         "properties": {
           "notes": {
@@ -633,6 +745,57 @@
           }
         },
         "summary": "Create Note"
+      }
+    },
+    "/v1/notes/by-path": {
+      "post": {
+        "description": "Load one note whole (body + frontmatter), addressed by ``vault_path``. D1-only.\n\n``path_prefix`` is an enforced authorization boundary, not an advisory filter: two\nclient corpora can share this deployment, and without this check a caller scoped to\none prefix could read another client's notes just by passing an arbitrary\n``vault_path``. There is no filesystem/Supabase fallback here \u2014 a by-path fetch\nonly makes sense against the corpus that owns the path (#2239).\n\n``path_prefix`` itself is also now checked against the caller's authenticated\ntenant (``_fetch_note_by_path``'s ``tenant_slug`` param) when\n``DIGI_TENANT_CORPUS_MAP`` is configured \u2014 closing the gap where ``digivault:read``\nalone let any caller name *any* prefix, not just their own corpus's (found in\nCodeRabbit's review of PR #2293; see ``tenant_scope.py``).\n\n``path_prefix`` resolution goes through ``resolve_path_prefix`` (shared with\n``D1Store.search``/``list_notes``) rather than a local ``prefix and ...`` check \u2014\na #2239 review found the local check treated \"a prefix was given but normalizes\nto empty\" (``\"\"``, ``\"/\"``, ``\"///\"``, ``\"   \"``, ``\".md\"``) the same as \"no\nscoping requested,\" which fails open: with a ``\"\"`` key present in\n``D1_DATABASE_MAP`` every one of those inputs returned another corpus's note\nbody with HTTP 200. ``resolve_path_prefix`` raises for exactly that case, which\nthis handler turns into ``400`` \u2014 a caller/config error, not a scope this route\ncan silently ignore. ``path_prefix`` itself is a required field (``422`` if\nomitted) for the same underlying reason: ``D1_DATABASE_MAP`` may never carry a\n``\"\"`` entry, so an omitted ``path_prefix`` could never resolve to a corpus and\nwould only ever ``503`` at request time \u2014 rejected up front instead (#2239 review).\n\nThe authorization check itself (prefix resolution, the 403 boundary, opening and\nquerying the store) lives in ``_fetch_note_by_path`` \u2014 shared with the\n``digivault_get_note`` orchestrator tool dispatched from ``orchestrator_invoke``\nbelow, so both surfaces enforce the same boundary from one place (#2239).",
+        "operationId": "get_note_by_path_v1_notes_by_path_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteByPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "path_prefix normalizes to an empty prefix (e.g. '/', '.md')"
+          },
+          "403": {
+            "description": "vault_path is outside the caller's path_prefix"
+          },
+          "404": {
+            "description": "no note at that vault_path in the resolved corpus"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "D1 misconfigured, no database for the prefix, or a D1 failure"
+          }
+        },
+        "summary": "Get Note By Path"
       }
     },
     "/v1/notes/{name}": {

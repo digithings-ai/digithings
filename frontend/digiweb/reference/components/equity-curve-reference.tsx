@@ -8,5 +8,5 @@
 import { EquityCurve, EQUITY_CURVE_DEMO } from "@digithings/web";
 
 export function EquityCurveReference() {
-  return <EquityCurve data={EQUITY_CURVE_DEMO} />;
+  return <EquityCurve data={EQUITY_CURVE_DEMO} label="Cumulative equity curve — demo series, weekly 2022–2026" />;
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -38,7 +39,10 @@ class TestWorkflow:
     """POST /workflow (run_digigraph_workflow)."""
 
     def test_returns_200_with_valid_prompt(self, client: TestClient) -> None:
-        with patch("digigraph.workflow.run_digigraph_workflow") as m:
+        # Patch target must match the name bound in digigraph.server (where the
+        # endpoint calls it), not digigraph.workflow (where it's defined) --
+        # patch() only rebinds the name in the module you tell it to.
+        with patch("digigraph.server.run_digigraph_workflow") as m:
             from digigraph.models import WorkflowResult
 
             m.return_value = WorkflowResult(
@@ -47,10 +51,14 @@ class TestWorkflow:
                 backtest_result={"status": "ok", "symbols": ["AAPL"]},
             )
             r = client.post("/workflow", json=SAMPLE_WORKFLOW_PAYLOAD)
+        m.assert_called_once()
         assert r.status_code == 200
         data = r.json()
         for field in SAMPLE_WORKFLOW_RESULT_FIELDS:
             assert field in data
+        assert data["success"] is True
+        assert data["message"] == "Done"
+        assert data["backtest_result"] == {"status": "ok", "symbols": ["AAPL"]}
 
     def test_calls_workflow_with_request_body(self, client: TestClient) -> None:
         with patch("digigraph.server.run_digigraph_workflow") as m:
@@ -357,3 +365,193 @@ class TestOpenAICompatible:
         assert "<details>" not in body
         assert "Tool:" in body or "digisearch" in body  # neutral formatter
         assert "Answer" in body
+
+    def test_chat_completions_threads_require_tool_calls_header(self, client: TestClient) -> None:
+        """X-Require-Tool-Calls: 1 reaches the WorkflowRequest passed to run_digigraph_workflow."""
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            from digigraph.models import WorkflowResult
+
+            m.return_value = WorkflowResult(success=True, message="ok", backtest_result=None)
+            r = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+                headers={"X-Require-Tool-Calls": "1"},
+            )
+        assert r.status_code == 200
+        m.assert_called_once()
+        call_arg = m.call_args[0][0]
+        assert call_arg.require_tool_calls is True
+
+
+@pytest.mark.unit
+class TestDigiSubjectTrustBoundary:
+    """CWE-639 IDOR regression (finding: digi_subject reaches the Store namespace
+    unverified). `digi_subject` is a client-writable field on `WorkflowRequest`, used
+    both for checkpoint thread_id scoping and, since Task 7, as the Store namespace
+    key in supervisor_node (a subject's stored response_language preference). Before
+    this fix, server.py's _digi_fields_from_request only overrode digi_subject when
+    auth.subject was truthy -- a conditional-only override that left the client's own
+    value untouched whenever auth was absent, or present with an empty subject claim.
+
+    These tests exercise _with_digi_request_context directly (the function that
+    builds the trusted WorkflowRequest from HTTP request + auth state) with a
+    lightweight fake Request, covering all three trust states. See ARCHITECTURE.md
+    §6.10."""
+
+    @staticmethod
+    def _fake_request(*, digi_auth: object | None) -> SimpleNamespace:
+        state = SimpleNamespace(digi_auth=digi_auth, digi_bearer=None)
+        return SimpleNamespace(state=state, headers={})
+
+    def test_authenticated_real_subject_is_preserved(self) -> None:
+        """(a) Existing behavior preserved: a verified, non-empty auth.subject still
+        wins over -- and overwrites -- whatever the client sent in the request body."""
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        auth = DigiAuthContext(subject="verified-user-1")
+        req = WorkflowRequest(prompt="hi", digi_subject="client-claimed-user")
+        out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
+        assert out.digi_subject == "verified-user-1"
+
+    def test_no_auth_object_forces_digi_subject_to_none(self) -> None:
+        """(b) The core regression: with NO auth object at all on request.state, a
+        client-supplied digi_subject must NOT survive into the returned
+        WorkflowRequest -- it must be forced to None regardless of what the client
+        sent in the request body, since it would otherwise key the Store namespace
+        (supervisor_node) with an unverified, attacker-chosen value."""
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+
+        req = WorkflowRequest(prompt="hi", digi_subject="attacker-controlled-subject")
+        out = _with_digi_request_context(self._fake_request(digi_auth=None), req)
+        assert out.digi_subject is None
+
+    def test_auth_object_with_empty_subject_forces_digi_subject_to_none(self) -> None:
+        """(c) The specific gap CodeRabbit flagged, distinct from (b): an auth object
+        IS present, but its subject claim is empty/falsy. A conditional-only override
+        (`if auth.subject: updates["digi_subject"] = auth.subject`) leaves the
+        "digi_subject" key entirely absent from `updates` in this case, so
+        `req.model_copy(update=updates)` would never touch -- let alone clear -- the
+        client's own digi_subject value. Must still be forced to None."""
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        auth = DigiAuthContext(subject="")
+        req = WorkflowRequest(prompt="hi", digi_subject="attacker-controlled-subject")
+        out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
+        assert out.digi_subject is None
+
+
+def test_resolve_require_tool_calls_chat_from_body() -> None:
+    from digigraph.models import ChatCompletionRequest
+    from digigraph.server import _resolve_require_tool_calls_chat
+
+    class _Headers:
+        def get(self, name: str) -> str | None:
+            return None
+
+    class _Req:
+        headers = _Headers()
+
+    req = ChatCompletionRequest(messages=[], require_tool_calls=True)
+    assert _resolve_require_tool_calls_chat(req, _Req()) is True
+
+
+def test_resolve_require_tool_calls_chat_from_header() -> None:
+    from digigraph.models import ChatCompletionRequest
+    from digigraph.server import _resolve_require_tool_calls_chat
+
+    class _Headers:
+        def get(self, name: str) -> str | None:
+            return "1" if name == "X-Require-Tool-Calls" else None
+
+    class _Req:
+        headers = _Headers()
+
+    req = ChatCompletionRequest(messages=[])
+    assert _resolve_require_tool_calls_chat(req, _Req()) is True
+
+
+def test_resolve_require_tool_calls_chat_none_when_absent() -> None:
+    from digigraph.models import ChatCompletionRequest
+    from digigraph.server import _resolve_require_tool_calls_chat
+
+    class _Headers:
+        def get(self, name: str) -> str | None:
+            return None
+
+    class _Req:
+        headers = _Headers()
+
+    req = ChatCompletionRequest(messages=[])
+    assert _resolve_require_tool_calls_chat(req, _Req()) is None
+
+
+@pytest.mark.unit
+class TestCorpusTrustBoundary:
+    """CWE-639 regression: when DIGI_TENANT_CORPUS_MAP is set, client body/headers
+    must not select another tenant's digisearch index (digisearch has no
+    server-side tenant→index bind). Mirrors digivault's enforce_tenant_path_prefix."""
+
+    @staticmethod
+    def _fake_request(
+        *,
+        digi_auth: object | None,
+        headers: dict[str, str] | None = None,
+    ) -> SimpleNamespace:
+        state = SimpleNamespace(digi_auth=digi_auth, digi_bearer=None)
+        return SimpleNamespace(state=state, headers=headers or {})
+
+    def test_map_overwrites_body_and_hostile_headers(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        monkeypatch.setenv(
+            "DIGI_TENANT_CORPUS_MAP",
+            (
+                '{"digithings":{"digisearchIndex":"digithings_docs",'
+                '"vaultPathPrefix":"clients/digithings"},'
+                '"occ":{"digisearchIndex":"occ_help",'
+                '"vaultPathPrefix":"clients/online-compliance-center"}}'
+            ),
+        )
+        auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+        req = WorkflowRequest(
+            prompt="hi",
+            digisearch_index="occ_help",
+            vault_path_prefix="clients/online-compliance-center",
+        )
+        out = _with_digi_request_context(
+            self._fake_request(
+                digi_auth=auth,
+                headers={
+                    "x-digi-corpus-index": "occ_help",
+                    "x-digi-vault-prefix": "clients/online-compliance-center",
+                },
+            ),
+            req,
+        )
+        assert out.digisearch_index == "digithings_docs"
+        assert out.vault_path_prefix == "clients/digithings"
+
+    def test_map_clears_body_when_tenant_unmapped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.models import WorkflowRequest
+        from digigraph.server import _with_digi_request_context
+        from digikey.models import DigiAuthContext
+
+        monkeypatch.setenv(
+            "DIGI_TENANT_CORPUS_MAP",
+            '{"occ":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/occ"}}',
+        )
+        auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+        req = WorkflowRequest(prompt="hi", digisearch_index="occ_help")
+        out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
+        assert out.digisearch_index is None
+        assert out.vault_path_prefix is None

@@ -43,6 +43,9 @@ export function ScrollNavReference() {
       <div
         className="relative mt-[1.2rem] h-[22rem] overflow-y-auto rounded-[12px] border border-hair bg-surface scroll-pt-0"
         ref={stageRef}
+        tabIndex={0}
+        role="region"
+        aria-label="Scroll-aware nav demo, scrollable"
       >
         <m.div
           className={`scroll-nav${solid ? " solid" : ""}`}
