@@ -90,6 +90,7 @@ export function TabsReference() {
           onChange={setView}
           variant="underline"
           label="Account view"
+          sharedPanel
         />
 
         <div
@@ -174,6 +175,11 @@ export function TabsReference() {
         </div>
       </div>
 
+      {/* pill — the note below is not a tabpanel either (same reasoning as the
+          chip block underneath), so linkPanels={false} keeps aria-controls
+          off the tabs rather than dangling a reference to an id that never
+          exists (found alongside #2272: this usage predates that fix and
+          had no panel-linking treatment at all). */}
       <div className="mt-8">
         <TabStrip
           tabs={MODES}
@@ -181,6 +187,7 @@ export function TabsReference() {
           onChange={setMode}
           variant="pill"
           label="Execution mode"
+          linkPanels={false}
         />
         <p className="mt-[0.9rem] font-mono text-[0.74rem] text-ink-mute">{MODE_NOTE[mode]}</p>
       </div>

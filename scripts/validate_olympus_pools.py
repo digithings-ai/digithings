@@ -17,8 +17,23 @@ pooled in ``config/olympus_models.yaml`` (plus ``openrouter/`` pins in
    the body must be non-empty and parse as JSON with the requested key.
 
 Requires ``OPENROUTER_API_KEY``. Without it the script prints a notice and exits 0 so
-non-secret CI contexts skip gracefully. Live calls use ``max_tokens<=64`` — the full
-sweep costs well under a cent.
+non-secret CI contexts skip gracefully. Live calls use ``max_tokens=2000``: a
+reasoning-capable slug bills hidden ``reasoning_content`` out of the same budget as
+the visible answer, and a tight cap (previously 64) can let reasoning consume the
+whole thing, cutting the response off one character into the visible answer — which
+reads identically to "model can't do strict JSON" (caught on
+``google/gemini-3.7-flash``, which returned a bare ``"H"``). A ``reasoning: {"enabled":
+false}`` field was tried as a more surgical fix and reverted: OpenRouter rejects it
+outright with HTTP 400 ("Reasoning is mandatory for this endpoint and cannot be
+disabled") on endpoints that treat reasoning as inherent (``gemini-3.7-flash``,
+``grok-4.6``), and combined with ``provider.require_parameters`` below it also 404'd
+four unrelated slugs that never declared ``reasoning`` as a supported parameter at
+all (``deepseek/deepseek-chat``, ``llama-4-maverick``, ``gpt-4o``, ``gpt-4o-mini`` —
+run 31840424733). Raising ``max_tokens`` instead adds no new parameter, so it can't
+interact with ``require_parameters``, and works uniformly across reasoning-mandatory,
+reasoning-optional, and non-reasoning slugs alike. The full sweep costs on the order
+of a few cents — nine distinct bare slugs x two live calls each, several against
+frontier-tier models at up to 2000 max_tokens.
 
 Usage:
     OPENROUTER_API_KEY=... python3 scripts/validate_olympus_pools.py
@@ -96,6 +111,7 @@ def collect_pool_slugs(config_dir: Path) -> list[str]:
 
 
 def _bare_slug(model: str) -> str:
+    """Strip the ``openrouter/`` prefix so a pool entry matches the API's model id."""
     return model.removeprefix("openrouter/").strip()
 
 
@@ -153,7 +169,7 @@ def check_tools_call(client: httpx.Client, slug: str) -> str | None:
                 "model": slug,
                 "messages": [{"role": "user", "content": "Call record_answer with answer='ok'."}],
                 "tools": [_TOOL],
-                "max_tokens": 64,
+                "max_tokens": 2000,
                 "provider": {"require_parameters": True},
             },
         )
@@ -178,15 +194,15 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
                 "model": slug,
                 "messages": [{"role": "user", "content": "Answer with the single word ok."}],
                 "response_format": _JSON_SCHEMA,
-                "max_tokens": 64,
+                "max_tokens": 2000,
                 "provider": {"require_parameters": True},
             },
         )
         if resp.status_code != 200:
             return f"json_schema call HTTP {resp.status_code}: {resp.text[:160]}"
-        content = ((resp.json().get("choices") or [{}])[0].get("message") or {}).get(
-            "content"
-        ) or ""
+        choice = (resp.json().get("choices") or [{}])[0]
+        content = (choice.get("message") or {}).get("content") or ""
+        finish_reason = choice.get("finish_reason")
         if content.strip():
             break
     else:
@@ -194,6 +210,8 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
     try:
         parsed = json.loads(content)
     except json.JSONDecodeError as exc:
+        if finish_reason == "length":
+            return f"json_schema output truncated at max_tokens (finish_reason=length); body: {content[:120]}"
         return f"json_schema output is not valid JSON ({exc}); body: {content[:120]}"
     if "answer" not in parsed:
         return f"json_schema output missing required key 'answer': {content[:120]}"
@@ -201,6 +219,7 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
 
 
 def main() -> int:
+    """Collect pool slugs from config, gate each against the live endpoint checks, and report."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config-dir", default=os.environ.get("DIGI_CONFIG_PATH", "config"), type=Path

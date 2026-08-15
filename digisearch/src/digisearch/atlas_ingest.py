@@ -186,8 +186,10 @@ def ingest_atlas_payload(
         :data:`ATLAS_INDEX_NAME` (``"atlas"`` unless the
         ``DIGISEARCH_ATLAS_INDEX`` env override is set).
     chunker:
-        Optional chunker override for tests. Defaults to the same
-        ``RecursiveChunker(512, 64)`` used by ``POST /ingest``.
+        Optional chunker override for tests. Defaults to ``RecursiveChunker()``
+        (``DEFAULT_CHUNK_CHARS``/``DEFAULT_CHUNK_OVERLAP``). Atlas rows are flat
+        research payloads with no structural segments, so this path deliberately
+        does not use the ``SegmentAwareChunker`` that ``POST /ingest`` wraps.
 
     Returns
     -------
@@ -208,7 +210,7 @@ def ingest_atlas_payload(
 
     date_iso = str(date_value)[:10]
     target_index = (index_name or ATLAS_INDEX_NAME).strip() or ATLAS_INDEX_NAME
-    used_chunker = chunker or RecursiveChunker(chunk_size=512, chunk_overlap=64)
+    used_chunker = chunker or RecursiveChunker()
 
     doc_id = _stable_doc_id(row)
     metadata = _extract_atlas_metadata(row)

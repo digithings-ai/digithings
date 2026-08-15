@@ -157,10 +157,13 @@ services:
       DIGIKEY_PUBLIC_KEY_PEM: ${DIGIKEY_PUBLIC_KEY_PEM:-}
       OPENAI_API_BASE: http://litellm:4000/v1
       DIGI_CONFIG_PATH: /app/config
-      DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-/app/config/digiproject.yaml}
+      # Local Profile A has no D1 — use the no-get_note project config. Cloudflare
+      # keeps digiproject.yaml (with digivault_get_note). Override via DIGI_PROJECT_CONFIG.
+      DIGI_PROJECT_CONFIG: ${DIGI_PROJECT_CONFIG:-/app/config/digiproject.profile-a-local.yaml}
       DIGI_WORKFLOW_PROFILE: ${DIGI_WORKFLOW_PROFILE:-research_rag}
       # Multi-image Profile A has digivault only (no digisearch service).
-      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digivault_search_notes}
+      # digivault_get_note is D1-only; stock Profile A sets DIGIVAULT_ROOT only.
+      DIGI_ALLOWED_TOOLS: ${DIGI_ALLOWED_TOOLS:-digisearch,digivault_search_notes}
       DIGI_LLM_MODE: ${DIGI_LLM_MODE:-test}
       DIGI_ENABLE_DEBUG_ENDPOINTS: ${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
       DIGI_ENABLE_THREAD_API: ${DIGI_ENABLE_THREAD_API:-0}
@@ -168,6 +171,12 @@ services:
       PYTHONUNBUFFERED: "1"
       AUDIT_LOG_PATH: /audit/events.jsonl
     volumes:
+      # This mount SHADOWS the Dockerfile's baked-in config/, it does not merge
+      # with it. ./config here must contain byok-providers.json or digigraph
+      # crash-loops at startup (fails loud, by design). A missing
+      # model_modes.yaml does NOT crash -- it silently falls back to a
+      # hardcoded default model -- so supply both regardless. See
+      # digigraph/Dockerfile and its ARCHITECTURE.md's DIGI_CONFIG_PATH entry.
       - ./config:/app/config:ro
       - digigraph_audit:/audit
     depends_on:

@@ -110,3 +110,14 @@ jobs:
       # Same pair frontend/digiweb/reference/README.md documents as the local gate.
       - name: Typecheck design-reference
         run: npm run typecheck --workspace design-reference
+
+      # digithings-stack-cloudflare is in this lane's path filter (ci.yml's `web`)
+      # but had no step here, so a var added to the hand-kept `Env` interface and
+      # never wired into `envVars` (index.ts) merged green — the exact silent
+      # failure env-vars-pin.test.js exists to catch (#2239 blocker 3), plus the
+      # tsc-caught direction (a stray env.FOO not on `Env`) going unchecked too.
+      - name: Typecheck digithings-stack-cloudflare
+        run: npm run typecheck --workspace digithings-stack-cloudflare
+
+      - name: Test digithings-stack-cloudflare
+        run: npm run test --workspace digithings-stack-cloudflare

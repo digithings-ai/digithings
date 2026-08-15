@@ -10,12 +10,23 @@ type Cell = { id: string; span: BentoSpan; blurb: string };
 
 // An asymmetric bento: the supervisor anchors a 2x2 hero, the flagship takes a
 // wide cell, the rest fall into units. Each cell wears its module livery.
+//
+// Order here is load-bearing for the grid, not just narrative: hero(2x2) +
+// wide(2x1) + tall(1x2) + 4 unit(1x1) cover exactly 12 cells — a clean 4x3
+// grid with zero gaps — but ONLY if the auto-placement cursor reaches them in
+// an order that tiles that way. tall must immediately follow hero (so it
+// lands beside it, both spanning rows 1-2) — the previous order instead ran
+// hero, wide, unit, unit, tall, unit, unit: by the time the cursor reached
+// tall (5th), only 2 unit cells remained to auto-place after it, too few to
+// backfill the 6 cells that opening tall's row-3/4 span exposes, leaving a
+// 4-cell gap in the bottom-right. Confirmed by hand-tracing the CSS Grid
+// auto-placement algorithm cell-by-cell for both orderings.
 const CELLS: Cell[] = [
   { id: "digigraph", span: "hero", blurb: "The supervisor. Routes every request to the module that owns it." },
-  { id: "digiquant", span: "wide", blurb: "NautilusTrader quant — research that ends in an order." },
+  { id: "digikey", span: "tall", blurb: "JWT + scoped API keys. Auth on by default." },
   { id: "digisearch", span: "unit", blurb: "Retrieval-augmented answers." },
   { id: "digichat", span: "unit", blurb: "The terminal, inhabited." },
-  { id: "digikey", span: "tall", blurb: "JWT + scoped API keys. Auth on by default." },
+  { id: "digiquant", span: "wide", blurb: "NautilusTrader quant — research that ends in an order." },
   { id: "digivault", span: "unit", blurb: "Obsidian-style markdown vault." },
   { id: "digismith", span: "unit", blurb: "Tracing across the graph." },
 ];

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any  # score:allow
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -136,40 +137,286 @@ class TestResearchNode:
         assert "[Current session datasets:" not in user_msg
         assert user_msg == "analyse AAPL"
 
-    def test_rag_stream_callback_called_for_tool_call_and_result(self) -> None:
-        """When stream_callback is in state, RAG path calls it with tool_call and tool_result."""
-        calls = []
-
-        def stream_callback(event_type: str, data: dict) -> None:
-            calls.append((event_type, data))
+    def test_stream_callback_from_state_rag_path_calls_it(self) -> None:
+        """RAG path emits tool_call/tool_result via get_stream_writer() now, captured
+        through the graph's own stream_mode="custom" channel — not injected via state."""
+        from digigraph.graph.state import WorkflowState
+        from langgraph.graph import END, START, StateGraph
 
         with patch("digigraph.graph.research._digisearch_available", return_value=True):
             with patch(
                 "digigraph.graph.research._load_research_settings",
                 return_value=(None, "default", "default", "You have digisearch. Use it and summarize."),
             ):
-                # Patch the HTTP call inside _handle_digisearch so the handler runs normally
-                with patch("digigraph.orchestration.builtin.invoke_digisearch_tool", return_value={
-                    "ok": True,
-                    "data": {
-                        "results": [{"content": "Doc 1 content", "score": 0.9, "doc_id": "d1", "rank": 1, "metadata": {}}],
-                        "total": 1,
+                with patch(
+                    "digigraph.orchestration.builtin.invoke_digisearch_tool",
+                    return_value={
+                        "ok": True,
+                        "data": {
+                            "results": [
+                                {
+                                    "content": "Doc 1 content",
+                                    "score": 0.9,
+                                    "doc_id": "d1",
+                                    "rank": 1,
+                                    "metadata": {},
+                                }
+                            ],
+                            "total": 1,
+                        },
                     },
-                }):
+                ):
                     with patch("digillm.client._stream_completion_one_turn") as m:
-                        # RAG path uses streaming: first turn returns tool call, second returns final content
                         m.side_effect = [
-                            ("", [{"id": "tc1", "function": {"name": "digisearch", "arguments": '{"query": "test query"}'}}]),
+                            (
+                                "",
+                                [
+                                    {
+                                        "id": "tc1",
+                                        "function": {
+                                            "name": "digisearch",
+                                            "arguments": '{"query": "test query"}',
+                                        },
+                                    }
+                                ],
+                            ),
                             ("Summary of the docs.", None),
                         ]
-                        out = research_node({"prompt": "find docs", "stream_callback": stream_callback})
-        assert out.get("research_response") == "Summary of the docs."
+                        g: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+                        g.add_node("research", research_node)
+                        g.add_edge(START, "research")
+                        g.add_edge("research", END)
+                        compiled = g.compile()
+                        calls: list[tuple[str, Any]] = []
+                        final: dict[str, Any] = {}
+                        for part in compiled.stream(
+                            {"prompt": "find docs"}, stream_mode=["updates", "custom"], version="v2"
+                        ):
+                            if part["type"] == "custom":
+                                calls.append(part["data"])
+                            else:
+                                final.update(part["data"].get("research", {}))
+        assert final.get("research_response") == "Summary of the docs."
         assert len(calls) >= 2
         assert calls[0][0] == "tool_call"
         assert calls[0][1].get("name") == "digisearch"
         assert calls[0][1].get("arguments", {}).get("query") == "test query"
         assert calls[1][0] == "tool_result"
         assert "Doc 1 content" in (calls[1][1].get("content") or "")
+
+    def test_a_zero_hit_search_still_emits_a_trace(self) -> None:
+        """A search that finds nothing must be visible, not silent.
+
+        Today only rag_sources produces a span, so 'searched and found nothing' and
+        'never searched' look identical in the UI — which is exactly the confusion this
+        change is meant to remove.
+
+        Drives ``_run_document_rag_path`` directly rather than ``research_node``: the
+        node wraps the whole RAG path in a broad ``except Exception``, which would
+        swallow an assertion failure here and report a misleading "error" state
+        instead. ``run_tools`` (digillm) is faked in-line rather than imported, so we
+        control exactly when ``execute_tool``/``on_tool_step`` fire without depending
+        on digillm's streaming internals.
+
+        ``_safe_stream_writer`` (not ``get_stream_writer`` directly) is patched to
+        capture events: this bare call bypasses any compiled graph, so the real
+        ``get_stream_writer()`` would raise (caught and no-op'd by
+        ``_safe_stream_writer`` in production) -- patching the seam lets this test
+        observe what the node writes without needing a full graph invocation, matching
+        the single-tuple ``writer((event_type, data))`` calling convention used
+        everywhere else post-migration.
+        """
+        from digigraph.graph.research import _run_document_rag_path
+
+        events: list[tuple[str, object]] = []
+
+        def fake_writer(item: tuple[str, object]) -> None:
+            events.append(item)
+
+        def fake_run_tools(
+            *,
+            model: str,
+            messages: list[dict],
+            tools: list,
+            execute_tool,
+            max_tool_rounds: int,
+            on_tool_step,
+            tool_choice: str = "auto",
+        ) -> str:
+            # Simulate one digillm tool round: a digisearch call that finds nothing.
+            on_tool_step("tool_call", {"name": "digisearch", "arguments": {"query": "jwt"}})
+            result = execute_tool("digisearch", {"query": "jwt"})
+            on_tool_step("tool_result", result)
+            return "No results found for jwt."
+
+        with patch("digigraph.graph.research._safe_stream_writer", return_value=fake_writer):
+            with patch("digigraph.graph.research.run_tools", side_effect=fake_run_tools):
+                with patch(
+                    "digigraph.orchestration.execute",
+                    return_value={"results": [], "rag_sources": []},
+                ):
+                    out = _run_document_rag_path(
+                        state={"prompt": "jwt"},
+                        cfg=None,
+                        system_prompt="You have digisearch. Use it and summarize.",
+                        index_name="default",
+                        index_display_name="default",
+                        prompt="jwt",
+                    )
+
+        assert out.get("research_response") == "No results found for jwt."
+        assert (
+            "tool_result",
+            {"results": [], "rag_sources": [], "hit_count": 0, "query": "jwt"},
+        ) in events
+
+    def test_run_document_rag_path_normalizes_empty_index_name(self) -> None:
+        """#2295 review: an empty or whitespace-only index_name (e.g. a blank
+        DIGISEARCH_INDEX env var) must not reach ToolContext.index_name
+        unnormalized. index_name is now written unconditionally into every
+        digisearch call's args (builtin.py's _handle_digisearch #2265 fix), so
+        an empty ToolContext.index_name is no longer harmlessly absent —
+        digisearch's own "default" fallback never gets a chance to apply."""
+        from digigraph.graph.research import _run_document_rag_path
+
+        captured: dict[str, str] = {}
+
+        def fake_get_tools_for_skills(skill_ids: list, context: object) -> list:
+            captured["index_name"] = context.index_name
+            return []
+
+        with patch("digigraph.skills.get_tools_for_skills", side_effect=fake_get_tools_for_skills):
+            with patch("digigraph.graph.research.run_tools", return_value="Summary."):
+                _run_document_rag_path(
+                    state={"prompt": "hi"},
+                    cfg=None,
+                    system_prompt="sys",
+                    index_name="   ",
+                    index_display_name="   ",
+                    prompt="hi",
+                )
+
+        assert captured["index_name"] == "default"
+
+    def test_run_document_rag_path_normalizes_truly_empty_index_name(self) -> None:
+        """Same as above for the plain-empty-string case (not just whitespace)."""
+        from digigraph.graph.research import _run_document_rag_path
+
+        captured: dict[str, str] = {}
+
+        def fake_get_tools_for_skills(skill_ids: list, context: object) -> list:
+            captured["index_name"] = context.index_name
+            return []
+
+        with patch("digigraph.skills.get_tools_for_skills", side_effect=fake_get_tools_for_skills):
+            with patch("digigraph.graph.research.run_tools", return_value="Summary."):
+                _run_document_rag_path(
+                    state={"prompt": "hi"},
+                    cfg=None,
+                    system_prompt="sys",
+                    index_name="",
+                    index_display_name="",
+                    prompt="hi",
+                )
+
+        assert captured["index_name"] == "default"
+
+
+@pytest.mark.unit
+class TestSupervisorNode:
+    """supervisor_node: per-subject response_language preference round-trip via Store."""
+
+    def test_supervisor_node_persists_and_recalls_response_language_per_subject(
+        self,
+    ) -> None:
+        """A response_language preference set on one thread must be recallable on a
+        brand-new thread for the same subject -- this is exactly the gap store-based
+        cross-thread memory closes: workflow.py clears response_language every turn so a
+        client can override it, but there was previously no cross-thread fallback, so a new
+        thread for the same authenticated subject lost the preference entirely."""
+        from digigraph.graph.nodes import supervisor_node
+        from digigraph.graph.state import WorkflowState
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.store.memory import InMemoryStore
+
+        store = InMemoryStore()
+        g: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+        g.add_node("supervisor", supervisor_node)
+        g.add_edge(START, "supervisor")
+        g.add_edge("supervisor", END)
+        compiled = g.compile(store=store)
+
+        # Turn 1, thread A: subject sets a preference explicitly.
+        compiled.invoke(
+            {"digi_subject": "user-42", "response_language": "de"},
+            config={"configurable": {"thread_id": "thread-a"}},
+        )
+
+        # Turn 2, brand-new thread B, same subject, client omits response_language entirely
+        # (e.g. a fresh chat session) -- the preference must still come back.
+        out = compiled.invoke(
+            {"digi_subject": "user-42"},
+            config={"configurable": {"thread_id": "thread-b"}},
+        )
+        assert out.get("response_language") == "de"
+
+    def test_supervisor_node_store_prefs_are_isolated_across_subjects(self) -> None:
+        """Store namespace is (digi_subject, \"prefs\") — subject B must never recall or
+        overwrite subject A's response_language on a shared InMemoryStore. Complements
+        TestDigiSubjectTrustBoundary (auth overwrite) by pinning the Store side of the
+        same IDOR surface after #2354."""
+        from digigraph.graph.nodes import supervisor_node
+        from digigraph.graph.state import WorkflowState
+        from langgraph.graph import END, START, StateGraph
+        from langgraph.store.memory import InMemoryStore
+
+        store = InMemoryStore()
+        g: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+        g.add_node("supervisor", supervisor_node)
+        g.add_edge(START, "supervisor")
+        g.add_edge("supervisor", END)
+        compiled = g.compile(store=store)
+
+        compiled.invoke(
+            {"digi_subject": "user-a", "response_language": "de"},
+            config={"configurable": {"thread_id": "thread-a"}},
+        )
+
+        out_b = compiled.invoke(
+            {"digi_subject": "user-b"},
+            config={"configurable": {"thread_id": "thread-b"}},
+        )
+        assert out_b.get("response_language") != "de"
+
+        compiled.invoke(
+            {"digi_subject": "user-b", "response_language": "fr"},
+            config={"configurable": {"thread_id": "thread-b2"}},
+        )
+        out_a = compiled.invoke(
+            {"digi_subject": "user-a"},
+            config={"configurable": {"thread_id": "thread-a2"}},
+        )
+        assert out_a.get("response_language") == "de"
+
+    def test_supervisor_node_does_not_crash_outside_a_real_graph_invocation(self) -> None:
+        """Finding 3 (IMPORTANT, final whole-branch review): supervisor_node must stay
+        callable/testable in isolation the same way _safe_stream_writer() already
+        guarantees for get_stream_writer(). Calling it directly (bypassing
+        graph.invoke()/.stream() entirely) with a digi_subject set used to reach
+        get_store() outside any runnable context, which raises RuntimeError -- and even
+        inside a graph compiled WITHOUT a store, get_store() returns None, and the
+        subsequent store.put()/.get() would raise AttributeError. _safe_get_store()
+        closes both gaps; this pins that the bare call is now safe and simply skips the
+        store-dependent logic."""
+        from digigraph.graph.nodes import supervisor_node
+
+        out = supervisor_node({"digi_subject": "user-42", "response_language": "de"})
+
+        assert "error" not in out
+        # No store available -- the response_language passed in is not echoed back as
+        # a fallback (there was no prior-thread value to recall), and nothing raised.
+        assert "response_language" not in out
+        assert out.get("supervisor_route") == "research"
 
 
 @pytest.mark.unit

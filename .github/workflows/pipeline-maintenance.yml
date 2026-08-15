@@ -83,7 +83,7 @@ jobs:
 
           pip-audit found **${COUNT}** CVE(s) in Python dependencies.
 
-          ## Task for Copilot
+          ## Task
           1. Run \`pip-audit -r requirements*.txt\` to see full findings
           2. For each CVE: bump the affected package to a patched version
           3. Run tests to confirm no regressions: \`make test-unit\`
@@ -182,7 +182,7 @@ jobs:
           ## Branches to delete
           ${BRANCH_LIST}
 
-          ## Task for Copilot
+          ## Task
           Delete each branch after confirming it is fully merged:
           \`\`\`bash
           for branch in <list>; do
@@ -242,7 +242,7 @@ jobs:
 
           \`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
 
-          ## Task for Copilot
+          ## Task
           1. Run \`make doc-check\` to see the full list
           2. Fix each broken link (update path or remove the link)
           3. Run \`make doc-check\` again to confirm clean
@@ -308,7 +308,7 @@ jobs:
 
           Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
 
-          ## Task for Copilot
+          ## Task
           \`\`\`bash
           make agents-init
           git add .claude/ agents/sources/
@@ -563,7 +563,7 @@ jobs:
           if len(drift) > 100:
               body_lines.append(f"- …and {len(drift) - 100} more")
           body_lines.append("")
-          body_lines.append("## Task for Copilot")
+          body_lines.append("## Task")
           body_lines.append("Apply the missing labels. For `complexity` and `risk` on unclear issues, default to `complexity:M` and `risk:low` — escalate to `exec:claude` if genuinely ambiguous.")
           body = "\n".join(body_lines)
 
@@ -751,7 +751,7 @@ jobs:
               body_lines.append(f"- ...and {len(pairs) - 50} more pairs")
           body_lines += [
               "",
-              "## Task for Copilot",
+              "## Task",
               "For each pair: close the older/less-detailed issue as a duplicate, linking to the canonical one. Add the `duplicate` label to the closed issue.",
           ]
           body = "\n".join(body_lines)

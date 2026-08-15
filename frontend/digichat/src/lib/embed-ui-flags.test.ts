@@ -13,7 +13,7 @@ describe("resolveEmbedUiFlags", () => {
         showByok: true,
         layout: "page",
       }),
-    ).toEqual({ showByok: true, layout: "page" });
+    ).toEqual({ showByok: true, layout: "page", showLanguageSelector: false });
   });
 
   it("does not derive showByok from gateMode", () => {
@@ -25,7 +25,30 @@ describe("resolveEmbedUiFlags", () => {
         accent: null,
         attribution: false,
       }),
-    ).toEqual({ showByok: false, layout: "embed" });
+    ).toEqual({ showByok: false, layout: "embed", showLanguageSelector: false });
+  });
+
+  it("resolveEmbedUiFlags passes showLanguageSelector through", () => {
+    expect(
+      resolveEmbedUiFlags({
+        slug: "x",
+        gateMode: "ungated",
+        theme: "dark",
+        accent: null,
+        attribution: false,
+        showLanguageSelector: true,
+      }).showLanguageSelector,
+    ).toBe(true);
+    expect(
+      resolveEmbedUiFlags({
+        slug: "x",
+        gateMode: "ungated",
+        theme: "dark",
+        accent: null,
+        attribution: false,
+        showLanguageSelector: false,
+      }).showLanguageSelector,
+    ).toBe(false);
   });
 });
 

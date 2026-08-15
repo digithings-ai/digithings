@@ -31,6 +31,7 @@
   --color-up: var(--up);
   --color-down: var(--down);
   --color-warn: var(--warn);
+  --color-danger: var(--danger);
 
   --color-term-bg: var(--term-bg);
   --color-term-ink: var(--term-ink);

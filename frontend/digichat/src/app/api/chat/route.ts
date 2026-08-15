@@ -7,6 +7,7 @@ import {
 import {
   normalizeOpenRouterModel,
 } from "@/lib/byok-openrouter";
+import { byokRequiresModel } from "@/lib/byok-providers";
 import { createDigiGraphClient, digigraphModelName } from "@/lib/digigraph";
 import {
   DigigraphUpstreamAuthError,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/digigraph-upstream";
 import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
+import { resolveLanguageCode } from "@/lib/languages";
 import { requireDigiChatAuth } from "@/lib/request-auth";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
@@ -102,6 +104,7 @@ export async function POST(req: Request) {
   const byokModel = normalizeOpenRouterModel(
     req.headers.get("x-byok-model")?.trim() ?? ""
   );
+  const languageCode = resolveLanguageCode(req.headers.get("x-digi-language"));
 
   const sessionId =
     req.headers.get("x-digichat-session") ??
@@ -185,6 +188,7 @@ export async function POST(req: Request) {
       responseHeaders,
       activityDetail: embedConfig.activityDetail,
       signal: req.signal,
+      responseLanguage: languageCode,
     });
   }
 
@@ -197,10 +201,7 @@ export async function POST(req: Request) {
   );
 
   // Non-OpenAI BYOK requires a model slug before forwarding to digigraph.
-  const byokNeedsModel =
-    byokProvider === "openrouter" ||
-    byokProvider === "anthropic" ||
-    byokProvider === "gemini";
+  const byokNeedsModel = byokRequiresModel(byokProvider);
   if (byokKey && byokNeedsModel && !byokModel) {
     return new Response(
       JSON.stringify({
@@ -252,6 +253,9 @@ export async function POST(req: Request) {
   }
   if (litellmProxyApiKey) {
     upstreamHeaders["X-LiteLLM-Proxy-Key"] = litellmProxyApiKey;
+  }
+  if (languageCode !== "en") {
+    upstreamHeaders["X-Digi-Language"] = languageCode;
   }
 
   // BYOK: forward per-request key to digigraph; never log or persist.

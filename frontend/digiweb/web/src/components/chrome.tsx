@@ -2,11 +2,12 @@
 /** Shared nav, footer, and module card. Brand + links are passed in so both
  *  marketing apps reuse the same chrome. */
 import { useRef, useState, type ReactNode } from "react";
-import { m, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { m, useScroll, useTransform } from "motion/react";
 import { ThemeToggle } from "./ThemeProvider";
 import { Emblem } from "./emblems";
 import { StackRow } from "./StackLogo";
 import { type ModuleNode } from "../data/modules";
+import { useMotionSafe } from "../motion/primitives";
 
 export interface NavLink { label: string; href: string; external?: boolean; cta?: boolean; }
 
@@ -96,7 +97,9 @@ export function Colophon({
   sweep?: boolean;
 }) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const reduced = useReducedMotion();
+  // useMotionSafe(), not raw useReducedMotion() -- see WordReveal.tsx's fix
+  // comment (#2244) for the full hydration-mismatch mechanism this avoids.
+  const reduced = !useMotionSafe();
   // 0 = the colophon's top enters the viewport bottom; 1 = scrolled to its
   // end. The band travels off-left → off-right across the middle of that
   // range, so the highlight crosses the wordmark once as you scroll into it.

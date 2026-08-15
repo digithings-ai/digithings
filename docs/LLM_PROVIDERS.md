@@ -143,7 +143,7 @@ Common confusion — these are **chat-only** and cannot be used as a LiteLLM bac
 
 - **Cohere** — free trial key, 1,000 calls/month, 20 RPM. Command A strong at RAG ($2.50/$10); Command A+ (218B MoE, Apache 2.0) is open-weight self-host — **not** on the public per-token rate card despite earlier records, hosted-endpoint pricing is "contact sales." Embed v4.0 (multimodal) $0.12/1M text tokens. `cohere/command-a-03-2025`. Trial keys forbidden for commercial.
 - **AI21** — $10 signup credit. Jamba 1.5 Large/Mini (256K context). `ai21/jamba-1.5-large`.
-- **xAI (Grok)** — no permanently-free model; $25 signup credit + up to $150/mo via data-sharing opt-in. New flagship `grok-4.5` (2026-07-08, "Opus-class") at $2/$6 (<200K), $4/$12 (≥200K). `xai/grok-4-3` is the default/cheapest current tier at $1.25/$2.50; `grok-3` fully retires 2026-08-15.
+- **xAI (Grok)** — no permanently-free model; $25 signup credit + up to $150/mo via data-sharing opt-in. New flagship `grok-4.6` (2026-08-12, agent/coding-focused, supersedes `grok-4.5`) at $2/$6 (<200K), $4/$12 (≥200K). `xai/grok-4-3` is the default/cheapest current tier at $1.25/$2.50; `grok-3` fully retires 2026-08-15.
 
 ---
 

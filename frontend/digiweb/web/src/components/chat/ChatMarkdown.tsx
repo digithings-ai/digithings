@@ -37,22 +37,29 @@
  */
 import type { ReactNode } from "react";
 
-import { ChatMarkdownSource } from "./ChatMarkdownSource";
+import { ChatMarkdownSource, type CodeBlockOverride } from "./ChatMarkdownSource";
+
+export type { CodeBlockOverride } from "./ChatMarkdownSource";
 
 export type ChatMarkdownProps = {
   children?: ReactNode;
   /** Markdown source — GFM + `$math$` + ```mermaid, rendered by the shared pipeline. */
   source?: string;
   className?: string;
+  /** Per-fence-language block-code hook — see {@link CodeBlockOverride}. Only
+   * consulted when `source` is passed; the children-only frame has nothing to
+   * parse. Optional, and additive: omit it and every fence renders exactly as
+   * before (mermaid diagram, or the copy-caption code block). */
+  renderCodeBlock?: CodeBlockOverride;
 };
 
-export function ChatMarkdown({ children, source, className }: ChatMarkdownProps) {
+export function ChatMarkdown({ children, source, className, renderCodeBlock }: ChatMarkdownProps) {
   const cls = ["chat-md min-w-0 text-[0.88rem] leading-[1.6]", className ?? ""]
     .filter(Boolean)
     .join(" ");
   return (
     <div className={cls}>
-      {source ? <ChatMarkdownSource source={source} /> : null}
+      {source ? <ChatMarkdownSource source={source} renderCodeBlock={renderCodeBlock} /> : null}
       {children}
     </div>
   );

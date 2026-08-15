@@ -143,6 +143,15 @@ export function HeroGraphReference() {
 
     // Track the pointer WITHIN this frame (the production hero tracks the whole
     // viewport; here the lens follows the cursor across the demo panel).
+    // Listens on window, not the canvas itself: the canvas is pointer-events-
+    // none (decorative, so nothing beneath the frame is blocked from clicks),
+    // which also removes IT from hit-testing — a mousemove listener bound to
+    // the canvas would never fire from real cursor movement. The frame-
+    // relative math below already reads the canvas's own bounding rect
+    // regardless of which element the listener is attached to, so this is a
+    // pure retarget with no behavior change once the cursor is over the frame
+    // (movement elsewhere on the page just clamps the lens to the nearest
+    // frame edge, same as the production hero's own page-wide tracking).
     function onMove(e: MouseEvent) {
       const r = canvas!.getBoundingClientRect();
       c.tx = clamp((e.clientX - r.left) / r.width, 0, 1);
@@ -164,7 +173,7 @@ export function HeroGraphReference() {
     const animate = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (animate) {
       step(0, true);
-      canvas.addEventListener("mousemove", onMove, { passive: true });
+      window.addEventListener("mousemove", onMove, { passive: true });
       raf = requestAnimationFrame(loop);
     } else {
       step(0, true);
@@ -174,7 +183,7 @@ export function HeroGraphReference() {
     return () => {
       if (raf) cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
-      canvas.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mousemove", onMove);
       obs.disconnect();
     };
   }, []);

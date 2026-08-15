@@ -7,7 +7,12 @@ import {
 } from "@/hooks/use-byok-key";
 import { resolveEmbedHost } from "@/lib/embed-gate";
 
-export type ByokPingResult = { ok: boolean; model?: string; error?: string };
+export type ByokPingResult = {
+  ok: boolean;
+  model?: string;
+  models?: { id: string; label: string }[];
+  error?: string;
+};
 
 /**
  * Client-side ping against `POST /api/byok/test`.
@@ -20,9 +25,14 @@ export async function pingByokKey(
   key: string,
   provider: BYOKProvider,
   model: string,
+  opts: { requireModel?: boolean } = {},
 ): Promise<ByokPingResult> {
+  const { requireModel = true } = opts;
+  // requireModel: false lets a model-required provider be pinged with no
+  // model chosen yet — used by the key-step prefetch (byok-cli-flow.tsx),
+  // which needs to validate the key before a model even exists to pick.
   const formatErr =
-    validateBYOKKey(key, provider) ?? validateBYOKModel(model, provider);
+    validateBYOKKey(key, provider) ?? (requireModel ? validateBYOKModel(model, provider) : null);
   if (formatErr) {
     return { ok: false, error: formatErr };
   }

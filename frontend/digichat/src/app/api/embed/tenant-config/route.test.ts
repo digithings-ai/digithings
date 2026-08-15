@@ -48,6 +48,7 @@ describe("GET /api/embed/tenant-config", () => {
       suggestions: [...DATATAPSTREAM_SUGGESTION_POOL],
       showByok: false,
       layout: "embed",
+      showLanguageSelector: true,
     });
     expect(JSON.stringify(body)).not.toContain("example.services.ai.azure.com");
   });
@@ -69,6 +70,7 @@ describe("GET /api/embed/tenant-config", () => {
       attribution: false,
       showByok: false,
       layout: "embed",
+      showLanguageSelector: false,
     });
   });
 
@@ -82,6 +84,7 @@ describe("GET /api/embed/tenant-config", () => {
       attribution: false,
       showByok: false,
       layout: "embed",
+      showLanguageSelector: false,
     });
   });
 

@@ -74,6 +74,23 @@ export function TearsheetChartsReference() {
   const chartView = printing ? PRINT_FULL_VIEW : view;
   const chartScale: ChartScale = printing ? "linear" : scale;
 
+  // ariaLabels must describe the visible window (lookback / pan), not always
+  // the full-history periodStart/periodEnd — screen readers otherwise hear
+  // full-span dates while the chart shows a subset.
+  const viewDateLabel = useMemo(() => {
+    if (!D.fullSpan || (chartView.lo <= 0 && chartView.hi >= 1)) {
+      return `${D.periodStart} to ${D.periodEnd}`;
+    }
+    const t0 = new Date(D.fullSpan[0]).getTime();
+    const t1 = new Date(D.fullSpan[1]).getTime();
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || t1 <= t0) {
+      return "visible chart range";
+    }
+    const start = new Date(t0 + chartView.lo * (t1 - t0)).toISOString().slice(0, 10);
+    const end = new Date(t0 + chartView.hi * (t1 - t0)).toISOString().slice(0, 10);
+    return `${start} to ${end}`;
+  }, [chartView]);
+
   const setViewFromChart = useCallback((v: ViewWindow) => {
     setViewOverride(v);
     const matched = matchLookbackPreset(v, D.fullSpan);
@@ -142,11 +159,20 @@ export function TearsheetChartsReference() {
 
   return (
     <div>
-      <div className="mb-[1rem] flex items-center justify-between gap-[1rem]">
+      <div className="mb-[1rem] flex flex-wrap items-center gap-[0.7rem]">
         <span className="ts-panel-label">{D.symbol} · {D.periodStart} → {D.periodEnd}</span>
+        {/* The KPI figures below are a deterministic random walk (demo-data.ts),
+            not a real backtest — an implausible number like a 92.62 profit
+            factor could otherwise read as a live bug rather than known-synthetic
+            filler. Same tag this reference site already uses elsewhere for
+            placeholder data (testimonial-wall-reference.tsx, docs-layout-
+            reference.tsx, terminal-budget-reference.tsx). */}
+        <span className="inline-block rounded-full border border-hair px-[0.6rem] py-[0.15rem] font-mono text-[0.58rem] uppercase tracking-[0.08em] text-ink-mute">
+          Example data · not live
+        </span>
         <button
           type="button"
-          className="ts-reset"
+          className="ts-reset ml-auto"
           onClick={() =>
             runTearsheetPrint({
               documentTitle: "finance-tearsheet specimen — digiweb",
@@ -180,6 +206,7 @@ export function TearsheetChartsReference() {
               Momentum: "var(--warn)",
               Hedges: "var(--down)",
             }}
+            ariaLabel="Portfolio return contribution by factor: Quality, Momentum, and Hedges, over the trailing 18 periods, with the exact portfolio return overlaid"
           />
         </div>
       </section>
@@ -262,21 +289,22 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
+                ariaLabel={`${D.symbol} candlestick price chart, ${chartScale} scale, with long and short trade entry and exit markers, ${viewDateLabel}`}
               />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "equity"}>
             <div className="ts-chart">
               {chartScale === "log" ? (
-                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+                <TimeSeries points={D.equity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve in dollars, log scale, ${viewDateLabel}`} />
               ) : (
-                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+                <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Equity curve, percent return, linear scale, ${viewDateLabel}`} />
               )}
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "drawdown"}>
             <div className="ts-chart">
-              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} />
+              <TimeSeries points={D.drawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={D.fullSpan} resetView={presetView} ariaLabel={`Drawdown, percent below peak equity, ${viewDateLabel}`} />
             </div>
           </div>
           <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
@@ -288,6 +316,7 @@ export function TearsheetChartsReference() {
                 onView={setViewFromChart}
                 fullSpan={D.fullSpan}
                 resetView={presetView}
+                ariaLabel={`Per-trade profit and loss, percent, realized and open trades, ${viewDateLabel}`}
               />
             </div>
           </div>
