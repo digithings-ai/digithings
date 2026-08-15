@@ -1,0 +1,5 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]: not navigated
+  - link [ref=e3] [cursor=pointer]:
+    - /url: "#navigated"
+    - button "Pause" [ref=e4]
