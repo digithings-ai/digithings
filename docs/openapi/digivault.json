@@ -1,0 +1,1096 @@
+{
+  "components": {
+    "schemas": {
+      "BacklinksResponse": {
+        "properties": {
+          "backlinks": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Backlinks",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "backlinks"
+        ],
+        "title": "BacklinksResponse",
+        "type": "object"
+      },
+      "CreateNoteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "default": "",
+            "title": "Body",
+            "type": "string"
+          },
+          "frontmatter": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional extra frontmatter keys merged with title/tags",
+            "title": "Frontmatter"
+          },
+          "name": {
+            "description": "New note name (filename stem)",
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "description": "When true, upsert via Vault.write_note(overwrite=True) for idempotent ingest",
+            "title": "Overwrite",
+            "type": "boolean"
+          },
+          "subdir": {
+            "default": "",
+            "description": "Optional subfolder under the vault root",
+            "title": "Subdir",
+            "type": "string"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateNoteRequest",
+        "type": "object"
+      },
+      "FunctionParametersSchema": {
+        "properties": {
+          "properties": {
+            "additionalProperties": true,
+            "title": "Properties",
+            "type": "object"
+          },
+          "required": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required",
+            "type": "array"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "FunctionParametersSchema",
+        "type": "object"
+      },
+      "FunctionToolSchema": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/FunctionParametersSchema"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "parameters"
+        ],
+        "title": "FunctionToolSchema",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LinkRef": {
+        "description": "A single Obsidian-style ``[[wikilink]]`` occurrence inside a note.\n\n``target`` is the note name as written (without the ``[[`` / ``]]``), with any\n``#heading`` and ``|alias`` stripped off into their own fields.",
+        "properties": {
+          "alias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional |display alias",
+            "title": "Alias"
+          },
+          "embed": {
+            "default": false,
+            "description": "True for transclusions: ![[note]]",
+            "title": "Embed",
+            "type": "boolean"
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional #heading fragment",
+            "title": "Heading"
+          },
+          "raw": {
+            "description": "The full matched text, e.g. '[[digigraph#api|API]]'",
+            "title": "Raw",
+            "type": "string"
+          },
+          "target": {
+            "description": "Linked note name, e.g. 'digigraph'",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "raw"
+        ],
+        "title": "LinkRef",
+        "type": "object"
+      },
+      "LintReport": {
+        "description": "Result of linting the whole vault.",
+        "properties": {
+          "issues": {
+            "default": [],
+            "description": "All issues found",
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "note_count": {
+            "description": "Number of notes scanned",
+            "title": "Note Count",
+            "type": "integer"
+          },
+          "ok": {
+            "description": "True when there are no issues",
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "note_count"
+        ],
+        "title": "LintReport",
+        "type": "object"
+      },
+      "Note": {
+        "description": "A single markdown note in the vault.",
+        "properties": {
+          "aliases": {
+            "default": [],
+            "description": "Frontmatter aliases",
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "backlinks": {
+            "default": [],
+            "description": "Names of notes that link to this note",
+            "items": {
+              "type": "string"
+            },
+            "title": "Backlinks",
+            "type": "array"
+          },
+          "frontmatter": {
+            "additionalProperties": true,
+            "description": "Raw parsed frontmatter mapping",
+            "title": "Frontmatter",
+            "type": "object"
+          },
+          "name": {
+            "description": "Note name (filename stem), e.g. 'digigraph'",
+            "title": "Name",
+            "type": "string"
+          },
+          "outlinks": {
+            "default": [],
+            "description": "Wikilinks found in the body",
+            "items": {
+              "$ref": "#/components/schemas/LinkRef"
+            },
+            "title": "Outlinks",
+            "type": "array"
+          },
+          "rel_path": {
+            "description": "Path relative to the vault root, POSIX form",
+            "title": "Rel Path",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "description": "Frontmatter tags, normalized",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Frontmatter 'title' if present",
+            "title": "Title"
+          }
+        },
+        "required": [
+          "name",
+          "rel_path"
+        ],
+        "title": "Note",
+        "type": "object"
+      },
+      "NoteByPathRequest": {
+        "additionalProperties": false,
+        "description": "Body for ``POST /v1/notes/by-path``: fetch one note whole by its exact vault path.",
+        "properties": {
+          "path_prefix": {
+            "description": "Enforced authorization boundary: vault_path must equal or fall under this prefix, or the request is rejected with 403. Required \u2014 D1_DATABASE_MAP may never carry a \"\" entry (see `_load_d1_database_map`'s guard), so an omitted path_prefix can never resolve to a corpus and would only ever 503 at request time; rejected here instead, at the schema boundary (422).",
+            "title": "Path Prefix",
+            "type": "string"
+          },
+          "vault_path": {
+            "description": "Exact vault_path to fetch",
+            "minLength": 1,
+            "title": "Vault Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vault_path",
+          "path_prefix"
+        ],
+        "title": "NoteByPathRequest",
+        "type": "object"
+      },
+      "NoteDetail": {
+        "description": "One note, whole: body and frontmatter together.\n\n``Note`` has frontmatter but no body; ``NoteRow``/``VaultSearchHit`` have a body but\nno frontmatter. ``digivault_get_note`` needs both, so this model exists.",
+        "properties": {
+          "body_markdown": {
+            "default": "",
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "frontmatter": {
+            "additionalProperties": true,
+            "title": "Frontmatter",
+            "type": "object"
+          },
+          "note_type": {
+            "default": "",
+            "title": "Note Type",
+            "type": "string"
+          },
+          "parent_doc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Doc"
+          },
+          "segment_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Segment Index"
+          },
+          "segment_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Page/heading identity for a note that is one segment of a larger source document (set by scripts/vectorize_sync.py / the ingestion chunker at frontmatter['segment_label']). Surfaced here as a top-level field too \u2014 not only inside `frontmatter` \u2014 because the original task brief for `digivault_get_note` specified this exact returned shape (`{vault_path, title, body_markdown, frontmatter, segment_label}`); a consumer that trusted that shape and read `data['segment_label']` directly got nothing before this field existed.",
+            "title": "Segment Label"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "default": "",
+            "title": "Title",
+            "type": "string"
+          },
+          "vault_path": {
+            "title": "Vault Path",
+            "type": "string"
+          },
+          "wikilinks": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Wikilinks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "vault_path"
+        ],
+        "title": "NoteDetail",
+        "type": "object"
+      },
+      "NoteList": {
+        "properties": {
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/Note"
+            },
+            "title": "Notes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notes"
+        ],
+        "title": "NoteList",
+        "type": "object"
+      },
+      "OpenAIToolDict": {
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/FunctionToolSchema"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "function"
+        ],
+        "title": "OpenAIToolDict",
+        "type": "object"
+      },
+      "OrchestratorInvokeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "OrchestratorInvokeRequest",
+        "type": "object"
+      },
+      "OrchestratorInvokeResponse": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "service": {
+            "default": "digivault",
+            "title": "Service",
+            "type": "string"
+          },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "OrchestratorInvokeResponse",
+        "type": "object"
+      },
+      "OrchestratorToolsResponse": {
+        "properties": {
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/OpenAIToolDict"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tools"
+        ],
+        "title": "OrchestratorToolsResponse",
+        "type": "object"
+      },
+      "RenameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_name": {
+            "minLength": 1,
+            "title": "New Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_name"
+        ],
+        "title": "RenameRequest",
+        "type": "object"
+      },
+      "SetFrontmatterRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "updates": {
+            "additionalProperties": true,
+            "description": "Frontmatter keys to merge",
+            "title": "Updates",
+            "type": "object"
+          }
+        },
+        "required": [
+          "updates"
+        ],
+        "title": "SetFrontmatterRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "ValidationIssue": {
+        "description": "One problem found by ``Vault.lint``.",
+        "properties": {
+          "kind": {
+            "description": "unresolved_link | missing_frontmatter | disallowed_tag | orphan_note | duplicate_note",
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable description",
+            "title": "Message",
+            "type": "string"
+          },
+          "note": {
+            "description": "Note rel_path the issue was found in (or '' for vault-wide)",
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note",
+          "kind",
+          "message"
+        ],
+        "title": "ValidationIssue",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Obsidian-style markdown vault management for digithings (frontmatter, wikilinks, backlinks, tags, lint). Interactive docs: `/docs` (Swagger) and `/redoc`.",
+    "title": "digivault",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/healthz": {
+      "get": {
+        "description": "Minimal liveness probe. Auth-exempt, secret-free, no downstream checks.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
+    "/v1/lint": {
+      "get": {
+        "description": "Validate the vault: unresolved links, missing frontmatter, orphans, tags.",
+        "operationId": "lint_v1_lint_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LintReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Lint"
+      }
+    },
+    "/v1/notes": {
+      "get": {
+        "description": "List every note in the vault with its tags, links, and backlinks.",
+        "operationId": "list_notes_v1_notes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Notes"
+      },
+      "post": {
+        "operationId": "create_note_v1_notes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Note"
+      }
+    },
+    "/v1/notes/by-path": {
+      "post": {
+        "description": "Load one note whole (body + frontmatter), addressed by ``vault_path``. D1-only.\n\n``path_prefix`` is an enforced authorization boundary, not an advisory filter: two\nclient corpora can share this deployment, and without this check a caller scoped to\none prefix could read another client's notes just by passing an arbitrary\n``vault_path``. There is no filesystem/Supabase fallback here \u2014 a by-path fetch\nonly makes sense against the corpus that owns the path (#2239).\n\n``path_prefix`` itself is also now checked against the caller's authenticated\ntenant (``_fetch_note_by_path``'s ``tenant_slug`` param) when\n``DIGI_TENANT_CORPUS_MAP`` is configured \u2014 closing the gap where ``digivault:read``\nalone let any caller name *any* prefix, not just their own corpus's (found in\nCodeRabbit's review of PR #2293; see ``tenant_scope.py``).\n\n``path_prefix`` resolution goes through ``resolve_path_prefix`` (shared with\n``D1Store.search``/``list_notes``) rather than a local ``prefix and ...`` check \u2014\na #2239 review found the local check treated \"a prefix was given but normalizes\nto empty\" (``\"\"``, ``\"/\"``, ``\"///\"``, ``\"   \"``, ``\".md\"``) the same as \"no\nscoping requested,\" which fails open: with a ``\"\"`` key present in\n``D1_DATABASE_MAP`` every one of those inputs returned another corpus's note\nbody with HTTP 200. ``resolve_path_prefix`` raises for exactly that case, which\nthis handler turns into ``400`` \u2014 a caller/config error, not a scope this route\ncan silently ignore. ``path_prefix`` itself is a required field (``422`` if\nomitted) for the same underlying reason: ``D1_DATABASE_MAP`` may never carry a\n``\"\"`` entry, so an omitted ``path_prefix`` could never resolve to a corpus and\nwould only ever ``503`` at request time \u2014 rejected up front instead (#2239 review).\n\nThe authorization check itself (prefix resolution, the 403 boundary, opening and\nquerying the store) lives in ``_fetch_note_by_path`` \u2014 shared with the\n``digivault_get_note`` orchestrator tool dispatched from ``orchestrator_invoke``\nbelow, so both surfaces enforce the same boundary from one place (#2239).",
+        "operationId": "get_note_by_path_v1_notes_by_path_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteByPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "path_prefix normalizes to an empty prefix (e.g. '/', '.md')"
+          },
+          "403": {
+            "description": "vault_path is outside the caller's path_prefix"
+          },
+          "404": {
+            "description": "no note at that vault_path in the resolved corpus"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "D1 misconfigured, no database for the prefix, or a D1 failure"
+          }
+        },
+        "summary": "Get Note By Path"
+      }
+    },
+    "/v1/notes/{name}": {
+      "get": {
+        "operationId": "get_note_v1_notes__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Note"
+      }
+    },
+    "/v1/notes/{name}/backlinks": {
+      "get": {
+        "operationId": "get_backlinks_v1_notes__name__backlinks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacklinksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Backlinks"
+      }
+    },
+    "/v1/notes/{name}/frontmatter": {
+      "patch": {
+        "operationId": "set_frontmatter_v1_notes__name__frontmatter_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetFrontmatterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Frontmatter"
+      }
+    },
+    "/v1/notes/{name}/rename": {
+      "post": {
+        "operationId": "rename_note_v1_notes__name__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Note"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Note"
+      }
+    },
+    "/v1/orchestrator_invoke": {
+      "post": {
+        "description": "Execute one digivault orchestrator tool by name (hub dispatch).",
+        "operationId": "orchestrator_invoke_v1_orchestrator_invoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestratorInvokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestratorInvokeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Orchestrator Invoke"
+      }
+    },
+    "/v1/orchestrator_tools": {
+      "post": {
+        "description": "Return OpenAI-style tool definitions owned by digivault (for digigraph).",
+        "operationId": "orchestrator_tools_v1_orchestrator_tools_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrchestratorToolsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Orchestrator Tools"
+      }
+    },
+    "/v1/status": {
+      "get": {
+        "description": "Operator diagnostic. Reports config presence only \u2014 never secrets.",
+        "operationId": "status_v1_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Status V1 Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Status"
+      }
+    },
+    "/v1/tags/{tag}": {
+      "get": {
+        "operationId": "search_by_tag_v1_tags__tag__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tag",
+            "required": true,
+            "schema": {
+              "title": "Tag",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search By Tag"
+      }
+    }
+  }
+}

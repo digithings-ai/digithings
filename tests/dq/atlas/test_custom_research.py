@@ -16,12 +16,11 @@ Covers:
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-payload dict shape
+from typing import Any  # score:allow untyped any — used for fake-payload dict shape
 from unittest.mock import patch
 from uuid import UUID
 
 import pytest
-
 from digiquant.olympus.atlas.graph import (
     AtlasInput,
     build_cli_parser,
@@ -39,19 +38,17 @@ from digiquant.olympus.atlas.state import (
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
-
 # ─── AtlasInput + CLI parser ────────────────────────────────────────────────
 
 
 @pytest.mark.unit
 class TestAtlasInputCustomPrompt:
     def test_default_is_none(self) -> None:
-        inp = AtlasInput(run_type="baseline", run_date=date(2026, 4, 26))
+        inp = AtlasInput(run_date=date(2026, 4, 26))
         assert inp.custom_prompt is None
 
     def test_explicit_prompt_propagates(self) -> None:
         inp = AtlasInput(
-            run_type="baseline",
             run_date=date(2026, 4, 26),
             custom_prompt="Drill into NVDA earnings risk.",
         )
@@ -62,7 +59,7 @@ class TestAtlasInputCustomPrompt:
 class TestCustomPromptCli:
     def test_cli_flag_default_yields_none(self) -> None:
         parser = build_cli_parser()
-        args = parser.parse_args(["--run-type", "baseline", "--run-date", "2026-04-26"])
+        args = parser.parse_args(["--cadence", "daily", "--run-date", "2026-04-26"])
         kwargs = resolve_cli_inputs(args)
         assert kwargs["custom_prompt"] is None
 
@@ -70,8 +67,10 @@ class TestCustomPromptCli:
         parser = build_cli_parser()
         args = parser.parse_args(
             [
-                "--run-type",
-                "baseline",
+                "--cadence",
+                "daily",
+                "--refresh-scope",
+                "all",
                 "--run-date",
                 "2026-04-26",
                 "--custom-prompt",
@@ -86,8 +85,8 @@ class TestCustomPromptCli:
         parser = build_cli_parser()
         args = parser.parse_args(
             [
-                "--run-type",
-                "baseline",
+                "--cadence",
+                "daily",
                 "--run-date",
                 "2026-04-26",
                 "--custom-prompt",
@@ -105,7 +104,6 @@ class TestCustomPromptCli:
 class TestInitialStateCustomPrompt:
     def test_state_carries_custom_prompt(self) -> None:
         inp = AtlasInput(
-            run_type="baseline",
             run_date=date(2026, 4, 26),
             custom_prompt="Hot take on small caps?",
         )
@@ -113,7 +111,7 @@ class TestInitialStateCustomPrompt:
         assert state.custom_prompt == "Hot take on small caps?"
 
     def test_state_default_custom_prompt_is_none(self) -> None:
-        inp = AtlasInput(run_type="baseline", run_date=date(2026, 4, 26))
+        inp = AtlasInput(run_date=date(2026, 4, 26))
         state = initial_state(inp)
         assert state.custom_prompt is None
 

@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureDigest } from './__fixtures__/snapshot-fixture';
 import { renderDigestMarkdownFromSnapshot } from './render-digest-from-snapshot';
-import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
 import {
+  normalizeMarkdownFirstHeadingDate,
+  renderDocumentMarkdownFromPayload,
+} from './render-document-from-payload';
+import {
+  cleanMemoProse,
   isAnalystSpecialistPayload,
   isDebateSummaryPayload,
   isMasterDigestPayload,
@@ -15,6 +19,8 @@ import {
   renderRebalanceMarkdown,
   renderRiskDebateMarkdown,
   renderSegmentReportMarkdown,
+  regimeChipsFromMacroPayload,
+  summarizeRecommendedPortfolio,
 } from './render-pipeline-payloads';
 import { digestItemsToStrings, extractDigestContextBullets } from './snapshot-context';
 
@@ -47,9 +53,12 @@ const REBALANCE_EMPTY = {
 };
 
 const REBALANCE_POPULATED = {
-  notes: 'Trim tech overweight.',
+  notes: 'Trim tech overweight after query_data.',
   actions: [{ ticker: 'NVDA', action: 'TRIM', current_pct: 12, recommended_pct: 8 }],
-  recommended_portfolio: [{ ticker: 'NVDA', weight_pct: 8 }],
+  recommended_portfolio: [
+    { ticker: 'NVDA', weight_pct: 8 },
+    { ticker: 'CASH', weight_pct: 92 },
+  ],
 };
 
 /** Trimmed copy of the production `deliberation/{ticker}` DebateSummary payload. */
@@ -174,7 +183,47 @@ describe('renderRebalanceMarkdown', () => {
     const md = renderRebalanceMarkdown(REBALANCE_POPULATED);
     expect(md).toContain('## Actions');
     expect(md).toContain('| NVDA | TRIM | 12 | 8 |');
+    expect(md).toContain('## Post-risk-sizing book summary');
+    expect(md).toContain('**Invested:** 8.00%');
+    expect(md).toContain('**Cash:** 92.00%');
+    expect(md).toContain('**Holdings:** 1');
     expect(md).toContain('## Recommended portfolio');
+    expect(md).toContain('Narrative / memo notes');
+    expect(md).toContain('data query');
+    expect(md).not.toContain('query_data');
+  });
+
+  it('summarizes decimal and percent recommended weights', () => {
+    expect(
+      summarizeRecommendedPortfolio({
+        recommended_portfolio: [
+          { ticker: 'NVDA', target_pct: 0.25 },
+          { ticker: 'MSFT', weight_pct: 15 },
+        ],
+      })
+    ).toEqual({ investedPct: 40, cashPct: 60, holdingsCount: 2 });
+  });
+
+  it('excludes the synthetic CASH row from invested and holdings', () => {
+    expect(
+      summarizeRecommendedPortfolio({
+        recommended_portfolio: [
+          { ticker: 'NVDA', weight_pct: 8 },
+          { ticker: 'CASH', weight_pct: 92 },
+        ],
+      })
+    ).toEqual({ investedPct: 8, cashPct: 92, holdingsCount: 1 });
+  });
+});
+
+describe('memo prose cleanup', () => {
+  it('replaces raw tool names in narrative prose while preserving code/path displays', () => {
+    const md = cleanMemoProse(
+      'Used query_data and get_market_data. Keep `query_data` and `/tools/get_market_data.py` exact.'
+    );
+    expect(md).toContain('Used data query and market data lookup.');
+    expect(md).toContain('`query_data`');
+    expect(md).toContain('/tools/get_market_data.py');
   });
 });
 
@@ -276,12 +325,10 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     // but the payload shape sniffer must not mis-route it to a wrong renderer.
     // isAnalystSpecialistPayload is exported for that check — verify it classifies correctly.
     expect(isAnalystSpecialistPayload(ANALYST_PAYLOAD)).toBe(true);
-    // The fallback renderer in render-document-from-payload will render the JSON since
-    // isAnalystSpecialistPayload is not wired into renderDocumentMarkdownFromPayload directly,
-    // but the payload must not match the deliberation path.
+    // The payload must not match the deliberation path or get flattened into
+    // markdown; queries.ts routes it to AnalystDocumentView.
     expect(isDebateSummaryPayload(ANALYST_PAYLOAD)).toBe(false);
-    // Verify md is non-null.
-    expect(md).not.toBeNull();
+    expect(md).toBeNull();
   });
 
   it('renders deliberation documents with the debate renderer (#698)', () => {
@@ -303,14 +350,30 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     expect(md).toContain('| Technology | XLK | bullish | high | AI capex |');
   });
 
-  it('renders unknown shapes as a JSON dump instead of null', () => {
+  it('leaves unknown shapes to the structured document fallback', () => {
     const md = renderDocumentMarkdownFromPayload({ mystery: true }, 'future-doc-kind');
-    expect(md).toContain('# future-doc-kind');
-    expect(md).toContain('"mystery": true');
+    expect(md).toBeNull();
   });
 
   it('returns null for unknown digest-keyed payloads so the snapshot fallback applies', () => {
     expect(renderDocumentMarkdownFromPayload({ mystery: true }, 'digest')).toBeNull();
+  });
+});
+
+describe('research document date labels', () => {
+  it('normalizes only the first visible H1 date to the document row date', () => {
+    const md = normalizeMarkdownFirstHeadingDate(
+      [
+        '# Document delta — 2026-06-17',
+        '',
+        'Baseline date: 2026-06-17',
+        'Compare date: 2026-06-16',
+      ].join('\n'),
+      '2026-06-18'
+    );
+    expect(md).toContain('# Document delta — 2026-06-18');
+    expect(md).toContain('Baseline date: 2026-06-17');
+    expect(md).toContain('Compare date: 2026-06-16');
   });
 });
 
@@ -324,6 +387,35 @@ describe('renderDigestMarkdownFromSnapshot shape routing', () => {
     const md = renderDigestMarkdownFromSnapshot(V1_SNAPSHOT as never);
     expect(md).toContain('# DIGEST — 2026-04-27');
     expect(md).toContain('## Sector Scorecard');
+  });
+});
+
+describe('regimeChipsFromMacroPayload (#1259 — Pipeline summary strip)', () => {
+  it('builds one chip per 4-factor field with the expected label/value/color', () => {
+    const chips = regimeChipsFromMacroPayload({
+      segment: 'macro',
+      growth: 'slowing',
+      inflation: 'cooling',
+      policy: 'easing',
+      risk_appetite: 'mixed',
+    });
+    expect(chips).toEqual([
+      { label: 'Growth', value: 'slowing', color: 'amber' },
+      { label: 'Inflation', value: 'cooling', color: 'green' },
+      { label: 'Policy', value: 'easing', color: 'green' },
+      { label: 'Risk appetite', value: 'mixed', color: 'amber' },
+    ]);
+  });
+
+  it('drops missing factors and defaults unknown tokens to muted (never throws)', () => {
+    expect(regimeChipsFromMacroPayload({ growth: 'expanding' })).toEqual([
+      { label: 'Growth', value: 'expanding', color: 'green' },
+    ]);
+    expect(regimeChipsFromMacroPayload({ growth: 'sideways' })).toEqual([
+      { label: 'Growth', value: 'sideways', color: 'muted' },
+    ]);
+    expect(regimeChipsFromMacroPayload(null)).toEqual([]);
+    expect(regimeChipsFromMacroPayload(undefined)).toEqual([]);
   });
 });
 

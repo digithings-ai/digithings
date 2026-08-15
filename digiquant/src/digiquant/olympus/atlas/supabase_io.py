@@ -1,7 +1,7 @@
 """Supabase adapter for the Atlas sub-graph.
 
 Replaces the legacy ``scripts/publish_document.py`` and
-``scripts/materialize_snapshot.py`` write paths from inside the DigiGraph
+``scripts/materialize_snapshot.py`` write paths from inside the digigraph
 sub-graph. Same tables, same unique keys — the legacy scripts will be frozen
 in commit 9 so both paths can never write concurrently.
 
@@ -21,8 +21,8 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from datetime import date
-from typing import Any, Protocol, TypedDict  # noqa: F401 — Protocol for client surface
+from datetime import date, datetime
+from typing import Any, Protocol, TypedDict  # score:allow untyped any — Protocol for client surface
 
 from digibase.audit import redact_mapping
 
@@ -133,7 +133,7 @@ class SupabaseClient(Protocol):
     supabase dependency. Production callers pass the real ``Client``.
     """
 
-    def table(self, name: str) -> Any: ...  # noqa: D401, E704
+    def table(self, name: str) -> Any: ...
 
 
 class SupabaseNotConfiguredError(RuntimeError):
@@ -149,8 +149,10 @@ class SupabaseConfig:
 
     @classmethod
     def from_env(cls) -> "SupabaseConfig":
-        url = os.environ.get("SUPABASE_URL", "").strip()
-        key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL", "")).strip()
+        key = os.environ.get(
+            "CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+        ).strip()
         missing: list[str] = []
         if not url:
             missing.append("SUPABASE_URL")
@@ -185,10 +187,31 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
       doc_type, run_type). Never pass raw LLM payloads, response bodies,
       or ``content``/``payload``/``snapshot`` blobs — those may contain
       PII or prompt text that the shallow redactor will not scrub.
-    - This logger.info call emits to the standard logger; DigiGraph's
+    - This logger.info call emits to the standard logger; digigraph's
       ``audit.py`` wraps that into structured JSONL downstream.
     """
     logger.info("atlas_io audit: %s %s", event_type, redact_mapping(payload))
+
+
+def _json_safe(value: Any) -> Any:
+    """Recursively coerce ``date``/``datetime`` to ISO strings.
+
+    The Supabase client serializes upsert bodies with the stdlib ``json``
+    encoder (via httpx), which cannot encode ``date``/``datetime``. Atlas/Hermes
+    payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo`` rehydrated from
+    a LangGraph checkpoint as a plain dict — rather than the Pydantic model
+    whose ``model_dump(mode="json")`` would coerce it — carries a raw ``date``
+    in ``payload["date"]``. Coercing here, at the single write boundary,
+    protects every caller (analyst/deliberation/book/memo/delta/snapshot) at
+    once instead of relying on each one to pre-serialize its dates.
+    """
+    if isinstance(value, dict):
+        return {key: _json_safe(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
 
 
 def publish_document(
@@ -231,7 +254,9 @@ def publish_document(
         "payload": payload,
         "content": content_markdown,
     }
-    resp = client.table("documents").upsert(row, on_conflict="date,document_key").execute()
+    resp = (
+        client.table("documents").upsert(_json_safe(row), on_conflict="date,document_key").execute()
+    )
     row_id = _extract_row_id(resp) or document_key
     _audit(
         "publish_document",
@@ -242,6 +267,32 @@ def publish_document(
         document_key=document_key,
         row_id=str(row_id),
         published_at=_parse_date(date_str),
+    )
+
+
+def publish_document_delta(
+    *,
+    client: SupabaseClient,
+    date_str: str,
+    target_document_key: str,
+    patch: dict[str, Any],
+    run_type: str,
+) -> PublishedArtifact:
+    """Publish a ``document_delta`` audit row under ``document-deltas/{target}`` (§5.4)."""
+    delta_key = f"document-deltas/{target_document_key}"
+    return publish_document(
+        client=client,
+        document_key=delta_key,
+        payload=patch,
+        # Title-Case to satisfy chk_documents_doc_type (#1010); the snake_case
+        # "document_delta" lives only inside the patch payload (the DocumentPatch
+        # model discriminator), never in the documents.doc_type column.
+        doc_type="Document Delta",
+        run_type=run_type,
+        title=f"delta {target_document_key} {date_str}",
+        date_str=date_str,
+        category="delta",
+        segment="document_delta",
     )
 
 
@@ -268,7 +319,7 @@ def publish_daily_snapshot(
         "snapshot": snapshot,
         "digest_markdown": digest_markdown,
     }
-    resp = client.table("daily_snapshots").upsert(row, on_conflict="date").execute()
+    resp = client.table("daily_snapshots").upsert(_json_safe(row), on_conflict="date").execute()
     row_id = _extract_row_id(resp) or date_str
     _audit(
         "publish_daily_snapshot",
@@ -280,6 +331,297 @@ def publish_daily_snapshot(
         row_id=str(row_id),
         published_at=_parse_date(date_str),
     )
+
+
+def upsert_onchain_cohort_positioning(
+    *,
+    client: SupabaseClient,
+    rows: list[dict[str, Any]],
+) -> int:
+    """Idempotently upsert per-(date,market) on-chain cohort positioning rows (#801).
+
+    Returns the number of rows written. A no-op (returns 0) when ``rows`` is empty, so the
+    preflight caller can skip cleanly on a Hyperdash outage without a special case. Upserts one
+    row at a time on ``(date, market)`` — the per-run market set is small (a handful) and this
+    matches the single-dict upsert convention used by every other writer here.
+    """
+    if not rows:
+        return 0
+    for row in rows:
+        client.table("onchain_cohort_positioning").upsert(
+            _json_safe(row), on_conflict="date,market"
+        ).execute()
+    _audit(
+        "upsert_onchain_cohort_positioning",
+        {"date": rows[0].get("date"), "row_count": len(rows)},
+    )
+    return len(rows)
+
+
+def load_prior_book(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    include_risk_fields: bool = False,
+) -> list[dict[str, Any]]:
+    """Positions rows for the most recent date strictly before ``run_date``.
+
+    Returns the held book coming into ``run_date`` (newest prior date only),
+    or ``[]`` on the first ever run.
+    """
+    columns = "date, ticker, weight_pct, entry_date"
+    if include_risk_fields:
+        columns += ", entry_price"
+    resp = (
+        client.table("positions")
+        .select(columns)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(200)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return []
+    rows.sort(key=lambda r: str(r.get("date") or ""), reverse=True)
+    top_date = str(rows[0].get("date") or "")
+    return [r for r in rows if str(r.get("date") or "") == top_date]
+
+
+# Per-ticker analyst / deliberation docs are loaded separately (slim summaries) so
+# ``load_prior_context`` does not stuff full decision artifacts into every node.
+_CONTINUITY_EXCLUDED_DOC_PREFIXES = ("analyst/", "deliberation/")
+
+_TERMINAL_THESIS_STATUSES = frozenset({"CLOSED", "INVALIDATED"})
+
+
+def _slim_analyst_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract PM-relevant fields from a published ``analyst/{ticker}`` payload."""
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
+    thesis = str(body.get("thesis") or "").strip()
+    return {
+        "conviction_score": body.get("conviction_score"),
+        "stance": body.get("stance"),
+        "thesis_excerpt": thesis[:400],
+    }
+
+
+def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract PM-relevant fields from a published ``deliberation/{ticker}`` payload.
+
+    Drops the full ``transcript`` (the bulk of the doc) — the carry is a slim
+    excerpt, not the full debate dump.
+    """
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
+    conclusion = str(body.get("conclusion") or "").strip()
+    return {
+        "net_stance": body.get("net_stance"),
+        "conviction_delta": body.get("conviction_delta"),
+        "converged": body.get("converged"),
+        "conclusion_excerpt": conclusion[:400],
+    }
+
+
+def load_prior_analyst_summaries(
+    client: SupabaseClient,
+    run_date: date,
+    tickers: list[str] | tuple[str, ...],
+    *,
+    lookback_days: int = 30,
+) -> dict[str, dict[str, Any]]:
+    """Latest prior ``analyst/{ticker}`` slim summary per held ticker.
+
+    Returns ``{ticker: {date, document_key, conviction_score, stance, thesis_excerpt}}``.
+    Empty when ``tickers`` is empty or no prior analyst docs exist.
+    """
+    from datetime import timedelta
+
+    if not tickers:
+        return {}
+    keys = [f"analyst/{t}" for t in tickers]
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("documents")
+        .select("date, document_key, payload")
+        .in_("document_key", list(keys))
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for row in getattr(resp, "data", None) or []:
+        key = str(row.get("document_key") or "")
+        if not key.startswith("analyst/"):
+            continue
+        ticker = key.split("/", 1)[1]
+        if ticker in out:
+            continue
+        slim = _slim_analyst_summary(row.get("payload") or {})
+        out[ticker] = {
+            "date": row.get("date"),
+            "document_key": key,
+            **slim,
+        }
+    return out
+
+
+def load_prior_deliberation_summaries(
+    client: SupabaseClient,
+    run_date: date,
+    tickers: list[str] | tuple[str, ...],
+    *,
+    lookback_days: int = 30,
+) -> dict[str, dict[str, Any]]:
+    """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
+
+    Mirrors :func:`load_prior_analyst_summaries`. Returns ``{ticker: {date,
+    document_key, net_stance, conviction_delta, converged, conclusion_excerpt}}``.
+    Empty when ``tickers`` is empty or no prior deliberation docs exist.
+    """
+    from datetime import timedelta
+
+    if not tickers:
+        return {}
+    keys = [f"deliberation/{t}" for t in tickers]
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("documents")
+        .select("date, document_key, payload")
+        .in_("document_key", list(keys))
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    out: dict[str, dict[str, Any]] = {}
+    for row in getattr(resp, "data", None) or []:
+        key = str(row.get("document_key") or "")
+        if not key.startswith("deliberation/"):
+            continue
+        ticker = key.split("/", 1)[1]
+        if ticker in out:
+            continue
+        slim = _slim_deliberation_summary(row.get("payload") or {})
+        out[ticker] = {
+            "date": row.get("date"),
+            "document_key": key,
+            **slim,
+        }
+    return out
+
+
+def load_active_theses_rows(
+    client: SupabaseClient,
+    run_date: date,
+    *,
+    row_cap: int = 100,
+) -> list[dict[str, Any]]:
+    """``theses`` rows for the latest date strictly before ``run_date``.
+
+    Excludes terminal statuses (``CLOSED``, ``INVALIDATED``). Empty on first run.
+    """
+    # Resolved in TWO steps — find the date, then fetch that date — rather than one ordered,
+    # capped query filtered in Python (#1835). The old shape was
+    # ``.order("date", desc=True).limit(100)`` then a client-side filter to the newest date
+    # present, which fails as the register grows: ``LIMIT`` spans dates, so rows from OLDER
+    # dates consume the cap and can crowd out the date actually wanted; and ``ORDER BY date``
+    # has no secondary key, so *which* rows survive a truncation is not stable between runs.
+    # Peak was 54 rows on one date against a cap of 100 — a 1.85x margin.
+    #
+    # This register is what the thesis-writing step is shown so it can update an existing thesis
+    # instead of creating a near-duplicate, and what ``validate_market_thesis_proposals`` dedupes
+    # against. A register missing entries admits the duplicates it exists to prevent, silently.
+    # ``row_cap`` now bounds ONE date's rows, so the same number is a far larger allowance.
+    date_resp = (
+        client.table("theses")
+        .select("date")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    date_rows = list(getattr(date_resp, "data", None) or [])
+    if not date_rows:
+        return []
+    top_date = str(date_rows[0].get("date") or "")
+    if not top_date:
+        return []
+    resp = (
+        client.table("theses")
+        .select(
+            "date, thesis_id, name, vehicle, invalidation, status, notes, "
+            "confidence, validation_criteria, invalidation_criteria, horizon, "
+            "thesis_kind, linked_market_thesis_id, topic_key"
+        )
+        .eq("date", top_date)
+        .limit(row_cap)
+        .execute()
+    )
+    rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
+    if len(rows) >= row_cap:
+        # Loud rather than silent: the caller cannot tell a complete register from a clipped one.
+        logger.warning(
+            "load_active_theses_rows: %d rows for %s hit row_cap=%d — the thesis register may be "
+            "truncated, which lets duplicate theses through (#1835)",
+            len(rows),
+            top_date,
+            row_cap,
+        )
+    return [
+        r for r in rows if str(r.get("status") or "ACTIVE").upper() not in _TERMINAL_THESIS_STATUSES
+    ]
+
+
+def load_portfolio_performance_snapshot(
+    client: SupabaseClient,
+    run_date: date,
+) -> dict[str, Any]:
+    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``."""
+    nav_resp = (
+        client.table("nav_history")
+        .select("date, nav, cash_pct, invested_pct")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    nav_rows: list[dict[str, Any]] = list(getattr(nav_resp, "data", None) or [])
+    if not nav_rows:
+        return {}
+    nav_row = nav_rows[0]
+    nav_date = str(nav_row.get("date") or "")
+    metrics_resp = (
+        client.table("portfolio_metrics")
+        .select("date, pnl_pct, sharpe, volatility, max_drawdown, alpha")
+        .eq("date", nav_date)
+        .limit(1)
+        .execute()
+    )
+    metrics_rows: list[dict[str, Any]] = list(getattr(metrics_resp, "data", None) or [])
+    snapshot: dict[str, Any] = {
+        "nav_date": nav_date,
+        "nav": nav_row.get("nav"),
+        "cash_pct": nav_row.get("cash_pct"),
+        "invested_pct": nav_row.get("invested_pct"),
+    }
+    if metrics_rows:
+        snapshot["metrics"] = metrics_rows[0]
+    return snapshot
+
+
+def prior_book_current_weights(prior_book: list[dict[str, Any]]) -> dict[str, float]:
+    """Map prior ``positions`` rows to ``{ticker: weight_pct}`` for PM phase_inputs."""
+    out: dict[str, float] = {}
+    for row in prior_book:
+        ticker = row.get("ticker")
+        if not ticker:
+            continue
+        try:
+            out[str(ticker)] = float(row.get("weight_pct") or 0.0)
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 def load_prior_context(
@@ -336,20 +678,16 @@ def load_prior_context(
     latest_by_key: dict[str, DocumentReadRow] = {}
     for row in getattr(docs_resp, "data", None) or []:
         key = row.get("document_key")
-        if key and key not in latest_by_key:
-            latest_by_key[key] = row
-
-    # Derive active-theses hint from documents whose doc_type signals a thesis.
-    theses = [
-        row.get("payload") or {}
-        for row in latest_by_key.values()
-        if "thesis" in (row.get("doc_type") or "").lower()
-    ]
+        if not key or key in latest_by_key:
+            continue
+        if any(str(key).startswith(prefix) for prefix in _CONTINUITY_EXCLUDED_DOC_PREFIXES):
+            continue
+        latest_by_key[key] = row
 
     return PriorContext(
         last_snapshots=last_snapshots,
         latest_segments=latest_by_key,
-        active_theses=theses,
+        active_theses=[],
     )
 
 
@@ -701,6 +1039,126 @@ def query_recent_lessons(
                 out.append(row)
                 added += 1
     return out
+
+
+def query_unfolded_resolved_decisions(*, client: SupabaseClient) -> list[DecisionLogLessonRow]:
+    """Return resolved ``decision_log`` rows not yet folded into beliefs (§11.1)."""
+    resp = (
+        client.table("decision_log")
+        .select(
+            "id, run_id, run_date, ticker, stance, conviction, thesis, "
+            "actual_return, alpha, reflection, resolved_at, beliefs_folded_at"
+        )
+        .eq("status", "resolved")
+        .order("run_date", desc=True)
+        .execute()
+    )
+    rows: list[DecisionLogLessonRow] = list(getattr(resp, "data", None) or [])
+    return [row for row in rows if not row.get("beliefs_folded_at")]
+
+
+def mark_decisions_beliefs_folded(
+    *,
+    client: SupabaseClient,
+    row_ids: list[str],
+    folded_at: datetime,
+) -> int:
+    """Stamp ``beliefs_folded_at`` on rows consumed by beliefs distillation."""
+    if not row_ids:
+        return 0
+    stamped = folded_at.isoformat()
+    updated = 0
+    for row_id in row_ids:
+        client.table("decision_log").update({"beliefs_folded_at": stamped}).eq(
+            "id", row_id
+        ).execute()
+        updated += 1
+    _audit("mark_decisions_beliefs_folded", {"count": updated})
+    return updated
+
+
+def load_latest_beliefs_document(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+) -> dict[str, Any] | None:
+    """Latest ``beliefs`` document strictly before ``run_date`` for PM context."""
+    resp = (
+        client.table("documents")
+        .select("date, document_key, doc_type, payload")
+        .eq("document_key", "beliefs")
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    return rows[0] if rows else None
+
+
+def query_institutional_absence_streak(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    lookback_days: int = 30,
+    document_key_prefix: str = "inst-",
+) -> int:
+    """Count consecutive recent run-dates with **no** institutional document published.
+
+    Powers the Phase 2 circuit-breaker (#928): Jun 17–19 prod paid for the
+    institutional LLM + web search yet produced zero ``inst-*`` documents (no
+    ingest). A streak of ``>= 3`` here lets the delta pipeline skip the paid
+    Phase 2 institutional nodes and emit a deterministic "absent" stub instead.
+
+    Method — one bounded read over ``documents`` (the same table preflight
+    already reads), no new table:
+
+    1. Pull every ``documents`` row in ``[run_date - lookback_days, run_date)``.
+    2. Group by ``date`` → the set of distinct run-dates that published anything.
+    3. Mark each such date "institutional present" if any of its rows has a
+       ``document_key`` starting with ``inst-``.
+    4. Walk the distinct dates newest→oldest and count how many leading dates
+       had **no** institutional document; stop at the first date that did.
+
+    The count is over dates that *published at all*, so an idle weekend (no run,
+    hence no rows) neither breaks nor extends the streak — only real runs that
+    skipped institutional ingest do. Returns ``0`` when the most recent run did
+    publish an ``inst-*`` document (breaker stays open) and ``0`` on an empty
+    window (first-ever / fresh tenant — never trip the breaker without evidence).
+    """
+    from datetime import timedelta
+
+    floor = (run_date - timedelta(days=lookback_days)).isoformat()
+    resp = (
+        client.table("documents")
+        .select("date, document_key")
+        .gte("date", floor)
+        .lt("date", run_date.isoformat())
+        .order("date", desc=True)
+        .execute()
+    )
+    rows: list[dict[str, Any]] = list(getattr(resp, "data", None) or [])
+    if not rows:
+        return 0
+
+    # date string -> did that run-date publish any inst-* document?
+    inst_present_by_date: dict[str, bool] = {}
+    for row in rows:
+        raw_date = row.get("date")
+        if not raw_date:
+            continue
+        day = str(raw_date)[:10]
+        key = str(row.get("document_key") or "")
+        is_inst = key.startswith(document_key_prefix)
+        inst_present_by_date[day] = inst_present_by_date.get(day, False) or is_inst
+
+    # Newest run-date first; count the leading run-dates with no institutional doc.
+    streak = 0
+    for day in sorted(inst_present_by_date, reverse=True):
+        if inst_present_by_date[day]:
+            break
+        streak += 1
+    return streak
 
 
 def query_macro_series_freshness(

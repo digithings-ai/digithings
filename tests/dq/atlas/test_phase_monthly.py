@@ -11,14 +11,13 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-
 from digiquant.olympus.atlas.phases.phase_monthly import MonthlyDigest, _monthly_node
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
-
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -61,21 +60,35 @@ def _monthly_payload() -> str:
 
 @pytest.mark.unit
 class TestMonthlyDigestModelConfig:
-    def test_phase_slug_returns_pinned_model(self) -> None:
-        """get_model_for_phase("monthly-digest") must return the pinned reasoning model.
+    def test_phase_slug_returns_pinned_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """get_model_for_phase("monthly-digest") must return the cheap-tier reasoning model."""
+        from pathlib import Path
 
-        Pipeline routes through OpenRouter Auto Router (config/model_modes.yaml).
-        """
         from digigraph.model_config import get_model_for_phase
+
+        repo_config = str(Path(__file__).parents[3] / "config")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", repo_config)
+        import digigraph.model_config as mc
+
+        monkeypatch.setattr(mc, "_olympus_models_cache", None)
 
         model = get_model_for_phase("monthly-digest")
-        assert model == "openrouter/openrouter/auto", (
-            f"monthly-digest should route via OpenRouter Auto Router, got {model!r}"
+        cfg = mc._load_olympus_models()
+        assert model in cfg.tiers["cheap"].allowed_models["reasoning"], (
+            f"monthly-digest should route via olympus_models cheap tier reasoning pool, got {model!r}"
         )
 
-    def test_phase_slug_not_none(self) -> None:
+    def test_phase_slug_not_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """The config entry must not be missing (None triggers the 403 fallback)."""
+        from pathlib import Path
+
         from digigraph.model_config import get_model_for_phase
+
+        repo_config = str(Path(__file__).parents[3] / "config")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", repo_config)
+        import digigraph.model_config as mc
+
+        monkeypatch.setattr(mc, "_olympus_models_cache", None)
 
         assert get_model_for_phase("monthly-digest") is not None
 
@@ -114,13 +127,18 @@ class TestMonthlyNodePassesPhaseSlug:
             "Without this the model_modes.yaml entry is never consulted."
         )
 
-    def test_kimi_not_called_in_best_mode(self) -> None:
+    def test_kimi_not_called_in_best_mode(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """In best mode the pinned model must win; kimi-k2-thinking must NOT be called.
 
         Simulates the production failure: get_model_for_mode() would return
         kimi-k2-thinking in best mode, but phase_slug routing must intercept first.
         """
         state = _minimal_state()
+        repo_config = str(Path(__file__).parents[3] / "config")
+        monkeypatch.setenv("DIGI_CONFIG_PATH", repo_config)
+        import digigraph.model_config as mc
+
+        monkeypatch.setattr(mc, "_olympus_models_cache", None)
 
         called_models: list[str] = []
 
@@ -129,7 +147,6 @@ class TestMonthlyNodePassesPhaseSlug:
             return _monthly_payload()
 
         with (
-            # Simulate best mode returning kimi (the 403 path) to prove it's bypassed.
             patch("digigraph.model_config._get_llm_mode", return_value="best"),
             patch(
                 "digigraph.graph.research_agent.completion_text",
@@ -143,10 +160,12 @@ class TestMonthlyNodePassesPhaseSlug:
             _monthly_node(state)
 
         assert called_models, "LLM must be called"
+        cfg = mc._load_olympus_models()
+        reasoning_pool = set(cfg.tiers["cheap"].allowed_models["reasoning"])
         for m in called_models:
             assert "kimi" not in m.lower(), (
                 f"kimi-k2-thinking must not be selected in best mode; got {m!r}"
             )
-        assert all(m == "openrouter/openrouter/auto" for m in called_models), (
-            f"Expected openrouter/openrouter/auto via phase_slug; got {called_models}"
-        )
+            assert m in reasoning_pool, (
+                f"Expected cheap-tier reasoning pool model via phase_slug; got {m!r}"
+            )

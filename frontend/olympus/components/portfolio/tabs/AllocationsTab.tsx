@@ -1,13 +1,19 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+import { SegmentedControl } from '@digithings/web';
 import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } from '@/lib/types';
+import type { TableRow } from '@/lib/database.types';
 import type { SleeveStackMode } from '@/lib/portfolio-aggregates';
+import { reconcileBook } from '@/lib/book-reconciliation';
 import AllocationsPositionsTable from '@/components/portfolio/AllocationsPositionsTable';
-import SleeveHistorySection from '@/components/portfolio/SleeveHistorySection';
+import BookReconciliationStrip from '@/components/portfolio/BookReconciliationStrip';
+import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
 
 export default function AllocationsTab(props: {
   lastUpdated: string | null;
   positions: Position[];
+  decisions: TableRow<'decision_log'>[];
   positionHistory: PositionHistoryRow[];
   positionEvents: DashboardPositionEvent[];
   thesisById: Map<string, Thesis>;
@@ -23,44 +29,44 @@ export default function AllocationsTab(props: {
   formatSleeveKey: (k: string) => string;
 }) {
   const {
-    lastUpdated,
-    positions,
-    positionHistory,
-    positionEvents,
-    thesisById,
-    effHistoryDate,
-    onSelectHistoryDate,
-    onClearHistoryDate,
-    showHistoryDateBanner,
-    dateParam,
-    historyMode,
-    setHistoryMode,
-    sleeveData,
-    sleeveKeys,
-    formatSleeveKey,
+    lastUpdated, positions, positionEvents,
   } = props;
+  const [view, setView] = useState<'positions' | 'activity'>('positions');
+
+  const reconciliation = useMemo(() => reconcileBook(positions), [positions]);
+  const positionCount = reconciliation.rows.length;
 
   return (
-    <div className="space-y-10">
-      <AllocationsPositionsTable
-        positions={positions}
-        positionHistory={positionHistory}
-        positionEvents={positionEvents}
-        thesisById={thesisById}
-        lastUpdated={lastUpdated}
+    <div
+      data-region="holdings-frame"
+      className="flex min-h-[28rem] flex-1 flex-col overflow-hidden"
+    >
+      <BookReconciliationStrip
+        reconciliation={reconciliation}
+        asOfDate={lastUpdated}
+        positionCount={positionCount}
       />
-      <SleeveHistorySection
-        historyMode={historyMode}
-        setHistoryMode={setHistoryMode}
-        sleeveData={sleeveData}
-        sleeveKeys={sleeveKeys}
-        formatSleeveKey={formatSleeveKey}
-        effHistoryDate={effHistoryDate}
-        onSelectHistoryDate={onSelectHistoryDate}
-        showHistoryDateBanner={showHistoryDateBanner}
-        dateParam={dateParam}
-        onClearHistoryDate={onClearHistoryDate}
-      />
+      <div className="flex items-center justify-between gap-3 border-x border-b border-hair px-4 py-2 md:px-6">
+        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+          book monitor
+        </span>
+        <SegmentedControl<'positions' | 'activity'>
+          options={['positions', 'activity']}
+          value={view}
+          onChange={setView}
+          dress="accent"
+          aria-label="Holdings view"
+        />
+      </div>
+      <div data-region="workspace" className="min-h-0 min-w-0 flex-1">
+        {view === 'positions' ? (
+          <section data-region="ledger" className="h-full min-h-0 min-w-0">
+          <AllocationsPositionsTable reconciliation={reconciliation} />
+          </section>
+        ) : (
+          <HoldingsActivityTable events={positionEvents} />
+        )}
+      </div>
     </div>
   );
 }

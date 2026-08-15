@@ -32,6 +32,10 @@ function applyHtmlColorScheme(preference: AtlasTheme) {
   const root = document.documentElement;
   root.classList.remove('light', 'dark');
   root.classList.add(resolved);
+  // Drive the canonical tokens.css [data-theme] layer alongside the legacy
+  // class, which still scopes the light-mode blueprint-grid + --shadow-glass
+  // overrides in globals.css.
+  root.setAttribute('data-theme', resolved);
 }
 
 function readStoredTheme(): AtlasTheme {

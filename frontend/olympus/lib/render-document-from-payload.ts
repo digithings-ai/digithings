@@ -28,15 +28,20 @@ function pushBulletBlock(target: string[], heading: string, items: unknown[] | u
   target.push('');
 }
 
-function renderPayloadJsonFallback(payload: unknown, documentKey?: string): string {
-  const lines: string[] = [`# ${documentKey || 'Document'}`, '', '## Payload'];
-  try {
-    lines.push('```json', JSON.stringify(payload, null, 2), '```');
-  } catch {
-    lines.push('_Unable to render payload._');
-  }
-  lines.push('');
-  return `${lines.join('\n').trim()}\n`;
+export function normalizeMarkdownFirstHeadingDate(markdown: string, docDate: string): string {
+  const normalizedDocDate = docDate.trim();
+  if (!normalizedDocDate) return markdown;
+
+  const lines = markdown.split('\n');
+  const headingIndex = lines.findIndex((line) => line.startsWith('# '));
+  if (headingIndex === -1) return markdown;
+
+  const firstHeading = lines[headingIndex];
+  const updatedHeading = firstHeading.replace(/\b\d{4}-\d{2}-\d{2}\b/, normalizedDocDate);
+  if (updatedHeading === firstHeading) return markdown;
+
+  lines[headingIndex] = updatedHeading;
+  return lines.join('\n');
 }
 
 export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?: string): string | null {
@@ -73,14 +78,21 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
     else if (dk.startsWith('opportunity-screen/')) docType = 'opportunity_screen';
   }
   if (!docType) {
-    // `digest`-keyed documents return null so the caller can fall back to the
-    // richer daily_snapshots.snapshot render. Every other unknown shape gets a
-    // JSON dump — debuggable beats "_No content available._".
-    if (documentKey === 'digest') return null;
-    return renderPayloadJsonFallback(payload, documentKey);
+    // Keep unknown payloads structured. The caller routes an empty markdown
+    // result to PayloadKeyValueView instead of flattening the object into JSON.
+    return null;
   }
 
   const dateStr = s(p.date);
+
+  // Beliefs distillation (#1383): BeliefsBlob = { doc_type: 'beliefs', date, body } —
+  // body is already markdown, capped at 12k chars by the publisher.
+  if (docType === 'beliefs') {
+    const body = s(p.body).trim();
+    if (body) {
+      return `# Beliefs${dateStr ? ` — ${dateStr}` : ''}\n\n${body}\n`;
+    }
+  }
 
   if (docType === 'research_changelog') {
     const items = Array.isArray(p.items) ? p.items : [];

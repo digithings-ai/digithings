@@ -1,8 +1,10 @@
 # ADR-0012 — digiquant.io served from a separate publish repo
 
-> **Historical note (2026-06):** Production deploy also uses **Cloudflare Pages** (`scripts/build-digiquant.sh`, `.github/workflows/deploy-digiquant-cloudflare.yml`). The split-repo `deploy-digiquant.yml` sync path below may still apply for `digithings-ai/digiquant.io`.
+> **Superseded — never implemented (verified 2026-08-01):** The publish repo `digithings-ai/digiquant.io` does not exist — the GitHub API returns 404 for it and the org lists no such repo. The sync workflow described below (`.github/workflows/deploy-digiquant.yml`) was added for this ADR and removed again in [#494](https://github.com/digithings-ai/digithings/issues/494), because Cloudflare Pages handles digiquant.io directly via its GitHub App integration. That git-integration build (`scripts/build-digiquant.sh`) is the sole delivery path for digiquant.io. Recorded while working [#1759](https://github.com/digithings-ai/digithings/issues/1759).
 
-**Status:** Accepted (2026-04-23)
+> **Historical note (2026-06):** Production deploy uses **Cloudflare Pages** (`scripts/build-digiquant.sh`, `.github/workflows/deploy-digiquant-cloudflare.yml`). **One identifier named in the Decision section below has since been renamed** (kept as-written to preserve the ADR record): the content path `frontend/digiquant/` → `frontend/digiquant-web/`.
+
+**Status:** Accepted (2026-04-23) — superseded, never implemented (2026-08-01)
 **Amends:** [ADR-0002](0002-domain-unification.md) (two-domain plan) and [ADR-0009](0009-frontend-umbrella.md) (frontend umbrella).
 **Context:** Issues [#174](https://github.com/digithings-ai/digithings/issues/174) (live-websites epic), [#301](https://github.com/digithings-ai/digithings/issues/301) (digiquant.io deploy).
 
@@ -19,7 +21,7 @@ ADR-0002 committed to two live domains — `digithings.ai` and `digiquant.io` �
 
 ## Decision
 
-`digiquant.io` is served from a dedicated publish repo, `digithings-ai/digiquant.io`, whose GitHub Pages config serves its `main` branch root. A sync workflow in this monorepo (`.github/workflows/deploy-digiquant.yml`) builds `dist/` from `frontend/digiquant/` + `frontend/design/` on every push to `develop`/`main` touching those paths, and force-pushes the result to the publish repo using a fine-grained PAT (`DIGIQUANT_IO_DEPLOY_TOKEN`, scoped to the publish repo, contents: read/write).
+`digiquant.io` is served from a dedicated publish repo, `digithings-ai/digiquant.io`, whose GitHub Pages config serves its `main` branch root. A sync workflow in this monorepo (`.github/workflows/deploy-digiquant.yml`) builds `dist/` from `frontend/digiquant/` + `frontend/digiweb/design/` on every push to `develop`/`main` touching those paths, and force-pushes the result to the publish repo using a fine-grained PAT (`DIGIQUANT_IO_DEPLOY_TOKEN`, scoped to the publish repo, contents: read/write).
 
 **The publish repo is deploy-only.** No human commits there; its history is a byproduct of deploys. The monorepo remains the sole source of truth.
 

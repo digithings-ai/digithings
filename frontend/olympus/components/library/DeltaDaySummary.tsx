@@ -20,15 +20,15 @@ export default function DeltaDaySummary({
 
   return (
     <div
-      className="rounded-xl border border-fin-blue/35 bg-gradient-to-br from-fin-blue/[0.12] via-fin-blue/[0.06] to-transparent px-5 py-5 text-sm shadow-[0_0_48px_-12px_rgba(59,130,246,0.35)] ring-1 ring-inset ring-white/[0.06]"
+      className="rounded-xl border border-accent/35 bg-gradient-to-br from-accent/[0.12] via-accent/[0.06] to-transparent px-5 py-5 text-sm shadow-[0_0_48px_-12px_color-mix(in_srgb,var(--accent)_35%,transparent)] ring-1 ring-inset ring-ink/[0.06]"
       role="region"
       aria-label="Delta run summary"
     >
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-1.5 min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-fin-blue/90">Delta day</p>
-          <p className="text-lg font-semibold text-text-primary leading-snug">Updates applied to this run</p>
-          <p className="text-xs text-text-secondary">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent/90">Delta day</p>
+          <p className="text-lg font-semibold text-ink leading-snug">Updates applied to this run</p>
+          <p className="text-xs text-ink-soft">
             {pathCount} path{pathCount !== 1 ? 's' : ''} touched
             {opCount > 0 ? (
               <>
@@ -37,13 +37,13 @@ export default function DeltaDaySummary({
               </>
             ) : null}
           </p>
-          <p className="text-xs text-text-muted max-w-2xl">
-            Open the <strong className="text-text-secondary">digest</strong> to compare against the prior snapshot or
+          <p className="text-xs text-ink-mute max-w-2xl">
+            Open the <strong className="text-ink-soft">digest</strong> to compare against the prior snapshot or
             the delta baseline
             {baseline ? (
               <>
                 {' '}
-                (<span className="font-mono text-text-secondary">{baseline}</span>)
+                (<span className="font-mono text-ink-soft">{baseline}</span>)
               </>
             ) : null}
             .
@@ -53,7 +53,7 @@ export default function DeltaDaySummary({
           <button
             type="button"
             onClick={onOpenDigest}
-            className="shrink-0 text-sm font-semibold px-4 py-2.5 rounded-lg bg-fin-blue/25 text-fin-blue border border-fin-blue/40 hover:bg-fin-blue/35 transition-colors"
+            className="shrink-0 text-sm font-semibold px-4 py-2.5 rounded-lg bg-accent/25 text-accent border border-accent/40 hover:bg-accent/35 transition-colors"
           >
             Open digest
           </button>

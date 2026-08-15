@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from digiquant.indicators.ma import WilderMA, SMA, EMA, WMA, HMA, DEMA, VWMA, make_ma
+from digiquant.indicators.ma import DEMA, EMA, HMA, SMA, VWMA, WMA, WilderMA, make_ma
 
 
 class TestWilderMA:

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { EmptyState as WebEmptyState } from '@digithings/web';
 
 /** Percent points → "+3.20%" / "-1.50%" / "—" for null. */
 export function fmtPct(v: number | null | undefined, digits = 2): string {
@@ -16,8 +17,8 @@ export function fmtNum(v: number | null | undefined, digits = 0): string {
 
 /** Green for gains, red for losses, muted for flat/missing — the fin-* convention. */
 export function signColorClass(v: number | null | undefined): string {
-  if (v == null || Number.isNaN(v) || v === 0) return 'text-text-secondary';
-  return v > 0 ? 'text-fin-green' : 'text-fin-red';
+  if (v == null || Number.isNaN(v) || v === 0) return 'text-ink-soft';
+  return v > 0 ? 'text-up' : 'text-down';
 }
 
 export function StatTile({
@@ -25,19 +26,25 @@ export function StatTile({
   value,
   sub,
   color,
+  flat = false,
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
   color?: string;
+  flat?: boolean;
 }) {
   return (
-    <div className="glass-card p-4 flex flex-col gap-1">
-      <span className="text-xs text-text-muted">{label}</span>
-      <span className={`text-xl font-semibold tabular-nums ${color ?? 'text-text-primary'}`}>
+    <div
+      className={flat
+        ? 'flex flex-col gap-1 border-b border-r border-hair p-4'
+        : 'glass-card flex flex-col gap-1 p-4'}
+    >
+      <span className="text-xs text-ink-mute">{label}</span>
+      <span className={`text-xl font-semibold tabular-nums ${color ?? 'text-ink'}`}>
         {value}
       </span>
-      {sub ? <span className="text-xs text-text-muted">{sub}</span> : null}
+      {sub ? <span className="text-xs text-ink-mute">{sub}</span> : null}
     </div>
   );
 }
@@ -47,40 +54,53 @@ export function SectionCard({
   subtitle,
   children,
   className,
+  flat = false,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   className?: string;
+  flat?: boolean;
 }) {
   return (
-    <div className={`glass-card p-5 flex flex-col gap-4 ${className ?? ''}`}>
+    <div
+      className={`${flat ? 'border-b border-hair py-5' : 'glass-card p-5'} flex flex-col gap-4 ${className ?? ''}`}
+    >
       <div className="flex flex-col gap-0.5">
-        <h2 className="text-sm font-semibold text-text-primary">{title}</h2>
-        {subtitle ? <p className="text-xs text-text-muted">{subtitle}</p> : null}
+        <h2 className="text-sm font-semibold text-ink">{title}</h2>
+        {subtitle ? <p className="text-xs text-ink-mute">{subtitle}</p> : null}
       </div>
       {children}
     </div>
   );
 }
 
+/**
+ * Thin shim over the promoted @digithings/web EmptyState (#1548): dress="glass"
+ * reproduces the shipped observability card (sans title/body/italic note, no
+ * glyph) exactly; the `.glass-card` surface stays a call-site class so the
+ * app's motion-reveal hook keeps firing. The local title/message/note API is
+ * preserved for consumers (AttributionTab, DecisionScorecardTab, SystemStatus).
+ */
 export function EmptyState({
   title,
   message,
   note,
+  flat = false,
 }: {
   title: string;
   message: string;
   /** Short secondary line for PMs — explains why the tab is empty without reading as "broken". */
   note?: string;
+  flat?: boolean;
 }) {
   return (
-    <div className="glass-card p-8 flex flex-col items-center justify-center gap-2 text-center">
-      <p className="text-sm font-medium text-text-secondary">{title}</p>
-      <p className="text-xs text-text-muted max-w-md">{message}</p>
-      {note ? (
-        <p className="text-xs text-text-muted/60 max-w-md mt-1 italic">{note}</p>
-      ) : null}
-    </div>
+    <WebEmptyState
+      dress="glass"
+      className={flat ? 'border-y border-hair' : 'glass-card'}
+      title={title}
+      body={message}
+      note={note}
+    />
   );
 }

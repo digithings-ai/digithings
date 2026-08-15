@@ -29,7 +29,7 @@ from pathlib import Path
 import polars as pl
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "digiquant" / "src"))
-from digiquant.data.prices._utils import call_with_retry  # noqa: E402
+from digiquant.data.prices._utils import call_with_retry
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -246,7 +246,7 @@ def download_batch(tickers: list[str], period: str) -> dict[str, pl.DataFrame]:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> int:  # noqa: C901
+def main() -> int:
     parser = argparse.ArgumentParser(
         description="Pre-load local price-history cache from Yahoo Finance"
     )

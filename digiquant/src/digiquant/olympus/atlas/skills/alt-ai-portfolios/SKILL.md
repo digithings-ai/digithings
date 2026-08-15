@@ -8,11 +8,11 @@ description: Tracks AI-run / AI-driven investment portfolio accounts on X (Claud
 ## Grounding (use first)
 
 A pre-fetched **`web_grounding`** block is provided in PHASE_INPUTS when available — it is
-an **x_search read of the tracked AI-portfolio accounts' latest posts** (per-account
-holdings/changes with named tickers + a cross-account consensus + sector tilt), each claim
-cited to its X post URL. Ground every claim on this block; carry its X post URLs into the
-output's `sources`. Do **not** assert a holding that is not in the block. If `web_grounding`
-is absent or empty, return empty findings and say so in `notes`.
+an **OpenRouter web search read of the tracked AI-portfolio accounts' latest posts**
+(per-account holdings/changes with named tickers + a cross-account consensus + sector tilt),
+each claim cited to its X post URL. Ground every claim on this block; carry its X post URLs
+into the output's `sources`. Do **not** assert a holding that is not in the block. If
+`web_grounding` is absent or empty, return empty findings and say so in `notes`.
 
 ## What to produce
 

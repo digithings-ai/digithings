@@ -24,6 +24,7 @@
 - NautilusTrader for all backtest/optimize
 - Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR
 - Never touch live-trading paths without explicit human approval
+- Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing.
 
 - **Every code change must trace to a GitHub Issue on Project #1.** Use a `task/<N>-<slug>` branch (via `make task ISSUE=N`) or include `Fixes #<N>` in the PR body. Enforced by `.github/workflows/pr-linkage.yml`.
 
@@ -41,6 +42,7 @@
 | `digibase` | — | Shared Python library — error envelopes, HTTP helpers, OTel | [digibase/AGENTS.md](digibase/AGENTS.md) |
 | `digikey` | 8005 | JWT + scoped API key auth plane — RS256, JWKS, token exchange | [digikey/AGENTS.md](digikey/AGENTS.md) |
 | `digichat` | 3005 | Next.js BFF + React chat UI — Auth.js, Drizzle, AI SDK streaming | [digichat/AGENTS.md](digichat/AGENTS.md) |
+| `digiskills` | — | Compiles a codebase/docs source into an installable Agent Skill package | [digiskills/AGENTS.md](digiskills/AGENTS.md) |
 
 ---
 
@@ -68,7 +70,7 @@ Full rubric criteria: [`docs/scoring/`](docs/scoring/)
 - `make new-task` — Create a GitHub Issue for the agent backlog (agent-task label) (`scripts/create_issue.sh`)
 - `make status` — List open agent-task issues, filterable by component (`scripts/list_tasks.sh`)
 - `make task` — Execute a backlog task end-to-end in an isolated git worktree (`scripts/run_task.sh`)
-- `make parse-error` — Parse a Python stack trace and identify the DigiThings component (`scripts/parse_traceback.py`)
+- `make parse-error` — Parse a Python stack trace and identify the digithings component (`scripts/parse_traceback.py`)
 
 ---
 
@@ -81,14 +83,13 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `component-router` — Maps a described change onto the correct component + reading list + test selector
 - `dictation-normalizer` — Reshapes rambling/dictated input into a structured instruction block; nothing lost
 - `spec-writer` — Emits GitHub Issue bodies matching .github/ISSUE_TEMPLATE/agent_task.yml
-- `pr-reviewer` — Rubric-aware PR review mirroring docs/scoring/ dimensions
 - `test-first-implementer` — Red/green/refactor TDD loop bound to the component test command
-- `security-reviewer` — OWASP + DigiThings security sweep before auth/crypto PRs
 
 **Skills** (prompted workflows — invoke by name or when the trigger fits):
 
 - `triage` — see `.claude/skills/triage/SKILL.md`
 - `ci-triage` — see `.claude/skills/ci-triage/SKILL.md`
+- `digiweb` — see `.claude/skills/digiweb/SKILL.md`
 
 **Slash commands** (Claude Code) / prompted workflows (other tools):
 
@@ -100,6 +101,7 @@ The skills, subagents, and slash commands below are defined once under `agents/s
 - `/opsx-propose` — see `.claude/commands/opsx-propose.md`
 - `/opsx-apply` — see `.claude/commands/opsx-apply.md`
 - `/opsx-archive` — see `.claude/commands/opsx-archive.md`
+- `/review` — see `.claude/commands/review.md`
 
 
 ---

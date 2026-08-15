@@ -1,15 +1,10 @@
-"""Hermes phase nodes — analysis, debate, PM allocation, reflection.
-
-Each phase composes :class:`digigraph.graph.pipeline_builder.PipelinePhase`
-objects that operate on :class:`digiquant.olympus.hermes.state.HermesState` (today
-an alias for :class:`digiquant.olympus.atlas.state.AtlasResearchState`).
+"""Hermes phase nodes — thesis-first H1–H9 graph.
 
 Phases:
-    - ``phase7c_analyst``   — 4-axis analyst specialisation (#430).
-    - ``phase7cd_debate``   — Bull/Bear adversarial debate per ticker (#429).
-    - ``phase7d_pm``        — risk-aggressive vs risk-conservative debate +
-                              portfolio-manager allocation memo (#431).
-    - ``phase9_evolution``  — closed-loop reflection / alpha scoring (#432).
+    - ``h1``–``h4`` — thesis track (market review → exploration → vehicle map → screener)
+    - ``h5``–``h6`` — portfolio track (unified analyst → PM↔analyst deliberation)
+    - ``h7_pm_direction`` — PM direction memo (no weights)
+    - ``phase7e_risk_sizing`` — H8 deterministic sizing (sole weight owner)
 """
 
 from __future__ import annotations

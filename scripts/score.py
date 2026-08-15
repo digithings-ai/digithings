@@ -56,7 +56,7 @@ SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
     ("digiquant/scripts/atlas/preload-history.py", "pd."),
     ("digiquant/scripts/atlas/update_tearsheet.py", "pandas"),
     # RegExp.exec in terminal highlighter — not Python exec() (DESLOP-027)
-    ("frontend/design/terminal/highlight-dom.js", "bare exec()"),
+    ("frontend/digiweb/design/terminal/highlight-dom.js", "bare exec()"),
     # projects/ are confidential standalone research scripts, not services
     ("projects/", "blocking sleep"),
     ("projects/", "requests import"),
@@ -72,6 +72,13 @@ SCORE_SKIP_PATH_FRAGMENTS: tuple[str, ...] = (
     "docs/reviews/",
     "digigraph/docs/SECURITY.md",
     "digigraph/src/digigraph/tools/analytics/execute_python.py",
+    # Shared design system (CSS/JS presentation) — score.py's anti-pattern
+    # heuristics are Python-oriented and misfire on CSS/JS (eval/exec/TODO scans
+    # hit all files). This is the source-of-truth design dir we iterate heavily;
+    # secrets are still covered by gitleaks. See #1310.
+    "frontend/digiweb/design/",
+    # Lockfile integrity hashes contain XXX substrings that trip TODO/FIXME scan.
+    "package-lock.json",
 )
 
 # ── Anti-pattern definitions ──────────────────────────────────────────────────
@@ -111,8 +118,12 @@ PATTERNS: list[tuple[re.Pattern, str, str, bool]] = [
     ),
     # Quality
     (
-        re.compile(r"from typing import.*\bAny\b(?!.*# noqa)"),
-        "untyped Any without # noqa annotation",
+        # Deliberately NOT ruff's suppression marker. Ruff's RUF100 rule strips
+        # suppression directives that suppress nothing, which silently deleted
+        # this gate's markers (#1709). `score:allow` is this tool's own token,
+        # already used for the file-level pragmas documented above.
+        re.compile(r"from typing import.*\bAny\b(?!.*score:allow)"),
+        "untyped Any without # score:allow annotation",
         "quality",
         True,
     ),

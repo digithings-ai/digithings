@@ -17,6 +17,20 @@ if [[ -z "$PROJECT_ROOT" ]]; then
   PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../" && pwd)"
 fi
 
+# Main repository root behind the current checkout. Linked git worktrees share
+# one common dir, so this is the primary tree's root even when PROJECT_ROOT
+# re-rooted to a worktree via a mid-session `cd`. Equals PROJECT_ROOT for the
+# primary tree; empty when not a git checkout. Lazy (spawns git) — call only
+# when a write target actually needs evaluating, not on every hook invocation.
+main_repo_root() {
+  local common
+  common="$(git -C "$PROJECT_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+  if [[ "$common" == */.git ]]; then
+    printf '%s\n' "${common%/.git}"
+  fi
+  return 0
+}
+
 # Read stdin once and cache it so multiple Python calls don't consume it twice.
 _HOOK_INPUT="$(cat)"
 

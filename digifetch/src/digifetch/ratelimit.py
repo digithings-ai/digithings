@@ -8,7 +8,7 @@ primemarket node with one explicit, testable limiter: it guarantees at least
 YAGNI by design
 ---------------
 This is a single-process, single-stream min-interval gate — *not* a token
-bucket and *not* Redis-backed. DigiThings reserves distributed/Redis rate
+bucket and *not* Redis-backed. digithings reserves distributed/Redis rate
 limiting for future ``digibase`` work (see root ARCHITECTURE.md); with exactly
 one consumer (twelve-x) a min-interval gate is the right amount of machinery.
 Both the clock and the sleep are injected so tests are deterministic and no

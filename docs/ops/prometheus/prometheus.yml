@@ -1,4 +1,4 @@
-# Prometheus scrape configuration for the DigiThings core stack.
+# Prometheus scrape configuration for the digithings core stack.
 # See docs/adr/0003-observability-baseline.md.
 #
 # All five FastAPI services expose /metrics via digibase.metrics.install_metrics.

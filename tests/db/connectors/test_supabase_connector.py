@@ -1,8 +1,8 @@
 """Unit tests for SupabaseConnector — the supabase client is faked, no live DB.
 
-Mirrors ``tests/db/connectors/test_notion_connector.py`` (typed-result
-assertions, success/failure paths) and reuses the in-memory fake-client shape
-from ``tests/dq/atlas/test_supabase_io.py`` (records calls, honours filters).
+Typed-result assertions over the success/failure paths, reusing the in-memory
+fake-client shape from ``tests/dq/atlas/test_supabase_io.py`` (records calls,
+honours filters).
 
 The connector is imported directly from the submodule rather than via the
 ``digibase.connectors`` package: the package ``__init__`` export for
@@ -13,10 +13,9 @@ would be premature here.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any  # noqa: ANN401 — fake supabase client dict shapes
+from typing import Any  # score:allow untyped any — fake supabase client dict shapes
 
 import pytest
-
 from digibase.connectors.supabase import (
     SupabaseConnector,
     SupabaseNotConfiguredError,

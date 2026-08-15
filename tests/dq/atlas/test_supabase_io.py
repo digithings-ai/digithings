@@ -2,24 +2,31 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
-from datetime import date, timedelta
-from typing import Any  # noqa: F401 — used for fake-client payload dict shape
+from datetime import date, datetime, timedelta
+from typing import Any  # score:allow untyped any — used for fake-client payload dict shape
 
 import pytest
-
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseConfig,
     SupabaseNotConfiguredError,
+    load_active_theses_rows,
+    load_portfolio_performance_snapshot,
+    load_prior_analyst_summaries,
+    load_prior_book,
     load_prior_context,
+    load_prior_deliberation_summaries,
+    prior_book_current_weights,
     publish_daily_snapshot,
     publish_document,
     query_macro_series_freshness,
     query_pending_decisions,
     query_price_deltas,
     query_price_technicals_freshness,
+    upsert_onchain_cohort_positioning,
 )
-
 
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 
@@ -42,8 +49,9 @@ class _FakeQuery:
     table_name: str
     store: dict[str, list[dict[str, Any]]]
     canned: list[dict[str, Any]] = field(default_factory=list)
-    _upsert_row: dict[str, Any] | None = None
+    _upsert_row: dict[str, Any] | list[dict[str, Any]] | None = None
     _update_row: dict[str, Any] | None = None
+    _delete: bool = False
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
     _order: tuple[str, bool] | None = None
     _limit: int | None = None
@@ -73,6 +81,11 @@ class _FakeQuery:
         self._filters.append(("in_", col, list(vals)))
         return self
 
+    def like(self, col: str, pattern: str) -> "_FakeQuery":
+        # PostgREST ``like``; only the trailing-``%`` prefix form is used in-repo.
+        self._filters.append(("like", col, pattern))
+        return self
+
     def order(self, col: str, desc: bool = False) -> "_FakeQuery":
         self._order = (col, desc)
         return self
@@ -81,21 +94,49 @@ class _FakeQuery:
         self._limit = n
         return self
 
-    def upsert(self, row: dict[str, Any], on_conflict: str | None = None) -> "_FakeQuery":
-        self._upsert_row = dict(row)
-        self._upsert_row["_on_conflict"] = on_conflict
+    def upsert(
+        self,
+        row: dict[str, Any] | list[dict[str, Any]],
+        on_conflict: str | None = None,
+    ) -> "_FakeQuery":
+        if isinstance(row, list):
+            self._upsert_row = [{**item, "_on_conflict": on_conflict} for item in row]
+        else:
+            self._upsert_row = {**row, "_on_conflict": on_conflict}
         return self
 
     def update(self, payload: dict[str, Any]) -> "_FakeQuery":
         self._update_row = dict(payload)
         return self
 
+    def delete(self) -> "_FakeQuery":
+        # PostgREST ``delete().eq(...).execute()``; removes matching rows from the
+        # write-side ``store`` (reads come from ``canned``, so a test that exercises
+        # a delete seeds the row in both).
+        self._delete = True
+        return self
+
+    def _matches(self, row: dict[str, Any]) -> bool:
+        return all(
+            (op == "eq" and row.get(col) == val)
+            or (op == "lt" and str(row.get(col, "")) < str(val))
+            or (op == "lte" and str(row.get(col, "")) <= str(val))
+            or (op == "gte" and str(row.get(col, "")) >= str(val))
+            or (op == "in_" and row.get(col) in val)
+            or (op == "like" and str(row.get(col, "")).startswith(str(val).rstrip("%")))
+            for op, col, val in self._filters
+        )
+
     def execute(self) -> _FakeResponse:
         if self._upsert_row is not None:
-            self.store.setdefault(self.table_name, []).append(self._upsert_row)
-            return _FakeResponse(
-                data=[{**self._upsert_row, "id": f"row-{len(self.store[self.table_name])}"}]
-            )
+            rows = self._upsert_row if isinstance(self._upsert_row, list) else [self._upsert_row]
+            self.store.setdefault(self.table_name, []).extend(rows)
+            return _FakeResponse(data=[dict(row) for row in rows])
+        if self._delete is True:
+            rows = self.store.get(self.table_name, [])
+            removed = [r for r in rows if self._matches(r)]
+            self.store[self.table_name] = [r for r in rows if not self._matches(r)]
+            return _FakeResponse(data=removed)
         if self._update_row is not None:
             # Apply update to rows in store that match all eq filters. Mirrors
             # PostgREST's ``update().eq(...).execute()`` chain semantics so the
@@ -103,29 +144,11 @@ class _FakeQuery:
             # ``update_decision_resolution`` is exercised end-to-end.
             updated: list[dict[str, Any]] = []
             for row in self.store.get(self.table_name, []):
-                if all(
-                    (op == "eq" and row.get(col) == val)
-                    or (op == "lt" and str(row.get(col, "")) < str(val))
-                    or (op == "lte" and str(row.get(col, "")) <= str(val))
-                    or (op == "gte" and str(row.get(col, "")) >= str(val))
-                    or (op == "in_" and row.get(col) in val)
-                    for op, col, val in self._filters
-                ):
+                if self._matches(row):
                     row.update(self._update_row)
                     updated.append(row)
             return _FakeResponse(data=updated)
-        rows = list(self.canned)
-        for op, col, val in self._filters:
-            if op == "lt":
-                rows = [r for r in rows if str(r.get(col, "")) < str(val)]
-            elif op == "lte":
-                rows = [r for r in rows if str(r.get(col, "")) <= str(val)]
-            elif op == "gte":
-                rows = [r for r in rows if str(r.get(col, "")) >= str(val)]
-            elif op == "eq":
-                rows = [r for r in rows if r.get(col) == val]
-            elif op == "in_":
-                rows = [r for r in rows if r.get(col) in val]
+        rows = [r for r in self.canned if self._matches(r)]
         if self._order is not None:
             col, desc = self._order
             rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
@@ -169,7 +192,56 @@ class TestSupabaseConfig:
 
 
 @pytest.mark.unit
+class TestJsonSafe:
+    """`_json_safe` is the write-boundary coercion that keeps date/datetime
+    objects out of the JSON body the Supabase client hands to httpx."""
+
+    def test_coerces_date_and_datetime_recursively(self) -> None:
+        from digiquant.olympus.atlas.supabase_io import _json_safe
+
+        out = _json_safe(
+            {
+                "date": date(2026, 6, 22),
+                "roster": [{"as_of": datetime(2026, 6, 22, 13, 30)}, "flat"],
+                "label": "long-tech",
+                "rank": 3,
+                "weight": None,
+            }
+        )
+        assert out == {
+            "date": "2026-06-22",
+            "roster": [{"as_of": "2026-06-22T13:30:00"}, "flat"],
+            "label": "long-tech",
+            "rank": 3,
+            "weight": None,
+        }
+        json.dumps(out)  # the whole structure must be JSON-encodable
+
+
+@pytest.mark.unit
 class TestPublishDocument:
+    def test_serializes_date_objects_nested_in_payload(self) -> None:
+        """Regression (Olympus daily crash, 2026-06-22): a ``PMDirectionMemo``
+        rehydrated from a LangGraph checkpoint as a plain dict — rather than the
+        Pydantic model — carries a raw ``datetime.date`` in ``payload['date']``.
+        The Supabase client JSON-encodes the row via httpx, so the date must be
+        coerced to an ISO string before upsert or it raises
+        ``TypeError: Object of type date is not JSON serializable``."""
+        client = FakeSupabaseClient()
+        publish_document(
+            client=client,
+            document_key="pm-direction-memo",
+            payload={"schema_version": "1.0", "date": date(2026, 6, 22), "roster": []},
+            doc_type="PM Direction Memo",
+            run_type="baseline",
+            title="PM Direction 2026-06-22",
+            date_str="2026-06-22",
+            category="portfolio",
+        )
+        row = client.store["documents"][0]
+        json.dumps(row)  # mirrors the real client's encode step — must not raise
+        assert row["payload"]["date"] == "2026-06-22"
+
     def test_idempotent_on_date_plus_document_key(self) -> None:
         client = FakeSupabaseClient()
         out1 = publish_document(
@@ -220,9 +292,9 @@ class TestPublishDocument:
         """If a caller inadvertently passed an api_key field via the outer
         audit payload it would be redacted. The adapter never puts secrets
         there today, but the contract must hold."""
-        from digiquant.olympus.atlas.supabase_io import _audit
-
         import logging
+
+        from digiquant.olympus.atlas.supabase_io import _audit
 
         with caplog.at_level(logging.INFO, logger="digiquant.olympus.atlas.supabase_io"):
             _audit("test", {"document_key": "k", "api_key": "sk-should-not-appear"})
@@ -245,6 +317,37 @@ class TestPublishDailySnapshot:
         assert out.table == "daily_snapshots"
         assert client.store["daily_snapshots"][0]["_on_conflict"] == "date"
         assert client.store["daily_snapshots"][0]["snapshot"] == {"regime": "slowing"}
+
+    def test_serializes_date_objects_in_snapshot(self) -> None:
+        """Same date-not-serializable class as documents — the snapshot JSONB
+        payload is written in the same H9 commit step."""
+        client = FakeSupabaseClient()
+        publish_daily_snapshot(
+            client=client,
+            date_str="2026-06-22",
+            snapshot={"regime": "slowing", "as_of": date(2026, 6, 22)},
+            run_type="baseline",
+            baseline_date=None,
+        )
+        row = client.store["daily_snapshots"][0]
+        json.dumps(row)  # must not raise
+        assert row["snapshot"]["as_of"] == "2026-06-22"
+
+
+@pytest.mark.unit
+class TestUpsertOnchainCohortPositioning:
+    def test_serializes_date_objects_in_rows(self) -> None:
+        """Every write through this adapter must survive JSON encoding — a
+        date-bearing on-chain row would otherwise crash the upsert too."""
+        client = FakeSupabaseClient()
+        written = upsert_onchain_cohort_positioning(
+            client=client,
+            rows=[{"date": date(2026, 6, 22), "market": "BTC", "net_taker": 0.3}],
+        )
+        assert written == 1
+        row = client.store["onchain_cohort_positioning"][0]
+        json.dumps(row)  # must not raise
+        assert row["date"] == "2026-06-22"
 
 
 @pytest.mark.unit
@@ -302,8 +405,200 @@ class TestLoadPriorContext:
         assert len(ctx.last_snapshots) == 2
         # Latest-per-key resolution kept the fresh macro row, not the stale one.
         assert ctx.latest_segments["macro/2026-04-19.json"]["payload"] == {"regime": "a"}
-        # Thesis doc filtered into active_theses.
-        assert any(t.get("label") == "long-tech" for t in ctx.active_theses)
+        # Thesis / analyst docs are excluded from latest_segments; theses load separately.
+        assert ctx.active_theses == []
+        assert "thesis/2026-04-19.json" in ctx.latest_segments
+
+    def test_excludes_analyst_and_deliberation_from_latest_segments(self) -> None:
+        docs = [
+            {
+                "date": "2026-04-19",
+                "document_key": "analyst/SPY",
+                "doc_type": "analyst",
+                "payload": {"stance": "hold"},
+            },
+            {
+                "date": "2026-04-19",
+                "document_key": "deliberation/SPY",
+                "doc_type": "deliberation",
+                "payload": {},
+            },
+            {
+                "date": "2026-04-19",
+                "document_key": "macro",
+                "doc_type": "macro",
+                "payload": {"x": 1},
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"daily_snapshots": [], "documents": docs})
+        ctx = load_prior_context(client=client, run_date=date(2026, 4, 20))
+        assert "macro" in ctx.latest_segments
+        assert "analyst/SPY" not in ctx.latest_segments
+        assert "deliberation/SPY" not in ctx.latest_segments
+
+
+@pytest.mark.unit
+class TestContinuityLoaders:
+    def test_load_prior_analyst_summaries_latest_per_ticker(self) -> None:
+        docs = [
+            {
+                "date": "2026-06-17",
+                "document_key": "analyst/SHY",
+                "payload": {
+                    "stance": "hold",
+                    "conviction_score": 1,
+                    "thesis": "Defensive duration anchor.",
+                },
+            },
+            {
+                "date": "2026-06-18",
+                "document_key": "analyst/SHY",
+                "payload": {
+                    "stance": "hold",
+                    "conviction_score": 2,
+                    "thesis": "Still defensive; yields peaked.",
+                },
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"documents": docs})
+        out = load_prior_analyst_summaries(client, date(2026, 6, 19), ["SHY"])
+        assert out["SHY"]["date"] == "2026-06-18"
+        assert out["SHY"]["conviction_score"] == 2
+        assert "yields peaked" in out["SHY"]["thesis_excerpt"]
+
+    def test_load_prior_deliberation_summaries_latest_per_ticker(self) -> None:
+        docs = [
+            {
+                "date": "2026-06-17",
+                "document_key": "deliberation/SHY",
+                "payload": {
+                    "net_stance": "neutral",
+                    "conviction_delta": 0,
+                    "converged": True,
+                    "conclusion": "Hold; duration anchor intact.",
+                    "transcript": [{"role": "pm", "text": "x" * 5000}],
+                },
+            },
+            {
+                "date": "2026-06-18",
+                "document_key": "deliberation/SHY",
+                "payload": {
+                    "net_stance": "bearish",
+                    "conviction_delta": -1,
+                    "converged": True,
+                    "conclusion": "Trim into strength; yields peaked.",
+                    "transcript": [{"role": "pm", "text": "y" * 5000}],
+                },
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"documents": docs})
+        out = load_prior_deliberation_summaries(client, date(2026, 6, 19), ["SHY"])
+        assert out["SHY"]["date"] == "2026-06-18"  # latest wins
+        assert out["SHY"]["net_stance"] == "bearish"
+        assert out["SHY"]["conviction_delta"] == -1
+        assert out["SHY"]["converged"] is True
+        assert "yields peaked" in out["SHY"]["conclusion_excerpt"]
+        # The bulky transcript must NOT survive the slim (carry is excerpt-only).
+        assert "transcript" not in out["SHY"]
+
+    def test_load_prior_deliberation_summaries_empty_tickers(self) -> None:
+        client = FakeSupabaseClient(canned_reads={"documents": []})
+        assert load_prior_deliberation_summaries(client, date(2026, 6, 19), []) == {}
+
+    def test_load_active_theses_rows_excludes_terminal(self) -> None:
+        rows = [
+            {
+                "date": "2026-06-18",
+                "thesis_id": "shy-duration",
+                "name": "Duration",
+                "status": "ACTIVE",
+            },
+            {
+                "date": "2026-06-18",
+                "thesis_id": "old-trade",
+                "name": "Closed",
+                "status": "CLOSED",
+            },
+            {
+                "date": "2026-06-17",
+                "thesis_id": "stale",
+                "name": "Stale",
+                "status": "ACTIVE",
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        active = load_active_theses_rows(client, date(2026, 6, 19))
+        assert [r["thesis_id"] for r in active] == ["shy-duration"]
+
+    def test_load_active_theses_rows_is_not_capped_across_dates(self) -> None:
+        """The register must not thin out as history accumulates (#1835).
+
+        The old shape was ``.order("date", desc=True).limit(row_cap)`` followed by a client-side
+        filter to the newest date present, so rows from OLDER dates consumed the cap and could
+        crowd out the date actually wanted. Here the newest date has 3 theses and the two older
+        dates have 40 between them, against ``row_cap=5`` — the old query would have returned
+        five rows all from 2026-06-18/17 ordering and yielded an arbitrary slice. The date is now
+        resolved first, so the cap applies to one date only.
+        """
+        newest = [
+            {"date": "2026-06-18", "thesis_id": f"live-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(3)
+        ]
+        older = [
+            {"date": "2026-06-17", "thesis_id": f"old-{i}", "name": f"O{i}", "status": "ACTIVE"}
+            for i in range(40)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": newest + older})
+        active = load_active_theses_rows(client, date(2026, 6, 19), row_cap=5)
+        assert sorted(r["thesis_id"] for r in active) == ["live-0", "live-1", "live-2"]
+
+    def test_load_active_theses_rows_warns_when_it_hits_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A truncated register admits the duplicate theses it exists to prevent, and the caller
+        cannot tell a complete register from a clipped one. So say so out loud."""
+        rows = [
+            {"date": "2026-06-18", "thesis_id": f"t-{i}", "name": f"T{i}", "status": "ACTIVE"}
+            for i in range(6)
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        with caplog.at_level(logging.WARNING):
+            load_active_theses_rows(client, date(2026, 6, 19), row_cap=3)
+        assert any("row_cap" in r.message for r in caplog.records)
+
+    def test_load_active_theses_rows_is_quiet_when_well_under_the_cap(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        rows = [
+            {"date": "2026-06-18", "thesis_id": "t-1", "name": "T1", "status": "ACTIVE"},
+        ]
+        client = FakeSupabaseClient(canned_reads={"theses": rows})
+        with caplog.at_level(logging.WARNING):
+            load_active_theses_rows(client, date(2026, 6, 19), row_cap=100)
+        assert not [r for r in caplog.records if "row_cap" in r.message]
+
+    def test_load_portfolio_performance_snapshot(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "nav_history": [
+                    {"date": "2026-06-18", "nav": 102.5, "cash_pct": 30, "invested_pct": 70}
+                ],
+                "portfolio_metrics": [
+                    {
+                        "date": "2026-06-18",
+                        "pnl_pct": 2.5,
+                        "sharpe": 1.1,
+                        "volatility": 8.0,
+                        "max_drawdown": -3.0,
+                        "alpha": 0.4,
+                    }
+                ],
+            }
+        )
+        snap = load_portfolio_performance_snapshot(client, date(2026, 6, 19))
+        assert snap["nav_date"] == "2026-06-18"
+        assert snap["nav"] == 102.5
+        assert snap["metrics"]["sharpe"] == 1.1
 
 
 @pytest.mark.unit
@@ -482,3 +777,33 @@ class TestQueryPendingDueWindow:
         too_recent = (run_date - timedelta(days=2)).isoformat()  # window not yet elapsed
         client = FakeSupabaseClient(canned_reads={"decision_log": [self._row(too_recent)]})
         assert query_pending_decisions(client=client, run_date=run_date) == []
+
+
+@pytest.mark.unit
+class TestLoadPriorBook:
+    def test_returns_latest_date_strictly_before_run_date(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "positions": [
+                    {"date": "2026-06-17", "ticker": "SPY", "weight_pct": 20},
+                    {"date": "2026-06-17", "ticker": "CASH", "weight_pct": 80},
+                    {"date": "2026-06-15", "ticker": "BIL", "weight_pct": 100},
+                ]
+            }
+        )
+        book = load_prior_book(client, date(2026, 6, 18))
+        assert {r["ticker"] for r in book} == {"SPY", "CASH"}
+        assert all(r["date"] == "2026-06-17" for r in book)
+
+    def test_first_run_returns_empty(self) -> None:
+        client = FakeSupabaseClient(canned_reads={"positions": []})
+        assert load_prior_book(client, date(2026, 6, 17)) == []
+
+    def test_prior_book_current_weights_maps_tickers(self) -> None:
+        weights = prior_book_current_weights(
+            [
+                {"ticker": "SPY", "weight_pct": 20},
+                {"ticker": "CASH", "weight_pct": 80},
+            ]
+        )
+        assert weights == {"SPY": 20.0, "CASH": 80.0}

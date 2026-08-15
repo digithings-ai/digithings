@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import date, datetime
 
 import pytest
-
 from digiquant.olympus.atlas.phases import _node_factory
 from digiquant.olympus.atlas.phases.phase1_altdata import _SPECS as ALT_SPECS
 from digiquant.olympus.atlas.phases.phase2_institutional import _SPECS as INST_SPECS
@@ -21,20 +20,24 @@ def test_macro_uses_data_tools_and_fallback_search():
 
 @pytest.mark.unit
 def test_alt_phases_grounding_modes():
-    # alt-options-derivatives reads data tools (#708); every other alt-data
-    # segment still grounds on soft signals (web/x search).
+    # Two alt-data segments are deterministically grounded (no soft search): options reads the
+    # Supabase data tools (#708); onchain reads the Hyperdash divergence preflight injects into
+    # market_context (#801). Every other alt-data segment grounds on web/x search.
     by_slug = {s.segment_slug: s for s in ALT_SPECS}
     opts = by_slug["alt-options-derivatives"]
     assert opts.use_data_tools is True
     assert opts.live_search is False and opts.ai_portfolios is False
-    # Every other alt-data segment still grounds on soft signals (web/x search),
-    # never data tools.
+    onchain = by_slug["alt-onchain-positioning"]
+    assert onchain.use_data_tools is False  # reads injected market_context, not data tools
+    assert onchain.live_search is False and onchain.ai_portfolios is False
+    # Every remaining alt-data segment grounds on soft signals (web/x search), never data tools.
+    _deterministic = {"alt-options-derivatives", "alt-onchain-positioning"}
     for spec in ALT_SPECS:
-        if spec.segment_slug == "alt-options-derivatives":
+        if spec.segment_slug in _deterministic:
             continue
         assert spec.use_data_tools is False, spec.segment_slug
         assert spec.live_search or spec.ai_portfolios, spec.segment_slug
-    # alt-ai-portfolios is the x_search one; the rest use web_search.
+    # alt-ai-portfolios uses OpenRouter web search; the rest use live_search grounding.
     assert by_slug["alt-ai-portfolios"].ai_portfolios is True
     assert by_slug["alt-ai-portfolios"].live_search is False
     assert by_slug["alt-sentiment-news"].live_search is True
@@ -70,7 +73,9 @@ def test_build_grounding_respects_kill_switch(monkeypatch):
         run_date=date(2026, 6, 8),
         model="openrouter/openrouter/auto",
     )
-    assert tools is None and execute_tool is None and grounding is None
+    # ATLAS_DATA_TOOLS disables Supabase data tools only; live_search pre-pass is independent.
+    assert tools is None and execute_tool is None
+    assert grounding is not None
 
     monkeypatch.setenv("ATLAS_DATA_TOOLS", "1")
     tools, execute_tool, grounding = _node_factory.build_grounding(
@@ -108,7 +113,6 @@ def test_options_segment_makes_no_paid_search(monkeypatch):
 def test_macro_series_yaml_has_volatility_complex():
     # The FRED vol series alt-options-derivatives reads must be in the manifest.
     import yaml
-
     from digiquant.olympus.atlas.graph import _atlas_config_root
 
     raw = yaml.safe_load((_atlas_config_root() / "macro_series.yaml").read_text())

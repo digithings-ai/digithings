@@ -13,10 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
 from digigraph.model_config import (
     ModelModesConfig,
     _load_model_modes,
+    _parse_provider_prefix,
     get_model_for_mode,
     resolve_effective_model,
     resolve_request_model,
@@ -64,11 +64,19 @@ class TestLoadModelModes:
         assert _load_model_modes() == ModelModesConfig()
 
 
+def _clear_explicit_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate mode/YAML resolution from sticky process env / project pins."""
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+
+
 @pytest.mark.unit
 class TestGetModelForMode:
     """get_model_for_mode() respects DIGI_LLM_MODE and config."""
 
     def test_fallback_when_no_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
         assert get_model_for_mode() == "gpt-4o-mini"
@@ -76,6 +84,7 @@ class TestGetModelForMode:
     def test_uses_defaults_test_from_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/mini\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -84,6 +93,7 @@ class TestGetModelForMode:
     def test_uses_defaults_medium_when_mode_medium(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text(
             "defaults:\n  test: t\n  medium: ollama/medium\n  best: b\n"
         )
@@ -95,6 +105,7 @@ class TestGetModelForMode:
     def test_falls_back_to_test_when_mode_missing_in_config(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/fallback\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "best")
@@ -103,6 +114,7 @@ class TestGetModelForMode:
     def test_normalizes_mode_lowercase(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/t\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "TEST")
@@ -116,6 +128,7 @@ class TestResolveEffectiveModel:
     def test_strips_prefix_for_local_ollama_base(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -126,6 +139,7 @@ class TestResolveEffectiveModel:
     def test_no_strip_for_litellm_base(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -183,6 +197,7 @@ class TestResolveRequestModel:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Missing provider key → Ollama mode model (legacy silent fallback, not a raise)."""
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
@@ -195,9 +210,193 @@ class TestResolveRequestModel:
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """A non-prefixed model resolves via resolve_effective_model (mode + ollama/ strip)."""
+        _clear_explicit_llm_env(monkeypatch)
         (tmp_path / "model_modes.yaml").write_text("defaults:\n  test: ollama/qwen3:8b\n")
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
         monkeypatch.setenv("DIGI_LLM_MODE", "test")
         monkeypatch.delenv("OLLAMA_MODEL", raising=False)
         monkeypatch.setenv("OPENAI_API_BASE", "http://127.0.0.1:11434/v1")  # :11434 → strip ollama/
         assert resolve_request_model("gpt-4o-mini") == "qwen3:8b"
+
+    def test_openrouter_byok_passthrough_without_platform_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OpenRouter BYOK keeps the provider model even when OPENROUTER_API_KEY is unset."""
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-or-v1-test",
+                        "x-byok-provider": "openrouter",
+                        "x-byok-model": "openai/gpt-4o-mini",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert (
+                resolve_request_model("openrouter/openai/gpt-4o-mini")
+                == "openrouter/openai/gpt-4o-mini"
+            )
+        finally:
+            pop_byok(tok)
+
+    def test_provider_registry_is_digillm_not_a_local_copy(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression: model_config must defer to digillm's provider registry, not keep
+
+        its own duplicate. Registering a brand-new provider via
+        ``digillm.register_provider`` (with no digigraph code change) must make
+        ``_parse_provider_prefix`` recognize it immediately — proving there is a
+        single source of truth, not two dicts that can drift apart.
+        """
+        import digillm.client
+
+        import digillm
+
+        digillm.register_provider(
+            "zzz-test-provider", "https://example.invalid/v1", "ZZZ_TEST_PROVIDER_API_KEY"
+        )
+        try:
+            provider, model_id = _parse_provider_prefix("zzz-test-provider/some-model")
+            assert provider == "zzz-test-provider"
+            assert model_id == "some-model"
+
+            monkeypatch.setenv("ZZZ_TEST_PROVIDER_API_KEY", "test-key")
+            assert (
+                resolve_request_model("zzz-test-provider/some-model")
+                == "zzz-test-provider/some-model"
+            )
+        finally:
+            del digillm.client._EXTERNAL_PROVIDERS["zzz-test-provider"]
+
+
+@pytest.mark.unit
+class TestByokModelOverride:
+    """OpenRouter BYOK model slug overrides mode/phase resolution."""
+
+    def test_get_model_for_mode_uses_byok_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-or-v1-test",
+                        "x-byok-provider": "openrouter",
+                        "x-byok-model": "openai/gpt-4o-mini",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert get_model_for_mode() == "openrouter/openai/gpt-4o-mini"
+        finally:
+            pop_byok(tok)
+
+    def test_get_model_for_mode_uses_byok_model_xai(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """x.ai BYOK must route to the user's model (#2361 review finding).
+
+        Before the ``xai`` branch existed, ``_apply_byok_model_override`` fell
+        through to ``return resolved`` for any provider it didn't recognize,
+        so an x.ai BYOK request silently ran on the operator's own
+        model/key instead of the user's — reproducing #1873 for the new
+        provider.
+        """
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "xai-test",
+                        "x-byok-provider": "xai",
+                        "x-byok-model": "grok-4-3",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert get_model_for_mode() == "xai/grok-4-3"
+        finally:
+            pop_byok(tok)
+
+    def test_every_routable_byok_provider_has_a_model_override_branch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression guard: a catalog provider missing a branch in
+        ``_apply_byok_model_override`` silently discards the user's
+        ``X-BYOK-Model`` and falls through to the operator's own model/key
+        (the #2361/#1873 failure mode). Every provider in
+        ``BYOK_ROUTABLE_PROVIDERS`` other than ``openai`` must prefix the
+        resolved model with ``<provider>/`` — so adding a new BYOK provider
+        to ``config/byok-providers.json`` without a matching branch here
+        fails this test instead of merging silently broken.
+        """
+        from digigraph.llm_auth import BYOK_ROUTABLE_PROVIDERS, pop_byok, push_byok_header
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self, provider: str) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "test-key",
+                        "x-byok-provider": provider,
+                        "x-byok-model": "some-model",
+                    }
+                )
+
+        assert BYOK_ROUTABLE_PROVIDERS, "catalog produced no routable providers"
+        for provider in BYOK_ROUTABLE_PROVIDERS:
+            tok = push_byok_header(_Req(provider))
+            try:
+                resolved = get_model_for_mode()
+            finally:
+                pop_byok(tok)
+            expected = "some-model" if provider == "openai" else f"{provider}/some-model"
+            assert resolved == expected, (
+                f"provider {provider!r} did not route the user's BYOK model "
+                f"(got {resolved!r}, expected {expected!r}) — add a branch to "
+                "_apply_byok_model_override"
+            )

@@ -1,0 +1,1415 @@
+{
+  "components": {
+    "schemas": {
+      "AddmResult": {
+        "description": "Result of drift check.",
+        "properties": {
+          "drift_detected": {
+            "default": false,
+            "description": "True if model/strategy drift detected",
+            "title": "Drift Detected",
+            "type": "boolean"
+          },
+          "implemented": {
+            "default": false,
+            "description": "True if drift check was performed",
+            "title": "Implemented",
+            "type": "boolean"
+          },
+          "message": {
+            "default": "",
+            "description": "Optional detail",
+            "title": "Message",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Drift score if computed",
+            "title": "Score"
+          }
+        },
+        "title": "AddmResult",
+        "type": "object"
+      },
+      "BacktestRequest": {
+        "additionalProperties": false,
+        "description": "Request body for /run_backtest.",
+        "properties": {
+          "data_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Directory with {symbol}.csv files",
+            "title": "Data Dir"
+          },
+          "data_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Path to single OHLCV CSV (overrides data_dir)",
+            "title": "Data Path"
+          },
+          "full_tearsheet": {
+            "default": true,
+            "description": "Include extended charts (distributions, rolling metrics). Set false for faster results.",
+            "title": "Full Tearsheet",
+            "type": "boolean"
+          },
+          "strategy_name": {
+            "description": "Strategy name (required)",
+            "minLength": 1,
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "strategy_params": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional strategy parameters (e.g. fast_ema_period, slow_ema_period)",
+            "title": "Strategy Params"
+          },
+          "symbols": {
+            "description": "Instruments (required)",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "tearsheet_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Write HTML tearsheet to this path",
+            "title": "Tearsheet Path"
+          }
+        },
+        "required": [
+          "strategy_name",
+          "symbols"
+        ],
+        "title": "BacktestRequest",
+        "type": "object"
+      },
+      "BacktestResult": {
+        "description": "Result of a single backtest run. Used by digigraph and MCP.",
+        "properties": {
+          "end_time": {
+            "description": "Backtest end (ISO)",
+            "title": "End Time",
+            "type": "string"
+          },
+          "max_drawdown_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Max drawdown %",
+            "title": "Max Drawdown Pct"
+          },
+          "message": {
+            "default": "",
+            "description": "Optional message or error",
+            "title": "Message",
+            "type": "string"
+          },
+          "num_trades": {
+            "default": 0,
+            "description": "Number of trades",
+            "title": "Num Trades",
+            "type": "integer"
+          },
+          "per_symbol_pnl": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "description": "Per-symbol PnL breakdown for multi-symbol backtests",
+            "title": "Per Symbol Pnl",
+            "type": "object"
+          },
+          "run_id": {
+            "description": "Unique run identifier",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sharpe_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sharpe ratio if computable",
+            "title": "Sharpe Ratio"
+          },
+          "start_time": {
+            "description": "Backtest start (ISO)",
+            "title": "Start Time",
+            "type": "string"
+          },
+          "status": {
+            "default": "ok",
+            "description": "ok | partial | error",
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_name": {
+            "description": "Strategy or idea label",
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "symbols": {
+            "description": "Instruments used",
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          },
+          "total_pnl": {
+            "default": 0.0,
+            "description": "Total PnL (account currency)",
+            "title": "Total Pnl",
+            "type": "number"
+          },
+          "total_return_pct": {
+            "default": 0.0,
+            "description": "Total return %",
+            "title": "Total Return Pct",
+            "type": "number"
+          }
+        },
+        "required": [
+          "run_id",
+          "strategy_name",
+          "start_time",
+          "end_time"
+        ],
+        "title": "BacktestResult",
+        "type": "object"
+      },
+      "ExportRequest": {
+        "additionalProperties": false,
+        "description": "Request body for /run_export.",
+        "properties": {
+          "params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Best params from optimize",
+            "title": "Params",
+            "type": "object"
+          },
+          "strategy_name": {
+            "description": "Strategy label",
+            "minLength": 1,
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "target": {
+            "default": "nautilus",
+            "description": "nautilus | nautilus_bundle | tradingview | alpaca | quantconnect",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "strategy_name"
+        ],
+        "title": "ExportRequest",
+        "type": "object"
+      },
+      "ExportResult": {
+        "description": "Result of strategy export to a target platform.",
+        "properties": {
+          "artifact_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Path to exported artifact if written",
+            "title": "Artifact Path"
+          },
+          "message": {
+            "default": "",
+            "description": "Optional message",
+            "title": "Message",
+            "type": "string"
+          },
+          "run_id": {
+            "description": "Export run identifier",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "ok",
+            "description": "ok | partial | error",
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_name": {
+            "description": "Strategy label",
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "target": {
+            "description": "nautilus | tradingview | alpaca | quantconnect",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "target",
+          "strategy_name"
+        ],
+        "title": "ExportResult",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "OptimizationConstraints": {
+        "description": "Hard limits for optimization; candidates violating these are rejected.",
+        "properties": {
+          "max_drawdown_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Max drawdown e.g. -0.15 for -15%",
+            "title": "Max Drawdown Pct"
+          },
+          "max_trades_per_year": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cap trade frequency",
+            "title": "Max Trades Per Year"
+          },
+          "min_return_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Minimum total return %",
+            "title": "Min Return Pct"
+          },
+          "min_sharpe": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Minimum Sharpe ratio",
+            "title": "Min Sharpe"
+          },
+          "min_trades": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Minimum number of trades required",
+            "title": "Min Trades"
+          },
+          "min_trades_per_year": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ensure minimum activity",
+            "title": "Min Trades Per Year"
+          }
+        },
+        "title": "OptimizationConstraints",
+        "type": "object"
+      },
+      "OptimizeRequest": {
+        "additionalProperties": false,
+        "description": "Request body for /run_optimize.",
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptimizationConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hard limits (min_trades, max_drawdown_pct, etc.)"
+          },
+          "data_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Directory with {symbol}.csv files",
+            "title": "Data Dir"
+          },
+          "data_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Path to single OHLCV CSV",
+            "title": "Data Path"
+          },
+          "method": {
+            "default": "grid",
+            "description": "grid | bayesian | random",
+            "title": "Method",
+            "type": "string"
+          },
+          "n_trials": {
+            "default": 50,
+            "description": "Trials for bayesian/random",
+            "title": "N Trials",
+            "type": "integer"
+          },
+          "objective": {
+            "default": "sharpe",
+            "description": "sharpe | return | pnl",
+            "title": "Objective",
+            "type": "string"
+          },
+          "param_grid": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "string"
+                      }
+                    ]
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Explicit param grid (overrides auto)",
+            "title": "Param Grid"
+          },
+          "strategy_name": {
+            "description": "Strategy name (required)",
+            "minLength": 1,
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "symbols": {
+            "description": "Instruments (required)",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "strategy_name",
+          "symbols"
+        ],
+        "title": "OptimizeRequest",
+        "type": "object"
+      },
+      "OptimizeResult": {
+        "description": "Result of parameter optimization. Phase 2: grid over backtest runs.",
+        "properties": {
+          "best_backtest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BacktestResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Backtest result for best params"
+          },
+          "best_params": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Best parameter set",
+            "title": "Best Params",
+            "type": "object"
+          },
+          "message": {
+            "default": "",
+            "description": "Optional message",
+            "title": "Message",
+            "type": "string"
+          },
+          "num_evaluations": {
+            "default": 0,
+            "description": "Number of param sets evaluated",
+            "title": "Num Evaluations",
+            "type": "integer"
+          },
+          "run_id": {
+            "description": "Optimization run identifier",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "ok",
+            "description": "ok | partial | error",
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_name": {
+            "description": "Strategy label",
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "symbols": {
+            "description": "Instruments",
+            "items": {
+              "type": "string"
+            },
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "strategy_name"
+        ],
+        "title": "OptimizeResult",
+        "type": "object"
+      },
+      "OrchestratorInvokeRequest": {
+        "description": "Request for POST /v1/orchestrator_invoke (hub tool dispatch).",
+        "properties": {
+          "arguments": {
+            "additionalProperties": true,
+            "title": "Arguments",
+            "type": "object"
+          },
+          "tool": {
+            "description": "digiquant_* tool name from orchestrator manifest",
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "title": "OrchestratorInvokeRequest",
+        "type": "object"
+      },
+      "PipelineRequest": {
+        "additionalProperties": false,
+        "description": "Request body for /run_pipeline and POST /v1/workflow (internal LangGraph pipeline).",
+        "properties": {
+          "constraints": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OptimizationConstraints"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hard optimization limits (min_trades, max_drawdown_pct, \u2026)"
+          },
+          "data_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Directory with {symbol}.csv files",
+            "title": "Data Dir"
+          },
+          "data_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Path to single OHLCV CSV",
+            "title": "Data Path"
+          },
+          "export_target": {
+            "default": "nautilus",
+            "description": "Export target",
+            "title": "Export Target",
+            "type": "string"
+          },
+          "method": {
+            "default": "grid",
+            "description": "Optimization method",
+            "title": "Method",
+            "type": "string"
+          },
+          "n_trials": {
+            "default": 50,
+            "description": "Max trials / grid size hint",
+            "minimum": 1.0,
+            "title": "N Trials",
+            "type": "integer"
+          },
+          "run_export": {
+            "default": true,
+            "description": "Run export after optimize (if policy allows)",
+            "title": "Run Export",
+            "type": "boolean"
+          },
+          "run_optimize": {
+            "default": true,
+            "description": "Run optimize after backtest",
+            "title": "Run Optimize",
+            "type": "boolean"
+          },
+          "strategy_name": {
+            "description": "Strategy name (required)",
+            "minLength": 1,
+            "title": "Strategy Name",
+            "type": "string"
+          },
+          "strategy_params": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional params for the initial backtest before optimize",
+            "title": "Strategy Params"
+          },
+          "symbols": {
+            "description": "Instruments (required)",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "strategy_name",
+          "symbols"
+        ],
+        "title": "PipelineRequest",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "NautilusTrader backtest / optimize / export / pipeline API for digithings. Also exposes orchestrator tool manifests for digigraph and MCP tools. Interactive docs: `/docs` (Swagger) and `/redoc`.",
+    "title": "digiquant",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/backtest/start": {
+      "post": {
+        "description": "Submit a backtest job. Returns job_id immediately.\n\nPoll progress via GET /backtest/{job_id}/progress (SSE).\nRetrieve the final result via GET /backtest/{job_id}/result.",
+        "operationId": "api_start_backtest_backtest_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Start Backtest Backtest Start Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Start Backtest"
+      }
+    },
+    "/backtest/{job_id}/progress": {
+      "get": {
+        "description": "SSE stream of backtest progress events for *job_id*.\n\nEvents are JSON objects with an ``event`` field (``start`` | ``done`` | ``error``).\nThe stream closes once the job completes or errors.",
+        "operationId": "api_backtest_progress_backtest__job_id__progress_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Backtest Progress"
+      }
+    },
+    "/backtest/{job_id}/result": {
+      "get": {
+        "description": "Return the final BacktestResult for a completed job. 404 if not found; 202 if still running.",
+        "operationId": "api_backtest_result_backtest__job_id__result_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Backtest Result"
+      }
+    },
+    "/check_drift": {
+      "get": {
+        "description": "Check ADDM drift for strategy. Phase 3: heartbeat calls this; if drift_detected, trigger re-optimize.",
+        "operationId": "api_check_drift_check_drift_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "strategy_id",
+            "required": false,
+            "schema": {
+              "default": "mean_reversion_tech",
+              "title": "Strategy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "baseline_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Baseline Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "current_sharpe",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Current Sharpe"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddmResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Check Drift"
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Legacy health check for Docker and digigraph (kept for back-compat).",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. Pair with digismith's ``/v1/status``\nfor richer diagnostics.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz"
+      }
+    },
+    "/run_backtest": {
+      "post": {
+        "description": "Run a real NautilusTrader backtest. Requires data_path or data_dir (no defaults).",
+        "operationId": "api_run_backtest_run_backtest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BacktestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Run Backtest"
+      }
+    },
+    "/run_export": {
+      "post": {
+        "description": "Export strategy config to artifact (JSON). Platform deploy not implemented for all targets.",
+        "operationId": "api_run_export_run_export_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Run Export"
+      }
+    },
+    "/run_optimize": {
+      "post": {
+        "description": "Run parameter optimization (grid, bayesian, or random). Requires Nautilus.",
+        "operationId": "api_run_optimize_run_optimize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptimizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimizeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Run Optimize"
+      }
+    },
+    "/run_pipeline": {
+      "post": {
+        "description": "Run full pipeline via internal LangGraph (backtest \u2192 optional optimize \u2192 optional export).",
+        "operationId": "api_run_pipeline_run_pipeline_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Api Run Pipeline Run Pipeline Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Api Run Pipeline"
+      }
+    },
+    "/strategies": {
+      "get": {
+        "description": "Registered Nautilus strategies (name, aliases, description, default_params).",
+        "operationId": "api_list_strategies_strategies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Api List Strategies Strategies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Api List Strategies"
+      }
+    },
+    "/v1/jobs/backtest": {
+      "post": {
+        "description": "Versioned alias for async backtest submission (same as POST /backtest/start).",
+        "operationId": "v1_post_jobs_backtest_v1_jobs_backtest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BacktestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Post Jobs Backtest V1 Jobs Backtest Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Post Jobs Backtest",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}/status": {
+      "get": {
+        "description": "Job lifecycle: ``running`` | ``completed`` | ``failed`` (digiquant backtest jobs).",
+        "operationId": "v1_get_job_status_v1_jobs__job_id__status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Get Job Status V1 Jobs  Job Id  Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Get Job Status",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/orchestrator_invoke": {
+      "post": {
+        "description": "Execute one digiquant orchestrator tool (digigraph hub dispatch).",
+        "operationId": "v1_orchestrator_invoke_v1_orchestrator_invoke_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestratorInvokeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Orchestrator Invoke V1 Orchestrator Invoke Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Orchestrator Invoke",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/orchestrator_tools": {
+      "post": {
+        "description": "Return OpenAI-style tools owned by digiquant (for digigraph orchestration).",
+        "operationId": "v1_orchestrator_tools_v1_orchestrator_tools_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Orchestrator Tools V1 Orchestrator Tools Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "V1 Orchestrator Tools",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/workflow": {
+      "post": {
+        "description": "Run the quant pipeline; returns JSON including ``trace`` and serialized step results.",
+        "operationId": "v1_post_workflow_v1_workflow_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PipelineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response V1 Post Workflow V1 Workflow Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "V1 Post Workflow",
+        "tags": [
+          "v1"
+        ]
+      }
+    }
+  }
+}

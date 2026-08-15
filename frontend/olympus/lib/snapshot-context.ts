@@ -4,6 +4,8 @@
  * segment_biases / market_data columns (and their extractor) were dropped in #714.
  */
 
+import type { ActionableItem, RiskItem } from './types';
+
 function pushUnique(out: string[], line: string, max: number) {
   const t = line.trim();
   if (!t || out.length >= max) return;
@@ -61,6 +63,66 @@ export function digestItemsToStrings(items: unknown): string[] {
               : '';
       const text = [label, detail].filter(Boolean).join(' — ');
       if (text) out.push(text);
+    }
+  }
+  return out;
+}
+
+/**
+ * Structured parse of `actionable_summary` ActionableItem[] (label/priority/rationale),
+ * sorted by priority ascending (the pipeline's own ranking — F5-permitted numbering),
+ * nulls last. Plain-string entries degrade to a bare label. Non-arrays → [].
+ */
+export function parseActionableItems(items: unknown): ActionableItem[] {
+  if (!Array.isArray(items)) return [];
+  const out: ActionableItem[] = [];
+  for (const item of items) {
+    if (typeof item === 'string') {
+      const t = item.trim();
+      if (t) out.push({ label: t, priority: null, rationale: null });
+      continue;
+    }
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const o = item as Record<string, unknown>;
+      const label = typeof o.label === 'string' ? o.label.trim() : '';
+      if (!label) continue;
+      out.push({
+        label,
+        priority: typeof o.priority === 'number' ? o.priority : null,
+        rationale: typeof o.rationale === 'string' && o.rationale.trim() ? o.rationale.trim() : null,
+      });
+    }
+  }
+  return out.sort((a, b) => {
+    if (a.priority == null && b.priority == null) return 0;
+    if (a.priority == null) return 1;
+    if (b.priority == null) return -1;
+    return a.priority - b.priority;
+  });
+}
+
+/**
+ * Structured parse of `risk_radar` RiskItem[] (label/trigger/horizon_hours), input order
+ * preserved (the pipeline orders by salience). Plain strings degrade to a bare label.
+ */
+export function parseRiskItems(items: unknown): RiskItem[] {
+  if (!Array.isArray(items)) return [];
+  const out: RiskItem[] = [];
+  for (const item of items) {
+    if (typeof item === 'string') {
+      const t = item.trim();
+      if (t) out.push({ label: t, trigger: null, horizonHours: null });
+      continue;
+    }
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      const o = item as Record<string, unknown>;
+      const label = typeof o.label === 'string' ? o.label.trim() : '';
+      if (!label) continue;
+      out.push({
+        label,
+        trigger: typeof o.trigger === 'string' && o.trigger.trim() ? o.trigger.trim() : null,
+        horizonHours: typeof o.horizon_hours === 'number' ? o.horizon_hours : null,
+      });
     }
   }
   return out;

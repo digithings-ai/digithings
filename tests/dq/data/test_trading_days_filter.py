@@ -6,7 +6,6 @@ from datetime import date, datetime
 
 import polars as pl
 import pytest
-
 from digiquant.data.prices._utils import filter_rows_by_trading_days
 
 

@@ -1,132 +1,197 @@
 'use client';
 
-import { Sparkles, FileText, Users } from 'lucide-react';
-import { SafeMarkdown } from '@/components/SafeMarkdown';
-import type { FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
+import { useMemo, useState } from 'react';
+import { CalendarClock } from 'lucide-react';
+import type {
+  FxConfluenceSnapshotRow,
+  FxConsensusDivergence,
+  FxConsensusSnapshotRow,
+  FxEconomicCalendarRow,
+  FxBriefRow,
+  FxTradeIdeaRow,
+} from '@/lib/twelve-x/types';
+import { eventLocalDateKey } from '@/lib/twelve-x/fetch';
+import { countDisputedTradeIdeas, disputedTradeIdeaRanks } from '@/lib/twelve-x/divergence';
+import TradeIdeasPanel from './TradeIdeasPanel';
+import DigestBrief from './DigestBrief';
+import TodayConsensusChart from './TodayConsensusChart';
+import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
+import { useTwelveX } from './context';
+import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
-interface DigestData {
-  run_date: string;
-  headline: string;
-  summary: string;
-  key_themes: string[];
-  doc_count: number;
-  broker_count: number;
-}
-
-/** Map a confluence/consensus direction string to a .fin-* text color class. */
-function directionColorClass(direction: string): string {
-  const d = direction.trim().toLowerCase();
-  if (d === 'bullish' || d === 'long' || d === 'buy') return 'text-fin-green';
-  if (d === 'bearish' || d === 'short' || d === 'sell') return 'text-fin-red';
-  if (d === 'watch') return 'text-fin-amber';
-  return 'text-text-secondary';
-}
-
-function directionLabel(direction: string): string {
-  const d = direction.trim();
-  if (!d) return '—';
-  return d.charAt(0).toUpperCase() + d.slice(1).toLowerCase();
-}
-
-function ConfluenceCard({ idea }: { idea: FxConfluenceSnapshotRow }) {
-  const colorClass = directionColorClass(idea.direction);
-  return (
-    <div className="glass-card p-4 flex flex-col gap-2">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] text-text-muted border border-border-subtle shrink-0">
-            #{idea.rank}
-          </span>
-          <span className="font-mono text-sm font-semibold text-text-primary truncate">{idea.currency}</span>
-        </div>
-        <span className={`text-xs font-semibold shrink-0 ${colorClass}`}>{directionLabel(idea.direction)}</span>
-      </div>
-      <p className="text-sm text-text-primary leading-snug">{idea.title}</p>
-      <div className="mt-auto flex items-center justify-between pt-1">
-        <span className="text-[11px] text-text-muted uppercase tracking-wider">Score</span>
-        <span className={`qn-metric tabular-nums ${colorClass}`}>
-          {Number.isFinite(idea.score) ? idea.score.toFixed(2) : '—'}
-        </span>
-      </div>
-    </div>
-  );
-}
+type DigestData = { run_date: string; summary: string; key_themes: string[]; doc_count: number; broker_count: number } | null;
 
 export default function TodayTab({
   digest,
+  tradeIdeas,
   confluence,
+  briefs,
+  events,
+  series,
+  divergenceByCurrency = {},
+  onSeeAllBriefs,
 }: {
-  digest: DigestData | null;
+  digest: DigestData;
+  tradeIdeas: FxTradeIdeaRow[];
   confluence: FxConfluenceSnapshotRow[];
+  briefs: FxBriefRow[];
+  events: FxEconomicCalendarRow[];
+  series: FxConsensusSnapshotRow[];
+  divergenceByCurrency?: Record<string, FxConsensusDivergence>;
+  onSeeAllBriefs: () => void;
 }) {
-  if (!digest) {
-    return (
-      <div className="glass-card p-10 text-center text-text-muted text-sm">
-        No FX daily digest is available yet.
-      </div>
-    );
-  }
+  const { openBrief } = useTwelveX();
+  const [highlightDisputed, setHighlightDisputed] = useState(false);
+
+  const disputeCount = useMemo(
+    () => countDisputedTradeIdeas(tradeIdeas, divergenceByCurrency),
+    [tradeIdeas, divergenceByCurrency],
+  );
+
+  const highlightRanks = useMemo(() => {
+    if (!highlightDisputed) return undefined;
+    return new Set(disputedTradeIdeaRanks(tradeIdeas, divergenceByCurrency));
+  }, [highlightDisputed, tradeIdeas, divergenceByCurrency]);
+
+  const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
+
+  // The single day the timeline renders: the local day shared by today's
+  // events, else the viewer-local "today" so an empty day still renders an axis.
+  const today = useMemo(() => {
+    if (events.length > 0) return eventLocalDateKey(events[0]);
+    return eventLocalDateKey({ event_datetime_utc: new Date().toISOString(), event_date: '' });
+  }, [events]);
 
   return (
-    <div className="space-y-4">
-      {/* Greeting / digest header */}
-      <div className="glass-card p-5 md:p-6 space-y-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Sparkles size={18} className="text-fin-blue shrink-0" />
-          <h2 className="text-lg md:text-xl font-semibold text-text-primary">{digest.headline}</h2>
-          <span className="text-[10px] font-mono text-text-muted ml-auto">{digest.run_date}</span>
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center gap-3 px-1">
+        <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="font-display text-2xl tracking-tight text-ink">Today&rsquo;s read</h2>
+      </div>
+
+      {disputeCount > 0 ? (
+        <p className="px-1 text-sm text-ink-soft">
+          <button
+            type="button"
+            data-disputes-line="true"
+            className="text-left text-accent hover:underline"
+            onClick={() => setHighlightDisputed((v) => !v)}
+          >
+            The data disputes {disputeCount} of today&rsquo;s calls
+            {disputeCount === 1 ? '' : 's'}.
+          </button>
+        </p>
+      ) : null}
+
+      {/* Above the fold: trade ideas + digest brief co-lead */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
+        <TradeIdeasPanel
+          ideas={tradeIdeas}
+          confluence={confluence}
+          highlightRanks={highlightRanks}
+        />
+        <DigestBrief digest={digest} />
+      </div>
+
+      {/* Mid row: consensus-average chart (wider) + broker briefs, height-matched. */}
+      <div className="today-mid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
+        <div className="flex min-w-0 flex-col">
+          <TodayConsensusChart series={series} />
         </div>
 
-        {digest.summary ? (
-          <SafeMarkdown className="prose prose-invert max-w-none text-sm text-text-secondary">
-            {digest.summary}
-          </SafeMarkdown>
-        ) : null}
-
-        {digest.key_themes.length > 0 ? (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {digest.key_themes.map((theme, i) => (
-              <span
-                key={`${theme}-${i}`}
-                className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-fin-blue/30 bg-fin-blue/10 text-fin-blue"
-              >
-                {theme}
+        <div className="min-w-0 lg:relative lg:self-stretch">
+          <section className="glass-card flex min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0">
+            <header className="mb-3 flex shrink-0 items-baseline gap-2">
+              <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
+              <span className="ml-auto font-mono text-[10px] text-ink-mute">
+                {briefs.length} {briefs.length === 1 ? 'brief' : 'briefs'}
               </span>
-            ))}
-          </div>
-        ) : null}
+              {briefs.length > 0 ? (
+                <button
+                  type="button"
+                  className="text-[11px] text-accent hover:underline"
+                  onClick={onSeeAllBriefs}
+                >
+                  see all →
+                </button>
+              ) : null}
+            </header>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-text-muted pt-1 border-t border-border-subtle/60 mt-1">
-          <span className="flex items-center gap-1.5">
-            <FileText size={13} aria-hidden />
-            <span className="qn-metric text-text-secondary tabular-nums">{digest.doc_count}</span>
-            documents
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Users size={13} aria-hidden />
-            <span className="qn-metric text-text-secondary tabular-nums">{digest.broker_count}</span>
-            brokers
-          </span>
+            {briefs.length === 0 ? (
+              <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
+            ) : (
+              <div
+                className="flex max-h-[32rem] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pr-1 lg:max-h-none lg:flex-1"
+                aria-label="Broker brief cards"
+                tabIndex={0}
+              >
+              {(() => {
+                // Group briefs by effective date (report_date ?? run_date), newest first.
+                const grouped = new Map<string, typeof briefs>();
+                briefs.forEach((b) => {
+                  const effDate = b.report_date ?? b.run_date;
+                  if (!grouped.has(effDate)) grouped.set(effDate, []);
+                  grouped.get(effDate)!.push(b);
+                });
+                const sortedDates = Array.from(grouped.keys()).sort().reverse();
+
+                return sortedDates.map((dateKey) => {
+                  const dateBriefs = grouped.get(dateKey)!;
+                  return (
+                    <div key={dateKey} className="flex flex-col gap-2">
+                      <h3 className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-soft">
+                        {dateKey}
+                      </h3>
+                      <ul className="flex flex-col gap-2">
+                        {dateBriefs.map((b, n) => (
+                          <li key={`${b.source_file}-${b.run_date}-${n}`}>
+                            <button
+                              type="button"
+                              className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
+                              onClick={() => openBrief(b.source_file, b.run_date)}
+                            >
+                              <div className="flex items-center gap-2 text-[11px] text-ink-mute">
+                                <span className="font-semibold text-ink-soft">
+                                  {b.broker_name ?? 'Unknown desk'}
+                                </span>
+                                {b.trader_relevance ? (
+                                  <span className="uppercase">· {b.trader_relevance}</span>
+                                ) : null}
+                              </div>
+                              <p className="mt-1 truncate text-sm font-medium text-ink">
+                                {b.document_title ?? b.source_file}
+                              </p>
+                              {b.central_thesis ? (
+                                <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
+                                  {b.central_thesis}
+                                </p>
+                              ) : null}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                });
+              })()}
+              </div>
+            )}
+          </section>
         </div>
       </div>
 
-      {/* Top trade ideas */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wider px-1">
-          Top trade ideas
-        </h3>
-        {confluence.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {confluence.map((idea) => (
-              <ConfluenceCard key={`${idea.run_date}-${idea.rank}`} idea={idea} />
-            ))}
-          </div>
+      {/* Full-width single-day timeline (replaces the old compact events tile). */}
+      <section className="glass-card p-4">
+        <header className="mb-3 flex items-baseline gap-2">
+          <TwelveXSectionHeading>Today&rsquo;s timeline</TwelveXSectionHeading>
+          <span className="ml-auto font-mono text-[10px] text-ink-mute">00:00 – 24:00</span>
+        </header>
+        {timelineEvents.length === 0 ? (
+          <p className="text-sm text-ink-mute">No macro events scheduled today.</p>
         ) : (
-          <div className="glass-card p-8 text-center text-text-muted text-sm">
-            No confluence trade ideas for {digest.run_date}.
-          </div>
+          <EventsTimeline events={timelineEvents} mode="single" day={today} />
         )}
-      </div>
+      </section>
     </div>
   );
 }

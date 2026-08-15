@@ -6,8 +6,11 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous digest JSON
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +70,16 @@ def load_portfolio_json(portfolio_path: Path) -> tuple[list, list, dict, str]:
     except JSON_IO_ERRORS as exc:
         logger.warning("could not read portfolio.json: %s", exc)
         return [], [], {}, "USD"
+
+
+def portfolio_preferences_static(portfolio_path: Path) -> dict[str, Any]:
+    """Constraints + defaults from ``portfolio.json`` (no live Supabase book weights)."""
+    _positions, _proposed, constraints, investor_currency = load_portfolio_json(portfolio_path)
+    prefs: dict[str, Any] = dict(constraints)
+    if investor_currency:
+        prefs["investor_currency"] = investor_currency
+    prefs.setdefault("holding_days", 5)
+    return prefs
 
 
 def load_rebalance_decision(date_str: str, daily_dir: Path) -> list[dict] | None:
@@ -415,7 +428,7 @@ def load_all_markdowns(root: Path) -> list[dict]:
             file_date = (
                 date_match.group(1)
                 if date_match
-                else datetime.fromtimestamp(os.path.getmtime(md_file)).strftime("%Y-%m-%d")
+                else datetime.fromtimestamp(os.path.getmtime(md_file), tz=UTC).strftime("%Y-%m-%d")
             )
             docs.append(
                 {

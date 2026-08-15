@@ -19,6 +19,10 @@ type AppShellContextValue = {
   mobileNavOpen: boolean;
   setMobileNavOpen: (open: boolean) => void;
   toggleMobileNav: () => void;
+  /** Command palette open state, lifted so chrome (search pill) can open it (F2). */
+  commandPaletteOpen: boolean;
+  openCommandPalette: () => void;
+  closeCommandPalette: () => void;
 };
 
 const AppShellContext = createContext<AppShellContextValue | null>(null);
@@ -35,6 +39,9 @@ function readSidebarCollapsed(): boolean {
 export function AppShellProvider({ children }: { children: ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
+  const closeCommandPalette = useCallback(() => setCommandPaletteOpen(false), []);
 
   const toggleSidebar = useCallback(() => {
     setSidebarCollapsed((c) => {
@@ -68,8 +75,19 @@ export function AppShellProvider({ children }: { children: ReactNode }) {
       mobileNavOpen,
       setMobileNavOpen,
       toggleMobileNav,
+      commandPaletteOpen,
+      openCommandPalette,
+      closeCommandPalette,
     }),
-    [sidebarCollapsed, toggleSidebar, mobileNavOpen, toggleMobileNav]
+    [
+      sidebarCollapsed,
+      toggleSidebar,
+      mobileNavOpen,
+      toggleMobileNav,
+      commandPaletteOpen,
+      openCommandPalette,
+      closeCommandPalette,
+    ]
   );
 
   return <AppShellContext.Provider value={value}>{children}</AppShellContext.Provider>;

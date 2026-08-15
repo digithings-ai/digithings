@@ -1,4 +1,4 @@
-# DigiChat — Next.js standalone.
+# digichat — Next.js standalone.
 # Build from the REPO ROOT (compose: context '.', dockerfile frontend/digichat/Dockerfile):
 # the app is an npm workspace member whose lockfile lives at the repo root and whose
 # private @digithings/design dependency only resolves through the workspace link.
@@ -7,15 +7,23 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY package.json package-lock.json ./
 COPY frontend/digichat/package.json frontend/digichat/
-COPY frontend/design/package.json frontend/design/
+COPY frontend/digichat-ui/package.json frontend/digichat-ui/
+COPY frontend/digiweb/design/package.json frontend/digiweb/design/
+COPY frontend/digiweb/web/package.json frontend/digiweb/web/
 COPY frontend/olympus/package.json frontend/olympus/
 RUN npm ci --workspace frontend/digichat --include-workspace-root
 
 FROM node:22-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+# /embed frame-ancestors are set at request time by src/proxy.ts from runtime
+# DIGICHAT_EMBED_HOSTS and/or DIGICHAT_EMBED_TENANTS host keys.
+# Do NOT pass DIGICHAT_EMBED_TENANTS as a build-arg (tokens in layer history).
+# DIGICHAT_EMBED_HOSTS build-arg is unused for CSP after runtime proxy; omit it.
 COPY --from=deps /app ./
-COPY frontend/design ./frontend/design
+COPY frontend/digiweb/design ./frontend/digiweb/design
+COPY frontend/digiweb/web ./frontend/digiweb/web
+COPY frontend/digichat-ui ./frontend/digichat-ui
 COPY frontend/digichat ./frontend/digichat
 RUN npm run build --workspace frontend/digichat
 

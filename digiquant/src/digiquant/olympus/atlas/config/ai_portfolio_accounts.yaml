@@ -3,7 +3,7 @@
 # are picking at the individual-stock level — Olympus trades ETFs, so these inform
 # sector/theme TILT, never a direct call.
 #
-# Verified active + posting named-ticker equity holdings (xAI x_search sweep, Jun 2026).
+# Verified active + posting named-ticker equity holdings (manual sweep, Jun 2026).
 # Handles are pinned exactly — note theaiportfolios (Claude, 241k) vs theAIportfolio
 # (Gemini, tiny) differ only by case/plural; do not confuse them.
 #

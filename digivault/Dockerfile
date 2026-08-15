@@ -1,6 +1,6 @@
-# DigiVault – Obsidian-style markdown vault management for the Digi ecosystem
+# digivault – Obsidian-style markdown vault management for the Digi ecosystem
 # Build from repo root: docker compose build digivault (context: .)
-# See digivault/ARCHITECTURE.md. HTTP API + MCP tooling for DigiGraph.
+# See digivault/ARCHITECTURE.md. HTTP API + MCP tooling for digigraph.
 
 FROM python:3.12-slim
 
@@ -25,7 +25,7 @@ RUN uv pip install --system -e "./digikey"
 COPY digivault/pyproject.toml digivault/ARCHITECTURE.md ./digivault/
 COPY digivault/src ./digivault/src
 WORKDIR /app/digivault
-RUN uv pip install --system -e ".[service]"
+RUN uv pip install --system -e ".[service,supabase]"
 
 WORKDIR /app
 EXPOSE 8004

@@ -9,7 +9,7 @@ Replace all `{placeholder}` values. Remove sections that don't apply.
 
 One sentence: what will be true when this task is done.
 
-> Example: `POST /v1/orchestrator_tools` on DigiSearch returns a `digisearch_research_delegate` tool when the `[agent]` extra is installed.
+> Example: `POST /v1/orchestrator_tools` on digisearch returns a `digisearch_research_delegate` tool when the `[agent]` extra is installed.
 
 ---
 

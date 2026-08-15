@@ -1,4 +1,4 @@
-"""Triage phase — ``state.triage`` + ``price_deltas`` on delta runs only.
+"""Triage phase — ``state.triage`` + ``price_deltas`` on every daily run.
 
 ``deps=None`` skips price lookup (conservative regenerate). See ``graph.py``.
 """
@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any  # noqa: F401 -- used for LangGraph update dict shape
+from typing import Any  # score:allow untyped any — used for LangGraph update dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
@@ -36,9 +36,6 @@ def build_triage_node(deps: TriageDeps | None):
     """
 
     def _triage(state: AtlasResearchState) -> dict[str, Any]:
-        if state.run_type != "delta":
-            return {}
-
         price_deltas: dict[str, float] = {}
         if deps is not None:
             tickers = all_tracked_tickers()

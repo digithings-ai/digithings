@@ -1,4 +1,5 @@
 import type { Doc } from '@/lib/types';
+import { CATEGORICAL_SERIES } from '@/lib/chart-colors';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PM document grouping
@@ -107,18 +108,8 @@ export function groupPmDocs(docs: Doc[]): PmDocGroup[] {
   return groups;
 }
 
-export const ALLOCATION_PALETTE = [
-  '#3B82F6',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#8B5CF6',
-  '#06B6D4',
-  '#F97316',
-  '#EC4899',
-  '#6366F1',
-  '#14B8A6',
-];
+// Hues live in the sanctioned fixed allowlist (lib/chart-colors.ts, #1402).
+export const ALLOCATION_PALETTE: readonly string[] = CATEGORICAL_SERIES;
 
 /** Stable accent color for a category / grouping key (hex, for inline styles). */
 export function allocationAccentFromKey(key: string): string {
@@ -134,18 +125,26 @@ const CATEGORY_LABELS: Record<string, string> = {
   equity_sector: 'Equity Sector',
   equity_broad: 'Broad Equity',
   fixed_income_cash: 'Cash',
+  fixed_income_core: 'Core Bonds',
   fixed_income_short: 'Short Duration',
+  fixed_income_intermediate: 'Intermediate Duration',
   fixed_income_long: 'Long Duration',
   fixed_income_tips: 'TIPS',
+  sector_consumer_disc: 'Consumer discretionary',
+  sector_energy: 'Energy',
+  sector_financials: 'Financials',
+  sector_healthcare: 'Healthcare',
   crypto: 'Crypto',
   international: 'International',
   cash: 'Cash',
+  unknown: 'Uncategorized',
   uncategorized: 'Uncategorized',
 };
 
 export function formatAllocationCategory(cat: string | null | undefined): string {
-  if (!cat) return '—';
-  return CATEGORY_LABELS[cat] || cat.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  if (!cat) return 'Uncategorized';
+  const key = cat.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return CATEGORY_LABELS[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export const PM_DOC_ORDER = [

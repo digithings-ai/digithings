@@ -1,0 +1,48 @@
+name: "Test: Nautilus smoke"
+
+# Installs from the committed uv.lock rather than resolving fresh (#1714, #1715).
+#
+# This is the one lane that WANTS `digiquant[nautilus]`, so the workspace-wide
+# `--all-extras` is exactly right here — it is the mirror image of
+# test-digiquant.yml, which pins its extras specifically to keep nautilus out.
+# The two lanes together cover tests/dq: the nautilus-importing files run here,
+# everything else runs there (#1501).
+#
+# `pip install pandas cryptography` dropped as redundant — pandas arrives via
+# yfinance/statsmodels under digiquant, cryptography via digikey.
+on:
+  workflow_call:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # --frozen fails if uv.lock is stale rather than silently re-resolving.
+      - name: Install from lockfile (includes nautilus)
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Nautilus-gated unit tests
+        # Runs every file that tests/dq/conftest.py drops from collection when
+        # the nautilus extra is absent (collect_ignore) — the plain digiquant
+        # lane (test-digiquant.yml) never sees them (#1501). Keep this list in
+        # sync with conftest.py's collect_ignore AND the nautilus_smoke filter
+        # in scripts/ci_paths.yaml. If a file reintroduces the Linux SIGABRT
+        # (exit 134, #42), drop it here with a comment citing #42.
+        run: |
+          uv run --frozen --no-sync pytest \
+            tests/dq/test_api.py \
+            tests/dq/test_audit.py \
+            tests/dq/test_backtest.py \
+            tests/dq/test_calibrations_loader.py \
+            tests/dq/test_nautilus_runner.py \
+            tests/dq/test_pipeline_graph.py \
+            tests/dq/test_strategies.py \
+            tests/dq/test_tearsheet_isolation.py \
+            tests/dq/test_v1_jobs.py \
+            -m unit -v --tb=short

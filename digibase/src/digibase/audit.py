@@ -1,4 +1,4 @@
-"""Audit payload redaction (shared across DigiGraph, DigiClaw, DigiQuant)."""
+"""Audit payload redaction (shared across digigraph, digiclaw, digiquant)."""
 
 from __future__ import annotations
 

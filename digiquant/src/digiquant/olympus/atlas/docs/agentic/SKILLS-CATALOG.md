@@ -35,9 +35,9 @@
 
 ---
 
-## Alternative data (4)
+## Alternative data (5)
 
-`alt-sentiment-news`, `alt-cta-positioning`, `alt-options-derivatives`, `alt-politician-signals`
+`alt-sentiment-news`, `alt-cta-positioning`, `alt-options-derivatives`, `alt-politician-signals`, `alt-onchain-positioning`
 
 ---
 

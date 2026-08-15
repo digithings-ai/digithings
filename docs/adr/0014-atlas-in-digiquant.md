@@ -8,7 +8,7 @@
 
 ## Context
 
-Atlas — the DigiQuant research pipeline and frontend — currently lives under
+Atlas — the digiquant research pipeline and frontend — currently lives under
 `apps/digiquant-atlas/`. That placement made sense when Atlas was an
 experimental standalone project, but it now creates three concrete problems:
 
@@ -23,24 +23,24 @@ experimental standalone project, but it now creates three concrete problems:
    type checking, and dependency graphs all see it as a separate top-level
    package.
 
-3. **Frontend umbrella misalignment.** ADR-0009 established that all DigiThings
+3. **Frontend umbrella misalignment.** ADR-0009 established that all digithings
    web frontends live under `frontend/`. It explicitly deferred the physical
    relocation of `apps/digiquant-atlas/frontend/` to `frontend/atlas/` with
    the note "keeping it nested under the research project is fine for now."
-   That deferral is no longer appropriate: Atlas is a first-class DigiQuant
+   That deferral is no longer appropriate: Atlas is a first-class digiquant
    product, its frontend is actively maintained, and keeping it outside
    `frontend/` creates a persistent exception to an otherwise clean rule.
 
 Atlas is not a research prototype anymore. It runs a scheduled LangGraph
-sub-graph inside DigiGraph (landed in [PR #243](https://github.com/digithings-ai/digithings/pull/243)),
-persists to the same Supabase schema as every other DigiQuant surface
+sub-graph inside digigraph (landed in [PR #243](https://github.com/digithings-ai/digithings/pull/243)),
+persists to the same Supabase schema as every other digiquant surface
 (ADR-0011), and carries first-class deliberation tables (ADR-0010). Treating
 it as an `apps/` side-project understates its role in the product family and
 makes it harder to evolve as an integrated part of `digiquant/`.
 
 ## Decision
 
-Atlas is a DigiQuant product. Its Python code becomes `digiquant.olympus.atlas`
+Atlas is a digiquant product. Its Python code becomes `digiquant.olympus.atlas`
 (namespace package inside `digiquant/src/digiquant/olympus/atlas/`) and its frontend
 moves to `frontend/atlas/`, consistent with ADR-0009.
 
@@ -81,7 +81,7 @@ Specifically:
 - `import digiquant.olympus.atlas` reads as a natural extension of the module; tooling
   that understands Python namespaces (mypy, pyright, dependency scanners)
   sees Atlas as part of `digiquant` automatically.
-- The `frontend/` umbrella holds every DigiThings web surface with no
+- The `frontend/` umbrella holds every digithings web surface with no
   exceptions. ADR-0009's deferred `frontend/atlas/` relocation item is resolved.
 - The product family narrative is clean: `digiquant/` owns the full quant
   engine — strategies, backtesting, Atlas research sub-graph, and the
@@ -90,7 +90,7 @@ Specifically:
 **Negative / tradeoffs:**
 
 - `apps/digiquant-atlas/` import paths (`digiquant_atlas.*`) appear throughout
-  DigiGraph sub-graph wiring, Supabase adapter references, and the frontend's
+  digigraph sub-graph wiring, Supabase adapter references, and the frontend's
   API client. All callers must be updated in the Python-move phase (#315).
 - The `"apps/*/frontend"` workspace glob must be dropped atomically with the
   frontend move (#300), not before, to avoid a broken-workspace window. CI
@@ -106,7 +106,7 @@ Specifically:
 
 | Phase | Issue | Description |
 |-------|-------|-------------|
-| 1 | [#315](https://github.com/digithings-ai/digithings/issues/315) | Python package move — `digiquant_atlas` → `digiquant.olympus.atlas`; update all import sites in DigiGraph, tests, and CI |
+| 1 | [#315](https://github.com/digithings-ai/digithings/issues/315) | Python package move — `digiquant_atlas` → `digiquant.olympus.atlas`; update all import sites in digigraph, tests, and CI |
 | 2 | [#300](https://github.com/digithings-ai/digithings/issues/300) | Frontend move — `apps/digiquant-atlas/frontend/` → `frontend/atlas/`; drop `apps/*/frontend` glob, update CI path filters |
 | 3 | TBD | Supabase migration consolidation — decide canonical home for `supabase/migrations/`; update CI and RUNBOOK paths |
 | 4 | TBD | `apps/digiquant-atlas/` cleanup — delete shell, migrate ancillary docs/scripts into `digiquant/`, remove stale CI workflows |

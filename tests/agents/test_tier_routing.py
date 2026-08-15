@@ -1,9 +1,13 @@
 """Unit tests for the agent tier-routing logic.
 
-Tests the quota-check and priority-parse logic used by:
-- .github/workflows/copilot-issue-dispatch.md  (gh-aw: quota check + assign-to-agent)
-- .github/workflows/copilot-pr-lifecycle.md    (gh-aw: PR state machine)
-- .github/workflows/scheduled-maintenance.yml  (duplicate-issues tokenizer)
+Tests the quota-check and priority-parse logic used by
+`.github/workflows/pipeline-maintenance.yml` (duplicate-issues tokenizer).
+
+These tests reimplement that logic inline rather than reading any workflow, which
+is why they survived the removal of the Copilot dispatch tier on 2026-08-05 — they
+originally mirrored two gh-aw workflows (copilot-issue-dispatch, copilot-pr-lifecycle)
+that no longer exist. Keep the file: `tests/agents/` holds only this test and
+ci.yml passes that directory to pytest explicitly, so emptying it fails the run.
 
 All tests are pure-Python (no subprocess, no network) and run as part of
 `pytest -m unit`.
@@ -13,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -20,14 +25,15 @@ pytestmark = pytest.mark.unit
 
 # ── Helpers extracted verbatim from the workflow inline scripts ──────────────
 
+
 def _parse_exhausted(state_labels_json: str) -> str:
-    """Mirrors the quota-exhausted check in copilot-issue-dispatch.md."""
+    """Quota-exhausted label parse, as pipeline-maintenance.yml does it."""
     labels = json.loads(state_labels_json)
     return "true" if "quota:copilot-exhausted" in labels else "false"
 
 
 def _parse_priority(issue_labels_json: str) -> str:
-    """Mirrors the priority-label parse in copilot-issue-dispatch.md."""
+    """Priority-label parse, as pipeline-maintenance.yml does it."""
     labels = json.loads(issue_labels_json)
     tier = "none"
     for label in labels:
@@ -54,6 +60,7 @@ def _similarity(title_a: str, title_b: str) -> float:
 
 # ── Quota state parsing ──────────────────────────────────────────────────────
 
+
 class TestExhaustedParsing:
     def test_not_exhausted_when_label_absent(self):
         state = json.dumps(["housekeeping", "maintenance"])
@@ -75,6 +82,7 @@ class TestExhaustedParsing:
 
 
 # ── Priority label parsing ───────────────────────────────────────────────────
+
 
 class TestPriorityParsing:
     def _labels(self, *names) -> str:
@@ -105,6 +113,7 @@ class TestPriorityParsing:
 
 
 # ── Escalation routing matrix ────────────────────────────────────────────────
+
 
 class TestEscalationMatrix:
     """Validates the routing logic described in EXECUTION_TIERS.md.
@@ -145,6 +154,7 @@ class TestEscalationMatrix:
 
 
 # ── Duplicate-issue title tokenizer ──────────────────────────────────────────
+
 
 class TestDuplicateTitleTokenizer:
     def test_strips_bracket_prefix(self):

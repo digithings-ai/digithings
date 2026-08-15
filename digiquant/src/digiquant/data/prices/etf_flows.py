@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import math
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous signal-dict values
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous signal-dict values
+)
 
 import polars as pl
 

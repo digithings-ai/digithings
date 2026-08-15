@@ -50,4 +50,19 @@ describe('TodayActionsPanel', () => {
     );
     expect(html).toContain('Initiate on the datacenter capex breakout.');
   });
+
+  it('bare mode drops the panel frame and header for the hero', () => {
+    const actions: RebalanceAction[] = [
+      { ticker: 'NVDA', current_pct: 0, recommended_pct: 6.5, action: 'OPEN' },
+    ];
+    const normal = renderToStaticMarkup(createElement(TodayActionsPanel, { actions }));
+    const bare = renderToStaticMarkup(createElement(TodayActionsPanel, { actions, bare: true }));
+    // Header + drill-down present normally, gone when bare…
+    expect(normal).toContain('Full rebalance memo');
+    expect(bare).not.toContain('Full rebalance memo');
+    expect(bare).not.toContain('glass-card');
+    // …but the move content itself still renders.
+    expect(bare).toContain('NVDA');
+    expect(bare).toContain('OPEN');
+  });
 });

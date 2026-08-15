@@ -6,9 +6,9 @@ import time
 from queue import Queue
 
 import pytest
+from digiquant.backtest_jobs import BACKTEST_JOB_TTL_SECS, prune_stale_backtest_jobs
 
 from digiquant import backtest_jobs
-from digiquant.backtest_jobs import BACKTEST_JOB_TTL_SECS, prune_stale_backtest_jobs
 
 
 @pytest.mark.unit

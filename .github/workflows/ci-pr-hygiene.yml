@@ -1,0 +1,66 @@
+name: "CI: PR hygiene"
+
+# Agent-task TSV coverage (path-gated), on schedule and PR.
+#
+# The issue-linkage check ("Require Fixes #N or task/N-* branch") that used to
+# live here was removed 2026-08 (docs/adr/0024-drop-pr-linkage-enforcement.md):
+# it was never a required status check on main or develop, so a failure never
+# blocked a merge, yet it still cost a CI run per PR and produced real rework
+# when it failed on PRs that merged anyway regardless (#2227, #2296). Linking a
+# PR to an issue (task/<N>-slug branch, or `Fixes #N` in the body) remains the
+# convention — see CLAUDE.md's Branching model section — it's just no longer
+# machine-enforced.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC daily
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  path-filter:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tsv: ${{ steps.filter.outputs.tsv }}
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            tsv:
+              - 'scripts/project_fields.tsv'
+              - '.github/workflows/ci-pr-hygiene.yml'
+
+  coverage:
+    name: All agent-task issues in TSV with real phase and valid model
+    needs: path-filter
+    if: |
+      always() && (
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'pull_request' &&
+         needs.path-filter.result == 'success' &&
+         needs.path-filter.outputs.tsv == 'true')
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check TSV coverage
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/check_project_fields_coverage.py

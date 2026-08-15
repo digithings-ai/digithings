@@ -1,4 +1,4 @@
-"""DigiSearch client - unified orchestrator. DigiSearch.from_config()."""
+"""digisearch client - unified orchestrator. DigiSearch.from_config()."""
 
 from __future__ import annotations
 

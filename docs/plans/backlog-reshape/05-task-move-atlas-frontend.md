@@ -27,7 +27,7 @@ This is a **move, not a refactor** — no behavior or dependency changes. The ba
 - [ ] `npm install` at repo root succeeds.
 - [ ] `npm --workspace frontend/atlas run build` succeeds.
 - [ ] `npm --workspace frontend/atlas run lint` passes.
-- [ ] `@digithings/design` workspace dep resolves from the new location (`frontend/atlas/` → `frontend/design/`).
+- [ ] `@digithings/design` workspace dep resolves from the new location (`frontend/atlas/` → `frontend/digiweb/design/`).
 - [ ] Any relative imports that reached up into the Atlas Python app (e.g., for config) are either preserved via explicit config files or documented.
 - [ ] CI `paths:` filters updated in every workflow that mentions `apps/digiquant-atlas/frontend/` — especially `digichat-test.yml` pattern analogs, and any Atlas-specific workflow in `apps/digiquant-atlas/.github/workflows/` that references the frontend path.
 - [ ] README and `apps/digiquant-atlas/AGENTS.md` updated to note the frontend now lives at `frontend/digiquant-atlas/`.

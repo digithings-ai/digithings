@@ -1,4 +1,4 @@
-"""DigiThings shared platform utilities (HTTP, errors, audit redaction, metrics, optional OTel)."""
+"""digithings shared platform utilities (HTTP, errors, audit redaction, metrics, optional OTel)."""
 
 from digibase.cors import install_cors, resolve_cors_origins
 from digibase.http import (

@@ -3,17 +3,37 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
+from contextlib import contextmanager
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel, Field, ValidationError
-
 from digigraph.graph.research_agent import (
     ANALYST_SYSTEM,
     _format_scope_block,
     _strictify_json_schema,
     run_research_agent,
 )
+from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletionMessage as OpenAIMessage
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat.chat_completion_message_function_tool_call import (
+    ChatCompletionMessageFunctionToolCall,
+    Function,
+)
+from pydantic import BaseModel, Field, ValidationError
+
+from digigraph import usage
+from digillm import (
+    CallPurpose,
+    NoArtifactReason,
+    ProviderAttemptRecord,
+    ProviderCallContextHandle,
+    ProviderCallRecord,
+    TelemetryRecord,
+    set_telemetry_observer,
+)
+from digillm import client as digillm_client
 
 
 class _SampleOutput(BaseModel):
@@ -22,6 +42,22 @@ class _SampleOutput(BaseModel):
     regime: str = Field(description="regime label")
     confidence: float = Field(ge=0.0, le=1.0)
     notes: list[str] = Field(default_factory=list)
+
+
+def _completion(content: str) -> ChatCompletion:
+    return ChatCompletion(
+        id="cmpl-research-telemetry",
+        created=0,
+        model="served-model",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="stop",
+                message=OpenAIMessage(role="assistant", content=content),
+            )
+        ],
+    )
 
 
 @pytest.mark.unit
@@ -245,6 +281,231 @@ class TestRunResearchAgent:
         assert second_messages[-1]["role"] == "user"
         assert "did not validate" in second_messages[-1]["content"]
 
+    def test_structured_repair_links_to_rejected_call(self) -> None:
+        bad = json.dumps({"regime": "x"})
+        good = json.dumps({"regime": "x", "confidence": 0.4})
+        call_ids = [uuid4(), uuid4()]
+        contexts: list[dict[str, object]] = []
+
+        @contextmanager
+        def capture_context(**kwargs: object):
+            contexts.append(kwargs)
+            yield ProviderCallContextHandle(last_call_id=call_ids[len(contexts) - 1])
+
+        with (
+            patch(
+                "digigraph.graph.research_agent.completion_text",
+                side_effect=[bad, good],
+            ),
+            patch(
+                "digigraph.graph.research_agent._usage.logical_call_context",
+                side_effect=capture_context,
+            ),
+        ):
+            run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+                max_retries=1,
+            )
+
+        assert [context["purpose"] for context in contexts] == [
+            CallPurpose.STRUCTURED_COMPLETION,
+            CallPurpose.STRUCTURED_REPAIR,
+        ]
+        assert contexts[0]["parent_call_id"] is None
+        assert contexts[1]["parent_call_id"] == call_ids[0]
+
+    def test_rejected_output_is_finalized_before_logical_record_delivery(self) -> None:
+        bad = json.dumps({"regime": "x"})
+        good = json.dumps({"regime": "x", "confidence": 0.4})
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.side_effect = [_completion(bad), _completion(good)]
+        records: list[TelemetryRecord] = []
+
+        class Collector:
+            def observe(self, record: TelemetryRecord) -> None:
+                records.append(record)
+
+        previous_observer = digillm_client._telemetry_observer
+        digillm_client.clear_caches()
+        set_telemetry_observer(Collector())
+        try:
+            with (
+                usage.call_context(node_run_id=uuid4()),
+                patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+            ):
+                output = run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="test-model",
+                    max_retries=1,
+                )
+        finally:
+            set_telemetry_observer(previous_observer)
+            digillm_client.clear_caches()
+
+        calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+        assert output.confidence == 0.4
+        assert len(calls) == 2
+        assert [call.purpose for call in calls] == [
+            CallPurpose.STRUCTURED_COMPLETION,
+            CallPurpose.STRUCTURED_REPAIR,
+        ]
+        assert [call.no_artifact_reason for call in calls] == [
+            NoArtifactReason.VALIDATION_REJECTED,
+            NoArtifactReason.CONSUMED_INLINE,
+        ]
+        assert calls[1].parent_call_id == calls[0].call_id
+
+    def test_tool_path_deferral_survives_a_failing_tool(self) -> None:
+        """A deferred tool-selection record must outlive an exception from the tool loop.
+
+        ``defer_finalization`` holds the successful tool-selection record in the handle until
+        ``finalize()`` delivers it. If the ``finally`` did not span the tool-loop call, an
+        exception out of ``execute_tool`` would discard that record while its physical attempt
+        row survives — an attempt whose ``call_id`` has no logical row, which migration 067's
+        ``fk_olympus_provider_attempts_call`` will reject once the writer lands.
+
+        The tool must raise something outside digillm's ``run_tools`` recoverable-error tuple
+        (``RuntimeError``/``OSError``/``ValueError``/``TypeError``/``KeyError`` — see
+        digillm/src/digillm/client.py's sequential tool-dispatch branch, added in
+        4e5f14c4e "fix(digillm): recover from sequential tool errors, signal round exhaustion").
+        Any of those five is now caught inside the tool loop and turned into a tool-result
+        message instead of propagating, so the mock's fixed response would just spin through
+        ``max_tool_rounds`` and surface an unrelated "empty LLM response" error. A plain
+        ``Exception`` subclass genuinely escapes the loop and exercises the deferral path this
+        test targets.
+        """
+        tool_call = ChatCompletion(
+            id="cmpl-tool-call",
+            created=0,
+            model="served-model",
+            object="chat.completion",
+            choices=[
+                Choice(
+                    index=0,
+                    finish_reason="tool_calls",
+                    message=OpenAIMessage(
+                        role="assistant",
+                        content=None,
+                        tool_calls=[
+                            ChatCompletionMessageFunctionToolCall(
+                                id="call-1",
+                                type="function",
+                                function=Function(name="probe", arguments="{}"),
+                            )
+                        ],
+                    ),
+                )
+            ],
+        )
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value = tool_call
+        records: list[TelemetryRecord] = []
+
+        class Collector:
+            def observe(self, record: TelemetryRecord) -> None:
+                records.append(record)
+
+        class _ToolExplosion(Exception):
+            """Not in digillm's recoverable-error tuple — must escape ``run_tools`` uncaught."""
+
+        def exploding_tool(name: str, arguments: dict[str, object]) -> str:
+            raise _ToolExplosion("tool blew up")
+
+        previous_observer = digillm_client._telemetry_observer
+        digillm_client.clear_caches()
+        set_telemetry_observer(Collector())
+        try:
+            with (
+                usage.call_context(node_run_id=uuid4()),
+                patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+                pytest.raises(_ToolExplosion, match="tool blew up"),
+            ):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="test-model",
+                    max_retries=0,
+                    tools=[
+                        {
+                            "type": "function",
+                            "function": {
+                                "name": "probe",
+                                "description": "probe",
+                                "parameters": {"type": "object", "properties": {}},
+                            },
+                        }
+                    ],
+                    execute_tool=exploding_tool,
+                )
+        finally:
+            set_telemetry_observer(previous_observer)
+            digillm_client.clear_caches()
+
+        calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+        attempts = [record for record in records if isinstance(record, ProviderAttemptRecord)]
+        assert calls, "the deferred tool-selection record was dropped"
+        logical_ids = {call.call_id for call in calls}
+        orphans = [attempt.call_id for attempt in attempts if attempt.call_id not in logical_ids]
+        assert not orphans, f"attempt rows with no logical call: {orphans}"
+
+    def test_deferred_record_survives_an_unexpected_consumer_exception(self) -> None:
+        """A deferred logical record must still reach the observer when the consumer raises.
+
+        ``defer_finalization`` withholds a successful logical record so the consumer can relabel
+        it ``validation_rejected``. If a consumer-side failure other than a parse error could skip
+        ``finalize()``, the deferral mechanism would silently lose telemetry — the exact opposite
+        of what it exists to guarantee.
+        """
+        good = json.dumps({"regime": "x", "confidence": 0.4})
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value = _completion(good)
+        records: list[TelemetryRecord] = []
+
+        class Collector:
+            def observe(self, record: TelemetryRecord) -> None:
+                records.append(record)
+
+        class _Exploding(BaseModel):
+            regime: str
+
+            @classmethod
+            def model_validate(cls, *args: object, **kwargs: object) -> "_Exploding":
+                raise RuntimeError("consumer blew up")
+
+        previous_observer = digillm_client._telemetry_observer
+        digillm_client.clear_caches()
+        set_telemetry_observer(Collector())
+        try:
+            with (
+                usage.call_context(node_run_id=uuid4()),
+                patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
+                pytest.raises(RuntimeError, match="consumer blew up"),
+            ):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_Exploding,
+                    model="test-model",
+                    max_retries=1,
+                )
+        finally:
+            set_telemetry_observer(previous_observer)
+            digillm_client.clear_caches()
+
+        calls = [record for record in records if isinstance(record, ProviderCallRecord)]
+        assert len(calls) == 1
+        assert calls[0].no_artifact_reason is NoArtifactReason.CONSUMED_INLINE
+
     def test_raises_validation_error_after_exhausting_retries(self) -> None:
         bad = json.dumps({"regime": "x"})
         with patch(
@@ -283,3 +544,55 @@ class TestRunResearchAgent:
         assert "properties" in strict_schema
         assert strict_schema["additionalProperties"] is False
         assert set(strict_schema["required"]) == {"regime", "confidence", "notes"}
+
+    def test_empty_response_raises_clear_value_error(self) -> None:
+        """An empty completion (openrouter/auto under high cost_quality_tradeoff) must raise
+        a descriptive ValueError before json.loads so the failure is diagnosable (#814)."""
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            return_value="",
+        ):
+            with pytest.raises(ValueError, match="empty LLM response from"):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="test-model",
+                    max_retries=0,
+                )
+
+    def test_whitespace_only_response_raises_value_error(self) -> None:
+        """Whitespace-only responses (after fence-strip) must also raise ValueError, not
+        JSONDecodeError with a generic 'Expecting value' message (#814)."""
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            return_value="   \n  ",
+        ):
+            with pytest.raises(ValueError, match="empty LLM response from"):
+                run_research_agent(
+                    skill_text="x",
+                    phase_inputs={},
+                    shared_context={},
+                    output_model=_SampleOutput,
+                    model="test-model",
+                    max_retries=0,
+                )
+
+    def test_empty_response_retried_then_succeeds(self) -> None:
+        """An empty first response is retried; a good second response returns normally (#814)."""
+        good = json.dumps({"regime": "recovery", "confidence": 0.6})
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            side_effect=["", good],
+        ) as mock:
+            out = run_research_agent(
+                skill_text="x",
+                phase_inputs={},
+                shared_context={},
+                output_model=_SampleOutput,
+                model="test-model",
+                max_retries=1,
+            )
+        assert out.regime == "recovery"
+        assert mock.call_count == 2

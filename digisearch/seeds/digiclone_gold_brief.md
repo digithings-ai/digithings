@@ -1,7 +1,7 @@
-# DigiClone seed brief: gold (XAU) and systematic trading context
+# digiclone seed brief: gold (XAU) and systematic trading context
 
-This file is **curated narrative** for local DigiSearch indexing (DigiClone / literature-style ideation).
-It is **not** financial advice and **not** backtest results. Always run DigiQuant for empirical metrics.
+This file is **curated narrative** for local digisearch indexing (digiclone / literature-style ideation).
+It is **not** financial advice and **not** backtest results. Always run digiquant for empirical metrics.
 
 ## Gold as a risk asset
 
@@ -11,10 +11,10 @@ It is **not** financial advice and **not** backtest results. Always run DigiQuan
 ## Strategy families to discuss (not performance claims)
 
 1. **Cross-sectional / time-series momentum** on gold or a basket including gold.
-2. **Moving-average crossover** and **MACD-style** trend filters (implemented in DigiQuant as `ema_cross`, `macd_trend`).
-3. **Mean reversion** via band-type rules (e.g. Bollinger-style; DigiQuant `bollinger_mr`).
+2. **Moving-average crossover** and **MACD-style** trend filters (implemented in digiquant as `ema_cross`, `macd_trend`).
+3. **Mean reversion** via band-type rules (e.g. Bollinger-style; digiquant `bollinger_mr`).
 4. **Volatility-scaled position sizing** — conceptually important; parameterize via `trade_size` in experiments.
 
 ## Citations habit
 
-When answering from RAG, cite **document titles or sources** from DigiSearch hits. Never invent Sharpe ratios or drawdowns; point users to **DigiQuant backtests** after OHLCV is available.
+When answering from RAG, cite **document titles or sources** from digisearch hits. Never invent Sharpe ratios or drawdowns; point users to **digiquant backtests** after OHLCV is available.

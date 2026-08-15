@@ -1,4 +1,4 @@
-"""DigiGraph unit tests: enable opt-in HTTP routes by default (see server gated_sensitive_endpoints)."""
+"""digigraph unit tests: enable opt-in HTTP routes by default (see server gated_sensitive_endpoints)."""
 
 from __future__ import annotations
 

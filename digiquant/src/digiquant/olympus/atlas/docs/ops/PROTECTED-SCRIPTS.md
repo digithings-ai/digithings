@@ -13,10 +13,10 @@ Scripts listed here are **do not remove or rename casually**: GitHub Actions, [`
 | Smoke test | `bash scripts/smoke-test.sh` |
 | Pytest | `python -m pytest tests/` — imports [`scripts/generate-snapshot.py`](../../scripts/generate-snapshot.py), [`scripts/update_tearsheet.py`](../../scripts/update_tearsheet.py) via [`tests/test_etl.py`](../../tests/test_etl.py) |
 | DB types | `bash scripts/check-types-sync.sh` |
-| Supabase migrations | `bash scripts/verify-supabase-migrations.sh` |
+| Supabase migrations | `bash digiquant/scripts/atlas/verify-supabase-migrations.sh` — via `test-digiquant.yml`, not `ci.yml` directly |
 | Skill frontmatter | `bash scripts/validate-frontmatter.sh` |
 
-### [`digiquant-prices.yml`](../../.github/workflows/digiquant-prices.yml)
+### [`pipeline-digiquant-prices.yml`](../../.github/workflows/pipeline-digiquant-prices.yml)
 
 Replaced the retired `daily-price-update.yml`. Uses `python -m digiquant prices …` commands
 (not the old standalone scripts). See [SCRIPTS.md](SCRIPTS.md) for the `python -m digiquant prices`
@@ -103,7 +103,7 @@ PY
 | `position_entry_from_events.py` | **Keep** — helper module. |
 | `regen_research_deltas.py` | **Deleted (WS4b)** — already-run one-shot. |
 
-Apr 2026 one-off repair scripts (`repair_apr15_*`, `repair_historical_artifacts`, `fix_backfill_lineage`) were **removed** from the repo for the migration baseline (not shipped to DigiThings).
+Apr 2026 one-off repair scripts (`repair_apr15_*`, `repair_historical_artifacts`, `fix_backfill_lineage`) were **removed** from the repo for the migration baseline (not shipped to digithings).
 
 Everything else had at least one **text** reference (docs, workflows, other scripts). Treat “unreferenced” as **candidate only** — dynamic imports, subprocess calls with constructed paths, or docs outside the scanned extensions can still reference a script.
 

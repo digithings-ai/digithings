@@ -1,9 +1,8 @@
-"""DigiSearch query logic. Stub, Azure, Chroma backends."""
+"""digisearch query logic. Stub, Azure, Chroma backends."""
 
 from __future__ import annotations
 
 from digisearch.core.models import Chunk, Query, Result
-
 from digisearch.search._stub import add_chunks, get_stub_index, query_index
 
 __all__ = [

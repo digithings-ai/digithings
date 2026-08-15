@@ -1,77 +1,183 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   CalendarClock,
   CalendarDays,
   Grid3x3,
-  Layers,
   LineChart as LineChartIcon,
-  ScrollText,
+  Workflow,
 } from 'lucide-react';
+import { EmptyState } from '@digithings/web';
 
-import { SubpageStickyTabBar, SUBPAGE_MAX, subpageTabButtonClass } from '@/components/subpage-tab-bar';
-import AtlasLoader from '@/components/AtlasLoader';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
+import PageSkeleton from '@/components/page-skeleton';
 import {
+  computeConsensusDeltaSet,
+  getConsensusDivergence,
   getConsensusTimeSeries,
   getEventOpinions,
   getIntelligence,
-  getLatestConsensus,
+  getIntelligenceWhy,
   getLatestDigest,
-  getLedger,
-  getLedgerRunDates,
   getMatrix,
-  getTopConfluence,
+  getTradeIdeas,
+  getTodayBriefs,
+  getTodayEvents,
   getUpcomingEvents,
+  getBriefs,
 } from '@/lib/twelve-x/fetch';
+import { selectLatestCompleteConsensus } from '@/lib/twelve-x/consensus-derive';
 import { isTwelveXConfigured } from '@/lib/twelve-x/supabase';
 import type {
+  FxBriefRow,
   FxConfluenceSnapshotRow,
+  FxConsensusDivergence,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
-  FxLedgerRow,
+  FxTradeIdeaRow,
+  IntelligenceWhy,
   MatrixCell,
 } from '@/lib/twelve-x/types';
 import TodayTab from './TodayTab';
+import BriefsIndex from './BriefsIndex';
 import ConsensusTab from './ConsensusTab';
-import IntelligenceTab from './IntelligenceTab';
 import EventsTab from './EventsTab';
+import HowItWorksTab from './HowItWorksTab';
 import MatrixTab from './MatrixTab';
-import LedgerTab from './LedgerTab';
 import BriefPanel from './BriefPanel';
-
-type TwelveXTab = 'today' | 'consensus' | 'intelligence' | 'events' | 'matrix' | 'ledger';
+import TwelveXHeading from './TwelveXHeading';
+import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
+import { useWatchlist } from './useWatchlist';
 
 type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 
+/** The workspace tab bar, in display order: id, icon, and label. */
+export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
+  { id: 'today', Icon: CalendarClock, label: 'Today' },
+  { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
+  { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
+  { id: 'events', Icon: CalendarDays, label: 'Events' },
+  { id: 'how-it-works', Icon: Workflow, label: 'How it works' },
+];
+
+function TwelveXTabBar({
+  active,
+  onSelect,
+  disabled = false,
+}: {
+  active: TwelveXTab;
+  onSelect?: (tab: TwelveXTab) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <SubpageStickyTabBar aria-label="FX research workspace">
+      {TWELVE_X_TABS.map(({ id, Icon, label }) => (
+        <button
+          key={id}
+          type="button"
+          disabled={disabled}
+          onClick={() => onSelect?.(id)}
+          className={`${subpageTabButtonClass(active === id)} disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          <Icon size={16} aria-hidden />
+          {label}
+        </button>
+      ))}
+    </SubpageStickyTabBar>
+  );
+}
+
+export function TwelveXUnavailable({ configured }: { configured: boolean }) {
+  return (
+    <div className="flex min-h-full flex-col">
+      <div className={`${SUBPAGE_MAX} flex-1 py-12`}>
+        <EmptyState
+          variant="error"
+          className="mx-auto max-w-md border border-hair bg-surface"
+          title={configured ? 'FX research is temporarily unavailable' : 'FX research is not connected'}
+          body={
+            configured
+              ? 'The research feed could not be reached. Try again to reconnect.'
+              : 'This environment is not connected to the FX research feed.'
+          }
+          action={
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+            >
+              Retry
+            </button>
+          }
+        />
+      </div>
+    </div>
+  );
+}
+
+/** A brief drill-down target: the source_file key plus the run that owns it. */
+export type BriefTarget = { sourceFile: string; runDate: string | null };
+
 interface TwelveXData {
   digest: DigestData;
-  confluence: FxConfluenceSnapshotRow[];
   consensusSeries: FxConsensusSnapshotRow[];
   latestConsensus: FxConsensusSnapshotRow[];
   intelligence: FxConfluenceSnapshotRow[];
+  intelligenceWhy: IntelligenceWhy;
   upcomingEvents: FxEconomicCalendarRow[];
   eventOpinions: FxEventSnapshotRow[];
   matrix: MatrixCell[];
-  ledgerRunDates: string[];
+  tradeIdeas: FxTradeIdeaRow[];
+  todayBriefs: FxBriefRow[];
+  todayEvents: FxEconomicCalendarRow[];
+  researchBriefs: FxBriefRow[];
+  divergenceByCurrency: Record<string, FxConsensusDivergence>;
 }
 
-function resolveTab(urlTab: string | null): TwelveXTab {
+export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
-  if (urlTab === 'intelligence') return 'intelligence';
+  if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
-  if (urlTab === 'ledger') return 'ledger';
+  if (urlTab === 'how-it-works') return 'how-it-works';
   return 'today';
 }
 
-function TwelveXInner({ urlTab }: { urlTab: string | null }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+/** Read a query param from the live URL (client only) — used once to seed state. */
+function readParam(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return new URLSearchParams(window.location.search).get(key);
+}
 
+/**
+ * Sync in-page state (tab / open brief) to the URL with
+ * history.replaceState — NOT the Next router. Under this suite's static export
+ * (output:'export' + trailingSlash) router.replace query-nav is unreliable and
+ * was the cause of tabs not switching / blank pages, so all control flow is
+ * local React state and the URL is mirrored only for deep-link/shareability.
+ */
+function syncUrl(
+  tab: TwelveXTab,
+  brief: BriefTarget | null,
+  view: 'briefs' | null = null,
+): void {
+  if (typeof window === 'undefined') return;
+  const p = new URLSearchParams();
+  if (tab !== 'today') p.set('tab', tab);
+  if (brief?.sourceFile) {
+    p.set('brief', brief.sourceFile);
+    if (brief.runDate) p.set('briefDate', brief.runDate);
+  }
+  if (view) p.set('view', view);
+  const qs = p.toString();
+  const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  window.history.replaceState(window.history.state, '', url);
+}
+
+export default function TwelveXClient() {
   // Resolve configuration once, synchronously, so the effect never has to call
   // setState in its body (which triggers cascading renders).
   const [configured] = useState(() => isTwelveXConfigured());
@@ -79,41 +185,56 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
   const [loading, setLoading] = useState(configured);
   const [error, setError] = useState<string | null>(configured ? null : 'unconfigured');
 
-  // Ledger (P4) loads lazily by selected run_date so the audit table can be
-  // re-pointed without refetching the whole workspace.
-  const [ledgerRun, setLedgerRun] = useState<string | null>(null);
-  const [ledgerRows, setLedgerRows] = useState<FxLedgerRow[]>([]);
+  // In-page navigation state — local, seeded once from the URL for deep links.
+  const [tab, setTabState] = useState<TwelveXTab>(() => resolveTab(readParam('tab')));
+  const [brief, setBrief] = useState<BriefTarget | null>(() => {
+    const sf = readParam('brief');
+    return sf ? { sourceFile: sf, runDate: readParam('briefDate') } : null;
+  });
+  const [view, setView] = useState<'briefs' | null>(() =>
+    readParam('view') === 'briefs' ? 'briefs' : null,
+  );
 
-  const tab: TwelveXTab = resolveTab(urlTab);
-
-  const replaceQuery = useCallback(
-    (mutate: (p: URLSearchParams) => void) => {
-      const p = new URLSearchParams(searchParams.toString());
-      mutate(p);
-      const s = p.toString();
-      router.replace(s ? `${pathname}?${s}` : pathname, { scroll: false });
-    },
-    [pathname, router, searchParams]
+  // Cross-link focus targets handed to the destination tabs.
+  const [consensusFocusCcy, setConsensusFocusCcy] = useState<string | null>(null);
+  const [eventFocus, setEventFocus] = useState<{ externalId?: string | null; name: string | null } | null>(
+    null
   );
 
   const setTab = useCallback(
     (next: TwelveXTab) => {
-      replaceQuery((p) => p.set('tab', next));
+      setTabState(next);
+      setView(null);
+      syncUrl(next, brief, null);
     },
-    [replaceQuery]
+    [brief]
   );
 
-  // "Why this weight?" from a consensus cell → jump to the ledger tab, pre-filtered
-  // to that currency (ledgerCcy is read by LedgerTab as its initial currency filter).
-  const drillToLedger = useCallback(
-    (currency: string) => {
-      replaceQuery((p) => {
-        p.set('tab', 'ledger');
-        p.set('ledgerCcy', currency);
-      });
+  const openBrief = useCallback(
+    (sourceFile: string, runDate: string | null) => {
+      const next = { sourceFile, runDate };
+      setBrief(next);
+      syncUrl(tab, next, view);
     },
-    [replaceQuery]
+    [tab, view]
   );
+
+  const closeBrief = useCallback(() => {
+    setBrief(null);
+    syncUrl(tab, null, view);
+  }, [tab, view]);
+
+  const openBriefsIndex = useCallback(() => {
+    setView('briefs');
+    syncUrl(tab, brief, 'briefs');
+  }, [tab, brief]);
+
+  const closeBriefsIndex = useCallback(() => {
+    setView(null);
+    syncUrl(tab, brief, null);
+  }, [tab, brief]);
+
+  // Cross-surface navigation (removed: drillToProvenance — Intelligence merged into Consensus drilldown)
 
   useEffect(() => {
     if (!configured) return;
@@ -123,45 +244,50 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
         const [
           digest,
           consensusSeries,
-          latestConsensus,
           intelligence,
           upcomingEvents,
           matrix,
-          ledgerRunDates,
+          researchBriefs,
         ] = await Promise.all([
           getLatestDigest(),
           getConsensusTimeSeries(),
-          getLatestConsensus(),
-          // Intelligence: full ranked confluence set for the latest run_date.
           getIntelligence(),
-          // Events: the upcoming 14-day macro calendar window.
           getUpcomingEvents(),
-          // Matrix (P3): latest desk view per (broker, currency) over a window.
           getMatrix(),
-          // Ledger (P4): run picker options.
-          getLedgerRunDates(),
+          getBriefs(14),
         ]);
-        // Confluence keys off the digest run_date so Today shows ideas for the
-        // same session as the greeting.
-        const confluence = digest?.run_date ? await getTopConfluence(digest.run_date) : [];
-        // Event opinions key off the intelligence run_date (latest confluence run)
-        // so the catalysts tab shows desk views for the freshest session.
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
-        const eventOpinions = opinionsDate ? await getEventOpinions(opinionsDate) : [];
+        const intelRunDate = intelligence[0]?.run_date ?? undefined;
+        const [eventOpinions, intelligenceWhy] = await Promise.all([
+          opinionsDate ? getEventOpinions(opinionsDate) : Promise.resolve([]),
+          getIntelligenceWhy(intelRunDate),
+        ]);
+        const canonical = intelligence[0]?.run_date ?? digest?.run_date ?? null;
+        const [tradeIdeas, todayBriefs, todayEvents, divergenceByCurrency] = canonical
+          ? await Promise.all([
+              getTradeIdeas(canonical),
+              getTodayBriefs(canonical),
+              getTodayEvents(),
+              getConsensusDivergence(canonical),
+            ])
+          : [[], [], await getTodayEvents(), {}];
         if (cancelled) return;
+        const latestConsensus = selectLatestCompleteConsensus(consensusSeries);
         setData({
           digest,
-          confluence,
           consensusSeries,
           latestConsensus,
           intelligence,
+          intelligenceWhy,
           upcomingEvents,
           eventOpinions,
           matrix,
-          ledgerRunDates,
+          tradeIdeas,
+          todayBriefs,
+          todayEvents,
+          researchBriefs,
+          divergenceByCurrency,
         });
-        // Default the ledger to the freshest run present.
-        setLedgerRun((prev) => prev ?? ledgerRunDates[0] ?? null);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load FX research data');
@@ -189,136 +315,118 @@ function TwelveXInner({ urlTab }: { urlTab: string | null }) {
     [data?.eventOpinions, intelligenceDate]
   );
 
-  // Load the ledger audit rows for the selected run (P4). Re-runs whenever the
-  // picker changes; independent of the main workspace load.
-  useEffect(() => {
-    if (!configured || !ledgerRun) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const rows = await getLedger(ledgerRun);
-        if (!cancelled) setLedgerRows(rows);
-      } catch {
-        if (!cancelled) setLedgerRows([]);
+  // Run-over-run consensus deltas (pure, derived from the fetched series).
+  const consensusDeltas = useMemo(
+    () => computeConsensusDeltaSet(data?.consensusSeries ?? []),
+    [data?.consensusSeries]
+  );
+
+  // The single canonical "as-of" run the workspace reports, preferring the
+  // digest's run, then intelligence, then the latest consensus run.
+  const canonicalRunDate = useMemo(
+    () => data?.digest?.run_date ?? intelligenceDate ?? latestConsensusDate,
+    [data?.digest?.run_date, intelligenceDate, latestConsensusDate]
+  );
+
+  const watchlist = useWatchlist();
+
+  // The shared cross-surface navigator handed to every tab via context.
+  const crossLink = useCallback(
+    (l: CrossLink) => {
+      switch (l.kind) {
+        case 'currency':
+          setTabState('consensus');
+          setConsensusFocusCcy(l.currency);
+          syncUrl('consensus', brief, view);
+          break;
+        case 'brief':
+          openBrief(l.sourceFile, l.runDate);
+          break;
+        case 'event':
+          setTabState('events');
+          setEventFocus({ externalId: l.externalId ?? null, name: l.eventName });
+          syncUrl('events', brief, view);
+          break;
+        case 'tab':
+          setTab(l.tab);
+          break;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [configured, ledgerRun]);
+    },
+    [brief, view, openBrief, setTab]
+  );
 
-  const selectLedgerRun = useCallback((next: string) => setLedgerRun(next), []);
+  const ctx = useMemo<TwelveXContextValue>(
+    () => ({ runDate: canonicalRunDate, crossLink, openBrief, watchlist }),
+    [canonicalRunDate, crossLink, openBrief, watchlist]
+  );
 
-  if (loading) return <AtlasLoader />;
-
-  if (error === 'unconfigured') {
-    return (
-      <div className={`${SUBPAGE_MAX} py-10`}>
-        <div className="glass-card p-10 text-center text-text-muted text-sm">
-          FX research is not configured. Set{' '}
-          <code className="font-mono text-text-secondary">NEXT_PUBLIC_TWELVEX_SUPABASE_URL</code> and{' '}
-          <code className="font-mono text-text-secondary">NEXT_PUBLIC_TWELVEX_SUPABASE_ANON_KEY</code>{' '}
-          (or the shared Supabase env vars).
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={`${SUBPAGE_MAX} py-10`}>
-        <div className="glass-card p-10 text-center text-fin-red text-sm">{error}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex min-h-full flex-col">
-      <SubpageStickyTabBar aria-label="FX research workspace">
-        <button type="button" onClick={() => setTab('today')} className={subpageTabButtonClass(tab === 'today')}>
-          <CalendarClock size={16} aria-hidden />
-          Today
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('consensus')}
-          className={subpageTabButtonClass(tab === 'consensus')}
-        >
-          <LineChartIcon size={16} aria-hidden />
-          Consensus
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('intelligence')}
-          className={subpageTabButtonClass(tab === 'intelligence')}
-        >
-          <Layers size={16} aria-hidden />
-          Intelligence
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('events')}
-          className={subpageTabButtonClass(tab === 'events')}
-        >
-          <CalendarDays size={16} aria-hidden />
-          Events
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('matrix')}
-          className={subpageTabButtonClass(tab === 'matrix')}
-        >
-          <Grid3x3 size={16} aria-hidden />
-          Matrix
-        </button>
-        <button
-          type="button"
-          onClick={() => setTab('ledger')}
-          className={subpageTabButtonClass(tab === 'ledger')}
-        >
-          <ScrollText size={16} aria-hidden />
-          Ledger
-        </button>
-      </SubpageStickyTabBar>
-
-      <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
-        {tab === 'consensus' ? (
+  // How-it-works is fully static and must stay reachable while the feed loads
+  // or is down; the data tabs degrade to the skeleton / unavailable state
+  // inside the workspace chrome instead of replacing it.
+  const renderActiveTab = () => {
+    if (tab === 'how-it-works') return <HowItWorksTab />;
+    if (loading) return <PageSkeleton bare />;
+    if (error) return <TwelveXUnavailable configured={error !== 'unconfigured'} />;
+    switch (tab) {
+      case 'consensus':
+        return (
           <ConsensusTab
             series={data?.consensusSeries ?? []}
             latest={data?.latestConsensus ?? []}
             latestDate={latestConsensusDate}
-            onDrillToLedger={drillToLedger}
+            deltas={consensusDeltas}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
+            focusCcy={consensusFocusCcy}
+            intelligenceWhy={data?.intelligenceWhy ?? { runDate: null, items: [] }}
+            researchBriefs={data?.researchBriefs ?? []}
           />
-        ) : tab === 'intelligence' ? (
-          <IntelligenceTab confluence={data?.intelligence ?? []} runDate={intelligenceDate} />
-        ) : tab === 'events' ? (
+        );
+      case 'events':
+        return (
           <EventsTab
             events={data?.upcomingEvents ?? []}
             opinions={data?.eventOpinions ?? []}
             runDate={eventOpinionsDate}
+            focus={eventFocus}
+            onOpenBrief={openBrief}
           />
-        ) : tab === 'matrix' ? (
-          <MatrixTab cells={data?.matrix ?? []} />
-        ) : tab === 'ledger' ? (
-          <LedgerTab
-            rows={ledgerRows}
-            runDate={ledgerRun}
-            runDates={data?.ledgerRunDates ?? []}
-            onSelectRun={selectLedgerRun}
-          />
+        );
+      case 'matrix':
+        return <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />;
+      default:
+        return view === 'briefs' ? (
+          <BriefsIndex briefs={data?.todayBriefs ?? []} onBack={closeBriefsIndex} />
         ) : (
-          <TodayTab digest={data?.digest ?? null} confluence={data?.confluence ?? []} />
-        )}
-      </div>
+          <TodayTab
+            digest={data?.digest ?? null}
+            tradeIdeas={data?.tradeIdeas ?? []}
+            confluence={data?.intelligence ?? []}
+            briefs={data?.todayBriefs ?? []}
+            events={data?.todayEvents ?? []}
+            series={data?.consensusSeries ?? []}
+            divergenceByCurrency={data?.divergenceByCurrency ?? {}}
+            onSeeAllBriefs={openBriefsIndex}
+          />
+        );
+    }
+  };
 
-      {/* Slide-over brief panel — opens on ?brief=<source_file> from any tab. */}
-      <BriefPanel />
+  return (
+    <div data-testid="twelvex-workspace" className="flex min-h-full flex-col">
+      <TwelveXHeading />
+      <TwelveXTabBar active={tab} onSelect={setTab} />
+
+      <TwelveXProvider value={ctx}>
+        <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>{renderActiveTab()}</div>
+
+        {/* Slide-over brief panel — local state, no router. */}
+        <BriefPanel
+          open={!!brief}
+          sourceFile={brief?.sourceFile ?? null}
+          runDate={brief?.runDate ?? null}
+          onClose={closeBrief}
+        />
+      </TwelveXProvider>
     </div>
   );
-}
-
-export default function TwelveXClient() {
-  const searchParams = useSearchParams();
-  const urlTab = searchParams.get('tab');
-  return <TwelveXInner urlTab={urlTab} />;
 }

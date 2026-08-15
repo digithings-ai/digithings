@@ -1,6 +1,6 @@
-# NautilusTrader Navigation for DigiQuant
+# NautilusTrader Navigation for digiquant
 
-Central guide for agents and developers working with NautilusTrader in DigiQuant. Use this when adding strategies, modifying backtest logic, or debugging Nautilus integration.
+Central guide for agents and developers working with NautilusTrader in digiquant. Use this when adding strategies, modifying backtest logic, or debugging Nautilus integration.
 
 ## 1. Package Structure
 

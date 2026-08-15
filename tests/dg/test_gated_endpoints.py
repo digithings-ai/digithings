@@ -5,9 +5,9 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
+from digigraph.server import app
 from fastapi.testclient import TestClient
 
-from digigraph.server import app
 from tests.digi_test_jwt import auth_headers
 
 

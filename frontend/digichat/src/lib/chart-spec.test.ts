@@ -42,4 +42,19 @@ describe("parseChartEnvelope", () => {
     expect(parseChartEnvelope("Just some text")).toBeNull();
     expect(parseChartEnvelope("")).toBeNull();
   });
+
+  it("strips formatter keys from nested option objects", () => {
+    const raw = JSON.stringify({
+      type: "chart",
+      spec: {
+        tooltip: { formatter: "<img src=x onerror=alert(1)>" },
+        series: [{ type: "bar", data: [1], label: { formatter: "{b}" } }],
+      },
+    });
+    const spec = parseChartEnvelope(raw);
+    expect(spec).toEqual({
+      tooltip: {},
+      series: [{ type: "bar", data: [1], label: {} }],
+    });
+  });
 });

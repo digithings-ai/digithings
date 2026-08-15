@@ -24,9 +24,9 @@
     "component:digiclaw": "module/digiclaw",
     "component:digibase": "module/digibase",
     "component:digivault": "develop",
-    "component:website": "module/website",
-    "component:digiquant-web": "module/website",
-    "component:design-system": "module/website",
+    "component:website": "develop",
+    "component:digiquant-web": "develop",
+    "component:design-system": "develop",
     "component:root": "develop",
     "default": "develop"
   }

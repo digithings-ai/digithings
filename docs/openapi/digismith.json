@@ -1,0 +1,148 @@
+{
+  "components": {
+    "schemas": {
+      "SmithStatus": {
+        "description": "Public status for GET /v1/status.",
+        "properties": {
+          "langsmith_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sanitized API host from LANGSMITH_ENDPOINT (no secrets)",
+            "title": "Langsmith Host"
+          },
+          "langsmith_sdk_installed": {
+            "description": "langsmith Python package is importable",
+            "title": "Langsmith Sdk Installed",
+            "type": "boolean"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "X-Request-ID of the call that produced this status (echoed for correlation)",
+            "title": "Request Id"
+          },
+          "tracing_configured": {
+            "description": "LangSmith tracing would activate (key + langsmith installed)",
+            "title": "Tracing Configured",
+            "type": "boolean"
+          },
+          "version": {
+            "description": "digismith package version",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "tracing_configured",
+          "langsmith_sdk_installed"
+        ],
+        "title": "SmithStatus",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "LangSmith-aligned observability control plane for digithings. HTTP surface is intentionally thin (health + secret-free status). Interactive docs: `/docs` (Swagger) and `/redoc`.",
+    "title": "digismith",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "description": "Legacy health check (kept for back-compat).",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Health Health Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Legacy health check",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Minimal liveness probe. Auth-exempt, secret-free.\n\nReturns HTTP 200 with ``{\"ok\": true}``. For richer diagnostics (tracing\nconfiguration, LangSmith host), see ``/v1/status``.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/v1/status": {
+      "get": {
+        "operationId": "status_v1_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmithStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Tracing status",
+        "tags": [
+          "status"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Liveness probes.",
+      "name": "health"
+    },
+    {
+      "description": "Non-sensitive tracing configuration status.",
+      "name": "status"
+    }
+  ]
+}

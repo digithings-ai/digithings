@@ -183,11 +183,19 @@ assert_denied "cat > live_trading/order.py (task branch — still denied)" \
 assert_denied "cat > src/execute_trade.py" \
   "cat > src/execute_trade.py"
 
+# live/ directory fragment is anchored to digiquant — see #1399 false positives
+assert_denied "cat > digiquant/src/digiquant/execution/live/engine.py" \
+  "cat > digiquant/src/digiquant/execution/live/engine.py"
+
 # ── ALLOW cases ───────────────────────────────────────────────────────────────
 
 # /tmp/ writes are always safe
 assert_allowed "cat > /tmp/scratch.txt" \
   "cat > /tmp/scratch.txt"
+
+# live/ outside digiquant is not a trading surface (design screenshots — #1399)
+assert_allowed "cat > frontend/design/references/mine/live/shot.jpg" \
+  "cat > frontend/design/references/mine/live/shot.jpg"
 
 # Read from protected path (no write)
 assert_allowed "cat .github/workflows/ci.yml | grep name" \

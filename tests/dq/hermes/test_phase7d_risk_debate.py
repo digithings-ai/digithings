@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import json
 from datetime import date
-from typing import Any  # noqa: F401 — used for fake-completion dict shape
+from typing import Any  # score:allow untyped any — used for fake-completion dict shape
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.graph.pipeline_builder import build_pipeline
-
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    PhaseHermesState,
+)
 from digiquant.olympus.hermes.phases.phase7d_pm import (
     build_phase7d,
     build_phase7d_pm,
     build_phase7d_risk_aggressive,
     build_phase7d_risk_conservative,
-)
-from digiquant.olympus.atlas.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
 )
 
 
@@ -38,10 +37,26 @@ def _state_for_debate() -> AtlasResearchState:
         config=AtlasConfigBundle(watchlist=["AAPL", "MSFT"]),
     )
     state.phase6_bias_row = {"date": "2026-04-26", "macro_regime": "late-cycle"}
-    state.phase7c_analysts = {
-        "AAPL": {"ticker": "AAPL", "conviction_score": 4, "stance": "buy"},
-        "MSFT": {"ticker": "MSFT", "conviction_score": 2, "stance": "hold"},
-    }
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts={
+            "AAPL": {
+                "ticker": "AAPL",
+                "conviction_score": 4,
+                "stance": "buy",
+                "thesis": "x",
+                "risks": "",
+                "sources": [],
+            },
+            "MSFT": {
+                "ticker": "MSFT",
+                "conviction_score": 2,
+                "stance": "hold",
+                "thesis": "x",
+                "risks": "",
+                "sources": [],
+            },
+        }
+    )
     return state
 
 

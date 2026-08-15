@@ -1,9 +1,9 @@
 # After CI passes on an agent branch PR, add automerge-agent when low-risk.
-name: Agent PR autolabel
+name: "Agent: PR autolabel"
 
 on:
   workflow_run:
-    workflows: [CI, Copilot targeted CI]
+    workflows: [CI]
     types: [completed]
 
 permissions:
@@ -29,15 +29,15 @@ jobs:
           PR=""
           if [[ -n "$BRANCH" ]]; then
             case "$BRANCH" in
-              cursor/*|copilot/*|bot/*) ;;
+              cursor/*|copilot/*|bot/*|task/*|claude/*) ;;
               *) echo "Not an agent branch — skipping."; exit 0 ;;
             esac
             PR=$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
-              --json number,labels,body,title,headRefOid,headRefName --jq '.[0]')
+              --json number,labels,body,title,headRefOid,headRefName,isCrossRepository --jq '.[0]')
           fi
           if [[ -z "$PR" || "$PR" == "null" ]]; then
             PR=$(gh pr list --repo "$REPO" --state open \
-              --json number,labels,body,title,headRefOid,headRefName \
+              --json number,labels,body,title,headRefOid,headRefName,isCrossRepository \
               --jq ".[] | select(.headRefOid==\"$HEAD_SHA\")")
           fi
           if [[ -z "$PR" || "$PR" == "null" ]]; then
@@ -45,6 +45,15 @@ jobs:
             exit 0
           fi
           NUM=$(echo "$PR" | jq -r '.number')
+          # CWE-862 guard: a branch name matching an agent prefix is not proof of
+          # origin — anyone can name a fork branch `task/1-anything`. isCrossRepository
+          # comes from the live PR object via the API, not from the (attacker-
+          # controlled) branch string, so this can't be spoofed the same way.
+          IS_FORK=$(echo "$PR" | jq -r '.isCrossRepository // false')
+          if [[ "$IS_FORK" == "true" ]]; then
+            echo "PR #$NUM is from a fork — refusing to auto-label."
+            exit 0
+          fi
           HAS=$(echo "$PR" | jq '[.labels[].name] | index("automerge-agent") != null')
           if [[ "$HAS" == "true" ]]; then
             echo "PR #$NUM already labeled automerge-agent"

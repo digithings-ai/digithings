@@ -4,7 +4,7 @@
 Every PR must trace to a backlog issue on the Project board.
 Either use a branch named  task/<N>-<slug>  (created by `make task ISSUE=N`),
 or add a line below like:  Fixes #123   (also accepts Closes / Resolves).
-CI check: .github/workflows/pr-hygiene.yml
+CI check: .github/workflows/ci-pr-hygiene.yml
 -->
 
 Fixes #
@@ -86,7 +86,7 @@ Agents: score honestly using `docs/scoring/`. Do not check a box unless you full
 - [ ] 7. No synchronous blocking in async routes (`asyncio.to_thread` for unavoidable blocking)
 - [ ] 8. Token efficiency (summaries/briefs in prompts, not full doc bodies)
 - [ ] 9. Result caching where stable (JWKS, orchestrator manifests cached with TTL)
-- [ ] 10. Backtest performance target maintained (10M rows < 2s; DigiQuant changes only)
+- [ ] 10. Backtest performance target maintained (10M rows < 2s; digiquant changes only)
 
 **Optimization score: __ / 10**
 
@@ -96,10 +96,10 @@ Agents: score honestly using `docs/scoring/`. Do not check a box unless you full
 - [ ] 1. Matches ARCHITECTURE.md spec (endpoints, models, flow order correct)
 - [ ] 2. Workflow state transitions correct (LangGraph nodes read/write correct fields)
 - [ ] 3. Audit events emitted for state changes (`audit_log()` on new side-effecting ops)
-- [ ] 4. DigiSmith spans carry required attributes (`workflow_id`, `request_id`, `session_id`)
+- [ ] 4. digismith spans carry required attributes (`workflow_id`, `request_id`, `session_id`)
 - [ ] 5. Error paths handled, not silenced (no bare `except: pass`)
 - [ ] 6. API contracts unchanged or versioned (breaking changes use `/v2/` path)
-- [ ] 7. Strategy invariants preserved (Nautilus event lifecycle unchanged; DigiQuant only)
+- [ ] 7. Strategy invariants preserved (Nautilus event lifecycle unchanged; digiquant only)
 - [ ] 8. JWT scope contract unchanged (new routes use existing scope naming convention)
 - [ ] 9. Test assertions are meaningful (specific values checked, not just `is not None`)
 - [ ] 10. No regression in existing tests (`make test-unit` passes with zero failures)
@@ -130,7 +130,7 @@ Agents: score honestly using `docs/scoring/`. Do not check a box unless you full
 > If any box below is checked, this PR **requires human review** before merge — do not label `automerge-docs`.
 
 - [ ] Live-trading path modified (broker adapters, order submission, execution gates)
-- [ ] Auth or crypto modified (DigiKey signing, JWT generation, scope enforcement)
+- [ ] Auth or crypto modified (digikey signing, JWT generation, scope enforcement)
 - [ ] New JWT scope added to a protected route
 - [ ] `DIGI_ALLOW_CODE_EXEC` gate modified
 - [ ] New network exposure (`0.0.0.0` bind or new published port)

@@ -124,9 +124,9 @@ export function ConnectionsSheet() {
       <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
         <SheetHeader>
-          <SheetTitle>DigiThings connections</SheetTitle>
+          <SheetTitle>digithings connections</SheetTitle>
           <SheetDescription>
-            Base URLs for the Python stack (DigiGraph, DigiQuant, DigiSmith, DigiSearch). Host dev defaults:
+            Base URLs for the Python stack (digigraph, digiquant, digismith, digisearch). Host dev defaults:
             <code className="mx-1 text-[11px]">127.0.0.1:8000–8003,8002</code>. Overrides are stored in an
             httpOnly cookie for this browser session.
           </SheetDescription>
@@ -155,9 +155,16 @@ export function ConnectionsSheet() {
                 ).map((k) => (
                   <Badge
                     key={k}
-                    variant={health[k] === "ok" ? "default" : "secondary"}
-                    className={
-                      health[k] === "ok" ? "bg-emerald-600/90 hover:bg-emerald-600" : "bg-amber-900/40"
+                    variant="secondary"
+                    // §08 four-state status colors via tokens: ok → --up,
+                    // unknown → mute, anything else → --warn. Weak washes,
+                    // never hardcoded hues.
+                    style={
+                      health[k] === "ok"
+                        ? { background: "color-mix(in srgb, var(--up) 15%, transparent)", color: "var(--up)" }
+                        : health[k] == null
+                          ? { background: "transparent", color: "var(--ink-mute, #6b7177)" }
+                          : { background: "color-mix(in srgb, var(--warn) 14%, transparent)", color: "var(--warn)" }
                     }
                   >
                     {k}: {health[k] ?? "—"}
@@ -167,7 +174,7 @@ export function ConnectionsSheet() {
             ) : null}
 
             <div className="space-y-2">
-              <Label htmlFor="dg">DigiGraph base URL</Label>
+              <Label htmlFor="dg">digigraph base URL</Label>
               <Input
                 id="dg"
                 value={form.digigraphUrl}
@@ -177,7 +184,7 @@ export function ConnectionsSheet() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dq">DigiQuant base URL</Label>
+              <Label htmlFor="dq">digiquant base URL</Label>
               <Input
                 id="dq"
                 value={form.digiquantUrl}
@@ -187,7 +194,7 @@ export function ConnectionsSheet() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="ds">DigiSmith base URL</Label>
+              <Label htmlFor="ds">digismith base URL</Label>
               <Input
                 id="ds"
                 value={form.digismithUrl}
@@ -197,7 +204,7 @@ export function ConnectionsSheet() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="dsearch">DigiSearch base URL</Label>
+              <Label htmlFor="dsearch">digisearch base URL</Label>
               <Input
                 id="dsearch"
                 value={form.digisearchUrl ?? ""}
@@ -211,13 +218,16 @@ export function ConnectionsSheet() {
                 autoComplete="off"
               />
               <p className="text-xs text-muted-foreground">
-                RAG / orchestrator hub uses this for health and (via DigiGraph) <code className="text-[11px]">DIGISEARCH_URL</code>{" "}
+                RAG / orchestrator hub uses this for health and (via digigraph) <code className="text-[11px]">DIGISEARCH_URL</code>{" "}
                 must match on the graph side. Docker Compose uses service names; native stack uses loopback.
               </p>
             </div>
 
             {persistence && !persistence.serverDatabaseConfigured ? (
-              <div className="rounded-md border border-amber-900/40 bg-amber-950/20 p-3 text-xs text-muted-foreground">
+              <div
+                className="rounded-md border p-3 text-xs text-muted-foreground"
+                style={{ borderColor: "color-mix(in srgb, var(--warn) 30%, transparent)" }}
+              >
                 <p className="font-medium text-foreground">Postgres not configured</p>
                 <p className="mt-1">
                   <strong>database: skipped</strong> means <code className="text-[11px]">DIGICHAT_DATABASE_URL</code> is unset

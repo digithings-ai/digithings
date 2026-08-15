@@ -119,7 +119,7 @@ Wave 7 landed in sub-waves **7a–7j** on PR #578. Wave **7j** closed the last e
 | ID | Why N/A |
 |----|---------|
 | SIMP-001 | LangGraph checkpoints require JSON-serializable `dict` slots; HTTP boundaries use `models.py` Pydantic (wave **7i**) |
-| SIMP-038 | CLI `digiquant prices fetch-macro` already calls `macro_ingest`; legacy `scripts/atlas/fetch-macro.py` is FROZEN per PROTECTED-SCRIPTS.md. Digigraph `research_brief` is **SIMP-034** (done), not SIMP-038 scope |
+| SIMP-038 | CLI `digiquant prices fetch-macro` already calls `macro_ingest`; legacy `scripts/atlas/fetch-macro.py` is FROZEN per PROTECTED-SCRIPTS.md. digigraph `research_brief` is **SIMP-034** (done), not SIMP-038 scope |
 | DESLOP-014 | Segment report models keep optional fields for LLM structured output; static `find_stale` cannot prove wiring without runtime graph traces |
 
 ## Post-merge follow-up (outside wave 7 scope)

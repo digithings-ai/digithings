@@ -1,3 +1,3 @@
-import { LibraryToResearchRedirectPage } from '@/components/legacy-spa-redirect';
+import { LibraryToWhyRedirectPage } from '@/components/legacy-spa-redirect';
 
-export default LibraryToResearchRedirectPage;
+export default LibraryToWhyRedirectPage;

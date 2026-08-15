@@ -60,11 +60,17 @@ class SegmentFreshness(BaseModel):
     """Per-segment provenance marker used by the dashboard.
 
     Mirrors :class:`digiquant.olympus.atlas.phases.phase7_synthesis.SegmentFreshness`.
+
+    ``frozen`` (#1749): regenerated today, but the edit merge changed nothing, so ``as_of`` is
+    the date the content last materially changed. This model is the READ-path validator and is
+    ``extra="forbid"`` — a value the writer can emit but this ``Literal`` does not list is a
+    ``ValidationError`` on every subsequent read of the row, not a soft ignore. Widen both
+    copies in the same change.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    source: Literal["today", "baseline"]
+    source: Literal["today", "baseline", "frozen"]
     as_of: str = Field(description="ISO date string ('' if unknown)")
 
 
@@ -159,8 +165,14 @@ class DigestPayload(BaseModel):
     institutional_summary: str = Field()
     asset_classes_summary: str = Field()
     us_equities_summary: str = Field()
-    thesis_tracker: str = Field(default="")
-    portfolio_recommendations: str = Field(default="")
+    thesis_tracker: str = Field(
+        default="",
+        description="Deprecated — Hermes owns thesis lifecycle; always empty on new runs.",
+    )
+    portfolio_recommendations: str = Field(
+        default="",
+        description="Deprecated — Hermes owns allocation; always empty on new runs.",
+    )
     actionable_summary: list[ActionableItem] = Field(default_factory=list)
     risk_radar: list[RiskItem] = Field(default_factory=list)
     segment_freshness: dict[str, SegmentFreshness] = Field(default_factory=dict)

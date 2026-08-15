@@ -5,7 +5,7 @@ Pull requests that change **only** allowlisted paths may enable **squash auto-me
 ## GitHub settings (maintainers)
 
 1. **Settings → General → Pull Requests:** enable **Allow auto-merge**.
-2. **Settings → Branches:** branch protection on `main` / `develop` — require status checks including **CI** and **Doc paths gate** (from `.github/workflows/automerge-docs.yml`).
+2. **Settings → Branches:** branch protection on `main` / `develop` — require status checks including **CI** and **Doc paths gate** (from `.github/workflows/agent-docs-automerge.yml`).
 3. Default merge: **squash** (recommended).
 
 ## Label

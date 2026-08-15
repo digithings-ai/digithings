@@ -88,11 +88,11 @@ Per repo policy ([`AGENTS.md`](../../AGENTS.md)), open a tracking epic before co
 
 | Area | `REM-*` / `AUDIT-*` | Why |
 |------|---------------------|-----|
-| **DigiKey / JWT / crypto** | REM-005, REM-017–019, REM-018 | Auth plane + Redis in prod-like compose |
+| **digikey / JWT / crypto** | REM-005, REM-017–019, REM-018 | Auth plane + Redis in prod-like compose |
 | **Live trading** | None direct; verify no edits under live-trading paths | Pre-push hook |
 | **Agent dispatch workflows** | REM-097, REM-098 | `.github/workflows/agent-*-dispatch.yml` protected |
 | **Olympus Supabase RLS** | REM-035, REM-036 | Product/security decision: public read vs BFF |
-| **DigiChat embed prod** | REM-010 | UX + auth model sign-off |
+| **digichat embed prod** | REM-010 | UX + auth model sign-off |
 | **execute_python sandbox** | REM-012 | Security architecture; container vs subprocess |
 | **Org GitHub settings** | REM-041 | Not mergeable in repo alone |
 | **Atlas LLM quotas** | REM-042, REM-043 | Billing/ops, not code-only |
@@ -168,7 +168,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** L
 
 #### REM-002 → AUDIT-002
-- **Title:** Bind DigiGraph MCP to loopback by default; document TLS/auth
+- **Title:** Bind digigraph MCP to loopback by default; document TLS/auth
 - **Component:** digigraph
 - **Files:** `digigraph/src/digigraph/mcp_server.py`, `docker-compose.yml`, `digigraph/ARCHITECTURE.md`
 - **Depends:** —
@@ -177,7 +177,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** M
 
 #### REM-003 → AUDIT-003
-- **Title:** Bind DigiSearch MCP to loopback; document ACL
+- **Title:** Bind digisearch MCP to loopback; document ACL
 - **Component:** digisearch
 - **Files:** `digisearch/src/digisearch/mcp_server.py`, `docker-compose.yml`
 - **Depends:** REM-023 (compose context) optional same commit
@@ -186,7 +186,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** S
 
 #### REM-004 → AUDIT-004
-- **Title:** Send machine API key Bearer on DigiQuant drift/optimize from heartbeat
+- **Title:** Send machine API key Bearer on digiquant drift/optimize from heartbeat
 - **Component:** digiclaw
 - **Files:** `digiclaw/src/digiclaw/heartbeat_runner.py`, `docker-compose.yml` (env for key), `tests/dc/test_heartbeat*.py`
 - **Depends:** REM-005
@@ -206,7 +206,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-006 → AUDIT-006
 - **Title:** Fix `printf` flag parsing in enforce-project-assignment workflow
 - **Component:** workflows
-- **Files:** `.github/workflows/enforce-project-assignment.yml`
+- **Files:** `.github/workflows/project-enforce-assignment.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `act` dry-run or manual bash replay; next 7 scheduled runs green
@@ -224,7 +224,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-008 → AUDIT-008
 - **Title:** Fix provider-review workflow missing `claude` CLI
 - **Component:** workflows
-- **Files:** `.github/workflows/provider-review.yml`
+- **Files:** `.github/workflows/pipeline-provider-review.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** Weekly job reaches pytest step; REM-089 wires tests
@@ -233,7 +233,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-009 → AUDIT-009
 - **Title:** Fix Polars Date vs Datetime `is_in` in compute-technicals
 - **Component:** digiquant / workflows
-- **Files:** `digiquant/scripts/atlas/compute-technicals.py`, `.github/workflows/digiquant-prices.yml`
+- **Files:** `digiquant/scripts/atlas/compute-technicals.py`, `.github/workflows/pipeline-digiquant-prices.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `python digiquant/scripts/atlas/compute-technicals.py` (fixture data) exits 0; intraday workflow green
@@ -325,7 +325,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** M
 
 #### REM-019 → AUDIT-019
-- **Title:** Rehydrate Redis blocklist from `jti_issued` on DigiKey startup
+- **Title:** Rehydrate Redis blocklist from `jti_issued` on digikey startup
 - **Component:** digikey
 - **Files:** `digikey/src/digikey/blocklist.py`, `digikey/src/digikey/lifespan.py` (or startup), `tests/dk/`
 - **Depends:** REM-005, REM-017
@@ -352,7 +352,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** S
 
 #### REM-022 → AUDIT-022
-- **Title:** Add `[ingestion]` extra to DigiSearch Dockerfile
+- **Title:** Add `[ingestion]` extra to digisearch Dockerfile
 - **Component:** digisearch
 - **Files:** `digisearch/Dockerfile`
 - **Depends:** —
@@ -435,14 +435,14 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-031 → AUDIT-031
 - **Title:** Add Nautilus smoke job on Linux CI
 - **Component:** digiquant / CI
-- **Files:** `.github/workflows/digiquant-test.yml`, `tests/dq/conftest.py`
+- **Files:** `.github/workflows/test-digiquant.yml`, `tests/dq/conftest.py`
 - **Depends:** REM-029, REM-060
 - **Parallel:** no (wave 2 overlap — implement in wave 2)
 - **Acceptance:** Ubuntu job runs `pytest tests/dq/ -m unit -k nautilus` (or dedicated marker) green
 - **Effort:** L
 
 #### REM-032 → AUDIT-032
-- **Title:** Tighten DigiChat SSRF allowlist (known hosts + env)
+- **Title:** Tighten digichat SSRF allowlist (known hosts + env)
 - **Component:** digichat
 - **Files:** `frontend/digichat/src/lib/ecosystem.ts`
 - **Depends:** —
@@ -498,7 +498,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-038 → AUDIT-038
 - **Title:** Add `olympus-test.yml` and wire into `ci.yml`
 - **Component:** olympus / CI
-- **Files:** `.github/workflows/olympus-test.yml`, `.github/workflows/ci.yml`
+- **Files:** `.github/workflows/test-olympus.yml`, `.github/workflows/ci.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** PR triggers lint + vitest + build for `frontend/olympus/**`
@@ -552,7 +552,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-044 → AUDIT-044
 - **Title:** Remove or implement missing `pr-quality-gate.yml` reference
 - **Component:** workflows
-- **Files:** `.github/workflows/ci-failure-triage.yml`
+- **Files:** `.github/workflows/agent-ci-failure-triage.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `workflow_call` validates; no dead workflow name
@@ -570,14 +570,14 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-046 → AUDIT-046
 - **Title:** Add compose-up `pytest -m e2e` job to GHA
 - **Component:** tests/CI
-- **Files:** `.github/workflows/e2e.yml` (new), `tests/test_e2e.py`
+- **Files:** `.github/workflows/test-e2e.yml` (new), `tests/test_e2e.py`
 - **Depends:** REM-005, REM-001 (stack healthy)
 - **Parallel:** no
 - **Acceptance:** CI job runs 8 e2e tests green (or documented secrets skip)
 - **Effort:** L
 
 #### REM-047 → AUDIT-047
-- **Title:** Cache compiled LangGraph workflow singleton in DigiGraph
+- **Title:** Cache compiled LangGraph workflow singleton in digigraph
 - **Component:** digigraph
 - **Files:** `digigraph/src/digigraph/workflow.py`, `digigraph/src/digigraph/graph/graph.py`
 - **Depends:** —
@@ -586,7 +586,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** M
 
 #### REM-048 → AUDIT-048
-- **Title:** Cache compiled DigiQuant pipeline graph
+- **Title:** Cache compiled digiquant pipeline graph
 - **Component:** digiquant
 - **Files:** `digiquant/src/digiquant/graph/pipeline.py`
 - **Depends:** —
@@ -646,7 +646,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-054 → AUDIT-054
 - **Title:** Add ruff format + coverage to digigraph-test.yml
 - **Component:** digigraph / CI
-- **Files:** `.github/workflows/digigraph-test.yml`
+- **Files:** `.github/workflows/test-digigraph.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** CI runs `ruff format --check` + coverage upload
@@ -689,7 +689,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** L — consider **DEFER partial**
 
 #### REM-059 → AUDIT-059
-- **Title:** Extract minimal pipeline builder from DigiGraph Hermes dependency
+- **Title:** Extract minimal pipeline builder from digigraph Hermes dependency
 - **Component:** digiquant
 - **Files:** `digiquant/src/digiquant/olympus/hermes/chain.py`, new `digiquant/hermes/pipeline_builder.py`
 - **Depends:** —
@@ -781,14 +781,14 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-069 → AUDIT-069
 - **Title:** Run request-id integration hops in digibase CI
 - **Component:** digibase / CI
-- **Files:** `.github/workflows/digibase-test.yml`, `tests/integration/test_request_id_hops.py`
+- **Files:** `.github/workflows/test-digibase.yml`, `tests/integration/test_request_id_hops.py`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** CI job runs integration marker green
 - **Effort:** S
 
 #### REM-070 → AUDIT-070
-- **Title:** Install `digibase[otel]` in DigiSmith Dockerfile when OTLP set
+- **Title:** Install `digibase[otel]` in digismith Dockerfile when OTLP set
 - **Component:** digismith
 - **Files:** `digismith/Dockerfile`
 - **Depends:** —
@@ -833,7 +833,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** S
 
 #### REM-075 → AUDIT-075
-- **Title:** Cache DigiKey JWT exchange until exp minus skew
+- **Title:** Cache digikey JWT exchange until exp minus skew
 - **Component:** digichat
 - **Files:** `frontend/digichat/src/lib/digigraph-upstream.ts`, tests
 - **Depends:** —
@@ -842,7 +842,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** M
 
 #### REM-076 → AUDIT-076
-- **Title:** Add `rehype-sanitize` to DigiChat markdown renderer
+- **Title:** Add `rehype-sanitize` to digichat markdown renderer
 - **Component:** digichat
 - **Files:** `frontend/digichat/src/components/chat-panel.tsx`, `package.json`
 - **Depends:** —
@@ -851,7 +851,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 - **Effort:** S
 
 #### REM-077 → AUDIT-077
-- **Title:** Apply global CSP headers on main DigiChat app
+- **Title:** Apply global CSP headers on main digichat app
 - **Component:** digichat
 - **Files:** `frontend/digichat/next.config.ts`
 - **Depends:** REM-010
@@ -889,7 +889,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-081 → AUDIT-081
 - **Title:** Replace ticker.js innerHTML with textContent/escape
 - **Component:** design
-- **Files:** `frontend/design/src/ticker.js` (or path per tree)
+- **Files:** `frontend/digiweb/design/src/ticker.js` (or path per tree)
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** grep no innerHTML in ticker; manual landings check
@@ -898,7 +898,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-082 → AUDIT-082
 - **Title:** Replace typewriter.js innerHTML with textContent
 - **Component:** design
-- **Files:** `frontend/design/src/typewriter.js`
+- **Files:** `frontend/digiweb/design/src/typewriter.js`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** grep clean; landings typewriter works
@@ -952,7 +952,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-088 → AUDIT-088
 - **Title:** Run OpenAPI contract tests in digigraph CI
 - **Component:** tests/CI
-- **Files:** `.github/workflows/digigraph-test.yml`, `tests/contracts/`
+- **Files:** `.github/workflows/test-digigraph.yml`, `tests/contracts/`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** `pytest tests/contracts/ -v` in CI
@@ -961,7 +961,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-089 → AUDIT-089
 - **Title:** Wire `tests/provider_review/` into provider-review workflow
 - **Component:** tests/CI
-- **Files:** `.github/workflows/provider-review.yml`, `tests/provider_review/`
+- **Files:** `.github/workflows/pipeline-provider-review.yml`, `tests/provider_review/`
 - **Depends:** REM-008
 - **Parallel:** no
 - **Acceptance:** 14 tests run weekly
@@ -970,7 +970,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 #### REM-090 → AUDIT-090
 - **Title:** Add atlas-graph-ci to ci.yml orchestrator or weekly full run
 - **Component:** tests/CI
-- **Files:** `.github/workflows/ci.yml`, `.github/workflows/atlas-graph-ci.yml`
+- **Files:** `.github/workflows/ci.yml`, `.github/workflows/test-atlas-graph.yml`
 - **Depends:** —
 - **Parallel:** yes
 - **Acceptance:** PR touching `digiquant/**/atlas/**` always runs graph CI
@@ -1053,7 +1053,7 @@ Format per entry: **Title** | Component | Files | Depends | Parallel | Acceptanc
 ### Wave 5 — Performance, P3, standards (REM-099 … REM-105)
 
 #### REM-099 → AUDIT-099
-- **Title:** Document Postgres checkpointer requirement for DigiGraph HA
+- **Title:** Document Postgres checkpointer requirement for digigraph HA
 - **Component:** digigraph
 - **Files:** `digigraph/ARCHITECTURE.md`, `digigraph/src/digigraph/graph/graph.py` (comment)
 - **Depends:** —
@@ -1145,7 +1145,7 @@ Meta, validation, and **DOC-*** gaps not fully covered by audit rows.
 | REM-125 | DOC-24 | olympus | Fix `NEXT_PUBLIC_OLYMPUS_VERSION` env name in README | `frontend/olympus/README.md` | — | yes | Matches code constant | S |
 | REM-126 | DOC-25 | digikey | Fix example scope `digigraph:workflow` in AGENTS | `digikey/AGENTS.md` | — | yes | Copy-paste works | S |
 | REM-127 | — | CI | Add hook bash tests to GHA (if `tests/hooks/` exists) | `.github/workflows/ci.yml` | — | yes | hooks test green | S |
-| REM-128 | — | CI | Compose `up` + `/healthz` probe job (optional nightly) | `.github/workflows/stack-smoke.yml` | REM-005 | no | All services 200 | M |
+| REM-128 | — | CI | Compose `up` + `/healthz` probe job (optional nightly) | `.github/workflows/smoke-stack.yml` | REM-005 | no | All services 200 | M |
 | REM-129 | — | digisearch | Add `make test-unit` digisearch to component routing doc | `docs/agents/COMPONENT_ROUTING.md` | — | yes | doc accurate | S |
 | REM-130 | — | olympus | Add Olympus to `make test-unit` or document npm-only | `Makefile`, `frontend/olympus/package.json` | REM-038 | yes | Documented command | S |
 | REM-131 | — | security | Run security-reviewer subagent on auth delta | PR | REM-005–019,010 | no | Written sign-off in PR | S |
@@ -1164,7 +1164,7 @@ Sourced from [`2026-06-audit-plan-gap-check.md`](./2026-06-audit-plan-gap-check.
 
 | ID | Maps | Title | Wave | Files | Depends | Acceptance | Effort |
 |----|------|-------|------|-------|---------|------------|--------|
-| **REM-138** | G-01 | Document + enforce auth on DigiGraph MCP `workflow` tool (scope or disable when unauthenticated) | 1 | `digigraph/src/digigraph/mcp_server.py`, `digigraph/ARCHITECTURE.md`, `tests/dg/` | REM-002 | pytest or doc: unauthenticated MCP cannot invoke workflow without scope | M |
+| **REM-138** | G-01 | Document + enforce auth on digigraph MCP `workflow` tool (scope or disable when unauthenticated) | 1 | `digigraph/src/digigraph/mcp_server.py`, `digigraph/ARCHITECTURE.md`, `tests/dg/` | REM-002 | pytest or doc: unauthenticated MCP cannot invoke workflow without scope | M |
 | **REM-139** | G-03 | Add `@pytest.mark.unit` to deselected `tests/ds/**` modules | 2 | `tests/ds/*.py` | — | `make test-unit` collects ds tests | S |
 | **REM-140** | G-04 | Locate and mark edgar (or named) tests with `@pytest.mark.unit` | 2 | `tests/**` (grep edgar) | — | `pytest --collect-only -m unit` includes edgar suite | S |
 | **REM-141** | DOC-02 | Update `ROADMAP.md` revocation / Redis opt-in (with REM-016) | 4 | `ROADMAP.md` | REM-016 | doc-check; matches SECURITY.md | S |
@@ -1185,9 +1185,9 @@ Sourced from [`2026-06-audit-plan-gap-check.md`](./2026-06-audit-plan-gap-check.
 | Per-component unit (local) | `pytest tests/dg/ -m unit -v` (replace `dg`→`dq`,`ds`,`dk`,`db`,`dc`,`dsm`) | no | module unit |
 | Monorepo unit gate | `make test-unit` | no | all `@pytest.mark.unit` |
 | Baseline gate | `make test-baseline` | no | imports/schemas |
-| DigiChat | `cd frontend/digichat && npm run lint && npm run test && npm run build` | no | TS/UI |
+| digichat | `cd frontend/digichat && npm run lint && npm run test && npm run build` | no | TS/UI |
 | Olympus | `cd frontend/olympus && npm run lint && npm run test && npm run build` | no | after REM-038 |
-| Digibase integration | `pytest tests/integration/test_request_id_hops.py -v` | partial | REM-069 |
+| digibase integration | `pytest tests/integration/test_request_id_hops.py -v` | partial | REM-069 |
 | Contracts | `pytest tests/contracts/ -v` | no | REM-088 |
 | Provider review | `pytest tests/provider_review/ -m unit -v` | no | REM-089 |
 | E2E | `make up && make test-e2e` | **yes** Docker | REM-046,133 |
@@ -1279,7 +1279,7 @@ Frontends and optional stack: see §5.4 checklist. Post-merge cron watch: [`POST
 | A6-digiclaw | `digiclaw/**`, `tests/dc/**` | 004, 072–074 |
 | A7-digibase+smith | `digibase/**`, `digismith/**`, `tests/db/**`, `tests/dsm/**` | 039–040, 066–071 |
 | A8-digichat | `frontend/digichat/**` | 010, 032–034, 075–079, 105 |
-| A9-olympus+design | `frontend/olympus/**`, `frontend/design/**`, `frontend/digithings/**`, `frontend/digiquant/**` | 035–038, 080–083 |
+| A9-olympus+design | `frontend/olympus/**`, `frontend/digiweb/design/**`, `frontend/digithings/**`, `frontend/digiquant/**` | 035–038, 080–083 |
 | A10-docs | `**/AGENTS.md`, `**/ARCHITECTURE.md`, `docs/**`, `CLAUDE.md` | 111–126, 096 |
 | A11-agents | `agents.yml`, `agents/sources/**` | 091–094, 123 |
 
@@ -1319,7 +1319,7 @@ Items to **exclude from the mega PR** or track as separate issues:
 | AUDIT-041 / REM-041 | Org GitHub “Actions can create PRs” — not code | Org admin ticket |
 | AUDIT-042–043 / REM-042–043 | LLM quota / provider billing | Ops: upgrade Gemini/Ollama limits |
 | AUDIT-058 full migration | Large pandas→Polars in atlas scripts | Dedicated PR after mega |
-| AUDIT-059 full extraction | Hermes/DigiGraph decoupling architecture | Issue + ADR |
+| AUDIT-059 full extraction | Hermes/digigraph decoupling architecture | Issue + ADR |
 | AUDIT-035–036 if BFF chosen | Multi-sprint Supabase auth redesign | Phase 2 PR after threat model ADR |
 | AUDIT-012 full container sandbox | May land minimal hardening only in mega | Security epic for container runtime |
 | AUDIT-100 if #401 open | Registry wiring depends on product | Link #401 |

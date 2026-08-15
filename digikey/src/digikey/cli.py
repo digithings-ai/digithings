@@ -1,4 +1,4 @@
-"""CLI for bootstrapping DigiKey keys (requires running DB and env)."""
+"""CLI for bootstrapping digikey keys (requires running DB and env)."""
 
 from __future__ import annotations
 

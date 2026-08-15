@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { getEcosystemEndpoints } from "@/lib/ecosystem";
+import { isServiceCapabilityEnabled } from "@/lib/capabilities";
 
 async function pingHealth(base: string, label: string, checks: Record<string, string>) {
   try {
@@ -20,9 +21,18 @@ export async function GET() {
   };
 
   const eco = await getEcosystemEndpoints();
-  await pingHealth(eco.digigraphUrl, "digraph", checks);
-  await pingHealth(eco.digiquantUrl, "digiquant", checks);
-  await pingHealth(eco.digismithUrl, "digismith", checks);
+  // digigraph/digiquant/digismith always have a default URL (see ecosystem.ts
+  // DEFAULTS), unlike digisearchUrl, so URL presence alone can't signal
+  // "not deployed here" for them — check the capability flag directly.
+  if (isServiceCapabilityEnabled("digigraph")) {
+    await pingHealth(eco.digigraphUrl, "digraph", checks);
+  }
+  if (isServiceCapabilityEnabled("digiquant")) {
+    await pingHealth(eco.digiquantUrl, "digiquant", checks);
+  }
+  if (isServiceCapabilityEnabled("digismith")) {
+    await pingHealth(eco.digismithUrl, "digismith", checks);
+  }
   if (eco.digisearchUrl?.trim()) {
     await pingHealth(eco.digisearchUrl, "digisearch", checks);
   }
@@ -39,12 +49,15 @@ export async function GET() {
     checks.database = "skipped";
   }
 
+  const digraphOk = !isServiceCapabilityEnabled("digigraph") || checks.digraph === "ok";
+  const digiquantOk = !isServiceCapabilityEnabled("digiquant") || checks.digiquant === "ok";
+  const digismithOk = !isServiceCapabilityEnabled("digismith") || checks.digismith === "ok";
   const digisearchOk = !eco.digisearchUrl?.trim() || checks.digisearch === "ok";
 
   const ok =
-    checks.digraph === "ok" &&
-    checks.digiquant === "ok" &&
-    checks.digismith === "ok" &&
+    digraphOk &&
+    digiquantOk &&
+    digismithOk &&
     digisearchOk &&
     (checks.database === "ok" || checks.database === "skipped");
 

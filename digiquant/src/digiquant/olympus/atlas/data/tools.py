@@ -8,13 +8,16 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date
-from typing import Any, Callable  # noqa  # scored-lint suppression: duck-typed client + tool args
+from datetime import UTC, date, datetime
+from typing import (  # score:allow untyped any — scored-lint suppression: duck-typed client + tool args
+    Any,
+    Callable,
+)
 
 from digiquant.olympus.atlas.data.queries import (
-    get_macro_series,
     get_etf_flows_proxy,
     get_fed_rate_probabilities,
+    get_macro_series,
     get_market_breadth,
     get_sector_relative_strength,
     get_vix_term_structure,
@@ -31,15 +34,20 @@ DATA_TOOLS: list[dict[str, Any]] = [
             "description": (
                 "Generic read of any market-data table to ground a claim in real numbers "
                 "(backed by digibase, scoped read-only to the data tables). Allowed tables: "
-                "price_history (daily OHLCV), price_technicals (sma/rsi/macd/adx/atr/bb/"
-                "zscore indicators per ticker), macro_series_observations (FRED macro by "
-                "series_id: VIXCLS, DGS10, T10Y2Y, M2SL, DFF, DTWEXBGS, T10YIE), positions, "
-                "nav_history, theses, thesis_vehicles, position_events, portfolio_metrics, "
-                "trading_calendar. Filter with eq/gte/lte/in_, sort with order+desc, cap with "
-                "limit. Examples: "
-                "{table:'price_technicals', eq:{ticker:'XLK'}, order:'date', desc:true, "
-                "limit:20} or {table:'macro_series_observations', eq:{series_id:'DGS10'}, "
-                "order:'obs_date', desc:true, limit:6}."
+                "price_history (daily OHLCV — columns: ticker, date, open, high, low, close, volume), "
+                "price_technicals (indicators per ticker — columns: ticker, date, sma_20, sma_50, "
+                "sma_200, rsi_14, macd, macd_signal, macd_hist, adx_14, atr_14, atr_pct, "
+                "bb_upper, bb_lower, bb_pct_b, zscore_200; "
+                "NOTE: price_technicals has NO 'close' column — use price_history for OHLCV), "
+                "macro_series_observations (FRED macro — columns: series_id, obs_date, value; "
+                "NOTE: the date column is 'obs_date' NOT 'date'; filter/sort by obs_date), "
+                "positions, nav_history, theses, thesis_vehicles, position_events, "
+                "portfolio_metrics, trading_calendar. "
+                "Filter with eq/gte/lte/in_, sort with order+desc, cap with limit. Examples: "
+                "{table:'price_technicals', eq:{ticker:'XLK'}, order:'date', desc:true, limit:20} "
+                "or {table:'macro_series_observations', eq:{series_id:'DGS10'}, "
+                "order:'obs_date', desc:true, limit:6} "
+                "or {table:'price_history', eq:{ticker:'SPY'}, order:'date', desc:true, limit:5}."
             ),
             "parameters": {
                 "type": "object",
@@ -175,14 +183,34 @@ def build_data_tool_dispatcher(
     ``allowed_tables`` narrows the tables ``query_data`` may read (e.g. market-data
     only for blinded analyst nodes); ``None`` keeps the full read whitelist.
     """
-    as_of = run_date or date.today()
+    as_of = run_date or datetime.now(UTC).date()
 
     def execute_tool(name: str, args: dict[str, Any]) -> str:
         try:
             if name == "query_data":
+                table = args.get("table")
+                if not table:
+                    return (
+                        "Error: query_data requires a 'table' argument. "
+                        "Allowed tables: price_history, price_technicals, "
+                        "macro_series_observations, positions, nav_history, theses, "
+                        "thesis_vehicles, position_events, portfolio_metrics, trading_calendar."
+                    )
+                # Server-side rewrite: the LLM sometimes sorts/filters macro_series_observations
+                # by 'date' (the generic name) instead of 'obs_date' (the real column). Silently
+                # correct it so the model gets useful data rather than a Postgres 42703 error (#814).
+                if table == "macro_series_observations":
+                    for filter_arg in ("eq", "gte", "lte"):
+                        filt = args.get(filter_arg)
+                        if isinstance(filt, dict) and "date" in filt:
+                            filt = dict(filt)
+                            filt["obs_date"] = filt.pop("date")
+                            args = {**args, filter_arg: filt}
+                    if args.get("order") == "date":
+                        args = {**args, "order": "obs_date"}
                 result = query_data(
                     client=client,
-                    table=args["table"],
+                    table=table,
                     columns=str(args.get("columns", "*")),
                     eq=args.get("eq"),
                     gte=args.get("gte"),
@@ -213,7 +241,7 @@ def build_data_tool_dispatcher(
             else:
                 return f"Error: unknown tool {name!r}"
             return json.dumps(result, default=str)
-        except Exception as exc:  # noqa: BLE001 — tool errors are returned to the model, not raised
+        except Exception as exc:  # tool errors are returned to the model, not raised
             logger.warning("data tool %s failed: %s", name, exc)
             return f"Error: {name} failed: {exc}"
 

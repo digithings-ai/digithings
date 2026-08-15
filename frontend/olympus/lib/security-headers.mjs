@@ -1,8 +1,9 @@
 /**
  * Static-export security headers for Olympus (REM-077).
- * Canonical values — mirrored in `frontend/digiquant/_headers`, which ships at the
- * dist ROOT (Cloudflare Pages ignores _headers files below the output root, so a
- * copy under public/ would never apply in production — #674).
+ * Canonical values — mirrored in `frontend/digiquant-web/public/_headers`, which
+ * scripts/build-digiquant.sh copies to the dist ROOT (Cloudflare Pages ignores
+ * _headers files below the output root, so a copy under dist/olympus/ would
+ * never apply in production — #674).
  */
 
 export const OLYMPUS_CSP = [
@@ -11,7 +12,7 @@ export const OLYMPUS_CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",

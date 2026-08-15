@@ -1,9 +1,9 @@
 ---
 name: digithings-backlog
-description: Maintain the hybrid agent backlog (INDEX + GitHub Issues) for the DigiThings monorepo.
+description: Maintain the hybrid agent backlog (INDEX + GitHub Issues) for the digithings monorepo.
 ---
 
-# DigiThings backlog skill
+# digithings backlog skill
 
 ## When to use
 

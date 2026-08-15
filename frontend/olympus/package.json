@@ -4,15 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && npm run check:static-export",
+    "check:static-export": "node scripts/check-static-export.mjs",
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
     "@digithings/design": "*",
+    "@digithings/web": "*",
     "@supabase/supabase-js": "^2.101.1",
     "diff": "^8.0.4",
+    "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.7.0",
     "next": "16.2.4",
     "react": "^19.2.4",

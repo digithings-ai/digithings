@@ -1,22 +1,41 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { CalendarClock, ChevronRight, FileText, Globe, Users } from 'lucide-react';
-import { briefHref } from './BriefPanel';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarClock, ChevronRight, Globe, Users } from 'lucide-react';
+import { eventLocalDateKey, hasResolvedTime } from '@/lib/twelve-x/fetch';
 import type {
   FxEconomicCalendarRow,
   FxEventCitation,
   FxEventSnapshotRow,
 } from '@/lib/twelve-x/types';
+import EventsTimeline, { eventsToTimeline } from './EventsTimeline';
+import EventDetailPanel from './EventDetailPanel';
 
-/** Impact → .fin-* color + dot styling. */
+/**
+ * Empty-state copy, shared by both views so they cannot drift.
+ *
+ * Deliberately a statement about the FEED, not about the world: `economic_calendar` is
+ * written by the external twelve-x ingest, whose forward horizon is shorter than this
+ * surface's 14-day window (#1753), so an empty result means "nothing ingested for these
+ * days" — never "no macro releases are scheduled", which a real 14-day window never is.
+ */
+const EMPTY_COPY =
+  'No economic releases have been ingested for the next 14 days — the shared macro ' +
+  'calendar feed does not currently cover this window.';
+
+/** The two Events views; List is the default. */
+type EventsView = 'list' | 'timeline';
+const VIEWS: { key: EventsView; label: string }[] = [
+  { key: 'list', label: 'List' },
+  { key: 'timeline', label: 'Timeline' },
+];
+
+/** Impact → .fin-* color + dot styling. Severity is chrome, not P&L (F5): high uses --warn, never --down. */
 function impactClass(impact: string): { text: string; dot: string } {
   const i = impact.trim().toLowerCase();
-  if (i === 'high') return { text: 'text-fin-red', dot: 'bg-fin-red' };
-  if (i === 'medium') return { text: 'text-fin-amber', dot: 'bg-fin-amber' };
-  return { text: 'text-text-muted', dot: 'bg-text-muted/60' };
+  if (i === 'high') return { text: 'text-warn', dot: 'bg-warn' };
+  if (i === 'medium') return { text: 'text-warn/70', dot: 'bg-warn/60' };
+  return { text: 'text-ink-mute', dot: 'bg-ink-mute/60' };
 }
 
 function impactLabel(impact: string): string {
@@ -73,160 +92,202 @@ function normalizeName(name: string | null | undefined): string {
     .trim();
 }
 
-interface MatchedOpinions {
+// Snapshot event_names often carry a leading country/region code that the
+// calendar event_name lacks ("US FOMC Statement" / "[CN] Retail Sales YoY" vs
+// "FOMC Statement"). Split that prefix off so the name-fallback can align the
+// two, qualified by country to avoid cross-country false matches.
+const COUNTRY_CODES = new Set([
+  'us', 'eu', 'ez', 'gb', 'uk', 'jp', 'cn', 'au', 'nz', 'ca', 'ch', 'de', 'fr',
+  'it', 'es', 'se', 'no', 'dk', 'tr', 'sg', 'in', 'kr', 'mx', 'za', 'br', 'hk',
+  'tw', 'id', 'th', 'pl', 'cz', 'hu', 'il',
+]);
+
+function splitCountry(normalized: string): { country: string; rest: string } {
+  const sp = normalized.indexOf(' ');
+  if (sp <= 0) return { country: '', rest: normalized };
+  const head = normalized.slice(0, sp);
+  if (COUNTRY_CODES.has(head)) return { country: head, rest: normalized.slice(sp + 1) };
+  return { country: '', rest: normalized };
+}
+
+/**
+ * Aggregated broker opinions matched to a single calendar event. Exported so the
+ * EventDetailPanel slide-over can render the same desk-commentary shape that the
+ * list/timeline produce via `matchOpinions`.
+ */
+export interface MatchedOpinions {
   mentions: number;
   brokers: string[];
   citations: FxEventCitation[];
   eventKey: string;
-}
-
-function ExpandedOpinions({
-  opinions,
-  runDate,
-}: {
-  opinions: MatchedOpinions;
+  /** The run_date of the opinion snapshot these citations came from. */
   runDate: string | null;
-}) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  return (
-    <div className="space-y-2 border-t border-border-subtle/60 px-4 py-3">
-      {opinions.citations.length > 0 ? (
-        opinions.citations.map((c, i) => (
-          <div key={`${c.broker}-${c.source_file}-${i}`} className="rounded-lg bg-white/[0.02] p-3">
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="font-mono text-xs font-semibold text-text-primary">
-                {c.broker || 'Unknown desk'}
-              </span>
-              {c.source_file ? (
-                <Link
-                  href={briefHref(
-                    pathname,
-                    new URLSearchParams(searchParams.toString()),
-                    c.source_file,
-                    runDate
-                  )}
-                  scroll={false}
-                  className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-fin-blue hover:underline"
-                  title={`Open brief ${c.source_file}`}
-                >
-                  <FileText size={11} aria-hidden />
-                  Brief
-                </Link>
-              ) : null}
-            </div>
-            {c.expected_outcome ? (
-              <p className="text-xs leading-snug text-text-secondary">
-                <span className="text-text-muted">Expected: </span>
-                {c.expected_outcome}
-              </p>
-            ) : null}
-            {c.fx_impact ? (
-              <p className="mt-1 text-xs leading-snug text-text-secondary">
-                <span className="text-text-muted">FX impact: </span>
-                {c.fx_impact}
-              </p>
-            ) : null}
-          </div>
-        ))
-      ) : (
-        <p className="text-xs text-text-muted">
-          {opinions.brokers.length > 0
-            ? `Cited by ${opinions.brokers.join(', ')}.`
-            : 'No broker detail available.'}
-        </p>
-      )}
-    </div>
-  );
 }
 
 function EventRow({
   event,
   opinions,
-  runDate,
+  onSelect,
+  highlight = false,
 }: {
   event: FxEconomicCalendarRow;
   opinions: MatchedOpinions | null;
-  runDate: string | null;
+  onSelect: (event: FxEconomicCalendarRow) => void;
+  highlight?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
   const { text: impactText, dot: impactDot } = impactClass(event.impact);
+  // `resolvedTime` is true only when we have a real UTC instant to localize; a
+  // falsy fallback to `event_time` is a raw venue/wall-clock string we mark with ≈.
+  const resolvedTime = hasResolvedTime(event);
   const time = formatLocalTime(event.event_datetime_utc) ?? event.event_time ?? null;
-  const hasOpinions = Boolean(opinions && opinions.mentions > 0);
+  // Evidence exists when mentions >0 OR brokers nonempty OR citations nonempty
+  const hasEvidence = Boolean(
+    opinions &&
+      (opinions.mentions > 0 ||
+        opinions.brokers.length > 0 ||
+        opinions.citations.length > 0)
+  );
+  const hasOpinions = hasEvidence;
+
+  // When this row is the cross-link target (catalyst → Events), scroll it into
+  // view so the trader lands on the right catalyst.
+  useEffect(() => {
+    if (highlight && rowRef.current) {
+      rowRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlight]);
 
   return (
-    <div className="overflow-hidden">
-      <button
-        type="button"
-        // A row with no broker opinions has nothing to expand: disable it so it is
-        // neither keyboard-focusable nor an interactive no-op. Rows WITH opinions
-        // stay the expand/collapse toggle.
-        disabled={!hasOpinions}
-        onClick={hasOpinions ? () => setOpen((v) => !v) : undefined}
-        className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors ${
-          hasOpinions ? 'cursor-pointer hover:bg-white/[0.02]' : 'cursor-default'
-        }`}
-        aria-expanded={hasOpinions ? open : undefined}
-      >
-        {/* Time column */}
-        <div className="w-14 shrink-0 text-right">
-          <span className="qn-metric block tabular-nums text-sm text-text-primary">
-            {time ?? '—'}
-          </span>
-        </div>
-
-        {/* Impact dot */}
-        <span className={`h-2 w-2 shrink-0 rounded-full ${impactDot}`} aria-hidden />
-
-        {/* Event detail */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-text-muted">
-              <Globe size={11} aria-hidden />
-              {event.country}
-            </span>
-            <span className={`text-[11px] font-medium ${impactText}`}>
-              {impactLabel(event.impact)}
+    <div
+      ref={rowRef}
+      className={`overflow-hidden transition-colors ${
+        highlight ? 'bg-accent/10 ring-1 ring-inset ring-accent/40' : ''
+      }`}
+    >
+      {hasOpinions ? (
+        <button
+          type="button"
+          onClick={() => onSelect(event)}
+          className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-ink/[0.02]"
+        >
+          {/* Time column */}
+          <div className="w-14 shrink-0 text-right">
+            <span className="qn-metric block tabular-nums text-sm text-ink">
+              {!resolvedTime && time ? (
+                <span
+                  className="mr-0.5 text-ink-mute/70"
+                  title="Venue-local time — could not convert to your timezone"
+                >
+                  ≈
+                </span>
+              ) : null}
+              {time ?? '—'}
             </span>
           </div>
-          <p className="truncate text-sm text-text-primary">{event.event_name}</p>
-        </div>
 
-        {/* Forecast / actual */}
-        <div className="hidden w-40 shrink-0 items-center justify-end gap-3 text-right sm:flex">
-          {event.forecast ? (
-            <span className="text-[11px] text-text-muted">
-              Fcst <span className="tabular-nums text-text-secondary">{event.forecast}</span>
-            </span>
-          ) : null}
-          {event.actual ? (
-            <span className="text-[11px] text-text-muted">
-              Act <span className="tabular-nums text-text-primary">{event.actual}</span>
-            </span>
-          ) : null}
-        </div>
+          {/* Impact dot */}
+          <span className={`h-2 w-2 shrink-0 rounded-full ${impactDot}`} aria-hidden />
 
-        {/* Opinions affordance */}
-        <div className="flex w-24 shrink-0 items-center justify-end gap-1.5">
-          {hasOpinions ? (
-            <>
-              <span className="flex items-center gap-1 text-[11px] text-text-muted">
-                <Users size={12} aria-hidden />
-                <span className="tabular-nums text-text-secondary">{opinions!.mentions}</span>
+          {/* Event detail */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
+                <Globe size={11} aria-hidden />
+                {event.country}
               </span>
-              <ChevronRight
-                size={14}
-                aria-hidden
-                className={`text-text-muted transition-transform ${open ? 'rotate-90' : ''}`}
-              />
-            </>
-          ) : null}
-        </div>
-      </button>
+              <span className={`text-[11px] font-medium ${impactText}`}>
+                {impactLabel(event.impact)}
+              </span>
+            </div>
+            <p className="truncate text-sm text-ink">{event.event_name}</p>
+          </div>
 
-      {hasOpinions && open ? (
-        <ExpandedOpinions opinions={opinions!} runDate={runDate} />
-      ) : null}
+          {/* Prior / forecast / actual */}
+          <div className="hidden w-52 shrink-0 items-center justify-end gap-3 text-right sm:flex">
+            {event.prior != null && event.prior !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Prior <span className="tabular-nums text-ink-soft">{event.prior}</span>
+              </span>
+            ) : null}
+            {event.forecast != null && event.forecast !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Fcst <span className="tabular-nums text-ink-soft">{event.forecast}</span>
+              </span>
+            ) : null}
+            {event.actual != null && event.actual !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Act <span className="tabular-nums text-ink">{event.actual}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* Opinions count + open-detail affordance (only when evidence exists) */}
+          <div className="flex w-24 shrink-0 items-center justify-end gap-1.5">
+            <span className="flex items-center gap-1 text-[11px] text-ink-mute">
+              <Users size={12} aria-hidden />
+              <span className="tabular-nums text-ink-soft">{opinions!.mentions}</span>
+            </span>
+            <ChevronRight size={14} aria-hidden className="text-ink-mute" />
+          </div>
+        </button>
+      ) : (
+        <div className="flex w-full items-center gap-3 px-4 py-3">
+          {/* Time column */}
+          <div className="w-14 shrink-0 text-right">
+            <span className="qn-metric block tabular-nums text-sm text-ink">
+              {!resolvedTime && time ? (
+                <span
+                  className="mr-0.5 text-ink-mute/70"
+                  title="Venue-local time — could not convert to your timezone"
+                >
+                  ≈
+                </span>
+              ) : null}
+              {time ?? '—'}
+            </span>
+          </div>
+
+          {/* Impact dot */}
+          <span className={`h-2 w-2 shrink-0 rounded-full ${impactDot}`} aria-hidden />
+
+          {/* Event detail */}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1 font-mono text-[11px] uppercase text-ink-mute">
+                <Globe size={11} aria-hidden />
+                {event.country}
+              </span>
+              <span className={`text-[11px] font-medium ${impactText}`}>
+                {impactLabel(event.impact)}
+              </span>
+            </div>
+            <p className="truncate text-sm text-ink">{event.event_name}</p>
+          </div>
+
+          {/* Prior / forecast / actual */}
+          <div className="hidden w-52 shrink-0 items-center justify-end gap-3 text-right sm:flex">
+            {event.prior != null && event.prior !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Prior <span className="tabular-nums text-ink-soft">{event.prior}</span>
+              </span>
+            ) : null}
+            {event.forecast != null && event.forecast !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Fcst <span className="tabular-nums text-ink-soft">{event.forecast}</span>
+              </span>
+            ) : null}
+            {event.actual != null && event.actual !== '' ? (
+              <span className="text-[11px] text-ink-mute">
+                Act <span className="tabular-nums text-ink">{event.actual}</span>
+              </span>
+            ) : null}
+          </div>
+
+          {/* No affordance when no evidence — just empty space */}
+          <div className="w-24 shrink-0" />
+        </div>
+      )}
     </div>
   );
 }
@@ -235,31 +296,49 @@ export default function EventsTab({
   events,
   opinions,
   runDate,
+  focus,
+  initialView = 'list',
+  initialSelectedId = null,
+  onOpenBrief,
 }: {
   events: FxEconomicCalendarRow[];
   opinions: FxEventSnapshotRow[];
   runDate: string | null;
+  /** Cross-link target from another tab (catalyst → Events): scroll/highlight it. */
+  focus?: { externalId?: string | null; name: string | null } | null;
+  /** Seed the active view — defaults to List; the non-default views are set
+   *  explicitly only for deterministic SSR rendering in tests. */
+  initialView?: EventsView;
+  /** Seed the open detail slide-over by event id — used so the open-panel state
+   *  is renderable under renderToStaticMarkup in tests. */
+  initialSelectedId?: string | null;
+  /** Optional callback to open a brief by source_file and run_date. Threaded to
+   *  EventDetailPanel so citations can open their source brief. */
+  onOpenBrief?: ((sourceFile: string, runDate: string) => void) | null;
 }) {
   // Index broker opinions so each upcoming calendar row can pick up the aggregated
   // desk views. Two lookups, mirroring how twelve-x groups risk events:
   //   1. byExternalId — keyed on the snapshot's `calendar_external_id` (== the calendar
   //      row's `external_id`) for calendar-linked snapshots. This is the precise join
   //      and is preferred whenever available.
-  //   2. byNameAndDate — keyed on (normalizedName + '\u001f' + event_date) for unlinked
-  //      snapshots. Including the date is what stops same-named events ("CPI",
-  //      "Rate Decision") on different dates/countries from colliding. Name alone is
+  //   2. byNameAndDate — keyed on (normalizedName + date), with a country-stripped,
+  //      country-qualified fallback so a snapshot name like "US FOMC Statement" still
+  //      aligns to the calendar's "FOMC Statement". The date + country qualifier stop
+  //      same-named events on different dates/countries from colliding. Name alone is
   //      never used as a key.
   const { byExternalId, byNameAndDate } = useMemo(() => {
-    const nameDateKey = (name: string, date: string | null): string =>
-      `${normalizeName(name)}\u001f${date ?? ''}`;
     const externalIdMap = new Map<string, MatchedOpinions>();
     const nameDateMap = new Map<string, MatchedOpinions>();
+    const put = (key: string, m: MatchedOpinions) => {
+      if (!nameDateMap.has(key)) nameDateMap.set(key, m); // first write wins -> deterministic
+    };
     for (const o of opinions) {
       const matched: MatchedOpinions = {
         mentions: Number(o.mentions ?? 0),
         brokers: asStringList(o.brokers),
         citations: asCitations(o.citations),
         eventKey: o.event_key,
+        runDate,
       };
       const externalId = (o.calendar_external_id ?? '').trim();
       if (externalId) {
@@ -267,84 +346,207 @@ export default function EventsTab({
         if (!externalIdMap.has(externalId)) externalIdMap.set(externalId, matched);
         continue;
       }
-      // Unlinked snapshot: fall back to (name + date). A normalized name is required
-      // for a usable key, and first write wins to keep matching deterministic.
-      const n = normalizeName(o.event_name);
-      if (!n) continue;
-      const key = nameDateKey(o.event_name, o.event_date);
-      if (!nameDateMap.has(key)) nameDateMap.set(key, matched);
+      // Unlinked snapshot: register under name+date keys. The snapshot name often
+      // carries a leading country code ("US FOMC Statement") the calendar name lacks,
+      // so register BOTH the exact normalized name AND the country-stripped form, the
+      // latter qualified by country to avoid cross-country false matches.
+      const full = normalizeName(o.event_name);
+      if (!full) continue;
+      const date = o.event_date ?? '';
+      put(`${full}|${date}`, matched);
+      const { country, rest } = splitCountry(full);
+      if (country && rest) put(`${rest}|${date}|${country}`, matched);
     }
     return { byExternalId: externalIdMap, byNameAndDate: nameDateMap };
-  }, [opinions]);
+  }, [opinions, runDate]);
 
-  const matchOpinions = (event: FxEconomicCalendarRow): MatchedOpinions | null => {
-    // Prefer the exact calendar_external_id ↔ external_id key match.
+  const matchOpinions = useCallback((event: FxEconomicCalendarRow): MatchedOpinions | null => {
+    // 1) Prefer the exact calendar_external_id -> external_id key match.
     const externalId = (event.external_id ?? '').trim();
     if (externalId) {
       const linked = byExternalId.get(externalId);
       if (linked) return linked;
     }
-    // Fall back to (normalized event_name AND event_date) — never name alone.
-    return byNameAndDate.get(`${normalizeName(event.event_name)}\u001f${event.event_date}`) ?? null;
-  };
+    const name = normalizeName(event.event_name);
+    const date = event.event_date ?? '';
+    // 2) Exact (normalized name + date) - matches snapshots without a country prefix.
+    const exact = byNameAndDate.get(`${name}|${date}`);
+    if (exact) return exact;
+    // 3) Country-qualified (name + date + calendar country) - matches snapshots whose
+    //    name carried a country prefix that is now stripped. Never name alone.
+    const country = normalizeName(event.country);
+    if (country) {
+      const qualified = byNameAndDate.get(`${name}|${date}|${country}`);
+      if (qualified) return qualified;
+    }
+    return null;
+  }, [byExternalId, byNameAndDate]);
 
-  // Group the upcoming window by day for a timeline layout.
+  // Group the upcoming window by day. Bucket by the LOCAL date of each event's
+  // release instant (when known) so the day header agrees with the locale-
+  // converted times shown in each row; fall back to the wall-clock feed date
+  // only when there is no resolved instant.
   const grouped = useMemo(() => {
     const byDate = new Map<string, FxEconomicCalendarRow[]>();
     for (const e of events) {
-      const list = byDate.get(e.event_date) ?? [];
+      const key = eventLocalDateKey(e);
+      const list = byDate.get(key) ?? [];
       list.push(e);
-      byDate.set(e.event_date, list);
+      byDate.set(key, list);
     }
     return [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [events]);
 
+  // Resolve the cross-link focus target to a concrete event id (by external_id,
+  // then by normalized name) so the matching row can scroll/highlight itself.
+  const focusedId = useMemo(() => {
+    if (!focus) return null;
+    const wantId = (focus.externalId ?? '').trim();
+    if (wantId) {
+      const byId = events.find((e) => (e.external_id ?? '').trim() === wantId);
+      if (byId) return byId.id;
+    }
+    const wantName = normalizeName(focus.name ?? '');
+    if (wantName) {
+      const byName = events.find((e) => normalizeName(e.event_name) === wantName);
+      if (byName) return byName.id;
+    }
+    return null;
+  }, [focus, events]);
+
+  // Active view (List default).
+  const [view, setView] = useState<EventsView>(initialView);
+
+  // The event whose detail slide-over is open, or null. Opened from both the List
+  // and the Timeline so the two views surface the identical event-detail popup.
+  // Seeded from initialSelectedId so the open state is renderable under SSR tests.
+  const [selected, setSelected] = useState<FxEconomicCalendarRow | null>(
+    () => events.find((e) => String(e.id) === initialSelectedId) ?? null,
+  );
+
+  // Map the full upcoming window to the reusable timeline's event shape, shared
+  // with the Today single-day timeline (same local-day/clock/impact rules).
+  const timelineEvents = useMemo(() => eventsToTimeline(events), [events]);
+
+  // Build a set of selectable event IDs (only events with evidence).
+  const selectableIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const event of events) {
+      const ops = matchOpinions(event);
+      const hasEvidence = Boolean(
+        ops &&
+          (ops.mentions > 0 || ops.brokers.length > 0 || ops.citations.length > 0)
+      );
+      if (hasEvidence) {
+        ids.add(String(event.id));
+      }
+    }
+    return ids;
+  }, [events, matchOpinions]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
-        <CalendarClock size={18} className="shrink-0 text-fin-blue" aria-hidden />
-        <h2 className="text-base font-semibold text-text-primary md:text-lg">Upcoming catalysts</h2>
+        <CalendarClock size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="font-display text-2xl tracking-tight text-ink">Upcoming catalysts</h2>
+        {/* List | Timeline segmented control (demo's #evtSubnav). */}
+        <div
+          className="ml-auto inline-flex overflow-hidden rounded-md border border-hair text-[11px]"
+          role="group"
+          aria-label="Events view"
+        >
+          {VIEWS.map((v) => {
+            const active = view === v.key;
+            return (
+              <button
+                key={v.key}
+                type="button"
+                data-evtview={v.key}
+                aria-pressed={active}
+                onClick={() => setView(v.key)}
+                className={`px-3 py-1 transition-colors ${
+                  active ? 'bg-accent/20 text-accent' : 'text-ink-mute hover:text-ink-soft'
+                }`}
+              >
+                {v.label}
+              </button>
+            );
+          })}
+        </div>
         {runDate ? (
-          <span className="ml-auto font-mono text-[10px] text-text-muted">
-            opinions as of {runDate}
-          </span>
+          <span className="font-mono text-[10px] text-ink-mute">opinions as of {runDate}</span>
         ) : null}
       </div>
 
-      <p className="max-w-2xl px-1 text-xs text-text-muted">
-        The next 14 days of macro events (times in your local timezone). Rows with aggregated broker
-        expectations are expandable — open to see which desks weighed in, what they expect, and the
-        FX impact they flag.
+      <p className="max-w-2xl px-1 text-xs text-ink-mute">
+        The next 14 days of macro events — times in your local timezone where a precise release
+        instant is known; <span className="text-ink-mute/70">≈</span> marks venue-local times we
+        could not convert. Open any event — in the list or on the timeline — to see which desks
+        weighed in, what they expect, and the FX impact they flag.
       </p>
 
-      {grouped.length > 0 ? (
-        <div className="space-y-4">
-          {grouped.map(([dateStr, rows]) => (
-            <div key={dateStr} className="glass-card overflow-hidden p-0">
-              <div className="flex items-center gap-3 border-b border-border-subtle bg-bg-secondary px-4 py-2.5">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-                  {formatDateLabel(dateStr)}
-                </h3>
-                <span className="ml-auto font-mono text-[10px] text-text-muted">{dateStr}</span>
+      {view === 'list' ? (
+        grouped.length > 0 ? (
+          <div className="space-y-4">
+            {grouped.map(([dateStr, rows]) => (
+              <div key={dateStr} className="glass-card overflow-hidden p-0">
+                <div className="flex items-center gap-3 border-b border-hair bg-term-bg px-4 py-2.5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
+                    {formatDateLabel(dateStr)}
+                  </h3>
+                  <span className="ml-auto font-mono text-[10px] text-ink-mute">{dateStr}</span>
+                </div>
+                <div className="divide-y divide-hair">
+                  {rows.map((event) => (
+                    <EventRow
+                      key={event.id}
+                      event={event}
+                      opinions={matchOpinions(event)}
+                      onSelect={setSelected}
+                      highlight={event.id === focusedId}
+                    />
+                  ))}
+                </div>
               </div>
-              <div className="divide-y divide-border-subtle">
-                {rows.map((event) => (
-                  <EventRow
-                    key={event.id}
-                    event={event}
-                    opinions={matchOpinions(event)}
-                    runDate={runDate}
-                  />
-                ))}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        ) : (
+          <div className="glass-card p-10 text-center text-sm text-ink-mute">{EMPTY_COPY}</div>
+        )
+      ) : null}
+
+      {view === 'timeline' ? (
+        <div className="glass-card p-4">
+          {timelineEvents.length > 0 ? (
+            <EventsTimeline
+              events={timelineEvents}
+              mode="multi"
+              selectableIds={selectableIds}
+              onSelect={(id) => setSelected(events.find((e) => String(e.id) === id) ?? null)}
+            />
+          ) : (
+            <p className="text-sm text-ink-mute">{EMPTY_COPY}</p>
+          )}
         </div>
-      ) : (
-        <div className="glass-card p-10 text-center text-sm text-text-muted">
-          No upcoming economic events in the next 14 days.
-        </div>
-      )}
+      ) : null}
+
+      <EventDetailPanel
+        event={selected}
+        opinions={selected ? matchOpinions(selected) : null}
+        onClose={() => setSelected(null)}
+        onOpenBrief={
+          onOpenBrief
+            ? (sourceFile: string) => {
+                const ops = selected ? matchOpinions(selected) : null;
+                const rd = ops?.runDate ?? runDate ?? '';
+                if (rd) {
+                  setSelected(null); // Close detail before opening brief
+                  onOpenBrief(sourceFile, rd);
+                }
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

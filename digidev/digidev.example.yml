@@ -89,7 +89,10 @@ human_gates:
 
 # Path regex for the pre-push hook — commits touching these paths require a
 # "Human-Approved-By: <name>" trailer.
-live_trading_regex: "(live_trading|execute_trade|place_order|/live[/.])"
+# Anchor directory fragments to your backend source roots: a bare "/live/"
+# also matches unrelated paths (e.g. design screenshots under
+# frontend/**/references/**/live/) and produces false positives.
+live_trading_regex: "(live_trading|execute_trade|place_order|(^|/)src/(.*/)?live[/.])"
 
 # ── Protected paths ───────────────────────────────────────────────────────────
 #

@@ -26,13 +26,19 @@ jobs:
       digiquant: ${{ steps.filter.outputs.digiquant }}
       digisearch: ${{ steps.filter.outputs.digisearch }}
       digigraph: ${{ steps.filter.outputs.digigraph }}
+      # Added by hand (#1788): generate_ci_path_filters.py only rewrites the
+      # block between the CI_PATH_FILTERS markers below, not this outputs map.
+      digillm: ${{ steps.filter.outputs.digillm }}
+      digifetch: ${{ steps.filter.outputs.digifetch }}
       digichat: ${{ steps.filter.outputs.digichat }}
       olympus: ${{ steps.filter.outputs.olympus }}
+      web: ${{ steps.filter.outputs.web }}
       score: ${{ steps.filter.outputs.score }}
       e2e_contract: ${{ steps.filter.outputs.e2e_contract }}
       nautilus_smoke: ${{ steps.filter.outputs.nautilus_smoke }}
       atlas_graph: ${{ steps.filter.outputs.atlas_graph }}
       ruff_and_scripts: ${{ steps.filter.outputs.ruff_and_scripts }}
+      workflows: ${{ steps.filter.outputs.workflows }}
       compose: ${{ steps.filter.outputs.compose }}
       pip_audit: ${{ steps.filter.outputs.pip_audit }}
     steps:
@@ -45,47 +51,71 @@ jobs:
             digibase:
               - 'digibase/**'
               - 'tests/db/**'
-              - '.github/workflows/digibase-test.yml'
+              - '.github/workflows/test-digibase.yml'
             digikey:
               - 'digikey/**'
               - 'tests/dk/**'
-              - '.github/workflows/digikey-test.yml'
+              - '.github/workflows/test-digikey.yml'
             digismith:
               - 'digismith/**'
               - 'tests/dsm/**'
-              - '.github/workflows/digismith-test.yml'
+              - '.github/workflows/test-digismith.yml'
             digivault:
               - 'digivault/**'
               - 'tests/dv/**'
-              - '.github/workflows/digivault-test.yml'
+              - '.github/workflows/test-digivault.yml'
             digiclaw:
               - 'digiclaw/**'
               - 'tests/dc/**'
-              - '.github/workflows/digiclaw-test.yml'
+              - '.github/workflows/test-digiclaw.yml'
             digiquant:
               - 'digiquant/**'
               - 'tests/dq/**'
-              - '.github/workflows/digiquant-test.yml'
+              - '.github/workflows/test-digiquant.yml'
+              - 'frontend/digiquant-web/lib/live/**'
             digisearch:
               - 'digisearch/**'
               - 'tests/ds/**'
-              - '.github/workflows/digisearch-test.yml'
+              - '.github/workflows/test-digisearch.yml'
             digigraph:
               - 'digigraph/**'
               - 'tests/dg/**'
-              - '.github/workflows/digigraph-test.yml'
+              - '.github/workflows/test-digigraph.yml'
+              - 'config/**'
+              - 'infra/digichat-release/config/**'
+            digillm:
+              - 'digillm/**'
+              - '.github/workflows/test-digillm.yml'
+            digifetch:
+              - 'digifetch/**'
+              - '.github/workflows/test-digifetch.yml'
             digichat:
               - 'frontend/digichat/**'
-              - 'frontend/design/**'
+              - 'frontend/digichat-ui/**'
+              - 'frontend/digiweb/web/**'
+              - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
-              - '.github/workflows/digichat-test.yml'
+              - '.github/workflows/test-digichat.yml'
             olympus:
               - 'frontend/olympus/**'
-              - 'frontend/design/**'
+              - 'frontend/digiweb/web/**'
+              - 'frontend/digiweb/design/**'
               - 'package.json'
               - 'package-lock.json'
-              - '.github/workflows/olympus-test.yml'
+              - '.github/workflows/test-olympus.yml'
+            web:
+              - 'frontend/digithings-web/**'
+              - 'frontend/digiquant-web/**'
+              - 'frontend/digichat-ui/**'
+              - 'frontend/digiweb/web/**'
+              - 'frontend/digiweb/design/**'
+              - 'frontend/digiweb/reference/**'
+              - 'frontend/digichat-cloudflare/**'
+              - 'frontend/digithings-stack-cloudflare/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/test-web.yml'
             score:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -95,31 +125,43 @@ jobs:
               - 'digismith/**'
               - 'digikey/**'
               - 'digivault/**'
-              - 'frontend/**'
               - 'scripts/**'
               - 'tests/**'
               - 'agents.yml'
               - 'agents/**'
-              - '.github/workflows/score-pr.yml'
+              - '.github/workflows/test-score.yml'
+              - 'config/**'
             e2e_contract:
               - 'tests/test_e2e.py'
               - 'tests/test_e2e_contract.py'
               - 'docker-compose.yml'
               - 'digikey/**'
-              - '.github/workflows/e2e.yml'
+              - '.github/workflows/test-e2e.yml'
             nautilus_smoke:
               - 'digiquant/**'
+              - 'tests/dq/conftest.py'
+              - 'tests/dq/test_api.py'
+              - 'tests/dq/test_audit.py'
+              - 'tests/dq/test_backtest.py'
+              - 'tests/dq/test_calibrations_loader.py'
               - 'tests/dq/test_nautilus_runner.py'
-              - '.github/workflows/nautilus-smoke.yml'
+              - 'tests/dq/test_pipeline_graph.py'
+              - 'tests/dq/test_strategies.py'
+              - 'tests/dq/test_tearsheet_isolation.py'
+              - 'tests/dq/test_v1_jobs.py'
+              - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'
               - 'digiquant/scripts/atlas/**'
               - 'digiquant/supabase/**'
               - 'tests/dq/atlas/**'
+              - 'digiquant/src/digiquant/olympus/edit_mode/**'
               - 'digiquant/src/digiquant/olympus/hermes/**'
+              - 'digiquant/src/digiquant/olympus/learning/**'
               - 'tests/dq/hermes/**'
-              - '.github/workflows/atlas-graph-ci.yml'
-              - '.github/workflows/atlas-*.yml'
+              - 'tests/dq/learning/**'
+              - '.github/workflows/test-atlas-graph.yml'
+              - '.github/workflows/pipeline-olympus.yml'
             ruff_and_scripts:
               - 'digibase/**'
               - 'digiclaw/**'
@@ -134,6 +176,20 @@ jobs:
               - 'agents/**'
               - '.github/workflows/ci.yml'
               - 'scripts/ci_paths.yaml'
+              - 'config/**'
+              - '.release-please-manifest.json'
+              - 'release-please-config.json'
+              - 'frontend/digichat/package.json'
+              - 'package-lock.json'
+              - '.github/workflows/release-please-digichat.yml'
+              - '.github/workflows/pipeline-digiquant-prices.yml'
+              - '.github/workflows/db-migrate.yml'
+              - '.github/workflows/pipeline-olympus.yml'
+              - '.github/workflows/deploy-digithings-cloudflare.yml'
+              - '.github/workflows/deploy-digiquant-cloudflare.yml'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/actionlint.yaml'
             compose:
               - 'docker-compose.yml'
               - '.env.example'
@@ -142,85 +198,132 @@ jobs:
             pip_audit:
               - '**/pyproject.toml'
               - 'pip-audit-ignore.txt'
-              - '.github/workflows/pip-audit.yml'
+              - '.github/workflows/security-pip-audit.yml'
             # CI_PATH_FILTERS_END
+
+  # ── Frontend canon guard (#1404, #1434) — UNCONDITIONAL ─────────────────────
+  # No `needs`/`if` gate on purpose: check_frontend_canon.py does
+  # `git ls-files frontend` and scans ALL frontend files regardless of the
+  # diff, so its verdict is a property of the whole tree while a path filter is a
+  # property of the diff. Gate it on any filter (as the per-app test jobs still are)
+  # and a PR whose diff falls outside that filter skips a check whose scope was never
+  # the diff in the first place. The mismatch is structural, so closing glob gaps does
+  # not fix it: frontend/digichat-ui/** and frontend/digiweb/reference/** were both in
+  # no lane when this job was written and both are covered now (digichat + web, and
+  # web since #1981) — the argument is unchanged. Keep the census case in view when
+  # judging that: digichat-ui IS a census app (CENSUS_APPS in check_frontend_canon.py),
+  # so the family-census check applies to it and only this job is guaranteed to run it,
+  # whereas digiweb — reference included — is exempt from that census by design, being
+  # where new families are born. The two were never symmetric examples.
+  # Stdlib-only; no npm/pip install needed.
+  frontend-canon:
+    name: Frontend canon guard
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Frontend canon guard
+        run: python3 scripts/check_frontend_canon.py
 
   # ── Per-component test suites (gated by paths) ───────────────────────────────
   digibase:
     needs: changes
     if: needs.changes.outputs.digibase == 'true'
-    uses: ./.github/workflows/digibase-test.yml
+    uses: ./.github/workflows/test-digibase.yml
 
   digikey:
     needs: changes
     if: needs.changes.outputs.digikey == 'true'
-    uses: ./.github/workflows/digikey-test.yml
+    uses: ./.github/workflows/test-digikey.yml
 
   digismith:
     needs: changes
     if: needs.changes.outputs.digismith == 'true'
-    uses: ./.github/workflows/digismith-test.yml
+    uses: ./.github/workflows/test-digismith.yml
 
   digivault:
     needs: changes
     if: needs.changes.outputs.digivault == 'true'
-    uses: ./.github/workflows/digivault-test.yml
+    uses: ./.github/workflows/test-digivault.yml
 
   digiclaw:
     needs: changes
     if: needs.changes.outputs.digiclaw == 'true'
-    uses: ./.github/workflows/digiclaw-test.yml
+    uses: ./.github/workflows/test-digiclaw.yml
 
   digiquant:
     needs: changes
     if: needs.changes.outputs.digiquant == 'true'
-    uses: ./.github/workflows/digiquant-test.yml
+    uses: ./.github/workflows/test-digiquant.yml
 
   digisearch:
     needs: changes
     if: needs.changes.outputs.digisearch == 'true'
-    uses: ./.github/workflows/digisearch-test.yml
+    uses: ./.github/workflows/test-digisearch.yml
 
   digigraph:
     needs: changes
     if: needs.changes.outputs.digigraph == 'true'
-    uses: ./.github/workflows/digigraph-test.yml
+    uses: ./.github/workflows/test-digigraph.yml
+
+  # digillm and digifetch (#1788). Both suites ran in no lane before this — and
+  # a combined `pytest` could not even collect them, because their tests/
+  # directories carried an __init__.py that claimed the repo-root `tests` package
+  # name. The __init__.py files are gone; these two jobs are the CI half.
+  digillm:
+    needs: changes
+    if: needs.changes.outputs.digillm == 'true'
+    uses: ./.github/workflows/test-digillm.yml
+
+  digifetch:
+    needs: changes
+    if: needs.changes.outputs.digifetch == 'true'
+    uses: ./.github/workflows/test-digifetch.yml
 
   digichat:
     needs: changes
     if: needs.changes.outputs.digichat == 'true'
-    uses: ./.github/workflows/digichat-test.yml
+    uses: ./.github/workflows/test-digichat.yml
 
   olympus:
     needs: changes
     if: needs.changes.outputs.olympus == 'true'
-    uses: ./.github/workflows/olympus-test.yml
+    uses: ./.github/workflows/test-olympus.yml
+
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    uses: ./.github/workflows/test-web.yml
 
   score:
     needs: changes
     if: needs.changes.outputs.score == 'true'
-    uses: ./.github/workflows/score-pr.yml
+    uses: ./.github/workflows/test-score.yml
 
   e2e-contract:
     needs: changes
     if: needs.changes.outputs.e2e_contract == 'true'
-    uses: ./.github/workflows/e2e.yml
+    uses: ./.github/workflows/test-e2e.yml
 
   nautilus-smoke:
     needs: changes
     if: needs.changes.outputs.nautilus_smoke == 'true'
-    uses: ./.github/workflows/nautilus-smoke.yml
+    uses: ./.github/workflows/test-nautilus.yml
 
   atlas-graph:
     needs: changes
     if: needs.changes.outputs.atlas_graph == 'true'
-    uses: ./.github/workflows/atlas-graph-ci.yml
+    uses: ./.github/workflows/test-atlas-graph.yml
 
   # ── Dependency CVE audit (pip-audit / OSV) ──────────────────────────────────
   pip-audit:
     needs: changes
     if: needs.changes.outputs.pip_audit == 'true'
-    uses: ./.github/workflows/pip-audit.yml
+    uses: ./.github/workflows/security-pip-audit.yml
 
   # ── Root-level ruff + scripts unit tests ────────────────────────────────────
   ruff-and-scripts:
@@ -231,75 +334,190 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - name: Install
-        run: |
-          python -m pip install -U pip
-          pip install -e "./digibase[dev]"
-          pip install -e "./digikey[dev]"
-          pip install cryptography ruff polars tabulate pyyaml pytest openai httpx
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # The hand-listed `cryptography ruff polars tabulate pyyaml pytest openai
+      # httpx` are all declared dependencies of workspace members, so the lock
+      # supplies them pinned. ruff stays version-bounded through the [dev] extras
+      # (#1701) and is now additionally pinned by the lock (0.16.0), so neither a
+      # release nor a resolution change can move the lint policy under a green CI.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: CI path filters in sync (ci.yml ⇄ ci_paths.yaml)
+        run: uv run --frozen --no-sync python scripts/generate_ci_path_filters.py --check
 
       - name: Validate model routing (config only)
-        run: python scripts/validate_model_routing.py --routing
+        run: uv run --frozen --no-sync python scripts/validate_model_routing.py --routing
 
       - name: Ruff (all src + tests)
         run: |
-          python -m ruff check \
+          uv run --frozen --no-sync ruff check \
             digibase/src digiclaw/src digigraph/src digiquant/src \
             digisearch/src digismith/src tests
 
       - name: Pytest (scripts + agents + integration hops + baseline)
         run: |
-          python -m pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
+          uv run --frozen --no-sync pytest tests/scripts/ tests/agents/ tests/integration/test_request_id_hops.py tests/baseline/ -m "unit or baseline" -v --tb=short --ignore=tests/baseline/test_cli.py
 
       - name: Pytest (provider review unit tests)
-        run: python -m pytest tests/provider_review/ -m unit -v --tb=short
+        run: uv run --frozen --no-sync pytest tests/provider_review/ -m unit -v --tb=short
 
       - name: Protected-path bash guard (REM-127)
         env:
           DIGI_ALLOW_PROTECTED: "0"
-        run: bash tests/scripts/test_protected_path_bash_guard.sh
+        # uv run so the script's own `python3` calls resolve to the locked venv.
+        run: uv run --frozen --no-sync bash tests/scripts/test_protected_path_bash_guard.sh
 
       - name: Pandas boundary (REM-132)
+        # Not wrapped in `uv run`: this script is pure bash + ripgrep and calls no
+        # Python, so the venv would buy nothing.
+        #
+        # NOTE (#1715): this gate is currently a no-op on runners without
+        # ripgrep. Its scan ends in `|| true`, so a missing `rg` yields an empty
+        # violation list and prints "pandas boundary OK". Run locally with rg
+        # present it FAILS on digiquant/scripts/fetch_real_ohlcv.py:17
+        # (`import pandas as pd`), which is outside the allowlist and contrary to
+        # the Polars-only rule. Left as-is here because fixing it is a digiquant
+        # code change, not a dependency-management one — tracked separately.
         run: bash scripts/check_pandas_boundary.sh
 
-  # ── Request Copilot PR review (Tier 1 primary reviewer) — REM-098 ───────────
-  # Single PR review path: this job only (no copilot-pr-review.yml). Issue dispatch
-  # uses copilot-issue-dispatch.lock.yml (gh-aw) + copilot-quota-gate.yml — see EXECUTION_TIERS.md.
-  # Claude /code-review is opt-in via claude-code-review.yml (ENABLE_CLAUDE_PR_REVIEW).
-  request-copilot-review:
-    name: Request Copilot review
-    if: |
-      github.event_name == 'pull_request' &&
-      (github.event.action == 'opened' || github.event.action == 'ready_for_review' || github.event.action == 'reopened') &&
-      github.event.pull_request.draft == false &&
-      github.actor != 'dependabot[bot]'
+  # ── GitHub Actions workflow lint (repo-wide) ────────────────────────────────
+  # Gated on `.github/workflows/**`, so it fires on any workflow edit — including
+  # edits to ci.yml itself. The predecessor was a job inside test-atlas-graph.yml
+  # with `files: ".github/workflows/pipeline-olympus.yml"`, invoked only from the
+  # atlas_graph lane; a workflow-only PR skipped that lane entirely and got no
+  # actionlint at all. Suppressions live in .github/actionlint.yaml.
+  actionlint:
+    name: actionlint
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
-    concurrency:
-      group: copilot-pr-review-${{ github.event.pull_request.number }}
-      cancel-in-progress: false
+    timeout-minutes: 5
     permissions:
-      pull-requests: write
+      contents: read
+    env:
+      # actionlint shells out to shellcheck for every `run:` block, so shellcheck
+      # is half this gate's rule set and its version is part of the gate's
+      # contract. Left to the action, it takes whatever `apt-get install
+      # shellcheck` yields on the runner image — which is how this job first went
+      # red: the image's 0.9.x reported SC2002 + SC2015 ×4 that 0.11.0 dropped
+      # after upstream relaxed both. Unpinned tool, output gates CI, verdict
+      # changes under an unchanged tree: CLAUDE.md § "Dependency version bounds".
+      # 0.11.0 is also what `brew install shellcheck` gives, so local == CI.
+      # (Those 5 findings were fixed, not pinned away — see this PR's diff.)
+      SHELLCHECK_VERSION: "0.11.0"
+      # sha256 of shellcheck-v<version>.linux.x86_64.tar.xz. Recompute on bump.
+      SHELLCHECK_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
     steps:
-      - name: Request Copilot code review (idempotent)
-        env:
-          GH_TOKEN: ${{ secrets.DIGITHINGS_PROJECT_TOKEN || github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
+      - uses: actions/checkout@v4
+
+      # Same pinned-tarball + checksum pattern as security-gitleaks.yml. Putting
+      # shellcheck on PATH here makes the action's own `which shellcheck` probe
+      # succeed, so it skips the apt install entirely.
+      - name: Install shellcheck (pinned release tarball)
         run: |
           set -euo pipefail
-          REQUESTED=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
-            --json reviewRequests \
-            --jq '[.reviewRequests[].login | ascii_downcase] | any(. == "copilot" or . == "copilot-swe-agent")')
-          if [ "$REQUESTED" = "true" ]; then
-            echo "Copilot review already requested — skipping (REM-098)"
-            exit 0
+          url="https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          # Retry flags are load-bearing -- see the matching comment in
+          # security-gitleaks.yml for the full reasoning. Short version: this
+          # download flaked twice on 2026-08-12, killing the job before
+          # actionlint ever ran; --retry alone would not have caught it because
+          # a connection reset (exit 56) is not in curl's "transient error" set,
+          # hence --retry-all-errors. Safe here because it is an idempotent GET
+          # of an immutable asset that is checksum-verified below.
+          curl -fsSL --retry 5 --retry-delay 2 --retry-all-errors \
+            --connect-timeout 15 -o /tmp/shellcheck.tar.xz "$url"
+          actual="$(sha256sum /tmp/shellcheck.tar.xz | awk '{print $1}')"
+          if [ "$actual" != "$SHELLCHECK_SHA256" ]; then
+            echo "checksum mismatch: expected $SHELLCHECK_SHA256 got $actual" >&2
+            exit 1
           fi
-          gh pr edit "$PR_NUMBER" --repo "$REPO" --add-reviewer "Copilot" || \
-            echo "::warning::Could not request Copilot review — ensure Copilot coding agent is enabled (Settings → Copilot → Coding agent)."
+          tar -xJf /tmp/shellcheck.tar.xz -C /tmp "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
+          sudo install -m 755 "/tmp/shellcheck-v${SHELLCHECK_VERSION}/shellcheck" /usr/local/bin/shellcheck
+          shellcheck --version
+
+      - name: Run actionlint
+        id: actionlint
+        uses: raven-actions/actionlint@v2
+        with:
+          # No `files:` input — actionlint with no path arguments discovers and
+          # lints every workflow under .github/workflows. Re-pinning it to a
+          # single file is what this job exists to undo.
+          #
+          # `version` is pinned rather than left at `latest` because actionlint
+          # SILENTLY IGNORES config keys it does not recognise: on a build
+          # without `paths:` support, .github/actionlint.yaml would be accepted
+          # and applied as nothing, and this job would go red with ~43 findings
+          # and no diagnostic. Bumping it is a deliberate PR, same rule as the
+          # ruff/mypy/pytest bounds in CLAUDE.md § "Dependency version bounds".
+          version: "1.7.12"
+          # shellcheck + pyflakes default to true. 39 of the 43 findings this job
+          # first surfaced came from the shellcheck integration, so it is
+          # load-bearing — and the step above pins the binary it calls.
+
+      - name: Assert every workflow was linted
+        env:
+          LINTED: ${{ steps.actionlint.outputs.total-files }}
+        # Coverage guard. A lint that quietly narrows its own scope reads exactly
+        # like a passing one — which is how the single-file pin above survived.
+        # `total-files` is parsed by the action from actionlint's own verbose
+        # summary, so this compares what ran against what is on disk.
+        run: |
+          set -euo pipefail
+          ON_DISK=$(find .github/workflows -maxdepth 1 \( -name '*.yml' -o -name '*.yaml' \) | wc -l)
+          echo "actionlint linted ${LINTED:-0} file(s); ${ON_DISK} workflow file(s) on disk."
+          if [ "${LINTED:-0}" -lt "${ON_DISK}" ]; then
+            echo "::error::actionlint covered ${LINTED:-0} of ${ON_DISK} workflow files — scope regression."
+            exit 1
+          fi
+
+      - name: Assert SC2129 is live
+        # The step above counts files, not rules. SC2129 was un-suppressed once
+        # every repeated `>> "$GITHUB_OUTPUT"` was grouped, so it is now the only
+        # thing keeping that convention — and a rule that stops firing leaves a
+        # green build indistinguishable from one that checked. Two ways it can go
+        # dormant, one probe each. Same coverage-guard reasoning as above.
+        run: |
+          set -euo pipefail
+
+          # 1. Does the pinned shellcheck still emit SC2129? Upstream has relaxed
+          #    checks before — 0.11.0 dropped the SC2002/SC2015 this job first
+          #    went red on — so a bump could silently retire this one too.
+          printf '%s\n' \
+            '#!/usr/bin/env bash' \
+            'echo a >> /tmp/sc2129-target' \
+            'echo b >> /tmp/sc2129-target' \
+            'echo c >> /tmp/sc2129-target' > /tmp/sc2129-canary.sh
+          # Capture before grepping: shellcheck exits non-zero *because* it found
+          # the finding, and under `pipefail` that failure would propagate out of
+          # `shellcheck | grep` and read as "rule dormant" on a healthy rule.
+          CANARY_OUT=$(shellcheck -f gcc /tmp/sc2129-canary.sh 2>&1 || true)
+          if ! grep -q SC2129 <<<"$CANARY_OUT"; then
+            echo "::error::shellcheck ${SHELLCHECK_VERSION} no longer reports SC2129 — the rule is dormant and the grouping convention is unenforced. Re-check it before accepting the bump."
+            exit 1
+          fi
+          echo "shellcheck ${SHELLCHECK_VERSION} reports SC2129 on the canary — rule is live."
+
+          # 2. Has the ignore been re-added? Prose mentioning SC2129 is fine; an
+          #    actual list entry is not.
+          if grep -Eq "^[[:space:]]*-[[:space:]]*'shellcheck reported issue in this script: SC2129:" .github/actionlint.yaml; then
+            echo "::error::SC2129 is suppressed again in .github/actionlint.yaml. Group the appends into a single { ... } >> \"\$GITHUB_OUTPUT\" block instead of re-adding the ignore."
+            exit 1
+          fi
+          echo "no SC2129 entry in .github/actionlint.yaml — rule is enforced."
+
+  # Copilot PR review retired (2026-08-05). The account is unsubscribed, so the
+  # job attached no reviewer — it ran `gh pr edit --add-reviewer Copilot`, hit the
+  # `|| echo ::warning::` fallback and reported success on every pull request
+  # while doing nothing. Reviews now run through Cursor Bugbot, invoked
+  # deliberately with a `bugbot run` comment once a diff is final rather than
+  # automatically on open: Bugbot moved to usage-based billing in June 2026 at
+  # roughly $1.00-$1.50 a run, so a review on every push is a real cost.
+  # Claude /code-review remains opt-in via agent-claude-review.yml.
 
   # ── Docker Compose validation ────────────────────────────────────────────────
   compose-validate:
@@ -316,4 +534,86 @@ jobs:
         run: cp .env.example .env
 
       - name: Validate Docker Compose
-        run: docker compose config -q
+        run: |
+          docker compose config -q
+          docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml config -q
+
+  # ── Required-check aggregator ─────────────────────────────────────────────────
+  # Every job above is individually path-gated via `changes`, so none of them can
+  # be named directly in develop's branch protection: a PR that doesn't touch a
+  # given component reports no status for that job's name at all, not "skipped",
+  # and GitHub then blocks the merge forever waiting on a check that will never
+  # run (docs/adr/0024 covers the same failure shape for a different gate — this
+  # is the mirror-image mistake, blocking too eagerly instead of not at all).
+  # This job always runs, tolerates `skipped` on every dependency, and fails only
+  # if something it depends on actually failed or was cancelled — so IT is the
+  # one stable name to require on develop.
+  required-checks:
+    name: Required checks passed
+    if: always()
+    needs:
+      - changes
+      - frontend-canon
+      - digibase
+      - digikey
+      - digismith
+      - digivault
+      - digiclaw
+      - digiquant
+      - digisearch
+      - digigraph
+      - digillm
+      - digifetch
+      - digichat
+      - olympus
+      - web
+      - score
+      - e2e-contract
+      - nautilus-smoke
+      - atlas-graph
+      - pip-audit
+      - ruff-and-scripts
+      - actionlint
+      - compose-validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Drift guard: this job's own `needs:` list was hand-enumerated once
+      # and already went stale silently (e2e-contract/nautilus-smoke/
+      # atlas-graph were added to ci.yml after required-checks existed and
+      # never got added here — a real false-green gap, not hypothetical).
+      # Fail loudly instead of trusting the list matches the file forever.
+      - name: Verify needs list covers every job in this file
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 -c "
+          import yaml
+          with open('.github/workflows/ci.yml') as f:
+              doc = yaml.safe_load(f)
+          jobs = set(doc['jobs']) - {'required-checks'}
+          needs = set(doc['jobs']['required-checks']['needs'])
+          missing = jobs - needs
+          extra = needs - jobs
+          if missing or extra:
+              if missing:
+                  print('::error::required-checks is missing these jobs from needs:', sorted(missing))
+              if extra:
+                  print('::error::required-checks needs lists jobs that do not exist:', sorted(extra))
+              raise SystemExit(1)
+          print('required-checks needs matches all', len(jobs), 'other jobs in ci.yml')
+          "
+
+      - name: Fail if any dependency failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 -c "
+          import json, os, sys
+          results = json.loads(os.environ['RESULTS'])
+          bad = {k: v['result'] for k, v in results.items() if v['result'] not in ('success', 'skipped')}
+          if bad:
+              print('Failed or cancelled required jobs:', bad)
+              sys.exit(1)
+          print('All required jobs passed or were skipped:', {k: v['result'] for k, v in results.items()})
+          "

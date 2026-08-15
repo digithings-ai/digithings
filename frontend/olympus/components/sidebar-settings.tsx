@@ -11,8 +11,12 @@ import {
   type CSSProperties,
 } from 'react';
 import { Settings } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useAppShell } from '@/components/app-shell-context';
 import { SettingsContent } from '@/components/settings-content';
+import { useDashboard } from '@/lib/dashboard-context';
+import { dataSourceHost } from '@/lib/data-source-host';
+import { normalizePathname } from '@/lib/pathname';
 
 const PANEL_W = 280;
 const GAP = 8;
@@ -51,12 +55,16 @@ function panelStyle(
 
 export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed: boolean }) {
   const mounted = useClientMounted();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [panelStyleState, setPanelStyleState] = useState<CSSProperties | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const { setMobileNavOpen } = useAppShell();
+  const { setMobileNavOpen, openCommandPalette } = useAppShell();
+  const { data } = useDashboard();
+  const meta = data?.portfolio?.meta ?? null;
+  const settingsPageActive = normalizePathname(pathname) === '/settings';
 
   const updatePosition = useCallback(() => {
     const btn = buttonRef.current;
@@ -110,11 +118,22 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
       <div
         ref={panelRef}
         style={panelStyleState}
-        className="rounded-xl border border-border-subtle bg-bg-glass backdrop-blur-xl shadow-glass p-4 max-h-[min(70vh,520px)] overflow-y-auto"
+        className="rounded-xl border border-hair bg-surface/95 backdrop-blur-md shadow-[var(--shadow-glass)] p-4 max-h-[min(70vh,520px)] overflow-y-auto"
         role="dialog"
         aria-label="Settings"
       >
         <SettingsContent
+          variant="popover"
+          lastRunDate={meta?.last_updated ?? null}
+          lastRunAt={meta?.last_run_at ?? null}
+          runType={meta?.latest_snapshot_run_type ?? null}
+          version={process.env.NEXT_PUBLIC_OLYMPUS_VERSION ?? 'v0.1 · dev'}
+          dataSourceHost={dataSourceHost()}
+          onOpenPalette={() => {
+            setOpen(false);
+            setMobileNavOpen(false);
+            openCommandPalette();
+          }}
           onNavigate={() => {
             setOpen(false);
             setMobileNavOpen(false);
@@ -128,15 +147,22 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (settingsPageActive) {
+            setOpen(false);
+            setMobileNavOpen(false);
+            return;
+          }
+          setOpen((v) => !v);
+        }}
         title="Settings"
         aria-expanded={open}
         aria-haspopup="dialog"
         className={`
           flex items-center gap-3 w-full rounded-lg py-3 text-sm font-medium transition-colors
-          text-text-secondary hover:text-text-primary hover:bg-white/[0.03]
+          text-ink-soft hover:text-ink hover:bg-ink/[0.03]
           ${sidebarCollapsed ? 'md:justify-center md:px-3' : 'px-3'}
-          ${open ? 'bg-white/[0.06] text-text-primary' : ''}
+          ${open ? 'bg-ink/[0.06] text-ink' : ''}
         `}
       >
         <Settings size={20} className="shrink-0" />

@@ -1,8 +1,8 @@
-# Agent Guide: DigiQuant
+# Agent Guide: digiquant
 
 ## Purpose
 
-DigiQuant is the **deterministic quant engine** of DigiThings. It owns and executes the ordered pipeline: validate → backtest → optimize → export. No other service may make performance claims (Sharpe, PnL, trade count) without a result originating from this service. It is the sole source of truth for strategy evaluation.
+digiquant is the **deterministic quant engine** of digithings. It owns and executes the ordered pipeline: validate → backtest → optimize → export. No other service may make performance claims (Sharpe, PnL, trade count) without a result originating from this service. It is the sole source of truth for strategy evaluation.
 
 ---
 
@@ -85,6 +85,48 @@ ruff check digiquant/ && ruff format --check digiquant/
 
 ---
 
+## Olympus (Atlas + Hermes)
+
+When touching `digiquant/src/digiquant/olympus/`:
+
+1. Read [`ARCHITECTURE.md`](ARCHITECTURE.md) § Atlas + Hermes and
+   [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md).
+2. Read component guides: [`src/digiquant/olympus/atlas/docs/AGENTS.md`](src/digiquant/olympus/atlas/docs/AGENTS.md),
+   [`src/digiquant/olympus/hermes/docs/AGENTS.md`](src/digiquant/olympus/hermes/docs/AGENTS.md).
+3. **One graph, one daily cadence** — do not add `OLYMPUS_HERMES_LITE`, `run_type` graph forks,
+   or `monthly` synthesis paths. Cost control = `OLYMPUS_MODEL_TIER` + per-artifact `skip`/`edit`/`full`.
+4. **Edit-mode extension pattern** (`digiquant.olympus.edit_mode`):
+   - Call `resolve_edit_mode(artifact_key, run_date, prior_loader, triage, force_full_rewrite)`
+     at node entry.
+   - `skip` → shallow-carry prior row (0 LLM); `edit` → load `*-edit.md` skill, expect
+     `DocumentPatch`, merge via `merge_document_patch`; `full` → `*-full.md` skill, full body.
+   - Prior = `prior_published(run_date, document_key)` (latest `date < run_date`), not calendar
+     yesterday only. Stale gap > `OLYMPUS_STALE_FULL_DAYS` (default 7) → `full`.
+5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
+   `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
+   sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
+   or phase9 evolution on the daily path.
+6. Tests: `pytest tests/dq/olympus/ tests/dq/atlas/ tests/dq/hermes/ -m unit -v`
+
+---
+
+## digiquant Supabase backend — `core` (#1064)
+
+The digiquant shared backend is the **`core`** Supabase project — the project historically
+used by Olympus/Atlas ([`supabase/`](supabase/), `project_id "digiquant-atlas"`), repurposed
+(renamed `core`) as the suite-wide backend. It is **not** a separate project: the free-tier
+2-project limit is taken by Olympus + the confidential **twelve-x** project. The shared market
+datasets already live here; #1064 only **adds** the strategy store
+([`supabase/migrations/046_strategy_store.sql`](supabase/migrations/046_strategy_store.sql)).
+
+The strategy-store accessor (`digiquant.data.store`, `build_digiquant_client`) resolves the
+standardized `CORE_SUPABASE_URL` / `CORE_SUPABASE_SERVICE_KEY`
+([ADR 0022](../docs/adr/0022-supabase-env-naming-standard.md)), falling back to the legacy
+`*_DIGIQUANT` and shared `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` names. `CORE_SUPABASE_*`
+is a **GitHub org secret** (all repos write `core`) — **never commit values**.
+
+See [`ARCHITECTURE.md` § digiquant Data Layer](ARCHITECTURE.md#digiquant-data-layer--strategy-store--shared-data-1064)
+and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-digiquant-supabase-project-topology.md).
 
 ---
 

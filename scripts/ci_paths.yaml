@@ -1,60 +1,151 @@
 # Single source of truth for CI path filters (dorny/paths-filter in ci.yml).
 # Regenerate embedded block: python3 scripts/generate_ci_path_filters.py
-# Drift check: python3 scripts/generate_ci_path_filters.py --check
+# Drift check (enforced in CI by the ruff-and-scripts job):
+#   python3 scripts/generate_ci_path_filters.py --check
 
 digibase:
   - digibase/**
   - tests/db/**
-  - .github/workflows/digibase-test.yml
+  - .github/workflows/test-digibase.yml
 
 digikey:
   - digikey/**
   - tests/dk/**
-  - .github/workflows/digikey-test.yml
+  - .github/workflows/test-digikey.yml
 
 digismith:
   - digismith/**
   - tests/dsm/**
-  - .github/workflows/digismith-test.yml
+  - .github/workflows/test-digismith.yml
 
 digivault:
   - digivault/**
   - tests/dv/**
-  - .github/workflows/digivault-test.yml
+  - .github/workflows/test-digivault.yml
 
 digiclaw:
   - digiclaw/**
   - tests/dc/**
-  - .github/workflows/digiclaw-test.yml
+  - .github/workflows/test-digiclaw.yml
 
 digiquant:
   - digiquant/**
   - tests/dq/**
-  - .github/workflows/digiquant-test.yml
+  - .github/workflows/test-digiquant.yml
+  # The browser half of the live price feed is guarded from Python, because
+  # frontend/digiquant-web has no test runner at all (#1807). Without this entry a
+  # frontend-only edit to useLivePrices.ts fires the `web` lane (eslint + build) and
+  # never runs tests/dq/test_prices_live_subscriber.py — the exact change class that
+  # guard exists to catch. eslint does not flag re-adding `private: true`, collapsing
+  # the per-instance Realtime topic, or reinstating a broadcast subscription.
+  - frontend/digiquant-web/lib/live/**
 
 digisearch:
   - digisearch/**
   - tests/ds/**
-  - .github/workflows/digisearch-test.yml
+  - .github/workflows/test-digisearch.yml
 
 digigraph:
   - digigraph/**
   - tests/dg/**
-  - .github/workflows/digigraph-test.yml
+  - .github/workflows/test-digigraph.yml
+  # config/ is loaded at digigraph runtime (model_modes.yaml, byok-providers.json,
+  # mcp_servers.yaml, olympus_models.yaml -- all read by tests/dg/*), and
+  # infra/digichat-release/config/ is its vendored copy for the Profile A release
+  # (kept in sync by TestByokCatalogVendoredCopy). Without these entries a
+  # config-only edit runs no digigraph job at all -- including the one test that
+  # guards the two copies against drifting -- and byok-providers.json now raises
+  # at import on malformed content, so a bad catalog-only edit could merge fully
+  # green and then crash-loop digigraph in production (#2361 finding 8).
+  - config/**
+  - infra/digichat-release/config/**
+
+# digillm and digifetch each keep their tests inside the component (digillm/tests,
+# digifetch/tests) rather than under the repo-root tests/ tree. So neither has a
+# tests/<abbrev>/** entry to list, the way digibase has tests/db/** — the
+# component glob (digillm/**, digifetch/**) already covers its own suite (#1788).
+digillm:
+  - digillm/**
+  - .github/workflows/test-digillm.yml
+
+digifetch:
+  - digifetch/**
+  - .github/workflows/test-digifetch.yml
 
 digichat:
   - frontend/digichat/**
-  - frontend/design/**
+  # #1941 moved digichat's whole render path into these two packages —
+  # MiniMarkdown delegates to @digithings/web's ChatMarkdown, and the activity
+  # feed renders on its chat primitives. Without them an edit to
+  # ChatMarkdownSource or ChatMermaidBlock changed the embed transcript and
+  # fired no digichat lint, test or build.
+  - frontend/digichat-ui/**
+  - frontend/digiweb/web/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
-  - .github/workflows/digichat-test.yml
+  - .github/workflows/test-digichat.yml
 
 olympus:
   - frontend/olympus/**
-  - frontend/design/**
+  # Olympus is the third consumer of @digithings/web: it declares the dep, imports
+  # chat-core.css, and renders <ChatMarkdown> via SafeMarkdown. Without this, a PR
+  # editing only frontend/digiweb/web/** runs no olympus lint, tests or static-export
+  # check while measurably changing what olympus ships — the `.chat-md h5` selector
+  # added in #1948 lands in olympus's built stylesheet. Not digichat-ui: olympus does
+  # not consume it.
+  - frontend/digiweb/web/**
+  - frontend/digiweb/design/**
   - package.json
   - package-lock.json
-  - .github/workflows/olympus-test.yml
+  - .github/workflows/test-olympus.yml
+
+web:
+  - frontend/digithings-web/**
+  - frontend/digiquant-web/**
+  # digithings-web /chat renders digichat-ui's DigiChatSession and imports its
+  # session.css + cursor.css, so a change there is a change to this app.
+  - frontend/digichat-ui/**
+  - frontend/digiweb/web/**
+  - frontend/digiweb/design/**
+  # The design reference is the canonical surface every other frontend copies patterns
+  # from (.claude/skills/digiweb/SKILL.md routes all web work through it), and until this
+  # entry nothing built, linted or type-checked it: the only `run build` calls in
+  # .github/workflows are test-digichat.yml and test-olympus.yml. ~137 commits in the
+  # month after it was scaffolded (2026-07-06), none of which could fail on a broken
+  # import or a bad type — in the one app whose defects propagate by being copied.
+  #
+  # Be precise about what it did have, because "no coverage" would overstate it:
+  # check_frontend_canon.py scans this workspace for raw palette utilities, legacy
+  # vocabulary and colour literals. Only its CSS class-family census skips digiweb, and
+  # that is deliberate — the reference is where new families are born (CENSUS_APPS in
+  # that script). score.py reaches this directory too; what excludes frontend/** is the
+  # `score` filter below, not the tool. None of those is a lint or a typecheck.
+  #
+  # It rides the `web` lane rather than a lane of its own because test-web.yml already
+  # pays the root `npm ci` that wires the @digithings/design and @digithings/web symlinks
+  # this workspace declares; a separate workflow would duplicate that install to run two
+  # commands.
+  #
+  # Note what this is NOT: neither Cloudflare deploy check watches this *directory*, and
+  # this entry does not change that — neither site builds this app, so firing two
+  # production builds per edit here would be cost with no consumer. This lane runs lint
+  # + tsc, never `next build`. Both checks do watch `frontend/digiweb/reference/package.json`
+  # (#1977, merged 2026-08-07) as an *install* input, since the root `npm install`
+  # resolves all eight manifests before either site compiles. Different claim, and the
+  # two compose: that PR's union guard reads every glob in this file, so this directory
+  # entry independently satisfies it.
+  - frontend/digiweb/reference/**
+  # digichat Containers Worker + Dockerfile (workspace digithings-digichat-cloudflare).
+  # Pages does not build it; vitest/wrangler live in that package. Keep on the web lane
+  # so package.json is never an orphan install-input (#2073 / #2074).
+  - frontend/digichat-cloudflare/**
+  # Profile A stack Containers Worker (workspace digithings-stack-cloudflare).
+  # Same install-input / web-lane cover as digichat-cloudflare above.
+  - frontend/digithings-stack-cloudflare/**
+  - package.json
+  - package-lock.json
+  - .github/workflows/test-web.yml
 
 score:
   - digibase/**
@@ -65,34 +156,62 @@ score:
   - digismith/**
   - digikey/**
   - digivault/**
-  - frontend/**
+  # frontend/** intentionally excluded from scoring (#1310): score.py is a
+  # Python-oriented anti-pattern heuristic that misfires on CSS/JS; gitleaks
+  # still runs on frontend PRs for secrets, and app builds still gate breakage.
   - scripts/**
   - tests/**
   - agents.yml
   - agents/**
-  - .github/workflows/score-pr.yml
+  - .github/workflows/test-score.yml
+  # score.py's only.py restriction applies solely to its pandas/polars-specific
+  # patterns (scan() in scripts/score.py) -- every other pattern, including
+  # Security-dimension checks, scans ALL changed files regardless of extension.
+  # So a config/**-only PR (byok-providers.json, model_modes.yaml, etc.) still has
+  # content the Security >= 8 rubric should see; without this entry it never runs
+  # at all for such a PR (#2361 finding 8 follow-up).
+  - config/**
 
 e2e_contract:
   - tests/test_e2e.py
   - tests/test_e2e_contract.py
   - docker-compose.yml
   - digikey/**
-  - .github/workflows/e2e.yml
+  - .github/workflows/test-e2e.yml
 
+# Mirrors the pytest invocation in test-nautilus.yml — every file that
+# tests/dq/conftest.py collect_ignores without the nautilus extra (#1501).
 nautilus_smoke:
   - digiquant/**
+  - tests/dq/conftest.py
+  - tests/dq/test_api.py
+  - tests/dq/test_audit.py
+  - tests/dq/test_backtest.py
+  - tests/dq/test_calibrations_loader.py
   - tests/dq/test_nautilus_runner.py
-  - .github/workflows/nautilus-smoke.yml
+  - tests/dq/test_pipeline_graph.py
+  - tests/dq/test_strategies.py
+  - tests/dq/test_tearsheet_isolation.py
+  - tests/dq/test_v1_jobs.py
+  - .github/workflows/test-nautilus.yml
 
 atlas_graph:
   - digiquant/src/digiquant/olympus/atlas/**
   - digiquant/scripts/atlas/**
   - digiquant/supabase/**
   - tests/dq/atlas/**
+  # tests/dq/atlas/test_segment_edit_mode.py drives the segment edit path end-to-end, so it is
+  # a guard on edit_mode/ — but edit_mode/ was not listed, and this lane's pytest selector is
+  # `tests/dq/atlas tests/dq/hermes tests/dq/learning`. An edit_mode-only change therefore
+  # skipped the one suite that exercises it in a compiled graph. Content identity now lives in
+  # edit_mode/content_identity.py and is consumed by three atlas modules (#1749).
+  - digiquant/src/digiquant/olympus/edit_mode/**
   - digiquant/src/digiquant/olympus/hermes/**
+  - digiquant/src/digiquant/olympus/learning/**
   - tests/dq/hermes/**
-  - .github/workflows/atlas-graph-ci.yml
-  - .github/workflows/atlas-*.yml
+  - tests/dq/learning/**
+  - .github/workflows/test-atlas-graph.yml
+  - .github/workflows/pipeline-olympus.yml
 
 ruff_and_scripts:
   - digibase/**
@@ -108,6 +227,62 @@ ruff_and_scripts:
   - agents/**
   - .github/workflows/ci.yml
   - scripts/ci_paths.yaml
+  # This job's "Validate model routing (config only)" step runs
+  # scripts/validate_model_routing.py --routing against the REAL
+  # config/model_modes.yaml -- the only CI check that does; tests/dg/test_model_config.py
+  # only exercises synthetic tmp_path fixtures. Without this entry a malformed real
+  # model_modes.yaml (bad mode name, duplicate key, wrong type) merges fully green
+  # (#2361 finding 8 follow-up -- same gap class as the digigraph lane's config/** entry
+  # above, for a different consumer of the same file).
+  - config/**
+  # tests/scripts/test_release_manifest_consistency.py reads these five, and `tests/**`
+  # above only fires when the test itself is edited. Without them the guard is silent on
+  # exactly the commits it exists to catch: both hand-cut digichat releases (d9b4f6fe,
+  # df3999dc) touched only the manifest, CHANGELOG and package.json, and a re-point of
+  # release-please at a dead branch fires actionlint but not this lane.
+  - .release-please-manifest.json
+  - release-please-config.json
+  - frontend/digichat/package.json
+  - package-lock.json
+  - .github/workflows/release-please-digichat.yml
+  # tests/scripts/test_prices_cron_dst.py asserts DST invariants and cron<->`if:`
+  # linkage for this workflow. A cron edit that touches nothing else would
+  # otherwise skip this lane, and the failure it guards (a stale
+  # `github.event.schedule` literal disabling a job) is silent (#1775).
+  - .github/workflows/pipeline-digiquant-prices.yml
+  # tests/scripts/test_db_migrate_ledger_gate.py asserts that the ledger lookup is the ONLY
+  # thing that can skip a migration (#1814 deleted a BASELINE_THROUGH branch that silently
+  # recorded new low-numbered files as applied without running their DDL). Without this entry a
+  # PR editing only db-migrate.yml fires actionlint but NOT that guard — silent on exactly the
+  # edit it exists to catch. Same shape as the prices-cron entry above.
+  - .github/workflows/db-migrate.yml
+  # tests/scripts/test_pipeline_olympus_attempt.py asserts the outer-retry loop exports
+  # OLYMPUS_ATTEMPT, which is the only channel carrying the attempt number into the diagnostics
+  # key (#1762). This file IS listed under atlas_graph, but that lane's selector is
+  # `tests/dq/atlas tests/dq/hermes tests/dq/learning` — it never runs tests/scripts/. Drop the
+  # export and every attempt collides on (run_id, 1) again with no error anywhere; the only
+  # symptom is a cost figure that is quietly a floor.
+  - .github/workflows/pipeline-olympus.yml
+  # tests/scripts/test_check_deploy_freshness.py pins both deploy checks' own `paths:` filters —
+  # that each lists the build script's callees, not just the build script. Same shape as the
+  # three entries above: a PR deleting one of those globs touches only .github/workflows/, which
+  # matches the `workflows` (actionlint) filter and nothing else, so the guard against that
+  # deletion would never run on the deletion. actionlint does not read trigger filters for
+  # coverage, and the failure is silent by construction — the check simply stops firing.
+  - .github/workflows/deploy-digithings-cloudflare.yml
+  - .github/workflows/deploy-digiquant-cloudflare.yml
+
+# Repo-wide actionlint. Deliberately the whole directory: before this filter the
+# only actionlint in CI was a job inside test-atlas-graph.yml pinned to
+# `files: .github/workflows/pipeline-olympus.yml`, reached only through the
+# atlas_graph lane — so a PR editing smoke-site.yml, a deploy workflow, or ci.yml
+# itself was never workflow-linted at all (observed on #1818, where atlas_graph
+# reported "skipping" over a diff of pure workflow YAML).
+# .github/actionlint.yaml is listed because it holds the suppression rules: a
+# change that widens or narrows them has to re-run the lint it governs.
+workflows:
+  - .github/workflows/**
+  - .github/actionlint.yaml
 
 compose:
   - docker-compose.yml
@@ -118,4 +293,4 @@ compose:
 pip_audit:
   - "**/pyproject.toml"
   - pip-audit-ignore.txt
-  - .github/workflows/pip-audit.yml
+  - .github/workflows/security-pip-audit.yml

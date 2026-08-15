@@ -1,8 +1,8 @@
 # digiquant-atlas — System Architecture
 
-> **Last updated**: 2026-04-26  
-> **Pipeline version**: v3 — 9-phase orchestrator with three-tier cadence  
-> **Canonical doc:** this file is the single long-form architecture narrative; [`docs/ARCHITECTURE-REVIEW.md`](../ARCHITECTURE-REVIEW.md) redirects here.
+> **Last updated**: 2026-06-20  
+> **Pipeline version**: v4 — daily Olympus graph (Atlas A0–A4 → Hermes H1–H9) with edit-mode continuity  
+> **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13–§14
 
 ---
 
@@ -12,9 +12,10 @@
 |------|-----|
 | **Cowork schedules (how the repo is run day-to-day)** | [`cowork/tasks/README.md`](../cowork/tasks/README.md), [`cowork/PROJECT.md`](../cowork/PROJECT.md) |
 | Operator commands and validation | [`RUNBOOK.md`](../../RUNBOOK.md) |
-| Baseline / delta / recovery procedures | [`WORKFLOWS.md`](WORKFLOWS.md) |
+| Daily cadence + refresh_scope | [`WORKFLOWS.md`](WORKFLOWS.md) |
 | Skill index (filesystem source of truth) | [`SKILLS-CATALOG.md`](SKILLS-CATALOG.md) |
 | IDE / Copilot / Cursor setup | [`PLATFORMS.md`](PLATFORMS.md) |
+| Hermes H1–H9 topology | [`hermes/docs/ARCHITECTURE.md`](../../../hermes/docs/ARCHITECTURE.md) |
 | Dated health / score snapshot | [`../SYSTEM-SCORECARD.md`](../SYSTEM-SCORECARD.md) |
 
 ---
@@ -25,61 +26,70 @@
 
 | Track | What | Task entry points |
 |-------|------|-------------------|
-| **Research (Track A)** | Weekly baseline, weekday delta, month-end synthesis — publish **`digest`** and segment research to Supabase | [`research-weekly-baseline.md`](../cowork/tasks/research-weekly-baseline.md), [`research-daily-delta.md`](../cowork/tasks/research-daily-delta.md), [`research-monthly-synthesis.md`](../cowork/tasks/research-monthly-synthesis.md), or [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md) |
-| **Portfolio (Track B)** | After research exists: thesis → vehicle map → PM / **`rebalance_decision`** | [`portfolio-pm-rebalance.md`](../cowork/tasks/portfolio-pm-rebalance.md), optional [`research-document-deltas.md`](../cowork/tasks/research-document-deltas.md) |
-| **Review & improvement** | **`pipeline_review`** → optional GitHub Issues; Phase 9 evolution artifacts per orchestrator | [`post-mortem-research-github.md`](../cowork/tasks/post-mortem-research-github.md), [`post-mortem-portfolio-github.md`](../cowork/tasks/post-mortem-portfolio-github.md) |
+| **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.olympus.hermes.chain --cadence daily` |
+| **Portfolio (Track B)** | Thesis-first Hermes H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
+| **Review & improvement** | `preflight_reflect` on due `decision_log` rows; beliefs on-demand | `--refresh-scope beliefs` |
 
-**Supporting (not the core cadence)** — still valid: deep dives, backfills, dashboard UX notes, manual runs, operator scripts. They do not replace the Track A → Track B → validate loop above.
+**Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
+synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per artifact ([#930](https://github.com/digithings-ai/digithings/issues/930)).
 
-The **9-phase tables** below are a **reference map** of how segment skills fit together. **Authoritative step order and publish rules** are the **Cowork task** you attached + [`RUNBOOK.md`](../../RUNBOOK.md) + `python -m digiquant.olympus.hermes.chain`.
+The **9-phase tables** below are a **reference map** of segment skills. **Authoritative runtime
+order** is the LangGraph pipeline: A0 preflight → A1 triage → A2 segments → A3 consolidate →
+A4 digest → Hermes H1–H9.
 
 ---
 
 ## Overview
 
-digiquant-atlas is an AI-orchestrated daily market intelligence system. Agents load config and prior context from **Supabase**, follow **`skills/<slug>/SKILL.md`** packages, and publish structured JSON to **`daily_snapshots`** and **`documents`** (optional local scratch under `data/` is gitignored).
+digiquant-atlas is an AI-orchestrated daily market intelligence system. Agents load config and
+prior context from **Supabase**, follow **`skills/<slug>/SKILL.md`** packages (or `*-edit.md`
+when `resolve_edit_mode` returns `edit`), and publish structured JSON to **`daily_snapshots`**
+and **`documents`**.
 
-The system operates on a **three-tier cadence**:
+### Daily cadence (current)
 
-| Tier | Day | Run Mode | Token Cost |
-|------|-----|----------|------------|
-| **Weekly Baseline** | Sunday | Full 9-phase run — all outputs from scratch | 100% |
-| **Daily Delta** | Mon–Sat | Lightweight delta — only segments with material changes | ~25–30% |
-| **Monthly Synthesis** | Month-end | Cross-week review + cumulative regime shifts | ~45% |
+| Control | Behavior |
+|---------|----------|
+| **Cron** | `.github/workflows/pipeline-olympus.yml` — `0 12 * * *` UTC daily |
+| **Sunday** | `refresh_scope=all` (operator full refresh) |
+| **Weekdays** | `refresh_scope=none` — continuity via `skip`/`edit`/`full` per artifact |
+| **CLI** | `python -m digiquant.olympus.hermes.chain --cadence daily [--refresh-scope …]` |
+| **Cost** | `OLYMPUS_MODEL_TIER` (`cheap` \| `balanced` \| `quality`) — not graph forks |
 
-**Token savings**: ~70–75% on typical weekday runs vs a full daily baseline.
-
-**Canonical skill paths** in the phase tables use **`skills/<slug>/SKILL.md`** only (one folder per slug under `skills/`).
+Quiet-day savings: triage `skip` (0 LLM) + `edit` (`DocumentPatch`) — not a separate delta graph.
 
 ---
 
-## Three-Tier Cadence
+## Atlas → Hermes handoff
 
-### Sunday — Weekly Baseline
+Atlas terminates at `phase7_synthesis` (`DigestPayload`). Hermes reads only `DigestPayload`
+from Atlas runtime ([ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md)).
 
-The full pipeline. Every segment is re-analyzed from scratch. The baseline becomes the week's analytical anchor. All segment payloads publish to Supabase `documents` / `daily_snapshots` per RUNBOOK.
+Retrieval tools (Hermes grounding): `query_research`, `query_data`, `query_portfolio` with
+phase-scoped blinding (spec §6.1).
 
-Entry point: `python -m digiquant.olympus.hermes.chain --run-type baseline`
+---
 
-### Mon–Sat — Daily Delta
+## Three-Tier Cadence (historical — superseded 2026-06-20)
 
-The delta run (`python -m digiquant.olympus.hermes.chain --run-type delta`) loads the week's baseline and any prior deltas, then runs a triage protocol:
+> **Superseded.** The three-tier baseline/delta/monthly model is replaced by one daily graph
+> and per-artifact edit mode. The section below is retained for operator context on legacy
+> Cowork task names and token-savings rationale.
 
-| Priority | Segments | Threshold to Trigger Delta |
-|----------|----------|---------------------------|
-| **Mandatory** | `macro`, `us-equities`, `crypto` | Always — these move every day |
-| **High** | `bonds`, `commodities`, `forex` | Yield/price moved >0.5% OR new CB signal |
-| **Standard** | `international`, `institutional` | Major regional event OR notable flow shift |
-| **Low** | `alt-data` sub-segments, all 11 sectors | Bias shifted OR tracked name moved >1.5% |
+### Sunday — Weekly Baseline (historical entry point)
 
-Output: JSON segment deltas for changed segments + a fully materialized digest snapshot in Supabase (`daily_snapshots` and digest `documents` row).
+Entry point was: `python -m digiquant.olympus.hermes.chain --run-type baseline`  
+**Current:** `--cadence daily --refresh-scope all` (Sunday cron sets `all` automatically).
 
-### Month-End — Monthly Synthesis
+### Mon–Sat — Daily Delta (historical)
 
-Entry point: [`skills/monthly-synthesis/SKILL.md`](../../skills/monthly-synthesis/SKILL.md)  
-Script: [`scripts/monthly-rollup.sh`](../../scripts/monthly-rollup.sh)
+Entry point was: `python -m digiquant.olympus.hermes.chain --run-type delta`  
+**Current:** `--cadence daily` with triage + `resolve_edit_mode` per segment.
 
-Collects weekly baselines + daily deltas into month-end synthesis (published to Supabase per RUNBOOK).
+### Month-End — Monthly Synthesis (removed)
+
+**Not in v1.** Month-over-month views are UI aggregation over stored daily artifacts.
+Do not schedule `monthly` runs or `phase_monthly` on the daily chain.
 
 ---
 
@@ -87,7 +97,7 @@ Collects weekly baselines + daily deltas into month-end synthesis (published to 
 
 Before any phase executes, the agent performs a structured context load:
 
-1. **Confirm run type** (`baseline` or `delta`) and baseline date — from `skills/weekly-baseline` / `skills/daily-delta`, `python3 scripts/run_db_first.py --dry-run`, or optional `data/agent-cache/daily/{{DATE}}/_meta.json` if your environment writes it
+1. **Confirm cadence** — `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday: `refresh_scope=all` via cron or `--refresh-scope all`)
 2. **Load config** — `config/watchlist.md`, `config/preferences.md`
 3. **Load prior context from Supabase** — query `daily_snapshots` and `documents` for recent dates
 4. **Load yesterday's snapshot from Supabase** — establishes continuity baseline for today's changes
@@ -142,6 +152,17 @@ Supabase: institutional segment payloads → `documents`.
 **What each sub-agent covers:**
 - **2A Flows**: ETF inflows/outflows by asset class and sector, dark pool unusual activity, 13D/13G/Form 4 filings, options-implied institutional positioning
 - **2B Hedge Fund Intel**: Latest signals from 16 tracked funds (CIK list in `config/hedge-funds.md`), reported via 13F, X posts, conference calls
+
+**Delta circuit-breaker (#928):** both 2A/2B run live web search + an LLM. Pre-flight
+probes `documents` (`query_institutional_absence_streak`) for consecutive recent runs that
+published **no** `inst-*` document and records the count on
+`DataLayerSnapshot.institutional_absence_streak` (`institutional_data_available` is the
+boolean flag). On a **delta** run, once that streak reaches
+`phase2_institutional.ABSENCE_BREAKER_THRESHOLD` (3), Phase 2 skips the paid `inst-*`
+LLM/search nodes and writes a deterministic `data_quality="absent"` stub (zero search spend)
+carrying a `circuit_breaker` marker; publish suppresses the empty stub and diagnostics records
+the skip + reason under `breakdown.phase2_outputs.circuit_breaker_skips`. **Baseline always
+runs Phase 2 fully** — a baseline re-probes the layer rather than inheriting a stale absence.
 
 ---
 
@@ -242,22 +263,32 @@ SECTOR SCORECARD — {{DATE}}
 
 ### Phase 7 — Master Synthesis (digest snapshot)
 
-> Synthesis, not regurgitation. Pull the most important signals across all phases
-> into a coherent, actionable brief.
+> Research-only synthesis. Pull the most important signals across all phases
+> into a coherent research brief. **No portfolio positioning** — that is Hermes's
+> domain (phases 7C–7E). See [ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
 **Canonical output:** digest snapshot JSON validated against `templates/digest-snapshot-schema.json`. Inside the LangGraph pipeline the terminal `phases/publish_phase.py` writes the digest into Supabase `daily_snapshots` and `documents` in one transaction (replacing the legacy `scripts/materialize_snapshot.py` + `scripts/publish_document.py` step). Markdown render is **derived** from JSON.
 
 **Required narrative coverage** (map into snapshot JSON fields / sections the schema defines):
-1. **Market Regime Snapshot** — single dominant force today
+1. **Market Regime Snapshot** — single dominant force today; cross-asset research themes (not positioning)
 2. **Alternative Data Dashboard** — sentiment + CTA + options + politician synthesis; lead with any contrarian signal
 3. **Institutional Intelligence Summary** — ETF flow direction, notable HF signal, any 13D/13G filing
 4. **Macro** — full regime read (from published macro segment)
 5. **Asset Classes** — bonds, commodities, forex, crypto, international
 6. **US Equities** — overview + full sector scorecard (11 sectors, OW/UW/N + key driver each)
-7. **Thesis Tracker** — per active thesis: ✅ Confirmed / ⚠️ Conflicted / ❌ Challenged / ⏳ No signal; flag approaching invalidation triggers
-8. **Portfolio Positioning Recommendations** — explicit Trim/Add/Hold/Exit with rationale and conviction scale
-9. **Actionable Summary** — top 5 items ranked by priority
-10. **Risk Radar** — what could break the current bias in 24–72 hours
+7. **Research Watchlist** (`actionable_summary`) — 3–5 evidence-based items to monitor; no trade verbs
+8. **Risk Radar** — what could break the current bias in 24–72 hours
+
+**Deprecated / always empty on new runs** (kept in schema for backward compat with historical rows):
+- `thesis_tracker` — Hermes PM + reflection own thesis lifecycle
+- `portfolio_recommendations` — Hermes phases 7D–7E own allocation
+
+**Context budget ([#1559](https://github.com/digithings-ai/digithings/issues/1559)).** Phase 7 aggregates every fresh phase-1..5 segment body plus prior context, and two inputs scale with the segment roster. On full ~27-segment baseline days they blew past the smallest routed reasoning-tier model's **64k** context (`BadRequestError 400 … requested ~90690`), after which graceful degradation carried the prior digest forward — publishing a byte-identical `daily_snapshots` row daily while telemetry read "ok". The fix (`phases/phase7_synthesis.py`) bounds **both** movers:
+
+- **PHASE_INPUTS** — a run-wide char budget (`_DIGEST_SEGMENT_INPUTS_BUDGET_CHARS = (64000 − 24000 reserve) × 3 chars/tok = 120 000 chars`) split across the *actual* fresh-segment count (`_per_segment_char_budget`), so the aggregate stays bounded as the roster grows. Within each segment `_slim_segment_body` greedily fills the decision-relevant fields (identity + stance → findings → sources → notes) up to that allowance and drops verbose extension prose; a full 34-segment day assembles to ~30k tokens.
+- **SHARED_CONTEXT** — `latest_segments` is filtered to the digest keys (`digest`, `digest-delta`) and the retained prior-digest payloads are trimmed (`_slim_prior_digest_payload`). The unfiltered prior per-segment carry was the dominant driver (~145k → ~0.4k tokens on a verbose baseline); it was redundant since carry/edit read the prior digest via `_DigestPriorLoader` directly.
+
+**Failure visibility.** When master-digest synthesis fails and carries the prior forward, the carried payload is stamped with `carried_from` (ISO source date) + a human `continuity` note (JSONB, no migration), and `diagnostics.summarize_run` escalates the run to **degraded** with the failure leading `error_summary` and a first-class `breakdown["master_digest_failed"]` key — so a stale carry is never reported as `ok`. (With the budget fix the overflow won't recur; the escalation is a safety net for any future digest failure.)
 
 ---
 
@@ -556,52 +587,58 @@ Skills are packaged as **`skills/<slug>/SKILL.md`**; use [`SKILLS-CATALOG.md`](S
 
 ---
 
-## LLM Routing — Three-Tier Provider Model
+## LLM Routing — OpenRouter capability tiers
 
-*Introduced 2026-04. Rationale and token budget: [`docs/atlas/token-budget.md`](../../../../docs/atlas/token-budget.md). Design decision: [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing).*
+*Current since Jun 2026 (#859, #980, #998): every phase LLM call routes through **OpenRouter** via capability pools in [`config/olympus_models.yaml`](../../../../../../config/olympus_models.yaml), selected by `OLYMPUS_MODEL_TIER` (`cheap` default / `balanced` / `quality`). This superseded the 2026-04 three-tier free-provider model (Groq / Ollama / Gemini — [DESIGN-DECISIONS.md ADR-016](../DESIGN-DECISIONS.md#adr-016-three-tier-llm-provider-routing), retained as history). Operator knobs and cost levers: [RUNBOOK.md "OpenRouter model tiers"](../RUNBOOK.md#openrouter-model-tiers-configolympus_modelsyaml). Historical per-phase budgets: [`docs/atlas/token-budget.md`](../../../../../../docs/atlas/token-budget.md).*
 
-The pipeline uses three free-tier providers, each matched to the complexity of the phases it serves. The default configuration is **fully free**; paid users can override any model via config.
+The default `cheap` tier is **open-weight models only** — frontier models (`openai/*`, `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series) are rejected at runtime (`digigraph.model_config.is_flagship_openrouter_model`), a guard added after a bare-Auto-Router delta run landed on GPT-5.5 and cost $11.95.
 
-### Provider assignment (default free-tier)
+### Capability pools (default `cheap` tier)
 
-| Tier | Provider | Model | Phases | Rationale |
-|------|----------|-------|--------|-----------|
-| **Extraction** | Groq | `llama-3.1-8b-instant` | 1, 2, 7C | Fast, high concurrency, 20k TPM free — ideal for parallel structured extraction fan-outs |
-| **Analysis** | Ollama Cloud | `qwen3.5:cloud` (via `DIGI_LLM_MODE`) | 3, 4, 5 | 397B MoE, 256K context, deep multi-factor reasoning for sequential analysis phases |
-| **Synthesis** | Gemini | `gemini-2.5-flash` | 7, 7D, 9 | 1M TPM free, best multi-document reasoning for high-stakes synthesis |
+Each phase slug maps to a **capability** (`phase_capabilities` / `phase_capability_prefixes` in `olympus_models.yaml`); the model is a **stable-hash pick over that capability's pool** (deterministic per slug — no per-run randomness).
 
-Estimated **~113k tokens/run** spread across three independent free tiers (vs ~674k on a single Ollama provider). Per-provider peak load stays within each provider's free-tier TPM window.
+| Capability | Pool (cheap tier) | Example phases |
+|------------|-------------------|----------------|
+| **extraction** | `deepseek/deepseek-v4-flash`, `meta-llama/llama-4-maverick` | `alt-*`, `inst-*`, 7C per-ticker analysts |
+| **research** | `deepseek/deepseek-v4-flash`, `meta-llama/llama-4-maverick` | `macro`, `bonds`, `sector-*`, 7D debate, `phase9-evolution` |
+| **reasoning** | `deepseek/deepseek-v4-flash` | `master-digest` (Phase 7), `pm-rebalance`, `monthly-digest` |
+| **web search** (grounding pre-pass only) | `perplexity/sonar`, `deepseek-v4-flash:online`, `llama-4-maverick:online` | live-search grounding; never phase/tool calls |
+
+Pools rebalanced in #2368 (2026-08-14, grok-4.6 added 2026-08-15; see #1622 for the prior 2026 open-weight refresh) to prefer the latest generation slug per vendor where cost allows — `deepseek-v4-flash` on cheap; `grok-4.3` (untouched by #2368; `grok-4.6` is the current xAI flagship but reserved for quality), `gpt-5.6-luna`, `gemini-3.7-flash`, and `deepseek-v4-pro` on balanced; `grok-4.6`/`gpt-5.6-sol`/`claude-sonnet-5`/`deepseek-v4-pro` on quality. `deepseek-chat` is retired from every Olympus pool — within Olympus every reference now resolves to `deepseek-v4-flash` (other digithings products pin it independently and are out of scope here). `deepseek-r1` was removed from every phase pool — its chain-of-thought output is not reliably strict JSON (the 2026-07-18 digest `JSONDecodeError`) — and `llama-4-maverick` from the reasoning pools (empty completions under strict `json_schema`, #1006). `z-ai/glm-5` was evaluated and rejected: its endpoint-gate record over four runs was pass/fail/pass/fail (empty bodies under strict `json_schema` even with a retry — the same #1006 class). Every pooled slug is **endpoint-verified** (function tools + strict `json_schema` + context floor) by `scripts/validate_olympus_pools.py`, which CI runs on any PR touching the routing configs (`validate-olympus-pools.yml`).
+
+> **Synthesis context (#1559, #1622).** `master-digest` is pinned via `phase_models` to `openrouter/deepseek/deepseek-v4-flash` (1M-token context), which removes the 64k context ceiling that broke synthesis daily 2026-07-08 → 07-17 (the 2025-era pool models' structured-output endpoints cap at 64,000 tokens against ~70–91k digest inputs). The #1559 input budget (`_slim_segment_body`, ≤64k target) is retained as a **cost bound** — prompt tokens are billed even when they fit. (Diagnostics note: the run-level `model` column in `atlas_run_diagnostics` is the first *served* model of the whole run, not the digest model — a failed digest call records no usage, so its model never appears there.)
+
+### Observed token volume
+
+From `atlas_run_diagnostics` (runs since 2026-06-15): **delta ≈ 1.3M total tokens/run** (~73 LLM calls, ≈ $0.43) and **baseline ≈ 340k** (~33 calls, ≈ $0.13). The old "~113k tokens/run" figure was the 2026-04 free-tier estimate and predates the Hermes fan-outs and web-grounding pre-passes.
 
 ### How routing works
 
-Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `analyst-AAPL`, `master-digest`) to `run_research_agent`. The agent resolves the model in this priority order:
+Every phase node passes a `phase_slug` (e.g. `alt-sentiment-news`, `master-digest`, `hermes/portfolio/deliberation-NVDA`) to `run_research_agent`. The model resolves in this priority order (`digigraph/src/digigraph/model_config.py`):
 
 ```
 1. Explicit model= kwarg  (test overrides, never set in production)
-2. get_model_for_phase(phase_slug)  →  looks up phase_models in config/model_modes.yaml
-3. get_model_for_mode()  →  DIGI_LLM_MODE tier (Ollama default)
+2. config/model_modes.yaml phase_models  →  explicit per-phase pin (escape hatch;
+   frontier models are rejected on cheap/balanced tiers)
+3. config/olympus_models.yaml  →  capability(phase_slug) × OLYMPUS_MODEL_TIER pool,
+   stable-hash pick
+4. get_model_for_mode()  →  legacy DIGI_LLM_MODE defaults; in an OpenRouter deploy a
+   non-OpenRouter fallback is redirected to the active tier's reasoning pool
 ```
 
-`config/model_modes.yaml` is the single configuration source for both tier defaults and per-phase overrides:
+`config/olympus_models.yaml` owns routing; `config/model_modes.yaml` `phase_models` is empty except for deliberate pins. The live pins (#1006, #1559, #1622):
 
 ```yaml
-# Per-phase overrides (provider/model format for Groq and Gemini)
 phase_models:
-  alt-sentiment-news: "groq/llama-3.1-8b-instant"
-  "analyst-":         "groq/llama-3.1-8b-instant"   # prefix match: analyst-AAPL, analyst-NVDA, …
-  master-digest:      "gemini/gemini-2.5-flash"
-  pm-rebalance:       "gemini/gemini-2.5-flash"
-  phase9-evolution:   "gemini/gemini-2.5-flash"
-  # Phases 3, 4, 5 have no entry → fall through to Ollama via DIGI_LLM_MODE
-
-# Ollama tier defaults (used when no phase_models entry exists)
-defaults:
-  test:   ollama-cloud/rnj-1:cloud
-  medium: ollama-cloud/qwen3-next:80b-cloud
-  best:   ollama-cloud/deepseek-v4-flash:cloud
+  # H6 deliberation emits strict JSON; llama-4-maverick returned empty completions under
+  # STRICT json_schema, so the per-ticker slugs are pinned to the json/tool-reliable model.
+  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-v4-flash   # trailing '-' = prefix match
+  # Pinned (not pool-hashed) so digest routing stays deterministic; v4-flash's 1M context
+  # removes the #1559 64k synthesis ceiling (#1622).
+  master-digest: openrouter/deepseek/deepseek-v4-flash
 ```
 
-Model strings with a `provider/` prefix (`groq/`, `gemini/`) are routed to the corresponding external OpenAI-compatible client in `digigraph/src/digigraph/llm.py`. All other strings go through the existing Ollama Cloud path.
+Model strings with a registered `provider/` prefix (`openrouter/`, `gemini/`, `xai/`) route to the corresponding OpenAI-compatible client via digillm's provider registry (`digillm/src/digillm/client.py`); all other strings go through the legacy Ollama path.
 
 ### Fan-out cap (`ATLAS_MAX_ANALYSTS`)
 
@@ -610,9 +647,14 @@ Phase 7C spawns one LLM node per ticker in the watchlist (up to 98). The `ATLAS_
 | Value | Behaviour |
 |-------|-----------|
 | `0` (default) | No cap — full watchlist |
-| `25` (CI default) | Capped at 25 tickers; logged at INFO level |
+| `30` (CI default) | Capped at 30 tickers; logged at INFO level |
 
-This keeps Phase 7C within Groq's free-tier concurrency limits during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
+On the live thesis-first path the cap is applied once, in H4 (`roster_cap.capped_tickers`),
+and since #1767 it is actually enforced — the prior book is the only sanctioned overshoot
+and thesis vehicles are prioritised within it. See
+`hermes/docs/ARCHITECTURE.md` § "Roster cap enforcement (#1767)".
+
+This bounds the per-run OpenRouter call volume (and spend) during scheduled CI runs. Production / local runs can set `ATLAS_MAX_ANALYSTS=0` to use the full watchlist.
 
 **Watchlist resolution (#694):** when the CLI is invoked without `--watchlist`
 (every scheduled workflow), `resolve_cli_inputs` falls back to
@@ -626,45 +668,43 @@ bound spend.
 
 ### Fallback behaviour
 
-If a provider key is not configured (`GROQ_API_KEY` or `GEMINI_API_KEY` unset), `chat_completion` logs a warning and falls back to the Ollama client for that call. The pipeline completes with degraded quality on those phases but never hard-fails due to a missing key.
+If a provider-prefixed model's key is not configured (e.g. `OPENROUTER_API_KEY` unset), `resolve_request_model` logs a warning and falls back to the Ollama mode model for that call — the pipeline completes with degraded quality but never hard-fails on a missing key. Empty completions self-heal with a retry (the first retry adds OpenRouter provider-fallback routing); see [RUNBOOK.md "OpenRouter empty completions"](../RUNBOOK.md#openrouter-empty-completions-degraded-book-empty-completion-from--in-logs) for the operator checklist.
 
 ### Overriding models (user configuration)
 
-Any phase model can be overridden by editing `config/model_modes.yaml`. The `phase_models` block accepts any OpenAI-compatible model string:
+Pin a phase via the `phase_models` block in `config/model_modes.yaml` (exact slug, or trailing-`-` prefix match). Pins are subject to tier policy — frontier models are rejected on `cheap`/`balanced` and fall back to `olympus_models.yaml`:
 
 ```yaml
 phase_models:
-  master-digest: "groq/llama-3.3-70b-versatile"     # swap synthesis to Groq
-  macro:         "gemini/gemini-2.5-pro"             # use Pro model for macro
-  "analyst-":    "cerebras/llama-3.3-70b"            # switch extraction tier to Cerebras
+  master-digest: "openrouter/deepseek/deepseek-v4-flash"   # pin synthesis to one pool model
+  "sector-":     "openrouter/mistralai/mistral-large"  # prefix match: sector-tech, sector-energy, …
 ```
 
-To add a new provider, register it in `_EXTERNAL_PROVIDERS` in `digigraph/src/digigraph/llm.py` (three lines: base URL, API key env var name). All existing retry, caching, and fallback logic applies automatically.
+Tier-wide changes belong in `config/olympus_models.yaml` (capability pools per tier). To add a new provider, call `digillm.register_provider(prefix, base_url, api_key_env)` or extend `_EXTERNAL_PROVIDERS` in `digillm/src/digillm/client.py`; retry, caching, and fallback logic applies automatically.
 
 ### Required secrets / env vars
 
-| Variable | Provider | Where set |
-|----------|----------|-----------|
-| `OPENAI_API_KEY` | Ollama Cloud | GitHub secret `OLLAMA_API_KEY` mapped in CI |
-| `GROQ_API_KEY` | Groq | GitHub secret + local `.env` |
-| `GEMINI_API_KEY` | Gemini | GitHub secret + local `.env` |
-| `ATLAS_MAX_ANALYSTS` | (cap) | CI workflow env: `"25"` |
-| `DIGI_LLM_MODE` | Ollama tier | CI: `best` (baseline), `medium` (delta) |
+| Variable | Purpose | Where set |
+|----------|---------|-----------|
+| `OPENROUTER_API_KEY` | All phase LLM calls + web grounding | GitHub secret + local `.env` |
+| `OLYMPUS_MODEL_TIER` | Tier select (`cheap` default / `balanced` / `quality`) | Optional; workflow env or shell |
+| `ATLAS_MAX_ANALYSTS` | H4/H5/H6 roster fan-out cap (#1767) | CI workflow env: `"30"` |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Publishing + diagnostics | GitHub secret + local `.env` |
 
-Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test all three providers.
+`OPENROUTER_ALLOWED_MODELS` and `OPENROUTER_COST_QUALITY_TRADEOFF` are **not** set by hand — `apply_olympus_openrouter_env()` derives them from the active tier at chain startup. Run `python3 scripts/validate-provider-keys.py` after adding keys to `.env` to smoke-test the configured providers.
 
 ---
 
-## DigiGraph Sub-graph Orchestration (issue #176, ADR-0009)
+## digigraph Sub-graph Orchestration (issue #176, ADR-0009)
 
-The 9-phase pipeline described above is now orchestrated by a DigiGraph
+The 9-phase pipeline described above is now orchestrated by a digigraph
 sub-graph in `digiquant/src/digiquant/olympus/atlas/`. Skill files in
 `skills/<slug>/SKILL.md` remain the authoritative "what to research"
 instructions — they are injected into a generic research agent at runtime
 rather than ported as prompt code.
 
 Entry point: `digiquant_atlas.graph.build_atlas_graph` plus `AtlasInput`.
-DigiClaw (issue #219) invokes this on a cron schedule.
+digiclaw (issue #219) invokes this on a cron schedule.
 
 **What changed operationally:**
 
@@ -686,17 +726,46 @@ now flows through the sub-graph.
 
 ## Hermes sub-graph (portfolio deliberation)
 
-The portfolio side of the pipeline — thesis review, vehicle mapping,
-opportunity screening, blinded per-ticker analysis, analyst↔PM
-deliberation, and the allocation memo — is orchestrated by the
-**Hermes sub-graph**. Hermes consumes `state.phase6_bias_row` from the
-Atlas research sub-graph and produces `state.phase_hermes.pm_allocation_memo`,
-which `phase7d_rebalance` then deterministically turns into the
-`RebalanceDecision`.
+Hermes owns **positioning** — thesis lifecycle, vehicle mapping, analyst
+deliberation, PM allocation, risk sizing, and book materialization. Atlas's
+Phase 7 digest is **research-only** (no `thesis_tracker`, no
+`portfolio_recommendations` on new runs). See
+[ADR-0015](../../../../../../docs/adr/0015-atlas-vs-hermes.md).
 
-Full spec: [`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) (topology diagram in §1.2,
-persistence mapping in §5). Wave 2 implementation units:
-[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md).
+### Boundary diagram
+
+```mermaid
+flowchart LR
+  subgraph Atlas["Atlas"]
+    A7["phase7_synthesis<br/>(research digest)"]
+  end
+  subgraph Hermes["Hermes"]
+    H["h1–h4 thesis pipeline<br/>(planned, not wired)"]
+    C["phase7c analysts"]
+    D["phase7d PM"]
+    E["phase7e sizing + materialize"]
+    H -.-> C --> D --> E
+  end
+  A7 -->|"DigestPayload"| H
+  A7 --> C
+```
+
+### Live vs intended entry
+
+| Stage | Intended (thesis-first) | Live today |
+|-------|-------------------------|------------|
+| Research handoff | `phase7_digest` + phases 1–6 segment slots | Same |
+| Thesis translation | h2 `market-thesis-exploration` → h3 `thesis-vehicle-map` | **Skipped** — Wave 2 skills deleted, not in graph |
+| Analyst roster | Tickers from thesis vehicle map + held names | `select_focus_tickers`: `prior_book` holdings + top-N `price_technicals` scores (#696) |
+| Thesis rows | Written when theses are proposed/mapped (h1–h3) | Written post-PM in `portfolio_materialize._upsert_theses` (one row per held ticker) |
+| Analyst linkage | Per-ticker analysis tied to `source_thesis_ids` | `AnalystPayload.thesis` is per-axis rationale text only — no thesis_id FK |
+
+The **live** Hermes graph is documented in
+[`hermes/docs/README.md`](../../hermes/docs/README.md). The **planned** seven-phase
+expansion (h1 thesis review through h7 PM memo) remains in
+[`HERMES_SUBGRAPH.md`](../../hermes/HERMES_SUBGRAPH.md) and
+[`WAVE2_UNIT_SPECS.md`](../../hermes/WAVE2_UNIT_SPECS.md) for reference; wiring h1–h4
+is a separate follow-up ([#924](https://github.com/digithings-ai/digithings/issues/924)) from book-continuity work (#859).
 
 Persistence lands in both `documents` (full payload) and the first-class
 tables introduced by migration 024: `theses`, `thesis_vehicles`,

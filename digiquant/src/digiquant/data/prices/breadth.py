@@ -14,7 +14,9 @@ fixture and no Supabase fake. The reader that fetches the window lives in
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: heterogeneous signal-dict values
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: heterogeneous signal-dict values
+)
 
 import polars as pl
 

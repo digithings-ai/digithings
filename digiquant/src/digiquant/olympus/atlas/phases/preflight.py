@@ -10,10 +10,14 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Callable  # noqa: F401 — used for heterogeneous node-update dict shape
+from typing import (  # score:allow untyped any — used for heterogeneous node-update dict shape
+    Any,
+    Callable,
+)
 
 import yaml
 
+from digiquant.data.onchain.hyperdash import get_onchain_cohort_positioning
 from digiquant.olympus.atlas.data.queries import get_fed_rate_probabilities, get_market_context
 from digiquant.olympus.atlas.decision_log import (
     ReflectorOutput,
@@ -29,15 +33,30 @@ from digiquant.olympus.atlas.state import (
 )
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
+    load_active_theses_rows,
+    load_portfolio_performance_snapshot,
+    load_prior_analyst_summaries,
+    load_prior_book,
     load_prior_context,
+    load_prior_deliberation_summaries,
+    prior_book_current_weights,
+    query_institutional_absence_streak,
     query_macro_series_freshness,
+    query_price_deltas,
     query_price_technicals_freshness,
+    upsert_onchain_cohort_positioning,
 )
+from digiquant.olympus.hermes.candidates import holdings_from_prior_book
+from digiquant.olympus.hermes.turnover import mark_to_market_weights
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
 
 logger = logging.getLogger(__name__)
+
+
+def _is_cash_ticker(ticker: str) -> bool:
+    return str(ticker).strip().upper() == "CASH"
 
 
 @dataclass(frozen=True)
@@ -49,6 +68,10 @@ class PreflightDeps:
     # Staleness threshold for price_technicals: if the latest date is older
     # than run_date - this many days, we flag a fallback in DataLayerSnapshot.
     price_staleness_days: int = 3
+    # Day window for the institutional-absence probe feeding the Phase 2
+    # circuit-breaker (#928). 30 days covers a baseline + a month of deltas
+    # with slack; matches the documents-read window in ``load_prior_context``.
+    institutional_absence_lookback_days: int = 30
 
 
 # Broad-market ETFs (+ BTC/ETH) always present in the injected market context.
@@ -119,7 +142,7 @@ def _refresh_stale_technicals(
             client=deps.client, tickers=tickers, as_of=run_date
         )
         return result.rows_upserted > 0
-    except Exception as exc:  # noqa: BLE001 — refresh is best-effort; never block preflight
+    except Exception as exc:  # refresh is best-effort; never block preflight
         logger.warning(
             "preflight: on-demand technicals refresh failed (%s); using stale data",
             exc,
@@ -177,12 +200,84 @@ def _data_layer_snapshot(
     if fed_odds is not None:
         market_context["fed_odds"] = fed_odds
 
+    # On-chain cohort positioning (smart-money vs rekt divergence) from Hyperdash (#801). The
+    # compact summary is injected into market_context so the alt-onchain-positioning segment + the
+    # phase6 bias row can read it (mirrors fed_odds); the per-market frame is persisted for
+    # backtest. Best-effort end to end — a Hyperdash outage/shape-drift must never block a run.
+    try:
+        onchain = get_onchain_cohort_positioning()
+    except Exception as exc:  # provider is fail-soft, but never let it crash preflight
+        logger.warning("onchain positioning unavailable (%s); slot will be None this run", exc)
+        onchain = None
+    if onchain is not None and onchain.error is None and onchain.has_data:
+        # Inject the signal even if persistence fails: the segment + bias row only need the compact
+        # summary, so the overlay is fully usable before migration 042 lands.
+        market_context["onchain_positioning"] = onchain.compact_summary()
+        try:
+            upsert_onchain_cohort_positioning(
+                client=deps.client, rows=onchain.to_rows(run_date.isoformat())
+            )
+        except Exception as exc:  # persistence is best-effort; a missing table
+            # (pre-migration window) or any postgrest/network error must never block the run.
+            logger.warning("onchain positioning persist failed (%s); continuing", exc)
+
+    # Institutional ingest/publish probe for the Phase 2 circuit-breaker (#928).
+    # Fail-soft: a probe error must never trip the breaker — keep the
+    # institutional nodes running (streak 0, available True) so a transient read
+    # error doesn't silently drop paid-but-needed grounding.
+    try:
+        inst_absence_streak = query_institutional_absence_streak(
+            client=deps.client,
+            run_date=run_date,
+            lookback_days=deps.institutional_absence_lookback_days,
+        )
+    except _SUPABASE_READ_ERRORS as exc:
+        logger.warning("institutional-absence probe failed (%s); breaker stays open this run", exc)
+        inst_absence_streak = 0
+
+    # ── Data-layer starvation flags (#946) ──────────────────────────────
+    # (a) Basket completeness: expected tickers with zero rows in price_technicals.
+    expected_tickers = set(_market_context_tickers())
+    present_tickers: set[str] = set()
+    mc_technicals = market_context.get("price_technicals")
+    if isinstance(mc_technicals, dict):
+        present_tickers = set(mc_technicals.keys())
+    price_basket_gap = sorted(expected_tickers - present_tickers)
+    if price_basket_gap:
+        logger.warning(
+            "preflight: price_technicals basket gap — %d/%d expected tickers missing: %s",
+            len(price_basket_gap),
+            len(expected_tickers),
+            price_basket_gap[:10],  # truncate for log readability
+        )
+
+    # (b)+(c) Freshness: >2 business days before run_date → stale.
+    stale_price = latest_tech is None or _business_days_between(latest_tech, run_date) > 2
+    stale_macro = macro_latest is None or _business_days_between(macro_latest, run_date) > 2
+    if stale_price:
+        logger.warning(
+            "preflight: price_technicals stale (latest=%s, run_date=%s)",
+            latest_tech,
+            run_date,
+        )
+    if stale_macro:
+        logger.warning(
+            "preflight: macro_series stale (latest=%s, run_date=%s)",
+            macro_latest,
+            run_date,
+        )
+
     return DataLayerSnapshot(
         price_technicals_latest=latest_tech,
         price_technicals_ticker_count=ticker_count,
         macro_series_latest=macro_latest,
         fallback_used=fallback,  # type: ignore[arg-type]
         market_context=market_context,
+        institutional_data_available=inst_absence_streak == 0,
+        institutional_absence_streak=inst_absence_streak,
+        price_basket_gap=price_basket_gap,
+        stale_price=stale_price,
+        stale_macro=stale_macro,
     )
 
 
@@ -193,17 +288,79 @@ def _days(n: int):
     return timedelta(days=n)
 
 
+def _business_days_between(earlier: date, later: date) -> int:
+    """Count business days (Mon–Fri) strictly between ``earlier`` and ``later``.
+
+    Returns 0 when ``later <= earlier``. Used for the >2-business-day staleness
+    check (#946) — weekends / holidays (not tracked) are excluded so a Monday
+    run with a Friday latest observation reads as 0 gap, not 2.
+    """
+    if later <= earlier:
+        return 0
+    from datetime import timedelta
+
+    count = 0
+    current = earlier + timedelta(days=1)
+    while current <= later:
+        # Monday=0 … Friday=4 are weekdays.
+        if current.weekday() < 5:
+            count += 1
+        current += timedelta(days=1)
+    return count
+
+
+def _hydrate_config(
+    client: SupabaseClient,
+    config: AtlasConfigBundle,
+    run_date: date,
+) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
+    """Merge portfolio constraints + materialized prior book into config preferences."""
+    from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
+    from digiquant.olympus.atlas.graph import _atlas_config_root
+
+    try:
+        prior_book = load_prior_book(client, run_date)
+    except _SUPABASE_READ_ERRORS:
+        prior_book = []
+
+    preferences = {
+        **portfolio_preferences_static(_atlas_config_root() / "portfolio.json"),
+        **dict(config.preferences),
+    }
+    current_weights = prior_book_current_weights(prior_book)
+    if current_weights:
+        # Mark-to-market (#955): drift prior weights by price moves since the last run so
+        # the H8 no-trade band compares against the actual current book, not stale targets.
+        held = tuple(t for t in current_weights if not _is_cash_ticker(t))
+        try:
+            deltas = (
+                query_price_deltas(client=client, tickers=held, run_date=run_date) if held else {}
+            )
+        except _SUPABASE_READ_ERRORS:
+            deltas = {}
+        preferences["current_weights"] = mark_to_market_weights(current_weights, deltas)
+
+    hydrated = AtlasConfigBundle(
+        watchlist=list(config.watchlist),
+        investment_profile=dict(config.investment_profile),
+        hedge_funds=list(config.hedge_funds),
+        preferences=preferences,
+        macro_series=list(config.macro_series),
+    )
+    return hydrated, prior_book
+
+
 def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], dict]:
     """Return the LangGraph preflight node bound to ``deps``."""
 
     def preflight(state: AtlasResearchState) -> dict:
-        # Delta runs MUST supply a baseline_date. We enforce it here (not at
-        # state construction) so the caller sees a clear error instead of a
-        # silent ignored field. See docs/plans/atlas-digigraph-migration.md §3.
-        if state.run_type == "delta" and state.baseline_date is None:
+        # Legacy delta runs required baseline_date for carry provenance. Daily
+        # cadence resolves priors per-artifact via prior_published (spec §5.1).
+        if state.cadence != "daily" and state.run_type == "delta" and state.baseline_date is None:
             raise ValueError("delta run requires baseline_date to be set on AtlasResearchState")
 
         config = deps.config_loader()
+        config, prior_book = _hydrate_config(deps.client, config, state.run_date)
         prior_context = load_prior_context(client=deps.client, run_date=state.run_date)
         data_layer = _data_layer_snapshot(deps, state.run_date, config)
 
@@ -222,11 +379,35 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         except _SUPABASE_READ_ERRORS:
             lessons = []
 
+        held_tickers = holdings_from_prior_book(prior_book)
+        try:
+            prior_analyst = load_prior_analyst_summaries(deps.client, state.run_date, held_tickers)
+        except _SUPABASE_READ_ERRORS:
+            prior_analyst = {}
+        try:
+            prior_deliberation = load_prior_deliberation_summaries(
+                deps.client, state.run_date, held_tickers
+            )
+        except _SUPABASE_READ_ERRORS:
+            prior_deliberation = {}
+        try:
+            active_theses = load_active_theses_rows(deps.client, state.run_date)
+        except _SUPABASE_READ_ERRORS:
+            active_theses = []
+        try:
+            portfolio_performance = load_portfolio_performance_snapshot(deps.client, state.run_date)
+        except _SUPABASE_READ_ERRORS:
+            portfolio_performance = {}
+
         prior_context = PriorContext(
             last_snapshots=prior_context.last_snapshots,
             latest_segments=prior_context.latest_segments,
-            active_theses=prior_context.active_theses,
+            active_theses=active_theses,
             decision_lessons=lessons,
+            prior_book=prior_book,
+            prior_analyst_by_ticker=prior_analyst,
+            prior_deliberation_by_ticker=prior_deliberation,
+            portfolio_performance=portfolio_performance,
         )
 
         return {

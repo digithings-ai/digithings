@@ -1,105 +1,86 @@
 'use client';
 
-import { useMemo } from 'react';
-import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import { Grid3x3 } from 'lucide-react';
 
-import { briefHref } from './BriefPanel';
-import { G10_CURRENCIES } from '@/lib/twelve-x/types';
+import { MATRIX_COLUMNS } from '@/lib/twelve-x/types';
 import type { MatrixCell } from '@/lib/twelve-x/types';
+import { directionStyle, formatTargets, convictionOpacity } from '@/lib/twelve-x/matrix-format';
+import BrokerProfilePanel from './BrokerProfilePanel';
+import MatrixCellHistoryPanel from './MatrixCellHistoryPanel';
 
-/** Map a currency-view direction to a .fin-* color + glyph for the matrix cell. */
-function directionStyle(direction: string): { text: string; bg: string; border: string; glyph: string } {
-  const d = direction.trim().toLowerCase();
-  if (d === 'bullish' || d === 'long' || d === 'buy')
-    return { text: 'text-fin-green', bg: 'bg-fin-green/10', border: 'border-fin-green/30', glyph: '▲' };
-  if (d === 'bearish' || d === 'short' || d === 'sell')
-    return { text: 'text-fin-red', bg: 'bg-fin-red/10', border: 'border-fin-red/30', glyph: '▼' };
-  if (d === 'watch')
-    return { text: 'text-fin-amber', bg: 'bg-fin-amber/10', border: 'border-fin-amber/30', glyph: '◆' };
-  return { text: 'text-text-secondary', bg: 'bg-white/[0.03]', border: 'border-border-subtle', glyph: '•' };
-}
-
-/** Conviction → opacity weight so high-conviction cells read louder. */
-function convictionOpacity(conviction: string): number {
-  const c = conviction.trim().toLowerCase();
-  if (c === 'high') return 1;
-  if (c === 'medium' || c === 'mid') return 0.8;
-  if (c === 'low') return 0.6;
-  return 0.7;
-}
-
-function convictionLabel(conviction: string): string {
-  const c = conviction.trim();
-  if (!c) return '';
-  return c.charAt(0).toUpperCase() + c.slice(1).toLowerCase();
-}
-
-export default function MatrixTab({ cells }: { cells: MatrixCell[] }) {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  // Brokers present (rows), alphabetical. Currencies (cols) in canonical G10
-  // order, falling back to any extras seen in the data.
+export default function MatrixTab({
+  cells,
+  onOpenBrief,
+  initialSelectedBroker = null,
+}: {
+  cells: MatrixCell[];
+  onOpenBrief: (sourceFile: string, runDate: string | null) => void;
+  /** Pre-open a broker's profile (deterministic SSR / tests). */
+  initialSelectedBroker?: string | null;
+}) {
+  // The broker whose profile slide-over is open (the "focus on one broker" drill-in).
+  const [selectedBroker, setSelectedBroker] = useState<string | null>(initialSelectedBroker);
+  // The cell whose history panel is open (multi-view drill-in).
+  const [selectedCell, setSelectedCell] = useState<MatrixCell | null>(null);
+  // Brokers present (rows), alphabetical.
   const brokers = useMemo(
     () => [...new Set(cells.map((c) => c.broker))].sort((a, b) => a.localeCompare(b)),
     [cells]
   );
 
-  const currencies = useMemo<string[]>(() => {
-    const present = new Set(cells.map((c) => c.currency));
-    const ordered: string[] = G10_CURRENCIES.filter((c) => present.has(c));
-    const orderedSet = new Set(ordered);
-    const extras = [...present].filter((c) => !orderedSet.has(c)).sort();
-    return [...ordered, ...extras];
-  }, [cells]);
-
-  // (broker, currency) → cell lookup.
+  // (broker, column) → cell lookup. getMatrix already keeps one freshest cell per
+  // (broker, G10 column), so the column placement is settled before we render.
   const byCell = useMemo(() => {
     const m = new Map<string, MatrixCell>();
-    for (const c of cells) m.set(`${c.broker}\u001f${c.currency}`, c);
+    for (const c of cells) m.set(`${c.broker}|${c.column}`, c);
     return m;
   }, [cells]);
 
-  const hasData = brokers.length > 0 && currencies.length > 0;
+  const hasData = brokers.length > 0;
 
-  // CSS grid template: a sticky broker label column + one column per currency.
-  const gridTemplate = `minmax(140px, 200px) repeat(${currencies.length}, minmax(64px, 1fr))`;
+  // Sticky broker label column + one column per G10 currency (fixed 8).
+  const gridTemplate = `minmax(150px, 220px) repeat(${MATRIX_COLUMNS.length}, minmax(72px, 1fr))`;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
-        <Grid3x3 size={18} className="shrink-0 text-fin-blue" aria-hidden />
-        <h2 className="text-base font-semibold text-text-primary md:text-lg">Desk view matrix</h2>
+        <Grid3x3 size={18} className="shrink-0 text-accent" aria-hidden />
+        <h2 className="font-display text-2xl tracking-tight text-ink">Desk view matrix</h2>
+        <span className="rounded bg-term-bg px-1.5 py-0.5 text-[10px] font-medium text-ink-mute">
+          8 of 10 G10 · NOK/SEK omitted
+        </span>
       </div>
 
-      <p className="max-w-2xl px-1 text-xs text-text-muted">
-        Each desk&apos;s latest standing view per G10 currency over a recent window. Cells are colored
-        by direction and shaded by conviction; click any cell to drill into the source brief.
+      <p className="max-w-2xl px-1 text-xs text-ink-mute">
+        Each desk&apos;s latest standing view per board currency (8 of G10 — NOK/SEK desk views appear
+        in Consensus, not here) over a recent window — a pair files under its base
+        currency (EUR/USD → EUR), shown as stated. Cells are
+        colored by direction and shaded by conviction; click a cell to open its source brief, or a
+        desk name to see that broker&apos;s full standing-view profile.
       </p>
 
       {hasData ? (
         <div className="glass-card overflow-hidden p-0">
           <div className="overflow-x-auto">
-            <div role="table" className="min-w-[680px] text-sm" aria-label="Broker by currency view matrix">
+            <div role="table" className="min-w-[760px] text-sm" aria-label="Broker by currency view matrix">
               {/* Header row */}
               <div
                 role="row"
-                className="grid items-stretch border-b border-border-subtle bg-bg-secondary"
+                className="grid items-stretch border-b border-hair bg-term-bg"
                 style={{ gridTemplateColumns: gridTemplate }}
               >
                 <div
                   role="columnheader"
-                  className="sticky left-0 z-10 bg-bg-secondary px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted"
+                  className="sticky left-0 z-10 bg-term-bg px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-ink-mute"
                 >
                   Desk
                 </div>
-                {currencies.map((ccy) => (
+                {MATRIX_COLUMNS.map((ccy) => (
                   <div
                     key={ccy}
                     role="columnheader"
-                    className="px-2 py-2.5 text-center font-mono text-[11px] font-semibold text-text-secondary"
+                    className="px-2 py-2.5 text-center font-mono text-[11px] font-semibold text-ink-soft"
                   >
                     {ccy}
                   </div>
@@ -107,7 +88,7 @@ export default function MatrixTab({ cells }: { cells: MatrixCell[] }) {
               </div>
 
               {/* Body rows */}
-              <div role="rowgroup" className="divide-y divide-border-subtle">
+              <div role="rowgroup" className="divide-y divide-hair">
                 {brokers.map((broker) => (
                   <div
                     key={broker}
@@ -117,19 +98,25 @@ export default function MatrixTab({ cells }: { cells: MatrixCell[] }) {
                   >
                     <div
                       role="rowheader"
-                      className="sticky left-0 z-10 flex items-center truncate bg-bg-secondary px-4 py-2 font-medium text-text-primary"
-                      title={broker}
+                      className="sticky left-0 z-10 bg-term-bg"
                     >
-                      <span className="truncate">{broker}</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBroker(broker)}
+                        className="flex w-full items-center gap-1.5 truncate px-4 py-2 text-left font-medium text-ink transition-colors hover:text-accent"
+                        title={`${broker} — open desk profile`}
+                      >
+                        <span className="truncate">{broker}</span>
+                      </button>
                     </div>
-                    {currencies.map((ccy) => {
-                      const cell = byCell.get(`${broker}\u001f${ccy}`);
+                    {MATRIX_COLUMNS.map((ccy) => {
+                      const cell = byCell.get(`${broker}|${ccy}`);
                       if (!cell) {
                         return (
                           <div
                             key={ccy}
                             role="cell"
-                            className="flex items-center justify-center px-1 py-2 text-text-muted/40"
+                            className="flex items-center justify-center px-1 py-2 text-ink-mute/40"
                             aria-label={`${broker} ${ccy}: no view`}
                           >
                             <span aria-hidden>·</span>
@@ -137,34 +124,50 @@ export default function MatrixTab({ cells }: { cells: MatrixCell[] }) {
                         );
                       }
                       const s = directionStyle(cell.direction);
+                      const hasHistory = cell.history && cell.history.length > 0;
+                      const totalViews = 1 + (cell.history?.length ?? 0);
+                      // A pair (e.g. EUR/USD filed under EUR) shows the instrument so it's
+                      // never misread as an outright single-currency call.
+                      const isPair = cell.currency.includes('/');
+                      // Surface broker levels/thesis in the tooltip when the desk view carries them.
+                      const levels = formatTargets(cell.targets);
+                      const title = `${broker} · ${cell.currency} · ${cell.direction}${
+                        cell.conviction ? ` (${cell.conviction})` : ''
+                      }${cell.signal ? ` — ${cell.signal}` : ''} · ${cell.report_date ?? cell.run_date}${
+                        levels ? `\nLevels: ${levels}` : ''
+                      }${cell.rationale ? `\n${cell.rationale}` : ''}${
+                        hasHistory ? `\n${totalViews} views — click to see history` : ' — open brief'
+                      }`;
                       return (
                         <div key={ccy} role="cell" className="p-1">
-                          <Link
-                            href={briefHref(
-                              pathname,
-                              new URLSearchParams(searchParams.toString()),
-                              cell.source_file,
-                              cell.run_date
-                            )}
-                            scroll={false}
-                            className={`flex h-full flex-col items-center justify-center gap-0.5 rounded-md border ${s.bg} ${s.border} px-1 py-1.5 text-center transition-colors hover:border-fin-blue/50 hover:bg-white/[0.05]`}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              hasHistory
+                                ? setSelectedCell(cell)
+                                : onOpenBrief(cell.source_file, cell.run_date)
+                            }
+                            className={`flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-md border ${s.bg} ${s.border} ${s.hoverBg} ${s.hoverBorder} px-1 py-1.5 text-center transition-colors`}
                             style={{ opacity: convictionOpacity(cell.conviction) }}
-                            title={`${broker} · ${ccy} · ${cell.direction}${
-                              cell.conviction ? ` (${cell.conviction})` : ''
-                            }${cell.signal ? ` — ${cell.signal}` : ''} · ${cell.run_date}`}
+                            title={title}
                           >
                             <span className={`text-sm leading-none ${s.text}`} aria-hidden>
                               {s.glyph}
                             </span>
-                            {cell.conviction ? (
-                              <span className="text-[9px] uppercase leading-none text-text-muted">
-                                {convictionLabel(cell.conviction)}
+                            {isPair ? (
+                              <span className="font-mono text-[8px] leading-none text-ink-mute/80">
+                                {cell.currency}
                               </span>
                             ) : null}
-                            <span className="font-mono text-[9px] leading-none text-text-muted/70">
-                              {cell.run_date.slice(5)}
+                            <span className="font-mono text-[9px] leading-none text-ink-mute/70">
+                              {(cell.report_date ?? cell.run_date).slice(5)}
                             </span>
-                          </Link>
+                            {hasHistory ? (
+                              <span className="rounded bg-accent/15 px-1 py-0.5 text-[8px] font-semibold tabular-nums text-accent">
+                                {totalViews}
+                              </span>
+                            ) : null}
+                          </button>
                         </div>
                       );
                     })}
@@ -175,27 +178,42 @@ export default function MatrixTab({ cells }: { cells: MatrixCell[] }) {
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border-subtle bg-bg-secondary px-4 py-2.5 text-[11px] text-text-muted">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hair bg-term-bg px-4 py-2.5 text-[11px] text-ink-mute">
             <span className="flex items-center gap-1.5">
-              <span className="text-fin-green" aria-hidden>▲</span> Bullish
+              <span className="text-accent" aria-hidden>▲</span> Bullish
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-fin-red" aria-hidden>▼</span> Bearish
+              <span className="text-warn" aria-hidden>▼</span> Bearish
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-fin-amber" aria-hidden>◆</span> Watch
+              <span className="text-warn" aria-hidden>◆</span> Watch
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-text-secondary" aria-hidden>•</span> Neutral
+              <span className="text-ink-soft" aria-hidden>•</span> Neutral
             </span>
-            <span className="ml-auto">Brighter = higher conviction · date = latest view</span>
+            <span className="ml-auto">Brighter = higher conviction · a pair sits under its base ccy</span>
           </div>
         </div>
       ) : (
-        <div className="glass-card p-10 text-center text-sm text-text-muted">
+        <div className="glass-card p-10 text-center text-sm text-ink-mute">
           No desk views available in the recent window.
         </div>
       )}
+
+      {/* Single-broker drill-in: click a desk label → its full standing-view profile. */}
+      <BrokerProfilePanel
+        broker={selectedBroker}
+        cells={cells}
+        onClose={() => setSelectedBroker(null)}
+        onOpenBrief={onOpenBrief}
+      />
+
+      {/* Multi-view cell drill-in: click a cell with history → see all dated views. */}
+      <MatrixCellHistoryPanel
+        cell={selectedCell}
+        onClose={() => setSelectedCell(null)}
+        onOpenBrief={onOpenBrief}
+      />
     </div>
   );
 }

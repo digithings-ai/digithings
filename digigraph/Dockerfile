@@ -1,4 +1,4 @@
-# DigiGraph – Phase 0+ (LangGraph orchestration + MCP/HTTP)
+# digigraph – Phase 0+ (LangGraph orchestration + MCP/HTTP)
 # Build from repo root: docker compose build digigraph (context: .)
 # See digigraph/ARCHITECTURE.md and root SECURITY.md. Bind to 127.0.0.1 in production.
 
@@ -20,18 +20,34 @@ COPY digibase/pyproject.toml digibase/README.md ./digibase/
 COPY digibase/src ./digibase/src
 RUN uv pip install --system -e "./digibase"
 
-# DigiKey (JWT verification middleware)
+# digikey (JWT verification middleware)
 COPY digikey/pyproject.toml digikey/README.md ./digikey/
 COPY digikey/src ./digikey/src
 RUN uv pip install --system -e "./digikey"
 
-# DigiSmith (sibling package; tracing helpers + LangSmith SDK)
+# digismith (sibling package; tracing helpers + LangSmith SDK)
 COPY digismith/pyproject.toml digismith/ARCHITECTURE.md ./digismith/
 COPY digismith/src ./digismith/src
 RUN uv pip install --system -e "./digismith[langsmith]"
 
+# digillm (sibling package; LLM client/provider abstraction — digigraph runtime dep)
+COPY digillm/pyproject.toml digillm/ARCHITECTURE.md ./digillm/
+COPY digillm/src ./digillm/src
+RUN uv pip install --system -e "./digillm"
+
 COPY digigraph/pyproject.toml ./digigraph/
 COPY digigraph/src ./digigraph/src
+# BYOK provider allowlist catalog: llm_auth.py's __file__-relative fallback
+# resolves to /app/config/byok-providers.json under this image's WORKDIR/layout.
+# Bake it in so a raw ghcr.io/.../digigraph image boots with zero configuration;
+# still overridable via a volume mount at /app/config or DIGI_CONFIG_PATH — but
+# that mount replaces the whole directory, it does not merge with this baked-in
+# copy, so it should supply BOTH byok-providers.json and model_modes.yaml. A
+# mount missing byok-providers.json crashes digigraph at startup
+# (_load_byok_catalog raises by design — no silent fallback); a mount missing
+# model_modes.yaml does NOT crash — model_config.py's loader silently falls
+# back to a hardcoded default model instead. Supply both regardless.
+COPY config/byok-providers.json ./config/byok-providers.json
 # ECharts → SVG (optional): install JS deps for render_svg path; safe to fail if lockfile missing
 RUN if [ -f digigraph/src/digigraph/tools/analytics/visualization/echarts/package-lock.json ]; then \
       cd digigraph/src/digigraph/tools/analytics/visualization/echarts && npm ci --omit=dev; \

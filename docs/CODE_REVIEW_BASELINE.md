@@ -1,8 +1,8 @@
-# DigiThings — Component Code Review Baseline
+# digithings — Component Code Review Baseline
 
 **Date:** 2026-03-18
 **Reviewer:** Claude Code (claude-sonnet-4-6)
-**Scope:** DigiGraph, DigiQuant, DigiSearch
+**Scope:** digigraph, digiquant, digisearch
 **Purpose:** Establish a scored baseline to track improvements over time. Re-run this review after each major improvement sprint.
 
 ---
@@ -23,13 +23,13 @@
 
 | Component | Architecture | Code Quality | Security | Testing | Docs | Performance | **Composite** |
 |-----------|:-----------:|:------------:|:--------:|:-------:|:----:|:-----------:|:-------------:|
-| DigiGraph | 7 | 5 | 3 | 0 | 7 | 5 | **4.5** |
-| DigiQuant | 6 | 4 | 5 | 0 | 7 | 4 | **4.3** |
-| DigiSearch | 6 | 4 | 4 | 0 | 5 | 4 | **3.8** |
+| digigraph | 7 | 5 | 3 | 0 | 7 | 5 | **4.5** |
+| digiquant | 6 | 4 | 5 | 0 | 7 | 4 | **4.3** |
+| digisearch | 6 | 4 | 4 | 0 | 5 | 4 | **3.8** |
 
 ---
 
-## DigiGraph
+## digigraph
 
 *LangGraph orchestration brain — research → backtest workflow, tool registry, OpenAI-compatible API*
 
@@ -75,7 +75,7 @@
 |---------|--------|
 | Research node (LLM + JSON extraction) | ✅ Implemented |
 | Document-mode research (tools + RAG) | ✅ Implemented |
-| Backtest node (HTTP → DigiQuant) | ✅ Implemented |
+| Backtest node (HTTP → digiquant) | ✅ Implemented |
 | Tool registry & dispatch | ✅ Implemented |
 | Sub-agents (visualization, analysis, etc.) | ✅ Implemented |
 | Run storage (file-based datasets) | ✅ Implemented |
@@ -91,7 +91,7 @@
 
 ---
 
-## DigiQuant
+## digiquant
 
 *NautilusTrader backtest/optimize engine — grid, random, Bayesian optimization, tearsheet, export*
 
@@ -155,7 +155,7 @@
 
 ---
 
-## DigiSearch
+## digisearch
 
 *RAG, document ingestion, multi-format parsing, vector search, MCP interface*
 
@@ -262,13 +262,13 @@ These issues exist across all three components and should be treated as platform
 
 | Component | Architecture | Code Quality | Security | Testing | Docs | Performance | **Composite** | **Δ v1→v2** |
 |-----------|:-----------:|:------------:|:--------:|:-------:|:----:|:-----------:|:-------------:|:-----------:|
-| DigiGraph | 8 | 6 | 4 | 5 | 7 | 7 | **6.2** | +1.7 |
-| DigiQuant | 8 | 7 | 6 | 5 | 7 | 9 | **7.0** | +2.7 |
-| DigiSearch | 7 | 6 | 4 | 5 | 5 | 7 | **5.7** | +1.9 |
+| digigraph | 8 | 6 | 4 | 5 | 7 | 7 | **6.2** | +1.7 |
+| digiquant | 8 | 7 | 6 | 5 | 7 | 9 | **7.0** | +2.7 |
+| digisearch | 7 | 6 | 4 | 5 | 5 | 7 | **5.7** | +1.9 |
 
 ---
 
-## DigiGraph — v2.0
+## digigraph — v2.0
 
 ### Scores
 
@@ -277,9 +277,9 @@ These issues exist across all three components and should be treated as platform
 | Architecture | 7 | 8 | +1 | Config caching (mtime-keyed) eliminates hot-path disk reads. LangSmith `_traceable` decorator cleanly optional. Sync-in-async pattern (`httpx.Client` in tool handlers called from async FastAPI) still present. OpenAI client created per-call — no connection reuse. |
 | Code Quality | 5 | 6 | +1 | `LLMResult` dataclass replaces `str \| tuple` return. Path traversal check logic still duplicated across `server.py`, `run_storage.py`, `digistore.py`. Bare `except Exception` reduced but not eliminated. `_DIGI_LLM_MODE` global removed (Phase 1). |
 | Security | 3 | 4 | +1 | `_DIGI_LLM_MODE` race condition fixed. Still: API key compared with `!=` (timing-attack-vulnerable, should use `secrets.compare_digest()`). Path traversal in `_serve_run_data_file()` validates `".."` in string before resolving — resolve-first pattern missing. Wildcard CORS default unchanged. No rate limiting. |
-| Testing | 0 | 5 | +5 | 13 test files covering LLM, server API, workflow, analytics, formatters. Monkeypatch-based env isolation. Gaps: no concurrency tests, no error-recovery tests (LLM timeout, DigiQuant down), no end-to-end LangGraph state transitions, no path traversal test cases. |
+| Testing | 0 | 5 | +5 | 13 test files covering LLM, server API, workflow, analytics, formatters. Monkeypatch-based env isolation. Gaps: no concurrency tests, no error-recovery tests (LLM timeout, digiquant down), no end-to-end LangGraph state transitions, no path traversal test cases. |
 | Documentation | 7 | 7 | 0 | Unchanged. Design docs accurate; no new architecture doc added for LangSmith / config caching. |
-| Performance | 5 | 7 | +2 | Config caching eliminates per-request YAML disk read. LangSmith tracing correctly gated (zero-overhead when unset). OpenAI client still instantiated per `get_client()` call — no persistent connection pool. Sync `httpx.Client` in tool handlers blocks async workers under load. 30s blocking DigiQuant wait unchanged. |
+| Performance | 5 | 7 | +2 | Config caching eliminates per-request YAML disk read. LangSmith tracing correctly gated (zero-overhead when unset). OpenAI client still instantiated per `get_client()` call — no persistent connection pool. Sync `httpx.Client` in tool handlers blocks async workers under load. 30s blocking digiquant wait unchanged. |
 
 **Composite: 6.2 / 10** (was 4.5)
 
@@ -295,7 +295,7 @@ These issues exist across all three components and should be treated as platform
 
 6. Path traversal validation duplicated in `server.py`, `run_storage.py`, `digistore.py` — extract `_assert_safe_path(base, ref)` utility.
 7. No concurrency tests for LangGraph thread isolation (concurrent sessions sharing same `thread_id`).
-8. No circuit breaker for DigiQuant / DigiSearch HTTP calls — cascading failure possible.
+8. No circuit breaker for digiquant / digisearch HTTP calls — cascading failure possible.
 9. LLM response not cached — identical prompts (e.g. repeated research nodes) make 2 API calls.
 10. `execute_python.py` `exec()` sandbox still present — highest-severity unresolved issue.
 
@@ -316,7 +316,7 @@ These issues exist across all three components and should be treated as platform
 
 ---
 
-## DigiQuant — v2.0
+## digiquant — v2.0
 
 ### Scores
 
@@ -366,14 +366,14 @@ These issues exist across all three components and should be treated as platform
 
 ---
 
-## DigiSearch — v2.0
+## digisearch — v2.0
 
 ### Scores
 
 | Dimension | v1 | v2 | Δ | Rationale |
 |-----------|:--:|:--:|:-:|-----------|
 | Architecture | 6 | 7 | +1 | Persistent `httpx.Client` with `atexit` cleanup added to `http_client.py`. Batch SQL cache reduces round-trips. Backend if/elif in `client.py` still hard-coded — no registry. `mcp_server.py` still ignores `client` param. Stub fallback still present as default. |
-| Code Quality | 4 | 6 | +2 | IDF formula fixed (`log(n/(df+1)+1)`) — correct and finite. Embedding cache returns positionally-correct results. Batch SQL query clean. `StubProvider`/`MismatchProvider` test utilities are reusable. `_subst_env()` still duplicated between DigiSearch `config.py` and DigiGraph `project_config.py`. |
+| Code Quality | 4 | 6 | +2 | IDF formula fixed (`log(n/(df+1)+1)`) — correct and finite. Embedding cache returns positionally-correct results. Batch SQL query clean. `StubProvider`/`MismatchProvider` test utilities are reusable. `_subst_env()` still duplicated between digisearch `config.py` and digigraph `project_config.py`. |
 | Security | 4 | 4 | 0 | No security changes in Phase 2/3. OData filter injection risk unchanged. Wildcard CORS unchanged. No auth. Query expansion (HyDE) passes user input to LLM unchecked. |
 | Testing | 0 | 5 | +5 | 9 tests in `test_embedding_cache.py`, 15 tests in `test_keyword_search.py`. Cache correctness, IDF ordering, BM25 skip-if-missing covered. Gaps: no OData injection tests, no path traversal tests for ingest, no hybrid search tests, no Azure backend tests. |
 | Documentation | 5 | 5 | 0 | Unchanged. Connection pooling and batch cache not documented in `digisearch/ARCHITECTURE.md`. |
@@ -391,8 +391,8 @@ These issues exist across all three components and should be treated as platform
 ### Remaining High-Priority Issues
 
 5. Backend selection in `client.py` uses `if/elif` — adding a new backend requires editing core client. Replace with `_BACKEND_REGISTRY: dict[str, type[DigiIndex]]`.
-6. `_subst_env()` duplicated in DigiSearch `config.py` and DigiGraph `project_config.py` — extract to shared utility.
-7. No logging anywhere in DigiSearch — production failures are invisible.
+6. `_subst_env()` duplicated in digisearch `config.py` and digigraph `project_config.py` — extract to shared utility.
+7. No logging anywhere in digisearch — production failures are invisible.
 8. `SentenceChunker` runs `nltk.download()` at module import time — network call on first import.
 9. PDF OCR still stubbed — returns placeholder text.
 10. No query result caching — identical search queries hit the backend every time.
@@ -421,12 +421,12 @@ These issues exist across all three components and should be treated as platform
 | Gap | Resolved? | Remaining Impact |
 |-----|:---------:|-----------------|
 | Zero test coverage | ✅ Partially — 84 tests added | Bayesian opt, ADDM, Pine Script, Azure backend untested |
-| No structured logging | ❌ | DigiSearch still zero logging; DigiGraph/DigiQuant partial |
+| No structured logging | ❌ | digisearch still zero logging; digigraph/digiquant partial |
 | Wildcard CORS + no auth | ❌ | All three endpoints publicly accessible |
-| Silent fallbacks / bare `except` | ❌ Partially | DigiSearch stub still silent; DigiGraph `except` reduced |
+| Silent fallbacks / bare `except` | ❌ Partially | digisearch stub still silent; digigraph `except` reduced |
 | No rate limiting | ❌ | Unchanged |
-| Sync blocking in async | ❌ | DigiGraph tool handlers still use sync HTTP |
+| Sync blocking in async | ❌ | digigraph tool handlers still use sync HTTP |
 | No request correlation ID | ❌ | Cannot trace a request across all 3 services |
 | No circuit breaker | ❌ | Cascading failure between components possible |
-| `_subst_env()` duplicated | ❌ | DigiSearch + DigiGraph both implement it |
+| `_subst_env()` duplicated | ❌ | digisearch + digigraph both implement it |
 | No inter-service health checks | ❌ | Each service has `/health` but doesn't check dependencies |

@@ -12,7 +12,7 @@ Central reference for running the digiquant-atlas pipeline on any AI platform.
 
 ## What is digiquant-atlas?
 
-A **9-phase** AI research pipeline (alternative data → institutional → macro → asset classes → equities/sectors → earnings → digest → portfolio layer) with a **three-tier cadence**: Sunday baseline, Mon–Sat deltas, month-end synthesis. Phases emit **structured JSON** (and optional segment markdown during transition); the digest is **`snapshot.json` / `delta-request.json`** materialized into `daily_snapshots` and `documents` in Supabase.
+A **9-phase** AI research pipeline (alternative data → institutional → macro → asset classes → equities/sectors → earnings → digest → Hermes H1–H9) with **one daily cadence** and edit-mode continuity (`skip`/`edit`/`full` per artifact). Phases emit structured JSON materialized into `daily_snapshots` and `documents` in Supabase.
 
 ## Quick start (DB-first)
 
@@ -24,7 +24,7 @@ python3 scripts/run_db_first.py
 
 **Track A — generic research only (no portfolio preferences):**
 
-- Run: `python -m digiquant.olympus.hermes.chain --run-type delta`
+- Run: `python -m digiquant.olympus.hermes.chain --cadence daily`
 - Prompt: [`scripts/cowork-research-prompt.txt`](../../scripts/cowork-research-prompt.txt)
 - After publish: `python3 scripts/run_db_first.py --skip-execute --validate-mode research`
 
@@ -34,7 +34,7 @@ python3 scripts/run_db_first.py
 - Cowork: [`cowork/README.md`](../../cowork/README.md), [`cowork/tasks/README.md`](../../cowork/tasks/README.md)
 - Validate: `--validate-mode pm` or `full`
 
-**Full pipeline (combined):** run `python -m digiquant.olympus.hermes.chain --run-type baseline|delta` per day type.
+**Full pipeline (combined):** `python -m digiquant.olympus.hermes.chain --cadence daily` (Sunday: `--refresh-scope all` via cron).
 
 **Single segment:** read `skills/{segment}/SKILL.md`, write **JSON** where the skill specifies, publish to Supabase per [`RUNBOOK.md`](../../RUNBOOK.md).
 

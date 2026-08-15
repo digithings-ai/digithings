@@ -7,7 +7,7 @@ import { OLYMPUS_CSP, OLYMPUS_SECURITY_HEADERS } from "./security-headers.mjs";
 // Shipped at the dist root by scripts/build-digiquant.sh — Cloudflare Pages
 // ignores _headers files below the output root (#674).
 const publicHeaders = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "../../digiquant/_headers"),
+  join(dirname(fileURLToPath(import.meta.url)), "../../digiquant-web/public/_headers"),
   "utf8",
 );
 
@@ -15,6 +15,7 @@ describe("olympus security-headers", () => {
   it("denies framing and allows Supabase connect", () => {
     expect(OLYMPUS_CSP).toContain("frame-ancestors 'none'");
     expect(OLYMPUS_CSP).toContain("https://*.supabase.co");
+    expect(OLYMPUS_CSP).toContain("wss://*.supabase.co");
   });
 
   it("exports standard hardening headers", () => {

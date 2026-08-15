@@ -1,0 +1,49 @@
+# Markdown link integrity + agent-instruction surface drift check + gh-aw compile check
+name: "CI: docs"
+
+on:
+  push:
+    branches: [main, develop]
+  # No path filter on pull_request: a workflow-level path filter means the
+  # check never posts a status on PRs outside these paths, and GitHub then
+  # blocks merge forever waiting on a check that will never run once this
+  # name is added to develop's required status checks (see CLAUDE.md §
+  # Branching model). Push keeps its path filter since that only affects
+  # direct-push runs, not PR-merge gating. The job itself is cheap
+  # (doc-link scan + agents-init --check), so running it unconditionally
+  # costs little.
+  pull_request: {}
+
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docs-and-agents-init:
+    name: doc-links + agents-init
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Installs from the committed uv.lock rather than resolving fresh (#1715).
+      # pyyaml and pydantic were installed unpinned here; both are locked now.
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
+
+      - name: Check internal markdown links
+        run: uv run --frozen --no-sync python scripts/check_doc_links.py
+
+      - name: Lint the docs/vision digivault vault
+        # `uv run make` rather than bare `make`: the Makefile target invokes
+        # `python3` directly, and uv run puts the synced venv first on PATH so
+        # that resolves to the locked interpreter instead of the system one.
+        run: uv run --frozen --no-sync make vault-check
+
+      - name: Verify generated files are in sync
+        run: uv run --frozen --no-sync python scripts/agents_init.py --check
+

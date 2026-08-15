@@ -6,7 +6,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from digigraph.formatters.openwebui import (
     OpenWebUIStreamFormatter,
     _format_delegate_result,

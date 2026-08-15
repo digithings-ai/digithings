@@ -3,12 +3,13 @@
 - **Status:** Accepted (2026-04-19)
 - **Amendment (2026-04-27):** the `apps/digiquant-atlas/frontend/` carve-out is removed. Atlas's frontend moved to `frontend/atlas/` ([#300](https://github.com/digithings-ai/digithings/issues/300)) as part of folding Atlas into the `digiquant` module ([#297](https://github.com/digithings-ai/digithings/issues/297)). The root `package.json` workspace glob is now just `frontend/*`; the `apps/*/frontend` entry was dropped.
 - **Supersedes (in part):** [ADR-0002 — domain unification](0002-domain-unification.md)
+- **Superseded (in part) by:** [ADR-0018 — digichat path routing](0018-digichat-path-routing.md) — the `chat.digithings.ai` domain target shown in this ADR's directory diagram and "Amendment to ADR-0002" section is replaced by path-based routing at `digithings.ai/chat`. The `frontend/` umbrella structure and workspace decision are unaffected.
 - **Related epic:** [#254](https://github.com/digithings-ai/digithings/issues/254)
 - **Parent epic:** [#235](https://github.com/digithings-ai/digithings/issues/235)
 
 ## Context
 
-The DigiThings repo shipped three web surfaces in three different
+The digithings repo shipped three web surfaces in three different
 hybrid states:
 
 1. `website/` — committed to the monorepo, deployed to `digithings.ai`
@@ -42,7 +43,7 @@ The remaining two — [#240](https://github.com/digithings-ai/digithings/issues/
 
 ## Decision
 
-Unify all DigiThings web frontends under a single `frontend/` umbrella
+Unify all digithings web frontends under a single `frontend/` umbrella
 in the existing monorepo, backed by an npm workspace and a
 `@digithings/design` package.
 
@@ -70,7 +71,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
 ### Positive
 
 - **Token sync is free.** A single source of truth at
-  `frontend/design/tokens.css` is consumed by every surface via
+  `frontend/digiweb/design/tokens.css` is consumed by every surface via
   workspace resolution. No HTTPS drift checks, no `npm publish` loop.
 - **Atomic cross-surface changes.** A design edit + its consumers
   update in one PR with one review. Previously this would have required
@@ -80,7 +81,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
   pre-push hook, and the PR automation are all single-repo tools. The
   umbrella doesn't require new machinery.
 - **CI alignment.** `digichat-test.yml` finally activates, gated on
-  `frontend/digichat/**` + `frontend/design/**`.
+  `frontend/digichat/**` + `frontend/digiweb/design/**`.
 - **History preserved.** All moves used `git mv` where possible; only
   the digichat import is from a fresh working tree (its prior 3-commit
   local history is acceptable loss).
@@ -111,7 +112,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
   follow-up against `apps/digiquant-atlas/frontend/`.
 - Physical relocation of Atlas frontend to `frontend/atlas/`. Keeping
   it nested under the research project is fine for now.
-- Digiquant.io separate Pages deploy. The current `static.yml` only
+- digiquant.io separate Pages deploy. The current `static.yml` only
   publishes `frontend/digithings/`. Parallel workflow for
   `frontend/digiquant/` → digiquant.io is tracked under epic #9.
 
@@ -135,7 +136,7 @@ a web frontend. Only its `frontend/` subpackage joins the workspace.
 - npm (not pnpm) — matches the pre-existing `digichat/package-lock.json`.
 - Static sites reference the design via `../design/…`
   relative paths. Published via a `dist/` assembly step in `static.yml`
-  that copies both `frontend/digithings/` and `frontend/design/`
+  that copies both `frontend/digithings/` and `frontend/digiweb/design/`
   into the Pages artifact.
 - `frontend/digichat/package.json` declares `@digithings/design`
   as a workspace dependency, but `globals.css` does not yet `@import` it

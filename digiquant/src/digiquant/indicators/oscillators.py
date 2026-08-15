@@ -52,8 +52,7 @@ class RSI:
 class BollingerBands:
     """Bollinger Bands with configurable MA basis type.
 
-    Uses sample standard deviation (ddof=1) matching PineScript's ta.stdev
-    which applies Bessel's correction.
+    Uses population standard deviation (ddof=0) matching PineScript's ta.stdev.
 
     update() takes the price source. After `length` bars:
       - middle: MA of source
@@ -76,7 +75,7 @@ class BollingerBands:
         if not self._ma.initialized or len(self._buffer) < self._length:
             return
         arr = np.array(list(self._buffer))
-        std = float(np.std(arr, ddof=1))
+        std = float(np.std(arr, ddof=0))
         self.middle = self._ma.value
         self.upper = self.middle + self._mult * std
         self.lower = self.middle - self._mult * std

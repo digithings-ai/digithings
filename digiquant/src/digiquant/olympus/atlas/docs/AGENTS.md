@@ -6,24 +6,26 @@
 
 ## What This Repo Is
 
-Daily market intelligence system. Three-tier cadence (**Supabase-first**, no `data/agent-cache/daily` markdown tree):
-- **Weekly Baseline** (Sunday) — Full digest snapshot JSON → `materialize_snapshot.py`
-- **Daily Delta** (Mon–Sat) — Delta-request JSON → materialize (~70% token savings vs full rewrite)
-- **Monthly Synthesis** (month end) — `monthly_digest` JSON → `documents`
+Daily market intelligence + portfolio loop. **Supabase-first** (no `data/agent-cache/daily` markdown tree).
+
+**One daily cadence** ([#930](https://github.com/digithings-ai/digithings/issues/930)): Atlas A0–A4 (research with
+edit-mode continuity) → Hermes H1–H9 (thesis-first) → `commit_run`. Cost is controlled by
+`OLYMPUS_MODEL_TIER` and per-artifact `skip`/`edit`/`full` — not separate baseline/delta graphs.
 
 ---
 
 ## Quickstart for Agents
 
-### Step 1: Run mode (no `_meta.json`)
-- **Sunday** (or explicit baseline) → run `python -m digiquant.olympus.hermes.chain --run-type baseline`
-- **Mon–Sat** → run `python -m digiquant.olympus.hermes.chain --run-type delta` (load baseline + prior deltas from **Supabase** `daily_snapshots` / `documents`)
-- Hint: `python3 scripts/run_db_first.py --dry-run`
+### Step 1: Run mode
+- **Daily (default):** `python -m digiquant.olympus.hermes.chain --cadence daily`
+- **Operator full refresh:** `--refresh-scope all` (Sunday cron sets this automatically)
+- **Beliefs only:** `--refresh-scope beliefs`
+- **Deprecated shim:** `--run-type baseline|delta` (warns; use `--cadence daily` + `--refresh-scope`)
+- Prior context loads from **Supabase** `daily_snapshots` / `documents` via preflight
 
 ### Publish path (canonical)
 ```
-JSON → validate_artifact.py (- or path)
-     → publish_document.py --payload -   OR   materialize_snapshot.py --date … --snapshot-json …
+JSON → validate → publish_document / in-graph publish_phase
 Operator close-out: python3 scripts/run_db_first.py
 ```
 
@@ -32,8 +34,7 @@ Operator close-out: python3 scripts/run_db_first.py
 ./scripts/new-day.sh              # Same as run_db_first.py (no folder scaffold)
 python3 scripts/run_db_first.py   # Metrics refresh + execute_at_open + validate_db_first
 ./scripts/git-commit.sh           # Commit config/docs (not gitignored `data/` — see data/README.md)
-./scripts/weekly-rollup.sh        # Prints weekly JSON → Supabase prompt
-./scripts/monthly-rollup.sh      # Prints monthly JSON → Supabase prompt
+./scripts/weekly-rollup.sh        # Prints weekly JSON → Supabase prompt (optional; no monthly cron)
 python3 scripts/fetch_research_library.py          # List research library index from Supabase
 python3 scripts/fetch_research_library.py --ticker NVDA  # Filter by ticker
 python3 scripts/publish_research.py --key research/deep-dives/NVDA-DATE --title "..." --type deep-dive --content -
@@ -49,7 +50,7 @@ python3 scripts/publish_research.py --key research/deep-dives/NVDA-DATE --title 
 - **Canonical digest** lives in Supabase (`daily_snapshots.snapshot`, `documents`); do not rely on local `DIGEST.md`
 - **State a bias** (Bullish/Bearish/Neutral/Conflicted) with rationale for every segment
 - Run **Phase 1 (alt-data) BEFORE Phase 3 (macro)** — positioning informs regime read
-- Daily δ: always write mandatory deltas: macro, us-equities, crypto
+- **Edit-mode:** triage maps `carry`→`skip`, `regenerate`→`edit`; segments/digest use `DocumentPatch` when prior exists
 - Analysis and bias are fine; specific buy/sell investment advice is not
 - **Token mode**: caveman ON for all process work (announcements, triage, checkpoints, reasoning). Say `normal mode` before authoring any content that publishes to Supabase (narratives, JSON rationale, recommendations). Say `caveman mode` after publishing. Quick test: text going into a DB field → full tokens; text staying in conversation → caveman.
 

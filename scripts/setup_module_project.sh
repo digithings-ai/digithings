@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# setup_module_project.sh — Create a standard DigiThings module GitHub Project.
+# setup_module_project.sh — Create a standard digithings module GitHub Project.
 #
 # Usage:
-#   bash scripts/setup_module_project.sh --title "DigiChat" [--org ORG]
+#   bash scripts/setup_module_project.sh --title "digichat" [--org ORG]
 #
 # Creates the project with standard fields (Phase, Area, Kind, Priority, Model)
-# matching the rest of the DigiThings project boards.
+# matching the rest of the digithings project boards.
 #
 # After running, register the project number:
 #   gh variable set DIGI_<MODULE>_PROJECT_NUMBER --repo digithings-ai/digithings --body <N>
@@ -45,9 +45,9 @@ add_field() {
 }
 
 add_field "Phase" \
-  "Phase 2 — Hardening,Phase 3 — Domain unification,Phase 4 — Atlas on DigiGraph,Phase 5 — Atlas tiering,SITAAS pilot"
+  "Phase 2 — Hardening,Phase 3 — Domain unification,Phase 4 — Atlas on digigraph,Phase 5 — Atlas tiering,SITAAS pilot"
 add_field "Area" \
-  "Cross-cutting,DigiGraph,DigiQuant,DigiSearch,DigiSmith,DigiKey,DigiChat,DigiBase,DigiClaw,Website,SITAAS,Docs,Atlas"
+  "Cross-cutting,digigraph,digiquant,digisearch,digismith,digikey,digichat,digibase,digiclaw,Website,SITAAS,Docs,Atlas"
 add_field "Kind" \
   "Epic,Feature,Task,Bug,Chore,Research"
 add_field "Priority" \

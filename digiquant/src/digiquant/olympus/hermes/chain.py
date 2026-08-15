@@ -8,38 +8,37 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Collection
 from dataclasses import dataclass
-from datetime import date
-from typing import Any  # noqa  # scored-lint suppression: opaque LangGraph checkpointer/graph
+from datetime import date, datetime, timezone
+from typing import (
+    Any,  # score:allow untyped any — scored-lint suppression: opaque LangGraph checkpointer/graph
+)
 
+from digigraph import usage as _usage
+
+from digiquant.olympus.atlas import diagnostics as _diagnostics
+from digiquant.olympus.atlas import provider_telemetry as _provider_telemetry
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,
     AtlasInput,
+    _legacy_run_type,
     build_atlas_graph,
     initial_state,
 )
-
-# DESLOP-034: import keeps phase_monthly in module graph for ADR-0015 doc linkage (no lazy split).
-from digiquant.olympus.atlas.phases.phase_monthly import build_phase_monthly  # noqa: F401
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
-from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
-    RiskSizingDeps,
-    build_risk_sizing_phase,
-)
-from digiquant.olympus.hermes.portfolio_materialize import (
-    MaterializeDeps,
-    build_materialize_phase,
-)
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
-from digiquant.olympus.atlas import diagnostics as _diagnostics
-from digiquant.olympus.hermes.graph import HermesGraphDeps, Phase9Deps, build_hermes_graph
-
-from digigraph import usage as _usage
+from digiquant.olympus.hermes.graph import (
+    HermesGraphDeps,
+    ThesisGraphDeps,
+    build_hermes_graph,
+)
+from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
 
 _logger = logging.getLogger(__name__)
 
@@ -47,6 +46,7 @@ __all__ = [
     "ChainDeps",
     "cli_main",
     "run_atlas_then_hermes",
+    "run_beliefs_distillation_if_triggered",
 ]
 
 
@@ -55,23 +55,22 @@ class ChainDeps:
     """Dependencies for the Atlas → Hermes chain.
 
     Atlas-side deps (preflight, triage, preflight-reflect) come from
-    :class:`AtlasGraphDeps`. Hermes-side deps (phase9 reflection write)
-    come from :class:`HermesGraphDeps`. The terminal ``publish``
-    :class:`PublishDeps` is shared — one Supabase client writes
+    :class:`AtlasGraphDeps`. Hermes-side deps (H1–H9 thesis path) come from
+    :class:`HermesGraphDeps`. Phase 9 evolution LLM (9A–9C) is **not** on the
+    daily graph — beliefs distillation is on-demand via
+    :func:`run_beliefs_distillation_if_triggered` (spec §11.1). The terminal
+    ``publish`` :class:`PublishDeps` is shared — one Supabase client writes
     everything at the end.
     """
 
     atlas: AtlasGraphDeps
     hermes: HermesGraphDeps
     publish: PublishDeps | None = None
-    # Phase 7E deterministic risk-sizing enforcement (#726). None → no-op (legacy /
-    # dry-run / monthly). Runs BEFORE publish + materialize so the published
-    # pm-rebalance document and the booked positions share the same sized book.
-    risk_sizing: RiskSizingDeps | None = None
-    # Phase 9D paper-portfolio materialization (#700). None → no-op (legacy /
-    # dry-run / monthly). Wired on by ``cli_main`` for non-monthly runs so the
-    # pipeline owns the book (owner decision 2026-06-13).
-    materialize: MaterializeDeps | None = None
+    # Phase 7E / H8 risk-sizing runs inside the Hermes graph (PR 4c). ``risk_sizing`` is
+    # wired via ``HermesGraphDeps`` for the H8 node — not as a chain terminal phase.
+    risk_sizing: Any | None = None  # legacy ChainDeps field; use hermes.risk_sizing
+    # Phase 9D paper-portfolio materialization folded into Hermes H9 (PR 4d).
+    materialize: Any | None = None  # legacy ChainDeps field — use hermes.commit_run
     # Per-run telemetry row (#726, 1B). None → skip the diagnostics write (dry-run /
     # legacy). Always wired by ``cli_main`` so every real run records its health.
     diagnostics: DiagnosticsDeps | None = None
@@ -84,6 +83,47 @@ class DiagnosticsDeps:
     client: Any
     run_id: str
     model: str | None = None
+    # Outer-retry attempt number (#1762). ``pipeline-olympus.yml`` retries the chain up to 3
+    # times inside ONE job, so ``GITHUB_RUN_ID`` — and therefore ``run_id`` — is identical
+    # across attempts. Before this was part of the diagnostics key, the last attempt's upsert
+    # replaced the previous attempt's tokens and cost, which is why 28 of 54 production rows
+    # carry a ``created_at`` that predates their own ``started_at``. Defaults to 1 so a local
+    # run without the env var is a plausible first attempt rather than the legacy 0 sentinel.
+    attempt: int = 1
+
+
+OUTER_ATTEMPT_ENV = "OLYMPUS_ATTEMPT"
+
+
+def _outer_attempt() -> int:
+    """The CI outer-retry attempt number, from ``OLYMPUS_ATTEMPT``.
+
+    ``pipeline-olympus.yml``'s retry loop exports it per attempt (#1762). Falls back to 1 —
+    a local or single-shot run genuinely is the first attempt, and 1 keeps it distinct from
+    the ``0`` sentinel migration 065 stamped on rows written before per-attempt keying.
+
+    Tolerant of a malformed value on purpose: this feeds telemetry, and a bad env var must
+    never be the reason a research run dies. A non-numeric or non-positive value is logged
+    and treated as attempt 1, which at worst re-collides two attempts the way the pre-#1762
+    code always did.
+    """
+    raw = os.environ.get(OUTER_ATTEMPT_ENV)
+    if raw is None or not raw.strip():
+        return 1
+    try:
+        attempt = int(raw)
+    except ValueError:
+        _logger.warning("%s=%r is not an integer; recording attempt 1", OUTER_ATTEMPT_ENV, raw)
+        return 1
+    if attempt < 1:
+        _logger.warning("%s=%r is not >= 1; recording attempt 1", OUTER_ATTEMPT_ENV, raw)
+        return 1
+    return attempt
+
+
+def _coerce_atlas_state(result: Any) -> AtlasResearchState:
+    """LangGraph ``invoke`` may return a plain dict (notably on checkpoint resume)."""
+    return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
 
 def _acquire_checkpointer() -> Any:
@@ -99,7 +139,7 @@ def _acquire_checkpointer() -> Any:
         from digigraph.graph.graph import get_checkpointer
 
         return get_checkpointer()
-    except Exception as exc:  # noqa: BLE001 — checkpointing is best-effort; never crash the run
+    except Exception as exc:  # checkpointing is best-effort; never crash the run
         _logger.warning("checkpointer unavailable (%s); running without resume", exc)
         return None
 
@@ -118,18 +158,18 @@ def _invoke_resumable(
     checkpoint, invoke(None) to continue from where it died; otherwise invoke(state).
     """
     if checkpointer is None or not thread_base:
-        return graph.invoke(state)
+        return _coerce_atlas_state(graph.invoke(state))
     cfg = {"configurable": {"thread_id": f"{thread_base}::{suffix}"}}
     resuming = False
     try:
         resuming = checkpointer.get_tuple(cfg) is not None
-    except Exception as exc:  # noqa: BLE001 — treat checkpoint-lookup failure as fresh run
+    except Exception as exc:  # treat checkpoint-lookup failure as fresh run
         _logger.warning("checkpoint lookup failed for %s (%s); running fresh", suffix, exc)
     if resuming:
         _logger.info(
             "resuming %s from checkpoint thread %s", suffix, cfg["configurable"]["thread_id"]
         )
-    return graph.invoke(None if resuming else state, cfg)
+    return _coerce_atlas_state(graph.invoke(None if resuming else state, cfg))
 
 
 def _degraded_run_pct() -> float:
@@ -140,7 +180,34 @@ def _degraded_run_pct() -> float:
         return 50.0
 
 
-def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -> None:
+def _retry_worthy_summary(summary: _diagnostics.RunSummary) -> bool:
+    """:func:`_retry_worthy` for a :class:`RunSummary` already in hand (avoids re-deriving it).
+
+    Keys on ``retry_signal``, **not** ``status``: since #1736 ``status`` also flips on damage
+    that is honest to report but not worth re-running (a lost research segment on a day whose
+    book committed). ``retry_signal`` is the frozen pre-#1736 gate, so CI's behaviour here is
+    byte-for-byte what it was.
+    """
+    return summary.retry_signal and not summary.book_committed
+
+
+def _retry_worthy(state: AtlasResearchState, *, degraded_pct: float) -> bool:
+    """Whether the CI outer-retry should fire for this run.
+
+    True only when the run is degraded AND its book did not actually **commit**. A run that
+    committed a valid book (or idempotent-noop of an already-booked day) did real, durable
+    work — re-running it just burns the outer loop's backoff sleeps on a good book (the
+    inception baseline sat ~20 min in retry sleeps after a successful materialization; #809).
+
+    #1555 generalizes the #809 guard from *materialized* to *committed*: a book that H8
+    materialized but H9 never persisted (coherence fail-closed / idempotency conflict / silent
+    skip) is NOT durable work — it must retry. A book-less degraded run (Atlas failed / Hermes
+    skipped) still retries as before.
+    """
+    return _retry_worthy_summary(_diagnostics.summarize_run(state, degraded_pct=degraded_pct))
+
+
+def _record_chain_error(state: AtlasResearchState, label: str, exc: BaseException) -> None:
     """Append a PhaseError marking a chain-level failure (``phase="chain"``, ``node=label``)
     so the diagnostics degraded gate sees it: ``summarize_run`` marks the run *failed* when a
     core engine (atlas/hermes) crashed and *degraded* on any other chain-level crash
@@ -151,7 +218,7 @@ def _record_chain_error(state: AtlasResearchState, label: str, exc: Exception) -
         state.errors.append(
             PhaseError(phase="chain", node=label, message=str(exc)[:500], retryable=True)
         )
-    except Exception:  # noqa: BLE001 — defensive; a bad append can't be allowed to abort the run
+    except Exception:  # defensive; a bad append can't be allowed to abort the run
         _logger.debug("chain: could not record error for %s", label, exc_info=True)
 
 
@@ -164,7 +231,7 @@ def _safe_invoke_graph(
     the belt-and-suspenders for a rare whole-graph raise (infra / checkpointer)."""
     try:
         return _invoke_resumable(graph, state, checkpointer, thread_base, label)
-    except Exception as exc:  # noqa: BLE001 — a late crash must still reach publish/materialize
+    except Exception as exc:  # a late crash must still reach publish/materialize
         _logger.exception("chain: %s graph failed; continuing with last-good state", label)
         _record_chain_error(state, label, exc)
         return state
@@ -181,27 +248,69 @@ def _run_terminal_phase(
     from digiquant.olympus.hermes.pipeline_builder import build_pipeline
 
     try:
-        return build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
-    except Exception as exc:  # noqa: BLE001 — one terminal phase failing must not abort the rest
+        return _coerce_atlas_state(
+            build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
+        )
+    except Exception as exc:  # one terminal phase failing must not abort the rest
         _logger.exception("chain: terminal phase %s failed; continuing", label)
         _record_chain_error(state, label, exc)
         return state
+
+
+def resolve_run_id(atlas_input: AtlasInput) -> str:
+    """CI run id when present, else a deterministic, self-labelled local id.
+
+    ``-local`` is a suffix no GitHub run id can carry, so an off-CI run can never be mistaken
+    for — or joined to — a CI run. Deliberately resolved once at the CLI boundary rather than
+    recomputed deeper in the call stack: two unrelated in-process runs on the same cadence and
+    date would otherwise share one identifier.
+    """
+    return os.environ.get("GITHUB_RUN_ID") or (
+        f"{atlas_input.cadence}-{atlas_input.run_date.isoformat()}-local"
+    )
+
+
+def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: AtlasInput) -> None:
+    """Fold the beliefs backlog, fail-soft (#1737).
+
+    Beliefs distillation is an *optional* on-demand backlog fold (spec §11.1), not a run
+    deliverable — yet both call sites were bare, so an LLM/Supabase error inside it escaped
+    ``run_atlas_then_hermes`` and killed a run that had already committed a book. Record it as
+    a chain-level error (so the run reports ``degraded``, not ``ok``) and continue: the
+    diagnostics row and the caller's exit code then describe what actually happened.
+    """
+    if deps.atlas.preflight.client is None:
+        return
+    try:
+        run_beliefs_distillation_if_triggered(
+            client=deps.atlas.preflight.client,
+            atlas_input=atlas_input,
+            run_type=_legacy_run_type(atlas_input.refresh_scope),
+        )
+    except Exception as exc:  # an optional backlog fold must never kill a booked run
+        _logger.exception("chain: beliefs distillation failed; continuing")
+        _record_chain_error(state, "beliefs", exc)
 
 
 def run_atlas_then_hermes(
     *,
     atlas_input: AtlasInput,
     deps: ChainDeps,
-    debate_rounds: int = 1,
+    debate_rounds: int | None = None,
     checkpointer: Any = None,
     thread_base: str | None = None,
     hermes_watchlist: list[str] | None = None,
+    hermes_held: Collection[str] = (),
 ) -> AtlasResearchState:
     """Compose Atlas → Hermes → publish, return the final state.
 
     ``hermes_watchlist`` narrows the Phase 7C/7CD per-ticker fan-out to a
     focus list (#696 — holdings + top-scored candidates) without touching the
     Atlas research watchlist; ``None`` fans out over the full watchlist.
+
+    ``hermes_held`` are the prior-book holdings; they are threaded to the
+    7C/7CD cap so a holding is never dropped by ``ATLAS_MAX_ANALYSTS`` and
+    auto-exited by the PM (the Jun-18 IJR regression, #936).
 
     ``deps.atlas.publish`` is overridden to ``None`` for the Atlas pass —
     publish runs once at the very end with the full populated state.
@@ -210,94 +319,167 @@ def run_atlas_then_hermes(
     **distinct** thread ids (``{thread_base}::atlas`` / ``::hermes``) so each
     resumes from its own checkpoint (#665); publish is never checkpointed (cheap
     + idempotent upserts).
+
+    ``debate_rounds``: compile-time upper bound on Bull/Bear debate rounds.
+    ``None`` defers to ``state.config.preferences["debate_rounds"]`` after the Atlas
+    pass (preflight loads config; clamped via ``clamp_debate_rounds``). Explicit
+    non-None overrides preferences.
     """
-    # Atlas: research only, no publish.
-    atlas_deps = AtlasGraphDeps(
-        preflight=deps.atlas.preflight,
-        publish=None,  # chain handles publish at the end
-        triage=deps.atlas.triage,
-        preflight_reflect=deps.atlas.preflight_reflect,
-    )
-    atlas_graph = build_atlas_graph(
-        atlas_input.run_type,
-        deps=atlas_deps,
-        watchlist=atlas_input.watchlist,
-        checkpointer=checkpointer,
-    )
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
-    _usage.start()
+    started_at = datetime.now(tz=timezone.utc)
+    # Detailed telemetry is keyed by the same run id the diagnostics row uses (GITHUB_RUN_ID
+    # via DiagnosticsDeps, written with on_conflict="run_id,attempt"), so Task 1.5 can
+    # reconcile the two against one value. With no diagnostics wiring there is no run to
+    # attribute to: capture stays at today's no-identity behaviour rather than minting an
+    # identifier that could silently join two unrelated in-process runs.
+    _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
     try:
+        # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
+        if atlas_input.refresh_scope == "beliefs":
+            _run_beliefs_fold(state, deps, atlas_input)
+            return state
+
+        # Atlas: research only, no publish.
+        atlas_deps = AtlasGraphDeps(
+            preflight=deps.atlas.preflight,
+            publish=None,  # chain handles publish at the end
+            triage=deps.atlas.triage,
+            preflight_reflect=deps.atlas.preflight_reflect,
+        )
+        atlas_graph = build_atlas_graph(
+            deps=atlas_deps,
+            watchlist=atlas_input.watchlist,
+            checkpointer=checkpointer,
+        )
         state = _safe_invoke_graph(atlas_graph, state, checkpointer, thread_base, "atlas")
 
-        # Monthly runs end at Atlas's phase_monthly. No Hermes, no terminal phases
-        # (phase_monthly handles its own output shape).
-        if atlas_input.run_type != "monthly":
-            # Hermes: analysis, debate, PM, reflection.
+        # Research-sufficiency gate (#944): Hermes books a rebalance + decision_log rows
+        # INSIDE its own graph (H9 commit-run), so it must NOT run when the Atlas pass
+        # produced no fresh research — otherwise the PM commits decisions on stale prior
+        # context. The Jun-20 incident: Atlas crashed on empty LLM responses, the chain
+        # swallowed it (``_safe_invoke_graph``), and a pm-rebalance was written against
+        # 2-day-stale prices. Skipping records a chain error so the run is gated degraded and
+        # CI's outer retry fires; the terminal publish still flushes whatever Atlas produced.
+        if _diagnostics.atlas_research_produced(state):
             hermes_graph = build_hermes_graph(
                 watchlist=list(
                     hermes_watchlist if hermes_watchlist is not None else atlas_input.watchlist
                 ),
                 deps=deps.hermes,
-                debate_rounds=debate_rounds,
                 checkpointer=checkpointer,
+                held=hermes_held,
             )
             state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
+        else:
+            _logger.error(
+                "chain: Atlas produced no research for %s; skipping Hermes — no rebalance booked",
+                atlas_input.run_date.isoformat(),
+            )
+            _record_chain_error(
+                state,
+                "hermes-skipped",
+                RuntimeError(
+                    "Atlas produced no fresh research; Hermes skipped to avoid booking a "
+                    "rebalance on stale context"
+                ),
+            )
 
-            # Terminal phases, each guarded so one failing never blocks the next or the
-            # diagnostics write. Phase 7E risk-sizing runs BEFORE publish + materialize so
-            # the published pm-rebalance document and the booked positions share the SAME
-            # sized book; materialize then books the enforced weights.
-            state = _run_terminal_phase(
-                deps.risk_sizing, build_risk_sizing_phase, state, "risk-sizing"
-            )
-            state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
-            state = _run_terminal_phase(
-                deps.materialize, build_materialize_phase, state, "materialize"
-            )
+        # Terminal phase — Atlas research artifacts only; Hermes terminal is H9 in-graph.
+        state = _run_terminal_phase(deps.publish, build_publish_phase, state, "publish")
+
+        # Automatic beliefs backlog fold (on-demand — not a daily graph node).
+        _run_beliefs_fold(state, deps, atlas_input)
         return state
+    except BaseException as exc:
+        # Last-resort recorder (#1733/#1763). The diagnostics row is written by the ``finally``
+        # below, but a *terminating* exception — SystemExit, KeyboardInterrupt, a job timeout's
+        # SIGTERM, an unexpected raise from a helper outside the fail-soft wrappers — used to
+        # reach that block with an error-free state, so the row said "ok" (or the process died
+        # before the row said anything at all). Record the crash first, then re-raise
+        # untouched: the caller's exit code and CI's view of the job are unchanged.
+        _record_chain_error(state, "terminal", exc)
+        raise
     finally:
         if deps.diagnostics is not None:
+            finished_at = datetime.now(tz=timezone.utc)
+            # Detailed ledger (#1979) FIRST, and before `_usage.reset()` — which clears every
+            # buffer both writes read, so anything ordered after it writes nothing while
+            # reporting success.
+            #
+            # Ahead of `write_row` specifically so the two are independent in both directions
+            # without touching the aggregate path. A detailed-flush failure cannot lose the
+            # aggregate row because the `except` below contains it. An aggregate failure cannot
+            # lose the detailed flush because the flush has already happened — which matters
+            # because `write_row` is fail-soft for its *upsert* but calls `summarize_run`
+            # outside that `try`, so a malformed state can still raise straight out of it. That
+            # raise is pre-existing and left alone here; the ordering just stops it taking the
+            # detailed records with it.
+            try:
+                _provider_telemetry.flush_run_telemetry(
+                    deps.diagnostics.client,
+                    run_id=deps.diagnostics.run_id,
+                    attempt=deps.diagnostics.attempt,
+                    node_runs=_usage.node_runs_snapshot(),
+                    provider_calls=_usage.provider_calls_snapshot(),
+                    provider_attempts=_usage.provider_attempts_snapshot(),
+                    aggregate_snapshot=_usage.snapshot(),
+                    detailed_projection=_usage.detailed_usage_projection(),
+                )
+            except Exception:  # a telemetry bug must not replace the run's real outcome
+                _logger.exception("chain: detailed provider telemetry flush failed; continuing")
             _diagnostics.write_row(
                 deps.diagnostics.client,
                 state=state,
                 run_id=deps.diagnostics.run_id,
-                run_type=atlas_input.run_type,
+                attempt=deps.diagnostics.attempt,
+                run_type=_legacy_run_type(atlas_input.refresh_scope),
                 run_date=atlas_input.run_date,
                 model=deps.diagnostics.model,
                 usage_snapshot=_usage.snapshot(),
+                started_at=started_at,
+                finished_at=finished_at,
+            )
+        else:
+            # Not a silent no-op. Without diagnostics wiring there is no run identifier, so
+            # `node_run_scope` never opens and the run produces no node runs and no logical
+            # calls *at the source* — only orphaned physical attempts, which have no persistable
+            # parent. Nothing is lost by not flushing here, but the absence must be visible.
+            _logger.info(
+                "chain: no diagnostics wiring; %d physical attempt(s) captured in process were "
+                "not persisted and this run contributes no detailed telemetry",
+                len(_usage.provider_attempts_snapshot()),
             )
         _usage.reset()
 
 
 # ─── CLI entry point ────────────────────────────────────────────────────────
 #
-# Invoked as ``python -m digiquant.olympus.hermes.chain --run-type baseline …`` by
-# the cron workflows (atlas-baseline.yml / atlas-delta.yml /
-# atlas-monthly.yml). Mirrors the old ``python -m digiquant.olympus.atlas.graph``
-# CLI surface so the workflow YAML diff stays minimal.
+# Invoked as ``python -m digiquant.olympus.hermes.chain --cadence daily …`` by
+# the unified cron workflow (.github/workflows/olympus.yml). Mirrors the Atlas
+# CLI cadence surface so the workflow YAML stays thin.
 
 
 def _parse_cli_date(value: str) -> date:
     from datetime import datetime as _dt
 
-    return _dt.strptime(value, "%Y-%m-%d").date()
+    # strptime, not date.fromisoformat: mirrors the Atlas CLI, which must reject
+    # non-ISO-extended input such as "20260420". The intermediate datetime is naive,
+    # which is harmless — .date() discards the time immediately.
+    return _dt.strptime(value, "%Y-%m-%d").date()  # noqa: DTZ007
 
 
 def _build_cli_parser():
     import argparse
 
+    from digiquant.olympus.atlas.graph import _add_cadence_cli_args
+
     parser = argparse.ArgumentParser(
         prog="python -m digiquant.olympus.hermes.chain",
         description="Run Atlas → Hermes end-to-end (research + analysis + PM + reflection).",
     )
-    parser.add_argument(
-        "--run-type",
-        required=True,
-        choices=("baseline", "delta", "monthly"),
-        help="Pipeline shape to compile and run.",
-    )
+    _add_cadence_cli_args(parser)
     parser.add_argument(
         "--run-date",
         required=True,
@@ -308,7 +490,7 @@ def _build_cli_parser():
         "--baseline-date",
         type=_parse_cli_date,
         default=None,
-        help="Explicit baseline date for delta runs. Ignored when --auto-baseline is set.",
+        help="Explicit baseline date for delta runs. Deprecated — prefer --refresh-scope all.",
     )
     parser.add_argument(
         "--resume-run-id",
@@ -322,7 +504,7 @@ def _build_cli_parser():
     parser.add_argument(
         "--auto-baseline",
         action="store_true",
-        help="Resolve --baseline-date from Supabase (delta runs only).",
+        help="Resolve --baseline-date from Supabase (deprecated shim for --run-type delta).",
     )
     parser.add_argument(
         "--watchlist",
@@ -353,6 +535,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     import json
     import sys
 
+    from digigraph.model_config import apply_olympus_openrouter_env
+
+    apply_olympus_openrouter_env()
+
     # Re-use Atlas's CLI helpers — they already handle --auto-baseline,
     # watchlist parsing, summary formatting.
     from digiquant.olympus.atlas.graph import _make_default_config_loader, resolve_cli_inputs
@@ -363,7 +549,9 @@ def cli_main(argv: list[str] | None = None) -> int:
     atlas_input = AtlasInput(**kwargs)
 
     summary = {
-        "run_type": atlas_input.run_type,
+        "cadence": atlas_input.cadence,
+        "refresh_scope": atlas_input.refresh_scope,
+        "run_type": _legacy_run_type(atlas_input.refresh_scope),
         "run_date": atlas_input.run_date.isoformat(),
         "baseline_date": (
             atlas_input.baseline_date.isoformat() if atlas_input.baseline_date else None
@@ -378,13 +566,10 @@ def cli_main(argv: list[str] | None = None) -> int:
             atlas_deps = AtlasGraphDeps(
                 preflight=PreflightDeps(client=None, config_loader=None)  # type: ignore[arg-type]
             )
-            build_atlas_graph(
-                atlas_input.run_type, deps=atlas_deps, watchlist=atlas_input.watchlist
-            )
+            build_atlas_graph(deps=atlas_deps, watchlist=atlas_input.watchlist)
             compiled["atlas"] = True
-            if atlas_input.run_type != "monthly":
-                build_hermes_graph(watchlist=list(atlas_input.watchlist))
-                compiled["hermes"] = True
+            build_hermes_graph(watchlist=list(atlas_input.watchlist))
+            compiled["hermes"] = True
         except Exception as exc:  # pragma: no cover
             summary["compile_error"] = repr(exc)
         json.dump({**summary, "dry_run": True, "compiled": compiled}, sys.stdout, default=str)
@@ -400,28 +585,23 @@ def cli_main(argv: list[str] | None = None) -> int:
             config_loader=_make_default_config_loader(atlas_input.watchlist),
         ),
         publish=None,  # chain handles publish at the end
-        triage=TriageDeps(client=client) if atlas_input.run_type == "delta" else None,
-        preflight_reflect=(
-            PreflightReflectDeps(client=client) if atlas_input.run_type != "monthly" else None
-        ),
+        triage=TriageDeps(client=client),
+        preflight_reflect=PreflightReflectDeps(client=client),
     )
+    from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
+    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
+
     hermes_deps = HermesGraphDeps(
-        phase9=(Phase9Deps(client=client) if atlas_input.run_type != "monthly" else None),
+        thesis=ThesisGraphDeps(client=client),
+        risk_sizing=RiskSizingDeps(client=client),
+        commit_run=CommitRunDeps(client=client),
     )
-    run_id = os.environ.get("GITHUB_RUN_ID") or (
-        f"{atlas_input.run_type}-{atlas_input.run_date.isoformat()}-local"
-    )
-    _non_monthly = atlas_input.run_type != "monthly"
+    run_id = resolve_run_id(atlas_input)
     chain_deps = ChainDeps(
         atlas=atlas_deps,
         hermes=hermes_deps,
-        publish=PublishDeps(client=client) if _non_monthly else None,
-        # Deterministic risk-sizing enforcement before publish/materialize (#726).
-        risk_sizing=(RiskSizingDeps(client=client) if _non_monthly else None),
-        # Pipeline owns the paper book on non-monthly runs (#700).
-        materialize=(MaterializeDeps(client=client) if _non_monthly else None),
-        # Per-run telemetry row (#726, 1B) — segment-count based, so non-monthly only.
-        diagnostics=(DiagnosticsDeps(client=client, run_id=run_id) if _non_monthly else None),
+        publish=PublishDeps(client=client),
+        diagnostics=DiagnosticsDeps(client=client, run_id=run_id, attempt=_outer_attempt()),
     )
     # Checkpoint/resume (#665): durable per-graph threads when DIGI_CHECKPOINTER is set
     # (DIGI_CHECKPOINTER=postgres + DIGI_CHECKPOINTER_POSTGRES_URI in prod). thread_base is
@@ -429,41 +609,50 @@ def cli_main(argv: list[str] | None = None) -> int:
     # a bad URI / unreachable Postgres degrades to an uncheckpointed run (#667).
     _checkpointer = _acquire_checkpointer()
     _thread_base = getattr(args, "resume_run_id", None) or run_id
-    # Focus the 7C/7CD per-ticker fan-out on holdings + top-scored candidates
-    # (#696). An explicit --watchlist is the operator override and is honored
-    # verbatim; the md-fallback path gets deterministic selection instead of
-    # an arbitrary alphabetical slice. Atlas research scope is unchanged.
-    _hermes_watchlist: list[str] | None = None
-    if not args.watchlist.strip() and atlas_input.run_type != "monthly":
-        from digiquant.olympus.hermes.candidates import select_focus_tickers
+    # Hermes H4 builds ``phase_hermes.focus_roster`` in-graph; Atlas watchlist is
+    # the research scope. Prior-book holdings still thread to the 7C/7CD cap (#936).
+    _holdings: list[str] = []
+    if not args.watchlist.strip():
+        from digiquant.olympus.atlas.supabase_io import load_prior_book
+        from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 
-        _hermes_watchlist = select_focus_tickers(
-            client=client,
-            watchlist=list(atlas_input.watchlist),
-            run_date=atlas_input.run_date,
-        )
-        summary["hermes_focus"] = list(_hermes_watchlist)
+        _prior_book = load_prior_book(client, atlas_input.run_date)
+        _holdings = holdings_from_prior_book(_prior_book)
 
     final_state = run_atlas_then_hermes(
         atlas_input=atlas_input,
         deps=chain_deps,
         checkpointer=_checkpointer,
         thread_base=_thread_base,
-        hermes_watchlist=_hermes_watchlist,
+        hermes_watchlist=None,
+        # Prior-book holdings always survive the 7C/7CD cap (#936). Empty when the
+        # operator overrides --watchlist or for monthly runs (no Hermes).
+        hermes_held=set(_holdings or ()),
     )
 
-    # Degraded-run gate (#726, 1B): a run that produced little/no fresh research is worth
-    # retrying — exit non-zero so the CI outer-retry fires (one bad sector does NOT trip
-    # it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). The diagnostics row, written
-    # inside run_atlas_then_hermes, records the why. Monthly runs use a different output
-    # shape (no research segments) so the gate doesn't apply.
-    degraded = _non_monthly and _diagnostics.is_degraded(
-        final_state, degraded_pct=_degraded_run_pct()
-    )
-    summary["degraded"] = degraded
-    json.dump({"ok": not degraded, "summary": summary}, sys.stdout, default=str)
+    # Degraded-run gate (#726, 1B) + good-book guard (#809): a run that produced little/no
+    # fresh research is worth retrying — exit non-zero so the CI outer-retry fires (one bad
+    # sector does NOT trip it; the threshold is ATLAS_DEGRADED_RUN_PCT, default 50%). BUT a
+    # run that already materialized a valid sized book must NOT retry — that wasted ~20 min of
+    # backoff sleeps on a good book (#809). The diagnostics row, written inside
+    # run_atlas_then_hermes, records the why. Monthly runs (no research segments) don't trip it.
+    run_summary = _diagnostics.summarize_run(final_state, degraded_pct=_degraded_run_pct())
+    retry_worthy = _retry_worthy_summary(run_summary)
+    # ``degraded`` keeps its pre-#1736 meaning (= the retry signal) so nothing parsing run.log
+    # changes shape; ``status`` is the honest health verdict that lands in
+    # ``atlas_run_diagnostics``. Both are printed because they legitimately disagree — a day
+    # that lost segments but committed its book is ``status=degraded, degraded=false`` (#1736).
+    summary["degraded"] = run_summary.retry_signal
+    summary["status"] = run_summary.status
+    summary["book_materialized"] = final_state.phase_hermes.sized_book is not None
+    # #1555: a green run must be *provably* a committed run. ``book_committed`` sits beside
+    # ``book_materialized`` so an operator never again reads ``ok:true, book_materialized:true``
+    # and assumes the book persisted — the silent H4→H9 freeze (2026-06-26) presented exactly
+    # that shape while nothing committed for weeks.
+    summary["book_committed"] = run_summary.book_committed
+    json.dump({"ok": not retry_worthy, "summary": summary}, sys.stdout, default=str)
     sys.stdout.write("\n")
-    return 1 if degraded else 0
+    return 1 if retry_worthy else 0
 
 
 if __name__ == "__main__":  # pragma: no cover

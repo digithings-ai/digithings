@@ -5,9 +5,9 @@ Production-grade test layout for Phase 0+. See CONTRIBUTING.md for requirements.
 ## Layout
 
 - **`tests/`** (root) – All tests.
-  - **`tests/dq/`** – Unit + API tests for DigiQuant (models, backtest, data, optimize, export, pipeline, brokers, FastAPI). Phase 2 complete.
-  - **`tests/dg/`** – Unit + API tests for DigiGraph (models, workflow, graph, LLM, FastAPI).
-  - **`tests/dc/`** – Unit tests for DigiClaw (audit). Phase 3.
+  - **`tests/dq/`** – Unit + API tests for digiquant (models, backtest, data, optimize, export, pipeline, brokers, FastAPI). Phase 2 complete.
+  - **`tests/dg/`** – Unit + API tests for digigraph (models, workflow, graph, LLM, FastAPI).
+  - **`tests/dc/`** – Unit tests for digiclaw (audit). Phase 3.
   - **`tests/test_e2e.py`** – E2E tests (require stack: `docker compose up` or local servers).
 
 ## Markers
@@ -16,7 +16,7 @@ Production-grade test layout for Phase 0+. See CONTRIBUTING.md for requirements.
 |---------------|--------|
 | `unit`        | No network, no Docker. Safe to run anywhere. |
 | `integration` | Uses HTTP (TestClient or live server). |
-| `e2e`         | Full stack: DigiGraph + DigiQuant must be up (LiteLLM checked on **127.0.0.1:4000** or **`LITELLM_URL`**). |
+| `e2e`         | Full stack: digigraph + digiquant must be up (LiteLLM checked on **127.0.0.1:4000** or **`LITELLM_URL`**). |
 | `slow`        | Slow tests (e.g. full Nautilus backtest). |
 
 ## Run tests
@@ -41,10 +41,10 @@ pytest -v
 Per package:
 
 ```bash
-# DigiQuant only
+# digiquant only
 pytest tests/dq -v
 
-# DigiGraph only
+# digigraph only
 pytest tests/dg -v
 ```
 
@@ -74,14 +74,14 @@ Per-component workflows live under `.github/workflows/` and are orchestrated by 
 
 | Job | Workflow | Notes |
 |-----|----------|-------|
-| Component tests | `digibase-test.yml`, `digikey-test.yml`, … | Path-filtered; callable via `workflow_call` |
+| Component tests | `test-digibase.yml`, `test-digikey.yml`, … | Path-filtered; callable via `workflow_call` |
 | Ruff + scripts | `ci.yml` → `ruff-and-scripts` | Baseline, contracts, integration hops |
-| Score gate | `score-pr.yml` | Heuristic diff scan via `scripts/score.py` |
-| Nautilus smoke | `nautilus-smoke.yml` | Linux `digiquant[nautilus]` parser tests |
-| Olympus | `olympus-test.yml` | Vitest + static export build (`frontend/olympus/`) |
-| Stack smoke | `stack-smoke.yml` | Nightly/manual Compose `/healthz` (REM-128) |
-| E2E contract | `e2e.yml` → `ci.yml` | `test_e2e_contract.py` without full stack |
-| E2E stack | `e2e.yml` on `develop` | `pytest -m e2e`; needs `E2E_BEARER_TOKEN` |
+| Score gate | `test-score.yml` | Heuristic diff scan via `scripts/score.py` |
+| Nautilus smoke | `test-nautilus.yml` | Linux `digiquant[nautilus]` parser tests |
+| Olympus | `test-olympus.yml` | Vitest + static export build (`frontend/olympus/`) |
+| Stack smoke | `smoke-stack.yml` | Nightly/manual Compose `/healthz` (REM-128) |
+| E2E contract | `test-e2e.yml` → `ci.yml` | `test_e2e_contract.py` without full stack |
+| E2E stack | `test-e2e.yml` on `develop` | `pytest -m e2e`; needs `E2E_BEARER_TOKEN` |
 | Pandas boundary | `ci.yml` → `ruff-and-scripts` | `scripts/check_pandas_boundary.sh` |
 
 Run locally before push:

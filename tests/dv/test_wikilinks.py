@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+from digivault.wikilinks import map_targets
 
 from digivault import parse_links, rewrite_target
-from digivault.wikilinks import map_targets
 
 pytestmark = pytest.mark.unit
 

@@ -20,7 +20,8 @@ import argparse
 import os
 import subprocess
 import sys
-from datetime import date as dt_date, timedelta
+from datetime import UTC, datetime, timedelta
+from datetime import date as dt_date
 from pathlib import Path
 
 try:
@@ -42,8 +43,8 @@ except ImportError:
 def _sb():
     if not _HAS_SB:
         raise RuntimeError("pip install supabase")
-    url = os.environ.get("SUPABASE_URL")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+    url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL"))
+    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY"))
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
@@ -72,6 +73,10 @@ def _next_calendar_day(iso: str) -> dt_date:
     return dt_date(y, m, d) + timedelta(days=1)
 
 
+def _script_dir() -> Path:
+    return Path(__file__).resolve().parent
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Backfill position_events for missing trading days using execute_at_open."
@@ -84,7 +89,7 @@ def main() -> int:
     )
     ap.add_argument(
         "--through",
-        default=dt_date.today().isoformat(),
+        default=datetime.now(UTC).date().isoformat(),
         help="Last date to process (default: UTC today)",
     )
     ap.add_argument(
@@ -99,9 +104,9 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    root = Path(__file__).resolve().parents[1]
-    exe_script = root / "scripts" / "execute_at_open.py"
-    price_script = root / "scripts" / "backfill_execution_prices.py"
+    script_dir = _script_dir()
+    exe_script = script_dir / "execute_at_open.py"
+    price_script = script_dir / "backfill_execution_prices.py"
     py = sys.executable
 
     sb = _sb()
@@ -131,13 +136,15 @@ def main() -> int:
         print(f"\n--- {d} ---")
         if args.dry_run:
             print(f"  [dry-run] {py} {exe_script} --date {d}")
-            print(f"  [dry-run] {py} {exe_script} --date {d} --prior-trading-day-rebalance  (if needed)")
+            print(
+                f"  [dry-run] {py} {exe_script} --date {d} --prior-trading-day-rebalance  (if needed)"
+            )
             continue
 
         # 1) Same-day rebalance_decision
         r1 = subprocess.run(
             [py, str(exe_script), "--date", d],
-            cwd=str(root),
+            cwd=str(script_dir),
             capture_output=True,
             text=True,
         )
@@ -149,7 +156,7 @@ def main() -> int:
         if need_prior:
             r2 = subprocess.run(
                 [py, str(exe_script), "--date", d, "--prior-trading-day-rebalance"],
-                cwd=str(root),
+                cwd=str(script_dir),
                 capture_output=True,
                 text=True,
             )
@@ -161,7 +168,7 @@ def main() -> int:
         if not args.skip_price_backfill and wrote:
             r3 = subprocess.run(
                 [py, str(price_script), "--date", d],
-                cwd=str(root),
+                cwd=str(script_dir),
                 capture_output=True,
                 text=True,
             )

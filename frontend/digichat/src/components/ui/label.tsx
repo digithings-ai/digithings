@@ -1,20 +1,15 @@
 "use client"
 
-import * as React from "react"
+// Thin re-export of the shared @digithings/web Label (#1419), pinned to
+// dress="chat" so the rendered look stays exactly digichat's current
+// shadcn-derived dress (incl. the .group data-disabled / .peer:disabled
+// dimming combinators).
 
-import { cn } from "@/lib/utils"
+import { Label as ControlLabel } from "@digithings/web"
+import type { LabelProps as ControlLabelProps } from "@digithings/web"
 
-function Label({ className, ...props }: React.ComponentProps<"label">) {
-  return (
-    <label
-      data-slot="label"
-      className={cn(
-        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
-        className
-      )}
-      {...props}
-    />
-  )
+function Label(props: Omit<ControlLabelProps, "dress">) {
+  return <ControlLabel dress="chat" {...props} />
 }
 
 export { Label }

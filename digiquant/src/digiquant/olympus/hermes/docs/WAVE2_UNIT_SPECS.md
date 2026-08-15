@@ -1,6 +1,11 @@
 # Wave 2 Unit Specs — Hermes implementation
 
-> **Historical note (WS4a):** This document describes the planned Wave 2 Hermes expansion. The Wave 2 skills (thesis, thesis-tracker, thesis-vehicle-map, opportunity-screener, deliberation, asset-analyst, market-thesis-exploration, deep-dive) were never wired to the live graph and have been deleted. This spec is preserved for reference.
+> **Superseded for implementation:** [#930](https://github.com/digithings-ai/digithings/issues/930) shipped H1–H9.
+> **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
+> **Live topology:** [`ARCHITECTURE.md`](ARCHITECTURE.md). H-path name mapping: W2-C/D/E/F/G → H1/H2/H3/H5/H6/H7; H8 = `phase7e_risk_sizing`; H9 = `h9_commit_run`.
+
+> **Historical note:** This document described the planned Wave 2 Hermes expansion before thesis-first
+> cutover. Retained for forensics and unit-ID cross-reference only.
 
 > **Parent spec:** [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md).
 > **Parent plan:** [`docs/plans/atlas-full-migration-wave1.md`](../../../../docs/plans/atlas-full-migration-wave1.md) §"Wave 2 preview".

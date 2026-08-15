@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { Badge, SectionTitle } from '@/components/ui';
 import { fetchLatestSnapshot } from '@/lib/snapshot-fetch';
 import type {
@@ -114,40 +115,68 @@ function RenderResult({
   return <SnapshotContent envelope={result.envelope} now={now} />;
 }
 
-export function SnapshotSkeleton() {
+/**
+ * Loading-grammar ruling (#1548): olympus wears ONE loading grammar — the
+ * @digithings/web sk-* shimmer sweep. The previous animate-pulse opacity bars
+ * here adopt the shimmer as a deliberate upgrade (no `pulse` dress was added
+ * to the Skeleton primitive); reduced-motion still degrades to a static tint.
+ * Bar layout (kicker line, headline bar, two section blocks) is unchanged.
+ */
+interface SnapshotPresentationProps {
+  flat?: boolean;
+}
+
+export function SnapshotSkeleton({ flat = false }: SnapshotPresentationProps) {
   return (
-    <section
+    <SkeletonGroup
       data-testid="snapshot-loading"
-      aria-busy="true"
-      aria-label="Loading daily snapshot"
-      className="glass-card p-6 space-y-4 animate-pulse"
+      aria-label="Loading daily investment brief"
+      className={flat
+        ? 'flex flex-col gap-4 border-y border-hair bg-surface px-5 py-6'
+        : 'glass-card p-6 flex flex-col gap-4'}
     >
-      <div className="h-3 w-40 rounded bg-white/10" />
-      <div className="h-6 w-3/4 rounded bg-white/10" />
+      <Skeleton className="h-3 w-40" />
+      <Skeleton className="h-6 w-3/4" />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="h-20 rounded bg-white/5" />
-        <div className="h-20 rounded bg-white/5" />
+        <Skeleton variant="block" className="h-20 w-full" />
+        <Skeleton variant="block" className="h-20 w-full" />
       </div>
-    </section>
+    </SkeletonGroup>
   );
 }
 
-export function SnapshotErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function SnapshotErrorBanner({
+  message,
+  onRetry,
+  flat = false,
+}: {
+  message: string;
+  onRetry: () => void;
+  flat?: boolean;
+}) {
   return (
     <section
       data-testid="snapshot-error"
       role="alert"
-      className="glass-card p-5 border-fin-red/30 bg-fin-red/5"
+      className={flat
+        ? 'border-y border-warn/40 bg-warn/5 px-5 py-5'
+        : 'glass-card p-5 border-down/30 bg-down/5'}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <SectionTitle className="text-fin-red">Snapshot unavailable</SectionTitle>
-          <p className="text-sm text-text-secondary break-words">{message}</p>
+          {flat ? (
+            <h3 className="mb-3 font-display text-xl text-warn">Brief unavailable</h3>
+          ) : (
+            <SectionTitle className="text-down">Brief unavailable</SectionTitle>
+          )}
+          <p className="text-sm text-ink-soft break-words">{message}</p>
         </div>
         <button
           type="button"
           onClick={onRetry}
-          className="shrink-0 rounded-md border border-fin-red/40 bg-fin-red/10 px-3 py-1.5 text-xs font-semibold text-fin-red hover:bg-fin-red/20"
+          className={flat
+            ? 'shrink-0 rounded-md border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
+            : 'shrink-0 rounded-md border border-down/40 bg-down/10 px-3 py-1.5 text-xs font-semibold text-down hover:bg-down/20'}
         >
           Retry
         </button>
@@ -156,19 +185,31 @@ export function SnapshotErrorBanner({ message, onRetry }: { message: string; onR
   );
 }
 
-export function SnapshotEmptyBanner({ reason }: { reason: 'no_recent_row' | 'unconfigured' }) {
+export function SnapshotEmptyBanner({
+  reason,
+  flat = false,
+}: {
+  reason: 'no_recent_row' | 'unconfigured';
+  flat?: boolean;
+}) {
   const message =
     reason === 'unconfigured'
       ? 'Supabase credentials are not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-      : 'No snapshot has been published for today or yesterday yet. Check back after the next pipeline run.';
+      : 'No Atlas daily investment brief has been published for today or yesterday yet. Check back after the next pipeline run.';
   return (
     <section
       data-testid="snapshot-empty"
       role="status"
-      className="glass-card p-5 border-border-subtle bg-bg-secondary/40"
+      className={flat
+        ? 'border-y border-hair bg-term-bg/40 px-5 py-5'
+        : 'glass-card p-5 border-hair bg-term-bg/40'}
     >
-      <SectionTitle>No snapshot available</SectionTitle>
-      <p className="text-sm text-text-secondary">{message}</p>
+      {flat ? (
+        <h3 className="mb-3 font-display text-xl text-ink">No brief available</h3>
+      ) : (
+        <SectionTitle>No brief available</SectionTitle>
+      )}
+      <p className="text-sm text-ink-soft">{message}</p>
     </section>
   );
 }
@@ -196,12 +237,13 @@ function SnapshotContent({
         <div
           data-testid="snapshot-stale-banner"
           role="status"
-          className="glass-card p-4 border-fin-amber/40 bg-fin-amber/5 flex items-center justify-between gap-3"
+          className="glass-card p-4 border-warn/40 bg-warn/5 flex items-center justify-between gap-3"
         >
           <div>
-            <p className="text-sm font-semibold text-fin-amber">Stale snapshot</p>
-            <p className="text-xs text-text-secondary">
-              Published {age ?? 'unknown'} (older than {DEFAULT_SNAPSHOT_STALENESS_HOURS}h).
+            <p className="text-sm font-semibold text-warn">Stale brief</p>
+            <p className="text-xs text-ink-soft">
+              This run&apos;s Atlas digest was published {age ?? 'unknown'} (older than{' '}
+              {DEFAULT_SNAPSHOT_STALENESS_HOURS}h).
             </p>
           </div>
           <Badge variant="amber">stale</Badge>
@@ -211,17 +253,20 @@ function SnapshotContent({
       <article className="glass-card p-6 space-y-5">
         <header className="flex flex-wrap items-baseline justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
-              Daily snapshot
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
+              Daily investment brief
+            </p>
+            <p className="mt-0.5 text-xs text-ink-mute">
+              Atlas research digest for this run — regime, risks, and recommended actions.
             </p>
             <h2
               data-testid="snapshot-headline"
-              className="text-xl font-semibold leading-snug text-text-primary"
+              className="mt-2 text-xl font-semibold leading-snug text-ink"
             >
               {digest.headline}
             </h2>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-ink-mute">
             <Badge variant={BIAS_VARIANT[digest.bias] ?? 'default'} data-testid="snapshot-bias">
               {biasLabel(digest.bias)}
             </Badge>
@@ -268,34 +313,40 @@ function SnapshotContent({
 export function NarrativeSection({ title, body, testId }: { title: string; body: string; testId: string }) {
   return (
     <div data-testid={testId} className="space-y-1.5">
-      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         {title}
       </h3>
-      <p className="text-sm leading-relaxed text-text-secondary whitespace-pre-line">{body}</p>
+      <p className="text-sm leading-relaxed text-ink-soft whitespace-pre-line">{body}</p>
     </div>
   );
 }
 
-export function ActionableList({ items }: { items: ActionableItem[] }) {
+export function ActionableList({ items, flat = false }: { items: ActionableItem[]; flat?: boolean }) {
   if (!items.length) return null;
   return (
-    <div data-testid="snapshot-actionable" className="space-y-2">
-      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+    <div
+      data-testid="snapshot-actionable"
+      data-presentation={flat ? 'flat' : undefined}
+      className="space-y-2"
+    >
+      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         Actionable summary
       </h3>
-      <ul className="space-y-2">
+      <ul className={flat ? 'divide-y divide-hair border-y border-hair' : 'space-y-2'}>
         {items.map((item, i) => (
           <li
             key={`${item.priority}-${i}`}
             data-testid="snapshot-actionable-item"
-            className="rounded-md border border-border-subtle bg-bg-secondary/30 p-3 text-sm"
+            className={flat
+              ? 'py-3 text-sm'
+              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
           >
-            <div className="flex items-center gap-2 text-xs text-text-muted">
+            <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">P{item.priority}</span>
               <span aria-hidden="true">·</span>
-              <span className="font-semibold text-text-primary">{item.label}</span>
+              <span className="font-semibold text-ink">{item.label}</span>
             </div>
-            <p className="mt-1 text-text-secondary">{item.rationale}</p>
+            <p className="mt-1 text-ink-soft">{item.rationale}</p>
           </li>
         ))}
       </ul>
@@ -303,26 +354,32 @@ export function ActionableList({ items }: { items: ActionableItem[] }) {
   );
 }
 
-export function RiskList({ items }: { items: RiskItem[] }) {
+export function RiskList({ items, flat = false }: { items: RiskItem[]; flat?: boolean }) {
   if (!items.length) return null;
   return (
-    <div data-testid="snapshot-risk-radar" className="space-y-2">
-      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-text-muted">
+    <div
+      data-testid="snapshot-risk-radar"
+      data-presentation={flat ? 'flat' : undefined}
+      className="space-y-2"
+    >
+      <h3 className="text-[10px] font-semibold uppercase tracking-widest text-ink-mute">
         Risk radar
       </h3>
-      <ul className="space-y-2">
+      <ul className={flat ? 'divide-y divide-hair border-y border-hair' : 'space-y-2'}>
         {items.map((item, i) => (
           <li
             key={`${item.label}-${i}`}
             data-testid="snapshot-risk-item"
-            className="rounded-md border border-border-subtle bg-bg-secondary/30 p-3 text-sm"
+            className={flat
+              ? 'py-3 text-sm'
+              : 'rounded-md border border-hair bg-term-bg/30 p-3 text-sm'}
           >
-            <div className="flex items-center gap-2 text-xs text-text-muted">
+            <div className="flex items-center gap-2 text-xs text-ink-mute">
               <span className="font-mono">{item.horizon_hours}h</span>
               <span aria-hidden="true">·</span>
-              <span className="font-semibold text-text-primary">{item.label}</span>
+              <span className="font-semibold text-ink">{item.label}</span>
             </div>
-            <p className="mt-1 text-text-secondary">{item.trigger}</p>
+            <p className="mt-1 text-ink-soft">{item.trigger}</p>
           </li>
         ))}
       </ul>

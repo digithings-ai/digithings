@@ -9,6 +9,7 @@ from pathlib import Path
 
 from digisearch.core.models import Document
 from digisearch.ingestion.base import Parser
+from digisearch.ingestion.segmenters.heading import heading_segments
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ class MarkdownParser(Parser):
                 source=src_str,
                 doc_type="markdown",
                 metadata={},
+                segments=heading_segments(content),
             )
         except Exception:
             logger.exception(

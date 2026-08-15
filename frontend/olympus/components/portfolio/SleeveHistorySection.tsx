@@ -2,6 +2,7 @@
 
 import { SectionTitle } from '@/components/ui';
 import { SleeveStackedChart } from '@/components/portfolio/sleeve-stacked-chart';
+import { SegmentedControl } from '@digithings/web';
 import type { SleeveStackMode } from '@/lib/portfolio-aggregates';
 
 export default function SleeveHistorySection(props: {
@@ -29,60 +30,50 @@ export default function SleeveHistorySection(props: {
     onClearHistoryDate,
   } = props;
 
+  const enoughHistory = sleeveData.length >= 2;
+
   return (
-    <section className="space-y-4">
-      <div className="glass-card p-6 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SectionTitle className="mb-0">Sleeves</SectionTitle>
-          <div className="flex rounded-lg border border-border-subtle overflow-hidden text-xs">
-            <button
-              type="button"
-              onClick={() => setHistoryMode('ticker')}
-              className={`px-3 py-1.5 font-medium ${historyMode === 'ticker' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'}`}
-            >
-              Ticker
-            </button>
-            <button
-              type="button"
-              onClick={() => setHistoryMode('category')}
-              className={`px-3 py-1.5 font-medium border-l border-border-subtle ${historyMode === 'category' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'}`}
-            >
-              Category
-            </button>
-            <button
-              type="button"
-              onClick={() => setHistoryMode('thesis')}
-              className={`px-3 py-1.5 font-medium border-l border-border-subtle ${historyMode === 'thesis' ? 'bg-fin-blue/20 text-fin-blue' : 'text-text-muted hover:bg-white/[0.04]'}`}
-            >
-              Thesis
-            </button>
-          </div>
-        </div>
+    <section className="mt-10 border border-hair bg-surface p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SectionTitle className="mb-0">Sleeves</SectionTitle>
+        <SegmentedControl<SleeveStackMode>
+          options={['ticker', 'category', 'thesis']}
+          value={historyMode}
+          onChange={setHistoryMode}
+          dress="accent"
+          aria-label="Sleeve grouping mode"
+        />
+      </div>
         {showHistoryDateBanner ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-fin-blue/30 bg-fin-blue/10 px-3 py-2 text-xs">
-            <span className="text-text-secondary">
-              <span className="font-mono text-text-primary">{dateParam}</span>
-              <span className="text-text-muted"> — chart or calendar</span>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2 text-xs">
+            <span className="text-ink-soft">
+              <span className="text-ink-mute">Sleeve mix pinned to </span>
+              <span className="font-mono text-ink">{dateParam}</span>
             </span>
             <button
               type="button"
               onClick={onClearHistoryDate}
-              className="shrink-0 px-2 py-1 rounded border border-border-subtle hover:bg-white/[0.06] text-text-primary"
+              className="shrink-0 px-2 py-1 rounded border border-hair hover:bg-ink/[0.06] text-ink"
             >
               Clear
             </button>
           </div>
         ) : null}
-        <div className="h-[380px]" aria-label="Sleeve weights stacked over time">
-          <SleeveStackedChart
-            data={sleeveData}
-            keys={sleeveKeys}
-            formatKey={formatSleeveKey}
-            selectedDate={effHistoryDate}
-            onChartDateSelect={onSelectHistoryDate}
-          />
-        </div>
-      </div>
+        {enoughHistory ? (
+          <div className="mt-4 h-[380px]" aria-label="Sleeve weights stacked over time">
+            <SleeveStackedChart
+              data={sleeveData}
+              keys={sleeveKeys}
+              formatKey={formatSleeveKey}
+              selectedDate={effHistoryDate}
+              onChartDateSelect={onSelectHistoryDate}
+            />
+          </div>
+        ) : (
+          <p className="mt-4 py-8 text-center text-sm text-ink-mute">
+            Sleeve history builds daily — one snapshot so far. The stacked weight chart appears once a second day is recorded.
+          </p>
+        )}
     </section>
   );
 }

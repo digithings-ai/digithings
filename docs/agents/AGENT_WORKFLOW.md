@@ -1,16 +1,17 @@
 # Autonomous Agent Development Workflow
 
-Protocol for agents working in the DigiThings monorepo.
+Protocol for agents working in the digithings monorepo.
 
 ---
 
 ## 1. Before writing code
 
-1. Read `{component}/AGENTS.md` — pre-flight checklist and anti-patterns.
-2. Read `{component}/ARCHITECTURE.md` — module map, API, data models, extension guide.
-3. Use Glob/Grep to verify files exist. Read the existing implementation before proposing changes.
-4. For changes > 3 files: write a 3–10 bullet plan and confirm it matches `ARCHITECTURE.md`. Update ARCHITECTURE.md first if there's a mismatch.
-5. If the approach requires a novel pattern not in any existing doc, escalate before proceeding.
+1. **Naming:** Digi product/module names are always lowercase (`digithings`, `digichat`, …). See [CLAUDE.md § Naming](../../CLAUDE.md#naming--digi-modules).
+2. Read `{component}/AGENTS.md` — pre-flight checklist and anti-patterns.
+3. Read `{component}/ARCHITECTURE.md` — module map, API, data models, extension guide.
+4. Use Glob/Grep to verify files exist. Read the existing implementation before proposing changes.
+5. For changes > 3 files: write a 3–10 bullet plan and confirm it matches `ARCHITECTURE.md`. Update ARCHITECTURE.md first if there's a mismatch.
+6. If the approach requires a novel pattern not in any existing doc, escalate before proceeding.
 
 ---
 
@@ -99,3 +100,17 @@ Always implement in the worktree (`make task` creates it at `.worktrees/task-N-s
 1. Close or update the linked GitHub Issue.
 2. If the change introduced a new pattern, add it to `{component}/AGENTS.md` under Extension Patterns.
 3. If the change revealed an anti-pattern, add it to `{component}/AGENTS.md` under Anti-Patterns.
+
+---
+
+## 9. Review depth by promotion stage
+
+The same diff moves through `task/<N>-slug → module/<component> → develop → main`. Don't re-run the full review pipeline at every hop — check what's actually new before choosing scope.
+
+| Stage | Review | Why |
+|-------|--------|-----|
+| `task/<N>-slug → module/<component>` | Full pass: `/pr-review-toolkit:review-pr all` (or the individual subagents) | Diff is smallest and freshest here — this is where deep review pays off |
+| `module/<component> → develop` | Skip if `git log --oneline origin/develop..module/<component>` shows only already-reviewed task-PR merge commits. Review only new commits added directly on the module branch (e.g. conflict-resolution edits) | Re-reviewing merged-and-approved task PRs is pure waste |
+| `develop → main` | `/code-review ultra` once, as the final release gate — not a repeat of the task-level pass | Cross-cutting release check, different purpose than line-level review |
+
+Before opening a promotion PR, run `git log --oneline <base>..<head>` — if it's empty or only merge commits, there is nothing new to review; link back to the task PR's review instead of re-running one.

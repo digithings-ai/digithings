@@ -15,7 +15,7 @@ export class DigigraphUpstreamAuthError extends Error {
 
 export type DigigraphUpstreamAuth = {
   bearer: string;
-  /** From DigiKey ``litellm_proxy_api_key`` when DIGIKEY_LITELLM_PROXY_KEY is set — forward as ``X-LiteLLM-Proxy-Key`` to DigiGraph. */
+  /** From digikey ``litellm_proxy_api_key`` when DIGIKEY_LITELLM_PROXY_KEY is set — forward as ``X-LiteLLM-Proxy-Key`` to digigraph. */
   litellmProxyApiKey: string | null;
 };
 
@@ -81,7 +81,7 @@ export function _resetUpstreamAuthCacheForTests(): void {
 }
 
 /**
- * JWT + optional LiteLLM proxy key (DigiKey token exchange or static bootstrap key).
+ * JWT + optional LiteLLM proxy key (digikey token exchange or static bootstrap key).
  * Reuses cached JWT until exp minus skew when exchange path is used.
  */
 export async function resolveDigigraphUpstreamAuth(
@@ -103,7 +103,7 @@ export async function resolveDigigraphUpstreamAuth(
       const ex = await exchangeDigikeyApiKey(digikeyUrl, raw);
       if (ex) return writeCache(cacheKey, ex);
       throw new DigigraphUpstreamAuthError(
-        "DigiKey api_key exchange failed (check DigiKey /v1/oauth/token and key material)."
+        "digikey api_key exchange failed (check digikey /v1/oauth/token and key material)."
       );
     }
   }
@@ -120,7 +120,7 @@ export async function resolveDigigraphUpstreamAuth(
     );
     if (ex) return writeCache(cacheKey, ex);
     throw new DigigraphUpstreamAuthError(
-      "DigiKey bff_session exchange failed (check DIGIKEY_BFF_TOKEN and DigiKey configuration)."
+      "digikey bff_session exchange failed (check DIGIKEY_BFF_TOKEN and digikey configuration)."
     );
   }
 
@@ -129,7 +129,7 @@ export async function resolveDigigraphUpstreamAuth(
 
   if (digikeyUrl && !bffTok) {
     throw new DigigraphUpstreamAuthError(
-      "DIGIKEY_URL is set but DIGIKEY_BFF_TOKEN is missing. Copy the same DigiKey secret into DigiChat (see docs/LOCAL_STACK.md), or send Authorization: Bearer dgk_live_…, or set DIGIGRAPH_UPSTREAM_API_KEY."
+      "DIGIKEY_URL is set but DIGIKEY_BFF_TOKEN is missing. Copy the same digikey secret into digichat (see docs/LOCAL_STACK.md), or send Authorization: Bearer dgk_live_…, or set DIGIGRAPH_UPSTREAM_API_KEY."
     );
   }
 

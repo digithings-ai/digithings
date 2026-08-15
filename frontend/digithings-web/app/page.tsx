@@ -1,70 +1,325 @@
-import { Nav, Footer, ScrollyGraph, Terminal, Reveal, type TermLine } from "@digithings/web";
-import { Brand, DT_NAV, DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import {
+  Colophon,
+  Footer,
+  NumberedStages,
+  OdometerStrip,
+  Reveal,
+  StackRow,
+  WordReveal,
+  type NumberedStage,
+  type OdometerStat,
+  type StackItem,
+} from "@digithings/web";
+import { DT_FOOTER, DT_FOOTER_META } from "./_nav";
+import { ContactMailto } from "@/components/ContactMailto";
+import { DtNav } from "@/components/DtNav";
+import { HeroMesh } from "@/components/landing/HeroMesh";
+import { ModuleManifest } from "@/components/landing/ModuleManifest";
+import { RepoActivity } from "@/components/landing/RepoActivity";
+import { RepoStrip } from "@/components/landing/RepoStrip";
 
-const BOOT: TermLine[] = [
-  { kind: "cmd", text: "digithings --about" },
-  { kind: "out", text: "open-core agentic stack · self-hosted" },
-  { kind: "gap" },
-  { kind: "cmd", text: "docker compose up -d" },
-  { kind: "ok", name: "digigraph", text: "orchestration   :8000" },
-  { kind: "ok", name: "digiquant", text: "quant engine    :8001" },
-  { kind: "ok", name: "digisearch", text: "retrieval       :8002" },
-  { kind: "ok", name: "digichat", text: "chat surface    :3005" },
-  { kind: "arrow", text: "→ stack online · audit on · byok" },
+// v8 landing for the digithings platform — 100% reference-sourced + expressive
+// (#1450). A mouse-following mesh-gradient hero (HeroMesh + reveal-field
+// HeroGraph) opens, then every visual block is a promoted @digithings/web
+// primitive or token-backed utility: the RepoStrip activity band, a digit-roll
+// OdometerStrip metrics band, the shared TerminalManifest, the NumberedStages
+// principles spine, the RepoActivity section, and the one big WordReveal claim.
+// The mesh / graph / counters / reveal are client islands; the page stays a
+// server component and exports statically. Every motion moment honors
+// prefers-reduced-motion and reads with no JS (html.no-js fallbacks).
+//
+// The slot under the hero used to hold a drifting <Marquee> of the seven core
+// dependencies. It was removed, not restyled: it named the same libraries the
+// #integrations section names deliberately and in full, so it added no
+// information and paid for that with perpetual motion under the hero. <RepoStrip>
+// takes the slot and spends it on live repository activity instead. The Marquee
+// primitive itself stays in @digithings/web — the design reference still
+// specimens it.
+
+// Every figure here is countable in the repo — no projections, no asterisks
+// (#1846). Each one is checked against the code, and the band must not
+// contradict the manifest right below it, which self-discloses "9 online · 2 on
+// the roadmap" (computed from the registry, so it tracks automatically):
+//   9  — non-roadmap modules in the shared `modules` registry (2 are roadmap:
+//        digistore, digilink). digivault was missing from the registry until it was
+//        added here — it ships
+//        a FastAPI service on 8004 behind its own compose profile and had been
+//        missing. This deliberately does NOT say "11", which is what used to sit
+//        14 lines under "no asterisks".
+//   16 — services under `services:` in the single 460-line docker-compose.yml.
+//   2  — live vector backends behind one client: Chroma and Azure AI Search
+//        (digisearch/src/digisearch/server.py fails startup unless one is
+//        configured).
+//   0  — BYOK keys stored: the key arrives per-request in `x-byok-key` and is
+//        forwarded upstream, never persisted or logged
+//        (frontend/digichat/src/app/api/chat/route.ts).
+// Rendered by the OdometerStrip (#1452 promotion): each digit is a 0–9 reel
+// that rolls to its value on arrival; reduced motion and no-JS ship the
+// settled final figures.
+const METRICS: OdometerStat[] = [
+  { value: "9", label: "modules shipping" },
+  { value: "16", label: "compose services" },
+  { value: "2", label: "vector backends" },
+  { value: "0", label: "keys stored" },
+];
+
+// The packages the stack is actually assembled from, named deliberately and in
+// full (#1846) — compatibility is the differentiator, so the dependency list IS
+// the pitch. This section is also why the marquee above it was removable: it named
+// a subset of these on a loop and added nothing. Rendered by the shared
+// StackRow/StackLogo primitives (@digithings/web): a slug present in the logos
+// registry gets its real vendor mark, anything else degrades to a monogram
+// chip. NautilusTrader, LiteLLM, Chroma and Azure AI Search publish no
+// single-path monochrome SVG, so they read as monograms — expected, not a bug.
+// Every slug below is verified against components/logos.ts.
+const INTEGRATIONS: { label: string; items: StackItem[] }[] = [
+  {
+    label: "orchestration & models",
+    items: [
+      { name: "LangGraph", icon: "langgraph" },
+      { name: "LiteLLM", icon: null, mono: "LL" },
+      { name: "MCP", icon: "modelcontextprotocol" },
+      { name: "OpenAI SDK", icon: "openai" },
+      { name: "Pydantic", icon: "pydantic" },
+      { name: "FastAPI", icon: "fastapi" },
+    ],
+  },
+  {
+    label: "quant, data & retrieval",
+    items: [
+      { name: "NautilusTrader", icon: null, mono: "NT" },
+      { name: "Optuna", icon: "optuna" },
+      { name: "Polars", icon: "polars" },
+      { name: "Chroma", icon: null, mono: "Ch" },
+      { name: "Azure AI Search", icon: null, mono: "AZ" },
+      { name: "Supabase", icon: "supabase" },
+      { name: "Postgres", icon: "postgresql" },
+    ],
+  },
+  {
+    label: "runtime, surface & observability",
+    items: [
+      { name: "Docker", icon: "docker" },
+      { name: "OpenTelemetry", icon: "opentelemetry" },
+      { name: "Prometheus", icon: "prometheus" },
+      { name: "Redis", icon: "redis" },
+      { name: "Next.js", icon: "nextdotjs" },
+      { name: "React", icon: "react" },
+    ],
+  },
+];
+
+// The four properties of every module — verbatim from the prior principles grid,
+// now a numbered spine.
+const PRINCIPLES: NumberedStage[] = [
+  {
+    num: "01",
+    title: "Self-hosted by default",
+    mech:
+      "One docker-compose file, sixteen services, on a laptop or any host you own — eight up by " +
+      "default and the rest behind named profiles you turn on: digichat, digivault, the search MCP, " +
+      "the heartbeat, observability, and the LiteLLM cache.",
+  },
+  {
+    num: "02",
+    title: "BYOK, every request",
+    mech: "Anthropic, OpenAI, or any LiteLLM-compatible key — forwarded per-request, never stored.",
+  },
+  {
+    num: "03",
+    title: "Audit-on by default",
+    mech: "Append-only JSONL audit and a correlation ID on every service hop. Events record a prompt's length, never its text — tail events.jsonl and check.",
+  },
+  {
+    num: "04",
+    title: "Backend-swappable",
+    mech: "Two live vector backends — Chroma and Azure AI Search — behind one client, swappable without touching business code.",
+  },
 ];
 
 export default function Home() {
   return (
     <>
-      <Nav brand={<Brand />} links={DT_NAV} />
+      <DtNav />
 
-      <main>
-        <section className="hero">
-          <div className="wrap hero-grid">
-            <div className="hero-copy">
-              <Reveal as="p" className="eyebrow"><span className="prompt">$</span> open core · ten modules online</Reveal>
-              <Reveal as="h1" className="hero-title" delay={0.05}>
-                Build agents on infrastructure <em>you own.</em>
-              </Reveal>
-              <Reveal as="p" className="hero-lede" delay={0.1}>
-                A modular, open-core agentic stack — composable services wired into one platform.
-                Self-hosted, BYOK, audit-on by default. No vendor lock-in, no opaque pipelines.
-              </Reveal>
-              <Reveal className="hero-actions" delay={0.15}>
-                <a className="btn btn-primary" href="/architecture">Explore the platform <span aria-hidden="true">→</span></a>
-                <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">View on GitHub</a>
-              </Reveal>
-            </div>
-            <Reveal className="hero-term" delay={0.1}>
-              <Terminal title="~/digithings — zsh" lines={BOOT} />
-            </Reveal>
+      <main id="main" tabIndex={-1}>
+        <HeroMesh>
+          <h1 className="dqhero-h1">
+            <span className="ln">
+              <span>AI infrastructure</span>
+            </span>
+            <span className="ln">
+              <span>in a glass box</span>
+            </span>
+            <span className="ln">
+              <span>
+                <em>you own</em>
+              </span>
+            </span>
+          </h1>
+          <p className="dqhero-lede">
+            Build and ship AI applications on infrastructure you own — your hosts, your keys, your
+            choice of model.
+          </p>
+          <div className="dqhero-cta">
+            {/* Real link, not decorative copy (full-UI-suite critique, P3):
+                the hero's only affordance used to be a <p>, and the nearest
+                actual CTA (NavShell's "Ask digichat" pill) disappears at
+                exactly the scroll depth that leaves the hero (autoHide
+                yields past 180px) -- so the page's most-viewed screen handed
+                off to one with no visible action. Same copy, same look,
+                now an anchor to the next section instead of a static label. */}
+            <a className="dqhero-scroll-label" href="#metrics">
+              Scroll to explore
+            </a>
+            <div className="dqhero-scroll" aria-hidden="true" />
           </div>
-        </section>
+        </HeroMesh>
 
-        <section className="section" id="platform">
+        <RepoStrip />
+
+        <section className="section" id="metrics">
           <div className="wrap">
             <Reveal className="section-head center">
-              <span className="kicker">// the platform</span>
-              <h2>Ten modules, wired into one.</h2>
-              <p>A supervisor at the centre routes every request to the right specialist. Scroll to walk the stack — or hover a node.</p>
+              <span className="kicker">{"// by the numbers"}</span>
+              <h2>The platform, in four numbers.</h2>
+              <p>
+                No asterisks — every figure is countable in the repo. Nine modules ship today and
+                two are still on the roadmap; the manifest below names which.
+              </p>
+            </Reveal>
+            <Reveal>
+              <OdometerStrip stats={METRICS} className="mx-auto max-w-[880px]" />
             </Reveal>
           </div>
-          <ScrollyGraph />
         </section>
+
+        <section className="section section-architecture" id="architecture">
+          <div className="wrap">
+            <Reveal className="section-head center">
+              <span className="kicker">{"// the architecture"}</span>
+              {/* nowrap from md up so the claim holds one line; it still wraps on
+                  phones, where forcing one line would shrink it to nothing.
+                  "Nine", not "Eleven" (full-UI-suite critique, P2): the
+                  #metrics section one screen above states, and the odometer
+                  literally renders, "9" shipped modules — a scanning reader
+                  hitting two different headline-level numbers back to back
+                  reads as a contradiction, even though both are correct under
+                  their own count (nine shipped vs. eleven total registered).
+                  The 9-shipped/2-roadmap split already lives in the body copy
+                  below; the headline now matches the number it is standing
+                  next to. */}
+              <h2 className="md:whitespace-nowrap">Nine modules. One toolkit.</h2>
+              <p>
+                The nine that ship run standalone or compose with the rest — retrieval, quant
+                research and chat, plus the auth, tracing and audit any deployment needs. Two more
+                are on the roadmap; the manifest below marks which.
+              </p>
+            </Reveal>
+            <ModuleManifest />
+          </div>
+        </section>
+
+        {/* Integrations: the dependency list as the pitch. Uses the shared
+            StackRow primitive — no app-local component, no new class family. */}
+        <section className="section" id="integrations">
+          <div className="wrap">
+            <Reveal className="section-head center">
+              <span className="kicker">{"// integrations"}</span>
+              <h2>Built on what you already run.</h2>
+              <p>
+                Every module is assembled from open-source libraries you can name, version, and
+                swap — no forks, no reimplementations. That is why this drops into an existing
+                deployment instead of asking you to replace one.
+              </p>
+            </Reveal>
+            {INTEGRATIONS.map((group) => (
+              <Reveal key={group.label} className="mx-auto mt-[1.7rem] max-w-[880px]">
+                <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-ink-mute">
+                  {group.label}
+                </div>
+                <StackRow items={group.items} />
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* "built on what you already run" (open dependencies) → "maintained in
+            the open" (the repo itself). Placed here rather than under the hero so
+            its figures never sit adjacent to the #metrics odometer, where two
+            number-bearing blocks would read as one restated twice. Plain
+            .section: section-alt stays the single accent before the claim. */}
+        <RepoActivity />
 
         <section className="section section-alt" id="principles">
           <div className="wrap">
-            <Reveal className="section-head"><span className="kicker">// why digithings</span><h2>Four properties of every module.</h2></Reveal>
-            <div className="principles">
-              <Reveal className="principle"><span className="principle-num">01</span><h3>Self-hosted by default</h3><p>One docker-compose file runs the whole stack on a laptop, a VM, or a cluster.</p></Reveal>
-              <Reveal className="principle"><span className="principle-num">02</span><h3>BYOK, every request</h3><p>Anthropic, OpenAI, or any LiteLLM-compatible key — forwarded per-request, never stored.</p></Reveal>
-              <Reveal className="principle"><span className="principle-num">03</span><h3>Audit-on by default</h3><p>Immutable JSONL audit, correlation IDs across every span, PII redacted before logs hit disk.</p></Reveal>
-              <Reveal className="principle"><span className="principle-num">04</span><h3>Backend-swappable</h3><p>Swap vector DB or storage backend without touching business code.</p></Reveal>
-            </div>
+            <Reveal className="section-head">
+              <span className="kicker">{"// why digithings"}</span>
+              <h2>Nobody knows which vendor wins.</h2>
+              <p>
+                The field moves faster than any bet you could place on it, so this architecture
+                declines to place one. Nothing here is married to a provider: the stack is
+                self-hosted, keys arrive per request, and models and vector backends are
+                configuration rather than code. When the leader changes, you change one setting —
+                not the application on top.
+              </p>
+            </Reveal>
+            <NumberedStages stages={PRINCIPLES} className="max-w-[760px]" />
           </div>
+        </section>
+
+        {/* No .section padding here: the WordReveal track is its own breathing
+            room (the line rides in, pins at mid-viewport for a beat, and the
+            page flows on) — section padding on top of it read as a dead gap. */}
+        <section id="claim" aria-label="You own the stack, the keys, and the infrastructure">
+          <div className="wrap">
+            {/* The owner's own line, and the one claim the whole page exists to
+                support. Three sentences on purpose: WordReveal fills word by
+                word, so the repetition lands as three separate beats rather
+                than one clause. */}
+            <WordReveal
+              id="claim-reveal"
+              text="You own the stack. You own the keys. You own the infra."
+            />
+          </div>
+        </section>
+
+        <section className="section text-center" id="contact">
+          <Reveal className="wrap">
+            <div className="font-mono text-[0.7rem] uppercase tracking-[0.16em] text-accent">
+              Contact
+            </div>
+            <h2 className="mt-[0.6rem] font-display text-[clamp(1.6rem,3vw,2.4rem)] font-normal leading-[1.12] tracking-[-0.01em] text-ink">
+              Questions, enterprise, or partnership.
+            </h2>
+            <p className="mx-auto mt-[0.8rem] max-w-[60ch] leading-[1.6] text-ink-soft">
+              The whole monorepo is MIT-licensed and public — take it and run it yourself. What we
+              sell is the integration work: fitting these modules to the stack you already have,
+              on your own infrastructure.
+            </p>
+            <div className="mt-[2rem] flex flex-wrap justify-center gap-[0.8rem]">
+              <ContactMailto className="btn btn-primary" subject="digithings%20inquiry">
+                Email us <span aria-hidden="true">→</span>
+              </ContactMailto>
+              <ContactMailto className="btn btn-ghost" subject="digithings%20enterprise">
+                Enterprise
+              </ContactMailto>
+            </div>
+            <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
+              <ContactMailto
+                className="text-accent [text-underline-offset:2px] hover:text-ink"
+                showAddress
+              >
+                Or email us directly
+              </ContactMailto>
+            </p>
+          </Reveal>
         </section>
       </main>
 
+      {/* sweep: the flagship page opts into the reference footer's glow
+          sweep — every other consumer keeps the outline-only default. */}
+      <Colophon name="digi" suffix="things" sweep />
       <Footer links={DT_FOOTER} meta={DT_FOOTER_META} />
     </>
   );

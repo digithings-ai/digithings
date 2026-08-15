@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiquant.addm import check_drift, clear_history, record_sharpe
 
 

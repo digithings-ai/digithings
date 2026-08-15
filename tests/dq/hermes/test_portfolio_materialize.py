@@ -10,10 +10,11 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.portfolio_materialize import (
     MaterializeDeps,
+    _default_invalidation,
+    _upsert_portfolio_metrics,
     build_materialize_node,
 )
 
@@ -193,8 +194,10 @@ class TestGuards:
 
 def _state_with_analysts(recommended, analysts, debates=None) -> AtlasResearchState:
     state = _state(recommended)
-    state.phase7c_analysts = analysts
-    state.phase7cd_debates = debates or {}
+    state.phase_hermes = PhaseHermesState(
+        asset_analysts=analysts,
+        deliberation_summaries=debates or {},
+    )
     return state
 
 
@@ -316,8 +319,10 @@ class TestPositionRiskFields:
             config=AtlasConfigBundle(preferences=preferences or {}),
         )
         state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
-        state.phase7c_analysts = analysts or {}
-        state.phase7cd_debates = debates or {}
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts=analysts or {},
+            deliberation_summaries=debates or {},
+        )
         return state
 
     def _book(self, client: FakeSupabaseClient) -> dict:
@@ -346,7 +351,7 @@ class TestPositionRiskFields:
                 [{"ticker": "AAPL", "target_pct": 40}],
                 analysts={"AAPL": {"conviction_score": 4, "stance": "buy"}},
                 debates={"AAPL": {"conviction_delta": 1}},
-                preferences={"holding_days": 30},
+                preferences={"holding_days": 5, "risk_horizon_days": 30},
             )
         )
         aapl = self._book(client)["AAPL"]
@@ -383,7 +388,7 @@ class TestPositionRiskFields:
         aapl = self._book(client)["AAPL"]
         assert aapl["entry_price"] == 150.0  # carried, NOT reset to today's 200 close
         assert aapl["entry_date"] == "2026-06-01"
-        assert aapl["horizon_days"] == 21  # default when preferences omit holding_days
+        assert aapl["horizon_days"] == 21  # decision holding_days does not set risk horizon
 
     def test_on_without_atr_skips_stop_target(self, monkeypatch) -> None:
         monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
@@ -431,7 +436,7 @@ class TestPositionRiskFields:
             assert f not in cash
 
     def test_negative_horizon_defaults_to_21(self, monkeypatch) -> None:
-        # A nonsensical negative holding_days must not persist — fall back to the default.
+        # A nonsensical negative risk horizon must not persist — fall back to the default.
         monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
         client = FakeSupabaseClient(
             canned_reads={
@@ -442,7 +447,7 @@ class TestPositionRiskFields:
             self._state(
                 [{"ticker": "SPY", "target_pct": 50}],
                 analysts={"SPY": {"conviction_score": 3}},
-                preferences={"holding_days": -5},
+                preferences={"risk_horizon_days": -5},
             )
         )
         assert self._book(client)["SPY"]["horizon_days"] == 21
@@ -471,3 +476,305 @@ class TestPositionRiskFields:
         assert spy["weight_pct"] == 50.0  # book still materialized
         for f in ("entry_price", "conviction", "sector_bucket", "stop_loss_pct"):
             assert f not in spy  # partial enrichment stripped after the failure
+
+    def test_enrichment_failure_preserves_thesis_id(self, monkeypatch) -> None:
+        # thesis_id is set before enrichment; enrichment failure must not strip it (#814).
+        import digiquant.olympus.hermes.portfolio_materialize as pm
+
+        def _boom(*_a, **_k):
+            raise RuntimeError("enrichment error")
+
+        monkeypatch.setenv("OLYMPUS_POSITION_RISK_FIELDS", "1")
+        monkeypatch.setattr(pm, "sector_bucket", _boom)
+        client = FakeSupabaseClient(
+            canned_reads={
+                "price_history": [{"date": "2026-06-11", "ticker": "SPY", "close": 400.0}]
+            }
+        )
+        build_materialize_node(MaterializeDeps(client=client))(
+            self._state([{"ticker": "SPY", "target_pct": 50}])
+        )
+        spy = self._book(client)["SPY"]
+        assert spy.get("thesis_id") == "spy"  # preserved through enrichment failure
+
+
+@pytest.mark.unit
+class TestBookIntegrity:
+    """#814 — book-write integrity: thesis_id on positions, invalidation defaults."""
+
+    def _run(self, client, recommended, analysts=None, debates=None) -> None:
+        state = AtlasResearchState(
+            run_type="delta", run_date=RUN_DATE, baseline_date=date(2026, 6, 9)
+        )
+        state.phase7d_rebalance = {"recommended_portfolio": recommended, "actions": [], "notes": ""}
+        state.phase_hermes = PhaseHermesState(
+            asset_analysts=analysts or {},
+            deliberation_summaries=debates or {},
+        )
+        build_materialize_node(MaterializeDeps(client=client))(state)
+
+    # ── Fix 1: thesis_id on positions ──────────────────────────────────────
+
+    def test_non_cash_positions_have_thesis_id(self) -> None:
+        client = FakeSupabaseClient()
+        self._run(
+            client, [{"ticker": "SPY", "target_pct": 60}, {"ticker": "IJR", "target_pct": 40}]
+        )
+        positions = {r["ticker"]: r for r in client.store["positions"]}
+        assert positions["SPY"]["thesis_id"] == "spy"
+        assert positions["IJR"]["thesis_id"] == "ijr"
+
+    def test_cash_residual_has_no_thesis_id(self) -> None:
+        client = FakeSupabaseClient()
+        self._run(client, [{"ticker": "SPY", "target_pct": 70}])
+        positions = {r["ticker"]: r for r in client.store["positions"]}
+        assert "thesis_id" not in positions["CASH"]
+
+    def test_thesis_id_matches_lowercase_ticker(self) -> None:
+        # thesis_id must be ticker.lower() to match the theses table FK (#814).
+        client = FakeSupabaseClient()
+        self._run(client, [{"ticker": "XLP", "target_pct": 100}])
+        xlp = next(r for r in client.store["positions"] if r["ticker"] == "XLP")
+        assert xlp["thesis_id"] == "xlp"
+
+    # ── Fix 2: invalidation defaults for ACTIVE theses ─────────────────────
+
+    def test_active_thesis_without_debate_gets_default_invalidation(self) -> None:
+        # No debate data → _default_invalidation must fill a non-empty string (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"stance": "buy", "thesis": "AI tailwind"}},
+            debates={},  # no bear_case
+        )
+        spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")
+        assert spy["invalidation"]  # must be non-empty
+        assert len(spy["invalidation"]) > 5
+
+    def test_explicit_bear_case_not_overridden(self) -> None:
+        # An existing bear_case must be preserved, not replaced by a default (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"stance": "buy"}},
+            debates={"SPY": {"bear_case": "breaks below 200dma"}},
+        )
+        spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")
+        assert spy["invalidation"] == "breaks below 200dma"
+
+    def test_stop_loss_pct_used_in_default_invalidation(self) -> None:
+        # When the analyst payload has stop_loss_pct, the default uses it (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "SPY", "target_pct": 100}],
+            analysts={"SPY": {"stance": "buy", "stop_loss_pct": -5.0}},
+            debates={},
+        )
+        spy = next(r for r in client.store["theses"] if r["thesis_id"] == "spy")
+        assert "5.0%" in spy["invalidation"]
+
+    def test_holding_with_no_analyst_gets_default_invalidation(self) -> None:
+        # A held ticker with no analyst payload must still get a non-empty invalidation (#814).
+        client = FakeSupabaseClient()
+        self._run(client, [{"ticker": "BIL", "target_pct": 100}], analysts={})
+        bil = next(r for r in client.store["theses"] if r["thesis_id"] == "bil")
+        assert bil["invalidation"]  # non-empty, generated from _default_invalidation
+
+    def test_monitoring_status_also_gets_default_invalidation(self) -> None:
+        # MONITORING theses (stance=watch) must also have non-empty invalidation (#814).
+        client = FakeSupabaseClient()
+        self._run(
+            client,
+            [{"ticker": "TLT", "target_pct": 100}],
+            analysts={"TLT": {"stance": "watch"}},
+            debates={},
+        )
+        tlt = next(r for r in client.store["theses"] if r["thesis_id"] == "tlt")
+        assert tlt["status"] == "MONITORING"
+        assert tlt["invalidation"]
+
+
+@pytest.mark.unit
+class TestPortfolioMetricsWriter:
+    """#953 — portfolio_metrics rows must compute sharpe/vol/drawdown/alpha
+    from the nav_history series, not leave them NULL."""
+
+    def test_metrics_computed_from_sufficient_nav_history(self) -> None:
+        """With 25 NAV points the writer must populate sharpe, volatility,
+        max_drawdown, and alpha (not NULL)."""
+        # Build 25 daily NAV values: base 100 with small daily returns.
+        nav_rows = [
+            {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 26)
+        ]
+        # SPY benchmark for alpha: same window, slightly different return.
+        spy_rows = [
+            {"date": f"2026-05-{d:02d}", "ticker": "SPY", "close": round(400.0 * (1.0005**d), 6)}
+            for d in range(1, 26)
+        ]
+        client = FakeSupabaseClient(
+            canned_reads={"nav_history": nav_rows, "price_history": spy_rows}
+        )
+        _upsert_portfolio_metrics(
+            client=client,
+            run_date=date(2026, 5, 25),
+        )
+        rows = client.store.get("portfolio_metrics", [])
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["date"] == "2026-05-25"
+        assert row["pnl_pct"] is not None
+        assert row["sharpe"] is not None
+        assert row["volatility"] is not None
+        assert row["max_drawdown"] is not None
+        assert row["alpha"] is not None
+        # Sanity: sharpe should be positive for a positive-return series
+        assert row["sharpe"] > 0
+        assert row["_on_conflict"] == "date"
+
+    def test_metrics_null_when_insufficient_history(self) -> None:
+        """With < 20 NAV points, risk metrics must be NULL (not 0)."""
+        nav_rows = [
+            {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)}
+            for d in range(1, 6)  # only 5 rows
+        ]
+        client = FakeSupabaseClient(canned_reads={"nav_history": nav_rows})
+        _upsert_portfolio_metrics(
+            client=client,
+            run_date=date(2026, 5, 5),
+        )
+        rows = client.store.get("portfolio_metrics", [])
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["sharpe"] is None
+        assert row["volatility"] is None
+        assert row["max_drawdown"] is None
+        assert row["alpha"] is None
+        assert row["net_return_pct"] is not None
+        assert row["benchmark_return_pct"] is None
+        assert row["relative_return_pct"] is None
+        # pnl_pct should still be populated (day return)
+        assert row["pnl_pct"] is not None
+
+    def test_metrics_idempotent_upsert_on_date(self) -> None:
+        """Re-running on the same date produces an upsert (on_conflict='date')."""
+        nav_rows = [
+            {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 6)
+        ]
+        client = FakeSupabaseClient(canned_reads={"nav_history": nav_rows})
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5))
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 5))
+        for row in client.store["portfolio_metrics"]:
+            assert row["_on_conflict"] == "date"
+
+    def test_materialize_node_writes_portfolio_metrics(self) -> None:
+        """The materialize node should call _upsert_portfolio_metrics after nav_history."""
+        nav_rows = [
+            {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 26)
+        ]
+        spy_rows = [
+            {"date": f"2026-05-{d:02d}", "ticker": "SPY", "close": round(400.0 * (1.0005**d), 6)}
+            for d in range(1, 26)
+        ]
+        client = FakeSupabaseClient(
+            canned_reads={"nav_history": nav_rows, "price_history": spy_rows}
+        )
+        state = _state([{"ticker": "SPY", "target_pct": 100}])
+        state.run_date = date(2026, 5, 25)
+        build_materialize_node(MaterializeDeps(client=client))(state)
+        assert "portfolio_metrics" in client.store
+        row = client.store["portfolio_metrics"][0]
+        assert row["date"] == "2026-05-25"
+
+    def test_alpha_positive_when_portfolio_beats_spy(self) -> None:
+        """Alpha = portfolio return - benchmark (SPY) return; should be positive
+        when portfolio outperforms."""
+        # Portfolio grows 0.2%/day, SPY grows 0.05%/day
+        nav_rows = [
+            {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.002**d), 6)} for d in range(1, 26)
+        ]
+        spy_rows = [
+            {
+                "date": f"2026-05-{d:02d}",
+                "ticker": "SPY",
+                "close": round(400.0 * (1.0005**d), 6),
+            }
+            for d in range(1, 26)
+        ]
+        client = FakeSupabaseClient(
+            canned_reads={"nav_history": nav_rows, "price_history": spy_rows}
+        )
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 25))
+        row = client.store["portfolio_metrics"][0]
+        assert row["alpha"] is not None
+        assert row["alpha"] > 0  # portfolio beat SPY
+        assert row["net_return_pct"] is not None
+        assert row["benchmark_return_pct"] is not None
+        assert row["relative_return_pct"] == row["alpha"]
+
+    def test_no_spy_data_alpha_none(self) -> None:
+        """When SPY price_history is missing, alpha must be None (not crash)."""
+        nav_rows = [
+            {"date": f"2026-05-{d:02d}", "nav": round(100.0 * (1.001**d), 6)} for d in range(1, 26)
+        ]
+        client = FakeSupabaseClient(canned_reads={"nav_history": nav_rows, "price_history": []})
+        _upsert_portfolio_metrics(client=client, run_date=date(2026, 5, 25))
+        row = client.store["portfolio_metrics"][0]
+        # sharpe/vol/drawdown should still be computed, but alpha requires SPY
+        assert row["sharpe"] is not None
+        assert row["alpha"] is None
+
+
+@pytest.mark.unit
+class TestVolatilityScaledInvalidation:
+    """#953 — _default_invalidation should use ATR-based stop when available,
+    falling back to generic 8% only when ATR data is absent."""
+
+    def test_atr_based_stop_when_available(self) -> None:
+        """When atr_pct is present, the stop should be ~2x ATR (volatility-scaled)."""
+        analyst = {"entry_price": 100.0, "atr_pct": 2.5}
+        result = _default_invalidation(analyst)
+        # 2 * 2.5% = 5% stop from entry
+        assert "5.0%" in result
+        assert (
+            "advisory" in result.lower()
+            or "atr" in result.lower()
+            or "volatility" in result.lower()
+        )
+        # Should NOT contain the generic 8%
+        assert "8%" not in result
+
+    def test_fallback_to_8pct_without_atr(self) -> None:
+        """Without ATR data, fall back to the generic 8% stop."""
+        analyst = {"entry_price": 100.0}
+        result = _default_invalidation(analyst)
+        assert "8%" in result
+
+    def test_atr_stop_with_high_vol_asset(self) -> None:
+        """High-vol asset (4% daily ATR) → 8% stop (not the generic 8%)."""
+        analyst = {"entry_price": 50.0, "atr_pct": 4.0}
+        result = _default_invalidation(analyst)
+        # 2 * 4% = 8% — but this is ATR-derived, not the generic fallback
+        assert "8.0%" in result
+
+    def test_atr_stop_with_low_vol_asset(self) -> None:
+        """Low-vol asset like BIL (0.1% daily ATR) → 0.2% stop, not 8%."""
+        analyst = {"entry_price": 91.0, "atr_pct": 0.1}
+        result = _default_invalidation(analyst)
+        # 2 * 0.1% = 0.2% stop — much more sensible for a T-bill ETF
+        assert "0.2%" in result
+        assert "8%" not in result
+
+    def test_stop_loss_pct_still_takes_priority(self) -> None:
+        """Explicit stop_loss_pct from analyst must still take priority over ATR."""
+        analyst = {"stop_loss_pct": -5.0, "atr_pct": 2.0, "entry_price": 100.0}
+        result = _default_invalidation(analyst)
+        assert "5.0%" in result
+
+    def test_zero_atr_falls_back(self) -> None:
+        """ATR of 0 is degenerate — fall back to 8% stop."""
+        analyst = {"entry_price": 100.0, "atr_pct": 0.0}
+        result = _default_invalidation(analyst)
+        assert "8%" in result

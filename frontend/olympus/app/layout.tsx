@@ -1,16 +1,15 @@
 import './globals.css';
-import { ReactNode, Suspense } from 'react';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { ReactNode } from 'react';
+import type { Metadata } from 'next';
+import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
 import { DashboardProvider } from '@/lib/dashboard-context';
 import { AppShellProvider } from '@/components/app-shell-context';
 import { ThemeProvider } from '@/components/theme-provider';
-import Sidebar from '@/components/sidebar';
-import MobileAppBar from '@/components/mobile-app-bar';
-import CommandPalette from '@/components/command-palette';
+import AppFrame from '@/components/app-frame';
 import MotionLayer from '@/components/motion-layer';
 
 /** Default + invalid keys → follow prefers-color-scheme; light/dark fixed; auto → OS */
-const THEME_INIT = `(function(){try{var t=localStorage.getItem('olympus-theme')||localStorage.getItem('dt-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}d.classList.add(dark?'dark':'light');}catch(e){document.documentElement.classList.add('dark');}})();`;
+const THEME_INIT = `(function(){try{var t=localStorage.getItem('olympus-theme')||localStorage.getItem('dt-theme');var d=document.documentElement;d.classList.remove('light','dark');var dark;if(t==='light')dark=false;else if(t==='dark')dark=true;else{dark=window.matchMedia('(prefers-color-scheme: dark)').matches;}var m=dark?'dark':'light';d.classList.add(m);d.setAttribute('data-theme',m);}catch(e){document.documentElement.classList.add('dark');document.documentElement.setAttribute('data-theme','dark');}})();`;
 
 // Self-hosted at build time by next/font (served from /olympus/_next/static/media),
 // so they satisfy the Olympus CSP (font-src 'self' data:) — no fonts.googleapis.com.
@@ -26,51 +25,58 @@ const geistMono = Geist_Mono({
   display: 'swap',
 });
 
-export const metadata = {
-  title: 'Olympus — DigiQuant',
-  description: 'DigiQuant Olympus — AI-orchestrated investment intelligence (Atlas research + Hermes analysis & PM)',
+// Editorial display serif — the digiquant.io house headline face (Fraunces).
+// Self-hosted by next/font so it satisfies the Olympus CSP (font-src 'self' data:).
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-fraunces',
+  display: 'swap',
+});
+
+export const metadata: Metadata = {
+  metadataBase: new URL('https://digiquant.io'),
+  applicationName: 'Olympus',
+  title: 'Olympus — digiquant',
+  description: 'digiquant Olympus — AI-orchestrated investment intelligence (Atlas research + Hermes analysis & PM)',
+  manifest: '/olympus/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'Olympus',
+    statusBarStyle: 'black-translucent',
+  },
   icons: {
-    icon: '/olympus/favicon.svg',
-    shortcut: '/olympus/favicon.svg',
+    icon: [
+      { url: '/olympus/icons/olympus-app-dark.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: dark)' },
+      { url: '/olympus/icons/olympus-app-light.svg', type: 'image/svg+xml', media: '(prefers-color-scheme: light)' },
+      { url: '/olympus/icons/olympus-app-32.png', type: 'image/png', sizes: '32x32' },
+    ],
+    shortcut: '/olympus/icons/olympus-app-32.png',
+    apple: [
+      { url: '/olympus/icons/olympus-app-touch-dark.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: dark)' },
+      { url: '/olympus/icons/olympus-app-touch-light.png', type: 'image/png', sizes: '180x180', media: '(prefers-color-scheme: light)' },
+    ],
   },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html
+      lang="en"
+      // Font variables must live on <html>: globals.css re-declares --font-sans/--font-mono
+      // on :root via var(--font-geist-*), which resolves at the declaring element — variables
+      // scoped to <body> are invisible there and the tokens go invalid app-wide (#1538).
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
-      <body className={`qn-blueprint-bg accent-digiquant min-h-screen bg-bg-primary text-text-primary antialiased ${geistSans.variable} ${geistMono.variable}`}>
+      <body className="qn-blueprint-bg min-h-screen bg-bg text-ink antialiased">
         <ThemeProvider>
           <MotionLayer />
           <DashboardProvider>
             <AppShellProvider>
-              <div className="flex min-h-screen">
-                <Suspense fallback={<aside className="w-[260px] shrink-0 border-r border-border-subtle bg-bg-glass" />}>
-                  <Sidebar />
-                </Suspense>
-                <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto max-h-screen">
-                  <div className="qn-page-chrome">
-                    <div className="qn-crumbs">
-                      <strong>Olympus</strong>
-                      <span aria-hidden="true"> / </span>
-                      <span>investment intelligence</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <a href="https://digiquant.io" target="_blank" rel="noopener noreferrer">
-                        Open digiquant.io -&gt;
-                      </a>
-                      <span className="qn-env">
-                        {process.env.NEXT_PUBLIC_OLYMPUS_VERSION ?? 'v0.1 · dev'}
-                      </span>
-                    </div>
-                  </div>
-                  <MobileAppBar />
-                  <CommandPalette />
-                  <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-                </main>
-              </div>
+              <AppFrame>{children}</AppFrame>
             </AppShellProvider>
           </DashboardProvider>
         </ThemeProvider>

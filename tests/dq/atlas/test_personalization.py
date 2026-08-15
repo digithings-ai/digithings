@@ -14,7 +14,6 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 import pytest
-
 from digiquant.olympus.atlas import (
     PersonalizedSnapshot,
     SnapshotEnvelope,
@@ -22,7 +21,6 @@ from digiquant.olympus.atlas import (
 )
 from digiquant.olympus.atlas.snapshot import DigestPayload
 from digiquant.profiles import AssetPreferences, InvestmentProfile
-
 
 # ─── Helpers (mirror tests/dq/atlas/test_snapshot.py style) ────────────────
 

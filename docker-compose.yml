@@ -4,7 +4,7 @@
 # For testing without OpenAI: set OLLAMA_MODEL=ollama/qwen3:8b in .env; Ollama runs in Docker below.
 
 services:
-  # ─── Redis for DigiKey JWT revocation blocklist (ADR-0007) ───
+  # ─── Redis for digikey JWT revocation blocklist (ADR-0007) ───
   digikey-blocklist-redis:
     image: redis:7-alpine
     container_name: digi-digikey-blocklist-redis
@@ -15,7 +15,7 @@ services:
       retries: 5
       start_period: 5s
 
-  # ─── DigiKey: API keys + JWT exchange (consumers use DIGIKEY_JWKS_URL → /.well-known/jwks.json) ───
+  # ─── digikey: API keys + JWT exchange (consumers use DIGIKEY_JWKS_URL → /.well-known/jwks.json) ───
   digikey:
     build:
       context: .
@@ -66,7 +66,7 @@ services:
       retries: 5
       start_period: 30s
 
-  # ─── DigiSmith: LangSmith-aligned observability (health + tracing status) ───
+  # ─── digismith: LangSmith-aligned observability (health + tracing status) ───
   digismith:
     build:
       context: .
@@ -86,7 +86,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── DigiGraph: LangGraph orchestration + MCP/HTTP workflow entrypoint ───
+  # ─── digigraph: LangGraph orchestration + MCP/HTTP workflow entrypoint ───
   digigraph:
     build:
       context: .
@@ -101,15 +101,19 @@ services:
       - DIGIQUANT_URL=http://digiquant:8001
       - DIGISEARCH_URL=http://digisearch:8002
       - DIGISMITH_URL=http://digismith:8003
+      # digivault is opt-in (dedicated Compose profile, not part of the always-on
+      # core stack) — leave empty by default so the digivault skill stays hidden
+      # unless an operator explicitly enables the profile and sets this.
+      - DIGIVAULT_URL=${DIGIVAULT_URL:-}
       - DIGIKEY_JWKS_URL=${DIGIKEY_JWKS_URL:-http://digikey:8005/.well-known/jwks.json}
       - DIGIKEY_ISSUER=${DIGIKEY_ISSUER:-http://digikey:8005}
       - DIGIKEY_AUDIENCE=${DIGIKEY_AUDIENCE:-digi-ecosystem}
       - DIGIKEY_PUBLIC_KEY_PEM=${DIGIKEY_PUBLIC_KEY_PEM:-}
       - DIGIQUANT_DATA_DIR=/app/data
-      - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-default}
+      - DIGISEARCH_INDEX=${DIGISEARCH_INDEX:-digithings_docs}
       - OPENAI_API_BASE=http://litellm:4000/v1
       - DIGI_CONFIG_PATH=/app/config
-      - DIGI_PROJECT_CONFIG=${DIGI_PROJECT_CONFIG:-}
+      - DIGI_PROJECT_CONFIG=${DIGI_PROJECT_CONFIG:-/app/config/dogfood-digiproject.yaml}
       - DIGI_LLM_MODE=${DIGI_LLM_MODE:-test}
       - DIGI_ENABLE_DEBUG_ENDPOINTS=${DIGI_ENABLE_DEBUG_ENDPOINTS:-0}
       - DIGI_ENABLE_THREAD_API=${DIGI_ENABLE_THREAD_API:-0}
@@ -117,6 +121,12 @@ services:
       - PYTHONUNBUFFERED=1
       - AUDIT_LOG_PATH=/audit/events.jsonl
     volumes:
+      # This mount SHADOWS the Dockerfile's baked-in config/, it does not merge
+      # with it. ./config here must contain byok-providers.json or digigraph
+      # crash-loops at startup (fails loud, by design). A missing
+      # model_modes.yaml does NOT crash -- it silently falls back to a
+      # hardcoded default model -- so supply both regardless. See
+      # digigraph/Dockerfile and ARCHITECTURE.md's DIGI_CONFIG_PATH entry.
       - ./config:/app/config:ro
       - ./digiquant/results/audit:/audit
     depends_on:
@@ -135,14 +145,11 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── DigiQuant: Nautilus + Polars backtest/optimize (MCP tools) ───
-  # For real backtests: build with NAUTILUS=1, e.g. NAUTILUS=1 docker compose build digiquant
+  # ─── digiquant: Nautilus + Polars backtest/optimize (MCP tools) ───
   digiquant:
     build:
       context: .
       dockerfile: digiquant/Dockerfile
-      args:
-        NAUTILUS: ${NAUTILUS:-1}
     image: digi-digiquant:latest
     container_name: digi-digiquant
     ports:
@@ -171,7 +178,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── DigiSearch: RAG, document search (MCP + HTTP for DigiGraph/DigiFlow) ───
+  # ─── digisearch: RAG, document search (MCP + HTTP for digigraph/digiflow) ───
   digisearch:
     build:
       context: .
@@ -203,7 +210,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── DigiVault: Obsidian-style markdown vault management (profile: digivault) ───
+  # ─── digivault: Obsidian-style markdown vault management (profile: digivault) ───
   digivault:
     build:
       context: .
@@ -235,7 +242,7 @@ services:
       retries: 3
       start_period: 10s
 
-  # ─── LiteLLM router (Phase 1: DigiGraph uses this for all LLM calls) ───
+  # ─── LiteLLM router (Phase 1: digigraph uses this for all LLM calls) ───
   # Image: see DOCKER.md § LiteLLM upgrades (pin digest in production).
   litellm:
     image: docker.litellm.ai/berriai/litellm:main-stable
@@ -250,11 +257,12 @@ services:
     volumes:
       - ./config:/app/config:ro
     # LiteLLM can start without Ollama; Ollama models fail until ollama is healthy
+    # main-stable image has no curl/wget — probe with the bundled Python.
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "curl -sf http://127.0.0.1:4000/health/liveliness >/dev/null || curl -sf http://127.0.0.1:4000/health",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=4)\"",
         ]
       interval: 15s
       timeout: 5s
@@ -275,7 +283,7 @@ services:
       retries: 5
       start_period: 5s
 
-  # ─── DigiSearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
+  # ─── digisearch MCP server (optional: run with docker compose --profile digisearch-mcp up) ───
   digisearch-mcp:
     build:
       context: ./digisearch
@@ -331,7 +339,7 @@ services:
       digiquant:
         condition: service_healthy
 
-  # ─── DigiChat: Next.js BFF + React UI (profile: digichat) ───
+  # ─── digichat: Next.js BFF + React UI (profile: digichat) ───
   digichat-db:
     image: postgres:16-alpine
     container_name: digi-digichat-db
