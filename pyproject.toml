@@ -1,0 +1,65 @@
+[project]
+name = "digithings-workspace"
+version = "0.0.0"
+description = "Workspace root — not published. Hosts the uv workspace and its single lockfile."
+requires-python = ">=3.12"
+dependencies = []
+
+# DO NOT REMOVE — this table is what keeps digiquant.io and digithings.ai deploying.
+#
+# Cloudflare Pages' v2 build image auto-detects languages from the repo root. Because this
+# file exists it reports `pip@25.1.1, python@3.13.3` and runs `pip install .` BEFORE the
+# configured build command. With `[project]` present but no `[build-system]`, pip falls back
+# to legacy setuptools, which then runs flat-layout package auto-discovery, finds every
+# top-level directory in the monorepo (agents, config, digiquant, frontend, node_modules, …)
+# and refuses:
+#     error: Multiple top-level packages discovered in a flat-layout: [...]
+# That is a non-zero exit during dependency install, so `scripts/build-digiquant.sh` and
+# `scripts/build-digithings.sh` are NEVER REACHED. Both production sites froze silently from
+# 2026-07-30 (when this file was added, #1714) until 2026-08-02 — three days of pushes to
+# `main` that built nothing, while every PR stayed green.
+#
+# `py-modules = []` is setuptools' documented escape hatch for "this directory is not a
+# package": it replaces auto-discovery with an explicit empty list, so `pip install .`
+# succeeds and installs nothing.
+#
+# Deliberately NO `[build-system]` table here, even though pinning one would be tidier.
+# Adding it changes the root entry uv records for this workspace and makes `uv lock --check`
+# demand a regenerated `uv.lock` (measured 2026-08-02: clean before, "needs to be updated"
+# after). Regenerating the lock to satisfy a cosmetic pin would re-resolve 222 packages —
+# a far bigger blast radius than the deploy fix warrants. `[tool.setuptools]` alone is inert
+# to uv's resolution, and pip's legacy setuptools fallback reads it just the same.
+#
+# CI could not catch this: the deploy build-check workflows invoke the build scripts
+# directly and never emulate Cloudflare's dependency-install step. The `Assert the repo root
+# is pip-installable` step in each deploy workflow now closes that gap.
+[tool.setuptools]
+py-modules = []
+
+[tool.uv.workspace]
+members = [
+  "digibase",
+  "digiclaw",
+  "digifetch",
+  "digigraph",
+  "digikey",
+  "digillm",
+  "digiquant",
+  "digisearch",
+  "digiskills",
+  "digismith",
+  "digivault",
+]
+
+[tool.uv.sources]
+digibase = { workspace = true }
+digiclaw = { workspace = true }
+digifetch = { workspace = true }
+digigraph = { workspace = true }
+digikey = { workspace = true }
+digillm = { workspace = true }
+digiquant = { workspace = true }
+digisearch = { workspace = true }
+digiskills = { workspace = true }
+digismith = { workspace = true }
+digivault = { workspace = true }

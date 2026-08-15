@@ -44,6 +44,15 @@ const HERMES: Phase[] = [
   ["h9", "Commit run", "persist & evolve"],
 ];
 
+// The chips below render the REAL phase-folder names (atlas/phases/,
+// hermes/phases/), not a display count — Hermes's h7 → h7e → h9 has no h8
+// because that number was never assigned a phase, not because one is
+// missing. Surfaced as a title so a visitor unfamiliar with the codebase
+// does not read the gap as a typo or broken enumeration (full-UI-suite
+// critique, digiquant-web target, P3).
+const PHASE_ID_TITLE =
+  "The real internal phase-folder name, not a sequential count — a gap (like Hermes's missing h8) means that number was never assigned, not a typo.";
+
 const NODES: [num: string, label: string][] = [
   ["01", "Atlas"],
   ["02", "Hermes"],
@@ -62,9 +71,9 @@ const HEADS: [tag: string, h: string, p: string][] = [
     "Thesis review to committed run — multi-agent deliberation, PM direction and risk sizing, with the dissent on record.",
   ],
   [
-    "03 — Kairos · execution",
-    "Works the order, after your gate.",
-    "Passive inside the spread, escalating only when the book thins — every child order logged to its parent thesis.",
+    "03 — Kairos · execution (planned)",
+    "The stage after the backtest. Not built.",
+    "Kairos names the execution stage, not a package: there is no digiquant.olympus.kairos, and every broker adapter under digiquant/src/digiquant/brokers/ is a stub that raises NotImplementedError.",
   ],
 ];
 
@@ -90,23 +99,27 @@ export function OlympusScene() {
     const logoBg = logoBgRef.current;
 
     let vw = 0;
-    let sw = 0;
     let maxPan = 0;
     let targetPan = 0;
     let curPan = 0;
     let gp = 0;
+    // per-card centre offset (real geometry, px from track start) — the pan
+    // centres a card by its actual width, not a uniform-width estimate, so the
+    // wide "in development" and dashboard-link cards land dead-centre too.
+    let centers: number[] = [];
 
     function measure() {
       const track = steps!.parentElement as HTMLElement;
       vw = track.clientWidth;
-      sw = (cards[1] ? cards[1].offsetWidth : 166) + 11; // step width + gap
-      // size the trailing spacer so the LAST real card (sooncard) can pan to the
-      // focus line and dwell there
-      const sooncardIdx = cards.length - 2;
+      // measure real card centres with the spacer collapsed (it trails the last
+      // card, so it never shifts any card's offsetLeft).
       spacer!.style.width = "0px";
-      const contentNoSpacer = steps!.scrollWidth;
-      const wantScroll = sooncardIdx * sw + sw * 0.5 + vw * 0.5;
-      spacer!.style.width = Math.max(0, Math.round(wantScroll - contentNoSpacer)) + "px";
+      centers = cards.map((c) => c.offsetLeft + c.offsetWidth / 2);
+      // size the trailing spacer so the LAST real card (the dashboard link) can
+      // pan to the focus line and dwell there
+      const lastCenter = centers[cards.length - 2];
+      const wantScroll = lastCenter + vw * 0.5;
+      spacer!.style.width = Math.max(0, Math.round(wantScroll - steps!.scrollWidth)) + "px";
       maxPan = Math.max(0, steps!.scrollWidth - vw);
     }
 
@@ -118,7 +131,10 @@ export function OlympusScene() {
     });
     const A = byEng[0];
     const H = byEng[1];
-    const K = byEng[2][0];
+    // Kairos leg spans the "in development" card AND the trailing dashboard link,
+    // so the pan ends by centring the link as the final beat (Kend), passing the
+    // Kairos card on the way.
+    const Kend = byEng[2][byEng[2].length - 1];
     const Aend = A[A.length - 1];
     const Hend = H[H.length - 1];
 
@@ -126,7 +142,7 @@ export function OlympusScene() {
     function frontierCf(g: number) {
       if (g < 0.42) return A[0] + (g / 0.42) * (Aend - A[0]);
       if (g < 0.8) return H[0] + ((g - 0.42) / 0.38) * (Hend - H[0]);
-      return Hend + ((g - 0.8) / 0.2) * (K - Hend);
+      return Hend + ((g - 0.8) / 0.2) * (Kend - Hend);
     }
 
     // Discrete state (engine lit, rail fill, active head/node) is scroll-driven so
@@ -138,7 +154,7 @@ export function OlympusScene() {
       const rect = scrolly!.getBoundingClientRect();
       const total = scrolly!.offsetHeight - window.innerHeight;
       gp = clamp(-rect.top / (total || 1), 0, 1);
-      railFill!.style.width = gp * 100 + "%";
+      railFill!.style.transform = `scaleX(${gp})`;
       // kinetic 3D Olympus mark behind the scene — fades in then keeps growing
       if (logoBg) {
         const lt = document.documentElement.getAttribute("data-theme") === "light";
@@ -146,8 +162,12 @@ export function OlympusScene() {
         logoBg.style.transform = `perspective(900px) rotateX(20deg) scale(${0.82 + gp * 0.5})`;
       }
       const cf = frontierCf(gp);
-      // centre the current/highlighted card in the track (was left-of-centre)
-      targetPan = clamp(cf * sw + sw * 0.5 - vw * 0.5, 0, maxPan);
+      // centre the current/highlighted card: interpolate its real centre offset
+      // between the two bracketing cards, then pan so that lands at mid-track.
+      const i0 = clamp(Math.floor(cf), 0, centers.length - 1);
+      const i1 = clamp(i0 + 1, 0, centers.length - 1);
+      const cp = centers[i0] + (centers[i1] - centers[i0]) * (cf - i0);
+      targetPan = clamp(cp - vw * 0.5, 0, maxPan);
       const fIdx = Math.round(cf);
       const activeEng = gp < 0.42 ? 0 : gp < 0.8 ? 1 : 2;
       cards.forEach((c, i) => {
@@ -221,9 +241,9 @@ export function OlympusScene() {
           <div className="dqp-scene-head">
             <div className="dqp-olympus">
               <OlympusMark size={22} />
-              <span>Olympus · research → portfolio → execution</span>
+              <span>Olympus · research → portfolio</span>
             </div>
-            <div className="dqp-scene-title">A hedge fund in a box.</div>
+            <div className="dqp-scene-title">The research desk in a box.</div>
           </div>
 
           {/* Graphite-style progress rail (#1215): scroll-synced .dqp-fill + engine
@@ -264,7 +284,7 @@ export function OlympusScene() {
               </div>
               {ATLAS.map(([id, n, d]) => (
                 <div className="dqp-step" data-eng="0" key={`a-${id}`}>
-                  <div className="dqp-si">{id}</div>
+                  <div className="dqp-si" title={PHASE_ID_TITLE}>{id}</div>
                   <div className="dqp-sn">{n}</div>
                   <div className="dqp-sd">{d}</div>
                 </div>
@@ -274,7 +294,7 @@ export function OlympusScene() {
               </div>
               {HERMES.map(([id, n, d]) => (
                 <div className="dqp-step" data-eng="1" key={`h-${id}`}>
-                  <div className="dqp-si">{id}</div>
+                  <div className="dqp-si" title={PHASE_ID_TITLE}>{id}</div>
                   <div className="dqp-sn">{n}</div>
                   <div className="dqp-sd">{d}</div>
                 </div>
@@ -286,6 +306,15 @@ export function OlympusScene() {
                 <span className="dqp-badge">In development</span>
                 <p>Atlas and Hermes run today. Kairos — live execution — is next.</p>
               </div>
+              {/* Final beat of the horizontal track: after the pipeline pans by,
+                  a quiet text+arrow that launches the dashboard. `/olympus/` is the
+                  separate dashboard export (dist/olympus/), so a plain <a> (full
+                  cross-app navigation), not a Next <Link>. data-eng="2" ties it to
+                  the Kairos leg so the pan centres it last (Kend). */}
+              <a className="dqp-step dqp-golink" data-eng="2" href="/olympus/">
+                <span className="dqp-golink-label">Open the Olympus dashboard</span>
+                <span className="dqp-golink-arrow" aria-hidden="true">→</span>
+              </a>
               <div className="dqp-step dqp-spacer" data-eng="-1" aria-hidden="true" ref={spacerRef} />
             </div>
           </div>

@@ -1,4 +1,4 @@
-# Epic #3 — DigiThings Project Spec v1alpha1
+# Epic #3 — digithings Project Spec v1alpha1
 
 Decomposition of [epic #3](https://github.com/digithings-ai/digithings/issues/3) into shipped work and remaining sub-tasks. The epic formalises `digiproject.yaml` as the single source of truth for per-deployment tunables, per [ADR-0001](../adr/0001-project-spec.md).
 
@@ -14,7 +14,7 @@ Decomposition of [epic #3](https://github.com/digithings-ai/digithings/issues/3)
 
 ## Remaining sub-tasks
 
-- [x] **E2E loader test.** Add a pytest (marker `e2e`) that mounts `docs/templates/project/digiproject.yaml` into a running DigiGraph, issues `/workflow`, and asserts the resolved `DigiProjectConfig` surfaced through `/v1/status` (or an equivalent debug endpoint) matches the file contents. Covers the "new engineer → 10 min" success criterion in epic #3. (**PR #69**)
+- [x] **E2E loader test.** Add a pytest (marker `e2e`) that mounts `docs/templates/project/digiproject.yaml` into a running digigraph, issues `/workflow`, and asserts the resolved `DigiProjectConfig` surfaced through `/v1/status` (or an equivalent debug endpoint) matches the file contents. Covers the "new engineer → 10 min" success criterion in epic #3. (**PR #69**)
 - [x] **Validation CLI.** Ship `digi project validate <path>` that parses the YAML, runs the JSON Schema from the spec, checks env-var references resolve, and exits non-zero on error. Reuses the schema block already embedded in [docs/spec/project-spec-v1alpha1.md](../spec/project-spec-v1alpha1.md); extracted to `digigraph/src/digigraph/schemas/digiproject.v1alpha1.json` so the spec doc and the CLI stay in lockstep. (**PR #92**)
 - [x] **Legacy-shape migration helper.** `digi project migrate <old-config.yaml>` that rewrites a pre-spec `config.yaml` into a valid `digiproject.yaml` (field renames, section nesting, removed keys flagged as warnings). The backward-compat loader from PR #56 is meant to last one release; this gives users a one-shot path off it. (**PR #99**)
 - [x] **Unsupported-version warning.** The spec promises `DigiProjectConfig` "will emit a warning when loading a file that declares an unsupported `version` field" — wire this in the loader with a unit test. (**PR #91**)

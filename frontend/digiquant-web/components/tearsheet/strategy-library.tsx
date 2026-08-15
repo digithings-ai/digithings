@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { SegToggle } from "./charts";
+import { SegToggle } from "@digithings/web";
 import { StrategyCard } from "./strategy-card";
 import { cagrPctFromGrowth } from "./stats";
 import { type StrategyIndexEntry } from "./types";

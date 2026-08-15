@@ -2,7 +2,7 @@
 
 import type { RebalanceAction } from '@/lib/types';
 import { Badge } from '@/components/ui';
-import { AsOfBadge } from '@/components/shared/as-of-badge';
+import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 
 /**
@@ -15,54 +15,38 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
  */
 
 type RegimeAccent = {
-  border: string;
-  bg: string;
   label: string;
-  badge: 'green' | 'red' | 'amber' | 'blue';
+  badge: 'default' | 'amber' | 'blue';
 };
 
 const REGIME_ACCENT: Record<string, RegimeAccent> = {
   strong_bullish: {
-    border: 'border-up/60',
-    bg: 'bg-gradient-to-br from-up/[0.10] via-transparent to-transparent',
-    label: 'text-up',
-    badge: 'green',
+    label: 'text-accent',
+    badge: 'blue',
   },
   bullish: {
-    border: 'border-up/45',
-    bg: 'bg-gradient-to-br from-up/[0.07] via-transparent to-transparent',
-    label: 'text-up',
-    badge: 'green',
+    label: 'text-accent',
+    badge: 'blue',
   },
   bearish: {
-    border: 'border-down/45',
-    bg: 'bg-gradient-to-br from-down/[0.07] via-transparent to-transparent',
-    label: 'text-down',
-    badge: 'red',
+    label: 'text-warn',
+    badge: 'amber',
   },
   strong_bearish: {
-    border: 'border-down/60',
-    bg: 'bg-gradient-to-br from-down/[0.10] via-transparent to-transparent',
-    label: 'text-down',
-    badge: 'red',
+    label: 'text-warn',
+    badge: 'amber',
   },
   caution: {
-    border: 'border-warn/50',
-    bg: 'bg-gradient-to-br from-warn/[0.07] via-transparent to-transparent',
     label: 'text-warn',
     badge: 'amber',
   },
   mixed: {
-    border: 'border-warn/40',
-    bg: 'bg-gradient-to-br from-warn/[0.05] via-transparent to-transparent',
     label: 'text-warn',
     badge: 'amber',
   },
   neutral: {
-    border: 'border-accent/40',
-    bg: 'bg-gradient-to-br from-accent/[0.06] via-transparent to-transparent',
-    label: 'text-accent',
-    badge: 'blue',
+    label: 'text-ink-soft',
+    badge: 'default',
   },
 };
 
@@ -73,6 +57,13 @@ export interface MoveHeroNav {
   dailyPct: number | null;
   benchTicker: string | null;
   excessPct: number | null;
+  /**
+   * Date of the latest nav_history point. When it lags the digest date the
+   * daily delta must NOT read "today" — the book can freeze while research
+   * stays fresh (#1555: Hermes committed nothing for 3 weeks and the hero
+   * kept presenting a June NAV move as today's).
+   */
+  asOfDate?: string | null;
 }
 
 export interface MoveHeroProps {
@@ -120,7 +111,7 @@ export function MoveHero({
     nav.excessPct == null ? 'text-ink-mute' : nav.excessPct >= 0 ? 'text-up' : 'text-down';
 
   return (
-    <section className={`glass-card border ${accent.border} ${accent.bg} overflow-hidden`}>
+    <section data-brief-section="command" className="overflow-hidden border-b border-hair">
       <div className="px-5 pt-5 pb-6 sm:px-7">
         {/* Quiet regime ribbon */}
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -133,29 +124,29 @@ export function MoveHero({
           <div className="flex items-center gap-2 flex-wrap">
             <AsOfBadge date={asOf} />
             {runType ? (
-              <Badge variant="default" className="uppercase tracking-wider">
-                {runType}
-              </Badge>
+              // Reference badge dress is already uppercase mono micro-caps —
+              // the old `uppercase tracking-wider` utilities are redundant.
+              <Badge variant="default">{runType}</Badge>
             ) : null}
             <Badge variant={accent.badge}>{regimeLabel}</Badge>
           </div>
         </div>
 
-        {/* THE READ — the marquee */}
+        {/* THE READ — the marquee. Date wears the shared as-of format so the
+            kicker, the ribbon badge, and the NAV line all read alike (#1553). */}
         <p className="mt-4 text-[11px] font-bold uppercase tracking-widest text-ink-mute">
-          Brief · {asOf ?? '—'}
+          Brief · {asOf ? formatAsOf(asOf) : '—'}
         </p>
         <h1 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight mt-1 text-ink">
           {headline ?? regime}
         </h1>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {confidence != null ? (
+        {confidence != null ? (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="rounded-md border border-hair px-2 py-0.5 font-mono text-[11px] tabular-nums text-ink-soft">
               {confidence.toFixed(1)} confidence
             </span>
-          ) : null}
-          <span className="text-xs text-ink-soft">{regime}</span>
-        </div>
+          </div>
+        ) : null}
 
         {/* The move — demoted to a one-line status */}
         {changeCount === 0 ? (
@@ -178,17 +169,28 @@ export function MoveHero({
             {nav.index == null ? '—' : nav.index.toFixed(1)}
           </span>
           {nav.sincePct != null ? (
-            <span className={sinceColor}>
-              {signedPct(nav.sincePct)} since inception
-              {nav.sinceDate ? <span className="text-ink-mute"> ({nav.sinceDate})</span> : null}
+            <span>
+              <span className={sinceColor}>{signedPct(nav.sincePct)}</span>
+              <span className="text-ink-soft"> since inception</span>
+              {nav.sinceDate ? (
+                <span className="text-ink-mute"> ({formatAsOf(nav.sinceDate)})</span>
+              ) : null}
             </span>
           ) : null}
           {nav.dailyPct != null ? (
-            <span className={dailyColor}>{signedPct(nav.dailyPct, ' today')}</span>
+            <span>
+              <span className={dailyColor}>{signedPct(nav.dailyPct)}</span>
+              <span className="text-ink-soft">
+                {nav.asOfDate && asOf && nav.asOfDate !== asOf
+                  ? ` on ${formatAsOf(nav.asOfDate)}`
+                  : ' today'}
+              </span>
+            </span>
           ) : null}
           {nav.benchTicker && nav.excessPct != null ? (
-            <span className={excessColor}>
-              {signedPct(nav.excessPct)} vs {nav.benchTicker}
+            <span>
+              <span className={excessColor}>{signedPct(nav.excessPct)}</span>
+              <span className="text-ink-soft"> vs {nav.benchTicker}</span>
             </span>
           ) : null}
         </div>

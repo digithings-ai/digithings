@@ -1,4 +1,4 @@
-/* Symbols page — emblem grid, brand marks, QR tiles, vendor chips, glyph set.
+/* Symbols page — emblem grid, brand marks, favicon tiles, vendor chips, glyph set.
 
    Note: the .stack-row / .stack-chip / .stack-ico / .stack-mono / .stack-name
    rules used by StackLogo already ship via @digithings/web/styles/web-theme.css,
@@ -36,6 +36,36 @@
   padding: 1.4rem 1rem 1rem;
 }
 
+/* The hairline wordmark has a ~200px floor — below that its 0.538%-of-em stroke
+   goes sub-pixel and greys out. One cell per row so the specimen is always shown
+   above that floor; the SVG scales to the cell, so the ratio holds at any width. */
+.sym-grid--wide {
+  grid-template-columns: 1fr;
+}
+
+.sym-cell--wide {
+  align-items: stretch;
+  padding: 1.6rem 1.4rem 1rem;
+  min-height: 0;
+}
+
+.sym-hairline {
+  display: block;
+  width: 100%;
+  height: auto;
+  color: var(--ink);
+}
+
+/* Opt-in for a livery-scoped specimen (same pattern as .sym-mark--accent
+   below): HairlineWordmark itself strokes in currentColor correctly, but an
+   .accent-<module> ancestor only exposes --accent as a custom property — it
+   never sets `color` — so the digiquant specimen needs this explicit
+   override to actually demonstrate the accent instead of silently staying
+   ink. */
+.sym-hairline--accent {
+  color: var(--accent);
+}
+
 .sym-label {
   font-family: var(--font-mono);
   font-size: 0.62rem;
@@ -43,6 +73,17 @@
   text-transform: uppercase;
   color: var(--ink-mute);
   overflow-wrap: anywhere;
+}
+
+/* Inline aside nested in a .sym-label figcaption — explanatory prose (e.g. a
+   sub-fidelity floor note), not another label, so it drops the uppercase/
+   tracking it would otherwise inherit. No opacity here on purpose: --ink-mute
+   (inherited from .sym-label) is already tuned to clear 4.5:1 against
+   --surface/--bg (see its own comment in tokens.css); fading it further would
+   drop this normal-size text below that minimum. */
+.sym-note {
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* Brand marks — the wordmark grammar shared with the footer colophon (mono
@@ -58,28 +99,30 @@
   color: var(--accent);
 }
 
-/* QR marks — tile variants carry their own background; mark variants are
-   transparent, so each card fixes its context: one dark, one light (the
-   digithings.ai paper white, #FBFBF9). Colors are intentionally literal —
-   these cards must NOT follow the page theme. */
+/* Favicon tiles — a tile bakes its own background, so unlike every other mark
+   here it cannot inherit ink; each site ships one file per theme polarity. The
+   cards below fix their own context (one dark, one light — the digithings.ai
+   paper white, #FBFBF9) so each tile is shown against the chrome it is actually
+   for. Colors are intentionally literal: these cards must NOT follow the page
+   theme, or the specimen would stop demonstrating the thing it exists to show. */
 
-.sym-qr-set {
+.sym-tile-set {
   margin-top: 1.2rem;
 }
 
-.sym-qr-site {
+.sym-tile-site {
   font-size: 0.68rem;
   color: var(--ink-soft);
 }
 
-.sym-qr-row {
+.sym-tile-row {
   margin-top: 0.55rem;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 0.7rem;
 }
 
-.sym-qr-card {
+.sym-tile-card {
   border-radius: 12px;
   padding: 1.5rem 1rem 1.1rem;
   display: flex;
@@ -89,17 +132,17 @@
   gap: 1.6rem;
 }
 
-.sym-qr-card--dark {
+.sym-tile-card--dark {
   background: #0b0c0e;
   border: 1px solid rgba(236, 238, 240, 0.1);
 }
 
-.sym-qr-card--light {
+.sym-tile-card--light {
   background: #fbfbf9;
   border: 1px solid rgba(11, 12, 14, 0.12);
 }
 
-.sym-qr-item {
+.sym-tile-item {
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -109,11 +152,11 @@
   text-align: center;
 }
 
-.sym-qr-card--dark .sym-label {
+.sym-tile-card--dark .sym-label {
   color: rgba(236, 238, 240, 0.52);
 }
 
-.sym-qr-card--light .sym-label {
+.sym-tile-card--light .sym-label {
   color: rgba(11, 12, 14, 0.52);
 }
 

@@ -1,4 +1,4 @@
-# DigiKey — Spec
+# digikey — Spec
 
 **Port:** 8005  
 **Role:** Auth plane — RS256 JWT issuance, scoped API key management, JWKS endpoint.

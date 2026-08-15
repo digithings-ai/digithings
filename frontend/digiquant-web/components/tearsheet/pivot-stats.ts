@@ -13,7 +13,7 @@ import {
   recoveryFactor,
 } from "./stats";
 import { breakdownTradeStats, closedTrades } from "./trades";
-import type { TearsheetBreakdown, TearsheetData, TearsheetPoint, TearsheetTrade } from "./types";
+import type { TearsheetBreakdown, TearsheetData, TearsheetSeriesPoint, TearsheetTrade } from "./types";
 
 export type StatsPivot = "direction" | "year";
 
@@ -23,8 +23,8 @@ export interface StatSlice {
   startISO: string;
   endISO: string;
   trades: TearsheetTrade[];
-  equity: TearsheetPoint[];
-  drawdown: TearsheetPoint[];
+  equity: TearsheetSeriesPoint[];
+  drawdown: TearsheetSeriesPoint[];
   /** Precomputed breakdown from tearsheet JSON (direction pivot). */
   breakdown?: TearsheetBreakdown;
   /** When true, alpha vs buy-and-hold is meaningful for this slice. */
@@ -58,7 +58,7 @@ function onOrBefore(iso: string, endISO: string): boolean {
   return new Date(iso).getTime() <= new Date(endISO).getTime();
 }
 
-function clipRange(points: TearsheetPoint[], startISO: string, endISO: string): TearsheetPoint[] {
+function clipRange(points: TearsheetSeriesPoint[], startISO: string, endISO: string): TearsheetSeriesPoint[] {
   return points.filter((p) => onOrAfterDate(p.t, startISO) && onOrBefore(p.t, endISO));
 }
 
@@ -101,19 +101,19 @@ function breakdownFromTrades(trades: TearsheetTrade[], returnPct: number | null)
   };
 }
 
-function periodReturnPct(equity: TearsheetPoint[]): number | null {
+function periodReturnPct(equity: TearsheetSeriesPoint[]): number | null {
   if (equity.length < 2) return null;
   const first = equity[0].v;
   const last = equity[equity.length - 1].v;
   return first > 0 ? (last / first - 1) * 100 : null;
 }
 
-function maxDrawdownInSlice(drawdown: TearsheetPoint[]): number | null {
+function maxDrawdownInSlice(drawdown: TearsheetSeriesPoint[]): number | null {
   if (drawdown.length === 0) return null;
   return drawdown.reduce((min, p) => (p.v < min ? p.v : min), drawdown[0].v);
 }
 
-function fullPeriodSlice(data: TearsheetData, equity: TearsheetPoint[], drawdown: TearsheetPoint[]): StatSlice {
+function fullPeriodSlice(data: TearsheetData, equity: TearsheetSeriesPoint[], drawdown: TearsheetSeriesPoint[]): StatSlice {
   return {
     id: "full",
     label: "Full period",
@@ -170,8 +170,8 @@ function periodMeta(d: Date): { id: string; start: string; end: string; label: s
 
 function collectCalendarSlices(
   data: TearsheetData,
-  equity: TearsheetPoint[],
-  drawdown: TearsheetPoint[],
+  equity: TearsheetSeriesPoint[],
+  drawdown: TearsheetSeriesPoint[],
 ): StatSlice[] {
   const periodKeys = new Map<string, { start: string; end: string; label: string }>();
 

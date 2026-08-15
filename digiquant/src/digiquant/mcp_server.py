@@ -1,4 +1,4 @@
-"""DigiQuant MCP server: backtest, optimize, export, strategy catalog.
+"""digiquant MCP server: backtest, optimize, export, strategy catalog.
 
 Run::
 
@@ -34,7 +34,7 @@ def _require_mcp() -> type:
 
 def create_mcp_server() -> Any:
     _require_mcp()
-    mcp = FastMCP("DigiQuant")
+    mcp = FastMCP("digiquant")
 
     @mcp.tool()
     def digiquant_list_strategies() -> str:
@@ -158,7 +158,7 @@ def create_mcp_server() -> Any:
         try:
             client = build_client(SupabaseConfig.from_env())
             result = get_price_technicals(client=client, ticker=ticker, lookback=lookback)
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -175,7 +175,7 @@ def create_mcp_server() -> Any:
         try:
             client = build_client(SupabaseConfig.from_env())
             result = get_macro_series(client=client, series_ids=series_ids, lookback=lookback)
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -193,7 +193,7 @@ def create_mcp_server() -> Any:
         """Read rows from a whitelisted Olympus table (JSON).
 
         Exposes the same read-only, table-scoped reader the in-process Hermes
-        agents use, so external agents (DigiChat / Kairos) can fetch the paper
+        agents use, so external agents (digichat / Kairos) can fetch the paper
         book and market data by key (#925). Allowed tables: ``positions``,
         ``nav_history``, ``theses``, ``thesis_vehicles``, ``position_events``,
         ``portfolio_metrics``, ``price_history``, ``price_technicals``,
@@ -217,7 +217,7 @@ def create_mcp_server() -> Any:
                 desc=desc,
                 limit=limit,
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller, never crash
+        except Exception as exc:  # surface as JSON to the caller, never crash
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
         return json.dumps(result, default=str)
 
@@ -281,7 +281,7 @@ def create_mcp_server() -> Any:
                     "last": df["timestamp"][-1],
                     "path": str(path),
                 }
-            except Exception as exc:  # noqa: BLE001 — surface per-symbol, never crash
+            except Exception as exc:  # surface per-symbol, never crash
                 out[ticker] = {"error": f"{type(exc).__name__}: {exc}"}
         return json.dumps(out, indent=2, default=str)
 
@@ -289,12 +289,18 @@ def create_mcp_server() -> Any:
     def digiquant_generate_slapper_tearsheet(
         strategy: str | None = None,
         cache_dir: str | None = None,
+        signal_delay_days: int = 0,
+        allow_example_calibrations: bool = False,
     ) -> str:
         """Run the NautilusTrader backtest for the Slapper family and write TV-style
         tearsheet JSON to the digiquant.io frontend. ``strategy=None`` runs all three.
 
-        Reads structure from ``strategies/settings.json`` (public) and calibrations
-        from ``calibrations.json`` (private). Returns the index entries written.
+        Structure comes from ``strategies/settings.json`` (public); calibrations
+        resolve file -> Supabase (-> example only when ``allow_example_calibrations``).
+        Each strategy runs in its own spawned process (#1389): NautilusTrader's Rust
+        logging initializes once per process, so a second in-process engine would
+        abort this server. ``signal_delay_days`` lags the public tearsheets by N
+        calendar days (#1462). Returns ``{"entries": [...], "failures": {...}}``.
         """
         import sys
         from pathlib import Path
@@ -307,17 +313,49 @@ def create_mcp_server() -> Any:
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
+        if signal_delay_days < 0:
+            return json.dumps({"error": "signal_delay_days must be >= 0"})
+
+        gt.load_repo_env()
+        try:
+            from digiquant.strategies.calibrations_loader import pick_calibration_source
+
+            cal_source = pick_calibration_source(
+                prefer_supabase=False,
+                allow_example=allow_example_calibrations,
+            )
+        except Exception as exc:  # surface as JSON to the caller
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
         settings = gt.load_settings()
+        if strategy is not None and strategy not in settings["strategies"]:
+            return json.dumps(
+                {
+                    "error": f"Unknown strategy {strategy!r}; "
+                    f"expected one of {sorted(settings['strategies'])}"
+                }
+            )
         cache = Path(cache_dir) if cache_dir else gt.DEFAULT_CACHE
         targets = (
             {strategy: settings["strategies"][strategy]} if strategy else settings["strategies"]
         )
-        results = []
+        entries: list[dict[str, Any]] = []
+        failures: dict[str, str] = {}
         for strat, cfg in targets.items():
-            entry = gt.run_and_write(strat, cfg["symbol"], settings, cache, gt.FRONTEND_STRATEGIES)
-            if entry:
-                results.append(entry)
-        return json.dumps(results, indent=2, default=str)
+            entry, error = gt.run_strategy_isolated(
+                strat,
+                cfg["symbol"],
+                settings,
+                cache,
+                gt.FRONTEND_STRATEGIES,
+                cal_source=cal_source,
+                signal_delay_days=signal_delay_days,
+            )
+            if entry is not None:
+                entries.append(entry)
+            else:
+                failures[strat] = error or "unknown error"
+        return json.dumps({"entries": entries, "failures": failures}, indent=2, default=str)
 
     @mcp.tool()
     def digiquant_validate_slapper_vs_tradingview(
@@ -343,7 +381,7 @@ def create_mcp_server() -> Any:
             return json.dumps(
                 compare(strategy, ohlcv_csv, tv_export_csv, start_date), indent=2, default=str
             )
-        except Exception as exc:  # noqa: BLE001 — surface as JSON to the caller
+        except Exception as exc:  # surface as JSON to the caller
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
     return mcp
@@ -355,7 +393,7 @@ def run_mcp(
     port: int = 8767,
 ) -> None:
     mcp = create_mcp_server()
-    logger.info("Starting DigiQuant MCP server on %s:%d (transport=%s)", host, port, transport)
+    logger.info("Starting digiquant MCP server on %s:%d (transport=%s)", host, port, transport)
     mcp.run(transport=transport, host=host, port=port)
 
 
@@ -363,7 +401,7 @@ if __name__ == "__main__":
     import argparse
 
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
-    parser = argparse.ArgumentParser(description="DigiQuant MCP server")
+    parser = argparse.ArgumentParser(description="digiquant MCP server")
     parser.add_argument("--stdio", action="store_true", help="Use stdio transport (Claude Desktop)")
     parser.add_argument("--host", default=os.environ.get("DIGIQUANT_MCP_HOST", "127.0.0.1"))
     parser.add_argument(

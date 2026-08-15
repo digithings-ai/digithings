@@ -2,7 +2,7 @@
 title: "digichat — API reference"
 type: reference
 status: generated
-created: 2026-06-29
+created: 2026-08-10
 tags:
   - api
   - core
@@ -21,7 +21,7 @@ A Next.js and React BFF streaming digigraph through the Vercel AI SDK, your key 
 NextAuth handles identity; Postgres and Drizzle persist sessions for humans and agents alike.
 
 ## Authentication
-The deployed digithings.ai chat is an agentic Cloudflare Pages Function (no login) that grounds answers in the digivault docs. The full Docker BFF additionally authenticates users via NextAuth and exchanges a BFF session for a digikey JWT to call DigiGraph.
+The deployed digithings.ai chat is an agentic Cloudflare Pages Function (no login) that grounds answers in the digivault docs. The full Docker BFF additionally authenticates users via NextAuth and exchanges a BFF session for a digikey JWT to call digigraph.
 
 
 ## Run locally
@@ -73,6 +73,40 @@ curl -X POST $DIGICHAT_URL/api/chat \
   -H "content-type: application/json" \
   -d '{"messages":[{"role":"user","content":"What does digigraph do?"}]}'
 ```
+
+### GET /api/conversations
+List persisted conversations (Docker BFF).
+
+auth: session
+
+### POST /api/conversations
+Create a conversation (Docker BFF).
+
+auth: session
+
+### GET /api/conversations/{id}
+Fetch one conversation (Docker BFF).
+
+auth: session
+
+### DELETE /api/conversations/{id}
+Delete a conversation (Docker BFF).
+
+auth: session
+
+### GET /api/ecosystem/config
+Ecosystem config for the chat shell.
+
+auth: none / session
+
+### POST /api/v1/chat
+OpenAI-compatible chat proxy through the BFF.
+
+auth: session
+
+## Notes
+- Committed OpenAPI: docs/openapi/digichat.json (authored; path existence checked in tests/contracts).
+- Self-host: make up-ghcr-digichat pulls ghcr.io/digithings-ai/digichat (see infra/self-host/compose.ghcr.yml).
 
 ## Stack
 Next.js, React, Vercel AI SDK, NextAuth, Postgres, Drizzle

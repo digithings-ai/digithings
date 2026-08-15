@@ -1,4 +1,6 @@
 import type { ChatTenantContext } from "@/lib/chat-route-context";
+import { isFirstPartyEmbedHost } from "@/lib/embed-first-party";
+import { isLegacyEmbedEnabled, LEGACY_EMBED_DISABLED_MESSAGE } from "@/lib/embed-legacy-gate";
 import { resolveEmbedTenantByHost, type EmbedTenantConfig } from "@/lib/embed-tenants";
 
 export type EmbedChatTenantContext = ChatTenantContext & {
@@ -30,7 +32,7 @@ export function isEmbedReferer(req: Request): boolean {
 }
 
 export function isEmbedAllowed(req: Request): boolean {
-  if (process.env.DIGICHAT_EMBED_ENABLED === "1") return true;
+  if (isLegacyEmbedEnabled()) return true;
   const token = req.headers.get("x-embed-token")?.trim();
   const expected = process.env.DIGICHAT_EMBED_TOKEN?.trim();
   return Boolean(expected && token === expected);
@@ -43,14 +45,15 @@ export function isEmbedChatRequest(req: Request): boolean {
 }
 
 /**
- * Resolves a registry tenant only when its own X-Embed-Token also matches.
- * A host string alone is never sufficient: it's the tenant's own public
- * domain, so registry membership by itself would let any caller claim any
- * tenant's config/backend routing (see #1339).
+ * Resolves a registry tenant when first-party allowlisted (digithings.ai /
+ * www) or when its own X-Embed-Token matches. Customer hosts still require
+ * a token — host alone is never enough for them (#1339). First-party
+ * bypass is Phase 3 (#1866).
  */
 export function resolveVerifiedEmbedTenant(req: Request): EmbedTenantConfig | null {
   const registered = resolveEmbedTenantByHost(embedHostOf(req));
   if (!registered) return null;
+  if (isFirstPartyEmbedHost(embedHostOf(req))) return registered;
   const token = req.headers.get("x-embed-token")?.trim();
   return token && token === registered.token ? registered : null;
 }
@@ -77,8 +80,7 @@ export function resolveEmbedChatTenant(req: Request): EmbedChatTenantContext | R
   return new Response(
     JSON.stringify({
       error: "embed_disabled",
-      message:
-        "Embed chat requires DIGICHAT_EMBED_ENABLED=1 or a valid X-Embed-Token. See frontend/digichat/README.md.",
+      message: LEGACY_EMBED_DISABLED_MESSAGE,
     }),
     { status: 503, headers: { "content-type": "application/json" } }
   );

@@ -5,12 +5,19 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.children }));
 
 import { TodaySummaries } from './today-summaries';
+import type { Position } from '@/lib/types';
+
+const pos = (ticker: string, weight_actual: number, weight_delta?: number): Position => ({
+  ticker, name: ticker, type: 'LONG', weight_actual, weight_delta,
+  current_price: null, entry_price: null, entry_date: null,
+  rationale: '', thesis_ids: [], category: 'equity', pm_notes: '', stats: {},
+});
 
 describe('TodaySummaries', () => {
   it('renders the three quiet doorway cards with their content', () => {
     const html = renderToStaticMarkup(
       createElement(TodaySummaries, {
-        positions: [{ ticker: 'NVDA', name: 'NVIDIA', weight_actual: 6.1, weight_delta: -2 }],
+        positions: [pos('NVDA', 6.1, -2)],
         theses: [{ id: 'T1', name: 'AI capex supercycle', status: 'confirmed' }],
         readSummary: 'Risk-off consolidation; rotating into defensives.',
         asOfDate: '2026-06-24',
@@ -23,6 +30,25 @@ describe('TodaySummaries', () => {
     expect(html).toContain('AI capex supercycle');
     expect(html).toContain('Risk-off consolidation');
     expect(html).not.toContain("How I'"); // performance doorway retired
+    expect(html).toContain('data-brief-section="doorways"');
+    expect(html).not.toContain('glass-card');
+  });
+
+  it('shows holdings on the % of NAV basis (matches the book strip / portfolio table)', () => {
+    // Persisted shape: holdings are % of NAV and include a CASH row for the rest.
+    // No independent metrics scale applies, so UUP reads its true 40.0% (not 36%),
+    // and CASH never appears as a holding row (#1553).
+    const html = renderToStaticMarkup(
+      createElement(TodaySummaries, {
+        positions: [pos('UUP', 40), pos('TLT', 35), pos('IJR', 15), pos('CASH', 10)],
+        theses: [],
+        readSummary: null,
+        asOfDate: '2026-07-16',
+      })
+    );
+    expect(html).toContain('UUP');
+    expect(html).toContain('40.0%');
+    expect(html).not.toContain('CASH');
   });
 
   it('handles an empty book without crashing', () => {

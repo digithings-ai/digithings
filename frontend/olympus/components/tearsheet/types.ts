@@ -1,29 +1,15 @@
-/** Shapes emitted by `digiquant.tearsheet_data` (the unified TearsheetData schema). */
+/**
+ * Shapes emitted by `digiquant.tearsheet_data` (the unified TearsheetData schema).
+ * The chart-facing shapes (TearsheetSeriesPoint, TearsheetTrade) are owned by the
+ * finance-tearsheet family (#1463); the full payload schema and the Olympus
+ * wrapper below stay app-local data wiring.
+ */
 
-import type { DecisionTrackRecord } from '@/lib/decision-track-record';
-import type { TableRow } from '@/lib/database.types';
-
-export interface TearsheetPoint {
-  t: string;
-  v: number;
-}
-
-export interface TearsheetTrade {
-  n: number;
-  direction: "long" | "short";
-  entry_label: string;
-  entry_date: string;
-  entry_price: number;
-  exit_date: string;
-  exit_price: number;
-  qty: number;
-  pnl: number;
-  pnl_pct: number;
-  equity_after: number;
-  exit_reason: string;
-  max_runup_pct: number;
-  max_drawdown_pct: number;
-}
+import type {
+  ContributionReturnPoint,
+  TearsheetSeriesPoint,
+  TearsheetTrade,
+} from '@digithings/web';
 
 export interface TearsheetBreakdown {
   trades: number;
@@ -63,40 +49,52 @@ export interface TearsheetData {
   overall: TearsheetBreakdown;
   long: TearsheetBreakdown;
   short: TearsheetBreakdown;
-  equity_curve: TearsheetPoint[];
-  drawdown_curve: TearsheetPoint[];
+  equity_curve: TearsheetSeriesPoint[];
+  drawdown_curve: TearsheetSeriesPoint[];
   trades: TearsheetTrade[];
   notes: string[];
 }
 
-/**
- * Olympus-specific wrapper around the ported TearsheetData. The live-NAV track reuses
- * TearsheetData (engine='live', strategy='Olympus', symbol='AI-INTELLIGENCE'); the
- * decision track-record track uses DecisionTrackRecord (TS port of atlas/backtest.py).
- * Each track degrades independently against its own empty-state predicate.
- */
-export interface DecisionLogRow {
-  run_date: string;
+export interface PerformanceHoldingRow {
   ticker: string;
-  stance: string;
-  conviction: number | null;
-  status: string;
-  alpha: number | null;
-  holding_days: number | null;
+  category: string | null;
+  weightPct: number | null;
+  unrealizedReturnPct: number | null;
+  realizedReturnPct: number | null;
+  attributionDate: string | null;
 }
 
+export interface PortfolioReturnPoint {
+  date: string;
+  nav: number;
+  /** Return rebased to 0% at the first stored NAV observation. */
+  returnPct: number;
+}
+
+export interface BenchmarkComparison {
+  ticker: string;
+  returnPct: number;
+  series: Array<{ date: string; returnPct: number }>;
+}
+
+export type PerformanceReturnsSource = 'persisted' | 'derived' | 'mixed' | 'unavailable';
+
 export interface OlympusTearsheet {
-  live: TearsheetData; // engine='live', strategy='Olympus', symbol='AI-INTELLIGENCE'
-  navPoints: number; // nav_history row count (gates the live track)
-  decision: DecisionTrackRecord; // from lib/decision-track-record (resolved decisions only)
-  decisionRows: DecisionLogRow[]; // resolved + pending, for the small decision-log table
-  nResolved: number;
-  nPending: number;
-  attribution: TableRow<'position_attribution'>[]; // latest date (absorbed from System)
-  attributionDate: string | null;
-  inceptionDate: string | null; // first nav_history.date
-  latestNav: number | null;
-  generatedAt: string; // ISO now
+  currentNav: number | null;
+  netReturnPct: number | null;
+  benchmarkReturnPct: number | null;
+  relativeReturnPct: number | null;
+  benchmarkTicker: string;
+  benchmarkComparisons: BenchmarkComparison[];
+  returnsSource: PerformanceReturnsSource;
+  metricsAsOf: string | null;
+  inceptionDate: string | null;
+  holdingsAsOf: string | null;
+  generatedAt: string | null;
+  navSeries: PortfolioReturnPoint[];
+  contributionSeries: ContributionReturnPoint[];
+  currentHoldings: PerformanceHoldingRow[];
+  historicalHoldings: PerformanceHoldingRow[];
 }
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */

@@ -1,0 +1,31 @@
+# digithings client #0 — onboard manifest
+#
+# Dual-sink dogfood: digivault (→ Supabase publish) + digisearch.
+# Chat UI: digithings.ai only. digiquant.io is crawl corpus only.
+client: digithings
+seed_url: https://digithings.ai/
+allowed_hosts:
+  - digithings.ai
+  - www.digithings.ai
+  - digiquant.io
+  - www.digiquant.io
+max_pages: 200
+max_depth: 4
+sinks: [vault, search]
+digisearch_index: digithings_docs
+vault_subdir: clients/digithings
+docs_path_prefixes:
+  ["/docs", "/chat", "/modules", "/architecture",
+   # Marketing/customer-facing docs (verified against live nav 2026-08-11):
+   # digithings.ai — /about, /quality, /security, /services, /team.
+   # digiquant.io's /olympus and /strategies are deliberately excluded —
+   # those are live interactive tools, not static content worth ingesting.
+   "/about", "/quality", "/security", "/services", "/team"]
+skip_path_prefixes: ["/blog", "/careers", "/legal"]
+
+static_sources: docs/projects/digithings/sources/repo-docs.yaml
+openapi_sources: docs/projects/digithings/sources/openapi.yaml
+repo_source:
+  kind: local
+  path: .
+  globs_file: docs/projects/digithings/sources/repo-docs.yaml

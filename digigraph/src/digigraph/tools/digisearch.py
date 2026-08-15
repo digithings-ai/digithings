@@ -1,6 +1,6 @@
-"""DigiSearch HTTP client helpers for DigiGraph (direct ``POST /query``).
+"""digisearch HTTP client helpers for digigraph (direct ``POST /query``).
 
-Orchestrator tool *definitions* and hub dispatch live in DigiSearch
+Orchestrator tool *definitions* and hub dispatch live in digisearch
 (``/v1/orchestrator_tools``, ``/v1/orchestrator_invoke``). This module keeps
 thin ``POST /query`` helpers for code paths that call search without the
 orchestrator manifest (e.g. research node utilities).
@@ -58,7 +58,7 @@ def digisearch(
     request_id: str | None = None,
     authorization_bearer: str | None = None,
 ) -> dict[str, Any] | None:
-    """Search DigiSearch. Returns raw response dict (results, query, index_name, total, summary?, facets?) or None."""
+    """Search digisearch. Returns raw response dict (results, query, index_name, total, summary?, facets?) or None."""
     base_url = os.environ.get("DIGISEARCH_URL", "").strip()
     if not base_url:
         return None
@@ -87,10 +87,14 @@ def digisearch(
     bearer = str(authorization_bearer).strip() if authorization_bearer else None
     headers = outbound_service_headers(request_id, bearer)
     try:
+        # Only the network call itself is inside `with _cb:` — same scoping as the
+        # hub connectors (ARCHITECTURE.md §5.4). A 4xx/5xx or malformed body is a
+        # rejection from a live service, not evidence digisearch is down, so it
+        # must not trip the process-wide circuit for every other caller.
         with _cb:
             r = _get_sync_client().post(url, json=payload, headers=headers)
-            r.raise_for_status()
-            return r.json()
+        r.raise_for_status()
+        return r.json()
     except CircuitBreakerOpen:
         return None
     except _QUERY_ERRORS:

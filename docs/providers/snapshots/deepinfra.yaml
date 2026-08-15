@@ -1,5 +1,5 @@
 provider: deepinfra
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -22,46 +22,46 @@ free_tier:
 paid_tier:
   available: true
   models:
-    - name: meta-llama/Llama-3.3-70B-Instruct
+    - name: meta-llama/Llama-3.3-70B-Instruct-Turbo
       context_window: 131072
       max_input_tokens: 131072
       max_output_tokens: 8192
-      cost_per_1m_input: 0.23
+      cost_per_1m_input: 0.10
       cost_per_1m_input_long: null
-      cost_per_1m_output: 0.40
+      cost_per_1m_output: 0.32
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: active            # renamed with -Turbo suffix; price cut $0.23/$0.40 -> $0.10/$0.32
     - name: deepseek-ai/DeepSeek-V3
       context_window: 163840
       max_input_tokens: 163840
       max_output_tokens: 8192
-      cost_per_1m_input: 0.27
+      cost_per_1m_input: 0.32
       cost_per_1m_input_long: null
-      cost_per_1m_output: 1.10
+      cost_per_1m_output: 0.89
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active            # context corrected 65k→164k; price updated $0.49/$0.89→$0.27/$1.10
+      status: active            # updated $0.27/$1.10 -> $0.32/$0.89 (input up, output down)
     - name: deepseek-ai/DeepSeek-V3.2
       context_window: 163840
       max_input_tokens: 163840
       max_output_tokens: 8192
-      cost_per_1m_input: 0.28
+      cost_per_1m_input: 0.26
       cost_per_1m_input_long: null
-      cost_per_1m_output: 0.56
+      cost_per_1m_output: 0.38
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: active            # updated $0.28/$0.56 -> $0.26/$0.38
     - name: deepseek-ai/DeepSeek-V4-Pro
       context_window: 1000000
       max_input_tokens: 1000000
       max_output_tokens: 8192
-      cost_per_1m_input: 1.74
+      cost_per_1m_input: 1.30
       cost_per_1m_input_long: null
-      cost_per_1m_output: 3.48
+      cost_per_1m_output: 2.60
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: active            # updated $1.74/$3.48 -> $1.30/$2.60
   batching:
     available: false
     discount_pct: null
@@ -103,4 +103,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "UPDATES: DeepSeek-V3 price corrected ($0.49/$0.89→$0.27/$1.10) and context corrected (65K→164K). Added DeepSeek-V3.2 ($0.28/$0.56) and DeepSeek-V4-Pro ($1.74/$3.48, 1M ctx). DeepInfra raised $107M Series B May 2026 (25× volume growth since Series A). Still cheapest open-weight hosting for Llama 3.3 70B at $0.23/1M. No key configured yet."
+notes: "2026-07-19 UPDATE: all four tracked model prices dropped further — Llama-3.3-70B renamed to -Turbo variant at $0.10/$0.32 (was $0.23/$0.40), DeepSeek-V4-Pro down to $1.30/$2.60 (was $1.74/$3.48), DeepSeek-V3.2 down to $0.26/$0.38 (was $0.28/$0.56); DeepSeek-V3 input ticked up slightly to $0.32 while output dropped to $0.89 (was $0.27/$1.10). Confirmed still no standing free tier — DeepInfra's own pricing page states a card or prepay is required; third-party '$1 free credit, no CC' claims are stale/unreliable. A DeepStart program offers free credits to qualifying startups via separate application, not a standing free tier. DeepInfra raised $107M Series B May 2026 (25× volume growth since Series A). Still cheapest open-weight hosting for Llama 3.3 70B. No key configured yet; no probe run (method: skipped)."

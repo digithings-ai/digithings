@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, ArrowUpRight, XCircle, PlusCircle, ListChecks } from 'lucide-react';
+import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
 import type { RebalanceAction } from '@/lib/types';
 
 /**
@@ -23,12 +24,16 @@ type ActionKind = 'EXIT' | 'OPEN' | 'TRIM' | 'ADD' | 'HOLD';
 
 const ORDER: Record<ActionKind, number> = { EXIT: 0, OPEN: 1, TRIM: 2, ADD: 3, HOLD: 4 };
 
-const STYLE: Record<ActionKind, { badge: string; icon: typeof ArrowRight }> = {
-  EXIT: { badge: 'bg-down/15 text-down border-down/30', icon: XCircle },
-  OPEN: { badge: 'bg-up/15 text-up border-up/30', icon: PlusCircle },
-  TRIM: { badge: 'bg-warn/15 text-warn border-warn/30', icon: ArrowDownRight },
-  ADD: { badge: 'bg-accent/15 text-accent border-accent/30', icon: ArrowUpRight },
-  HOLD: { badge: 'bg-ink/[0.06] text-ink-mute border-hair', icon: ArrowRight },
+// Badge hues ride the sanctioned EVENT_COLORS map (lib/chart-colors.ts) — the
+// same four-way identity coding as the chart event markers and drilldown labels.
+// Token-driven classes collapsed OPEN and ADD in dark mode (--up === --accent),
+// so the non-HOLD kinds are fixed hues applied via inline style.
+const STYLE: Record<ActionKind, { color: string | null; icon: typeof ArrowRight }> = {
+  EXIT: { color: EVENT_COLORS.EXIT, icon: XCircle },
+  OPEN: { color: EVENT_COLORS.OPEN, icon: PlusCircle },
+  TRIM: { color: EVENT_COLORS.TRIM, icon: ArrowDownRight },
+  ADD: { color: EVENT_COLORS.ADD, icon: ArrowUpRight },
+  HOLD: { color: null, icon: ArrowRight },
 };
 
 /**
@@ -57,14 +62,21 @@ function isSizerRemoved(a: RebalanceAction): boolean {
 
 function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string }) {
   const kind = kindOf(a.action);
-  const { badge, icon: Icon } = STYLE[kind];
+  const { color, icon: Icon } = STYLE[kind];
   const delta = (a.recommended_pct ?? 0) - (a.current_pct ?? 0);
   return (
     <div className="px-5 py-2.5 hover:bg-ink/[0.025] transition-colors">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <span
-            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge}`}
+            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+              color ? '' : 'bg-ink/[0.06] text-ink-mute border-hair'
+            }`}
+            style={
+              color
+                ? { color, backgroundColor: withAlpha(color, 0.15), borderColor: withAlpha(color, 0.3) }
+                : undefined
+            }
           >
             <Icon size={11} />
             {kind}
@@ -128,10 +140,11 @@ export function TodayActionsPanel({
       {!bare && (
         <div className="px-5 py-3.5 border-b border-hair bg-term-bg flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <ListChecks size={15} className="text-up" />
+            {/* Decision chrome, not P&L (F5) — calm accent, matching the pipeline decision pips. */}
+            <ListChecks size={15} className="text-accent" />
             <h3 className="text-sm font-semibold">Today&rsquo;s actions</h3>
             {changes.length > 0 && (
-              <span className="rounded-full bg-up/15 text-up border border-up/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
+              <span className="rounded-full bg-accent/15 text-accent border border-accent/30 px-2 py-0.5 text-[10px] font-bold tabular-nums">
                 {changes.length}
               </span>
             )}

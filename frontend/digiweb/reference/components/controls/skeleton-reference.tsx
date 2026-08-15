@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 
+import { Skeleton, SkeletonGroup } from "@digithings/web";
+
 /**
  * Skeleton loading states — placeholder shapes with a shimmer sweep that stand
  * in until content arrives, then swap 1:1 to the real layout. The shimmer is a
  * translating gradient over ink-tinted shapes (no accent needed — reads under
  * the monochrome default); money colors only appear in the loaded state where
  * they mean something. A toggle replays the load. Reduced motion drops the
- * shimmer and shows a static placeholder.
+ * shimmer and shows a static placeholder. Consumes the shared <Skeleton/> and
+ * <SkeletonGroup/> primitives from @digithings/web.
  */
 const METRICS = [
   { k: "CAGR", v: "+44.9%", tone: "up" },
@@ -44,17 +47,17 @@ export function SkeletonReference() {
         </button>
       </div>
 
-      <div className="mt-[1.1rem] flex flex-col gap-[1rem]" aria-busy={loading}>
+      <SkeletonGroup busy={loading} className="mt-[1.1rem] flex flex-col gap-[1rem]">
         {/* profile / strategy card */}
         <article className="flex items-center gap-[0.9rem] rounded-[12px] border border-hair bg-surface px-[1.1rem] py-[1rem]">
           {loading ? (
             <>
-              <span className="sk sk-circle" />
+              <Skeleton variant="circle" />
               <div className="flex min-w-0 flex-1 flex-col gap-[0.5rem]">
-                <span className="sk sk-line" style={{ width: "55%" }} />
-                <span className="sk sk-line" style={{ width: "38%" }} />
+                <Skeleton width="55%" />
+                <Skeleton width="38%" />
               </div>
-              <span className="sk sk-btn" />
+              <Skeleton variant="button" />
             </>
           ) : (
             <>
@@ -84,8 +87,8 @@ export function SkeletonReference() {
             >
               {loading ? (
                 <>
-                  <span className="sk sk-line sk-line--sm" style={{ width: `${40 + i * 8}%` }} />
-                  <span className="sk sk-block" />
+                  <Skeleton size="sm" width={`${40 + i * 8}%`} />
+                  <Skeleton variant="block" />
                 </>
               ) : (
                 <>
@@ -104,7 +107,7 @@ export function SkeletonReference() {
             </div>
           ))}
         </div>
-      </div>
+      </SkeletonGroup>
     </section>
   );
 }

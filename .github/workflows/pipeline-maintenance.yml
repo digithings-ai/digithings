@@ -22,16 +22,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
       - name: Run pip-audit
         id: audit
+        # This audit was silently dead. It ran `pip-audit -r requirements*.txt`,
+        # but this repo has no requirements*.txt at any path — the glob never
+        # expanded, so pip-audit errored, `|| true` swallowed it, and the bare
+        # `except: print(0)` below turned the unparseable output into a clean
+        # "0 vulnerabilities". The weekly CVE sweep has therefore been reporting
+        # all-clear without auditing anything.
+        #
+        # uv.lock (#1714) finally gives it something real to audit: export the
+        # whole workspace closure and audit that. `uvx` runs pip-audit as an
+        # ephemeral tool rather than a project dependency (#1715).
         run: |
-          pip install pip-audit --quiet
+          uv export --frozen --all-packages --all-extras \
+            --format requirements-txt \
+            --no-emit-project --no-emit-workspace --no-hashes \
+            -o audit-requirements.txt
+          echo "── audited closure: $(grep -c '==' audit-requirements.txt) pinned packages"
           set +e
-          OUTPUT=$(pip-audit --format=json -r requirements*.txt 2>&1 || true)
+          OUTPUT=$(uvx pip-audit --format=json -r audit-requirements.txt 2>&1 || true)
           COUNT=$(echo "$OUTPUT" | python3 -c "
           import json,sys
           try:
@@ -41,10 +55,12 @@ jobs:
           except:
               print(0)
           " 2>/dev/null || echo "0")
-          echo "vuln_count=$COUNT" >> "$GITHUB_OUTPUT"
-          echo "output<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "vuln_count=$COUNT"
+            echo "output<<EOF"
+            echo "$OUTPUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create CVE issue if findings
         if: steps.audit.outputs.vuln_count != '0'
@@ -62,12 +78,12 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,security:finding,maintenance,component:root,risk:high,exec:claude" \
+            --label "security:finding,maintenance,component:root,risk:high,exec:claude" \
             --body "## Security Finding
 
           pip-audit found **${COUNT}** CVE(s) in Python dependencies.
 
-          ## Task for Copilot
+          ## Task
           1. Run \`pip-audit -r requirements*.txt\` to see full findings
           2. For each CVE: bump the affected package to a patched version
           3. Run tests to confirm no regressions: \`make test-unit\`
@@ -83,7 +99,12 @@ jobs:
           - [ ] \`make test-unit\` passes after bumps
           - [ ] PR opened and labelled \`security:finding\`")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 2. Stale branch cleanup ───────────────────────────────────────────────────
   stale-branches:
@@ -116,12 +137,24 @@ jobs:
             fi
           done < <(git branch -r | sed 's|origin/||' | tr -d ' ')
 
-          echo "stale_branches<<EOF" >> "$GITHUB_OUTPUT"
-          printf "$STALE" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          # Both reads below use '%b' to expand the literal \n separators STALE
+          # accumulates above while keeping the branch names as data. `printf
+          # "$STALE"` would put them in the format string, where a branch named
+          # e.g. `fix/100%-cpu` is a bogus conversion spec (SC2059); `printf
+          # "%s"` would not expand the separators at all, collapsing the list to
+          # one line so `grep -c .` reports 1 however many branches are stale.
+          # `count` is interpolated into the cleanup issue title, not just used
+          # as the boolean for the `if:` gate below, so the number has to be right.
           COUNT=0
-          [[ -n "$STALE" ]] && COUNT=$(printf "%s" "$STALE" | grep -c .)
-          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          [[ -n "$STALE" ]] && COUNT=$(printf '%b' "$STALE" | grep -c .)
+
+          # Computed before the append group so all four writes stay contiguous.
+          {
+            echo "stale_branches<<EOF"
+            printf '%b' "$STALE"
+            echo "EOF"
+            echo "count=$COUNT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create cleanup issue if stale branches found
         if: steps.stale.outputs.count != '0'
@@ -137,11 +170,11 @@ jobs:
             --search "stale merged branches in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
           [[ -n "$EXISTING" ]] && { echo "Issue #$EXISTING already open — skipping."; exit 0; }
 
-          BRANCH_LIST=$(printf "$STALE" | sed 's/^/- /')
+          BRANCH_LIST=$(printf '%b' "$STALE" | sed 's/^/- /')
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,cleanup,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --label "cleanup,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## Stale Branch Cleanup
 
           Found **${COUNT}** branches that are merged into \`develop\` and have not been updated in 14+ days.
@@ -149,7 +182,7 @@ jobs:
           ## Branches to delete
           ${BRANCH_LIST}
 
-          ## Task for Copilot
+          ## Task
           Delete each branch after confirming it is fully merged:
           \`\`\`bash
           for branch in <list>; do
@@ -162,7 +195,12 @@ jobs:
           - [ ] No unmerged work lost (verify each branch is merged before deletion)
           - [ ] Comment on this issue with the list of branches deleted")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 3. Doc link check ─────────────────────────────────────────────────────────
   doc-links:
@@ -177,10 +215,12 @@ jobs:
           set +e
           OUTPUT=$(python3 scripts/check_doc_links.py 2>&1)
           EXIT=$?
-          echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
-          echo "output<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$OUTPUT" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
+          {
+            echo "exit_code=$EXIT"
+            echo "output<<EOF"
+            echo "$OUTPUT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create issue if broken links
         if: steps.doccheck.outputs.exit_code != '0'
@@ -197,12 +237,12 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:cursor" \
+            --label "housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## Broken Internal Doc Links
 
           \`python3 scripts/check_doc_links.py\` found broken markdown links in the repository.
 
-          ## Task for Copilot
+          ## Task
           1. Run \`make doc-check\` to see the full list
           2. Fix each broken link (update path or remove the link)
           3. Run \`make doc-check\` again to confirm clean
@@ -217,7 +257,12 @@ jobs:
           - [ ] \`make doc-check\` exits 0
           - [ ] No links removed that should be kept (prefer fixing paths over removal)")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 4. agents-init drift check ────────────────────────────────────────────────
   agents-drift:
@@ -226,17 +271,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.12"
+          enable-cache: true
 
-      - run: pip install pyyaml --quiet
+      # pyyaml from the lock instead of an unpinned `pip install` (#1715).
+      - name: Install from lockfile
+        run: uv sync --frozen --all-packages --all-extras
 
       - name: Check for drift
         id: drift
         run: |
           set +e
-          OUTPUT=$(python3 scripts/agents_init.py --check 2>&1)
+          OUTPUT=$(uv run --frozen --no-sync python scripts/agents_init.py --check 2>&1)
           EXIT=$?
           echo "exit_code=$EXIT" >> "$GITHUB_OUTPUT"
           echo "output=$OUTPUT" >> "$GITHUB_OUTPUT"
@@ -256,12 +303,12 @@ jobs:
 
           URL=$(gh issue create --repo "$REPO" \
             --title "$TITLE" \
-            --label "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot" \
+            --label "housekeeping,maintenance,component:root,risk:low,exec:cursor" \
             --body "## agents-init Drift
 
           Generated files in \`.claude/\` are out of sync with \`agents.yml\` + \`agents/sources/\`.
 
-          ## Task for Copilot
+          ## Task
           \`\`\`bash
           make agents-init
           git add .claude/ agents/sources/
@@ -277,7 +324,12 @@ jobs:
           - [ ] \`python3 scripts/agents_init.py --check\` exits 0
           - [ ] PR opened and merged to develop")
           echo "Created: $URL"
-          [[ -n "${PROJ:-}" ]] && gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          # Best-effort board placement: never fail the step over it. Written as
+          # if/then rather than `A && B || true`, where the `|| true` covers both
+          # "PROJ unset" and "item-add failed" and reads like an else (SC2015).
+          if [[ -n "${PROJ:-}" ]]; then
+            gh project item-add "$PROJ" --owner digithings-ai --url "$URL" >/dev/null 2>&1 || true
+          fi
 
   # ── 5. Stale issue sweep ─────────────────────────────────────────────────────
   # Issues with no activity in >90 days get a comment + `stale` label.
@@ -299,9 +351,12 @@ jobs:
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
           # >90d for normal issues, >7d for `blocked`-labeled. Export so
-          # the Python child process sees them via os.environ.
-          export CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
-          export CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # the Python child process sees them via os.environ. Assign first —
+          # `export X=$(cmd)` masks the command's exit status from `set -e`
+          # (SC2155).
+          CUTOFF_NORMAL=$(date -u -v-90d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '90 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          CUTOFF_BLOCKED=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF_NORMAL CUTOFF_BLOCKED
 
           python3 <<'PY'
           import json, os, subprocess
@@ -355,7 +410,9 @@ jobs:
           set -euo pipefail
           [ -z "${GH_TOKEN:-}" ] && { echo "::warning::DIGITHINGS_PROJECT_TOKEN not set — skipping."; exit 0; }
 
-          export CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          # Assign before exporting so `set -e` still sees date(1)'s status (SC2155).
+          CUTOFF=$(date -u -v-14d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          export CUTOFF
 
           python3 <<'PY'
           import json, os, subprocess, re
@@ -506,7 +563,7 @@ jobs:
           if len(drift) > 100:
               body_lines.append(f"- …and {len(drift) - 100} more")
           body_lines.append("")
-          body_lines.append("## Task for Copilot")
+          body_lines.append("## Task")
           body_lines.append("Apply the missing labels. For `complexity` and `risk` on unclear issues, default to `complexity:M` and `risk:low` — escalate to `exec:claude` if genuinely ambiguous.")
           body = "\n".join(body_lines)
 
@@ -518,7 +575,7 @@ jobs:
           else:
               r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
                                   "--title", title,
-                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
                                   "--body", body],
                                  capture_output=True, text=True)
               print(r.stdout.strip())
@@ -614,7 +671,7 @@ jobs:
           else:
               r = subprocess.run(["gh", "issue", "create", "--repo", os.environ["REPO"],
                                   "--title", title,
-                                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
                                   "--body", body],
                                  capture_output=True, text=True)
               print(r.stdout.strip())
@@ -629,7 +686,7 @@ jobs:
   # ── 9. Duplicate issue scan ─────────────────────────────────────────────────
   # Finds open issues with near-identical titles and creates a Copilot task
   # to resolve them. Uses word-overlap similarity after stripping the
-  # bracket-prefix convention DigiThings uses (e.g. "[feat] x" vs "[fix] x").
+  # bracket-prefix convention digithings uses (e.g. "[feat] x" vs "[fix] x").
   duplicate-issues:
     name: Duplicate issue scan
     runs-on: ubuntu-latest
@@ -694,7 +751,7 @@ jobs:
               body_lines.append(f"- ...and {len(pairs) - 50} more pairs")
           body_lines += [
               "",
-              "## Task for Copilot",
+              "## Task",
               "For each pair: close the older/less-detailed issue as a duplicate, linking to the canonical one. Add the `duplicate` label to the closed issue.",
           ]
           body = "\n".join(body_lines)
@@ -715,7 +772,7 @@ jobs:
               r = subprocess.run([
                   "gh", "issue", "create", "--repo", os.environ["REPO"],
                   "--title", title,
-                  "--label", "copilot,housekeeping,maintenance,component:root,risk:low,exec:copilot",
+                  "--label", "housekeeping,maintenance,component:root,risk:low,exec:cursor",
                   "--body", body,
               ], capture_output=True, text=True)
               print(r.stdout.strip())

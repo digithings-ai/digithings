@@ -38,17 +38,15 @@ export function AsOfBadge({
 
   const label = `as of ${formatAsOf(date)}${agePart}`;
   if (stale) {
-    return (
-      <Badge variant="amber" className="font-mono">
-        {label} · stale
-      </Badge>
-    );
+    // Reference badge dress is already mono — the old `font-mono` utility
+    // is redundant.
+    return <Badge variant="amber">{label} · stale</Badge>;
   }
   return <span className="font-mono text-[10px] text-ink-mute tracking-wide">{label}</span>;
 }
 
 /** "2026-06-13" → "Jun 13". Falls back to the raw string on a parse miss. */
-function formatAsOf(date: string): string {
+export function formatAsOf(date: string): string {
   const m = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return date;
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

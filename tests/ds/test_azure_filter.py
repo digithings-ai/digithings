@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digisearch.indexes.backends.azure_search import _build_odata_filter
 
 

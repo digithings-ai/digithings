@@ -5,7 +5,11 @@ import { resetEmbedTenantRegistryForTests } from "./embed-tenants";
 const REGISTRY = JSON.stringify({
   "datatapstream.com": {
     slug: "datatapstream",
-    backend: { type: "external-relay", url: "https://relay.example.com/api/digichat" },
+    backend: {
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
+    },
     gateMode: "ungated",
     token: "datatapstream-secret",
   },
@@ -45,8 +49,9 @@ describe("resolveEmbedChatTenant with a registered host", () => {
     expect(result.tenantSlug).toBe("datatapstream");
     expect(result.ownerUserSub).toBe("embed:anonymous");
     expect(result.embedConfig?.backend).toEqual({
-      type: "external-relay",
-      url: "https://relay.example.com/api/digichat",
+      type: "foundry",
+      projectEndpoint: "https://example.services.ai.azure.com",
+      agentName: "agent",
     });
   });
 
@@ -71,9 +76,9 @@ describe("resolveEmbedChatTenant with a registered host", () => {
     if (result instanceof Response) expect(result.status).toBe(503);
   });
 
-  it("falls back to the generic legacy embed tenant (not the registered one) when the token is missing but embed is globally enabled", () => {
+  it("falls back to the generic legacy embed tenant (not the registered one) when the token is missing but legacy embed is globally enabled", () => {
     vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
-    vi.stubEnv("DIGICHAT_EMBED_ENABLED", "1");
+    vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "1");
     resetEmbedTenantRegistryForTests();
     const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://datatapstream.com" }));
     expect(result).not.toBeInstanceOf(Response);
@@ -85,7 +90,7 @@ describe("resolveEmbedChatTenant with a registered host", () => {
 
 describe("resolveEmbedChatTenant legacy behavior (unknown host)", () => {
   it("keeps the env-gated legacy identity with a null embedConfig", () => {
-    vi.stubEnv("DIGICHAT_EMBED_ENABLED", "1");
+    vi.stubEnv("DIGICHAT_LEGACY_EMBED_ENABLED", "1");
     const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://unknown.example.com" }));
     expect(result).not.toBeInstanceOf(Response);
     if (result instanceof Response) return;
@@ -95,6 +100,98 @@ describe("resolveEmbedChatTenant legacy behavior (unknown host)", () => {
 
   it("still returns 503 for unknown hosts when embed is not enabled", () => {
     const result = resolveEmbedChatTenant(embedRequest({ "x-embed-host": "https://unknown.example.com" }));
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+});
+
+const DIGITHINGS_REGISTRY = JSON.stringify({
+  "digithings.ai": {
+    slug: "digithings",
+    aliases: ["www.digithings.ai"],
+    backend: { type: "digigraph" },
+    gateMode: "ungated",
+    activityDetail: "full",
+    token: "digithings-schema-token",
+  },
+});
+
+describe("first-party digithings host", () => {
+  it("resolves without X-Embed-Token when host is allowlisted and registered", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", DIGITHINGS_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://digithings.ai" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+    expect(result.embedConfig?.gateMode).toBe("ungated");
+  });
+
+  it("still requires a token for non-first-party registered hosts", () => {
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "https://datatapstream.com" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+  });
+});
+
+const LOCALHOST_REGISTRY = JSON.stringify({
+  localhost: {
+    slug: "digithings",
+    aliases: ["127.0.0.1"],
+    backend: { type: "digigraph" },
+    gateMode: "ungated",
+    activityDetail: "full",
+    token: "local-dev-token",
+  },
+});
+
+describe("dev loopback first-party (dogfood)", () => {
+  it("resolves localhost without X-Embed-Token in development when registered", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://localhost:3000" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+    expect(result.embedConfig?.gateMode).toBe("ungated");
+  });
+
+  it("resolves 127.0.0.1 via alias without token in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://127.0.0.1:3000" }),
+    );
+    expect(result).not.toBeInstanceOf(Response);
+    if (result instanceof Response) return;
+    expect(result.tenantSlug).toBe("digithings");
+  });
+
+  it("returns 503 for localhost in production even when registered", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("DIGICHAT_EMBED_TENANTS", LOCALHOST_REGISTRY);
+    resetEmbedTenantRegistryForTests();
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://localhost:3000" }),
+    );
+    expect(result).toBeInstanceOf(Response);
+    if (result instanceof Response) expect(result.status).toBe(503);
+  });
+
+  it("returns 503 for unregistered localhost in development", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const result = resolveEmbedChatTenant(
+      embedRequest({ "x-embed-host": "http://localhost:3000" }),
+    );
     expect(result).toBeInstanceOf(Response);
     if (result instanceof Response) expect(result.status).toBe(503);
   });

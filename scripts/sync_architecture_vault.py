@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Sync the DigiVault-managed ``docs/vision`` vault → Supabase ``public.architecture_notes``.
+"""Sync the digivault-managed ``docs/vision`` vault → Supabase ``public.architecture_notes``.
 
-Dogfoods two DigiThings modules:
+Dogfoods two digithings modules:
 
 * **digivault** — parses the Obsidian vault (YAML frontmatter, body, ``[[wikilinks]]``)
   via the core ``Vault`` index. It is the single source of truth for note structure.
@@ -14,11 +14,11 @@ Usage
 -----
 Dry-run (no DB, no credentials — verifies the parse/mapping)::
 
-    PYTHONPATH=digivault/src:digibase/src python3 -P scripts/sync_architecture_vault.py --dry-run
+    PYTHONPATH=. uv run python scripts/sync_architecture_vault.py --dry-run
 
 Real sync (CI / operator; needs service-role credentials in the environment)::
 
-    python3 scripts/sync_architecture_vault.py
+    PYTHONPATH=. uv run python scripts/sync_architecture_vault.py
 
 Credentials resolve ``CORE_SUPABASE_URL`` / ``CORE_SUPABASE_SERVICE_KEY`` (ADR-0022),
 falling back to ``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY``. The service key is read
@@ -32,7 +32,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any  # noqa: ANN401 — frontmatter/row values are arbitrary YAML/JSON
+from typing import Any  # score:allow untyped any — frontmatter/row values are arbitrary YAML/JSON
 
 from digivault import Vault, split_frontmatter
 
@@ -59,7 +59,7 @@ def _summary_from_body(body: str) -> str:
 
 
 def build_rows(vault_dir: str) -> list[dict[str, Any]]:
-    """Parse the vault with DigiVault and map each note to an architecture_notes row."""
+    """Parse the vault with digivault and map each note to an architecture_notes row."""
     vault = Vault(vault_dir)
     rows: list[dict[str, Any]] = []
     for note in vault.list_notes():
@@ -86,7 +86,7 @@ def build_rows(vault_dir: str) -> list[dict[str, Any]]:
 
 def _connector():  # type: ignore[no-untyped-def]
     """Build a digibase SupabaseConnector, preferring the ADR-0022 CORE_* names."""
-    from digibase.connectors.supabase import (  # noqa: PLC0415 (deferred: optional extra)
+    from digibase.connectors.supabase import (  # (deferred: optional extra)
         SupabaseConnector,
         SupabaseNotConfiguredError,
     )

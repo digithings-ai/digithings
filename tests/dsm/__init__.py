@@ -1,1 +1,1 @@
-# DigiSmith unit tests
+# digismith unit tests

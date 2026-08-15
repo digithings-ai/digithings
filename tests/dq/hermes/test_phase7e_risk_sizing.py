@@ -12,8 +12,12 @@ from datetime import date, timedelta
 
 import polars as pl
 import pytest
-
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
+from digiquant.olympus.atlas.state import (
+    AtlasConfigBundle,
+    AtlasResearchState,
+    PhaseHermesState,
+    PriorContext,
+)
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases import phase7e_risk_sizing
 from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
@@ -191,6 +195,84 @@ def test_effective_conviction_applies_debate_delta() -> None:
     w = _weights(rebal)
     assert w["AAA"] > w["BBB"]
     assert w["AAA"] / w["BBB"] == pytest.approx(5.0 / 3.0, rel=0.05)
+
+
+class TestUnchallengedCarryIsLowConfidence:
+    """#1742 — a position whose H6 debate crashed may not be sized as a won argument.
+
+    On 2026-07-31 the three highest-conviction new opens (VGK/FXI/IBIT, 30% of NAV) were
+    all crash-carried: H6 published the analyst's own stance as a converged debate, and
+    sizing had no way to know the PM challenge never ran.
+    """
+
+    _ANALYSTS = {
+        "AAA": {"conviction_score": 3, "stance": "buy"},
+        "BBB": {"conviction_score": 3, "stance": "buy"},
+    }
+
+    def _sized(
+        self,
+        debates: dict,
+        preferences: dict | None = None,
+        analysts: dict | None = None,
+        **kwargs,
+    ) -> dict:
+        return _run(
+            _state(
+                [{"ticker": "AAA", "target_pct": 50}, {"ticker": "BBB", "target_pct": 50}],
+                analysts=analysts or dict(self._ANALYSTS),
+                debates=debates,
+                preferences={**_RELAXED, **(preferences or {})},
+                **kwargs,
+            ),
+            FakeSupabaseClient(
+                canned_reads={"price_technicals": _tech_rows({"AAA": 20, "BBB": 20})}
+            ),
+        )
+
+    def test_memo_path_caps_the_crash_carried_name_at_the_bar(self) -> None:
+        # The memo branch is production (H7 writes a memo every run): rank 1 (AAA) would
+        # outweigh rank 2 (BBB), but AAA's debate crashed, so it drops to the entry bar.
+        rebal = self._sized({"AAA": {"carried": True, "carry_reason": "llm_failure"}})
+        w = _weights(rebal)
+        assert w["AAA"] == pytest.approx(w["BBB"])
+        # Capped, never ejected — the name stays in the book and is named in the note.
+        assert "AAA" in w
+        assert "H6 deliberation failed" in rebal["notes"]
+
+    def test_benign_fingerprint_skip_keeps_full_conviction(self) -> None:
+        # The quiet-ticker carry (#925) is a real prior debate; it must not be haircut.
+        rebal = self._sized({"AAA": {"carried": True, "carry_reason": "fingerprint_skip"}})
+        w = _weights(rebal)
+        assert w["AAA"] > w["BBB"]
+        assert "H6 deliberation failed" not in rebal["notes"]
+
+    def test_legacy_path_caps_the_crash_carried_name_too(self) -> None:
+        # No-memo branch, with the un-carried run as its own control: AAA's analyst
+        # conviction of 5 outweighs BBB's 2 until AAA's debate crashes.
+        analysts = {
+            "AAA": {"conviction_score": 5, "stance": "buy"},
+            "BBB": {"conviction_score": 2, "stance": "buy"},
+        }
+        control = self._sized({}, analysts=analysts, use_memo=False)
+        crashed = self._sized(
+            {"AAA": {"carried": True, "carry_reason": "llm_failure"}},
+            analysts=analysts,
+            use_memo=False,
+        )
+        assert _weights(control)["AAA"] > _weights(control)["BBB"]
+        assert _weights(crashed)["AAA"] == pytest.approx(_weights(crashed)["BBB"])
+
+    def test_cap_holds_when_the_bar_is_raised_above_the_default(self) -> None:
+        # ``min_conviction`` above the memo floor of 2.0: capping AT the bar still clears
+        # the sizer's ``>=`` selection, so the position survives at minimum size.
+        rebal = self._sized(
+            {"AAA": {"carried": True, "carry_reason": "llm_failure"}},
+            preferences={"min_conviction": 3.0},
+        )
+        w = _weights(rebal)
+        assert "AAA" in w
+        assert w["AAA"] == pytest.approx(w["BBB"])
 
 
 def test_memo_conviction_rank_orders_weights() -> None:
@@ -496,3 +578,89 @@ def test_correlation_reader_error_falls_back_to_none(monkeypatch: pytest.MonkeyP
     assert "SPY" in _weights(rebal)
     # And corr=None must have been passed (conservative fallback).
     assert captured.get("corr") is None, "expected corr=None fallback on reader error"
+
+
+@pytest.mark.unit
+class TestHeldContinuityBackstop:
+    """#1649 backstop — the FINAL sized book enforces held ⇒ positive weight or flat.
+
+    The 2026-07-22 22:54 run reached H9 with NINE held names at weight<=0 despite the
+    memo-unaddressed carry being live — the invariant must hold on the final dict
+    regardless of which upstream crack fired.
+    """
+
+    def _held_state(self, *, flat: bool = False, with_weight: bool = True) -> AtlasResearchState:
+        prior_book = [{"ticker": "DBO", "weight_pct": 7.5 if with_weight else None}]
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=RUN_DATE,
+            baseline_date=date(2026, 6, 9),
+            config=AtlasConfigBundle(preferences={}),
+            prior_context=PriorContext(prior_book=prior_book),
+        )
+        roster = [TickerDirection(ticker="SPY", direction="long", conviction_rank=1)]
+        if flat:
+            roster.append(TickerDirection(ticker="DBO", direction="flat", conviction_rank=2))
+        else:
+            # The exact 2026-07-22 shape: PM addressed the held name as long,
+            # but sizing dropped it (weight absent from the final dict).
+            roster.append(TickerDirection(ticker="DBO", direction="long", conviction_rank=2))
+        state.phase_hermes = PhaseHermesState(
+            pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster)
+        )
+        return state
+
+    def test_sized_out_held_name_is_readded_at_drifted_weight(self) -> None:
+        state = self._held_state()
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        assert out["DBO"] == 7.5, "held name dropped by sizing must be re-added"
+        assert out["SPY"] == 60.0
+
+    def test_explicit_flat_is_never_resurrected(self) -> None:
+        state = self._held_state(flat=True)
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        assert "DBO" not in out, "an explicit flat is an exit — never re-added"
+
+    def test_unrecoverable_weight_stays_out_and_fails_closed_downstream(self) -> None:
+        state = self._held_state(with_weight=False)
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        assert "DBO" not in out, "no recoverable weight → leave out; H9 fails closed"
+
+    def test_non_held_names_untouched(self) -> None:
+        state = self._held_state()
+        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0, "QQQ": 0.0}, state)
+        assert out["QQQ"] == 0.0, "backstop is held-only"
+
+
+@pytest.mark.unit
+class TestActionClassificationAndInvestedCap:
+    """#1676 — held rebalances classify add/trim/hold (not 'new'); Σ invested ≤ 100%."""
+
+    def test_memo_path_actions_classify_against_live_weights(self) -> None:
+        # The H7 memo path passes original_actions=[] — previously EVERYTHING was "new".
+        actions = phase7e_risk_sizing._rebuild_actions(
+            [],
+            pm_targets={"AAA": 1.0, "BBB": 1.0, "CCC": 1.0, "DDD": 1.0},
+            sized={"AAA": 8.0, "BBB": 3.0, "CCC": 5.0, "DDD": 6.0},
+            current_weights={"AAA": 5.0, "BBB": 5.0, "CCC": 5.0},
+        )
+        verbs = {row["ticker"]: row["action"] for row in actions}
+        assert verbs == {"AAA": "add", "BBB": "trim", "CCC": "hold", "DDD": "new"}
+
+    def test_cap_scales_proportionally_over_100(self) -> None:
+        capped = phase7e_risk_sizing._cap_total_invested({"A": 60.0, "B": 50.0})
+        assert round(sum(capped.values()), 6) == 100.0
+        assert round(capped["A"] / capped["B"], 6) == round(60.0 / 50.0, 6)
+
+    def test_cap_leaves_valid_books_untouched(self) -> None:
+        book = {"A": 60.0, "B": 30.0}
+        assert phase7e_risk_sizing._cap_total_invested(dict(book)) == book
+
+    def test_backstop_overshoot_is_capped(self) -> None:
+        # The #1649 backstop legitimately re-adds drifted weight onto a full book;
+        # the cap must bring the composition back to exactly 100.
+        sized = {"A": 70.0, "B": 30.0}
+        sized["DBO"] = 7.5  # backstop re-add
+        capped = phase7e_risk_sizing._cap_total_invested(sized)
+        assert round(sum(capped.values()), 6) == 100.0
+        assert capped["DBO"] > 0, "the rescued position survives the cap"

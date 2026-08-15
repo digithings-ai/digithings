@@ -25,7 +25,14 @@ export type SnapshotBias =
 
 /** Per-segment provenance marker. Mirrors phase7_synthesis.SegmentFreshness. */
 export interface SegmentFreshness {
-  source: 'today' | 'baseline';
+  /**
+   * `today` — regenerated this run, content changed.
+   * `frozen` — regenerated this run and the edit merge changed nothing, so `as_of` is the
+   *   date the content last materially changed, not the run date (#1749). Used to be
+   *   indistinguishable from `today`.
+   * `baseline` — not regenerated at all; carried from the last baseline.
+   */
+  source: 'today' | 'baseline' | 'frozen';
   /** ISO date string ('' if unknown). */
   as_of: string;
 }

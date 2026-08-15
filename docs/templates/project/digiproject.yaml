@@ -1,5 +1,5 @@
 # digiproject.yaml — v1alpha1
-# Minimal starter for a new DigiThings project.
+# Minimal starter for a new digithings project.
 # Copy this directory to projects/<your-project>/ and customise below.
 # All fields are optional; defaults shown in comments.
 # Full spec: docs/spec/project-spec-v1alpha1.md
@@ -12,7 +12,11 @@ project:
 agents:
   enabled:
     - research            # only "research" is supported in Phase 1
-  llm_mode: test          # "test" | "medium" | "best"
+  llm_mode: test          # "free" | "test" | "medium" | "best" (policy; free ≠ a shared product slug)
+  # llm:                    # required when llm_mode: free; optional pin otherwise
+  #   provider: openrouter
+  #   model: openai/gpt-oss-20b:free   # operator-chosen; OpenRouter :free roster rotates
+  #   api_key_env: OPENROUTER_API_KEY
   # planning_mode: false  # enable plan-then-execute flow
   # allowed_tools:        # restrict tool names (default: all)
   #   - digisearch

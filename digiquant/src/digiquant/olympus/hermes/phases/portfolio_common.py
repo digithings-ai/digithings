@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import logging
 from datetime import date
-from typing import Any, TypeVar  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
-from pydantic import BaseModel, ValidationError
+from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
+    Any,
+    TypeVar,
+)
 
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from pydantic import BaseModel, ValidationError
 
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
 from digiquant.olympus.atlas.phases._node_factory import (
@@ -250,7 +253,9 @@ def run_asset_analyst_llm(
         result = run_research_agent(
             skill_text=skill_text,
             phase_inputs=phase_inputs,
-            shared_context=_shared_context(state, context_keys=(), data_layer_scope="ticker"),
+            shared_context=_shared_context(
+                state, context_keys=("digest", "digest-delta"), data_layer_scope="ticker"
+            ),
             output_model=DocumentPatch,
             phase_slug=phase_slug,
             tools=tools,
@@ -285,16 +290,32 @@ def run_asset_analyst_llm(
         )
         return payload, doc, errors
 
-    result = run_research_agent(
-        skill_text=skill_text,
-        phase_inputs=phase_inputs,
-        shared_context=_shared_context(state, context_keys=(), data_layer_scope="ticker"),
-        output_model=AnalystPayload,
-        phase_slug=phase_slug,
-        tools=tools,
-        execute_tool=execute_tool,
-        model=eff_model,
-    )
+    try:
+        result = run_research_agent(
+            skill_text=skill_text,
+            phase_inputs=phase_inputs,
+            shared_context=_shared_context(
+                state, context_keys=("digest", "digest-delta"), data_layer_scope="ticker"
+            ),
+            output_model=AnalystPayload,
+            phase_slug=phase_slug,
+            tools=tools,
+            execute_tool=execute_tool,
+            model=eff_model,
+        )
+    except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
+        logger.warning(
+            "H5 analyst LLM failed for %s (%s: %s); skipping ticker",
+            ticker,
+            type(exc).__name__,
+            exc,
+        )
+        errors.append(
+            PhaseError(
+                phase="phase_hermes", node=phase_slug, message=f"analyst LLM failed: {exc}"[:500]
+            )
+        )
+        return None, None, errors
     payload = result.model_copy(
         update={"fingerprint_news_hash": news_hash_for_ticker(state, ticker)}
     )

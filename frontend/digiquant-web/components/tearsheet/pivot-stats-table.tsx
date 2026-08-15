@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { SegToggle } from "./charts";
-import { fmtNum, fmtPct, toneClass } from "./format";
+import { SegToggle, fmtNum, fmtPct, toneClass } from "@digithings/web";
 import { fmtRatio } from "./stats";
 import {
   PIVOT_LABELS,

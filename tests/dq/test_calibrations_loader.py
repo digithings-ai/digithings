@@ -6,12 +6,13 @@ import json
 from pathlib import Path
 
 import pytest
-
 from digiquant.strategies.calibrations_loader import (
     load_calibrations_file,
     merge_trade_start,
     resolve_calibrations,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def test_merge_trade_start() -> None:

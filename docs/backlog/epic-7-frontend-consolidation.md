@@ -2,14 +2,14 @@
 
 Decomposition of [Epic #7](https://github.com/digithings-ai/digithings/issues/7) (Phase 3a) into concrete child tasks.
 
-**Historical record.** The `chat.digithings.ai` subdomain target described below (ADR-0002) was later superseded by [ADR-0018](../adr/0018-digichat-path-routing.md), which routes DigiChat at `digithings.ai/chat`. `frontend/digichat/` is not deployed anywhere today — see epic [#1248](https://github.com/digithings-ai/digithings/issues/1248) for the in-progress cutover to the real routing target.
+**Historical record.** The `chat.digithings.ai` subdomain target described below (ADR-0002) was later superseded by [ADR-0018](../adr/0018-digichat-path-routing.md), which routes digichat at `digithings.ai/chat`. `frontend/digichat/` is not deployed anywhere today — see epic [#1248](https://github.com/digithings-ai/digithings/issues/1248) for the in-progress cutover to the real routing target.
 
 ## Recap
 
 [ADR-0002](../adr/0002-domain-unification.md) commits to a two-domain arrangement:
 
 - `digithings.ai` — static landing (`website/`, GitHub Pages, canvas starfield).
-- `chat.digithings.ai` — production DigiChat (`digichat/`, Next.js).
+- `chat.digithings.ai` — production digichat (`digichat/`, Next.js).
 - Atlas and the commercial product surface move to `digiquant.io` (tracked separately, Phase 3c).
 
 Phase 3a is the execution pass: verify routing, add the CTA, retire duplicates, tidy nav. Phase 3b (BYOK) and 3c (`digiquant.io`) are out of scope here.
@@ -18,11 +18,11 @@ Phase 3a is the execution pass: verify routing, add the CTA, retire duplicates, 
 
 - [ADR-0002](../adr/0002-domain-unification.md) — two-domain decision recorded.
 - [PR #58](https://github.com/digithings-ai/digithings/pull/58) — DNS + Pages routing verified and documented in `docs/DEPLOYMENT.md`; `website/CNAME` confirmed; asset-copy step audited; nav link to `chat.digithings.ai` confirmed in `website/index.html`.
-- Vite DigiChat POC previously removed (per ADR-0002 context).
+- Vite digichat POC previously removed (per ADR-0002 context).
 
 ## Remaining sub-tasks
 
-- [x] **"Chat with DigiThings" CTA on `website/`** — prominent hero button linking to `https://chat.digithings.ai`. Today only a small nav link exists; ADR-0002 calls for a conversion-oriented CTA. ([PR #93](https://github.com/digithings-ai/digithings/pull/93))
+- [x] **"Chat with digithings" CTA on `website/`** — prominent hero button linking to `https://chat.digithings.ai`. Today only a small nav link exists; ADR-0002 calls for a conversion-oriented CTA. ([PR #93](https://github.com/digithings-ai/digithings/pull/93))
 - [x] **Audit `website/` copy for Atlas-specific references** — remove or redirect any mentions that belong on `digiquant.io`; keep the landing focused on the open-core ecosystem. ([PR #80](https://github.com/digithings-ai/digithings/pull/80), closed)
 - [ ] **301 redirects for legacy URLs** — enumerate any previously-linked paths (old `/chat`, Vite-POC URLs, Atlas teasers) and document the redirect plan for GitHub Pages or a lightweight redirect layer. _Deferred: no legacy URLs identified that require active redirects at this stage._
 - [ ] **Shared header/footer story** — decide between a small shared partial (build-time include for `website/` + a matching React component in `digichat/`) or deliberate duplication with a style guide. Capture the decision in `website/README.md`. _Deferred: pending digichat stabilisation and the digiquant.io split (Phase 3c)._

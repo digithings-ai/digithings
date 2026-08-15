@@ -23,11 +23,11 @@ const EMBED_IP_WINDOW_MS = envPositiveInt("DIGICHAT_EMBED_IP_RATE_LIMIT_WINDOW_M
 /**
  * Best-effort client IP for rate-limiting only — never treat this as an
  * identity signal. `cf-connecting-ip` is set authoritatively by Cloudflare's
- * edge (DigiChat's deployment target per ADR-0018) and can't be spoofed by
+ * edge (digichat's deployment target per ADR-0018) and can't be spoofed by
  * the client when actually behind Cloudflare. Falls back to the first
  * `X-Forwarded-For` hop for non-Cloudflare setups (dev, other proxies) — that
  * header, and `cf-connecting-ip` itself outside Cloudflare, CAN be spoofed
- * absent a proxy that strips/overwrites them. DigiGraph closed the equivalent
+ * absent a proxy that strips/overwrites them. digigraph closed the equivalent
  * gap in its own rate limiter via a `DIGI_TRUSTED_PROXIES` allowlist
  * (digigraph/ARCHITECTURE.md §12.8, REM-027); this module has no equivalent
  * yet (tracked as a follow-up) — acceptable only because this is a

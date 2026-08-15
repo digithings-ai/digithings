@@ -3,6 +3,12 @@ import Image from "next/image";
 import { Emblem, emblems, StackRow, type StackItem } from "@digithings/web";
 import { Glyph, glyphNames } from "@/components/symbols/glyph";
 import { OlympusMark, Wordmark } from "@/components/symbols/marks";
+import {
+  AnimatedLockup,
+  HairlineWordmark,
+  TerminalMark,
+  TerminalWordmark,
+} from "@/components/symbols/terminal-marks";
 
 /* The full ICONS registry from frontend/digiweb/web/src/components/logos.ts — every
    slug that resolves to a real Simple Icons mark in StackLogo. */
@@ -13,6 +19,7 @@ const REGISTRY_STACK: StackItem[] = [
   { name: "Next.js", icon: "nextdotjs" },
   { name: "OpenAI", icon: "openai" },
   { name: "OpenTelemetry", icon: "opentelemetry" },
+  { name: "Optuna", icon: "optuna" },
   { name: "Polars", icon: "polars" },
   { name: "PostgreSQL", icon: "postgresql" },
   { name: "Prometheus", icon: "prometheus" },
@@ -28,36 +35,23 @@ const REGISTRY_STACK: StackItem[] = [
 const FALLBACK_STACK: StackItem[] = [
   { name: "NautilusTrader", icon: null, mono: "NT" },
   { name: "LiteLLM", icon: null, mono: "LL" },
-  { name: "Optuna", icon: null, mono: "Op" },
 ];
 
-/* QR favicon tiles. The digithings.ai and digiquant.io sets are distinct
-   marks (different payloads and module shapes), so both ship. */
-const QR_SETS = [
+/* Brand favicon tiles. One artwork — the compact `d` + block cursor — in the two
+   theme polarities, since the tile bakes its own background and cannot inherit
+   ink. digithings.ai and digiquant.io ship byte-identical files (the mark is
+   monochrome, so there is nothing site-specific to differ); both are listed
+   because there is no build step syncing the three public/ directories. */
+const TILE_SETS = [
   {
     site: "digithings.ai",
-    dark: [
-      { src: "/favicon-qr.svg", label: "favicon-qr.svg" },
-      { src: "/favicon-qr-mark-dark.svg", label: "favicon-qr-mark-dark.svg" },
-    ],
-    light: [
-      { src: "/favicon-qr-light.svg", label: "favicon-qr-light.svg" },
-      { src: "/favicon-qr-mark-light.svg", label: "favicon-qr-mark-light.svg" },
-    ],
+    dark: [{ src: "/favicon-dg-light.svg", label: "favicon-dg-light.svg" }],
+    light: [{ src: "/favicon-dg.svg", label: "favicon-dg.svg" }],
   },
   {
     site: "digiquant.io",
-    dark: [
-      { src: "/digiquant-favicon-qr.svg", label: "digiquant · favicon-qr.svg" },
-      { src: "/digiquant-favicon-qr-mark-dark.svg", label: "digiquant · favicon-qr-mark-dark.svg" },
-    ],
-    light: [
-      { src: "/digiquant-favicon-qr-light.svg", label: "digiquant · favicon-qr-light.svg" },
-      {
-        src: "/digiquant-favicon-qr-mark-light.svg",
-        label: "digiquant · favicon-qr-mark-light.svg",
-      },
-    ],
+    dark: [{ src: "/digiquant-favicon-dg-light.svg", label: "digiquant · favicon-dg-light.svg" }],
+    light: [{ src: "/digiquant-favicon-dg.svg", label: "digiquant · favicon-dg.svg" }],
   },
 ];
 
@@ -71,8 +65,9 @@ export default function SymbolsPage() {
         </h1>
         <p>
           The complete symbol library across digithings.ai, digiquant.io, and the apps: module
-          emblems, brand marks, QR tiles, vendor logos, and the utility glyph set — all drawn in
-          currentColor so every mark inherits ink or accent from its livery scope.
+          emblems, brand marks, favicon tiles, vendor logos, and the utility glyph set — nearly all
+          drawn in currentColor so a mark inherits ink or accent from its livery scope (the terminal
+          cut is the deliberate exception — see brand marks below).
         </p>
       </header>
 
@@ -99,19 +94,56 @@ export default function SymbolsPage() {
         <p className="kicker">{"// brand marks"}</p>
         <h2 className="title">Wordmarks and signature marks.</h2>
         <p className="section-copy">
-          The text lockup follows the footer colophon grammar: mono at weight 500, prefix in ink,
-          suffix wearing the accent of its scope. digichat has no separate mark — its module
-          emblem is enough. The olympus mark is ported from the dashboard&apos;s loader, four
-          strokes in currentColor.
+          The house identity is a terminal line caught mid-prompt: the module name, then a filled
+          block cursor. The cursor reuses the <code>.term-cursor</code> geometry — 0.6em wide,
+          which is exactly one Geist Mono advance, so it fills one character cell. Two registers,
+          each matching the weight of the surface it imitates: the <strong>terminal</strong> mark
+          and wordmark at 400, the weight <code>.term-body</code> actually renders at, and the{" "}
+          <strong>hairline</strong> display cut at 500, replicating the footer colophon. Each has a
+          floor — the full <code>digi</code> lockup closes up below ~64px (use the compact{" "}
+          <code>d</code> reduction), and the hairline is <strong>full-bleed only</strong>: its
+          stroke scales with the art, so below an em of ~173px it goes sub-pixel. For{" "}
+          <code>digithings</code>{" "}
+          that is a ~1036px rendered width before the stroke reaches one device pixel — the
+          colophon&apos;s own scale. The specimen below is deliberately the widest cell on the page
+          and is <em>still</em>{" "}
+          narrower than that, so treat it as a lockup check, not a fidelity one (each caption below
+          repeats this so it reads next to the artifact, not just up here). The olympus mark is
+          ported from the dashboard&apos;s loader, four strokes in currentColor. One exception to
+          the currentColor rule: the <strong>terminal</strong> mark and wordmark are deliberately{" "}
+          <strong>one tone</strong> — plain <code>--ink</code>, never <code>--accent</code>, even
+          under a livery scope, because they read as a real shell prompt and{" "}
+          <code>.term-body</code> itself never recolors by module. The specimen below wears{" "}
+          <code>.accent-digiquant</code> anyway, on purpose, to show that side-by-side against the{" "}
+          <strong>hairline</strong> cut, which genuinely does follow the scope.
         </p>
         <div className="sym-grid sym-grid--marks">
           <figure className="sym-cell sym-cell--mark">
-            <Wordmark suffix="things" />
-            <figcaption className="sym-label">digithings wordmark</figcaption>
+            <span className="sym-mark">
+              <TerminalMark size={44} />
+            </span>
+            <figcaption className="sym-label">terminal mark · full</figcaption>
+          </figure>
+          <figure className="sym-cell sym-cell--mark">
+            <span className="sym-mark">
+              <TerminalMark size={44} variant="compact" />
+            </span>
+            <figcaption className="sym-label">terminal mark · compact</figcaption>
+          </figure>
+          <figure className="sym-cell sym-cell--mark">
+            <TerminalWordmark suffix="things" />
+            <figcaption className="sym-label">terminal wordmark</figcaption>
           </figure>
           <figure className="sym-cell sym-cell--mark accent-digiquant">
-            <Wordmark suffix="quant" />
-            <figcaption className="sym-label">digiquant wordmark</figcaption>
+            <TerminalWordmark suffix="quant" />
+            <figcaption className="sym-label">
+              terminal wordmark · digiquant
+              <span className="sym-note"> — one tone by design, ignores this scope</span>
+            </figcaption>
+          </figure>
+          <figure className="sym-cell sym-cell--mark">
+            <Wordmark suffix="things" />
+            <figcaption className="sym-label">text wordmark (superseded)</figcaption>
           </figure>
           <figure className="sym-cell sym-cell--mark">
             <span className="sym-mark">
@@ -120,39 +152,71 @@ export default function SymbolsPage() {
             <figcaption className="sym-label">olympus mark</figcaption>
           </figure>
         </div>
+        <div className="sym-grid sym-grid--wide">
+          <figure className="sym-cell sym-cell--wide">
+            <AnimatedLockup className="block text-[2.6rem]" />
+            <figcaption className="sym-label">
+              animated lockup · types every module, pure CSS
+            </figcaption>
+          </figure>
+          <figure className="sym-cell sym-cell--wide">
+            <HairlineWordmark word="things" className="sym-hairline" />
+            <figcaption className="sym-label">
+              hairline wordmark · display only
+              <span className="sym-note">
+                {" "}
+                — below its ~1036px floor here; a lockup check, not a fidelity one
+              </span>
+            </figcaption>
+          </figure>
+          <figure className="sym-cell sym-cell--wide accent-digiquant">
+            <HairlineWordmark word="quant" className="sym-hairline sym-hairline--accent" />
+            <figcaption className="sym-label">
+              hairline wordmark · digiquant
+              <span className="sym-note">
+                {" "}
+                — below its ~933px floor here; a lockup check, not a fidelity one
+              </span>
+            </figcaption>
+          </figure>
+        </div>
       </section>
 
-      <section className="section-block" id="qr-marks">
-        <p className="kicker">{"// qr marks"}</p>
-        <h2 className="title">Favicons that scan.</h2>
+      <section className="section-block" id="brand-tiles">
+        <p className="kicker">{"// brand tiles"}</p>
+        <h2 className="title">Favicons carry their own ink.</h2>
         <p className="section-copy">
-          Each site&apos;s favicon is a working QR code pointing at its own domain — the
-          digithings.ai and digiquant.io sets are distinct marks, so both ship. Tile variants
-          carry their own background; mark variants are transparent and sit on the surface behind
-          them, one per theme.
+          The favicon is the compact <code>d</code> + cursor reduction, never the full{" "}
+          <code>digi</code> lockup — five character cells are illegible at 16px. A tile bakes its
+          own background, so unlike every other mark here it cannot inherit ink from{" "}
+          <code>currentColor</code>; each site therefore ships one file per theme polarity, wired
+          through <code>metadata.icons</code> with <code>prefers-color-scheme</code> media queries.
+          Those queries are the reason the sites do <em>not</em> use an{" "}
+          <code>app/icon.svg</code>: the Next.js file convention overrides the metadata block and
+          would silently drop them.
         </p>
-        {QR_SETS.map((set) => (
-          <div key={set.site} className="sym-qr-set">
-            <p className="sym-qr-site sym-label">{set.site}</p>
-            <div className="sym-qr-row">
-              <div className="sym-qr-card sym-qr-card--dark">
-                {set.dark.map((qr) => (
-                  <figure key={qr.src} className="sym-qr-item">
-                    <Image src={qr.src} alt={`${set.site} QR mark, dark`} width={96} height={96} />
-                    <figcaption className="sym-label">{qr.label}</figcaption>
+        {TILE_SETS.map((set) => (
+          <div key={set.site} className="sym-tile-set">
+            <p className="sym-tile-site sym-label">{set.site}</p>
+            <div className="sym-tile-row">
+              <div className="sym-tile-card sym-tile-card--dark">
+                {set.dark.map((tile) => (
+                  <figure key={tile.src} className="sym-tile-item">
+                    <Image src={tile.src} alt={`${set.site} favicon tile, dark`} width={96} height={96} />
+                    <figcaption className="sym-label">{tile.label}</figcaption>
                   </figure>
                 ))}
               </div>
-              <div className="sym-qr-card sym-qr-card--light">
-                {set.light.map((qr) => (
-                  <figure key={qr.src} className="sym-qr-item">
+              <div className="sym-tile-card sym-tile-card--light">
+                {set.light.map((tile) => (
+                  <figure key={tile.src} className="sym-tile-item">
                     <Image
-                      src={qr.src}
-                      alt={`${set.site} QR mark, light`}
+                      src={tile.src}
+                      alt={`${set.site} favicon tile, light`}
                       width={96}
                       height={96}
                     />
-                    <figcaption className="sym-label">{qr.label}</figcaption>
+                    <figcaption className="sym-label">{tile.label}</figcaption>
                   </figure>
                 ))}
               </div>

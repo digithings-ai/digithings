@@ -16,7 +16,7 @@ Design (mirrors the existing connectors):
 - Writes are idempotent upserts on schema-declared unique keys
   (``on_conflict=...``); replays of the same node are safe. Write failures are
   caught and returned as ``SupabaseWriteResult(success=False, error=...)``,
-  mirroring ``NotionConnector``'s ``UpsertResult`` contract.
+  reporting per-write success/error rather than raising.
 - Every write emits a redacted audit line via ``digibase.audit.redact_mapping``.
   Only non-sensitive *metadata* (table, operation, row count, on_conflict) is
   audited — never row bodies, which may carry PII/licensed data the shallow,
@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Protocol  # noqa: ANN401 — untyped supabase client payloads
+from typing import Any, Protocol  # score:allow untyped any — untyped supabase client payloads
 
 from digibase.audit import redact_mapping
 
@@ -44,7 +44,7 @@ class SupabaseClient(Protocol):
     ``table()`` returns a PostgREST query builder).
     """
 
-    def table(self, name: str) -> Any: ...  # noqa: D102, E704
+    def table(self, name: str) -> Any: ...
 
 
 class SupabaseNotConfiguredError(RuntimeError):
@@ -56,7 +56,7 @@ class SupabaseWriteResult:
     """Result of an upsert. ``rows`` is the number of rows sent (not the count
     PostgREST echoes back, which depends on ``returning=`` and is not always
     available). Mirrors ``digiquant...supabase_writer.UpsertResult`` plus the
-    ``success``/``error`` shape of ``NotionConnector``'s result.
+    ``success``/``error`` shape callers branch on without try/except.
     """
 
     success: bool
@@ -167,7 +167,7 @@ class SupabaseConnector:
                 total += len(payload)
             self._audit(table, "upsert", total, on_conflict)
             return SupabaseWriteResult(success=True, table=table, rows=total)
-        except Exception as exc:  # noqa: BLE001 — surface any client/transport error
+        except Exception as exc:  # surface any client/transport error
             logger.error("supabase: upsert failed for %s: %s", table, exc)
             return SupabaseWriteResult(success=False, table=table, error=str(exc))
 
@@ -230,7 +230,7 @@ class SupabaseConnector:
             data = list(getattr(response, "data", None) or [])
             total = getattr(response, "count", None)
             return SupabaseReadResult(success=True, rows=data, count=total)
-        except Exception as exc:  # noqa: BLE001 — surface any client/transport error
+        except Exception as exc:  # surface any client/transport error
             logger.error("supabase: select failed for %s: %s", table, exc)
             return SupabaseReadResult(success=False, error=str(exc))
 

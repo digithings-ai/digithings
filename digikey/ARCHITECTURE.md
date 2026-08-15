@@ -1,4 +1,4 @@
-# DigiKey Architecture
+# digikey Architecture
 
 **Version:** 0.1.0
 **Service port:** 8005
@@ -8,15 +8,15 @@
 
 ## 1. Overview
 
-DigiKey is the single authentication and authorization control plane for the DigiThings ecosystem. Every protected route on every other service — DigiGraph, DigiQuant, DigiSearch — refuses traffic unless the caller presents a short-lived JWT signed by DigiKey. No service issues its own tokens. No service trusts tokens from any other issuer. This is the zero-trust boundary.
+digikey is the single authentication and authorization control plane for the digithings ecosystem. Every protected route on every other service — digigraph, digiquant, digisearch — refuses traffic unless the caller presents a short-lived JWT signed by digikey. No service issues its own tokens. No service trusts tokens from any other issuer. This is the zero-trust boundary.
 
 The service has two responsibilities:
 
-1. **Opaque API key management.** External callers hold a `dgk_live_` prefixed secret. DigiKey stores only a bcrypt hash. The raw secret is shown once on creation and never retrievable again.
+1. **Opaque API key management.** External callers hold a `dgk_live_` prefixed secret. digikey stores only a bcrypt hash. The raw secret is shown once on creation and never retrievable again.
 
-2. **JWT issuance via token exchange.** A caller presents their opaque API key (or a BFF session credential) to `POST /v1/oauth/token`. DigiKey verifies the key, checks revocation, and returns a short-lived RS256 JWT that carries the caller's scopes, tenant context, and identity. Downstream services verify this JWT locally against the published JWKS — they never call DigiKey per-request.
+2. **JWT issuance via token exchange.** A caller presents their opaque API key (or a BFF session credential) to `POST /v1/oauth/token`. digikey verifies the key, checks revocation, and returns a short-lived RS256 JWT that carries the caller's scopes, tenant context, and identity. Downstream services verify this JWT locally against the published JWKS — they never call digikey per-request.
 
-This architecture means DigiKey sits on the hot path for key exchange but is completely off the hot path for request verification. A JWKS cache in each consumer service means DigiKey can be down for minutes without affecting in-flight requests.
+This architecture means digikey sits on the hot path for key exchange but is completely off the hot path for request verification. A JWKS cache in each consumer service means digikey can be down for minutes without affecting in-flight requests.
 
 ---
 
@@ -35,14 +35,14 @@ This architecture means DigiKey sits on the hot path for key exchange but is com
 - Both kinds are stored with the same bcrypt-hashed schema.
 
 **Token exchange (`POST /v1/oauth/token`)**
-- `grant_type=api_key`: caller presents raw key; DigiKey looks up by prefix, runs bcrypt verification, checks `revoked_at`, emits JWT.
-- `grant_type=bff_session`: DigiChat's BFF presents `Authorization: Bearer DIGIKEY_BFF_TOKEN`. DigiKey issues a JWT with `principal_kind=bff_session` and `sub=bff:<subject>`.
+- `grant_type=api_key`: caller presents raw key; digikey looks up by prefix, runs bcrypt verification, checks `revoked_at`, emits JWT.
+- `grant_type=bff_session`: digichat's BFF presents `Authorization: Bearer DIGIKEY_BFF_TOKEN`. digikey issues a JWT with `principal_kind=bff_session` and `sub=bff:<subject>`.
 
 **Admin key issuance (`POST /v1/admin/keys`)**
 - Protected by `DIGIKEY_ADMIN_TOKEN` bearer. Creates a new `ApiKeyRow`, returns the plaintext key once.
 
 **Scope enforcement**
-- `scopes.py`: wildcard matching. `*` grants everything. `service:*` grants all sub-scopes for that service. Exact string match for leaf scopes. Scope downscoping: callers can request a subset of their granted scopes by passing `requested_scopes`; DigiKey verifies the subset is within the granted set before issuing.
+- `scopes.py`: wildcard matching. `*` grants everything. `service:*` grants all sub-scopes for that service. Exact string match for leaf scopes. Scope downscoping: callers can request a subset of their granted scopes by passing `requested_scopes`; digikey verifies the subset is within the granted set before issuing.
 
 **Source file map**
 
@@ -66,7 +66,7 @@ This architecture means DigiKey sits on the hot path for key exchange but is com
 
 ## 3. API Surface
 
-### DigiKey-owned endpoints
+### digikey-owned endpoints
 
 **`GET /health`** and **`GET /healthz`**
 `/health` returns `{"status": "ok", "service": "digikey"}` (legacy, kept for back-compat). `/healthz` returns `{"ok": true}` — the preferred liveness probe. Both are always public, rate-limit-exempt, and secret-free. Docker healthcheck targets `/healthz`. See AGENTS.md "Liveness vs status".
@@ -122,7 +122,7 @@ Middleware behaviour on each request:
 
 ### JWT claims
 
-All tokens issued by DigiKey include these claims:
+All tokens issued by digikey include these claims:
 
 | Claim | Type | Notes |
 |-------|------|-------|
@@ -166,20 +166,20 @@ Scopes follow a `service:action` namespace. Defined (implicitly) in `scopes.py` 
 
 | Scope | Service | Grants access to |
 |-------|---------|-----------------|
-| `digigraph:workflow` | DigiGraph | `POST /workflow`, debug endpoints, default fallback |
-| `digigraph:chat` | DigiGraph | `/v1/chat/completions`, `/v1/models` |
-| `digigraph:mcp` | DigiGraph | `/threads/*`, `/files/*` |
-| `digiquant:backtest` | DigiQuant | `/run_backtest`, `/backtest/*`, `/v1/jobs/*`, `/v1/orchestrator_tools` |
-| `digiquant:optimize` | DigiQuant | `/run_optimize`, `/run_pipeline`, `/v1/workflow` |
-| `digisearch:query` | DigiSearch | `/query`, `/v1/research_turn`, `/v1/orchestrator_tools`, `/indexes/*` |
-| `digisearch:ingest` | DigiSearch | `/ingest*` |
+| `digigraph:workflow` | digigraph | `POST /workflow`, debug endpoints, default fallback |
+| `digigraph:chat` | digigraph | `/v1/chat/completions`, `/v1/models` |
+| `digigraph:mcp` | digigraph | `/threads/*`, `/files/*` |
+| `digiquant:backtest` | digiquant | `/run_backtest`, `/backtest/*`, `/v1/jobs/*`, `/v1/orchestrator_tools` |
+| `digiquant:optimize` | digiquant | `/run_optimize`, `/run_pipeline`, `/v1/workflow` |
+| `digisearch:query` | digisearch | `/query`, `/v1/research_turn`, `/v1/orchestrator_tools`, `/indexes/*` |
+| `digisearch:ingest` | digisearch | `/ingest*` |
 | `*` | all | Wildcard — all scopes |
 
 Default BFF session scopes (from `scopes.py`): `digigraph:workflow`, `digigraph:chat`, `digigraph:mcp`, `digiquant:backtest`, `digiquant:optimize`, `digisearch:query`, `digisearch:ingest`.
 
 ### LiteLLM proxy key funnel
 
-When `DIGIKEY_LITELLM_PROXY_KEY` is set on the DigiKey container, `POST /v1/oauth/token` appends `litellm_proxy_api_key` to the response. This key (typically equal to `LITELLM_MASTER_KEY`) is forwarded by DigiChat as `X-LiteLLM-Proxy-Key` to DigiGraph, enabling one token exchange to bootstrap both service JWT auth and LiteLLM bearer auth. The LiteLLM key is a static pass-through — DigiKey does not scope or validate it.
+When `DIGIKEY_LITELLM_PROXY_KEY` is set on the digikey container, `POST /v1/oauth/token` appends `litellm_proxy_api_key` to the response. This key (typically equal to `LITELLM_MASTER_KEY`) is forwarded by digichat as `X-LiteLLM-Proxy-Key` to digigraph, enabling one token exchange to bootstrap both service JWT auth and LiteLLM bearer auth. The LiteLLM key is a static pass-through — digikey does not scope or validate it.
 
 ---
 
@@ -188,7 +188,7 @@ When `DIGIKEY_LITELLM_PROXY_KEY` is set on the DigiKey container, `POST /v1/oaut
 ### Token exchange flow
 
 ```
-Client                   DigiKey                     DB
+Client                   digikey                     DB
   |                         |                          |
   | POST /v1/oauth/token    |                          |
   | {grant_type: api_key,   |                          |
@@ -209,7 +209,7 @@ Client                   DigiKey                     DB
   | {access_token, expires} |                          |
 ```
 
-### Consumer JWT verification (no DigiKey call)
+### Consumer JWT verification (no digikey call)
 
 ```
 Client                 DigiAuthMiddleware              JWKS Cache
@@ -258,7 +258,7 @@ Single table: `digikey_api_keys`. Engine is initialized lazily at first use via 
 
 ### RS256 signing
 
-DigiKey uses asymmetric RS256 (RSA 2048-bit). The private key never leaves the DigiKey container. Consumer services hold only the public key or a JWKS URL. This is correct for a multi-service ecosystem: compromise of a consumer service does not expose signing capability.
+digikey uses asymmetric RS256 (RSA 2048-bit). The private key never leaves the digikey container. Consumer services hold only the public key or a JWKS URL. This is correct for a multi-service ecosystem: compromise of a consumer service does not expose signing capability.
 
 **Gap:** The default `kid` is the static string `"digikey-1"`. Without a meaningful `kid` rotation scheme, JWKS consumers cannot distinguish keys across rotations.
 
@@ -270,7 +270,7 @@ Raw API keys are never stored. Only bcrypt hashes are persisted in the `key_hash
 
 ### JWT revocation (Redis blocklist — ADR-0007)
 
-When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), DigiKey:
+When `DIGIKEY_BLOCKLIST_REDIS_URL` is set (wired in root `docker-compose.yml`), digikey:
 
 1. Persists issued `jti` values in Postgres (`jti_issued`) at token exchange time.
 2. On `POST /v1/revoke`, marks the API key revoked and adds live JTIs to the Redis blocklist.
@@ -298,7 +298,7 @@ Additionally, SQLite's `check_same_thread=False` allows cross-thread access but 
 
 ### JWKS caching staleness in consumers
 
-`jwt_verify.py` maintains a module-level `PyJWKClient` singleton with `lifespan=300` (default). After a DigiKey restart with an ephemeral key (or a deliberate key rotation), consumers continue accepting old-key tokens for up to 5 minutes. This is a feature (resilience) but also a security window: rotated-out keys remain trusted by consumers for 300 seconds.
+`jwt_verify.py` maintains a module-level `PyJWKClient` singleton with `lifespan=300` (default). After a digikey restart with an ephemeral key (or a deliberate key rotation), consumers continue accepting old-key tokens for up to 5 minutes. This is a feature (resilience) but also a security window: rotated-out keys remain trusted by consumers for 300 seconds.
 
 ### Constant-time comparison
 
@@ -310,9 +310,9 @@ Additionally, SQLite's `check_same_thread=False` allows cross-thread access but 
 
 ### Single DB dependency
 
-All state (API keys, revocation via `revoked_at`) lives in one database. DigiKey itself is stateless between requests — the private key is loaded in memory. Horizontal scaling of DigiKey is straightforward as long as all instances share the same Postgres database and the same `DIGIKEY_PRIVATE_KEY_PEM` (or coordinate JWKS via a shared volume/secret store).
+All state (API keys, revocation via `revoked_at`) lives in one database. digikey itself is stateless between requests — the private key is loaded in memory. Horizontal scaling of digikey is straightforward as long as all instances share the same Postgres database and the same `DIGIKEY_PRIVATE_KEY_PEM` (or coordinate JWKS via a shared volume/secret store).
 
-SQLite cannot support multi-instance DigiKey. Postgres is required for any horizontal scaling.
+SQLite cannot support multi-instance digikey. Postgres is required for any horizontal scaling.
 
 ### Revocation check latency (Redis blocklist)
 
@@ -320,7 +320,7 @@ When `DIGIKEY_BLOCKLIST_REDIS_URL` is set, consumers call `blocklist.is_blocked(
 
 ### JWKS caching
 
-Consumers cache the JWKS for 300 seconds by default. DigiKey's `/.well-known/jwks.json` endpoint is read-only and stateless — it can handle high fan-out traffic without DB involvement. The endpoint's bottleneck is CPU (RSA key serialization), not I/O.
+Consumers cache the JWKS for 300 seconds by default. digikey's `/.well-known/jwks.json` endpoint is read-only and stateless — it can handle high fan-out traffic without DB involvement. The endpoint's bottleneck is CPU (RSA key serialization), not I/O.
 
 ### Token exchange rate
 
@@ -329,11 +329,11 @@ Consumers cache the JWKS for 300 seconds by default. DigiKey's `/.well-known/jwk
 2. One bcrypt verify (CPU-bound, ~100ms at cost factor 12).
 3. One RSA sign (CPU-bound, ~1ms for 2048-bit).
 
-At high exchange rates, bcrypt is the bottleneck. DigiKey does not cache exchange results. If the same API key exchanges tokens in a tight loop, each exchange runs a full bcrypt verify. There is no negative effect on correctness, but throughput is bounded by bcrypt latency times available threads.
+At high exchange rates, bcrypt is the bottleneck. digikey does not cache exchange results. If the same API key exchanges tokens in a tight loop, each exchange runs a full bcrypt verify. There is no negative effect on correctness, but throughput is bounded by bcrypt latency times available threads.
 
 ### Multi-instance considerations
 
-Each DigiKey instance generates its own ephemeral key when `DIGIKEY_ALLOW_EPHEMERAL_KEY=1`. Multiple instances would publish different JWKS documents, causing cross-instance token verification failures. In any multi-instance deployment, `DIGIKEY_PRIVATE_KEY_PEM` must be identical across instances (e.g., injected from a shared secret store).
+Each digikey instance generates its own ephemeral key when `DIGIKEY_ALLOW_EPHEMERAL_KEY=1`. Multiple instances would publish different JWKS documents, causing cross-instance token verification failures. In any multi-instance deployment, `DIGIKEY_PRIVATE_KEY_PEM` must be identical across instances (e.g., injected from a shared secret store).
 
 ---
 
@@ -355,7 +355,7 @@ RS256 signature verification in consumers is slower than HMAC-SHA256 by roughly 
 
 ### JWKS caching TTL in DigiAuthMiddleware
 
-`PyJWKClient` with `lifespan=300` caches signing keys in memory within the consumer process. Cache miss (first request after startup or after TTL expiry) triggers an HTTP request to `DIGIKEY_JWKS_URL`. If DigiKey is unreachable at that moment, the cache miss becomes a hard 401/503 for that request. There is no stale-while-revalidate behavior.
+`PyJWKClient` with `lifespan=300` caches signing keys in memory within the consumer process. Cache miss (first request after startup or after TTL expiry) triggers an HTTP request to `DIGIKEY_JWKS_URL`. If digikey is unreachable at that moment, the cache miss becomes a hard 401/503 for that request. There is no stale-while-revalidate behavior.
 
 ### Connection pool for Postgres
 
@@ -370,26 +370,26 @@ RS256 signature verification in consumers is slower than HMAC-SHA256 by roughly 
 All three protected services import from the `digikey` package directly:
 
 ```
-DigiGraph   → digikey.integrations.service_middleware.{DigiAuthMiddleware, digigraph_path_scopes}
-DigiQuant   → digikey.integrations.service_middleware.{DigiAuthMiddleware, digiquant_path_scopes}
-DigiSearch  → digikey.integrations.service_middleware.{DigiAuthMiddleware, digisearch_path_scopes}
+digigraph   → digikey.integrations.service_middleware.{DigiAuthMiddleware, digigraph_path_scopes}
+digiquant   → digikey.integrations.service_middleware.{DigiAuthMiddleware, digiquant_path_scopes}
+digisearch  → digikey.integrations.service_middleware.{DigiAuthMiddleware, digisearch_path_scopes}
 ```
 
 This means the `digikey` package is a compile-time dependency of every service, not just a runtime network dependency. Path-scope tables live in the `digikey` package itself (`service_middleware.py`), not in each service. A scope change requires updating `digikey` and rebuilding all three consumer images.
 
-### DigiChat (BFF)
+### digichat (BFF)
 
-DigiChat holds `DIGIKEY_URL` and `DIGIKEY_BFF_TOKEN`. On session establishment (user login via OIDC or API key auth), DigiChat calls `POST /v1/oauth/token` with `grant_type=bff_session`. The returned JWT is forwarded as `Authorization: Bearer` to DigiGraph on all upstream calls. `litellm_proxy_api_key` is forwarded as `X-LiteLLM-Proxy-Key`.
+digichat holds `DIGIKEY_URL` and `DIGIKEY_BFF_TOKEN`. On session establishment (user login via OIDC or API key auth), digichat calls `POST /v1/oauth/token` with `grant_type=bff_session`. The returned JWT is forwarded as `Authorization: Bearer` to digigraph on all upstream calls. `litellm_proxy_api_key` is forwarded as `X-LiteLLM-Proxy-Key`.
 
-The static fallback `DIGIGRAPH_UPSTREAM_API_KEY` bypasses DigiKey entirely. It is documented as emergency/bootstrap only.
+The static fallback `DIGIGRAPH_UPSTREAM_API_KEY` bypasses digikey entirely. It is documented as emergency/bootstrap only.
 
 ### LiteLLM proxy key funnel
 
-DigiKey is not a LiteLLM auth provider. It acts only as a distribution mechanism: the value of `DIGIKEY_LITELLM_PROXY_KEY` (a pre-configured LiteLLM master key) is included verbatim in the token response. DigiKey does not create, validate, or scope LiteLLM keys. If `DIGIKEY_LITELLM_PROXY_KEY` is rotated, all currently-held JWTs contain the old LiteLLM key until they expire.
+digikey is not a LiteLLM auth provider. It acts only as a distribution mechanism: the value of `DIGIKEY_LITELLM_PROXY_KEY` (a pre-configured LiteLLM master key) is included verbatim in the token response. digikey does not create, validate, or scope LiteLLM keys. If `DIGIKEY_LITELLM_PROXY_KEY` is rotated, all currently-held JWTs contain the old LiteLLM key until they expire.
 
 ### Audit trail
 
-JWT claims include `jti`, `tenant_slug`, `project_id`, `key_pub`, and `principal_kind`. Consumer services are expected to include these in audit events (as documented in root `SECURITY.md`). DigiKey itself does not emit audit events on token exchange. There is no `AUDIT_SINK_URL` integration yet.
+JWT claims include `jti`, `tenant_slug`, `project_id`, `key_pub`, and `principal_kind`. Consumer services are expected to include these in audit events (as documented in root `SECURITY.md`). digikey itself does not emit audit events on token exchange. There is no `AUDIT_SINK_URL` integration yet.
 
 ---
 
@@ -411,13 +411,13 @@ digikey:
     start_period: 10s
 ```
 
-DigiKey has no `depends_on` — it starts first. All other services declare `condition: service_healthy` on `digikey`. The full startup order is:
+digikey has no `depends_on` — it starts first. All other services declare `condition: service_healthy` on `digikey`. The full startup order is:
 
 ```
 digikey (healthy) → digiquant (healthy) → digisearch (healthy) → litellm (healthy) → digigraph (healthy)
 ```
 
-DigiChat depends on `digikey` and `digigraph` being healthy.
+digichat depends on `digikey` and `digigraph` being healthy.
 
 ### Environment variables
 
@@ -430,7 +430,7 @@ DigiChat depends on `digikey` and `digigraph` being healthy.
 | `DIGIKEY_ISSUER` | `http://127.0.0.1:8005` | Yes (match consumers) | JWT `iss` claim |
 | `DIGIKEY_AUDIENCE` | `digi-ecosystem` | No | JWT `aud` claim |
 | `DIGIKEY_ADMIN_TOKEN` | — | Yes for key creation | Bearer for `POST /v1/admin/keys` |
-| `DIGIKEY_BFF_TOKEN` | — | Yes for DigiChat | Bearer for `bff_session` grants |
+| `DIGIKEY_BFF_TOKEN` | — | Yes for digichat | Bearer for `bff_session` grants |
 | `DIGIKEY_ALLOW_DEV_GLOBAL` | `0` | No (never in prod) | Enable `dev_global` key issuance/exchange |
 | `DIGIKEY_JWT_TTL_SEC` | `900` | No | JWT lifetime in seconds |
 | `DIGIKEY_LITELLM_PROXY_KEY` | — | No | Forwarded as `litellm_proxy_api_key` |
@@ -438,14 +438,14 @@ DigiChat depends on `digikey` and `digigraph` being healthy.
 | `DIGIKEY_RL_PER_MIN` | `10` | No | Auth-path rate limit: sustained req/min per IP |
 | `DIGIKEY_RL_BURST` | `20` | No | Auth-path rate limit: burst capacity per IP |
 
-Consumer-side variables (set on DigiGraph/DigiQuant/DigiSearch):
+Consumer-side variables (set on digigraph/digiquant/digisearch):
 
 | Variable | Purpose |
 |----------|---------|
 | `DIGIKEY_JWKS_URL` | Fetch signing keys (preferred) |
 | `DIGIKEY_PUBLIC_KEY_PEM` | Static public key alternative |
-| `DIGIKEY_ISSUER` | Must match DigiKey's configured issuer |
-| `DIGIKEY_AUDIENCE` | Must match DigiKey's configured audience |
+| `DIGIKEY_ISSUER` | Must match digikey's configured issuer |
+| `DIGIKEY_AUDIENCE` | Must match digikey's configured audience |
 
 ### Volume and key persistence
 
@@ -453,7 +453,7 @@ The named volume `digikey_data` is mounted at `/data` inside the container. SQLi
 
 ### MCP server
 
-DigiKey does not expose an MCP server. It is infrastructure, not a capability provider. There is no `POST /v1/orchestrator_tools` endpoint.
+digikey does not expose an MCP server. It is infrastructure, not a capability provider. There is no `POST /v1/orchestrator_tools` endpoint.
 
 ---
 
@@ -471,7 +471,7 @@ Private key material is currently a PEM string in an environment variable. This 
 Scope definitions are hardcoded in `service_middleware.py`. An OPA integration would externalize policy (scope-to-path mappings) into versioned policy files, enabling policy changes without code deployments or service restarts.
 
 **Usage aggregation from `AUDIT_SINK_URL`**
-DigiKey does not emit events on token exchange. An `AUDIT_SINK_URL` integration would let operators track per-tenant, per-key token exchange volume for billing, anomaly detection, and compliance reporting.
+digikey does not emit events on token exchange. An `AUDIT_SINK_URL` integration would let operators track per-tenant, per-key token exchange volume for billing, anomaly detection, and compliance reporting.
 
 **Org-level scope policies**
 Current scopes are per-key. There is no concept of an organization-level policy that caps what any key under a tenant can grant. A `TenantPolicy` table could enforce upper bounds on scope grants independent of individual key configuration.
@@ -480,7 +480,7 @@ Current scopes are per-key. There is no concept of an organization-level policy 
 The `grant_type` field accepts `api_key` and `bff_session` only. There is no refresh token mechanism. Clients must re-exchange their API key every 15 minutes (default TTL). A `refresh_token` grant would allow silent re-issuance without re-presenting the API key secret.
 
 **Rate limiting on token endpoint** — *partially closed in v0.1.1.*
-A per-IP in-process token-bucket limiter (see `ratelimit.py`) is now applied as a FastAPI dependency on `POST /v1/oauth/token` and `POST /v1/admin/keys`. Defaults: 10 req/min sustained, burst 20 — configurable via `DIGIKEY_RL_PER_MIN` / `DIGIKEY_RL_BURST`. Exempt routes (`/health`, `/.well-known/jwks.json`) carry no limiter overhead. The bucket is process-local; cross-process sharing (Redis or a DigiBase-backed store) is the remaining follow-up for multi-instance deployments, and per-API-key-prefix limiting is still a gap. Responses on breach: HTTP 429 with `{"detail":"rate_limited","retry_after":N}` and a `Retry-After` header.
+A per-IP in-process token-bucket limiter (see `ratelimit.py`) is now applied as a FastAPI dependency on `POST /v1/oauth/token` and `POST /v1/admin/keys`. Defaults: 10 req/min sustained, burst 20 — configurable via `DIGIKEY_RL_PER_MIN` / `DIGIKEY_RL_BURST`. Exempt routes (`/health`, `/.well-known/jwks.json`) carry no limiter overhead. The bucket is process-local; cross-process sharing (Redis or a digibase-backed store) is the remaining follow-up for multi-instance deployments, and per-API-key-prefix limiting is still a gap. Responses on breach: HTTP 429 with `{"detail":"rate_limited","retry_after":N}` and a `Retry-After` header.
 
 ---
 
@@ -494,15 +494,15 @@ See Section 6 (JWT revocation). Follow-ups: multi-instance rate-limit sharing, i
 
 ### (b) Add key rotation ceremony with JWKS key ID overlap
 
-A new DigiKey key pair deployment currently invalidates all in-flight tokens as soon as consumer JWKS caches expire (up to 300 seconds after deployment). Tokens signed with the old key are rejected.
+A new digikey key pair deployment currently invalidates all in-flight tokens as soon as consumer JWKS caches expire (up to 300 seconds after deployment). Tokens signed with the old key are rejected.
 
 Recommended approach: support multiple keys in the JWKS document. On rotation, publish `{"keys": [new_key, old_key]}` for at least one full cache TTL (300 seconds). Consumers select the correct key by `kid`. After the overlap period, remove the old key from JWKS. This requires:
 - `DIGIKEY_KEY_ID` to be rotated (new value) per deployment.
-- DigiKey to optionally load a secondary PEM (`DIGIKEY_PREV_KEY_PEM`, `DIGIKEY_PREV_KEY_ID`) and include it in the JWKS response.
+- digikey to optionally load a secondary PEM (`DIGIKEY_PREV_KEY_PEM`, `DIGIKEY_PREV_KEY_ID`) and include it in the JWKS response.
 
 ### (c) Add token introspection endpoint
 
-Services that need real-time validity checks (e.g., after key revocation) cannot use local JWT verification — they need to call DigiKey. Add `POST /v1/introspect` following RFC 7662:
+Services that need real-time validity checks (e.g., after key revocation) cannot use local JWT verification — they need to call digikey. Add `POST /v1/introspect` following RFC 7662:
 
 ```json
 { "token": "<JWT>" }
@@ -513,9 +513,9 @@ This endpoint checks both cryptographic validity and `jti_blocklist` membership.
 
 ### (d) Version and externalize scope definitions
 
-`service_middleware.py` embeds path-scope mappings for all three services. This creates a coupling: adding a new DigiSearch endpoint requires updating `digikey`, rebuilding `digikey`, and redeploying all consumers that inherit the package.
+`service_middleware.py` embeds path-scope mappings for all three services. This creates a coupling: adding a new digisearch endpoint requires updating `digikey`, rebuilding `digikey`, and redeploying all consumers that inherit the package.
 
-Recommended: move path-scope tables into each service's own configuration (loaded at startup), with DigiKey responsible only for scope validation at exchange time. The middleware's `PathScopeFn` signature already supports this — it just needs to be wired to a config file rather than hardcoded functions.
+Recommended: move path-scope tables into each service's own configuration (loaded at startup), with digikey responsible only for scope validation at exchange time. The middleware's `PathScopeFn` signature already supports this — it just needs to be wired to a config file rather than hardcoded functions.
 
 ### (e) Add rate limiting on `POST /v1/oauth/token`
 
@@ -526,9 +526,9 @@ Brute-force guessing of the non-prefix portion of an API key (32 random URL-safe
 For production environments subject to audit or compliance requirements, the private key must not exist as a plaintext environment variable. Integrate with HashiCorp Vault Transit:
 
 - `jwt_issue.py` calls `POST /transit/sign/digikey` instead of `jwt.encode` with local key.
-- Vault Transit returns the RS256 signature; DigiKey assembles the JWT.
+- Vault Transit returns the RS256 signature; digikey assembles the JWT.
 - JWKS is constructed from Vault Transit's public key endpoint.
-- Key rotation is managed by Vault, not DigiKey deployment cycles.
+- Key rotation is managed by Vault, not digikey deployment cycles.
 
 Until this is implemented, at minimum rotate `DIGIKEY_PRIVATE_KEY_PEM` on a regular schedule (monthly) and store it in a secrets manager (AWS Secrets Manager, 1Password Secrets Automation) rather than in `.env` files on disk.
 

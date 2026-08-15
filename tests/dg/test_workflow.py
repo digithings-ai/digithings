@@ -5,14 +5,13 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.workflow import run_digigraph_workflow
 
 
 @pytest.mark.unit
 class TestRunDigigraphWorkflow:
-    """run_digigraph_workflow contract. Integration with DigiQuant in e2e."""
+    """run_digigraph_workflow contract. Integration with digiquant in e2e."""
 
     def test_returns_workflow_result(self) -> None:
         req = WorkflowRequest(prompt="Backtest tech")
@@ -38,13 +37,13 @@ class TestRunDigigraphWorkflow:
 
     def test_workflow_error_propagates_to_result(self) -> None:
         """When graph returns error in state, WorkflowResult has success=False and message contains error."""
-        def _mock_invoke(initial: dict, config: dict | None = None) -> dict:
+        def _mock_invoke(initial: dict, config: dict | None = None, **_kwargs: object) -> dict:
             return {
                 "prompt": initial.get("prompt"),
                 "strategy_name": "x",
                 "symbols": ["A"],
                 "backtest_result": None,
-                "error": "DigiQuant connection refused",
+                "error": "digiquant connection refused",
             }
         with patch("digigraph.workflow.build_workflow_graph") as m:
             m.return_value.invoke = _mock_invoke
@@ -55,7 +54,7 @@ class TestRunDigigraphWorkflow:
 
     def test_workflow_error_logs_workflow_end(self) -> None:
         """When graph returns error, workflow_end is still logged with success=False."""
-        def _mock_invoke(initial: dict, config: dict | None = None) -> dict:
+        def _mock_invoke(initial: dict, config: dict | None = None, **_kwargs: object) -> dict:
             return {"error": "fake error", "backtest_result": None}
 
         with patch("digigraph.workflow.build_workflow_graph") as m_build:
@@ -77,3 +76,42 @@ class TestRunDigigraphWorkflow:
         result = run_digigraph_workflow(req)
         assert isinstance(result, WorkflowResult)
         assert result.message
+
+
+@pytest.mark.unit
+def test_invoke_passes_durability_sync() -> None:
+    """durability defaults to \"async\" (checkpoint persisted concurrently with the next
+    step) — too weak for the DIGI_INTERRUPT_AFTER_RESEARCH breakpoint and the /resume
+    endpoint, both of which assume the checkpoint at the pause point is actually durable
+    before a client can act on it."""
+    with patch("digigraph.workflow.build_workflow_graph") as m_build:
+        m_build.return_value.invoke.return_value = {"error": None}
+        run_digigraph_workflow(WorkflowRequest(prompt="test"))
+    _, kwargs = m_build.return_value.invoke.call_args
+    assert kwargs.get("durability") == "sync"
+
+
+@pytest.mark.unit
+def test_via_stream_passes_durability_sync() -> None:
+    from digigraph.workflow import run_digigraph_workflow_via_stream
+
+    with patch("digigraph.workflow.build_workflow_graph") as m_build:
+        m_build.return_value.stream.return_value = iter([])
+        m_build.return_value.get_state.return_value = None
+        run_digigraph_workflow_via_stream(WorkflowRequest(prompt="test"))
+    _, kwargs = m_build.return_value.stream.call_args
+    assert kwargs.get("durability") == "sync"
+
+
+@pytest.mark.unit
+def test_streaming_passes_durability_sync() -> None:
+    from queue import Queue
+
+    from digigraph.workflow import run_digigraph_workflow_streaming
+
+    with patch("digigraph.workflow.build_workflow_graph") as m_build:
+        m_build.return_value.stream.return_value = iter([])
+        m_build.return_value.get_state.return_value = None
+        run_digigraph_workflow_streaming(WorkflowRequest(prompt="test"), Queue())
+    _, kwargs = m_build.return_value.stream.call_args
+    assert kwargs.get("durability") == "sync"

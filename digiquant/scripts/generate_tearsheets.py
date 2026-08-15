@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate TradingView-faithful tearsheets via the NautilusTrader engine.
 
-This is the DigiQuant flagship path for the Slapper family (BTC/ETH/SOL):
+This is the digiquant flagship path for the Slapper family (BTC/ETH/SOL):
 
     Coinbase OHLCV cache
       → NautilusTrader backtest (digiquant.strategies.SlapperStrategy)
@@ -22,10 +22,19 @@ logging can only initialize once per process, so a second in-process
 crashing strategy cannot take down the rest — failures are collected and the
 script exits non-zero if any strategy failed.
 
+``--signal-delay-days N`` (#1462) lags the public view of every strategy by N
+calendar days: the OHLCV frame is truncated so the run ends N days before the
+freshest cached bar, and the whole tearsheet is generated from that shorter
+series. End-date shift — not redaction — so the equity curve, drawdown, trade
+log, open-position state, and headline metrics are self-consistent by
+construction and none of them can leak the live position. Payloads declare the
+lag via ``signal_delay_days``.
+
 Usage:
     python scripts/generate_tearsheets.py
     python scripts/generate_tearsheets.py --strategy eth_slapper
     python scripts/generate_tearsheets.py --cache-dir digiquant/data/price-history
+    python scripts/generate_tearsheets.py --signal-delay-days 3
 """
 
 from __future__ import annotations
@@ -36,9 +45,14 @@ import logging
 import multiprocessing
 import signal
 import sys
+from datetime import timedelta
 from decimal import Decimal
 from multiprocessing.connection import Connection
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -65,6 +79,30 @@ _PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
 
 def load_settings() -> dict:
     return json.loads(SETTINGS_PATH.read_text())
+
+
+def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFrame:
+    """Truncate OHLCV so the run's end date lags the cached end by N calendar days.
+
+    End-date shift (#1462): the public tearsheets are generated as if the run
+    happened ``signal_delay_days`` days ago. Every derived artifact (equity
+    curve, drawdown, trade log, open-position state, headline metrics) is then
+    self-consistent by construction — there is no per-field redaction to get
+    wrong. The cutoff is calendar days from the newest bar's timestamp, not a
+    bar count, so gaps in the series still yield a true N-day lag.
+
+    ``0`` is an exact no-op (the frame is returned unchanged); negative values
+    would peek into the future and raise ``ValueError``.
+    """
+    import polars as pl
+
+    if signal_delay_days < 0:
+        raise ValueError(f"signal_delay_days must be >= 0, got {signal_delay_days}")
+    if signal_delay_days == 0 or ohlcv.is_empty():
+        return ohlcv
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    cutoff = ohlcv[ts_col].max() - timedelta(days=signal_delay_days)
+    return ohlcv.filter(pl.col(ts_col) <= cutoff)
 
 
 def _mult(direction: str, entry_price: float, price: float) -> float:
@@ -221,12 +259,16 @@ def run_nautilus(
 
     def _epoch_ns(value) -> int:
         # Polars Date -> midnight-UTC ns (matches the previous BarDataWrangler index).
-        dt = value if isinstance(value, datetime) else datetime(value.year, value.month, value.day)
+        dt = (
+            value
+            if isinstance(value, datetime)
+            else datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+        )
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return int(dt.timestamp() * 1_000_000_000)
 
-    # Build Nautilus bars directly from the Polars frame — DigiQuant is Polars-only,
+    # Build Nautilus bars directly from the Polars frame — digiquant is Polars-only,
     # so OHLCV is not routed through the DataFrame-wrangler ingestion path.
     bars = []
     for i, t in enumerate(ts_vals):
@@ -278,7 +320,7 @@ def trades_from_positions(positions) -> list[dict]:
     """Round-trip trades (chronological) from the Nautilus positions report.
 
     The Nautilus report is read row-wise; missing exits (NaT/NaN) are detected via
-    self-inequality, avoiding non-Polars dataframe helpers in DigiQuant code.
+    self-inequality, avoiding non-Polars dataframe helpers in digiquant code.
     """
 
     def _missing(x) -> bool:
@@ -407,6 +449,7 @@ def run_and_write(
     *,
     cal_source: str,
     push_supabase: bool = False,
+    signal_delay_days: int = 0,
 ) -> dict | None:
     from digiquant.data.prices.history_cache import load_cached
     from digiquant.strategies.calibrations_loader import resolve_calibrations
@@ -415,6 +458,14 @@ def run_and_write(
     ohlcv = load_cached(symbol, cache_dir)
     if ohlcv is None or ohlcv.is_empty():
         logger.error("No data for %s in %s", symbol, cache_dir)
+        return None
+    # Public signal delay (#1462): shift the whole run's end date back, so all
+    # published artifacts describe the same (lagged) point in time.
+    ohlcv = apply_signal_delay(ohlcv, signal_delay_days)
+    if ohlcv.is_empty():
+        logger.error(
+            "No data left for %s after applying %d-day signal delay", symbol, signal_delay_days
+        )
         return None
 
     d = settings["defaults"]
@@ -427,11 +478,12 @@ def run_and_write(
         trade_start=trade_start or None,
     )
     logger.info(
-        "Running Nautilus backtest: %s (%s, %d bars, cal=%s)",
+        "Running Nautilus backtest: %s (%s, %d bars, cal=%s, signal_delay=%dd)",
         strategy,
         symbol,
         len(ohlcv),
         cal_source,
+        signal_delay_days,
     )
     positions, bars_list, ohlc_bars, signal_log = run_nautilus(
         strategy, symbol, ohlcv, settings, calibration=calibration
@@ -480,16 +532,36 @@ def run_and_write(
         for t in closed
     ]
 
+    # Current signal = the leg still open at period end (carry_open_at_period_end
+    # marks it exit_reason="open"); "flat" if the book is closed. last_price is the
+    # as-of (signal-delayed) daily close. This is the digiquant.io position banner.
+    open_leg = next((t for t in trade_dicts if t.get("exit_reason") == "open"), None)
+    current_signal = {
+        "position": open_leg["direction"] if open_leg else "flat",
+        "entry_label": open_leg.get("entry_label", "") if open_leg else "",
+        "last_signal_date": (
+            open_leg["entry_date"] if open_leg else (window[-1][0] if window else "")
+        ),
+        "last_price": bars_list[-1][1] if bars_list else None,
+    }
+
+    notes = [
+        f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
+        f"100% equity compounding, trade window from {trade_start}."
+    ]
+    if signal_delay_days:
+        notes.append(
+            f"Public signal delay: end date shifted back {signal_delay_days} days; "
+            f"all figures are as of {window[-1][0] if window else ''}."
+        )
     td = from_nautilus_run(
         summary,
         trade_dicts,
         equity_curve,
         data_source=d.get("data_source", "Coinbase daily OHLCV (CCXT)"),
         ohlc_bars=[b for b in ohlc_bars if not trade_start or b[0] >= trade_start],
-        notes=[
-            f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-            f"100% equity compounding, trade window from {trade_start}."
-        ],
+        notes=notes,
+        signal_delay_days=signal_delay_days,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -520,10 +592,7 @@ def run_and_write(
                 min_pf,
             )
 
-    if push_supabase:
-        _push_tearsheet_to_supabase(strategy, td, equity_curve)
-
-    return {
+    index_entry = {
         "strategy": td.strategy,
         "symbol": td.symbol,
         "engine": td.engine,
@@ -531,6 +600,7 @@ def run_and_write(
         "kind": settings["strategies"][strategy].get("kind", "long_short"),
         "period_start": td.period_start,
         "period_end": td.period_end,
+        "signal_delay_days": td.signal_delay_days,
         "net_profit_pct": td.net_profit_pct,
         "max_drawdown_pct": td.max_drawdown_pct,
         "profit_factor": td.profit_factor,
@@ -541,36 +611,61 @@ def run_and_write(
         "href": f"/strategies/{td.strategy}",
     }
 
+    if push_supabase:
+        _push_tearsheet_to_supabase(strategy, td, equity_curve, current_signal, index_entry)
 
-def _push_tearsheet_to_supabase(strategy: str, td, equity_curve: list[tuple[str, float]]) -> None:
-    """Upsert headline metrics + equity curve to strategy_tearsheets (service role)."""
+    return index_entry
+
+
+def _push_tearsheet_to_supabase(
+    strategy: str,
+    td,
+    equity_curve: list[tuple[str, float]],
+    current_signal: dict,
+    index_entry: dict,
+) -> None:
+    """Upsert the full tearsheet payload + current signal to Supabase (service role).
+
+    The website reads ``strategy_tearsheets`` live, so the row must carry the
+    whole payload digiquant.io renders — the full ``TearsheetData`` (metrics,
+    equity/drawdown curves, OHLC bars, trades), plus the derived ``current_signal``
+    and the index-level extras (label/kind/avg_trade) that live in settings, not
+    ``TearsheetData``. The normalized ``strategy_signals`` row is refreshed too
+    (service-role write) for any relational consumer.
+    """
     from digiquant.data.store.client import build_digiquant_client
-    from digiquant.data.store.strategies import upsert_tearsheet
+    from digiquant.data.store.strategies import upsert_signal, upsert_tearsheet
 
     client = build_digiquant_client()
     if client is None:
         logger.warning("Supabase push skipped — credentials missing")
         return
-    metrics = {
-        "net_profit_pct": td.net_profit_pct,
-        "max_drawdown_pct": td.max_drawdown_pct,
-        "profit_factor": td.profit_factor,
-        "win_rate_pct": td.win_rate_pct,
-        "total_trades": td.total_trades,
-        "period_start": td.period_start,
-        "period_end": td.period_end,
-        "final_equity": td.final_equity,
-        "generated_at": td.generated_at,
-    }
+
+    payload = td.model_dump(mode="json")
+    payload["current_signal"] = current_signal
+    payload["label"] = index_entry["label"]
+    payload["kind"] = index_entry["kind"]
+    payload["avg_trade_pct"] = index_entry["avg_trade_pct"]
+
     curve = [{"t": t, "v": v} for t, v in equity_curve]
     upsert_tearsheet(
         client,
         strategy_id=strategy,
-        metrics=metrics,
+        metrics=payload,
         as_of=td.generated_at,
         equity_curve=curve,
     )
-    logger.info("  Pushed tearsheet summary → strategy_tearsheets (%s)", strategy)
+    upsert_signal(
+        client,
+        strategy_id=strategy,
+        position=current_signal["position"],
+        as_of=td.generated_at,
+        last_signal_date=current_signal["last_signal_date"] or None,
+        last_price=current_signal["last_price"],
+    )
+    logger.info(
+        "  Pushed tearsheet + %s signal → Supabase (%s)", current_signal["position"], strategy
+    )
 
 
 def _strategy_worker(
@@ -582,6 +677,7 @@ def _strategy_worker(
     output_dir: Path,
     cal_source: str,
     push_supabase: bool,
+    signal_delay_days: int,
 ) -> None:
     """Child-process entry point: run one strategy end-to-end, report via ``conn``."""
     status: tuple[str, dict | str | None]
@@ -594,6 +690,7 @@ def _strategy_worker(
             output_dir,
             cal_source=cal_source,
             push_supabase=push_supabase,
+            signal_delay_days=signal_delay_days,
         )
         if entry is not None:
             status = ("ok", entry)
@@ -645,6 +742,7 @@ def run_strategy_isolated(
     *,
     cal_source: str,
     push_supabase: bool = False,
+    signal_delay_days: int = 0,
 ) -> tuple[dict | None, str | None]:
     """Run one strategy's backtest in its own spawned process; return (entry, error).
 
@@ -668,6 +766,7 @@ def run_strategy_isolated(
             output_dir,
             cal_source,
             push_supabase,
+            signal_delay_days,
         ),
         name=f"tearsheet-{strategy}",
     )
@@ -713,7 +812,16 @@ def main() -> None:
         action="store_true",
         help="Upsert headline metrics to strategy_tearsheets after each run",
     )
+    parser.add_argument(
+        "--signal-delay-days",
+        type=int,
+        default=0,
+        help="Lag the public tearsheets by N calendar days: truncate OHLCV so the run "
+        "ends N days before the freshest cached bar (end-date shift, #1462). Default 0.",
+    )
     args = parser.parse_args()
+    if args.signal_delay_days < 0:
+        parser.error("--signal-delay-days must be >= 0")
 
     from digiquant.strategies.calibrations_loader import pick_calibration_source
 
@@ -742,6 +850,7 @@ def main() -> None:
             args.output_dir,
             cal_source=cal_source,
             push_supabase=args.push_supabase,
+            signal_delay_days=args.signal_delay_days,
         )
         if entry is not None:
             entries.append(entry)

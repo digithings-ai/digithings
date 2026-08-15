@@ -1,18 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import AtlasLoader from '@/components/AtlasLoader';
+import PageSkeleton from '@/components/page-skeleton';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import { SUBPAGE_MAX } from '@/components/subpage-tab-bar';
+import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { OlympusTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
 import { fetchOlympusTearsheet } from '@/lib/observability-queries';
 import type { OlympusTearsheet } from '@/components/tearsheet/types';
 
 /**
- * Performance — the hybrid, exportable tear sheet for the single strategy
- * "Olympus": a live-NAV track + an Olympus-specific decision track-record track,
- * each degrading independently, plus the relocated Attribution diagnostics.
- * Empty-state-first; window.print() export enabled in all states.
+ * Performance — persisted cumulative returns and stored holding-attribution
+ * windows. The screen does not recalculate headline metrics from raw NAV.
  */
 export default function PerformancePage() {
   const [data, setData] = useState<OlympusTearsheet | null>(null);
@@ -35,11 +33,16 @@ export default function PerformancePage() {
   return (
     <div className="flex min-h-full flex-col">
       <PortfolioSectionNav active="performance" />
-      <div className={`${SUBPAGE_MAX} ts-page flex-1 py-4 md:py-6`}>
+      {/* No py-* utilities here: .ts-page owns the vertical padding. Under the
+          old unlayered sheet they were dead declarations; against the family
+          sheet's @layer components defaults they would win and shrink the
+          shipped clamp() padding. */}
+      <div className={`${SUBPAGE_MAX} ts-page flex-1`}>
         {error ? (
           <p className="ts-status ts-status-error">{error}</p>
         ) : !data ? (
-          <AtlasLoader fullScreen={false} />
+          // bare: .ts-page already owns the container + padding (#1548)
+          <PageSkeleton bare />
         ) : (
           <OlympusTearsheetView data={data} />
         )}

@@ -1,4 +1,4 @@
-"""Unit tests for DigiClaw audit logging (Phase 3)."""
+"""Unit tests for digiclaw audit logging (Phase 3)."""
 
 from __future__ import annotations
 

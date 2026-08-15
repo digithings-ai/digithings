@@ -18,10 +18,12 @@
 }
 
 /* ── ✓ check-marker grammar on feature rows (li.pricing-feature) ────────── */
+/* --accent, not --up: this marks "feature included," a generic positive/
+   selection signal, not a P&L read — --up/--down stay reserved for money. */
 .pricing-feature::before {
   content: "✓";
   flex: 0 0 auto;
-  color: var(--up);
+  color: var(--accent);
   font-weight: 600;
   line-height: 1.4;
 }

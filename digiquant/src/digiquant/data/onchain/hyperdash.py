@@ -26,7 +26,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Protocol  # noqa  # scored-lint: heterogeneous GraphQL/JSON payload shapes
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous GraphQL/JSON payload shapes
+    Any,
+    Protocol,
+)
 
 import polars as pl
 
@@ -338,7 +341,7 @@ class HyperdashScraper:
             body = _post_graphql(
                 self.endpoint, _COHORT_SUMMARY_QUERY, timeout=self.timeout, session=self.session
             )
-        except Exception as exc:  # noqa: BLE001 — any transport/HTTP flake → empty, never crash
+        except Exception as exc:  # any transport/HTTP flake → empty, never crash
             logger.warning("Hyperdash cohort fetch failed: %s", exc)
             return CohortPositioning.empty(error=str(exc))
         if body.get("errors"):

@@ -1,14 +1,14 @@
-"""DigiSearch composite research turn (agent graph + HTTP)."""
+"""digisearch composite research turn (agent graph + HTTP)."""
 
 from __future__ import annotations
 
 import pytest
+from digisearch.agent.pipeline import run_research_turn
+from digisearch.core.models import Chunk
+from digisearch.search import add_chunks
+from digisearch.server import app
 from fastapi.testclient import TestClient
 
-from digisearch.agent.pipeline import run_research_turn
-from digisearch.search import add_chunks
-from digisearch.core.models import Chunk
-from digisearch.server import app
 from tests.digi_test_jwt import auth_headers
 
 

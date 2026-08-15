@@ -1,5 +1,5 @@
 provider: openai
-last_checked: 2026-06-04
+last_checked: 2026-07-19
 source: agent-research
 
 free_tier:
@@ -71,7 +71,37 @@ paid_tier:
       cost_per_1m_output: 180.00
       cost_per_1m_output_long: null
       cost_per_1m_input_cached: null
-      status: active
+      status: active            # likely superseded by GPT-5.6 below — not yet confirmed removed from API
+    - name: gpt-5.6-luna
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 1.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 6.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # GPT-5.6 family went GA 2026-07-09
+    - name: gpt-5.6-terra
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 2.50
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 15.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # GPT-5.6 family went GA 2026-07-09
+    - name: gpt-5.6-sol
+      context_window: 1048576
+      max_input_tokens: 1048576
+      max_output_tokens: 131072
+      cost_per_1m_input: 5.00
+      cost_per_1m_input_long: null
+      cost_per_1m_output: 30.00
+      cost_per_1m_output_long: null
+      cost_per_1m_input_cached: null
+      status: active            # GPT-5.6 family went GA 2026-07-09; new top-line flagship
   batching:
     available: true
     discount_pct: 50
@@ -113,4 +143,4 @@ verification:
   probe_model_alias: null
   github_secret_key: null
 
-notes: "gpt-5.5 released 2026 at $5/$30; gpt-5.5-pro at $30/$180 for highest capability. gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet."
+notes: "MATERIAL CHANGE 2026-07-19: GPT-5.6 family went GA 2026-07-09 — Luna $1/$6, Terra $2.50/$15, Sol $5/$30 per 1M (input/output); this is a full flagship-lineup update, not just an add-on. gpt-5.5/gpt-5.5-pro remain callable per some sources but are likely aging out — not yet confirmed removed from the API (only ChatGPT-surface retirements confirmed: o3 retiring from ChatGPT 2026-08-26; GPT-4o/4.1/4.1-mini/o4-mini already retired from ChatGPT 2026-02-13; older GPT-5/o3 API snapshots deprecated 2026-06-11, removal scheduled 2026-12-11). gpt-4.1-mini corrected to $0.40/$1.60 (snapshot had $0.15/$0.60 which is gpt-4o-mini pricing). Container sessions now billed per-minute (5-min minimum) as of 2026-06-02. No key configured yet; no probe run (method: skipped)."

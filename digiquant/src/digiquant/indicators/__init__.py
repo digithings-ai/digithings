@@ -32,7 +32,7 @@ __all__ = [
 # `import digiquant.indicators` (and submodule imports such as
 # `digiquant.indicators.ma`) keep working before those modules land.
 try:
-    from digiquant.indicators.oscillators import BollingerBands, RSI
+    from digiquant.indicators.oscillators import RSI, BollingerBands
 
     __all__ += ["BollingerBands", "RSI"]
 except ImportError:

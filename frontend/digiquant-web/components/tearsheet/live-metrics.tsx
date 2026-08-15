@@ -1,22 +1,16 @@
 /** Nightly tearsheet pipeline stamps ``generated_at`` when backtests refresh. */
 
-/** Green pulse + “live” when backtest metrics are present. */
+import { LiveBadge } from "@digithings/web";
+
+/** Green pulse + “live” when backtest metrics are present — the family
+ *  LiveBadge (#1463); whether it shows at all is this app's data wiring. */
 export function LiveMetricsBadge({
   generatedAt,
-  className = "",
+  className,
 }: {
   generatedAt: string | null | undefined;
   className?: string;
 }) {
   if (!generatedAt) return null;
-
-  return (
-    <span
-      className={`ts-live-badge${className ? ` ${className}` : ""}`}
-      aria-label="Live backtest metrics"
-    >
-      <span className="ts-live-dot" aria-hidden="true" />
-      <span className="ts-live-label">live</span>
-    </span>
-  );
+  return <LiveBadge ariaLabel="Live backtest metrics" className={className} />;
 }

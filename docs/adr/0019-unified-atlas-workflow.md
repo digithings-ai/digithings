@@ -20,7 +20,8 @@ workflow files:
 Both files share:
 
 - identical install steps (`scripts/install-workspace.sh digiquant`, `digiquant[atlas]`,
-  `langgraph-checkpoint-postgres`)
+  `langgraph-checkpoint-postgres`) — see the amendment below; these are now a single
+  `uv sync --frozen`, which does not change the duplication this ADR is about
 - identical "Resolve run date" step
 - identical "Validate providers (preflight)" step with identical env vars
   (`OPENROUTER_ALLOWED_MODELS`, `OPENROUTER_COST_QUALITY_TRADEOFF`)
@@ -318,3 +319,18 @@ unaffected by either phase.
   `TriageDeps` in `digiquant/src/digiquant/olympus/atlas/phases/triage_phase.py`
 - Predecessor: [ADR-0015](0015-atlas-vs-hermes.md) (Atlas/Hermes split)
 - Related: [ADR-0014](0014-atlas-in-digiquant.md) (Atlas in digiquant)
+
+## Amendment — 2026-07-30 (#1717)
+
+The install steps described above no longer exist in that form. `pipeline-olympus.yml`
+and `pipeline-atlas-metrics.yml` now install from the committed `uv.lock` with a single
+`uv sync --frozen`, so `scripts/install-workspace.sh` is not called by any workflow.
+
+This does not affect the decision recorded here. The duplication that motivated unifying
+the two workflows was structural — shared resolve/preflight/retry/upload/failure-issue
+steps — and collapsing three install lines into one does not change it. The original text
+is left intact as the record of what was true when the decision was taken.
+
+Note the ordering constraint the cutover exposed: these pipelines `checkout` with
+`ref: main`, so they read the lockfile from the released branch rather than from
+`develop`. Converting them required `uv.lock` to exist on `main` first (#1721).

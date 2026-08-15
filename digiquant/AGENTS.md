@@ -1,8 +1,8 @@
-# Agent Guide: DigiQuant
+# Agent Guide: digiquant
 
 ## Purpose
 
-DigiQuant is the **deterministic quant engine** of DigiThings. It owns and executes the ordered pipeline: validate → backtest → optimize → export. No other service may make performance claims (Sharpe, PnL, trade count) without a result originating from this service. It is the sole source of truth for strategy evaluation.
+digiquant is the **deterministic quant engine** of digithings. It owns and executes the ordered pipeline: validate → backtest → optimize → export. No other service may make performance claims (Sharpe, PnL, trade count) without a result originating from this service. It is the sole source of truth for strategy evaluation.
 
 ---
 
@@ -110,9 +110,9 @@ When touching `digiquant/src/digiquant/olympus/`:
 
 ---
 
-## DigiQuant Supabase backend — `core` (#1064)
+## digiquant Supabase backend — `core` (#1064)
 
-The DigiQuant shared backend is the **`core`** Supabase project — the project historically
+The digiquant shared backend is the **`core`** Supabase project — the project historically
 used by Olympus/Atlas ([`supabase/`](supabase/), `project_id "digiquant-atlas"`), repurposed
 (renamed `core`) as the suite-wide backend. It is **not** a separate project: the free-tier
 2-project limit is taken by Olympus + the confidential **twelve-x** project. The shared market
@@ -125,7 +125,7 @@ standardized `CORE_SUPABASE_URL` / `CORE_SUPABASE_SERVICE_KEY`
 `*_DIGIQUANT` and shared `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` names. `CORE_SUPABASE_*`
 is a **GitHub org secret** (all repos write `core`) — **never commit values**.
 
-See [`ARCHITECTURE.md` § DigiQuant Data Layer](ARCHITECTURE.md#digiquant-data-layer--strategy-store--shared-data-1064)
+See [`ARCHITECTURE.md` § digiquant Data Layer](ARCHITECTURE.md#digiquant-data-layer--strategy-store--shared-data-1064)
 and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-digiquant-supabase-project-topology.md).
 
 ---

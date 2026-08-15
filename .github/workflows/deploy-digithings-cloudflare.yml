@@ -8,10 +8,159 @@ on:
   pull_request:
     paths:
       - "frontend/digithings-web/**"
+      # digithings-web imports @digithings/digichat-ui — <DigiChatMark> in DtNav.tsx,
+      # <DigiChatSession> on the /chat route, and its stylesheets in globals.css — so it
+      # is a build input to this site, and has been since #1384. PR #1490 edited
+      # frontend/digichat-ui/src/DigiChatSession.tsx alongside digichat-only files,
+      # matched no glob here, and ran no deploy build check; #1859 repeated it. Judge that
+      # by the PR's whole file set, not by a commit: a filter sees the union of the PR's
+      # paths, so a digichat-ui commit that rides along with a digithings-web edit does
+      # fire this check and proves nothing either way.
+      #
+      # The miss is silent because no other job in CI runs a production `next build` of
+      # digithings-web. test-web.yml lints it (`eslint .`) and runs vitest; the only
+      # `run build` invocations in .github/workflows/ are digichat's and olympus's. So a
+      # `next build`-only failure — a "use client" boundary violation, a crash while
+      # prerendering the static export — is caught here or nowhere.
+      #
+      # One entry, not a workspace sweep. What belongs here is the closure of what
+      # scripts/build-digithings.sh compiles: digithings-web, plus its transitive workspace
+      # deps @digithings/design, @digithings/web, and this. All four are now listed. The
+      # digiquant sibling needs no equivalent entry — its closure is digiquant-web +
+      # olympus + design + web, already complete, and neither app consumes digichat-ui
+      # (scripts/ci_paths.yaml's `olympus` filter records that half; the digiquant-web half
+      # is verified by there being no import of it anywhere in that app). The same file's
+      # `web` filter already lists frontend/digichat-ui/** for the reason above — added in
+      # #1948, for the lint/test lane only. Do not read this entry as "watch every
+      # workspace": the root `npm install` resolves all eight, but gating both checks on
+      # all eight fires them on every unrelated workspace, which is the trade #1956
+      # declines for `**/package.json`. tests/scripts/test_deploy_build_inputs.py derives
+      # both closures from the manifests and asserts each filter covers its own.
+      - "frontend/digichat-ui/**"
       - "frontend/digiweb/web/**"
       - "frontend/digiweb/design/**"
       - "scripts/build-digithings.sh"
+      # The build script's callees. Watching the caller alone leaves the gap this
+      # check exists to close, and the two files below fail in different places.
+      # `write-build-info.sh` runs inside the real Cloudflare build under
+      # `set -euo pipefail` (scripts/build-digithings.sh:66) and the build hard-fails
+      # when the stamp it writes is absent — a bug there breaks the production deploy.
+      # `check_deploy_freshness.py` is never reached by the real deploy (Cloudflare's
+      # build command is `bash scripts/build-digithings.sh`, which does not call it);
+      # it is the evaluator behind this workflow's "Assert deploy build stamp" step and
+      # smoke-site.yml's daily probe, so a bug there breaks detection instead — every
+      # production probe turns into a false verdict while the site builds fine.
+      # Neither is untested today: ci.yml's ruff_and_scripts filter matches scripts/**,
+      # so tests/scripts/ runs on both. What that suite cannot reach is this job — the
+      # real npm install, the Next build, and the writer running *in situ*. The unit
+      # suite never executes a build script at all (it only reads their text) and runs
+      # the writer standalone, with an absolute output path and a controlled env. So a
+      # stamp that breaks only under the build script's `cd` to the repo root — which is
+      # what makes the relative `dist/build-info.json` resolve, and what the `git
+      # rev-parse` fallback reads — or under the `rm -rf dist` at build-digithings.sh:55,
+      # which lands *after* the Next build and is pinned today by a text assertion rather
+      # than by execution, or only once fed through the evaluator, passes there and fails
+      # on Cloudflare.
+      - "scripts/write-build-info.sh"
+      - "scripts/check_deploy_freshness.py"
       - ".github/workflows/deploy-digithings-cloudflare.yml"
+      # Root packaging manifests are what make Cloudflare's build image auto-run a
+      # dependency install ahead of the build command, so a change to one can break the
+      # deploy without touching a single frontend file. #1714 was exactly that — it edited
+      # only the root pyproject.toml and uv.lock, matched none of the globs above, and so
+      # froze this site for three days without ever running this check.
+      - "pyproject.toml"
+      - "requirements.txt"
+      - "setup.py"
+      # The npm manifests break the deploy the same way, by a more direct route: the
+      # build script runs its own root install (scripts/build-digithings.sh:15) — `npm
+      # install`, which reconciles the lock against the manifests, not `npm ci`, which
+      # installs from it — so a bad resolution there fails the build with no frontend
+      # file touched, and no Cloudflare auto-detection needed. PR #1949 was the near
+      # miss: -1646/+176 lines of package-lock.json, and the digiquant sibling of this
+      # check never fired at all.
+      #
+      # Both entries are root-anchored, and only the root hole is closed: a `paths:`
+      # pattern is matched against the whole repo-root-relative path, so a wildcard-free
+      # name matches that one file and nothing nested. Do NOT re-cite #1702/#1708/#1712
+      # as proof of that, the way an earlier draft did. Those three did each edit 11
+      # nested pyproject.toml files and fire neither check — but they merged 2026-07-29
+      # and -07-30, and `pyproject.toml` only entered these filters on 2026-08-02
+      # (ff384b4f). The entry did not exist yet, so their silence is evidence of nothing.
+      # The standing in-repo corroboration is docs-reindex-guide.yml, which lists bare
+      # `ARCHITECTURE.md` alongside `digibase/ARCHITECTURE.md`, `digichat/ARCHITECTURE.md`
+      # and ~20 further per-component paths — every one of them redundant if the bare
+      # name reached nested files. The workspace manifests therefore have to be named
+      # one by one, below.
+      - "package.json"
+      - "package-lock.json"
+      # The root lock does not stand in for those manifests. Counted at PR granularity —
+      # the unit a `paths:` filter actually sees — 17 of the 38 PRs that have touched one
+      # of the eight left package-lock.json out of the PR entirely. A further 8 of the 38
+      # would match no glob in either deploy filter *as those filters stand today*: a
+      # counterfactual, and a floor rather than a count, because the filters' own
+      # contents have changed across that span — the very trap the paragraph above
+      # warns about, so do not restate it as history. The one case verified against the
+      # runs API is PR #1385: a one-file PR changing only
+      # frontend/digichat/package.json, on which neither deploy check ran.
+      # Do NOT cite 92ab99b6 for this, as an earlier draft did — it looks like
+      # a tidy one-file commit, but it shipped inside PR #1505 alongside
+      # package-lock.json and 15 other files, and that PR's digiquant check ran and
+      # passed. Commits are the wrong unit here; develop carries merges, not squashes.
+      #
+      # And be equally plain about what has NOT happened: across all 38, some lane
+      # running a root install always fired, so nothing has yet reached production
+      # through this hole. The one manifest with no lane of its own was
+      # digiweb/reference, named at the end of this list. (An earlier draft counted
+      # digichat-ui here too; that was wrong — ci.yml's `digichat` and `web` filters both
+      # list frontend/digichat-ui/**, and both lanes install at the root.) This closes a
+      # structural hole before it bites. It is not the fix for an incident.
+      #
+      # This site's build closure, read off the @digithings/* deps, is digithings-web →
+      # design + digichat-ui + web, digichat-ui → web, web → design. All four are covered
+      # by the directory globs at the top of this list — digichat-ui by the entry added
+      # there, which supersedes the `frontend/digichat-ui/package.json` line #1956 added
+      # here: a manifest glob is a strict subset of the directory glob, so keeping both
+      # would leave a dead entry. `**/package.json` is still not the fix: it would fire
+      # both deploy checks on every unrelated workspace, digigraph's vendored echarts
+      # manifest included.
+      #
+      # The last entry is an install input, not a build input, and is here for a different
+      # reason from everything above it. The root `npm install` resolves all eight
+      # workspace manifests before either site compiles, so an unresolvable range in any
+      # of them fails this build even though nothing here imports that workspace. Four of
+      # the eight sit outside this site's closure; three are reached by a lane that
+      # installs at the root — frontend/digichat by ci.yml's `digichat`,
+      # frontend/digiquant-web by its `web`, frontend/olympus by its `olympus`. Two of
+      # those lanes run `npm ci`, which catches a bad range by a different route than the
+      # distinction drawn above: not by resolving it, but by refusing to run at all when
+      # manifest and lock disagree. Cover either way. The fourth,
+      # frontend/digiweb/reference, was in no path filter in this repo at all — of the
+      # eight it was the one manifest watched by nothing — so a bad range there *would*
+      # take both production sites down with no CI job running. Counterfactual, not
+      # history: nothing has reached production through this hole. (#1956 reports
+      # verifying the failure empirically — ETARGET out of the root install. Not re-run
+      # here; the mechanism is just what `npm install` does with a workspaces root.)
+      #
+      # Only the manifest, not `frontend/digiweb/reference/**`. Nothing anywhere in CI
+      # *builds* that app; since #1981 ci.yml's `web` lane does lint and type-check it,
+      # gated on that directory, which is why this filter is the narrower of the two —
+      # an install input here, a lint/typecheck input there, and no `next build` in
+      # either. (Until #1981 nothing built OR linted it, verified across all workflows
+      # and their history; do not restore that stronger wording.) Widening this entry to
+      # the directory would fire this site's Next build, and
+      # digiquant's two, on every edit to a design reference with ~137 commits in the
+      # month since it was scaffolded (2026-07-06) — while the manifest's *content* has
+      # not changed since that same day; the lone commit at this path is the `git mv` that
+      # created it. Note that path history alone would not license this, for the reason
+      # given above about #1702/#1708/#1712: the path is younger than the claim. Content
+      # stability is the evidence, and `git log --follow` is not — it walks back to
+      # 2026-04-27, before this app existed.
+      # digithings-stack-cloudflare is an install-input workspace (CF Profile A
+      # Containers Worker). Pages does not build it; name the manifest so it is
+      # not an orphan under tests/scripts/test_deploy_build_inputs.py.
+      - "frontend/digithings-stack-cloudflare/package.json"
+      - "frontend/digiweb/reference/package.json"
   workflow_dispatch:
 
 concurrency:
@@ -33,6 +182,17 @@ jobs:
           node-version: "22"
           cache: npm
 
+      # Cloudflare's build image auto-detects languages from the repo root, finds the root
+      # pyproject.toml, and runs `pip install .` BEFORE the configured build command. If that
+      # fails, the build command is never reached — so this whole job passing proves nothing
+      # about the real deploy. That is not hypothetical: #1714 added the root pyproject.toml
+      # on 2026-07-30 and both production sites silently built nothing until 2026-08-02, with
+      # every PR green throughout. Run the same step Cloudflare runs, first, in the same order.
+      # --dry-run suffices: the failure occurs in "getting requirements to build wheel", which
+      # --dry-run still performs, and it avoids mutating the runner's site-packages.
+      - name: Assert the repo root is pip-installable (Cloudflare runs `pip install .`)
+        run: python3 -m pip install --dry-run --no-deps .
+
       - name: Assemble dist/ (same as Cloudflare Pages)
         run: bash scripts/build-digithings.sh
 
@@ -48,3 +208,16 @@ jobs:
           grep -q digithings.ai dist/CNAME
           # fonts self-hosted; no Google Fonts references in the export
           ! grep -rq "fonts.googleapis.com" dist
+
+      # The daily freshness probe in smoke-site.yml reads this stamp off the live
+      # site (#1759). Validate the stamp the build just wrote with the same
+      # evaluator, so a regression in either half fails here rather than turning
+      # every production probe into a false UNSTAMPED.
+      - name: Assert deploy build stamp
+        run: |
+          test -f dist/build-info.json
+          python3 scripts/check_deploy_freshness.py \
+            --url dist/build-info.json \
+            --status 200 \
+            --body-file dist/build-info.json \
+            --max-age-hours 1

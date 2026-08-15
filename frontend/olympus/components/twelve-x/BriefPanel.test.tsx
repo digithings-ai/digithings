@@ -1,21 +1,16 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 
 /**
- * SSR-only test (node env, renderToStaticMarkup — no jsdom/RTL). BriefPanel
- * loads its brief asynchronously via `getBrief` inside a `useEffect`, so under
- * static SSR the brief never lands in state on its own. We seed the loaded-brief
- * render path two ways:
- *   - mock `getBrief` so the import resolves without touching Supabase, and
- *   - mock React's `useState` so the FIRST `useState(null)` call (the `brief`
- *     state) initialises to our fixture, while every later `useState` keeps its
- *     real default. `useEffect` is stubbed to a no-op so the async loader and
- *     scroll-lock effects don't run during SSR.
- * This renders the same loaded markup a hydrated panel would show, letting us
- * assert how `central_thesis` is rendered.
+ * SSR-only test (node env, renderToStaticMarkup — no jsdom/RTL). Since the
+ * panel chrome moved onto the shared @digithings/web Sheet (#1450), the popup
+ * lives in a Base UI portal that never renders under static SSR — so these
+ * content assertions target the exported BriefPanelBody (the local data/content
+ * half of the panel) directly, with the loaded-brief state passed as props.
+ * This is the same loaded markup a hydrated panel shows inside the sheet.
  */
 const fixtureBrief: FxBriefRow = {
   run_date: '2026-06-24',
@@ -34,50 +29,20 @@ const fixtureBrief: FxBriefRow = {
   positioning_signals: [],
 };
 
+// The module under test imports the Supabase-backed fetchers; mock them so the
+// import never touches a client (the panel's fetch effect is not under test).
 vi.mock('@/lib/twelve-x/fetch', () => ({
   getBrief: vi.fn(async () => fixtureBrief),
 }));
 
-// Per-render control: `render()` resets `seeded` so the FIRST useState(null)
-// call (the `brief` state) of each render is seeded with the fixture. The
-// second null-initialised state (`error`) must keep its real null default, so
-// we only seed once per render.
-const seedControl = { seeded: false };
-
-vi.mock('react', async () => {
-  const actual = await vi.importActual<typeof import('react')>('react');
-  const useState = ((initial: unknown) => {
-    if (!seedControl.seeded && initial === null) {
-      seedControl.seeded = true;
-      return actual.useState(fixtureBrief as unknown);
-    }
-    return actual.useState(initial);
-  }) as typeof actual.useState;
-  return {
-    ...actual,
-    default: actual,
-    useState,
-    // No-op effects: the async loader / Escape / scroll-lock effects must not
-    // run under SSR. The `brief` state is already seeded above.
-    useEffect: () => {},
-  };
-});
-
-import BriefPanel from './BriefPanel';
-
-afterEach(() => {
-  vi.clearAllMocks();
-});
+import { BriefPanelBody } from './BriefPanel';
 
 function render(over: Partial<FxBriefRow> = {}): string {
-  Object.assign(fixtureBrief, over);
-  seedControl.seeded = false;
   return renderToStaticMarkup(
-    createElement(BriefPanel, {
-      open: true,
-      sourceFile: fixtureBrief.source_file,
-      runDate: fixtureBrief.run_date,
-      onClose: () => {},
+    createElement(BriefPanelBody, {
+      brief: { ...fixtureBrief, ...over },
+      loading: false,
+      error: null,
     })
   );
 }

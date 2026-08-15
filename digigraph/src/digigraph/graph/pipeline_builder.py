@@ -1,6 +1,6 @@
 """Declarative pipeline builder for LangGraph sub-graphs.
 
-A sub-graph like DigiQuant Atlas (#176) is a sequence of phases; each phase
+A sub-graph like digiquant Atlas (#176) is a sequence of phases; each phase
 has one or more nodes that may run in parallel, and every phase fully completes
 before the next begins. Instead of open-coding the edge plumbing per sub-graph,
 callers declare a ``list[PipelinePhase]`` and this builder compiles it into a
@@ -18,15 +18,22 @@ Design:
 
 from __future__ import annotations
 
+import functools
+import inspect
+import logging
 from dataclasses import dataclass
 
 # The noqa below is read by repo-local `scripts/score.py` (not ruff) — that
 # gate flags unscoped `Any` imports. LangGraph node update dicts are
 # legitimately heterogeneous, so `Any` here is intentional.
-from typing import Any, Callable, Sequence  # noqa  # scored-lint suppression
+from typing import Any, Callable, Sequence  # score:allow untyped any — scored-lint suppression
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
+
+from digigraph.usage import node_run_scope
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -67,17 +74,78 @@ class FanOutPhase:
         items: ``state -> sequence`` of items to fan out over, evaluated at run time.
         with_item: ``(state, item) -> state`` returning a state copy that carries ``item`` for
             the worker to read (typically ``state.model_copy(update={...})``).
+        item_key: Optional ``state -> label`` that reads back the per-``Send`` cursor
+            ``with_item`` injected. Used only as the telemetry fan-out discriminator
+            (``NodeRunRecord.fanout_key``); it never affects dispatch, routing, or reducers,
+            and a failure or blank result leaves the discriminator absent.
     """
 
     name: str
     worker: NodeSpec
     items: Callable[[Any], Sequence[Any]]
     with_item: Callable[[Any, Any], Any]
+    item_key: Callable[[Any], Any] | None = None
 
     @property
     def nodes(self) -> tuple[NodeSpec, ...]:
         """Expose the worker as a 1-tuple so name validation/registration treat it uniformly."""
         return (self.worker,)
+
+
+def _fanout_key(key_of: Callable[[Any], Any] | None, state: Any) -> str | None:
+    """Best-effort per-``Send`` discriminator. A telemetry label must never change a node."""
+    if key_of is None:
+        return None
+    try:
+        value = key_of(state)
+    except Exception:
+        # Warning, not debug: a broken extractor is a wiring bug and should be visible. It
+        # must not be fatal — telemetry cannot change the exceptions a node raises.
+        logger.warning("fan-out telemetry key extraction failed", exc_info=True)
+        return None
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _instrumented(
+    node_name: str,
+    run: Callable[..., dict[str, Any]],
+    key_of: Callable[[Any], Any] | None,
+) -> Callable[..., dict[str, Any]]:
+    """Wrap one node body in its run/node telemetry scope without changing its contract.
+
+    ``functools.wraps`` plus ``*args/**kwargs`` is mandatory, not stylistic: LangGraph decides
+    what to inject from ``inspect.signature(func).parameters``, matched by parameter name and
+    annotation, and ``inspect.signature`` follows ``__wrapped__``. A ``(state)``-only wrapper
+    breaks any node declaring ``config``/``writer``/``store``/``runtime``. ``wraps`` also
+    preserves ``__name__``, which LangGraph reads for the trace name.
+
+    A coroutine node needs a coroutine wrapper. ``functools.wraps`` copies the inner signature,
+    so a sync wrapper around an ``async def`` looks synchronous to LangGraph while returning an
+    un-awaited coroutine: the node fails with ``InvalidUpdateError: Expected dict, got
+    <coroutine>`` instead of being routed to the async path. No node registered here is async
+    today and nothing calls ``ainvoke``, so this is latent — but a sync-only wrapper would make
+    an async node permanently unroutable rather than merely unused.
+    """
+    if inspect.iscoroutinefunction(run):
+
+        @functools.wraps(run)
+        async def _awrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            state = args[0] if args else kwargs.get("state")
+            with node_run_scope(node_name, fanout_key=_fanout_key(key_of, state)):
+                return await run(*args, **kwargs)
+
+        return _awrapped
+
+    @functools.wraps(run)
+    def _wrapped(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        state = args[0] if args else kwargs.get("state")
+        with node_run_scope(node_name, fanout_key=_fanout_key(key_of, state)):
+            return run(*args, **kwargs)
+
+    return _wrapped
 
 
 def build_pipeline(
@@ -131,10 +199,16 @@ def build_pipeline(
 
     graph: StateGraph = StateGraph(state_cls)
 
-    # Register every runnable node.
+    # Register every runnable node inside its telemetry node scope. The wrapper is
+    # signature-transparent (`functools.wraps` + `*args/**kwargs`), so LangGraph's
+    # signature-driven config/writer/store/previous/runtime/error injection still sees the
+    # node's own parameters. Synthetic barriers below are intentionally NOT wrapped: `_noop`
+    # runs no user code and makes no provider calls, so it emits no node record —
+    # reconciliation counts real node executions, not compiled graph nodes.
     for phase in phases:
+        key_of = phase.item_key if isinstance(phase, FanOutPhase) else None
         for node in phase.nodes:
-            graph.add_node(node.name, node.run)
+            graph.add_node(node.name, _instrumented(node.name, node.run, key_of))
 
     # Synthetic barriers. A barrier is a no-op node that joins a fan-out and
     # launches the next fan-out. For single-node phases, the node itself acts

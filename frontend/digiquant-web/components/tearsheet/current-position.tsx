@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
+import { DirectionPill, fmtNum, fmtPct, toneClass } from "@digithings/web";
 import { AssetLogoFor } from "./asset-logo";
-import { fmtNum, fmtPct, toneClass } from "./format";
 import {
   isOpenTrade,
   markPriceForTrade,
@@ -49,7 +49,7 @@ export function CurrentPosition({ data, asset }: { data: TearsheetData; asset: s
         <span className="ts-position-asof">as of {asOf}</span>
       </div>
       <div className="ts-position-body">
-        <span className={`ts-dir ts-dir-${open.direction}`}>{open.direction}</span>
+        <DirectionPill direction={open.direction} />
         <div className="ts-position-main">
           {signal ? <span className="ts-position-signal">{signal}</span> : null}
           <span className="ts-position-entry">

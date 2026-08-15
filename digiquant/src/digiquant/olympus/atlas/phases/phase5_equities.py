@@ -5,7 +5,7 @@ Sector nodes share ``sector-research`` skill + ``config/sectors.yaml`` injection
 
 from __future__ import annotations
 
-from typing import Any, Literal  # noqa: F401 — used for dict shape typing below
+from typing import Any, Literal  # score:allow untyped any — used for dict shape typing below
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field
@@ -18,7 +18,6 @@ from digiquant.olympus.atlas.phases._node_factory import (
 from digiquant.olympus.atlas.sectors_config import SectorConfig, load_sectors
 from digiquant.olympus.atlas.segments import Bias, DataQuality, SegmentReport, Source
 from digiquant.olympus.atlas.state import AtlasResearchState, SegmentPayload, SegmentSlot
-
 
 # ─── Output models ──────────────────────────────────────────────────────────
 

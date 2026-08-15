@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChatStreamCursor } from "@digithings/web";
+import { stripFoundryCitationMarkers, chainActivities } from "./activity-view";
 import { ChatActivities } from "./components/ChatActivities";
 import { CopyButton } from "./components/CopyButton";
 import { DigiChatWordmark } from "./components/DigiChatMark";
@@ -16,7 +17,8 @@ export function DigiChatSession({
   suggestions = [],
   placeholder,
   showByok,
-  showStatusBar = false,
+  /** When false, error rows omit the inline BYOK link (ungated dogfood / infra errors). */
+  showByokOnError = true,
   branding,
   ariaLabel = "digichat",
   className,
@@ -37,13 +39,11 @@ export function DigiChatSession({
     send,
     stop,
     onRetry,
-    modelLabel,
     providerIsSet = false,
     openSettings,
   } = chat;
 
   const [input, setInput] = useState("");
-  const [barOpen, setBarOpen] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -95,14 +95,20 @@ export function DigiChatSession({
     .join(" ");
 
   const renderAssistant = (content: string, streaming: boolean) => {
-    if (renderAssistantContent) return renderAssistantContent(content, streaming);
-    if (!content) return null;
-    return <MiniMarkdown text={content} />;
+    const clean = stripFoundryCitationMarkers(content);
+    if (renderAssistantContent) return renderAssistantContent(clean, streaming);
+    if (!clean) return null;
+    return <MiniMarkdown text={clean} />;
   };
 
   return (
     <section className={sessionClass} aria-label={ariaLabel}>
-      {headerSlot}
+      {headerSlot ??
+        (branding?.title ? null : (
+          <header className="dc-wordmark-header">
+            <DigiChatWordmark />
+          </header>
+        ))}
 
       {branding?.title ? (
         <header className="dc-brand">
@@ -122,28 +128,6 @@ export function DigiChatSession({
             </span>
           ) : null}
         </header>
-      ) : null}
-
-      {showStatusBar ? (
-        <>
-          <button
-            type="button"
-            className="dc-bar-toggle"
-            aria-expanded={barOpen}
-            onClick={() => setBarOpen((v) => !v)}
-          >
-            <DigiChatWordmark /> {barOpen ? "▾" : "▸"}
-          </button>
-          <div className={`dc-bar${barOpen ? "" : " is-collapsed"}`} aria-hidden={!barOpen}>
-            <span className="dc-bar-meta">vault-grounded · agentic · streams live</span>
-            {showByok ? (
-              <button type="button" className="dc-bar-key" onClick={handleOpenSettings}>
-                {providerIsSet ? "key ✓" : "bring your own key"}
-              </button>
-            ) : null}
-            {modelLabel ? <span className="dc-bar-model">model: {modelLabel}</span> : null}
-          </div>
-        </>
       ) : null}
 
       <div className="dc-thread" ref={threadRef} aria-live="polite" aria-atomic="false">
@@ -188,6 +172,9 @@ export function DigiChatSession({
 
         {messages.map((m, i) => {
           const streaming = busy && m.role === "assistant" && i === messages.length - 1;
+          /* Working… (and any other Foundry ack) is caret-only noise in the
+             chain — strip it. Tool rows carry their own running/ok state. */
+          const chain = chainActivities(m.activities ?? []);
           return (
             <div key={i} className={`dc-msg dc-${m.role}`}>
               <span className="dc-who" aria-hidden="true">
@@ -196,12 +183,14 @@ export function DigiChatSession({
               <div className="dc-body">
                 {m.role === "assistant" ? (
                   <>
-                    {m.activities?.length ? <ChatActivities activities={m.activities} /> : null}
+                    {chain.length ? <ChatActivities activities={chain} /> : null}
                     {renderAssistant(m.content, streaming)}
-                    {streaming && <ChatStreamCursor className="dt-cur" />}
-                    {streaming && !m.content && !m.activities?.length ? (
-                      <span className="dc-out-dim">connecting…</span>
-                    ) : null}
+                    {/* One bare flash for the whole turn: under an empty wait,
+                        under the growing tool chain, then under the answer as
+                        it streams. Tool rows themselves say Searching/done —
+                        no typed "Working…" / "Searching for…" line on top.
+                        Gone the moment busy clears. */}
+                    {streaming ? <ChatStreamCursor className="dt-cur" /> : null}
                   </>
                 ) : (
                   m.content
@@ -210,11 +199,30 @@ export function DigiChatSession({
               {/* No copy button on embed: the clipboard API is unavailable in a
                   cross-origin iframe, so the button silently no-ops. */}
               {layout !== "embed" && m.role === "assistant" && !streaming && m.content ? (
-                <CopyButton text={m.content} className="dc-msg-copy" ariaLabel="Copy answer" />
+                <CopyButton
+                  text={stripFoundryCitationMarkers(m.content)}
+                  className="dc-msg-copy"
+                  ariaLabel="Copy answer"
+                />
               ) : null}
             </div>
           );
         })}
+
+        {/* useChat only appends the assistant message once the first stream
+            chunk arrives — often seconds after submit (Foundry create +
+            empty reasoning). Until then the last row is still the user turn,
+            so mount a placeholder assistant with the same bare caret. */}
+        {busy && (messages.length === 0 || messages[messages.length - 1]?.role === "user") ? (
+          <div className="dc-msg dc-assistant" aria-busy="true">
+            <span className="dc-who" aria-hidden="true">
+              ·
+            </span>
+            <div className="dc-body">
+              <ChatStreamCursor className="dt-cur" />
+            </div>
+          </div>
+        ) : null}
 
         {showByok && quotaPrompt && !providerIsSet ? (
           <div className="dc-quota-banner" role="status">
@@ -230,7 +238,7 @@ export function DigiChatSession({
         {error ? (
           <p className="dtc-error" role="alert">
             {error}
-            {showByok && !providerIsSet ? (
+            {showByok && !providerIsSet && showByokOnError ? (
               <>
                 {" "}
                 <button type="button" className="dc-inline-link" onClick={handleOpenSettings}>
@@ -248,6 +256,9 @@ export function DigiChatSession({
             ) : null}
           </p>
         ) : null}
+
+        {/* BYOK terminal flow — inline in the transcript, not a separate modal */}
+        {settingsPanel}
       </div>
 
       {formReplacement ?? (
@@ -271,7 +282,7 @@ export function DigiChatSession({
             aria-label={placeholder}
             rows={1}
             maxLength={2000}
-            disabled={busy}
+            disabled={busy || !!settingsPanel}
           />
           {busy && stop ? (
             <button type="button" className="dc-stop" onClick={stop} aria-label="Stop generating">
@@ -281,7 +292,7 @@ export function DigiChatSession({
             <button
               type="submit"
               className="dc-send"
-              disabled={!input.trim() || busy}
+              disabled={!input.trim() || busy || !!settingsPanel}
               aria-label="Send message"
             >
               ↵
@@ -291,7 +302,6 @@ export function DigiChatSession({
       )}
 
       {footerSlot}
-      {settingsPanel}
     </section>
   );
 }

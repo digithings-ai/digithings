@@ -1,4 +1,4 @@
-"""Versioned trace events for DigiGraph streaming (DigiChat, observability)."""
+"""Versioned trace events for digigraph streaming (digichat, observability)."""
 
 from __future__ import annotations
 
@@ -14,11 +14,12 @@ TraceEventType = Literal[
     "code_block",
     "span",
     "graph_update",
+    "round_boundary",
 ]
 
 
 class RagSourceItem(BaseModel):
-    """One citation from DigiSearch-style results."""
+    """One citation from digisearch-style results."""
 
     source_id: str | None = Field(
         default=None,
@@ -38,7 +39,7 @@ def rag_sources_from_results(
     max_items: int = 20,
     snippet_len: int = 400,
 ) -> list[dict[str, Any]]:
-    """Build RAG citation list for trace/UI from DigiSearch result dicts (redacted size)."""
+    """Build RAG citation list for trace/UI from digisearch result dicts (redacted size)."""
     out: list[dict[str, Any]] = []
     for r in results[:max_items]:
         if not isinstance(r, dict):

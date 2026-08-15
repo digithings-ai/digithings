@@ -4,8 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Change } from 'diff';
 import { diffLines, diffWords } from 'diff';
 import { ChevronDown } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import type { DocumentDiffCompareKind, DocumentDiffPair } from '@/lib/queries';
 import { useGenericDocumentDiff } from '@/lib/hooks/use-generic-document-diff';
 
@@ -332,9 +331,7 @@ export default function GenericDiffDocumentView({
     return (
       <div className="space-y-4">
         {toolbar}
-        <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-        </div>
+        <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
       </div>
     );
   }
@@ -362,9 +359,7 @@ export default function GenericDiffDocumentView({
       <div className="space-y-3">
         {toolbar}
         <p className="text-down text-xs">{error}</p>
-        <div className="prose prose-invert max-w-none text-sm">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-        </div>
+        <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
       </div>
     );
   }
@@ -376,9 +371,7 @@ export default function GenericDiffDocumentView({
         <p className="text-ink-mute text-sm">
           No comparison document for this choice — showing the current version below.
         </p>
-        <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-        </div>
+        <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
       </div>
     );
   }
@@ -446,15 +439,11 @@ export default function GenericDiffDocumentView({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[min(62vh,720px)] overflow-auto">
             <div className="rounded-lg border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
               <p className="text-[10px] font-mono text-ink-mute mb-2">Compare — {pair.compareDate}</p>
-              <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{pair.beforeMarkdown}</ReactMarkdown>
-              </div>
+              <SafeMarkdown>{pair.beforeMarkdown}</SafeMarkdown>
             </div>
             <div className="rounded-lg border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
               <p className="text-[10px] font-mono text-ink-mute mb-2">Current — {pair.targetDate}</p>
-              <div className="prose prose-invert max-w-none text-sm leading-relaxed">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{pair.afterMarkdown}</ReactMarkdown>
-              </div>
+              <SafeMarkdown>{pair.afterMarkdown}</SafeMarkdown>
             </div>
           </div>
         </div>

@@ -1,10 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assembleIntelligenceWhy,
+  assembleMatrix,
   boardColumn,
+  calendarWindow,
+  getTodayEvents,
+  getUpcomingEvents,
+  localDateKey,
   normalizeKeyThemes,
   sortTodayBriefs,
   filterEventsToDay,
+  getTradeIdeas,
 } from './fetch';
 import type {
   FxBriefRow,
@@ -12,15 +18,123 @@ import type {
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxLedgerRow,
+  MatrixCell,
 } from './types';
 
 /**
- * `boardColumn` must consolidate broker view currencies into the 8 G10 matrix
- * columns IDENTICALLY to the twelve-x Notion matrix (`nodes/publish.py`
- * `_board_column`), so the two surfaces never disagree. This mirrors the
- * authoritative mapping table in twelve-x `tests/test_publish_node.py`.
+ * `economic_calendar` fixture for the #1753 window tests at the bottom of this file.
+ * `vi.mock` is hoisted to the top of the module by Vitest, so it is declared here even
+ * though only that block uses it: every other test in this file is a pure function and
+ * never reaches the client.
  */
-describe('boardColumn (Notion-matrix-consistent currency consolidation)', () => {
+const calendarDb = vi.hoisted(() => ({
+  rows: [] as { event_date: string }[],
+  gte: [] as [string, string][],
+  lte: [] as [string, string][],
+}));
+
+const tradeIdeasDb = vi.hoisted(() => ({
+  selectColumns: '',
+}));
+
+vi.mock('./supabase', () => {
+  type Payload = { data: unknown[] | null; error: unknown };
+  interface TradeIdeasBuilder {
+    select: (columns: string) => TradeIdeasBuilder;
+    eq: (column: string, value: string) => TradeIdeasBuilder;
+    order: (column: string, options?: unknown) => TradeIdeasBuilder;
+    then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
+  }
+  const makeBuilder = (): TradeIdeasBuilder => {
+    const builder: TradeIdeasBuilder = {
+      select: (columns) => {
+        tradeIdeasDb.selectColumns = columns;
+        return builder;
+      },
+      eq: () => builder,
+      order: () => builder,
+      then: (onFulfilled) => Promise.resolve(onFulfilled({ data: [], error: null })),
+    };
+    return builder;
+  };
+  return {
+    isTwelveXConfigured: () => true,
+    twelveXSupabase: {
+      from: (table: string): TradeIdeasBuilder => {
+        if (table !== 'fx_trade_ideas_snapshot') throw new Error(`unexpected table: ${table}`);
+        return makeBuilder();
+      },
+    },
+  };
+});
+
+vi.mock('../supabase', () => {
+  type Payload = { data: { event_date: string }[] | null; error: unknown };
+  interface CalendarBuilder {
+    select: (columns: string) => CalendarBuilder;
+    order: (column: string, options?: unknown) => CalendarBuilder;
+    gte: (column: string, value: string) => CalendarBuilder;
+    lte: (column: string, value: string) => CalendarBuilder;
+    then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
+  }
+  const makeBuilder = (): CalendarBuilder => {
+    const bounds = { lo: '', hi: '' };
+    const builder: CalendarBuilder = {
+      select: () => builder,
+      order: () => builder,
+      gte: (column, value) => {
+        calendarDb.gte.push([column, value]);
+        bounds.lo = value;
+        return builder;
+      },
+      lte: (column, value) => {
+        calendarDb.lte.push([column, value]);
+        bounds.hi = value;
+        return builder;
+      },
+      // PostgREST applies .gte/.lte SERVER-side, so a row outside the requested window
+      // never reaches the client. Emulating that is what makes these tests fail on a
+      // wrong bound instead of passing on a fake that returns everything.
+      then: (onFulfilled) =>
+        Promise.resolve(
+          onFulfilled({
+            data: calendarDb.rows.filter(
+              (r) => r.event_date >= bounds.lo && r.event_date <= bounds.hi,
+            ),
+            error: null,
+          }),
+        ),
+    };
+    return builder;
+  };
+  return {
+    isSupabaseConfigured: () => true,
+    supabase: {
+      from: (table: string): CalendarBuilder => {
+        if (table !== 'economic_calendar') throw new Error(`unexpected table: ${table}`);
+        return makeBuilder();
+      },
+    },
+  };
+});
+
+/**
+ * `boardColumn` consolidates broker view currencies into the 8 G10 matrix
+ * columns. Olympus owns this rule outright, so this table is the authoritative
+ * statement of it — keep it exhaustive.
+ */
+describe('getTradeIdeas', () => {
+  it('selects trade_levels and evidence alongside the core trade-idea columns', async () => {
+    tradeIdeasDb.selectColumns = '';
+    await getTradeIdeas('2026-06-24');
+    expect(tradeIdeasDb.selectColumns).toContain('trade_levels');
+    expect(tradeIdeasDb.selectColumns).toContain('evidence');
+    expect(tradeIdeasDb.selectColumns).toContain('citations');
+    expect(tradeIdeasDb.selectColumns).toContain('as_of');
+  });
+});
+
+describe('boardColumn (currency consolidation)', () => {
   it('files a single G10 currency under itself', () => {
     expect(boardColumn('USD')).toBe('USD');
     expect(boardColumn('EUR')).toBe('EUR');
@@ -249,7 +363,134 @@ describe('assembleIntelligenceWhy', () => {
     expect(out.items[0].desks).toHaveLength(1);
     expect(out.items[0].desks[0].broker).toBe('Harbour');
   });
+});
 
+/**
+ * `assembleMatrix` is the PURE matrix assembly behind `getMatrix`: per
+ * (broker, column), deduplicate exact (source_file, run_date), sort newest-first,
+ * and split into primary + history. Tests must assert actual returned history
+ * order and no duplicates.
+ */
+describe('assembleMatrix', () => {
+  it('returns empty array when given no briefs', () => {
+    const cells = assembleMatrix([]);
+    expect(cells).toEqual([]);
+  });
+
+  it('creates one cell per (broker, column) with the newest view as primary', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-latest.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
+      }),
+      brief({
+        broker_name: 'Meridian',
+        run_date: '2026-06-24',
+        source_file: 'meridian-latest.pdf',
+        currency_views: [{ currency: 'EUR', direction: 'bearish', conviction: 'medium' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(2);
+    const atlas = cells.find((c) => c.broker === 'Atlas' && c.column === 'USD');
+    expect(atlas).toBeDefined();
+    expect(atlas!.direction).toBe('bullish');
+    expect(atlas!.run_date).toBe('2026-06-24');
+    const meridian = cells.find((c) => c.broker === 'Meridian' && c.column === 'EUR');
+    expect(meridian).toBeDefined();
+    expect(meridian!.direction).toBe('bearish');
+  });
+
+  it('deduplicates exact (source_file, run_date) pairs keeping only first occurrence', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-duplicate.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
+      }),
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-duplicate.pdf', // exact duplicate
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    expect(cells[0].history).toBeUndefined();
+  });
+
+  it('preserves distinct views as history sorted newest-first', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas-2026-06-24.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'high', rationale: 'Latest view' }],
+      }),
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-23',
+        source_file: 'atlas-2026-06-23.pdf',
+        currency_views: [{ currency: 'USD', direction: 'bullish', conviction: 'medium', rationale: 'Previous view' }],
+      }),
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-22',
+        source_file: 'atlas-2026-06-22.pdf',
+        currency_views: [{ currency: 'USD', direction: 'neutral', conviction: 'low', rationale: 'Oldest view' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    const cell = cells[0];
+    expect(cell.run_date).toBe('2026-06-24');
+    expect(cell.rationale).toBe('Latest view');
+    expect(cell.history).toHaveLength(2);
+    expect(cell.history![0].run_date).toBe('2026-06-23');
+    expect(cell.history![0].rationale).toBe('Previous view');
+    expect(cell.history![1].run_date).toBe('2026-06-22');
+    expect(cell.history![1].rationale).toBe('Oldest view');
+  });
+
+  it('files pairs under their base currency only (EUR/USD → EUR column)', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas.pdf',
+        currency_views: [{ currency: 'EUR/USD', direction: 'bullish', conviction: 'high' }],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    expect(cells[0].column).toBe('EUR');
+    expect(cells[0].currency).toBe('EUR/USD'); // verbatim for display
+  });
+
+  it('drops views outside the extended G10 set', () => {
+    const briefs = [
+      brief({
+        broker_name: 'Atlas',
+        run_date: '2026-06-24',
+        source_file: 'atlas.pdf',
+        currency_views: [
+          { currency: 'USD', direction: 'bullish', conviction: 'high' },
+          { currency: 'USD/TRY', direction: 'bearish', conviction: 'high' }, // exotic
+          { currency: 'DXY', direction: 'bullish', conviction: 'high' }, // not a currency
+        ],
+      }),
+    ];
+    const cells = assembleMatrix(briefs);
+    expect(cells).toHaveLength(1);
+    expect(cells[0].currency).toBe('USD'); // only the USD view survived
+  });
+});
+
+describe('assembleIntelligenceWhy continued', () => {
   it('orders desks by relevance descending', () => {
     const out = assembleIntelligenceWhy(
       [confluence({ currency: 'USD' })],
@@ -381,5 +622,133 @@ describe('assembleIntelligenceWhy', () => {
       '2026-06-24'
     );
     expect(out.items.map((i) => i.rank)).toEqual([1, 2]);
+  });
+});
+
+/* ------------------------------------------------------------------ *
+ * #1753 — the calendar window: UTC bound vs viewer-local key
+ * ------------------------------------------------------------------ */
+
+const REAL_TZ = process.env.TZ;
+
+/**
+ * Pin the viewer's zone AND the wall clock. Node invalidates V8's cached default
+ * timezone when `process.env.TZ` is assigned, so a formatter constructed afterwards
+ * resolves to `zone`; the assertion makes a runtime that ignores the assignment fail
+ * loudly here rather than silently testing the runner's own zone (CI runs in UTC).
+ */
+function useViewer(zone: string, isoInstant: string): void {
+  process.env.TZ = zone;
+  vi.setSystemTime(new Date(isoInstant));
+  expect(new Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(zone);
+}
+
+describe('localDateKey / calendarWindow (PURE)', () => {
+  it('keys an instant to the calendar day of the given zone, not of UTC', () => {
+    // 01:30Z on Aug 1 is still Jul 31 in New York and already Aug 1 in Auckland.
+    const instant = new Date('2026-08-01T01:30:00Z');
+    expect(localDateKey(instant, 'America/New_York')).toBe('2026-07-31');
+    expect(localDateKey(instant, 'Pacific/Auckland')).toBe('2026-08-01');
+    expect(localDateKey(instant, 'UTC')).toBe('2026-08-01');
+  });
+
+  it('pads the query window one day either side of the local 14-day window', () => {
+    const w = calendarWindow(new Date('2026-08-01T01:30:00Z'), 'America/New_York');
+    // The promise the surface makes: local today → +14 days.
+    expect(w.localStart).toBe('2026-07-31');
+    expect(w.localEnd).toBe('2026-08-14');
+    // The bound sent to PostgREST, padded because `event_date` is a wall-clock day and
+    // can sit a day either side of the local key derived from the release instant.
+    expect(w.queryStart).toBe('2026-07-30');
+    expect(w.queryEnd).toBe('2026-08-15');
+  });
+
+  it('is the same construction eventLocalDateKey uses, so keys are comparable', () => {
+    process.env.TZ = 'America/New_York';
+    try {
+      const iso = '2026-08-01T01:30:00Z';
+      const kept = filterEventsToDay(
+        [ev({ id: 1, event_datetime_utc: iso, event_date: '2026-08-01' })],
+        localDateKey(new Date(iso))
+      );
+      expect(kept).toHaveLength(1);
+    } finally {
+      if (REAL_TZ === undefined) delete process.env.TZ;
+      else process.env.TZ = REAL_TZ;
+    }
+  });
+});
+
+describe('getTodayEvents / getUpcomingEvents over the mocked calendar', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    calendarDb.rows = [];
+    calendarDb.gte = [];
+    calendarDb.lte = [];
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    if (REAL_TZ === undefined) delete process.env.TZ;
+    else process.env.TZ = REAL_TZ;
+  });
+
+  it('#1753 REGRESSION: a western viewer still sees their local-today releases', async () => {
+    // 21:30 Jul 31 in New York = 01:30 Aug 1 UTC. Before the fix the predicate was built
+    // from the UTC date ('2026-08-01'), so this row — the viewer's own today — was
+    // dropped by PostgREST before filterEventsToDay could keep it, and the Today tab's
+    // events strip went blank while the row existed.
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      ev({ id: 1, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T22:00:00Z' }),
+      ev({ id: 2, event_date: '2026-08-03', event_datetime_utc: '2026-08-03T12:30:00Z' }),
+    ];
+    const today = await getTodayEvents();
+    expect(today.map((e) => e.id)).toEqual([1]);
+    expect(calendarDb.gte).toEqual([['event_date', '2026-07-30']]);
+    expect(calendarDb.lte).toEqual([['event_date', '2026-08-15']]);
+  });
+
+  it('keys all-day rows (no release instant) by their wall-clock event_date', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      ev({ id: 3, event_date: '2026-07-31', event_datetime_utc: null }),
+      ev({ id: 4, event_date: '2026-08-01', event_datetime_utc: null }),
+    ];
+    expect((await getTodayEvents()).map((e) => e.id)).toEqual([3]);
+  });
+
+  it('drops local-yesterday rows from "upcoming" though the query pads back a day', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      // 18:00Z Jul 30 = 14:00 local Jul 30 — inside the padded query, local-yesterday.
+      ev({ id: 5, event_date: '2026-07-30', event_datetime_utc: '2026-07-30T18:00:00Z' }),
+      ev({ id: 6, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T22:00:00Z' }),
+    ];
+    expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([6]);
+  });
+
+  it('keeps a row whose event_date is past the horizon but whose local day is not', async () => {
+    useViewer('America/New_York', '2026-08-01T01:30:00Z');
+    calendarDb.rows = [
+      // 02:00Z Aug 15 = 22:00 local Aug 14 — the last local day of the window, and the
+      // reason queryEnd is padded forward.
+      ev({ id: 7, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T02:00:00Z' }),
+      // 12:30Z Aug 15 = 08:30 local Aug 15 — genuinely past the 14-day horizon.
+      ev({ id: 8, event_date: '2026-08-15', event_datetime_utc: '2026-08-15T12:30:00Z' }),
+    ];
+    expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([7]);
+  });
+
+  it('holds for an eastern viewer whose local day runs ahead of UTC', async () => {
+    // 12:30 Aug 1 in Auckland = 00:30 Aug 1 UTC. The 23:00Z Jul 31 release is already
+    // Aug 1 locally, so it belongs to this viewer's today; the 09:00Z one is Jul 31.
+    useViewer('Pacific/Auckland', '2026-08-01T00:30:00Z');
+    calendarDb.rows = [
+      ev({ id: 9, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T23:00:00Z' }),
+      ev({ id: 10, event_date: '2026-07-31', event_datetime_utc: '2026-07-31T09:00:00Z' }),
+    ];
+    expect((await getTodayEvents()).map((e) => e.id)).toEqual([9]);
+    expect((await getUpcomingEvents()).map((e) => e.id)).toEqual([9]);
   });
 });

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from functools import lru_cache
 from pathlib import Path
-from typing import Any  # noqa: F401 — used for JSON-schema payload dict shape
+from typing import Any  # score:allow untyped any — used for JSON-schema payload dict shape
 
 import jsonschema
 

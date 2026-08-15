@@ -1,206 +1,300 @@
 'use client';
 
-/**
- * Performance tear sheet — the hybrid, exportable surface for the single strategy
- * "Olympus": a live-NAV track + an Olympus-specific decision track-record track,
- * each degrading independently against its own empty-state predicate, plus the
- * absorbed Attribution diagnostics. One serif H1, one primary KPI strip (NOT a
- * MetricCard wall), two labeled .ts-panel tracks. Pure-SVG charts (no recharts in
- * the tracks) so window.print() yields a crisp PDF; the Download PDF button is
- * enabled in ALL states. F5 token rule: signed financial values use up/red
- * (toneClass); cyan --accent is reserved for the equity line + header chrome.
- */
 import type React from 'react';
-import AttributionTab from '@/components/observability/AttributionTab';
-import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
-import { SignedBars, TimeSeries } from './charts';
-import { fmtCompact, fmtNum, fmtPct, toneClass } from './format';
-import type { OlympusTearsheet } from './types';
+import { useState } from 'react';
+import { Download } from 'lucide-react';
+import {
+  IconButton,
+  TabStrip,
+  fmtPct,
+  runTearsheetPrint,
+  tabId,
+  tabPanelId,
+  toneClass,
+} from '@digithings/web';
+import type { OlympusTearsheet, PerformanceHoldingRow } from './types';
+import {
+  PortfolioContributionChart,
+} from './PortfolioPerformanceCharts';
+import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
 
-function Kpi({ label, value, sub }: { label: string; value: React.ReactNode; sub?: string }) {
+const PERFORMANCE_TABS = [
+  { id: 'current', label: 'Open positions' },
+  { id: 'historical', label: 'Closed positions' },
+];
+const TAB_LABEL = 'Performance holdings';
+
+function ReturnValue({ value }: { value: number | null }) {
+  if (value == null) return <>—</>;
   return (
-    <div className="ts-kpi">
-      <span className="ts-kpi-label">{label}</span>
-      <span className="ts-kpi-value">{value}</span>
-      {sub ? <span className="ts-kpi-sub">{sub}</span> : null}
+    <span className={toneClass(value)}>
+      {value > 0 ? '+' : ''}
+      {fmtPct(value)}
+    </span>
+  );
+}
+
+function HoldingsPerformanceTable({
+  rows,
+  emptyMessage,
+  returnLabel,
+}: {
+  rows: PerformanceHoldingRow[];
+  emptyMessage: string;
+  returnLabel: 'Unrealized' | 'Realized';
+}) {
+  if (!rows.length) {
+    return <p className="px-6 py-12 text-center text-sm text-ink-mute">{emptyMessage}</p>;
+  }
+
+  return (
+    <div className="max-h-[22rem] overflow-auto print:max-h-none print:overflow-visible">
+      <table className="w-full min-w-[680px] border-collapse font-mono text-[0.78rem] [font-variant-numeric:tabular-nums]">
+        <thead className="sticky top-0 z-10 bg-surface print:static">
+          <tr className="border-b border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
+            <th className="px-5 py-2.5 text-left font-normal">Holding</th>
+            <th className="px-3 py-2.5 text-left font-normal">Category</th>
+            <th className="px-3 py-2.5 text-right font-normal">Weight</th>
+            <th className="px-3 py-2.5 text-right font-normal">{returnLabel}</th>
+            <th className="px-5 py-2.5 text-right font-normal">As of</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-hair">
+          {rows.map((row) => (
+            <tr key={row.ticker} className="hover:bg-ink/[0.02]">
+              <td className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</td>
+              <td className="px-3 py-2.5 text-ink-soft">
+                {formatAllocationCategory(row.category)}
+              </td>
+              <td className="px-3 py-2.5 text-right text-ink">
+                {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
+              </td>
+              <td className="px-3 py-2.5 text-right">
+                <ReturnValue
+                  value={
+                    returnLabel === 'Unrealized'
+                      ? row.unrealizedReturnPct
+                      : row.realizedReturnPct
+                  }
+                />
+              </td>
+              <td className="px-5 py-2.5 text-right text-ink-mute">
+                {row.attributionDate ?? '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
-  const c = toneClass(v);
-  return c ? <span className={c}>{children}</span> : <>{children}</>;
+function Metric({
+  label,
+  value,
+  format = 'percent',
+}: {
+  label: string;
+  value: number | null;
+  format?: 'percent' | 'number';
+}) {
+  return (
+    <div className="flex min-w-0 flex-col justify-center gap-2 border-r border-hair px-4 py-4 last:border-r-0">
+      <dt className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">{label}</dt>
+      <dd className="m-0 font-mono text-2xl font-medium tabular-nums text-ink">
+        {format === 'number' ? (value != null ? value.toFixed(2) : '—') : <ReturnValue value={value} />}
+      </dd>
+    </div>
+  );
 }
 
-const BUCKET_LABEL: Record<number, string> = { 5: 'high', 3: 'medium', 1: 'low' };
+function HoldingsPanel({
+  rows,
+  title,
+  emptyMessage,
+  id,
+  tabIndex,
+  returnLabel,
+}: {
+  rows: PerformanceHoldingRow[];
+  title: string;
+  emptyMessage: string;
+  id: string;
+  tabIndex: number;
+  returnLabel: 'Unrealized' | 'Realized';
+}) {
+  return (
+    <section
+      role="tabpanel"
+      id={tabPanelId(TAB_LABEL, id)}
+      aria-labelledby={tabId(TAB_LABEL, id)}
+      className="border-x border-b border-hair bg-surface"
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-hair px-5 py-3">
+        <h2 className="font-display text-xl font-normal text-ink">{title}</h2>
+        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+          {returnLabel === 'Unrealized' ? 'open book' : 'recorded exits'}
+        </span>
+      </div>
+      <HoldingsPerformanceTable rows={rows} emptyMessage={emptyMessage} returnLabel={returnLabel} />
+      <span className="sr-only">
+        Panel {tabIndex + 1} of {PERFORMANCE_TABS.length}
+      </span>
+    </section>
+  );
+}
+
+/**
+ * Compact realized read under the return band: the headline above marks the
+ * whole book (unrealized included, per NAV); this strip is the recorded-exits
+ * record only, deliberately smaller so the two are never confused.
+ */
+function RealizedSummary({ rows }: { rows: PerformanceHoldingRow[] }) {
+  const realized = rows
+    .map((row) => row.realizedReturnPct)
+    .filter((v): v is number => v != null && Number.isFinite(v));
+  if (realized.length === 0) return null;
+  const winners = realized.filter((v) => v > 0).length;
+  const avg = realized.reduce((sum, v) => sum + v, 0) / realized.length;
+  const best = Math.max(...realized);
+  const worst = Math.min(...realized);
+  const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+  return (
+    <div
+      data-testid="realized-summary"
+      className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-x border-b border-hair bg-surface px-5 py-2 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
+    >
+      <span className="font-semibold">Realized · closed positions</span>
+      <span>{realized.length} exit{realized.length === 1 ? '' : 's'}</span>
+      <span>win rate {Math.round((winners / realized.length) * 100)}%</span>
+      <span>avg {pct(avg)}</span>
+      <span>best {pct(best)}</span>
+      <span>worst {pct(worst)}</span>
+    </div>
+  );
+}
 
 export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
-  const { live, decision } = data;
-  const hasLiveCurve = data.navPoints >= 2;
-  const hasTrackRecord = data.nResolved >= 1;
-
-  const resolvedAlphasPct = data.decisionRows
-    .filter((r) => r.status === 'resolved' && r.alpha != null)
-    .map((r) => (r.alpha as number) * 100);
+  const [activeTab, setActiveTab] = useState(0);
+  const [printing, setPrinting] = useState(false);
+  const [benchmarkTicker, setBenchmarkTicker] = useState(
+    data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
+      data.benchmarkTicker
+  );
+  const benchmark =
+    data.benchmarkComparisons.find((comparison) => comparison.ticker === benchmarkTicker) ?? null;
+  const benchmarkReturnPct = benchmark?.returnPct ?? data.benchmarkReturnPct;
+  const relativeReturnPct =
+    data.netReturnPct != null && benchmarkReturnPct != null
+      ? data.netReturnPct - benchmarkReturnPct
+      : data.relativeReturnPct;
+  const performancePeriod =
+    data.inceptionDate && data.metricsAsOf
+      ? `${data.inceptionDate}–${data.metricsAsOf}`
+      : null;
 
   return (
-    <div className="ts-page">
-      <header className="ts-header">
-        <div>
-          <h1 className="ts-h1">Olympus — AI-intelligence strategy</h1>
-          <div className="ts-meta">
-            <span className="ts-meta-text">
-              {data.inceptionDate ? `live since ${data.inceptionDate}` : 'awaiting inception'}
-            </span>
-            <span className="ts-meta-text">
-              · {data.navPoints} NAV point{data.navPoints === 1 ? '' : 's'} · {data.nResolved} resolved /{' '}
-              {data.nPending} pending
-            </span>
-          </div>
-        </div>
-        <div className="ts-header-actions">
-          <button type="button" className="ts-btn" onClick={() => window.print()}>
-            Download PDF
-          </button>
-        </div>
+    <div className="ts-print-root space-y-0">
+      <header className="flex items-center justify-between gap-4 border-b border-hair pb-3">
+        <h1 className="font-display text-2xl font-normal text-ink">Performance</h1>
+        <IconButton
+          aria-label="Download performance tear sheet as PDF"
+          title="Download PDF"
+          onClick={() =>
+            runTearsheetPrint({ documentTitle: 'Olympus performance', setPrinting })
+          }
+        >
+          <Download size={17} aria-hidden />
+        </IconButton>
       </header>
 
-      {/* Primary KPI strip — single headline NAV + the decision differentiators (not a 2×4 wall) */}
-      <div className="ts-kpis">
-        <Kpi
-          label="NAV"
-          value={data.latestNav != null ? fmtNum(data.latestNav, 2) : '—'}
-          sub={
-            data.latestNav != null
-              ? `${live.net_profit_pct >= 0 ? '+' : ''}${fmtPct(live.net_profit_pct)} since inception`
-              : 'awaiting inception'
-          }
-        />
-        <Kpi
-          label="Hit rate"
-          value={hasTrackRecord ? fmtPct(decision.hit_rate * 100) : '—'}
-          sub={hasTrackRecord ? 'positive-alpha share' : 'in flight'}
-        />
-        <Kpi
-          label="Mean alpha"
-          value={
-            hasTrackRecord ? <Toned v={decision.mean_alpha_pct}>{fmtPct(decision.mean_alpha_pct)}</Toned> : '—'
-          }
-          sub={hasTrackRecord ? 'per resolved decision' : 'in flight'}
-        />
-        <Kpi
-          label="Information ratio"
-          value={hasTrackRecord ? fmtNum(decision.information_ratio, 2) : '—'}
-          sub={hasTrackRecord ? 'mean α / σ(α)' : 'in flight'}
+      <section
+        data-testid="performance-command-band"
+        aria-label="Portfolio returns"
+        className="grid grid-cols-1 border-x border-b border-hair bg-surface/80 md:grid-cols-[minmax(0,1fr)_auto]"
+      >
+        <dl className="m-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+          <Metric label="NAV index" value={data.currentNav} format="number" />
+          <Metric label="Portfolio return" value={data.netReturnPct} />
+          <Metric label="Benchmark return" value={benchmarkReturnPct} />
+          <Metric label="Active return" value={relativeReturnPct} />
+        </dl>
+        <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
+          <span>{performancePeriod ? 'period' : data.metricsAsOf ? 'as of' : 'status'}</span>
+          <strong className="font-medium text-accent">
+            {performancePeriod ?? data.metricsAsOf ?? 'awaiting persisted metrics'}
+          </strong>
+        </div>
+      </section>
+
+      <RealizedSummary rows={data.historicalHoldings} />
+
+      <PortfolioContributionChart
+        points={data.contributionSeries}
+        benchmark={benchmark}
+        comparisons={data.benchmarkComparisons}
+        onBenchmarkChange={setBenchmarkTicker}
+      />
+
+      <div className="border-x border-b border-hair bg-surface px-4 pt-2">
+        <TabStrip
+          tabs={PERFORMANCE_TABS}
+          active={activeTab}
+          onChange={setActiveTab}
+          label={TAB_LABEL}
+          variant="underline"
+          // Only true outside of printing (CodeRabbit, PR #2290): the
+          // printing branch below renders BOTH HoldingsPanels at once (real
+          // ids "current" and "historical" both exist), so sharedPanel's
+          // single-active-id assumption would be wrong there — fall back to
+          // one aria-controls per tab, which is correct while both panels
+          // are genuinely mounted.
+          sharedPanel={!printing}
         />
       </div>
 
-      {/* Track 1 — Live NAV */}
-      <section className="ts-panel">
-        <div className="ts-panel-head">
-          <span className="ts-panel-label">Live NAV</span>
+      {printing ? (
+        <div className="space-y-5">
+          <HoldingsPanel
+            rows={data.currentHoldings}
+            title="Open positions"
+            emptyMessage="No open position performance is stored yet."
+            id="current"
+            tabIndex={0}
+            returnLabel="Unrealized"
+          />
+          <HoldingsPanel
+            rows={data.historicalHoldings}
+            title="Closed positions"
+            emptyMessage="No realized exit performance is stored yet."
+            id="historical"
+            tabIndex={1}
+            returnLabel="Realized"
+          />
         </div>
-        {hasLiveCurve ? (
-          <div className="ts-grid-2">
-            <div className="ts-chart">
-              <div className="ts-subhead">Equity curve</div>
-              <TimeSeries points={live.equity_curve} scale="linear" tone="accent" fmt={fmtCompact} height={260} />
-            </div>
-            <div className="ts-chart">
-              <div className="ts-subhead">Drawdown</div>
-              <TimeSeries points={live.drawdown_curve} tone="down" fmt={(v) => `${v.toFixed(1)}%`} zeroBaseline height={260} />
-            </div>
-          </div>
-        ) : (
-          <p className="ts-panel-body">
-            NAV {data.latestNav != null ? fmtNum(data.latestNav, 2) : 'n/a'} —{' '}
-            {data.inceptionDate ? `live since ${data.inceptionDate}` : 'awaiting inception'} — equity curve accrues
-            daily.
-          </p>
-        )}
-      </section>
+      ) : activeTab === 0 ? (
+        <HoldingsPanel
+          rows={data.currentHoldings}
+          title="Open positions"
+          emptyMessage="No open position performance is stored yet."
+          id="current"
+          tabIndex={0}
+          returnLabel="Unrealized"
+        />
+      ) : (
+        <HoldingsPanel
+          rows={data.historicalHoldings}
+          title="Closed positions"
+          emptyMessage="No realized exit performance is stored yet."
+          id="historical"
+          tabIndex={1}
+          returnLabel="Realized"
+        />
+      )}
 
-      {/* Track 2 — Decision track record (resolved decisions only) */}
-      <section className="ts-panel">
-        <div className="ts-panel-head">
-          <span className="ts-panel-label">Decision track record</span>
-        </div>
-        {hasTrackRecord ? (
-          <>
-            <div className="ts-kpis">
-              <Kpi label="Hit rate" value={fmtPct(decision.hit_rate * 100)} />
-              <Kpi label="Mean alpha" value={<Toned v={decision.mean_alpha_pct}>{fmtPct(decision.mean_alpha_pct)}</Toned>} />
-              <Kpi label="Information ratio" value={fmtNum(decision.information_ratio, 2)} />
-              <Kpi label="Sortino" value={fmtNum(decision.sortino_ratio, 2)} />
-              <Kpi label="Decision max DD" value={<span className="is-neg">{fmtPct(decision.max_drawdown_pct)}</span>} />
-              <Kpi label="N decisions" value={fmtNum(decision.n_trades)} />
-            </div>
-
-            <div className="ts-grid-2">
-              <div className="ts-chart">
-                <div className="ts-subhead">Per-decision alpha</div>
-                <SignedBars values={resolvedAlphasPct} fmt={(v) => `${v.toFixed(1)}%`} />
-              </div>
-              <div className="ts-chart">
-                <div className="ts-subhead">Conviction calibration</div>
-                <SignedBars values={decision.conviction_buckets.map((b) => b.mean_alpha_pct)} fmt={(v) => `${v.toFixed(1)}%`} />
-                <div className="ts-bar-labels">
-                  {decision.conviction_buckets.map((b) => (
-                    <span key={b.conviction}>{BUCKET_LABEL[b.conviction] ?? b.conviction}</span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="ts-table-wrap">
-              <table className="ts-table ts-trades">
-                <thead>
-                  <tr>
-                    <th>Run date</th>
-                    <th>Ticker</th>
-                    <th>Stance</th>
-                    <th>Conviction</th>
-                    <th>Status</th>
-                    <th className="ts-num">Alpha %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.decisionRows.map((r, i) => (
-                    <tr key={`${r.ticker}-${r.run_date}-${i}`}>
-                      <td>{r.run_date}</td>
-                      <td>{r.ticker}</td>
-                      <td>{r.conviction != null ? <SignedConvictionBadge value={r.conviction} /> : r.stance}</td>
-                      <td>{r.conviction != null ? fmtNum(r.conviction) : '—'}</td>
-                      <td>{r.status}</td>
-                      <td className="ts-num">
-                        {r.alpha != null ? <Toned v={r.alpha}>{fmtPct(r.alpha * 100)}</Toned> : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <p className="ts-panel-body">
-            {data.nPending} decision{data.nPending === 1 ? '' : 's'} in flight — track record resolves as holding
-            windows close.
-          </p>
-        )}
-      </section>
-
-      {/* Attribution diagnostics — absorbed from System (renders its own empty state) */}
-      <section className="ts-panel">
-        <div className="ts-panel-head">
-          <span className="ts-panel-label">Attribution</span>
-        </div>
-        <AttributionTab attribution={data.attribution} date={data.attributionDate} />
-      </section>
-
-      <ul className="ts-notes">
-        <li>Data source: nav_history + decision_log</li>
-        <li>Generated {data.generatedAt}</li>
-      </ul>
+      <p className="mt-3 text-right font-mono text-[0.62rem] text-ink-mute">
+        Holdings as of {data.holdingsAsOf ?? '—'}
+      </p>
     </div>
   );
 }

@@ -12,7 +12,7 @@ this folder is the deep layer.
 | [graphite-full.md](graphite-full.md) | Full site map, pages, scroll-pinned features, dark zinc system |
 | [cursor-full.md](cursor-full.md) | Bento layout, light utilitarian, pricing/enterprise/changelog |
 | [xai-full.md](xai-full.md) | Brutalist mono, API/capability cards, news/pricing |
-| [components-catalog.md](components-catalog.md) | Cross-site component comparison + DigiThings primitive mapping |
+| [components-catalog.md](components-catalog.md) | Cross-site component comparison + digithings primitive mapping |
 | [mobile-nav-interactions.md](mobile-nav-interactions.md) | Playwright-verified mobile nav, menus, touch targets |
 | [copy-patterns.md](copy-patterns.md) | Headlines, CTAs, friction reducers, section voice |
 

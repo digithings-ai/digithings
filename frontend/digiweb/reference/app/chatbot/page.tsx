@@ -20,7 +20,9 @@ export default function ChatbotPage() {
           opencode and grok, but with the modern affordances a graph needs: a mono scrollback with a{" "}
           <code>&gt;</code> prompt, collapsible tool-call blocks, and rendered objects (markdown,
           charts, graphs, action widgets) embedded right in the output. Clear, dense, easy to get
-          used to. Every turn wears the digichat rose; money and code colors stay quarantined.
+          used to. Every turn wears the digichat rose; money and code colors stay quarantined —
+          role reads by glyph, not hue: <code>&gt;</code> opens a user turn, <code>▸</code> an
+          assistant turn, <code>·</code> a system aside.
         </p>
       </header>
 

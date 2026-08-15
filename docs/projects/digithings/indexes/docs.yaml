@@ -1,0 +1,31 @@
+# indexes/docs.yaml — digisearch index manifest for digithings dogfood (client #0).
+#
+# Dual-sink onboard writes to digisearch_index: digithings_docs (see onboard.yaml).
+# This file documents the index for digigraph project_config discovery and for
+# operators comparing against the legacy digithings-guide index.
+
+index_name: digithings_docs
+backend: azure_search
+
+description: |
+  digithings dogfood corpus: public website crawl (digithings.ai + digiquant.io),
+  monorepo ARCHITECTURE/AGENTS/docs, and OpenAPI specs. Use for grounding
+  digithings.ai/chat answers.
+
+# Source globs mirrored from sources/repo-docs.yaml (repo ingest + legacy compare).
+sources:
+  - docs/projects/digithings/SHOWCASE.md
+  - docs/projects/digithings/README.md
+  - README.md
+  - ROADMAP.md
+  - ARCHITECTURE.md
+  - AGENTS.md
+  - docs/VISION.md
+  - docs/adr/*.md
+  - docs/digichat/**/*.md
+  - docs/openapi/*.json
+  - digigraph/ARCHITECTURE.md
+  - digivault/ARCHITECTURE.md
+  - digisearch/ARCHITECTURE.md
+  - digikey/ARCHITECTURE.md
+  - digiquant/ARCHITECTURE.md

@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import logging
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 import ccxt
@@ -90,7 +90,7 @@ def main() -> None:
         df = bars_to_polars(bars, ticker)
         df = df.unique(subset=["timestamp"], keep="last").sort("timestamp")
         if args.through_yesterday:
-            today = date.today().isoformat()
+            today = datetime.now(UTC).date().isoformat()
             before = len(df)
             df = df.filter(pl.col("timestamp") < today)
             if before != len(df):

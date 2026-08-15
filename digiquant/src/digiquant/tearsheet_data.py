@@ -20,7 +20,10 @@ from pydantic import BaseModel, Field
 # 1.1 — added optional ``ohlc_bars`` (price candlesticks) + per-trade signal type
 # carried in ``entry_label`` (MR/Trend/MR&T) on the nautilus path. Back-compatible:
 # 1.0 consumers ignore ``ohlc_bars``; 1.1 fixtures may carry an empty list.
-SCHEMA_VERSION = "1.1"
+# 1.2 — added ``signal_delay_days`` (#1462): public tearsheets are generated with
+# the data end date shifted back N calendar days (end-date shift, no redaction),
+# and the payload declares that lag. Back-compatible: defaults to 0 (no delay).
+SCHEMA_VERSION = "1.2"
 
 
 class SeriesPoint(BaseModel):
@@ -94,6 +97,10 @@ class TearsheetData(BaseModel):
     bars: int = 0
     initial_capital: float = 0.0
     final_equity: float = 0.0
+    # Public signal delay (#1462): the run's data end date lags the freshest
+    # available bar by this many calendar days (end-date shift, so every
+    # artifact is self-consistent). 0 = no delay (internal / historical runs).
+    signal_delay_days: int = Field(0, ge=0, description="Calendar days the end date lags reality")
 
     # ── Headline KPIs ─────────────────────────────────────────────────────
     net_profit: float = 0.0
@@ -176,6 +183,7 @@ def _build_tearsheet(
     generated_at: str | None = None,
     notes: Sequence[str] | None = None,
     ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
+    signal_delay_days: int = 0,
 ) -> TearsheetData:
     """Shared builder for the summary-based adapters (``from_pine`` / ``from_nautilus_run``).
 
@@ -184,6 +192,8 @@ def _build_tearsheet(
     mappings; ``equity_curve`` is the ``(date, mark-to-market equity)`` list.
     ``ohlc_bars`` is an optional ``(date, open, high, low, close)`` list for the
     candlestick price chart (raw tuples so callers need not import ``OHLCBar``).
+    ``signal_delay_days`` declares how far the run's end date was shifted back
+    from the freshest available bar (#1462); the caller shifts the data itself.
     """
     overall = summary.get("all")
     overall_block = _stat_block(overall if isinstance(overall, Mapping) else None)
@@ -223,6 +233,7 @@ def _build_tearsheet(
         period_start=start.strip(),
         period_end=end.strip(),
         bars=int(summary.get("bars", 0) or 0),
+        signal_delay_days=signal_delay_days,
         initial_capital=initial_capital,
         final_equity=float(summary.get("final_equity", 0.0) or 0.0),
         net_profit=overall_block.net_profit,
@@ -275,10 +286,13 @@ def from_nautilus_run(
     generated_at: str | None = None,
     notes: Sequence[str] | None = None,
     ohlc_bars: Sequence[tuple[str, float, float, float, float]] | None = None,
+    signal_delay_days: int = 0,
 ) -> TearsheetData:
     """Adapt a NautilusTrader backtest (round-trip positions + MTM equity) into
     ``TearsheetData`` (engine=nautilus). Same summary/trades/equity shape as
-    ``from_pine`` so the renderer consumes one schema regardless of engine."""
+    ``from_pine`` so the renderer consumes one schema regardless of engine.
+    ``signal_delay_days`` records the public end-date shift applied upstream
+    (#1462); pass 0 for undelayed (internal) runs."""
     return _build_tearsheet(
         summary,
         trades,
@@ -288,6 +302,7 @@ def from_nautilus_run(
         generated_at=generated_at,
         notes=notes,
         ohlc_bars=ohlc_bars,
+        signal_delay_days=signal_delay_days,
     )
 
 

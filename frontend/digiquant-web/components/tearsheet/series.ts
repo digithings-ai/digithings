@@ -1,4 +1,4 @@
-import { type OHLCBar, type TearsheetPoint } from "./types";
+import { type TearsheetOhlcBar, type TearsheetSeriesPoint } from "./types";
 
 /** True when `iso` is on or after `startISO` (calendar compare via epoch). */
 export function onOrAfterDate(iso: string, startISO: string): boolean {
@@ -7,13 +7,13 @@ export function onOrAfterDate(iso: string, startISO: string): boolean {
 }
 
 /** Drop points before the backtest / trade window. */
-export function clipPoints(points: TearsheetPoint[], periodStart: string): TearsheetPoint[] {
+export function clipPoints(points: TearsheetSeriesPoint[], periodStart: string): TearsheetSeriesPoint[] {
   if (!periodStart || points.length === 0) return points;
   return points.filter((p) => onOrAfterDate(p.t, periodStart));
 }
 
 /** Drop OHLC bars before the backtest / trade window. */
-export function clipOhlc(bars: OHLCBar[], periodStart: string): OHLCBar[] {
+export function clipOhlc(bars: TearsheetOhlcBar[], periodStart: string): TearsheetOhlcBar[] {
   if (!periodStart || bars.length === 0) return bars;
   return bars.filter((b) => onOrAfterDate(b.t, periodStart));
 }
@@ -21,7 +21,7 @@ export function clipOhlc(bars: OHLCBar[], periodStart: string): OHLCBar[] {
 /** Shared x-span for linked charts: backtest start → last equity point. */
 export function chartFullSpan(
   periodStart: string,
-  equity: TearsheetPoint[],
+  equity: TearsheetSeriesPoint[],
   periodEnd: string,
 ): [string, string] | undefined {
   if (!periodStart) return undefined;

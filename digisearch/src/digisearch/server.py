@@ -1,4 +1,4 @@
-"""DigiSearch HTTP API for DigiGraph and DigiFlow (query, ingest, Azure/Chroma backends)."""
+"""digisearch HTTP API for digigraph and digiflow (query, ingest, Azure/Chroma backends)."""
 
 from __future__ import annotations
 
@@ -17,17 +17,18 @@ from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digisearch_path_scopes
 
 from digisearch import __version__
-from digisearch.core.models import Query
-from digisearch.logging import configure_logging
-from digisearch.ingest_paths import resolve_ingest_source
 from digisearch.agent.pipeline_models import ResearchTurnOutput
+from digisearch.core.models import Query
+from digisearch.indexes.backends.vectorize import MAX_TOP_K as _VECTORIZE_MAX_TOP_K
+from digisearch.ingest_paths import resolve_ingest_source
+from digisearch.logging import configure_logging
 from digisearch.orchestrator_tools import (
-    OpenAIToolDict,
     TOOL_DIGISEARCH,
     TOOL_DIGISEARCH_FETCH_ALL,
     TOOL_DIGISEARCH_RESEARCH_DELEGATE,
+    OpenAIToolDict,
 )
-from digisearch.search._stub import query_index, route_add_chunks
+from digisearch.search._stub import _first_env, query_index, route_add_chunks
 
 configure_logging()
 
@@ -47,8 +48,12 @@ def _resolve_fetch_all_max(requested: int | None) -> int:
 
 
 app = FastAPI(
-    title="DigiSearch",
-    description="RAG, document search for Digi ecosystem. MCP tools for DigiGraph/DigiFlow.",
+    title="digisearch",
+    description=(
+        "RAG and document search for digithings: ingest, query, indexes, and research turns. "
+        "MCP tools and orchestrator manifests for digigraph. "
+        "Interactive docs: `/docs` (Swagger) and `/redoc`."
+    ),
     version=__version__,
 )
 install_metrics(app, service="digisearch", version=__version__)
@@ -58,14 +63,21 @@ app.add_middleware(DigiAuthMiddleware, service="digisearch", path_scopes=digisea
 
 @app.on_event("startup")
 def _require_real_search_backend() -> None:
-    """Fail startup unless Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
+    """Fail startup unless Vectorize, Azure, Chroma, or DIGISEARCH_ALLOW_STUB=1 (unit tests) is set."""
     allow_stub = os.environ.get("DIGISEARCH_ALLOW_STUB", "0").strip().lower() in (
         "1",
         "true",
         "yes",
     )
     if allow_stub:
-        logger.warning("DigiSearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
+        logger.warning("digisearch: DIGISEARCH_ALLOW_STUB=1 — in-memory stub allowed (tests only).")
+        return
+    # Canonical-first, legacy-fallback (#2239 credential rename) -- same precedence
+    # `_vectorize_backend` uses, so this startup gate can never disagree with the
+    # backend it's gating.
+    if _first_env("CLOUDFLARE_ACCOUNT_ID", "VECTORIZE_ACCOUNT_ID", "D1_ACCOUNT_ID") and _first_env(
+        "CLOUDFLARE_API_TOKEN", "VECTORIZE_API_TOKEN", "D1_API_TOKEN"
+    ):
         return
     from digisearch.indexes.backends import azure_search as _az
 
@@ -78,7 +90,8 @@ def _require_real_search_backend() -> None:
     chroma_ok = bool(os.environ.get("CHROMA_PATH") or os.environ.get("CHROMA_HOST"))
     if not azure_ok and not chroma_ok:
         raise RuntimeError(
-            "DigiSearch requires a real backend: set AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
+            "digisearch requires a real backend: set CLOUDFLARE_ACCOUNT_ID+CLOUDFLARE_API_TOKEN "
+            "(or legacy VECTORIZE_*/D1_* names), AZURE_SEARCH_* or CHROMA_PATH/CHROMA_HOST, "
             "or DIGISEARCH_ALLOW_STUB=1 for tests only."
         )
 
@@ -220,7 +233,7 @@ class QueryResponse(BaseModel):
     )
     backend: str | None = Field(
         default=None,
-        description="Index backend that served the query: azure_ai_search | chroma | stub",
+        description="Index backend that served the query: vectorize | azure_ai_search | chroma | stub",
     )
 
 
@@ -266,7 +279,7 @@ class ResearchTurnRequest(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    """Legacy health check for Docker and DigiGraph (kept for back-compat)."""
+    """Legacy health check for Docker and digigraph (kept for back-compat)."""
     return {"status": "ok", "service": "digisearch"}
 
 
@@ -274,7 +287,7 @@ def health() -> dict[str, str]:
 def healthz() -> dict[str, bool]:
     """Minimal liveness probe. Auth-exempt, rate-limit-exempt, secret-free.
 
-    Returns HTTP 200 with ``{"ok": true}``. Pair with DigiSmith's ``/v1/status``
+    Returns HTTP 200 with ``{"ok": true}``. Pair with digismith's ``/v1/status``
     for richer diagnostics.
     """
     return {"ok": True}
@@ -284,7 +297,7 @@ def healthz() -> dict[str, bool]:
 def azure_status() -> dict[str, bool | str]:
     """Check if Azure AI Search is configured and reachable."""
     try:
-        from digisearch.indexes.backends.azure_search import is_azure_configured, _get_client
+        from digisearch.indexes.backends.azure_search import _get_client, is_azure_configured
 
         if not is_azure_configured():
             return {
@@ -415,6 +428,15 @@ class OrchestratorFetchAllData(BaseModel):
     total: int
     query: str
     index_name: str
+    possibly_truncated: bool = Field(
+        default=False,
+        description=(
+            "True when a page came back capped at the Vectorize backend's per-query "
+            "match limit before this tool's own total/max_results check ended pagination "
+            "-- `total` above may undercount the actual number of matches. Chroma/Azure "
+            "pages never set this; only Vectorize's fixed per-query cap can trigger it."
+        ),
+    )
 
 
 class OrchestratorInvokeResponse(BaseModel):
@@ -438,7 +460,7 @@ def _research_turn_available() -> bool:
 
 @app.post("/v1/orchestrator_tools")
 def api_orchestrator_tools(req: OrchestratorToolsRequest) -> OrchestratorToolsResponse:
-    """Return OpenAI-style tool definitions owned by DigiSearch (for DigiGraph orchestration)."""
+    """Return OpenAI-style tool definitions owned by digisearch (for digigraph orchestration)."""
     from digisearch.orchestrator_tools import build_orchestrator_tool_manifest
 
     tools = build_orchestrator_tool_manifest(
@@ -489,7 +511,7 @@ def _query_request_from_digisearch_args(
 
 @app.post("/v1/orchestrator_invoke")
 def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvokeResponse:
-    """Execute one DigiSearch orchestrator tool by name (hub dispatch)."""
+    """Execute one digisearch orchestrator tool by name (hub dispatch)."""
     tool = (req.tool or "").strip()
     args = req.arguments if isinstance(req.arguments, dict) else {}
     default_idx = (
@@ -536,6 +558,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
         skip = 0
         total_so_far = 0
         total_estimate: int | None = None
+        possibly_truncated = False
         while True:
             qreq = _query_request_from_digisearch_args(
                 {
@@ -561,6 +584,31 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
             all_results.extend(results)
             total_so_far += len(results)
             total_estimate = payload.get("total")
+            # I4: Vectorize clamps any query to MAX_TOP_K (50) matches regardless of
+            # the requested page_size. A page landing at exactly that cap while a
+            # bigger page was requested is indistinguishable from "no more results"
+            # by the len(results) < page_size check below -- it means this backend
+            # cannot even see whether more matches exist, let alone page to them
+            # (VectorizeBackend.query() does not consult Query.skip). Flag it rather
+            # than let the caller believe `total` is exhaustive.
+            if (
+                payload.get("backend") == "vectorize"
+                and page_size > _VECTORIZE_MAX_TOP_K
+                and len(results) == _VECTORIZE_MAX_TOP_K
+            ):
+                possibly_truncated = True
+                logger.warning(
+                    "digisearch_fetch_all page capped at Vectorize's per-query limit "
+                    "(%d matches, page_size=%d requested); result set may be incomplete",
+                    _VECTORIZE_MAX_TOP_K,
+                    page_size,
+                    extra={
+                        "operation": "digisearch_fetch_all",
+                        "outcome": "clamped",
+                        "index_name": idx,
+                        "backend": "vectorize",
+                    },
+                )
             if total_estimate is not None and total_so_far >= int(total_estimate):
                 break
             if max_results is not None and total_so_far >= max_results:
@@ -578,6 +626,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
                 total=len(all_results),
                 query=qtext,
                 index_name=idx,
+                possibly_truncated=possibly_truncated,
             ),
         )
 
@@ -618,7 +667,7 @@ def api_orchestrator_invoke(req: OrchestratorInvokeRequest) -> OrchestratorInvok
 
 @app.post("/v1/research_turn", response_model=ResearchTurnOutput)
 def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
-    """Run one DigiSearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
+    """Run one digisearch-owned research turn (LangGraph: plan → retrieve → aggregate)."""
     try:
         from digisearch.agent.pipeline import run_research_turn
     except ImportError as e:
@@ -633,7 +682,7 @@ def api_research_turn(req: ResearchTurnRequest) -> ResearchTurnOutput:
 def api_ingest(req: IngestRequest) -> IngestResponse:
     """Ingest a document. Uses parsers + chunkers when available. Returns 503 if ingestion fails."""
     try:
-        from digisearch.ingestion.chunkers.recursive import RecursiveChunker
+        from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
         from digisearch.ingestion.registry import ParserRegistry
 
         try:
@@ -658,7 +707,7 @@ def api_ingest(req: IngestRequest) -> IngestResponse:
         if req.metadata:
             merged = {**merged, **req.metadata}
         doc.metadata = merged
-        chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64)
+        chunker = SegmentAwareChunker()
         chunks = chunker.chunk(doc)
         merge_document_metadata_into_chunks(doc, chunks)
         doc.chunks = chunks
@@ -711,7 +760,7 @@ def delete_document(name: str, doc_id: str) -> dict:
     """Delete document from index (not implemented)."""
     raise HTTPException(
         status_code=501,
-        detail="Per-document delete is not implemented for this DigiSearch deployment",
+        detail="Per-document delete is not implemented for this digisearch deployment",
     )
 
 

@@ -14,6 +14,7 @@ const STAGE_LABEL: Record<PipelineStage, string> = {
   synthesis: 'Synthesis',
   selection: 'Selection',
   decision: 'Decision',
+  learning: 'Learning',
 };
 
 /** Human-ish display name for a doc when its title is thin (falls back to the document_key). */

@@ -50,7 +50,7 @@ describe("GET /api/health", () => {
     expect(body.ok).toBe(false);
   });
 
-  it("skips digraph/digiquant/digismith checks and stays healthy when they're not in DIGICHAT_ENABLED_SERVICES (#external-relay-only deploy)", async () => {
+  it("skips digraph/digiquant/digismith checks and stays healthy when they're not in DIGICHAT_ENABLED_SERVICES (foundry-only / services-disabled deploy)", async () => {
     // "" falls back to the all-enabled default in capabilities.ts (raw || fallback),
     // so a non-matching placeholder is what actually disables every service.
     vi.stubEnv("DIGICHAT_ENABLED_SERVICES", "none");

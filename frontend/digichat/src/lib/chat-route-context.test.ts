@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveChatTenantContext } from "./chat-route-context";
+import { isLegacyEmbedEnabled } from "./embed-legacy-gate";
 import {
   isEmbedAllowed,
   isEmbedReferer,
@@ -27,6 +28,7 @@ describe("isEmbedAllowed", () => {
 
   beforeEach(() => {
     process.env = { ...env };
+    delete process.env.DIGICHAT_LEGACY_EMBED_ENABLED;
     delete process.env.DIGICHAT_EMBED_ENABLED;
     delete process.env.DIGICHAT_EMBED_TOKEN;
   });
@@ -35,9 +37,16 @@ describe("isEmbedAllowed", () => {
     process.env = env;
   });
 
-  it("allows when DIGICHAT_EMBED_ENABLED=1", () => {
+  it("allows when DIGICHAT_LEGACY_EMBED_ENABLED=1", () => {
+    process.env.DIGICHAT_LEGACY_EMBED_ENABLED = "1";
+    const req = new Request("http://localhost/api/chat");
+    expect(isEmbedAllowed(req)).toBe(true);
+  });
+
+  it("allows when deprecated DIGICHAT_EMBED_ENABLED=1", () => {
     process.env.DIGICHAT_EMBED_ENABLED = "1";
     const req = new Request("http://localhost/api/chat");
+    expect(isLegacyEmbedEnabled()).toBe(true);
     expect(isEmbedAllowed(req)).toBe(true);
   });
 
@@ -61,6 +70,7 @@ describe("resolveEmbedChatTenant", () => {
 
   beforeEach(() => {
     process.env = { ...env };
+    delete process.env.DIGICHAT_LEGACY_EMBED_ENABLED;
     delete process.env.DIGICHAT_EMBED_ENABLED;
     delete process.env.DIGICHAT_EMBED_TOKEN;
   });
@@ -70,7 +80,7 @@ describe("resolveEmbedChatTenant", () => {
   });
 
   it("returns embed tenant when unauthenticated embed host is allowed", () => {
-    process.env.DIGICHAT_EMBED_ENABLED = "1";
+    process.env.DIGICHAT_LEGACY_EMBED_ENABLED = "1";
     const req = new Request("http://localhost/api/chat", {
       headers: { "x-embed-host": "https://digithings.ai" },
     });

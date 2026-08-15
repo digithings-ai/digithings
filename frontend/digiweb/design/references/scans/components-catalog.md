@@ -11,7 +11,7 @@ Use with [`../EVOLUTION.md`](../EVOLUTION.md) primitive mapping at the end.
 
 | Component | Graphite | Cursor | x.ai | Notes |
 |-----------|----------|--------|------|-------|
-| Primary | ● Orange fill `#ff8833`, ~10px radius, subtle shadow | ● Dark fill on light bg; "Get started" | ● **White filled pill** (one per view) | DigiThings: `--accent` primary, not orange |
+| Primary | ● Orange fill `#ff8833`, ~10px radius, subtle shadow | ● Dark fill on light bg; "Get started" | ● **White filled pill** (one per view) | digithings: `--accent` primary, not orange |
 | Secondary | ● Ghost "Request a demo" | ● Outlined / text | ● **Outline pill** 1px white | |
 | Nav CTA | ● "Sign up" + arrows | ● "Sign in" text link | ● Sign up filled pill | Keep GitHub/theme always visible (our pattern) |
 | Link CTA | ● "Learn more →" text + arrow | ● "Learn about X →" | ● "Explore →" | Adopt arrow suffix for docs links |
@@ -106,7 +106,7 @@ x.ai:      [  GET API KEY  ]                 pill    bg=white  text=dark
 
 ## Typography roles (summary)
 
-| Role | Graphite | Cursor | x.ai | DigiThings target |
+| Role | Graphite | Cursor | x.ai | digithings target |
 |------|----------|--------|------|-------------------|
 | Display | Matter 500 | Cursor Gothic | Geist Mono 300 | Fraunces / Instrument Serif (marketing) |
 | Body | Matter 400 | Lato | Universal Sans | Geist Sans |
@@ -127,7 +127,7 @@ x.ai:      [  GET API KEY  ]                 pill    bg=white  text=dark
 
 ---
 
-## DigiThings primitive mapping
+## digithings primitive mapping
 
 | Planned primitive | Primary reference | Secondary |
 |-------------------|-------------------|-----------|

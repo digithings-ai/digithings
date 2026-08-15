@@ -31,7 +31,9 @@ export type TerminalManifestRow = {
 };
 
 export type TerminalManifestProps = {
-  /** Head-line command, e.g. `digithings ps`. */
+  /** Head line, e.g. `modules`. Pair a non-shell `prompt` with a non-shell
+   *  label: with the default `$` mark this reads as a command the visitor can
+   *  type, so it must name one that exists. */
   command: string;
   rows: TerminalManifestRow[];
   /** Head-line prompt mark. */
@@ -162,6 +164,16 @@ export function TerminalManifest({
                     onClick={() => select(r.id)}
                   >
                     <span className={`tm-dot${off ? " off" : ""}`} aria-hidden="true" />
+                    {/* The dot is the only running/roadmap signal (color +
+                        glow), aria-hidden with no text equivalent elsewhere
+                        in the row — a screen-reader user got zero indication
+                        of which services are live. .tm-sr (terminal-manifest.css),
+                        not Tailwind's .sr-only: this is a shared component and
+                        that utility only exists in an app whose own source
+                        happens to use the class (see .tl-sr's comment,
+                        terminal-loaders.css, for the bug that already caused
+                        once). */}
+                    <span className="tm-sr">{off ? "On the roadmap" : "Online"}</span>
                     <span className="tm-name text-[0.92rem] font-medium">
                       <RowName name={r.name} prefix={namePrefix} />
                     </span>

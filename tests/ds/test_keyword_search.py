@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 
 import pytest
-
 from digisearch.core.models import Query
 from digisearch.search.keyword import TFIDFSearcher
 
@@ -126,6 +125,7 @@ class TestBM25Searcher:
 
         with patch.dict(sys.modules, {"rank_bm25": None}):
             from importlib import reload
+
             import digisearch.search.keyword as kw_module
             reload(kw_module)
             if not kw_module._BM25_AVAILABLE:

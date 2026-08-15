@@ -25,4 +25,22 @@ describe('SleeveHistorySection', () => {
     }));
     expect(html).toContain('Sleeve weights stacked over time');
   });
+
+  it('uses SegmentedControl with dress="accent" and an aria-label', () => {
+    const html = renderToStaticMarkup(createElement(SleeveHistorySection, {
+      ...base, sleeveData: [{ date: '2026-06-23', NVDA: 30 }, { date: '2026-06-24', NVDA: 31 }],
+    }));
+    expect(html).toContain('role="group"');
+    expect(html).toContain('aria-label');
+    expect(html).toContain('nb-seg-group--accent');
+    expect(html).toContain('aria-pressed="true"');
+  });
+
+  it('uses flat divided sections with hairlines instead of glass-card', () => {
+    const html = renderToStaticMarkup(createElement(SleeveHistorySection, {
+      ...base, sleeveData: [{ date: '2026-06-23', NVDA: 30 }, { date: '2026-06-24', NVDA: 31 }],
+    }));
+    expect(html).not.toContain('glass-card');
+    expect(html).toContain('border-hair');
+  });
 });

@@ -1,13 +1,14 @@
+import { isOpenTrade, type TradeReturnBar } from "@digithings/web";
 import { type TearsheetData, type TearsheetTrade } from "./types";
+
+// The open-trade predicate and the per-trade-return bar shape belong to the
+// finance-tearsheet family (#1463); re-exported for the app data wiring here.
+export { isOpenTrade };
+export type { TradeReturnBar };
 
 /** Calendar date shown in tables — exit when closed, else entry. */
 export function tradeDate(t: TearsheetTrade): string {
   return t.exit_date || t.entry_date || "";
-}
-
-/** Open round-trip still marked to market (no realized P&L yet). */
-export function isOpenTrade(t: TearsheetTrade): boolean {
-  return !t.exit_date || t.exit_reason === "open";
 }
 
 /** The live leg at period end, if any. */
@@ -53,18 +54,6 @@ export function unrealizedReturnPct(t: TearsheetTrade, mark: number): number {
 /** Closed trades only — unrealized open legs stay out of cumulative P&L charts. */
 export function closedTrades(trades: TearsheetTrade[]): TearsheetTrade[] {
   return trades.filter((t) => !isOpenTrade(t));
-}
-
-/** One bar on the per-trade return chart. */
-export interface TradeReturnBar {
-  /** X-axis date (exit for closed; period end for the open leg). */
-  t: string;
-  /** Realized or unrealized return (%). */
-  pct: number;
-  /** Unrealized open position — rendered highlighted at the end. */
-  open: boolean;
-  /** Source trade for hover tooltips. */
-  trade: TearsheetTrade;
 }
 
 /** Chronological per-trade % returns for the P&L bar chart (open leg last). */

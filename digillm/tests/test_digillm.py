@@ -7,22 +7,33 @@ tests (module-global response/client caches would otherwise mask the mock).
 from __future__ import annotations
 
 import json
-from typing import Any  # noqa: ANN401 — fake OpenAI client dict shapes
+from typing import Any  # score:allow untyped any — fake OpenAI client dict shapes
 from unittest.mock import MagicMock, patch
 
 import pytest
-from openai.types.chat import ChatCompletion, ChatCompletionMessage as OpenAIMessage
+from openai import Timeout
+from openai.types.chat import ChatCompletion
+from openai.types.chat import ChatCompletionMessage as OpenAIMessage
 from openai.types.chat.chat_completion import Choice
 from pydantic import BaseModel, ValidationError
 
 import digillm
 from digillm import client as client_mod
 
+# Every test here is offline — the OpenAI client is mocked throughout (see the module
+# docstring), so the whole file is `unit` by construction. Marking it module-wide rather
+# than per-test matches digifetch/tests and means a new test cannot forget the marker.
+# Until #1788 this file carried no marker at all, so `pytest -m unit` selected zero of its
+# tests and `make test-unit` covered none of them.
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture(autouse=True)
 def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear module-global caches and provider env vars before each test."""
+    previous_usage_observer = client_mod._usage_observer
     digillm.clear_caches()
+    digillm.set_usage_observer(None)
     for var in (
         "OPENAI_API_KEY",
         "OPENAI_API_BASE",
@@ -41,6 +52,7 @@ def _clean_state(monkeypatch: pytest.MonkeyPatch) -> None:
     ):
         monkeypatch.delenv(var, raising=False)
     yield
+    digillm.set_usage_observer(previous_usage_observer)
     digillm.clear_caches()
 
 
@@ -125,6 +137,25 @@ def test_get_client_for_model_missing_key_raises() -> None:
         digillm.get_client_for_model("gemini/gemini-2.5-flash")
 
 
+def test_get_client_for_model_anthropic_byok_uses_user_key() -> None:
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        with digillm.byok("sk-ant-user", "https://api.anthropic.com/v1/"):
+            digillm.get_client_for_model("anthropic/claude-sonnet-4-6")
+    assert made[0]["api_key"] == "sk-ant-user"
+    assert made[0]["base_url"].rstrip("/") == "https://api.anthropic.com/v1"
+
+
+def test_anthropic_is_registered_provider() -> None:
+    assert digillm.is_registered_provider("anthropic")
+    assert digillm.get_provider_api_key_env("anthropic") == "ANTHROPIC_API_KEY"
+
+
 def test_default_client_uses_openai_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "sk-default")
     monkeypatch.setenv("OPENAI_API_BASE", "http://localhost:4000/")
@@ -164,6 +195,87 @@ def test_register_provider(monkeypatch: pytest.MonkeyPatch) -> None:
         assert made["api_key"] == "ak-1"
     finally:
         client_mod._EXTERNAL_PROVIDERS.pop("acme", None)
+
+
+# ── Explicit request timeout (#1734) ─────────────────────────────────────────
+
+
+def _capture_client_kwargs(build: Any) -> list[dict[str, Any]]:
+    """Run ``build()`` with ``OpenAI`` patched; return the kwargs of every construction."""
+    made: list[dict[str, Any]] = []
+
+    def fake_openai(**kwargs: Any) -> MagicMock:
+        made.append(kwargs)
+        return MagicMock()
+
+    with patch.object(client_mod, "OpenAI", side_effect=fake_openai):
+        build()
+    return made
+
+
+def test_default_timeout_matches_openai_sdk_default() -> None:
+    """The explicit bound must equal the SDK default it replaces, or this "hardening"
+    silently retunes every call. A bare float would widen connect from 5s to 600s."""
+    from openai._constants import DEFAULT_TIMEOUT
+
+    assert client_mod._REQUEST_TIMEOUT == DEFAULT_TIMEOUT
+    assert client_mod._REQUEST_TIMEOUT.connect == 5.0
+    assert client_mod._REQUEST_TIMEOUT.read == 600
+
+
+@pytest.mark.parametrize(
+    ("env", "build"),
+    [
+        pytest.param(
+            {"OPENAI_API_KEY": "sk-default"},
+            lambda: digillm.get_client_for_model("gpt-4o-mini"),
+            id="default-client",
+        ),
+        pytest.param(
+            {"OPENROUTER_API_KEY": "or-test"},
+            lambda: digillm.get_client_for_model("openrouter/mistral/mistral-7b"),
+            id="provider-client",
+        ),
+    ],
+)
+def test_clients_are_built_with_an_explicit_timeout(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], build: Any
+) -> None:
+    """Every client construction threads ``timeout=``. Without it the bound exists only
+    inside the OpenAI SDK's constants module: invisible here and free to change on a bump."""
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    sentinel = Timeout(123.0, connect=4.0)
+    # raising=False so this fails on the missing ``timeout`` kwarg (the actual defect)
+    # rather than on the missing constant, which would prove nothing about behavior.
+    monkeypatch.setattr(client_mod, "_REQUEST_TIMEOUT", sentinel, raising=False)
+    made = _capture_client_kwargs(build)
+    assert made, "expected exactly one client construction"
+    assert all(kw.get("timeout") is sentinel for kw in made), (
+        f"expected timeout={sentinel!r} on every client, got {[kw.get('timeout') for kw in made]}"
+    )
+
+
+def test_byok_clients_are_built_with_an_explicit_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The two uncached BYOK paths bypass the ``_client_cache`` branches above, so they
+    need their own coverage — a user-key client that can hang forever is the same bug."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    sentinel = Timeout(123.0, connect=4.0)
+    monkeypatch.setattr(client_mod, "_REQUEST_TIMEOUT", sentinel, raising=False)
+
+    def build() -> None:
+        with digillm.byok("sk-or-user", "https://openrouter.ai/api/v1"):
+            digillm.get_client_for_model("openrouter/openai/gpt-4o-mini")  # provider BYOK
+            digillm.get_client_for_model("gpt-4o-mini")  # default-path BYOK
+
+    made = _capture_client_kwargs(build)
+    assert len(made) == 2
+    assert all(kw.get("timeout") is sentinel for kw in made), (
+        f"expected timeout={sentinel!r} on both BYOK clients, "
+        f"got {[kw.get('timeout') for kw in made]}"
+    )
 
 
 # ── chat_completion ─────────────────────────────────────────────────────────
@@ -557,6 +669,228 @@ def test_chat_completion_with_tools_loop() -> None:
     assert executed == [("lookup", {"q": "x"})]
     assert ("tool_call", {"name": "lookup", "arguments": {"q": "x"}}) in steps
     assert any(k == "tool_result" for k, _ in steps)
+    # Round 1 had empty content alongside its tool_calls (the common, well-behaved
+    # case) — no round_boundary fires when there is no narration to mark.
+    assert not any(k == "round_boundary" for k, _ in steps)
+
+
+def test_round_with_content_and_tool_calls_emits_round_boundary() -> None:
+    """#2306 follow-up: a round that narrates its plan WHILE also calling tools
+    ("I will load the full notes...") must be marked as not-final the moment
+    tool_calls is known, or a caller downstream has no way to distinguish that
+    narration from the actual final answer that streams right after it — confirmed
+    in production, where the two concatenated into one visible block with nothing
+    between them."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    responses = [
+        _mock_response("I will load the full notes now.", tool_calls=[tc]),
+        _mock_response("Here is the real answer."),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == "Here is the real answer."
+    boundaries = [p for k, p in steps if k == "round_boundary"]
+    assert len(boundaries) == 1
+    assert boundaries[0] == {"round_idx": 0, "narration": "I will load the full notes now."}
+    # The boundary fires the moment tool_calls is known, BEFORE this round's own
+    # tool_call/tool_result events (those fire later, during dispatch) — so a
+    # consumer reacting to it (e.g. closing the current text segment) sees the
+    # marker before the round's tool activity, not interleaved after it.
+    kinds = [k for k, _ in steps]
+    assert kinds.index("round_boundary") < kinds.index("tool_call")
+
+
+def test_sequential_tool_error_becomes_recoverable_result() -> None:
+    """A raised exception from a sequential (non-parallel) tool call must not abort the
+    whole run — it must become a tool-result content string, exactly like the parallel
+    dispatch branch's existing ``except (RuntimeError, OSError, ValueError, TypeError,
+    KeyError)`` 3 lines above the sequential branch — so the model gets a turn to react
+    instead of the caller seeing a bare traceback."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    responses = [
+        _mock_response("", tool_calls=[tc]),
+        _mock_response("recovered"),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    def execute_tool(name: str, args: dict) -> str:
+        raise ValueError("boom")
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool,
+        )
+    assert out == "recovered"
+    second_call_messages = fake_client.chat.completions.create.call_args_list[1].kwargs["messages"]
+    tool_msgs = [m for m in second_call_messages if m.get("role") == "tool"]
+    assert tool_msgs, "expected a tool-role message to reach the model"
+    assert "boom" in tool_msgs[0]["content"]
+
+
+def test_round_limit_exhausted_emits_signal_and_forces_final_answer() -> None:
+    """When every round through max_tool_rounds keeps requesting tools, run_tools must
+    still return a real answer (forcing one tool-free completion, existing behavior)
+    AND tell the caller the round budget was exhausted, not just fall through silently —
+    today there is no signal at all that a workflow is routinely maxing out its budget."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+
+    responses = [
+        _mock_response("", tool_calls=[tc]),  # round 0: still calling tools
+        _mock_response(
+            "", tool_calls=[tc]
+        ),  # round 1 (last, max_tool_rounds=2): still calling tools
+        _mock_response("forced final answer"),  # post-loop forced completion
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=2,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == "forced final answer"
+    signals = [p for k, p in steps if k == "round_limit_exhausted"]
+    assert signals == [{"max_tool_rounds": 2}]
+
+
+@pytest.mark.parametrize("max_tool_rounds", [0, -1])
+def test_max_tool_rounds_zero_never_emits_round_limit_exhausted(max_tool_rounds: int) -> None:
+    """max_tool_rounds=0 (or negative) means the for loop's range() is empty -- zero
+    tool rounds ever ran, so there is nothing to have "exhausted." Before the guard,
+    run_tools fell through to the post-loop code unconditionally and fired
+    round_limit_exhausted (and the matching warning log) even though no round ran at
+    all, falsely implying the model burned through a budget it never got a chance to
+    use."""
+    fake_client = MagicMock()
+    # No completion call should happen at all: the loop body never executes, and
+    # `content` stays "" with `current` unchanged from `messages`, so the
+    # forced-completion branch's `len(current) > len(messages)` guard is also False.
+    fake_client.chat.completions.create.side_effect = AssertionError(
+        f"must not call the model when max_tool_rounds={max_tool_rounds}"
+    )
+
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            max_tool_rounds=max_tool_rounds,
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+
+    assert out == ""
+    assert not any(k == "round_limit_exhausted" for k, _ in steps)
+
+
+def test_round_boundary_not_emitted_on_the_non_streaming_path_without_content() -> None:
+    """Regression pin for the non-streaming branch specifically (test above already
+    covers it, but this isolates it): tool_calls with NO content must still fire no
+    round_boundary, matching the streaming path's behavior exactly."""
+    fn = MagicMock()
+    fn.name = "lookup"
+    fn.arguments = "{}"
+    tc = MagicMock()
+    tc.id = "c1"
+    tc.function = fn
+    responses = [_mock_response("", tool_calls=[tc]), _mock_response("done")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = responses
+    steps: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: steps.append((kind, payload)),
+        )
+    assert not any(k == "round_boundary" for k, _ in steps)
+
+
+def test_run_tools_raises_when_required_tool_choice_gets_no_tool_calls() -> None:
+    """tool_choice='required' must fail closed, not silently return content, when a
+    tool-enabled turn ignores the requirement and answers without calling a tool —
+    a deployment that opted into this floor (agents.require_tool_calls) never gets
+    a quiet parametric-knowledge answer in its place."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("final answer")
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(RuntimeError, match="tool_choice='required'"):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool=lambda n, a: "unused",
+                tool_choice="required",
+            )
+    # tool_choice still reached the wire before the model's response was rejected.
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["tool_choice"] == "required"
+
+
+def test_run_tools_defaults_tool_choice_to_auto() -> None:
+    """Unchanged default behavior when tool_choice is not passed."""
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("final answer")
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool=lambda n, a: "unused",
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["tool_choice"] == "auto"
 
 
 def test_chat_completion_with_tools_parallel_branch() -> None:
@@ -732,6 +1066,157 @@ def test_stream_deltas_tool_call_then_final_answer() -> None:
     assert ("tool_call", {"name": "lookup", "arguments": {"q": "x"}}) in seen
     assert any(k == "tool_result" for k, _ in seen)
     assert [p for k, p in seen if k == "content"] == ["final ", "answer"]
+    # This round had no content alongside its tool_calls — no round_boundary to mark.
+    assert not any(k == "round_boundary" for k, _ in seen)
+
+
+def test_stream_deltas_narration_alongside_tool_call_emits_round_boundary() -> None:
+    """Streaming path, mirroring the non-streaming test above: a round that streams
+    real content (narration) fragments alongside its tool_calls must fire
+    round_boundary with the JOINED content once tool_calls is known — not per
+    fragment, and not on the non-streaming path only."""
+    round1 = [
+        _stream_chunk(content="I will "),
+        _stream_chunk(content="load the notes."),
+        _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup", arguments="{}")]),
+    ]
+    round2 = [_stream_chunk(content="Real answer.")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1, round2]
+    seen: list[tuple[str, Any]] = []
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+            stream_deltas=True,
+        )
+    assert out == "Real answer."
+    boundaries = [p for k, p in seen if k == "round_boundary"]
+    assert len(boundaries) == 1
+    assert boundaries[0] == {"round_idx": 0, "narration": "I will load the notes."}
+
+
+def test_stream_deltas_forwards_tool_choice_required() -> None:
+    """tool_choice='required' reaches the wire on the STREAMING path — the only
+    path production ever takes for this parameter (research.py always passes
+    on_tool_step, which forces stream_deltas=True in digigraph's wrapper).
+
+    max_tool_rounds=1 keeps this exercising the intended shape: one tool-enabled
+    round (tool_calls present, so the fail-closed check added for the
+    tool_choice='required' floor never fires) followed by the forced tool-free
+    wrap-up completion (tools=None, so tool_choice never reaches that call's wire
+    either) — not a second 'required' round, which would now raise."""
+    round1 = [
+        _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup")]),
+        _stream_chunk(tool_calls=[_tc_fragment(0, arguments='{"q":')]),
+        _stream_chunk(tool_calls=[_tc_fragment(0, arguments=' "x"}')]),
+    ]
+    round2 = [_stream_chunk(content="final "), _stream_chunk(content="answer")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1, round2]
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool=lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: None,
+            stream_deltas=True,
+            tool_choice="required",
+            max_tool_rounds=1,
+        )
+    assert out == "final answer"
+    # First round has tools attached, so tool_choice must be on the wire.
+    first_call_kwargs = fake_client.chat.completions.create.call_args_list[0][1]
+    assert first_call_kwargs["tool_choice"] == "required"
+
+
+def test_stream_deltas_required_tool_choice_never_leaks_rejected_content() -> None:
+    """A tool_choice='required' round that streams narration/reasoning but comes
+    back with no tool_calls must not have leaked those deltas to on_tool_step
+    before run_tools raises. A delta already streamed can't be un-streamed, so
+    the fail-closed check alone isn't enough -- this pins the buffer-then-discard
+    fix (CodeRabbit follow-up review on the fail-closed fix itself, PR #2361)."""
+    round1 = [
+        _stream_chunk(reasoning="Thinking it over..."),
+        _stream_chunk(content="Let me think about this "),
+        _stream_chunk(content="without calling a tool."),
+    ]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1]
+    seen: list[tuple[str, Any]] = []
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(RuntimeError, match="tool_choice='required'"):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool=lambda name, args: "unused",
+                on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+                stream_deltas=True,
+                tool_choice="required",
+            )
+    # The rejected narration/reasoning must never have reached the caller's callback.
+    assert not any(kind in ("content", "reasoning") for kind, _ in seen)
+
+
+def test_stream_deltas_required_tool_choice_releases_content_when_tool_called() -> None:
+    """Narration alongside a SATISFIED tool_choice='required' round (tool_calls
+    present) must still reach on_tool_step -- buffering only discards a rejected
+    round's deltas, it must not silently eat a legitimate one's.
+
+    max_tool_rounds=1 means the round budget is exhausted right after this one
+    tool-calling round, which now unconditionally forces the tool-free wrap-up
+    completion (CodeRabbit follow-up review on PR #2361: the round's own
+    narration was written before its tool_calls ran, so it can't reflect what
+    "check that" actually returned -- returning it directly would discard the
+    tool result this round just appended). The wrap-up's own content ("Final
+    answer using tool result.") is what run_tools must return, not the earlier
+    narration -- though that narration must still have been delivered live."""
+    round1 = [
+        _stream_chunk(content="I will "),
+        _stream_chunk(content="check that."),
+        _stream_chunk(tool_calls=[_tc_fragment(0, id="c1", name="lookup", arguments="{}")]),
+    ]
+    round2 = [_stream_chunk(content="Final answer using tool result.")]
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [round1, round2]
+    seen: list[tuple[str, Any]] = []
+
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {}}}]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        out = digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            lambda name, args: "tool-result",
+            on_tool_step=lambda kind, payload: seen.append((kind, payload)),
+            stream_deltas=True,
+            tool_choice="required",
+            max_tool_rounds=1,
+        )
+    assert out == "Final answer using tool result."
+    # The tool-calling round's narration was still delivered (buffering releases it
+    # once tool_calls is confirmed) -- it's just no longer what run_tools returns.
+    assert [p for k, p in seen if k == "content"] == [
+        "I will ",
+        "check that.",
+        "Final answer using tool result.",
+    ]
+    assert any(k == "round_limit_exhausted" for k, _ in seen)
+    # Second call is the tool-free wrap-up: no tools attached, so tool_choice
+    # never reaches its wire even though the outer tool_choice is still "required".
+    second_call_kwargs = fake_client.chat.completions.create.call_args_list[1][1]
+    assert "tools" not in second_call_kwargs
+    assert "tool_choice" not in second_call_kwargs
 
 
 def test_stream_deltas_default_false_uses_non_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -783,11 +1268,119 @@ def test_create_with_retry_retries_then_succeeds() -> None:
     assert sleep.call_count == 1
 
 
+def test_completion_reports_transient_provider_retries() -> None:
+    from openai import APITimeoutError
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        APITimeoutError(request=MagicMock()),
+        _real_completion("recovered"),
+    ]
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod, "_sleep_transient_retry", return_value=5.0),
+    ):
+        digillm.completion("gpt-4o-mini", [{"role": "user", "content": "hi"}])
+
+    assert fake_client.chat.completions.create.call_count == 2
+    assert len(events) == 1
+    assert events[0]["retry_count"] == 1
+
+
+def test_completion_records_failed_410_fallback_retry() -> None:
+    class GoneError(RuntimeError):
+        status_code = 410
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        GoneError("live search removed"),
+        ValueError("fallback failed"),
+    ]
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        with pytest.raises(ValueError, match="fallback failed"):
+            digillm.completion(
+                "xai/grok-4",
+                [{"role": "user", "content": "hi"}],
+                search_parameters={"mode": "auto"},
+            )
+
+    assert fake_client.chat.completions.create.call_count == 2
+    assert len(events) == 1
+    assert events[0]["ok"] is False
+    assert events[0]["retry_count"] == 1
+
+
 def test_create_with_retry_propagates_non_transient() -> None:
     fake_client = MagicMock()
     fake_client.chat.completions.create.side_effect = ValueError("bad request")
     with pytest.raises(ValueError, match="bad request"):
         client_mod._create_with_retry(fake_client, model="m", messages=[])
+
+
+def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
+    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries."""
+    made = _capture_client_kwargs(digillm.get_client)
+    assert len(made) == 1
+    assert "max_retries" not in made[0]
+
+
+@pytest.mark.parametrize(
+    ("search_name", "expected_kind"),
+    [("web_search", "web_search"), ("x_search", "x_search")],
+)
+def test_direct_search_reports_duration(
+    monkeypatch: pytest.MonkeyPatch,
+    search_name: str,
+    expected_kind: str,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    response = MagicMock()
+    response.output_text = "Grounded [[1]](https://example.test/source)"
+    response.output = []
+    fake_client = MagicMock()
+    fake_client.responses.create.return_value = response
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod.time, "perf_counter", side_effect=[10.0, 10.125]),
+    ):
+        result = getattr(client_mod, search_name)("xai/grok-4", "latest market news")
+
+    assert result is not None
+    assert len(events) == 1
+    assert events[0]["kind"] == expected_kind
+    assert events[0]["duration_ms"] == 125
+
+
+@pytest.mark.parametrize("search_name", ["web_search", "x_search"])
+def test_direct_search_failure_reports_duration(
+    monkeypatch: pytest.MonkeyPatch,
+    search_name: str,
+) -> None:
+    monkeypatch.setenv("XAI_API_KEY", "xai-test")
+    fake_client = MagicMock()
+    fake_client.responses.create.side_effect = RuntimeError("provider unavailable")
+    events: list[dict[str, Any]] = []
+    digillm.set_usage_observer(lambda **fields: events.append(fields))
+
+    with (
+        patch.object(client_mod, "get_client_for_model", return_value=fake_client),
+        patch.object(client_mod.time, "perf_counter", side_effect=[20.0, 20.075]),
+    ):
+        result = getattr(client_mod, search_name)("xai/grok-4", "latest market news")
+
+    assert result is None
+    assert len(events) == 1
+    assert events[0]["ok"] is False
+    assert events[0]["duration_ms"] == 75
 
 
 # ── Per-request overrides (contextvars) ──────────────────────────────────────
@@ -887,6 +1480,95 @@ def test_structured_completion_sends_json_schema_response_format() -> None:
     assert rf["type"] == "json_schema"
     assert rf["json_schema"]["name"] == "_Person"
     assert "properties" in rf["json_schema"]["schema"]
+
+
+class _PersonWithOptional(BaseModel):
+    name: str
+    nickname: str | None = None
+
+
+def test_structured_completion_strict_schema_lists_every_property_as_required() -> None:
+    """Strict mode must list defaulted/optional fields in `required` too (nullable
+    instead of omitted) — OpenAI-family providers 400 otherwise. Plain
+    `model_json_schema()` omits fields with a default from `required`."""
+    captured: dict[str, Any] = {}
+
+    def fake_create(_client: Any, **kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return _mock_response('{"name": "X", "nickname": null}')
+
+    with patch.object(client_mod, "_create_with_retry", side_effect=fake_create):
+        with patch.object(client_mod, "get_client_for_model", return_value=MagicMock()):
+            digillm.structured_completion(
+                "gpt-4o-mini", [{"role": "user", "content": "x"}], _PersonWithOptional
+            )
+    schema = captured["response_format"]["json_schema"]["schema"]
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["additionalProperties"] is False
+
+
+class _Address(BaseModel):
+    city: str
+    # Defaulted nested field — plain model_json_schema() omits it from required.
+    country: str = "US"
+
+
+class _PersonNested(BaseModel):
+    name: str
+    address: _Address
+
+
+def test_structured_completion_strict_schema_forces_required_through_nested_defs() -> None:
+    """#2353 claims recursive required-forcing through $defs/items/anyOf. Flat
+    optional coverage alone would miss nested Atlas/digest schemas that still
+    400 on OpenAI-family providers when a child property is omitted from
+    required."""
+    captured: dict[str, Any] = {}
+
+    def fake_create(_client: Any, **kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return _mock_response('{"name": "X", "address": {"city": "Berlin", "country": "DE"}}')
+
+    with patch.object(client_mod, "_create_with_retry", side_effect=fake_create):
+        with patch.object(client_mod, "get_client_for_model", return_value=MagicMock()):
+            digillm.structured_completion(
+                "gpt-4o-mini", [{"role": "user", "content": "x"}], _PersonNested
+            )
+    schema = captured["response_format"]["json_schema"]["schema"]
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["additionalProperties"] is False
+
+    # Nested object may live under $defs / $ref (OpenAI strict helper) or inline.
+    defs = schema.get("$defs") or schema.get("definitions") or {}
+    nested_candidates = [defs[k] for k in defs if "Address" in k] if defs else []
+    if not nested_candidates:
+        addr = schema["properties"].get("address")
+        assert isinstance(addr, dict)
+        nested_candidates = [addr]
+    for nested in nested_candidates:
+        assert set(nested["required"]) == set(nested["properties"])
+        assert nested.get("additionalProperties") is False
+
+
+def test_structured_completion_non_strict_keeps_plain_schema() -> None:
+    """strict=False must NOT force-list optional fields into `required` — it uses
+    plain `model_json_schema()`, which omits defaulted fields."""
+    captured: dict[str, Any] = {}
+
+    def fake_create(_client: Any, **kwargs: Any) -> MagicMock:
+        captured.update(kwargs)
+        return _mock_response('{"name": "X"}')
+
+    with patch.object(client_mod, "_create_with_retry", side_effect=fake_create):
+        with patch.object(client_mod, "get_client_for_model", return_value=MagicMock()):
+            digillm.structured_completion(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "x"}],
+                _PersonWithOptional,
+                strict=False,
+            )
+    schema = captured["response_format"]["json_schema"]["schema"]
+    assert "nickname" not in schema["required"]
 
 
 def test_structured_completion_validation_error() -> None:

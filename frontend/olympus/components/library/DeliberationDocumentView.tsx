@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { cleanMemoProse } from '@/lib/render-pipeline-payloads';
 
 // ── Legacy deliberation-transcript types ──────────────────────────────────
@@ -112,7 +111,36 @@ export default function DeliberationDocumentView({
   const debateTicker =
     payload?.ticker != null && typeof payload.ticker === 'string' ? payload.ticker.trim() : '';
 
-  const isDebateShape = debateRounds.length > 0 || bullThesis !== '' || bearThesis !== '' || netStance !== '';
+  // ── H6 DeliberationSummary fields (#1679) ─────────────────────────────
+  // PM↔analyst deliberations carry {transcript:[{role,round_number,message}],
+  // conclusion, converged, carried, escalated, cap_reason} — none of which the
+  // bull/bear branch rendered, so H6 docs lost their transcript entirely.
+  const conclusion =
+    payload?.conclusion != null && typeof payload.conclusion === 'string'
+      ? payload.conclusion.trim()
+      : '';
+  const carried = payload?.carried === true;
+  const escalated = payload?.escalated === true;
+  const capReason =
+    payload?.cap_reason != null && typeof payload.cap_reason === 'string'
+      ? payload.cap_reason.trim()
+      : '';
+  const converged = typeof payload?.converged === 'boolean' ? payload.converged : null;
+  const transcript: { role?: string; round_number?: number; message?: string }[] = Array.isArray(
+    payload?.transcript,
+  )
+    ? (payload.transcript as { role?: string; round_number?: number; message?: string }[]).filter(
+        (turn) => turn && typeof turn.message === 'string' && turn.message.trim() !== '',
+      )
+    : [];
+
+  const isDebateShape =
+    debateRounds.length > 0 ||
+    bullThesis !== '' ||
+    bearThesis !== '' ||
+    netStance !== '' ||
+    transcript.length > 0 ||
+    conclusion !== '';
 
   // ── Legacy deliberation-transcript shape ─────────────────────────────
   const body =
@@ -132,9 +160,7 @@ export default function DeliberationDocumentView({
   // ── Fallback ────────────────────────────────────────────────────────────
   if (!isRiskDebateShape && !isDebateShape && (!body || (!finalDecisions.length && !legacyRounds.length))) {
     return (
-      <div className="prose prose-invert max-w-none text-sm">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-      </div>
+      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
     );
   }
 
@@ -153,17 +179,13 @@ export default function DeliberationDocumentView({
           {aggressiveCase && (
             <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
               <p className="text-[10px] uppercase tracking-wider text-up mb-2">Aggressive case</p>
-              <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(aggressiveCase)}</ReactMarkdown>
-              </div>
+              <SafeMarkdown>{cleanMemoProse(aggressiveCase)}</SafeMarkdown>
             </div>
           )}
           {conservativeCase && (
             <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
               <p className="text-[10px] uppercase tracking-wider text-warn mb-2">Conservative case</p>
-              <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(conservativeCase)}</ReactMarkdown>
-              </div>
+              <SafeMarkdown>{cleanMemoProse(conservativeCase)}</SafeMarkdown>
             </div>
           )}
         </div>
@@ -172,9 +194,7 @@ export default function DeliberationDocumentView({
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
               Key tension
             </h3>
-            <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(keyTension)}</ReactMarkdown>
-            </div>
+            <SafeMarkdown>{cleanMemoProse(keyTension)}</SafeMarkdown>
           </div>
         )}
       </div>
@@ -205,23 +225,50 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
+        {/* H6 state badges (#1679): carried / converged / max_rounds escalation */}
+        {(carried || escalated || converged != null) && (
+          <div className="flex flex-wrap items-center gap-2">
+            {carried && (
+              <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+                carried from prior run
+              </span>
+            )}
+            {converged === true && !carried && (
+              <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-up">
+                converged
+              </span>
+            )}
+            {escalated && (
+              <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-warn">
+                escalated{capReason ? ` · ${capReason}` : ''}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* H6 conclusion — the deliberation's final read */}
+        {conclusion && (
+          <div>
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
+              Conclusion
+            </h3>
+            <SafeMarkdown>{cleanMemoProse(conclusion)}</SafeMarkdown>
+          </div>
+        )}
+
         {/* Bull / Bear thesis side-by-side */}
         {(bullThesis || bearThesis) ? (
           <div className="grid gap-4 md:grid-cols-2">
             {bullThesis ? (
               <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
                 <p className="text-[10px] uppercase tracking-wider text-up mb-2">Bull thesis</p>
-                <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(bullThesis)}</ReactMarkdown>
-                </div>
+                <SafeMarkdown>{cleanMemoProse(bullThesis)}</SafeMarkdown>
               </div>
             ) : null}
             {bearThesis ? (
               <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
                 <p className="text-[10px] uppercase tracking-wider text-down/90 mb-2">Bear thesis</p>
-                <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(bearThesis)}</ReactMarkdown>
-                </div>
+                <SafeMarkdown>{cleanMemoProse(bearThesis)}</SafeMarkdown>
               </div>
             ) : null}
           </div>
@@ -240,6 +287,28 @@ export default function DeliberationDocumentView({
             </div>
           </div>
         ) : null}
+
+        {/* PM ↔ analyst transcript, grouped by round (#1679) */}
+        {transcript.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
+              Deliberation transcript
+            </h3>
+            <ol className="space-y-3">
+              {transcript.map((turn, i) => (
+                <li key={i} className="rounded-lg border border-hair bg-term-bg/40 p-4">
+                  <p className="mb-1.5 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+                    <span>Round {turn.round_number ?? '?'}</span>
+                    <span className={turn.role === 'pm' ? 'text-accent' : 'text-ink-soft'}>
+                      {turn.role === 'pm' ? 'PM challenge' : 'Analyst response'}
+                    </span>
+                  </p>
+                  <SafeMarkdown>{cleanMemoProse(turn.message ?? '')}</SafeMarkdown>
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
       </div>
     );
   }
@@ -273,19 +342,11 @@ export default function DeliberationDocumentView({
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-ink-mute mb-1">Analyst</p>
-                    <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {cleanMemoProse(row.analyst_recommendation || '_—_')}
-                      </ReactMarkdown>
-                    </div>
+                    <SafeMarkdown>{cleanMemoProse(row.analyst_recommendation || '_—_')}</SafeMarkdown>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-ink-mute mb-1">PM decision</p>
-                    <div className="prose prose-invert max-w-none text-sm text-ink-soft">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {cleanMemoProse(row.pm_decision || '_—_')}
-                      </ReactMarkdown>
-                    </div>
+                    <SafeMarkdown>{cleanMemoProse(row.pm_decision || '_—_')}</SafeMarkdown>
                   </div>
                 </div>
                 {row.invalidation_condition ? (
@@ -337,19 +398,11 @@ function DebateRoundBlock({ round }: { round: DebateRound }) {
         <div className="px-4 py-3 grid gap-3 md:grid-cols-2 border-t border-hair">
           <div>
             <h4 className="text-xs font-semibold text-up mb-2">Bull</h4>
-            <div className="prose prose-invert max-w-none text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {cleanMemoProse(round.bull_argument || '_—_')}
-              </ReactMarkdown>
-            </div>
+            <SafeMarkdown>{cleanMemoProse(round.bull_argument || '_—_')}</SafeMarkdown>
           </div>
           <div>
             <h4 className="text-xs font-semibold text-down/90 mb-2">Bear</h4>
-            <div className="prose prose-invert max-w-none text-sm">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {cleanMemoProse(round.bear_argument || '_—_')}
-              </ReactMarkdown>
-            </div>
+            <SafeMarkdown>{cleanMemoProse(round.bear_argument || '_—_')}</SafeMarkdown>
           </div>
         </div>
       ) : null}
@@ -380,9 +433,7 @@ function RoundBlock({ round }: { round: Round }) {
               {sec.heading ? (
                 <h4 className="text-xs font-semibold text-accent/90 mb-2">{sec.heading}</h4>
               ) : null}
-              <div className="prose prose-invert max-w-none text-sm">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{cleanMemoProse(sec.markdown || '')}</ReactMarkdown>
-              </div>
+              <SafeMarkdown>{cleanMemoProse(sec.markdown || '')}</SafeMarkdown>
             </div>
           ))}
         </div>

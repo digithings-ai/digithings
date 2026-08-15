@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from digiskills.frontmatter import parse_skill_md, render_skill_md
 from digiskills.models import SkillManifest
 

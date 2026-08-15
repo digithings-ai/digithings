@@ -15,7 +15,13 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal  # noqa  # scored-lint suppression: heterogeneous graph / dict shapes
+from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Literal,
+)
+
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
@@ -38,6 +44,8 @@ logger = logging.getLogger(__name__)
 DEFAULT_BELIEFS_BACKLOG = 20
 BELIEFS_DOCUMENT_KEY = "beliefs"
 BELIEFS_DOC_TYPE_COLUMN = "Beliefs"
+# Must be allow-listed in chk_documents_category (migration 053); see #1383.
+BELIEFS_CATEGORY = "learning"
 
 __all__ = [
     "DEFAULT_BELIEFS_BACKLOG",
@@ -150,7 +158,7 @@ def distill_beliefs(
     if theses is None:
         try:
             theses = load_active_theses_rows(client, run_date)
-        except Exception as exc:  # noqa: BLE001 — optional context must not block beliefs fold
+        except Exception as exc:  # optional context must not block beliefs fold
             logger.warning("beliefs: active_theses unavailable (%s); continuing", exc)
             theses = []
 
@@ -165,7 +173,7 @@ def distill_beliefs(
         run_type=run_type,
         title=f"Beliefs {run_date.isoformat()}",
         date_str=run_date.isoformat(),
-        category="learning",
+        category=BELIEFS_CATEGORY,
         segment="beliefs",
     )
     mark_decisions_beliefs_folded(
@@ -248,7 +256,7 @@ def run_beliefs_distillation_if_triggered(
             same_ticker_limit=50,
             cross_ticker_limit=50,
         )
-    except Exception as exc:  # noqa: BLE001 — optional context must not block beliefs fold
+    except Exception as exc:  # optional context must not block beliefs fold
         logger.warning("beliefs: lessons fetch failed (%s); using unfolded rows", exc)
         lessons = query_unfolded_resolved_decisions(client=client)
 

@@ -1,6 +1,7 @@
 import "./data.css";
 import { CardDeck, type CardDeckItem } from "@/components/card-deck";
 import { ChangelogRailReference } from "@/components/changelog-rail-reference";
+import { ConvictionReference } from "@/components/data/conviction-reference";
 import { AlertCard, ChangelogCard, MetricCard, QuoteCard } from "@/components/deck-cards";
 import { DotMatrixStat } from "@/components/dot-matrix-stat";
 import { MarqueeTickerReference } from "@/components/marquee-ticker-reference";
@@ -98,6 +99,7 @@ export default function DataPage() {
 
       <ChangelogRailReference />
       <SortableTableReference />
+      <ConvictionReference />
       <RoadmapGanttReference />
       <PricingReference />
       <PricingMatrixReference />

@@ -3,15 +3,32 @@ import { DrawdownPlotReference } from "@/components/drawdown-plot-reference";
 import { EquityCurveReference } from "@/components/equity-curve-reference";
 import { MonthlyReturnsReference } from "@/components/monthly-returns-reference";
 import { OrderbookReference } from "@/components/orderbook-reference";
+import { PageToc } from "@/components/page-toc";
 import { PerfMetricsReference } from "@/components/perf-metrics-reference";
 import { PerformanceDashboardReference } from "@/components/performance-dashboard-reference";
 import { PortfolioReference } from "@/components/portfolio-reference";
+import { PortfolioWorkspaceReference } from "@/components/portfolio-workspace-reference";
 import { PriceChartReference } from "@/components/price-chart-reference";
 import { StockTickerReference } from "@/components/stock-ticker-reference";
 import { SyncedTearsheetReference } from "@/components/synced-tearsheet-reference";
 
+const TOC_ITEMS = [
+  { id: "ticker-tape", label: "Ticker" },
+  { id: "price-chart", label: "Price chart" },
+  { id: "equity-curve", label: "Equity curve" },
+  { id: "drawdown", label: "Drawdown" },
+  { id: "synced-tearsheet", label: "Synced tearsheet" },
+  { id: "performance", label: "Performance" },
+  { id: "portfolio-workspace", label: "Portfolio workspace" },
+  { id: "portfolio", label: "Positions blotter" },
+  { id: "charting-rules", label: "Charting rules" },
+  { id: "perf-metrics", label: "Perf metrics" },
+  { id: "returns-matrix", label: "Returns matrix" },
+  { id: "order-book", label: "Order book" },
+];
+
 const CHART_RULES = [
-  "Lightweight Charts (TradingView's open-source engine) is the only price/series primitive — custom SVG candles are retired.",
+  "Lightweight Charts (TradingView's open-source engine) is the price/series primitive for DASHBOARD surfaces. Print-grade surfaces (PDF-exporting tearsheets) compose the SVG finance-tearsheet family instead — canvas rasterizes in print. The split ruling: frontend/digiweb/CHARTS.md.",
   "We feed it our own backtest data. No external feed, no market connection; attributionLogo is off, so there's no TradingView branding.",
   "The canvas background is always transparent and every color is read from a design token (--up/--down, --hair, --accent, --font-mono) — never hard-coded.",
   "A MutationObserver on data-theme re-applies the palette, so charts re-theme live on light/dark and livery changes.",
@@ -30,10 +47,11 @@ export default function FinancePage() {
         </h1>
         <p>
           The finance-specific grammar behind digiquant: price charts on TradingView Lightweight
-          Charts, order books, and tearsheet metrics. Gains and losses wear the sanctioned
-          <code> --up</code> / <code>--down</code> money colors; the module livery stays for
-          identity and chrome, never for P&amp;L.
+          Charts, order books, and tearsheet metrics. Gains and losses wear the sanctioned{" "}
+          <code>--up</code> / <code>--down</code>
+          {" "}money colors; the module livery stays for identity and chrome, never for P&amp;L.
         </p>
+        <PageToc items={TOC_ITEMS} />
       </header>
 
       <StockTickerReference />
@@ -86,8 +104,10 @@ export default function FinancePage() {
           Equity and its underwater drawdown in a single chart, split into stacked panes. Because
           they share one time scale, the x-axis, crosshair and zoom move together — hover the top
           pane and the drawdown reads the same bar. Both series come from the same walk, so every
-          dip lines up with the red beneath it. This is the multi-chart primitive; add a pane per
-          series rather than stacking separate charts.
+          dip lines up with the red beneath it. This is the multi-chart primitive for screen-only
+          dashboards; add a pane per series rather than stacking separate charts. Print-grade
+          tearsheets — anything with a PDF export — compose the SVG{" "}
+          <a href="/tearsheet">finance-tearsheet family</a> instead.
         </p>
         <div className="pc-frame pc-frame--tall">
           <SyncedTearsheetReference />
@@ -95,6 +115,7 @@ export default function FinancePage() {
       </section>
 
       <PerformanceDashboardReference />
+      <PortfolioWorkspaceReference />
       <PortfolioReference />
 
       <section className="section-block" id="charting-rules">

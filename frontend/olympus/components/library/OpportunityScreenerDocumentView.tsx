@@ -1,7 +1,6 @@
 'use client';
 
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { SafeMarkdown } from '@/components/SafeMarkdown';
 
 /** Loose row shape for opportunity_screen / screener JSON variants. */
 type ScoreRow = Record<string, unknown>;
@@ -45,9 +44,7 @@ export default function OpportunityScreenerDocumentView({
 
   if (!body || (!rows.length && !summary)) {
     return (
-      <div className="prose prose-invert max-w-none text-sm">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
-      </div>
+      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
     );
   }
 
@@ -68,9 +65,7 @@ export default function OpportunityScreenerDocumentView({
       {summary ? (
         <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Summary</h3>
-          <div className="prose prose-invert max-w-none text-ink-soft">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{summary}</SafeMarkdown>
         </div>
       ) : null}
       {regimeNote ? (
@@ -117,9 +112,7 @@ export default function OpportunityScreenerDocumentView({
       {body.notes != null && String(body.notes).trim() ? (
         <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">Notes</h3>
-          <div className="prose prose-invert max-w-none text-ink-soft text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(body.notes)}</ReactMarkdown>
-          </div>
+          <SafeMarkdown>{String(body.notes)}</SafeMarkdown>
         </div>
       ) : null}
     </div>

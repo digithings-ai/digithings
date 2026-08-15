@@ -1,9 +1,8 @@
-"""Unit tests for DigiSearch Polars summarization."""
+"""Unit tests for digisearch Polars summarization."""
 
 from __future__ import annotations
 
 import pytest
-
 from digisearch.core.summarize import summarize_results
 
 

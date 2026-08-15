@@ -9,19 +9,30 @@
 @import "@digithings/web/styles/docs.css";
 @import "@digithings/web/styles/terminal-manifest.css";
 /* Homepage primitives (#1450): NumberedStages spine (stages.css), the
-   digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion),
-   the WordReveal pinned-blur claim (word-reveal.css) and the stack Marquee
-   (marquee.css). */
+   digit-roll OdometerStrip metrics band (data-layout.css, #1452 promotion) and
+   the WordReveal pinned-blur claim (word-reveal.css). marquee.css is gone with
+   the stack Marquee it styled — the band under the hero is <RepoStrip> now, built
+   from tokens and utilities. digiquant-web still imports it. */
 @import "@digithings/web/styles/stages.css";
 @import "@digithings/web/styles/data-layout.css";
 @import "@digithings/web/styles/word-reveal.css";
-@import "@digithings/web/styles/marquee.css";
 /* Chat family primitives (#1418) — imported BEFORE the digichat-ui sheets so
    the .dc- and .dt- rules keep winning same-specificity ties (e.g. the
    caret's animation shorthand when an element carries both .chat-cursor
    and .dt-cur). */
 @import "@digithings/web/styles/chat-core.css";
+/* Math is a separate sheet because KaTeX's own CSS drags in 60 font files
+   (~1 MB). This app renders <DigiChatSession>, so it reaches
+   remark-math/rehype-katex and genuinely needs them; olympus and the design
+   reference deliberately do not import this. Must come AFTER chat-core.css. */
+@import "@digithings/web/styles/chat-math.css";
 @import "@digithings/web/styles/chat-widgets.css";
+/* The .tl-* frame for <TerminalStepCaret>, which <DigiChatSession> shows while
+   an answer is still on its way. This app is the second consumer of that
+   session component (digichat is the first), so it needs the sheet too — the
+   chat page renders the caret whether or not this line is here, just unstyled.
+   AFTER chat-core.css: the caret inside it is <ChatStreamCursor>. */
+@import "@digithings/web/styles/terminal-loaders.css";
 @import "@digithings/digichat-ui/styles/cursor.css";
 @import "@digithings/digichat-ui/styles/session.css";
 
@@ -34,7 +45,9 @@
 @source "../../digiweb/web/src/components/stages";
 @source "../../digiweb/web/src/components/data-layout";
 @source "../../digiweb/web/src/components/typography";
-@source "../../digiweb/web/src/components/marquee";
+@source "../../digiweb/web/src/components/symbols";
+/* … and the terminal loaders' (<TerminalStepCaret> in the waiting turn). */
+@source "../../digiweb/web/src/components/terminal";
 
 /* Point the token font families at the self-hosted next/font variables. */
 :root[data-theme] {
@@ -47,7 +60,7 @@
 }
 
 /* ---- Neutral platform palette (digithings.ai only) ----
-   DigiThings is the platform; accent flavoring belongs to individual modules,
+   digithings is the platform; accent flavoring belongs to individual modules,
    not the platform shell. The shared design tokens (tokens.css) define a teal
    accent that digiquant.io legitimately uses for its green-candle identity — we
    must NOT change that file (digiquant-web + olympus consume it). Instead we
@@ -76,13 +89,6 @@
    page shading always reaches the top border. (The shared file also feeds
    digiquant.io, so we don't touch it.) */
 .glow { animation: none; transform: none; }
-
-/* brand QR mark: transparent, theme-inverted (dark modules in light mode, white
-   in dark) — two <img>s swapped by [data-theme] (Lightning CSS drops mask-image,
-   so a single recolorable mark isn't reliable). */
-.brand-mark { display: inline-block; }
-[data-theme="light"] .brand-mark-dark { display: none; }
-[data-theme="dark"] .brand-mark-light { display: none; }
 
 /* ==========================================================================
    v7 LANDING CHROME — originally ported from digiquant-web/app/globals.css
@@ -124,6 +130,13 @@ html {
 
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
+/* DtNav's "ask digichat" desktop tail entry (#1450 round 3+): plain icon +
+   label in the theme's own ink tone, not a `.btn-primary` pill — a filled
+   button read as a bright, standoffish box sitting next to the quiet GitHub
+   glyph and the plain inline links either side of it. */
+.dc-nav-cta { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 8px; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
+.dc-nav-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+
 /* ---- HERO: animated mesh-gradient, scroll-reactive ---- */
 .dqhero { position: relative; min-height: 100svh; display: flex; align-items: center; justify-content: center; text-align: center; overflow: hidden; }
 .dqhero-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; filter: blur(48px) saturate(1.15); }
@@ -152,7 +165,10 @@ html {
 html.no-js .dqhero-h1 .ln > span { transform: none; }
 html.no-js .dqhero-lede,
 html.no-js .dqhero-cta { opacity: 1; transform: none; }
-.dqhero-scroll-label { margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
+/* Now a real <a href="#metrics">, not a static <p> (full-UI-suite critique,
+   P3) -- text-decoration reset since this wasn't a link before and had no
+   underline in its original design. */
+.dqhero-scroll-label { display: inline-block; margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; color: color-mix(in srgb, var(--accent) 78%, var(--ink)); }
 /* scroll-down cue: accent hairline with a pulse travelling down it */
 .dqhero-scroll { position: relative; width: 2px; height: 88px; overflow: hidden; border-radius: 1px; background: linear-gradient(color-mix(in srgb, var(--accent) 52%, var(--hair-2)), transparent); }
 .dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 32px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 45%, transparent); animation: dq-scrollcue 1.55s var(--ease) infinite; }
@@ -180,14 +196,6 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   }
 }
 
-/* Mermaid diagrams (MermaidBlock.tsx) — client-rendered SVG for pipeline/architecture
-   visualizations. Centered, contained; a view-source toggle reveals the raw code. */
-.dc-mermaid { margin: 0.7rem 0; }
-.dc-mermaid-fig { margin: 0; display: flex; justify-content: center; padding: 0.6rem; border: 1px solid var(--hair); border-radius: 9px; background: color-mix(in srgb, var(--ink) 3%, transparent); overflow-x: auto; }
-.dc-mermaid-fig svg { max-width: 100%; height: auto; }
-.dc-mermaid-toggle { font: inherit; font-size: 0.7rem; color: var(--ink-mute); background: transparent; border: 0; cursor: pointer; padding: 0.2rem 0; letter-spacing: 0.03em; }
-.dc-mermaid-toggle:hover { color: var(--ink-soft); }
-
 /* BYOK settings panel (ProviderSettings.tsx — digithings-web only) */
 .dc-settings-backdrop { position: fixed; inset: 0; z-index: 80; background: color-mix(in srgb, var(--bg) 35%, transparent); backdrop-filter: blur(4px); display: flex; justify-content: flex-end; }
 .dc-settings-panel { width: min(22rem, 92vw); height: 100%; overflow-y: auto; padding: 1rem 1rem 1.25rem; background: var(--surface); border-left: 1px solid var(--hair); box-shadow: -8px 0 24px color-mix(in srgb, var(--ink) 8%, transparent); font-family: var(--font-mono); font-size: 0.78rem; }
@@ -213,6 +221,18 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dc-settings-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
 .dc-settings-error { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--down); }
 .dc-settings-test-ok { margin: 0.35rem 0 0; font-size: 0.72rem; color: var(--up); }
+
+/* digichat embed boot loader (ChatEmbedShell.tsx) sits over the page's own
+   fixed .grain/.glow layers, not a plain app background. ContainerBootLoader's
+   shared .tl-boot class fills var(--bg) by default (right for its usual mode:
+   pinned over an app that has not rendered, with nothing behind it) -- scoped
+   override for this usage only, so .grain/.glow stay visible through the
+   loading phase instead of disappearing behind a flat rectangle that then pops
+   away once digichat itself loads. */
+.tl-boot.dc-embed-boot { background: transparent; }
+
+
+/* Landing / module cards continue below */
 
 /* ---- /docs API reference — app-owned CONTENT chrome only. The shell
    (responsive sidebar + scroll-spy + mobile disclosure), hero, code blocks,
@@ -251,6 +271,44 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .doc-guide-title { margin: 0; font-family: var(--serif); font-weight: 400; font-size: clamp(1.4rem, 2.6vw, 1.9rem); letter-spacing: -0.01em; color: var(--ink); }
 .doc-guide-h { margin: 0.6rem 0 0; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-mute); font-weight: 500; }
 .doc-guide-list { margin: 0.2rem 0 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.35rem; color: var(--ink-soft); font-size: 0.9rem; line-height: 1.6; }
+.doc-inline-link { color: var(--accent); text-decoration: none; text-underline-offset: 2px; }
+.doc-inline-link:hover { text-decoration: underline; }
+
+/* Wide shell for OpenAPI explorer (Swagger needs horizontal room). */
+.docs-shell--wide { max-width: 1180px; }
+
+/* ---- Swagger UI (vendored CSS) — re-tint toward site tokens; hide try-it chrome ---- */
+.docs-swagger .swagger-ui { font-family: var(--font-sans); color: var(--ink); }
+.docs-swagger .swagger-ui .info .title,
+.docs-swagger .swagger-ui .opblock-tag,
+.docs-swagger .swagger-ui .opblock .opblock-summary-path,
+.docs-swagger .swagger-ui .opblock .opblock-summary-description,
+.docs-swagger .swagger-ui .tab li,
+.docs-swagger .swagger-ui table thead tr td,
+.docs-swagger .swagger-ui table thead tr th,
+.docs-swagger .swagger-ui .parameter__name,
+.docs-swagger .swagger-ui .response-col_status,
+.docs-swagger .swagger-ui .response-col_description,
+.docs-swagger .swagger-ui .model-title,
+.docs-swagger .swagger-ui .prop-type,
+.docs-swagger .swagger-ui label,
+.docs-swagger .swagger-ui .scheme-container { color: var(--ink); }
+.docs-swagger .swagger-ui .info .base-url,
+.docs-swagger .swagger-ui .parameter__type,
+.docs-swagger .swagger-ui .prop-format,
+.docs-swagger .swagger-ui .model .property.primitive { color: var(--ink-soft); }
+.docs-swagger .swagger-ui .scheme-container,
+.docs-swagger .swagger-ui .opblock,
+.docs-swagger .swagger-ui section.models,
+.docs-swagger .swagger-ui .model-box { background: var(--surface); border-color: var(--hair); box-shadow: none; }
+.docs-swagger .swagger-ui .opblock .opblock-section-header { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.docs-swagger .swagger-ui .btn,
+.docs-swagger .swagger-ui select { border-radius: 7px; }
+.docs-swagger .swagger-ui .topbar,
+.docs-swagger .swagger-ui .auth-wrapper,
+.docs-swagger .swagger-ui .try-out,
+.docs-swagger .swagger-ui .execute-wrapper,
+.docs-swagger .swagger-ui .btn.execute { display: none !important; }
 
 /* ---- public interface / mcp lists ---- */
 .doc-iface { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }

@@ -1,8 +1,8 @@
-"""E2E tests: DigiGraph + DigiQuant stack (workflow, health, backtest, test_llm).
+"""E2E tests: digigraph + digiquant stack (workflow, health, backtest, test_llm).
 
 Run with stack up:
   docker compose up -d
-  Export E2E_BEARER_TOKEN with a DigiKey-issued JWT (scopes must include digigraph:* / digiquant:* / digisearch:query).
+  Export E2E_BEARER_TOKEN with a digikey-issued JWT (scopes must include digigraph:* / digiquant:* / digisearch:query).
   pytest -v -m e2e
 
 Or local stack (no Docker port conflict):
@@ -23,14 +23,14 @@ def _e2e_bearer() -> str:
     tok = os.environ.get("E2E_BEARER_TOKEN", "").strip()
     if not tok:
         pytest.skip(
-            "E2E_BEARER_TOKEN must be set to a DigiKey JWT for protected routes (see digikey/ARCHITECTURE.md /v1/oauth/token)."
+            "E2E_BEARER_TOKEN must be set to a digikey JWT for protected routes (see digikey/ARCHITECTURE.md /v1/oauth/token)."
         )
     return tok
 
 
 @pytest.mark.e2e
 def test_digiquant_health(digiquant_url: str, e2e_available: bool) -> None:
-    """DigiQuant /health returns 200."""
+    """digiquant /health returns 200."""
     if not e2e_available:
         pytest.skip("E2E stack not available. Start with: docker compose up -d")
     with httpx.Client(timeout=5.0) as client:
@@ -41,7 +41,7 @@ def test_digiquant_health(digiquant_url: str, e2e_available: bool) -> None:
 
 @pytest.mark.e2e
 def test_digigraph_health(digigraph_url: str, e2e_available: bool) -> None:
-    """DigiGraph /health returns 200."""
+    """digigraph /health returns 200."""
     if not e2e_available:
         pytest.skip("E2E stack not available")
     with httpx.Client(timeout=5.0) as client:
@@ -52,9 +52,9 @@ def test_digigraph_health(digigraph_url: str, e2e_available: bool) -> None:
 
 @pytest.mark.e2e
 def test_digisearch_health(digisearch_url: str, digisearch_available: bool) -> None:
-    """DigiSearch /health returns 200. Skips if DigiSearch not in stack (e.g. run_local.sh)."""
+    """digisearch /health returns 200. Skips if digisearch not in stack (e.g. run_local.sh)."""
     if not digisearch_available:
-        pytest.skip("DigiSearch not available. Use docker compose up -d for full stack.")
+        pytest.skip("digisearch not available. Use docker compose up -d for full stack.")
     with httpx.Client(timeout=5.0) as client:
         r = client.get(f"{digisearch_url}/health")
     assert r.status_code == 200
@@ -63,9 +63,9 @@ def test_digisearch_health(digisearch_url: str, digisearch_available: bool) -> N
 
 @pytest.mark.e2e
 def test_digisearch_query(digisearch_url: str, digisearch_available: bool) -> None:
-    """DigiSearch POST /query returns results structure."""
+    """digisearch POST /query returns results structure."""
     if not digisearch_available:
-        pytest.skip("DigiSearch not available. Use docker compose up -d for full stack.")
+        pytest.skip("digisearch not available. Use docker compose up -d for full stack.")
     bearer = _e2e_bearer()
     with httpx.Client(
         timeout=5.0,
@@ -88,7 +88,7 @@ def test_digiquant_run_backtest_direct(
     digiquant_url: str,
     e2e_available: bool,
 ) -> None:
-    """DigiQuant POST /run_backtest returns BacktestResult. Requires data_dir (e.g. /app/data in Docker)."""
+    """digiquant POST /run_backtest returns BacktestResult. Requires data_dir (e.g. /app/data in Docker)."""
     if not e2e_available:
         pytest.skip("E2E stack not available")
     data_dir = os.environ.get("E2E_DATA_DIR", "/app/data")

@@ -6,7 +6,6 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
-
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{(\w+)\.(\w+)\}\}")
 
 _PLAN_STEP_ERRORS = (

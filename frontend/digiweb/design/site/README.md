@@ -411,7 +411,7 @@ is native (`Tab` to the summary, `Enter`/`Space` to toggle).
 ```html
 <div class="faq">
   <details class="faq__item" name="pricing-faq" open>
-    <summary class="faq__q">Is DigiThings really open source?</summary>
+    <summary class="faq__q">Is digithings really open source?</summary>
     <p class="faq__a">Yes — the core stack is MIT-licensed and self-hostable.</p>
   </details>
   <details class="faq__item" name="pricing-faq">

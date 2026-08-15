@@ -1,13 +1,13 @@
-"""Unit tests for DigiSearch POST /query API (filter, columns, response_mode, summary)."""
+"""Unit tests for digisearch POST /query API (filter, columns, response_mode, summary)."""
 
 from __future__ import annotations
 
 import pytest
+from digisearch.core.models import Chunk
+from digisearch.search import add_chunks
+from digisearch.server import app
 from fastapi.testclient import TestClient
 
-from digisearch.server import app
-from digisearch.search import add_chunks
-from digisearch.core.models import Chunk
 from tests.digi_test_jwt import auth_headers
 
 

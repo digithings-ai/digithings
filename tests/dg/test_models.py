@@ -1,11 +1,10 @@
-"""Unit tests for DigiGraph Pydantic models."""
+"""Unit tests for digigraph Pydantic models."""
 
 from __future__ import annotations
 
 import pytest
+from digigraph.models import ChatCompletionRequest, ChatMessage, WorkflowRequest, WorkflowResult
 from pydantic import ValidationError
-
-from digigraph.models import ChatMessage, WorkflowRequest, WorkflowResult
 
 
 @pytest.mark.unit
@@ -47,6 +46,23 @@ class TestWorkflowRequest:
         with pytest.raises(ValidationError):
             WorkflowRequest.model_validate({})
 
+    def test_workflow_request_accepts_require_tool_calls(self) -> None:
+        req = WorkflowRequest(prompt="hi", require_tool_calls=True)
+        assert req.require_tool_calls is True
+
+    def test_workflow_request_require_tool_calls_defaults_to_none(self) -> None:
+        req = WorkflowRequest(prompt="hi")
+        assert req.require_tool_calls is None
+
+
+@pytest.mark.unit
+class TestChatCompletionRequest:
+    """ChatCompletionRequest model."""
+
+    def test_chat_completion_request_accepts_require_tool_calls(self) -> None:
+        req = ChatCompletionRequest(messages=[], require_tool_calls=False)
+        assert req.require_tool_calls is False
+
 
 @pytest.mark.unit
 class TestWorkflowResult:
@@ -62,7 +78,7 @@ class TestWorkflowResult:
         assert r.backtest_result["status"] == "ok"
 
     def test_failure_without_backtest(self) -> None:
-        r = WorkflowResult(success=False, message="DigiQuant unreachable", backtest_result=None)
+        r = WorkflowResult(success=False, message="digiquant unreachable", backtest_result=None)
         assert r.success is False
         assert r.backtest_result is None
 

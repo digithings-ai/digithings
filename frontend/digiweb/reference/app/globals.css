@@ -13,11 +13,14 @@
 @import "@digithings/web/styles/chat-widgets.css";
 @import "@digithings/web/styles/controls-core.css";
 @import "@digithings/web/styles/controls-overlay.css";
-@import "@digithings/web/styles/finance-charts.css";
 @import "@digithings/web/styles/finance-composites.css";
+/* finance-tearsheet manages its own layering (print grammar unlayered) —
+   import PLAINLY, never wrapped in layer(...) (see the sheet header). */
+@import "@digithings/web/styles/finance-tearsheet.css";
 @import "@digithings/web/styles/data-layout.css";
 @import "@digithings/web/styles/deck.css";
 @import "@digithings/web/styles/effects-chrome.css";
+@import "@digithings/web/styles/command-palette.css";
 
 /* Shared components (@digithings/web) carry token-backed utilities, and
    Tailwind never scans package sources on its own — point it at them
@@ -34,9 +37,14 @@
 @source "../../web/src/components/controls";
 @source "../../web/src/components/finance-charts";
 @source "../../web/src/components/finance-composites";
+@source "../../web/src/components/finance-tearsheet";
 @source "../../web/src/components/data-layout";
 @source "../../web/src/components/deck";
 @source "../../web/src/components/effects-chrome";
+@source "../../web/src/components/command-palette";
+@source "../../web/src/components/symbols";
+/* The terminal loaders' specimen markup now lives in the package too. */
+@source "../../web/src/components/terminal";
 
 /* Shared base for every design-reference page. Family-specific styles live
    next to their page (app/<family>/<family>.css) — keep this file small. */
@@ -70,7 +78,7 @@ html {
   padding: 0.5rem 0.9rem;
   border-radius: 8px;
   background: var(--accent);
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   text-decoration: none;
@@ -215,6 +223,15 @@ html {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
 
+/* appearance:none above drops the native select focus ring in Chromium along
+   with the rest of the native chrome — restore a visible one, matching the
+   theme-toggle/burger treatment below. */
+.site-nav-livery select:focus-visible,
+.site-nav-suite select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
 .site-nav-livery select option,
 .site-nav-suite select option {
   background: var(--surface);
@@ -236,8 +253,14 @@ html {
   transition: color 0.2s var(--ease);
 }
 
-.site-nav-theme:hover {
+.site-nav-theme:hover,
+.site-nav-theme:focus-visible {
   color: var(--ink);
+}
+
+.site-nav-theme:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .site-nav-burger {
@@ -256,8 +279,14 @@ html {
   transition: color 0.2s var(--ease);
 }
 
-.site-nav-burger:hover {
+.site-nav-burger:hover,
+.site-nav-burger:focus-visible {
   color: var(--ink);
+}
+
+.site-nav-burger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .site-nav-burger span {
@@ -331,15 +360,58 @@ html {
   border-bottom-color: color-mix(in srgb, var(--accent) 55%, var(--hair));
 }
 
+.site-nav-sheet a:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
 /* Collapsed state — driven by JS fit-detection (SiteNav), not a fixed
    breakpoint: the inline links give way to the hamburger the instant they
-   would no longer fit on one row, whatever the viewport width. */
+   would no longer fit on one row, whatever the viewport width. The livery
+   and type-suite pickers collapse in lockstep (they move into the sheet —
+   see .site-nav-sheet-controls) so the always-visible row only ever has to
+   fit the brand mark, theme toggle, and hamburger: that trio must never
+   overflow, since the hamburger is the only way back into the sheet. */
 .site-nav.is-collapsed .site-nav-links {
+  display: none;
+}
+
+.site-nav.is-collapsed .site-nav-livery,
+.site-nav.is-collapsed .site-nav-suite {
   display: none;
 }
 
 .site-nav.is-collapsed .site-nav-burger {
   display: inline-flex;
+}
+
+/* .site-nav-livery normally starts the right-aligned trailing group via its
+   own margin-left:auto (see above) — but that rule hides livery outright
+   when collapsed, so nothing is left to absorb the row's leading space and
+   the theme toggle + hamburger fall back to sitting left-aligned right next
+   to the brand mark. Re-anchor the auto-margin on the theme toggle, the
+   first element still visible in the trailing group once collapsed, so the
+   pair stays pinned to the right edge exactly as it does at full width. */
+.site-nav.is-collapsed .site-nav-theme {
+  margin-left: auto;
+}
+
+/* Livery + type-suite pickers duplicated inside the sheet for collapsed
+   widths — right-aligned under the links, same max width, with the row's
+   margin-left:auto reset (there's no sibling to push away from in here). */
+.site-nav-sheet-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(100%, 20rem);
+  margin-top: 1.4rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--hair);
+  pointer-events: auto;
+}
+
+.site-nav-sheet-controls .site-nav-livery {
+  margin-left: 0;
 }
 
 /* Page scaffold */
@@ -439,7 +511,7 @@ html {
 
 .btn-primary {
   background: var(--accent);
-  color: var(--surface-inverse, #06110f);
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -462,8 +534,8 @@ html {
   width: 11px;
   height: 11px;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--surface-inverse, #06110f) 30%, transparent);
-  border-top-color: var(--surface-inverse, #06110f);
+  border: 2px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
+  border-top-color: var(--on-accent);
   animation: btn-spin 0.7s linear infinite;
 }
 

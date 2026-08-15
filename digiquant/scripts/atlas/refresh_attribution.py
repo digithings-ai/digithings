@@ -28,7 +28,7 @@ import math
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint: duck-typed Supabase client + rows
+from typing import Any  # score:allow untyped any — scored-lint: duck-typed Supabase client + rows
 
 # repo root: .../digiquant/scripts/atlas/refresh_attribution.py → up 4 (atlas → scripts →
 # digiquant → repo root).

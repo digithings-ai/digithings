@@ -1,5 +1,5 @@
 ---
-title: DigiFetch
+title: digifetch
 type: module
 status: reviewed
 created: 2026-06-15
@@ -8,22 +8,22 @@ tags:
   - web-scraping
   - library
 ---
-# DigiFetch
+# digifetch
 > The shared web-scraping engine — headless-browser lifecycle, composable retry/backoff, and polite rate limiting, as a library with no service coupling.
 
 ## What it is
 
-DigiFetch is the shared web-scraping / headless-fetch engine for the DigiThings stack. It is a standalone library — no FastAPI, no port, no service coupling — that extracts the reusable *mechanics* of web scraping (headless-browser session lifecycle, composable retry/backoff, polite-scraping rate limiting, and an HTTP fetch/download path with a Playwright→HTTP cookie hand-off) from site-specific scrapers, leaving only the site-specific logic in each consumer.
+digifetch is the shared web-scraping / headless-fetch engine for the digithings stack. It is a standalone library — no FastAPI, no port, no service coupling — that extracts the reusable *mechanics* of web scraping (headless-browser session lifecycle, composable retry/backoff, polite-scraping rate limiting, and an HTTP fetch/download path with a Playwright→HTTP cookie hand-off) from site-specific scrapers, leaving only the site-specific logic in each consumer.
 
 The package is side-effect-free and browser-free on import: `import digifetch` never launches or imports a browser. Playwright is imported lazily at call time, so the library installs and imports cleanly on a machine with no browser present; the headless seam is opt-in via the `[browser]` extra.
 
 ## The problem it solves
 
-Every scraper reinvents the same brittle plumbing — backoff loops, throttles, browser session management, cookie hand-off — wrapped tightly around one site's selectors. The mechanics never get reused and never get hardened. DigiFetch separates the durable mechanics (reusable, tested, injectable clocks/sleeps for fast tests) from the disposable site logic, so scraping infrastructure compounds instead of being rebuilt per source.
+Every scraper reinvents the same brittle plumbing — backoff loops, throttles, browser session management, cookie hand-off — wrapped tightly around one site's selectors. The mechanics never get reused and never get hardened. digifetch separates the durable mechanics (reusable, tested, injectable clocks/sleeps for fast tests) from the disposable site logic, so scraping infrastructure compounds instead of being rebuilt per source.
 
 ## How it fits in the ecosystem
 
-DigiFetch is a leaf library that any data-acquisition path can depend on. Hard dependencies are just `pydantic` and `httpx` (the monorepo HTTP convention; `requests` is intentionally excluded). Today there is exactly one consumer — **twelve-x** — so the public interface was validated against a single use case and is treated as provisional (0.1.0); it should be expected to change when a second consumer arrives. It was built ahead of the usual "extract on the second consumer" rule by explicit request.
+digifetch is a leaf library that any data-acquisition path can depend on. Hard dependencies are just `pydantic` and `httpx` (the monorepo HTTP convention; `requests` is intentionally excluded). Today there is exactly one consumer — **twelve-x** — so the public interface was validated against a single use case and is treated as provisional (0.1.0); it should be expected to change when a second consumer arrives. It was built ahead of the usual "extract on the second consumer" rule by explicit request.
 
 ## Capabilities — Current
 
@@ -37,10 +37,10 @@ Shipped:
 
 ## Capabilities — 12-month roadmap
 
-- Wire twelve-x's scrapers onto DigiFetch (the deferred companion to the extraction)
+- Wire twelve-x's scrapers onto digifetch (the deferred companion to the extraction)
 - Stabilise the public API to 1.0 once a second consumer validates it
-- Distributed/Redis-backed rate limiting (today single-process; shared throttling is future DigiBase work)
+- Distributed/Redis-backed rate limiting (today single-process; shared throttling is future digibase work)
 
 ## Open source vs. proprietary
 
-**Open (MIT/Apache):** the entire DigiFetch library — retry, rate limiting, HTTP fetch/download, and the headless-browser seam. It is pure open-core infrastructure; any proprietary value lives in the site-specific scrapers and the data they feed, not in DigiFetch.
+**Open (MIT/Apache):** the entire digifetch library — retry, rate limiting, HTTP fetch/download, and the headless-browser seam. It is pure open-core infrastructure; any proprietary value lives in the site-specific scrapers and the data they feed, not in digifetch.

@@ -2,6 +2,8 @@
 
 Canonical rules for all agents in this repo are in **[CLAUDE.md](CLAUDE.md)** — read that first.
 
+**Naming:** Digi product/module names are always lowercase (`digithings`, `digichat`, `digivault`, …) — never DigiThings / DigiChat / Digichat. See [CLAUDE.md § Naming](CLAUDE.md#naming--digi-modules).
+
 Claude Code loads `CLAUDE.md` at session start. Cursor agents use `.cursor/rules/digithings.mdc`; Copilot uses `.github/copilot-instructions.md` — both generated from `agents.yml` by `make agents-init`.
 
 ## Cursor Cloud specific instructions
@@ -14,7 +16,7 @@ Claude Code loads `CLAUDE.md` at session start. Cursor agents use `.cursor/rules
 
 ### Dependency install
 
-The VM update script creates `.venv`, runs `scripts/install-workspace.sh --with-dev` (put `.venv/bin` on `PATH` first — the script calls `python`, not `python3`), installs `digiquant[nautilus]`, `litellm[proxy]`, and root `npm ci` plus Linux native bindings for DigiChat Vitest (see `.github/workflows/test-digichat.yml`).
+The VM update script creates `.venv`, runs `scripts/install-workspace.sh --with-dev` (put `.venv/bin` on `PATH` first — the script calls `python`, not `python3`), installs `digiquant[nautilus]`, `litellm[proxy]`, and root `npm ci` (which now supplies the Linux native bindings digichat Vitest needs — `package-lock.json` carries every installable platform entry, so no hand-install step is required).
 
 Activate before Python commands: `source .venv/bin/activate` or `PATH="$PWD/.venv/bin:$PATH"`.
 
@@ -23,24 +25,24 @@ Copy config once per session if missing: `cp .env.example .env` (set `GROQ_API_K
 ### Running services without Docker
 
 ```bash
-PATH="$PWD/.venv/bin:$PATH" make stack-local   # DigiKey :8005, DigiGraph :8000, DigiQuant :8001, DigiSearch :8002, DigiSmith :8003, LiteLLM :4000
+PATH="$PWD/.venv/bin:$PATH" make stack-local   # digikey :8005, digigraph :8000, digiquant :8001, digisearch :8002, digismith :8003, LiteLLM :4000
 PATH="$PWD/.venv/bin:$PATH" ./scripts/stop_stack_local.sh
 ```
 
-DigiChat dev UI (needs `frontend/digichat/.env.local` + optional `make up-digichat-db` for Postgres): `make digichat-dev` → http://127.0.0.1:3000.
+digichat dev UI (needs `frontend/digichat/.env.local` + optional `make up-digichat-db` for Postgres): `make digichat-dev` → http://127.0.0.1:3000.
 
 ### Lint / test commands (no stack required)
 
 | Command | Purpose |
 |---------|---------|
 | `make test-baseline` | Fast always-green gate (imports, schemas, CLI) |
-| `make test-unit` | Full Python unit + DigiChat Vitest (see caveats) |
-| `npm run test --workspace digichat` | DigiChat Vitest only |
+| `make test-unit` | Full Python unit + digichat Vitest (see caveats) |
+| `npm run test --workspace digichat` | digichat Vitest only |
 | `.venv/bin/ruff check <component>/src` | Python lint |
 
-**Linux caveat:** NautilusTrader can **SIGABRT** when backtest engine tests run under pytest on Linux (tracked #42). `make test-unit` may abort mid-run; use `make test-baseline` and targeted `pytest -m unit tests/dg/ tests/dk/` for a safe subset. Live `POST /run_backtest` against a running DigiQuant may also crash the process on some Linux hosts.
+**Linux caveat:** NautilusTrader can **SIGABRT** when backtest engine tests run under pytest on Linux (tracked #42). `make test-unit` may abort mid-run; use `make test-baseline` and targeted `pytest -m unit tests/dg/ tests/dk/` for a safe subset. Live `POST /run_backtest` against a running digiquant may also crash the process on some Linux hosts.
 
-**LLM workflow:** `POST /workflow` on DigiGraph requires a provider key in `.env` (e.g. `GROQ_API_KEY`). JWT exchange via DigiKey works without it.
+**LLM workflow:** `POST /workflow` on digigraph requires a provider key in `.env` (e.g. `GROQ_API_KEY`). JWT exchange via digikey works without it.
 
 ### Issue a dev API key (stack-local)
 

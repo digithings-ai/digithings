@@ -21,6 +21,10 @@ import type {
   PipelineObservabilityBundle,
   PipelineTickerDoc,
   PositionPriceChartData,
+  AnalystPayload,
+  AnalystEvidence,
+  TickerCoverage,
+  TickerDossier,
 } from './types';
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
 import { renderDocumentMarkdownFromPayload } from './render-document-from-payload';
@@ -30,6 +34,8 @@ import {
   renderRiskDebateMarkdown,
 } from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
+import { buildRebalanceActions } from './rebalance-actions';
+import { holdingWeightChange } from './holding-weight-change';
 import {
   digestItemsToStrings,
   extractDigestContextBullets,
@@ -38,9 +44,10 @@ import {
 } from './snapshot-context';
 import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
-import { inferPortfolioCategory } from './portfolio-categories';
+import { buildInstrumentLookup, resolveInstrumentIdentity } from './instrument-metadata';
 import { normalizePositionEvent } from './position-events';
 import { thesisIdEquals } from './thesis-id';
+import type { ThesisVehicleRow } from './thesis-story';
 
 /** Coerce a jsonb column that should be a string[] into one, tolerating null/non-arrays. */
 function asStringArray(v: unknown): string[] {
@@ -57,6 +64,7 @@ export function lastRunAt(snapshot: Pick<TableRow<'daily_snapshots'>, 'created_a
 export function mapThesisRow(t: TableRow<'theses'>): Thesis {
   return {
     id: t.thesis_id,
+    topic_key: t.topic_key ?? null,
     name: t.name,
     vehicle: t.vehicle,
     invalidation: t.invalidation,
@@ -376,6 +384,211 @@ export async function fetchThesisPipelinePayloadsForDate(runDate: string): Promi
   return { market_thesis_exploration, thesis_vehicle_map };
 }
 
+/** Rows returned per `thesis_vehicles` fetch (bounded window, newest first). */
+const THESIS_VEHICLES_LIMIT = 2000;
+
+/**
+ * The analyst vehicle-selection map (`thesis_vehicles`): ticker → MARKET thesis_id,
+ * with rationale + candidate_rank, newest first. This is the RELIABLE
+ * ticker→market-thesis join for the Theses story spine (#1562) —
+ * `theses.linked_market_thesis_id` is self-referential / dead. History is included
+ * so `selectThesisAsOf` can pick the latest-available mapping per thesis. Fail-soft
+ * to `[]` so the tab renders an empty spine rather than an error wall.
+ */
+export async function fetchThesisVehicleMap(): Promise<ThesisVehicleRow[]> {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const { data, error } = await supabase
+    .from('thesis_vehicles')
+    .select('date,thesis_id,ticker,rationale,candidate_rank')
+    .order('date', { ascending: false })
+    .limit(THESIS_VEHICLES_LIMIT);
+  if (error) {
+    console.warn('Supabase thesis_vehicles query:', error);
+    return [];
+  }
+  const rows = (data ?? []) as Pick<
+    TableRow<'thesis_vehicles'>,
+    'date' | 'thesis_id' | 'ticker' | 'rationale' | 'candidate_rank'
+  >[];
+  return rows.map((r) => ({
+    date: r.date,
+    thesisId: r.thesis_id,
+    ticker: r.ticker,
+    rationale: r.rationale ?? null,
+    candidateRank: r.candidate_rank ?? null,
+  }));
+}
+
+/**
+ * Coerce a `documents.payload` jsonb blob into the H5 `AnalystPayload` shape
+ * (mirrors `digiquant/.../hermes/models/analyst.py`). Defensive against partial/
+ * malformed payloads — every field falls back to its schema default rather than
+ * throwing, since this renders directly in the Ticker Dossier (#1562 PR2).
+ * `price_targets` is passed through as-is (a free-form label→number dict; keys
+ * vary call to call) and only null-checked, never destructured by fixed key.
+ */
+export function parseAnalystPayload(raw: unknown): AnalystPayload | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const s = (v: unknown): string => (typeof v === 'string' ? v : '');
+  const priceTargets =
+    o.price_targets && typeof o.price_targets === 'object' && !Array.isArray(o.price_targets)
+      ? (o.price_targets as Record<string, number | string>)
+      : null;
+  return {
+    ticker: s(o.ticker).toUpperCase(),
+    conviction_score: typeof o.conviction_score === 'number' ? o.conviction_score : 0,
+    stance: s(o.stance),
+    thesis: s(o.thesis),
+    risks: s(o.risks),
+    sources: asStringArray(o.sources),
+    fundamentals: s(o.fundamentals),
+    technicals: s(o.technicals),
+    headwinds: asStringArray(o.headwinds),
+    tailwinds: asStringArray(o.tailwinds),
+    bull_case: s(o.bull_case),
+    bear_case: s(o.bear_case),
+    price_targets: priceTargets,
+    expectations: s(o.expectations),
+    fingerprint_news_hash: s(o.fingerprint_news_hash),
+    evidence: parseAnalystEvidence(o.evidence),
+  };
+}
+
+/** Coerce the #1672 evidence block; null when absent (legacy docs) or malformed. */
+function parseAnalystEvidence(raw: unknown): AnalystEvidence | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const n = (v: unknown): number | null => (typeof v === 'number' ? v : null);
+  return {
+    independent_confirming_signals: n(o.independent_confirming_signals),
+    contradicting_signals: n(o.contradicting_signals),
+    catalyst_within_horizon:
+      typeof o.catalyst_within_horizon === 'boolean' ? o.catalyst_within_horizon : null,
+    trend_alignment: typeof o.trend_alignment === 'string' ? o.trend_alignment : '',
+    evidence_quality: typeof o.evidence_quality === 'string' ? o.evidence_quality : '',
+  };
+}
+
+/**
+ * The full per-ticker analyst dossier (#1562 PR2): latest `analyst/{TICKER}`
+ * document, the `analyst_coverage` pointer row, every `decision_log` row, and
+ * the latest stored attribution window for the ticker.
+ *
+ * Held-position data is deliberately NOT fetched here — `TickerDossierView`
+ * reads it from the already-loaded `useDashboard()` positions (avoids
+ * re-deriving the weight/PnL computation `getFullDashboardData` already owns).
+ *
+ * Fail-soft per section: a missing/erroring table degrades that section to its
+ * empty default rather than blanking the whole dossier.
+ */
+export async function fetchTickerDossier(ticker: string): Promise<TickerDossier> {
+  const t = String(ticker).toUpperCase().trim();
+  const empty: TickerDossier = {
+    ticker: t,
+    analyst: null,
+    analystDate: null,
+    coverage: null,
+    decisions: [],
+    latestAttribution: null,
+  };
+  if (!t || !isSupabaseConfigured() || !supabase) return empty;
+
+  const [docRes, decRes, covRes, attributionRes] = await Promise.all([
+    supabase
+      .from('documents')
+      .select('date, payload')
+      .eq('document_key', `analyst/${t}`)
+      .order('date', { ascending: false })
+      .limit(1),
+    supabase.from('decision_log').select('*').ilike('ticker', t).order('run_date', { ascending: false }),
+    supabase
+      .from('analyst_coverage')
+      .select('date, ticker, thesis_ids, current_recommendation_key, last_updated')
+      .ilike('ticker', t)
+      .order('last_updated', { ascending: false })
+      .limit(1),
+    supabase
+      .from('position_attribution')
+      .select('*')
+      .ilike('ticker', t)
+      .order('date', { ascending: false })
+      .limit(1),
+  ]);
+
+  if (docRes.error) console.warn('fetchTickerDossier documents query:', docRes.error);
+  if (decRes.error) console.warn('fetchTickerDossier decision_log query:', decRes.error);
+  if (covRes.error) console.warn('fetchTickerDossier analyst_coverage query:', covRes.error);
+  if (attributionRes.error) {
+    console.warn('fetchTickerDossier position_attribution query:', attributionRes.error);
+  }
+
+  const docRow = (docRes.data?.[0] ?? null) as Pick<TableRow<'documents'>, 'date' | 'payload'> | null;
+  const analyst = docRow ? parseAnalystPayload(docRow.payload) : null;
+  const analystDate = docRow?.date ?? null;
+
+  const covRow = (covRes.data?.[0] ?? null) as Pick<
+    TableRow<'analyst_coverage'>,
+    'date' | 'ticker' | 'thesis_ids' | 'current_recommendation_key' | 'last_updated'
+  > | null;
+  const coverage: TickerCoverage | null = covRow
+    ? {
+        date: covRow.date ?? null,
+        thesis_ids: asStringArray(covRow.thesis_ids),
+        current_recommendation_key: covRow.current_recommendation_key ?? null,
+        last_updated: covRow.last_updated ?? null,
+      }
+    : null;
+
+  const decisions = (decRes.data ?? []) as TableRow<'decision_log'>[];
+  const latestAttribution = (attributionRes.data?.[0] ?? null) as
+    | TableRow<'position_attribution'>
+    | null;
+
+  return { ticker: t, analyst, analystDate, coverage, decisions, latestAttribution };
+}
+
+/**
+ * Distinct union of every ticker known to the dashboard's per-ticker surfaces
+ * (`positions`, `decision_log`, analyst documents via `documents.sector`, and
+ * `analyst_coverage`) — feeds the command palette's "Tickers" group and any
+ * build-time ticker enumeration. Fail-soft to `[]` per source so one missing
+ * table doesn't blank the whole union.
+ */
+export async function fetchAllTickers(): Promise<string[]> {
+  if (!isSupabaseConfigured() || !supabase) return [];
+  const TICKER_UNION_LIMIT = 2000;
+
+  const [posRes, decRes, docRes, covRes] = await Promise.all([
+    supabase.from('positions').select('ticker').limit(TICKER_UNION_LIMIT),
+    supabase.from('decision_log').select('ticker').limit(TICKER_UNION_LIMIT),
+    supabase
+      .from('documents')
+      .select('sector')
+      .like('document_key', 'analyst/%')
+      .limit(TICKER_UNION_LIMIT),
+    supabase.from('analyst_coverage').select('ticker').limit(TICKER_UNION_LIMIT),
+  ]);
+
+  const out = new Set<string>();
+  const add = (rows: unknown, error: unknown, label: string, key: string): void => {
+    if (error) {
+      console.warn(`fetchAllTickers ${label} query:`, error);
+      return;
+    }
+    for (const row of (rows as Record<string, unknown>[] | null) ?? []) {
+      const v = row[key];
+      if (typeof v === 'string' && v.trim()) out.add(v.toUpperCase().trim());
+    }
+  };
+  add(posRes.data, posRes.error, 'positions', 'ticker');
+  add(decRes.data, decRes.error, 'decision_log', 'ticker');
+  add(docRes.data, docRes.error, 'documents', 'sector');
+  add(covRes.data, covRes.error, 'analyst_coverage', 'ticker');
+
+  return sortTickerUniverse([...out]);
+}
+
 /** PostgREST page size for Activity ledger (avoid 10k truncation on dense HOLD history). */
 const POSITION_EVENTS_PAGE = 2500;
 const POSITION_EVENTS_MAX = 80000;
@@ -488,12 +701,13 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   })();
 
   const [
-    snapshotRes, positionsRes, thesesRes, navRes,
+    snapshotRes, positionsRes, instrumentsRes, thesesRes, navRes,
     benchRes, metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
     pmRebalanceRes,
   ] = await Promise.all([
     supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
     supabase.from('positions').select('*').order('date', { ascending: false }).limit(1000),
+    supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
     supabase.from('nav_history').select('*').order('date', { ascending: true }),
     supabase
@@ -539,6 +753,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
 
   if (pmRebalanceRes.error) {
     console.warn('Supabase pm-rebalance prefetch:', pmRebalanceRes.error);
+  }
+  if (instrumentsRes.error) {
+    console.warn('Supabase instruments query (apply migration 055 if missing):', instrumentsRes.error);
   }
   if (deltaDocsRes.error) {
     console.error('Supabase delta-request documents query:', deltaDocsRes.error);
@@ -588,6 +805,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       ? (rawSnapshotJson as DigestSnapshot)
       : null;
   const allPositions: TableRow<'positions'>[] = positionsRes.data ?? [];
+  const allInstruments: TableRow<'instruments'>[] = instrumentsRes.data ?? [];
+  const instrumentByTicker = buildInstrumentLookup(allInstruments);
   const allTheses: TableRow<'theses'>[] = thesesRes.data ?? [];
   const navHistory: TableRow<'nav_history'>[] = navRes.data ?? [];
   const benchRows: Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[] =
@@ -773,8 +992,20 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     proposedPositions.map((p) => [p.ticker, Number(p.weight_pct ?? 0)])
   );
 
-  // Treat proposed_positions as executed immediately (post-trade = current).
-  const effectiveCurrentPositions: TableRow<'positions'>[] = proposedPositions.length
+  // Whether the committed book already covers the snapshot's date. When it
+  // does, the positions table is the truth: it carries the POST-TURNOVER
+  // booked weights (H8 sizing + no-trade band + carry), which legitimately
+  // differ from the PM's proposal (e.g. a 20% target booked at 11.4%).
+  const bookedCoversSnapshot =
+    latestPosDate != null && snapshot.date != null && latestPosDate >= snapshot.date;
+
+  // Treat proposed_positions as executed immediately ONLY while the booked
+  // positions LAG the snapshot — the coping path for a frozen/failed commit
+  // (the #1555 era, when this fallback was the whole dashboard's data source).
+  // Preferring the proposal once the book is committed showed PM INTENT as
+  // if it were the actual book across Holdings/Brief/dossier (#1572).
+  const effectiveCurrentPositions: TableRow<'positions'>[] = !bookedCoversSnapshot &&
+  proposedPositions.length
     ? proposedPositions
         .filter((p) => Number(p.weight_pct ?? 0) > 0)
         .map((p) => {
@@ -888,23 +1119,34 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     return null;
   }
 
-  const positions: Position[] = effectiveCurrentPositions.map((p) => ({
+  const positions: Position[] = effectiveCurrentPositions.map((p) => {
+    const identity = resolveInstrumentIdentity(p, instrumentByTicker);
+    return {
     // Prices: prefer explicit position fields; else derive from price_history
     ticker: p.ticker,
-    name: p.name ?? p.ticker,
+    name: identity.name,
+    instrument: identity.instrument,
     type: 'LONG' as const,
     weight_actual: Number(p.weight_pct ?? 0),
     weight_target: targetWeightByTicker.has(p.ticker) ? targetWeightByTicker.get(p.ticker)! : null,
+    // `prevWeightByTicker.get(...) ?? 0` used to make a brand-new 10% position report `+10.0pp`
+    // — a rate of change for something with no prior size to change from, which reads as
+    // "added 10 points to an existing holding" rather than "opened a position" (#1850). A
+    // ticker missing from the prior book is `undefined`, and `holdingWeightChange` keeps that
+    // distinct from a held-but-0% sleeve, which genuinely can move.
     weight_delta:
       latestPosDate && prevPosDate
-        ? Number(p.weight_pct ?? 0) - (prevWeightByTicker.get(p.ticker) ?? 0)
+        ? holdingWeightChange(
+            Number(p.weight_pct ?? 0),
+            prevWeightByTicker.has(p.ticker) ? prevWeightByTicker.get(p.ticker) : null,
+          ).deltaPp
         : null,
     current_price: p.current_price != null ? Number(p.current_price) : latestClose(p.ticker).curr,
     entry_price: resolvedEntryPrice(p),
     entry_date: p.entry_date ?? null,
     rationale: p.rationale ?? '',
     thesis_ids: p.thesis_id ? [p.thesis_id] : [],
-    category: inferPortfolioCategory(p.ticker, p.category),
+    category: identity.category,
     pm_notes: p.pm_notes ?? '',
     stats: {},
     unrealized_pnl_pct: (() => {
@@ -944,7 +1186,8 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     target_pct_gain: p.target_pct_gain ?? null,
     horizon_days: p.horizon_days ?? null,
     sector_bucket: p.sector_bucket ?? null,
-  }));
+    };
+  });
 
   // Rebalance actions — prefer pm-rebalance.actions (carry per-ticker rationale
   // from the PM LLM) over the locally derived action labels when pm-rebalance is
@@ -956,21 +1199,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     if (pmRebDateMatches && pmRebPayload) {
       const acts = pmRebPayload.actions;
       if (Array.isArray(acts) && acts.length > 0) {
-        return acts
-          .map((a) => {
-            if (!a || typeof a !== 'object') return null;
-            const o = a as Record<string, unknown>;
-            const ticker = String(o.ticker || '').trim().toUpperCase();
-            if (!ticker) return null;
-            const current_pct = Number(o.current_pct ?? 0);
-            // Live shape: `target_pct`; fixture / test payloads: `recommended_pct`.
-            const recommended_pct = Number(o.target_pct ?? o.recommended_pct ?? 0);
-            const action = String(o.action || 'HOLD').toUpperCase();
-            // Carry rationale so downstream UI can render it without another fetch.
-            const rationale = o.rationale != null ? String(o.rationale) : undefined;
-            return { ticker, current_pct, recommended_pct, action, rationale };
-          })
-          .filter(Boolean) as { ticker: string; current_pct: number; recommended_pct: number; action: string; rationale?: string }[];
+        // buildRebalanceActions resolves the prior weight from the PREVIOUS book date (#1850);
+        // see that module for why the CURRENT book is the wrong source.
+        return buildRebalanceActions(acts, prevWeightByTicker);
       }
     }
     // Fallback: derive action from proposed vs current weight delta.
@@ -1077,16 +1308,19 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     },
     positions,
     portfolio_management: {
-      current_positions: effectiveCurrentPositions.map((p) => ({
-        ticker: p.ticker,
-        name: p.name ?? p.ticker,
-        category: inferPortfolioCategory(p.ticker, p.category),
-        weight_pct: Number(p.weight_pct ?? 0),
-        thesis_ids: p.thesis_id ? [p.thesis_id] : [],
-        entry_date: p.entry_date ?? null,
-        entry_price_usd: resolvedEntryPrice(p),
-        notes: p.pm_notes ?? '',
-      })),
+      current_positions: effectiveCurrentPositions.map((p) => {
+        const identity = resolveInstrumentIdentity(p, instrumentByTicker);
+        return {
+          ticker: p.ticker,
+          name: identity.name,
+          category: identity.category,
+          weight_pct: Number(p.weight_pct ?? 0),
+          thesis_ids: p.thesis_id ? [p.thesis_id] : [],
+          entry_date: p.entry_date ?? null,
+          entry_price_usd: resolvedEntryPrice(p),
+          notes: p.pm_notes ?? '',
+        };
+      }),
       proposed_positions: proposedPositions.map((p) => ({
         ticker: p.ticker,
         weight_pct: p.weight_pct,
@@ -1100,7 +1334,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       date: p.date,
       ticker: p.ticker,
       weight_pct: Number(p.weight_pct ?? 0),
-      category: inferPortfolioCategory(p.ticker, p.category),
+      category: resolveInstrumentIdentity(p, instrumentByTicker).category,
       thesis_id: p.thesis_id ?? null,
     })),
     position_events,
@@ -1565,7 +1799,7 @@ export async function getLibraryDocumentById(id: string): Promise<LibraryDocumen
   }
 
   const view = resolveLibraryDocumentView(doc.document_key, doc.payload);
-  const markdown = md || '_No content available._';
+  const markdown = md || (payload ? '' : '_No content available._');
 
   return {
     id: doc.id,

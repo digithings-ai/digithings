@@ -45,3 +45,25 @@ export {
   type TooltipContentProps,
 } from "./Tooltip";
 export { Collapsible, CollapsibleTrigger, CollapsibleContent } from "./Collapsible";
+// promoted controls patterns (#1548)
+export {
+  Skeleton,
+  SkeletonGroup,
+  type SkeletonProps,
+  type SkeletonGroupProps,
+  type SkeletonVariant,
+} from "./Skeleton";
+export { EmptyState, type EmptyStateProps, type EmptyStateVariant } from "./EmptyState";
+export {
+  SegmentedControl,
+  Pager,
+  PagerPage,
+  IconButton,
+  type SegmentedControlProps,
+  type SegmentedOption,
+  type PagerProps,
+  type PagerPageProps,
+  type IconButtonProps,
+} from "./NavButtons";
+export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./TagsInput";
+export { SearchBar, type SearchBarProps } from "./SearchBar";

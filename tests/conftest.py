@@ -9,7 +9,7 @@ import pytest
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    """Fail-closed services need JWT settings; unit tests mint tokens locally (no DigiKey process)."""
+    """Fail-closed services need JWT settings; unit tests mint tokens locally (no digikey process)."""
     if os.environ.get("DIGI_STRICT_BACKEND_TESTS") == "1":
         os.environ.pop("DIGISEARCH_ALLOW_STUB", None)
     else:
@@ -18,7 +18,6 @@ def pytest_configure(config: pytest.Config) -> None:
         return
     try:
         from cryptography.hazmat.primitives.asymmetric import rsa
-
         from digikey.crypto_keys import private_key_to_pem, public_key_to_pem
     except ImportError as exc:
         # `digikey` source is always on sys.path (see pytest.ini pythonpath=), but its
@@ -57,19 +56,19 @@ def _url(env_var: str, default_port: int) -> str:
 
 @pytest.fixture(scope="session")
 def digiquant_url() -> str:
-    """Base URL for DigiQuant API. Set DIGIQUANT_URL or default 127.0.0.1:8001."""
+    """Base URL for digiquant API. Set DIGIQUANT_URL or default 127.0.0.1:8001."""
     return _url("DIGIQUANT_URL", 8001).rstrip("/")
 
 
 @pytest.fixture(scope="session")
 def digigraph_url() -> str:
-    """Base URL for DigiGraph API. Set DIGIGRAPH_URL or default 127.0.0.1:8000."""
+    """Base URL for digigraph API. Set DIGIGRAPH_URL or default 127.0.0.1:8000."""
     return _url("DIGIGRAPH_URL", 8000).rstrip("/")
 
 
 @pytest.fixture(scope="session")
 def digisearch_url() -> str:
-    """Base URL for DigiSearch API. Set DIGISEARCH_URL or default 127.0.0.1:8002."""
+    """Base URL for digisearch API. Set DIGISEARCH_URL or default 127.0.0.1:8002."""
     return _url("DIGISEARCH_URL", 8002).rstrip("/")
 
 
@@ -91,7 +90,7 @@ def e2e_available() -> bool:
 
 @pytest.fixture(scope="session")
 def digisearch_available() -> bool:
-    """True if DigiSearch is up (e.g. Docker stack with digisearch)."""
+    """True if digisearch is up (e.g. Docker stack with digisearch)."""
     import httpx
 
     try:

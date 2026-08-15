@@ -1,4 +1,10 @@
-# Legacy DigiGraph mode defaults (test / medium / best) + optional per-phase overrides.
+# Legacy digigraph mode defaults (test / medium / best) + optional per-phase overrides.
+#
+# ``llm_mode`` is an access/cost *policy*, not a product catalog:
+#   free   → resolved model must be free-tier capable (:free / ollama); pin via
+#            agents.llm or DIGI_LLM_PROVIDER/DIGI_LLM_MODEL — do NOT add a free:
+#            slug here (OpenRouter free roster rotates).
+#   test / medium / best → tier semantics; defaults below are local-dev fallbacks.
 #
 # Atlas/Hermes phase routing is centralized in config/olympus_models.yaml
 # (capability tier × OLYMPUS_MODEL_TIER). Entries here override that policy when
@@ -20,10 +26,17 @@ defaults:
 
 # Optional per-phase overrides — empty by default; olympus_models.yaml owns routing.
 phase_models:
-  # #1006: pin H6 deliberation to deepseek-chat. The cheap ``research`` pool also holds
-  # llama-4-maverick, which returns empty completions under STRICT json_schema — so the
-  # ~40% of watchlist tickers that hashed onto it failed json.loads at char 0
-  # (DeliberationPmTurn / DeliberationAnalystTurn). deepseek-chat is the json/tool-reliable
-  # open-weight model already in the pool; the trailing '-' makes this a prefix match for
-  # every per-ticker slug (hermes/portfolio/deliberation-{ticker}) emitted by h6_deliberation.
-  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-chat
+  # #1006: pin H6 deliberation. The cheap ``research`` pool also holds llama-4-maverick,
+  # which returns empty completions under STRICT json_schema — so the ~40% of watchlist
+  # tickers that hashed onto it failed json.loads at char 0 (DeliberationPmTurn /
+  # DeliberationAnalystTurn). deepseek-v4-flash is the json/tool-reliable open-weight
+  # model already in the pool; the trailing '-' makes this a prefix match for every
+  # per-ticker slug (hermes/portfolio/deliberation-{ticker}) emitted by h6_deliberation.
+  hermes/portfolio/deliberation-: openrouter/deepseek/deepseek-v4-flash
+  # #1559/#1622: pin Phase-7 master-digest. First pinned to deepseek-chat when the
+  # ``reasoning`` pool hash landed on deepseek-r1, whose chain-of-thought output is not
+  # reliably strict JSON (2026-07-18 delta digest JSONDecodeError → prior digest carried).
+  # Repointed to deepseek-v4-flash (#1622): 1M-token context removes the 64k synthesis
+  # ceiling entirely (the #1559 input budget stays as a cost bound), at half the price.
+  # Kept as a pin (not a pool hash) so digest routing stays deterministic.
+  master-digest: openrouter/deepseek/deepseek-v4-flash

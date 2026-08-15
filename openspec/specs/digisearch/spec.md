@@ -1,4 +1,4 @@
-# DigiSearch — Spec
+# digisearch — Spec
 
 **Port:** 8002  
 **Role:** RAG pipeline — document ingest, chunking, embedding, vector search, and orchestrator tool surface.

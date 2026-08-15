@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DigiChat · digithings",
-  description: "Production chat UI for the DigiGraph orchestrator.",
+  title: "digichat · digithings",
+  description: "Production chat UI for the digigraph orchestrator.",
 };
 
 // Pre-paint companion to the shared themeInitScript: mirror [data-theme] onto

@@ -24,15 +24,15 @@ LINKS = {
     297: [300, 314, 315, 316, 317, 318, 319, 320],
     # Website live demos
     174: [266, 261, 200, 204, 299, 301],
-    # DigiClaw (reduced scope)
+    # digiclaw (reduced scope)
     173: [216, 217, 218, 220, 221],
-    # DigiKey SSO federation
+    # digikey SSO federation
     175: [206, 207, 208, 209, 210, 211],
-    # DigiLink
+    # digilink
     171: [191, 192, 193, 194],
-    # DigiStore
+    # digistore
     172: [195],
-    # Legacy DigiChat ecosystem epic
+    # Legacy digichat ecosystem epic
     8: [201, 202, 203, 205],  # #204 routed to #174 instead
     # Legacy digiquant.io epic
     9: [183],

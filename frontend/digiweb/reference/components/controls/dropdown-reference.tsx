@@ -26,6 +26,7 @@ export function DropdownReference() {
   const [active, setActive] = useState(0);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const current = OPTIONS.find((o) => o.id === selected) ?? OPTIONS[0];
   const filtered = OPTIONS.filter(
@@ -38,13 +39,47 @@ export function DropdownReference() {
   // Enter stay aligned even if OPTIONS is reordered to interleave groups.
   const ordered = groups.flatMap((g) => filtered.filter((o) => o.group === g));
 
+  // Closing via Enter/Escape/a definitive in-pane action (option pick, footer
+  // action) returns focus to the trigger — the focused filter <input> simply
+  // unmounts when `open` goes false, and a focused element removed from the
+  // DOM falls back to <body>, stranding a keyboard user at the top of the
+  // document instead of back where they opened the menu from.
+  const closeMenu = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
+
+  // While open, Escape/Enter are caught by a DOCUMENT-level listener (below)
+  // so they work no matter which row/field inside the pane has focus. That
+  // only stays correct as long as focus is actually still somewhere inside
+  // the pane: if a keyboard user Tabs past the footer action onto later page
+  // content (nothing else here closes the menu on tab-out) — or another
+  // widget's own shortcut steals focus away, e.g. SearchBarReference's `/`
+  // hotkey — `open` stays true and a later, unrelated Escape/Enter keypress
+  // elsewhere on the page would still hit this pane's handler, including
+  // closeMenu()'s forced refocus back onto the trigger. Auto-closing the
+  // instant focus actually leaves the wrapper removes that stale-armed
+  // state. Same pattern as NavShell.tsx's onFocusLeave (React's onBlur is
+  // focusout, so it bubbles from children; relatedTarget is the element
+  // gaining focus, so this only fires once focus has genuinely left the
+  // pane). Plain setOpen, not closeMenu: focus already moved somewhere else
+  // on purpose, so it isn't yanked back to the trigger.
+  const onWrapperBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (wrapRef.current?.contains(e.relatedTarget as Node | null)) return;
+    setOpen(false);
+  };
+
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
+      // Deliberately plain setOpen(false), not closeMenu(): the user clicked
+      // somewhere else on purpose, so their click target keeps focus (the
+      // browser's own default click-to-focus already handles that) rather
+      // than this yanking focus back to the trigger.
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closeMenu();
       else if (e.key === "ArrowDown") {
         e.preventDefault();
         setActive((i) => Math.min(ordered.length - 1, i + 1));
@@ -54,7 +89,7 @@ export function DropdownReference() {
       } else if (e.key === "Enter" && ordered[active]) {
         e.preventDefault();
         setSelected(ordered[active].id);
-        setOpen(false);
+        closeMenu();
       }
     };
     document.addEventListener("mousedown", onDown);
@@ -87,8 +122,9 @@ export function DropdownReference() {
         arrow-keys to move, Enter to choose, click-outside or Escape to close.
       </p>
 
-      <div className="relative mt-[1.2rem] w-[min(100%,22rem)]" ref={wrapRef}>
+      <div className="relative mt-[1.2rem] w-[min(100%,22rem)]" ref={wrapRef} onBlur={onWrapperBlur}>
         <button
+          ref={triggerRef}
           type="button"
           className={`dd-trigger${open ? " open" : ""}`}
           aria-haspopup="listbox"
@@ -145,7 +181,7 @@ export function DropdownReference() {
                             onMouseEnter={() => setActive(idx)}
                             onClick={() => {
                               setSelected(o.id);
-                              setOpen(false);
+                              closeMenu();
                             }}
                           >
                             <span className="dd-dot" aria-hidden="true" />
@@ -166,7 +202,7 @@ export function DropdownReference() {
             </div>
 
             <div className="dd-footer">
-              <button type="button" className="dd-footer-action" onClick={() => setOpen(false)}>
+              <button type="button" className="dd-footer-action" onClick={closeMenu}>
                 <span aria-hidden="true">+</span> New strategy…
               </button>
             </div>

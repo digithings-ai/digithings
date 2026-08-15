@@ -1,14 +1,18 @@
-name: "Pipeline: DigiQuant tearsheets"
+name: "Pipeline: digiquant tearsheets"
 
-# Daily Slapper tearsheet regeneration for digiquant.io (#1068).
+# Daily Slapper tearsheet regeneration for digiquant.io (#1068, #1069).
+#
+# DB-driven delivery: the job regenerates and upserts the tearsheet payload
+# (headline metrics + equity curve + trade list + current signal) to Supabase
+# `strategy_tearsheets`. digiquant.io reads that table live at runtime, so there
+# is NO repo commit and NO deploy in this path — updating the row updates the site.
 #
 # Prerequisite (#1067): calibrations uploaded to strategy_calibrations via
 # digiquant/scripts/sync_strategy_calibrations.py (one-time, service role).
 #
 # 1. Fetch latest Coinbase daily OHLCV
 # 2. Backtest with calibrations from Supabase (private IP — never in repo/CI secrets)
-# 3. Commit frontend/digiquant-web/public/strategies/*.json for Cloudflare rebuild
-# 4. Upsert headline metrics to strategy_tearsheets
+# 3. Upsert the tearsheet payload + current signal to Supabase (service role)
 
 on:
   schedule:
@@ -17,7 +21,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   issues: write
 
 jobs:
@@ -35,47 +39,44 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            digibase/pyproject.toml
-            digikey/pyproject.toml
-            digiquant/pyproject.toml
+          ref: main   # scheduled triggers fire from default branch; code pinned to main (#1626)
 
-      - name: Install digiquant (nautilus + store)
-        run: |
-          python -m pip install -U pip
-          pip install -e "./digibase"
-          pip install -e "./digikey"
-          pip install -e "./digiquant[nautilus,prices]"
-          pip install ccxt
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # From the lockfile in the checked-out tree (`main`) — see #1717/#1721.
+      # This is the one pipeline that keeps NautilusTrader: it generates real
+      # tearsheets, so the engine is the point rather than a hazard (#42 is about
+      # the dq *test* lane, not this job).
+      #
+      # ccxt is NOT in the lock because it is declared in no pyproject, despite
+      # `digiquant/scripts/fetch_coinbase.py` importing it unguarded at module
+      # scope. It is supplied per-step below with `uv run --with` instead of being
+      # added to the lock here: the lockfile this job reads lives on `main`, so a
+      # new dependency could not take effect until the next release and the step
+      # would break in between. Declaring and pinning it is tracked separately.
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra nautilus --extra prices
 
       - name: Verify calibrations exist in Supabase
-        run: python digiquant/scripts/verify_strategy_calibrations_rls.py
+        run: uv run --frozen --no-sync python digiquant/scripts/verify_strategy_calibrations_rls.py
 
       - name: Fetch Coinbase daily OHLCV
-        run: python digiquant/scripts/fetch_coinbase.py --through-yesterday
+        run: uv run --frozen --with ccxt python digiquant/scripts/fetch_coinbase.py --through-yesterday
 
-      - name: Generate tearsheets (from Supabase calibrations)
+      - name: Generate tearsheets + push to Supabase
+        # --push-supabase: upsert the tearsheet payload + current signal to
+        # strategy_tearsheets (service role). --signal-delay-days 3 (#1462):
+        # public figures lag reality by 3 days (end-date shift) so the live
+        # position can't be read off the curve. No repo commit — the DB is the
+        # delivery; digiquant.io reads strategy_tearsheets live.
         run: |
-          python digiquant/scripts/generate_tearsheets.py \
+          uv run --frozen --no-sync python digiquant/scripts/generate_tearsheets.py \
             --from-supabase \
-            --push-supabase
-
-      - name: Commit refreshed static JSON (if changed)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/digiquant-web/public/strategies/
-          if git diff --staged --quiet; then
-            echo "No tearsheet changes to commit."
-            exit 0
-          fi
-          git commit -m "chore(digiquant): refresh Slapper tearsheets [skip ci]"
-          git push
+            --push-supabase \
+            --signal-delay-days 3
 
       - name: Update persistent failure issue
         if: failure()

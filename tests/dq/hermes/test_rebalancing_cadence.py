@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-
 from digiquant.olympus.hermes.turnover import (
     apply_rebalancing_cadence,
     hold_drifted_book,

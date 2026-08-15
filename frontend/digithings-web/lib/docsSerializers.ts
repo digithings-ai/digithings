@@ -1,6 +1,6 @@
 /**
  * Markdown serializers for the API docs — shared by the /docs page (the
- * "copy as Markdown" buttons in DocsLayout) and the DigiVault sync generator
+ * "copy as Markdown" buttons in DocsLayout) and the digivault sync generator
  * (scripts/gen-api-vault.ts), so the two never drift.
  *
  * Pure functions, no React or client-only deps; `ModuleNode` is imported as a

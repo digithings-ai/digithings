@@ -8,11 +8,10 @@ import sys
 import textwrap
 
 import pytest
-
 from digisearch.ingestion.parsers.plaintext import PlainTextParser
 from digisearch.ingestion.registry import ParserRegistry
 
-# Server/runtime modules that the [server] extra owns plus the DigiSearch client.
+# Server/runtime modules that the [server] extra owns plus the digisearch client.
 # Importing an ingestion parser (the [ingestion] extra) must NOT pull any of
 # these in — that is the whole point of the lazy package surface (#633).
 _FORBIDDEN_ON_PARSER_IMPORT = (
@@ -77,7 +76,7 @@ def test_pdf_parser_imports_without_server_stack() -> None:
     """`digisearch.ingestion.parsers.pdf` must import without the [server] stack.
 
     Proves the PEP 562 lazy ``digisearch/__init__`` does not eagerly import the
-    DigiSearch client, and that the parser's own import chain stays light.
+    digisearch client, and that the parser's own import chain stays light.
     """
     result = _import_isolation_probe("import digisearch.ingestion.parsers.pdf")
     assert result.returncode == 0, result.stderr or result.stdout
@@ -100,9 +99,10 @@ def test_top_level_import_stays_lazy() -> None:
 @pytest.mark.unit
 def test_lazy_client_attribute_still_resolves() -> None:
     """`digisearch.DigiSearch` (and core models) still resolve via PEP 562 __getattr__."""
-    import digisearch
     from digisearch.client import DigiSearch as RealClient
     from digisearch.core.models import Document as RealDocument
+
+    import digisearch
 
     # Public names are exported and discoverable...
     for name in ("DigiSearch", "Chunk", "Document", "Query", "Result"):
@@ -116,4 +116,4 @@ def test_lazy_client_attribute_still_resolves() -> None:
     assert all(getattr(digisearch, n) is not None for n in ("Chunk", "Query", "Result"))
 
     with pytest.raises(AttributeError):
-        digisearch.does_not_exist  # noqa: B018 - intentional attribute probe
+        digisearch.does_not_exist  # intentional attribute probe

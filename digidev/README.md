@@ -66,7 +66,7 @@ No tool? Skip it. The core workflow (tasks → code → score → commit → PR)
 ```
 .claude/
   settings.json          ← hook wiring + allowlisted commands
-  agents/                ← 6 subagents (spec-writer, pr-reviewer, etc.)
+  agents/                ← 4 subagents (spec-writer, component-router, etc.)
   skills/                ← 6 skills (finish-task, score-and-fix, triage, etc.)
   commands/              ← 5 slash commands (/spec, /score, /task, /triage, etc.)
 

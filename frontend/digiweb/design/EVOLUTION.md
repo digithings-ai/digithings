@@ -1,4 +1,4 @@
-# DigiThings design evolution
+# digithings design evolution
 
 **Status:** Living document · **Last updated:** 2026-07-05
 
@@ -8,7 +8,7 @@
 > DqNav/DigiNav hydration fix (#1291/#1296). **Reverted:** digithings hero
 > trust-strip + ProductFrame + 4-module bento (#1210/#1211), digiquant hero CTAs +
 > trust-strip + stat row + feature bento (#1213/#1214), the closing-CTA wiring on
-> both sites (#1227), the DigiChat `/welcome` route (#1218), and the Olympus status
+> both sites (#1227), the digichat `/welcome` route (#1218), and the Olympus status
 > dot (#1231). The shared CSS/JS **primitives below still exist** in `frontend/digiweb/design/`
 > (unused except by `/#pricing`); the checklist marks reflect what was *built*, not
 > what is currently wired live. See #1308.
@@ -27,9 +27,9 @@ removed as dead code in #1240 once an import-graph audit confirmed neither
 landing referenced them. The standalone `terminal/` primitive (`initTerminal`,
 unrelated to `site/terminal.js` above) was removed the same way in #1365: the
 2026-07-05 terminal-widget prototype (`design-reference.html`) explicitly
-considered and rejected reviving it in favor of a fresh build, and DigiChat's
+considered and rejected reviving it in favor of a fresh build, and digichat's
 only reference to it was an unused `styles.css` import — no `.term-*` class
-was ever consumed, since DigiChat's real chat UI uses its own `.dc-term-*`
+was ever consumed, since digichat's real chat UI uses its own `.dc-term-*`
 system instead.
 
 **Deep audits:** [`references/scans/`](references/scans/INDEX.md) — page-by-page,
@@ -74,7 +74,7 @@ we build next.
 | Hero mesh + parallax | `HeroMesh.tsx` both landings | Stripe/Graphite atmosphere |
 | Mono kickers `// section` | `site.css` `.kicker` | xAI eyebrows |
 | Module accent palette | `tokens.css` `--accent-*` | Unique to us — keep |
-| Terminal / CLI identity | DigiChat, manifests, `terminal.js` | xAI mono voice |
+| Terminal / CLI identity | digichat, manifests, `terminal.js` | xAI mono voice |
 | Glass dashboard | Olympus | **Deprecate toward flat** (xAI) |
 | Hamburger nav + persistent theme/GitHub | `DigiNav`, `DqNav` | Cursor mobile utilitarian |
 | Shared primitives | `scroll-trigger`, `typography-motion`, `quant-native` | Graphite motion infra |
@@ -146,7 +146,7 @@ API / docs pages      ○          ◐        ●
 3. Hero CTA + “fund in a box” trust strip
 4. Wire stat counters to real metrics when available
 
-### DigiChat (`frontend/digichat/`)
+### digichat (`frontend/digichat/`)
 
 **Mode:** Product-as-landing
 
@@ -313,7 +313,7 @@ Add to `tokens.css` when implementing primitives:
 
 - [x] Olympus glass → surface migration (#1216) — **audit: already flat**. `.glass-card` is a legacy *name* for a flat `--surface` panel (1px `--hair` border, subtle intentional depth shadow, not glass); `backdrop-blur` is confined to sticky/overlay chrome (nav, mobile app bar, command palette, sidebar), never content. Surface system documented in `frontend/olympus/app/globals.css` (Olympus has no ARCHITECTURE.md/AGENTS.md to update). No visual change — anti-pattern #8 already satisfied.
 - [x] twelve-x xAI utility polish (#1217) — **audit: already there**. Section/table headers use `uppercase tracking-wider` mono-style labels (`ConsensusDataTable`, `IntelligenceTab`, `MoversStrip`); metrics use `font-mono tabular-nums`; chips/panels are flat (`.glass-card` = flat panel, per #1216); `MoversStrip` is already a real-data headline FX metric strip. No mesh/serif/scrolly. Forcing the shared `StatCounter` over the working `MoversStrip` would be churn — left as-is.
-- [x] DigiChat full token adoption (#240, closed) + product-as-hero `/welcome` marketing route with a BYOK/API `CodeSampleBand` (#1218). Public route (frozen chat-UI hero, cyan accent); shared `.code-sample-band` CSS scoped under `.welcome-codeband` with local dark `--term-*` values (digichat doesn't set `:root[data-theme]`). No purple in v2 tokens — cyan only (AC wording flagged).
+- [x] digichat full token adoption (#240, closed) + product-as-hero `/welcome` marketing route with a BYOK/API `CodeSampleBand` (#1218). Public route (frozen chat-UI hero, cyan accent); shared `.code-sample-band` CSS scoped under `.welcome-codeband` with local dark `--term-*` values (digichat doesn't set `:root[data-theme]`). No purple in v2 tokens — cyan only (AC wording flagged).
 
 ### Phase E — Additional primitives & content-gated integration
 
@@ -326,7 +326,7 @@ Add to `tokens.css` when implementing primitives:
 - [x] both landings closing CTA wiring — #1227. `ClosingCtaBand` wired before the footer on both sites via `<Reveal className="closing-cta">` (reveal-up + reduced-motion via the shared Reveal). digithings.ai: "Build your agent stack in the open." → **Ask digichat** (/chat) · Read the docs (/docs). digiquant.io: "One graph, research to execution." → **Open Olympus** (/#olympus) · Browse strategies (/strategies). Internal links use `next/link`.
 - [x] `TrustStrip` integration logo variant (`.trust-strip--logos`) — #1229. x.ai-style integration-mark row (real stack: NautilusTrader · LangGraph · LiteLLM · Polars), grayscale/muted default → color on hover, composes on the base strip. Smoke demo (text wordmarks; production uses real logo `<img>` + `alt`) + `site/README.md`. No stock/fabricated logos.
 - [x] `CaseStudyCard` primitive (P3, content-gated) — #1230. `.case-study` flat card (`{org} × digithings` label, quote, attribution + optional logo), composes in bento/capability-grid/`.h-scroll`. Content-gated — ships dormant, `.case-study--example` watermark for demos only, real attribution required in production. Smoke demo (watermarked example row) + `site/README.md` content shape.
-- [x] Olympus status dot → DigiSmith (P3) — #1231. Sidebar-footer operator dot polling DigiSmith `GET /v1/status` every 60s (`lib/digismith-status.ts` + `components/status-dot.tsx`). Env-gated on `NEXT_PUBLIC_DIGISMITH_URL` (unset → not rendered, so local dev without the stack is unaffected); non-blocking client fetch; green (ok) / amber (degraded) / red (error) / grey (unreachable — graceful); no PII in the label. Documented in Olympus README (no ARCHITECTURE.md exists). Maintainer-approved the new Olympus→DigiSmith dependency; deploy needs CORS + CSP `connect-src`.
+- [x] Olympus status dot → digismith (P3) — #1231. Sidebar-footer operator dot polling digismith `GET /v1/status` every 60s (`lib/digismith-status.ts` + `components/status-dot.tsx`). Env-gated on `NEXT_PUBLIC_DIGISMITH_URL` (unset → not rendered, so local dev without the stack is unaffected); non-blocking client fetch; green (ok) / amber (degraded) / red (error) / grey (unreachable — graceful); no PII in the label. Documented in Olympus README (no ARCHITECTURE.md exists). Maintainer-approved the new Olympus→digismith dependency; deploy needs CORS + CSP `connect-src`.
 
 ---
 
@@ -355,8 +355,8 @@ From user iteration log + reference analysis:
 | [`site/README.md`](site/README.md) | Theme contract + JS modules |
 | [`references/olympus-subpage-chrome.md`](references/olympus-subpage-chrome.md) | Olympus subpage chrome — tab bar, tabs-vs-sidebar, typography, surfaces (#1220) |
 | [`docs/adr/0009-frontend-umbrella.md`](../../docs/adr/0009-frontend-umbrella.md) | Monorepo layout |
-| `frontend/digithings-web/components/landing/` | DigiThings landing components |
-| `frontend/digiquant-web/components/landing/` | DigiQuant landing components |
+| `frontend/digithings-web/components/landing/` | digithings landing components |
+| `frontend/digiquant-web/components/landing/` | digiquant landing components |
 | `frontend/olympus/components/twelve-x/` | twelve-x research UI |
 
 ---

@@ -8,7 +8,7 @@ import pytest
 
 pytest.importorskip("openai")  # chain -> atlas.graph -> digigraph.llm needs openai
 
-from digiquant.olympus.hermes import chain  # noqa: E402
+from digiquant.olympus.hermes import chain
 
 
 @pytest.mark.unit

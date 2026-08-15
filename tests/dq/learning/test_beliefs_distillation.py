@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any  # noqa  # scored-lint: heterogeneous fake-row / fixture dicts
-import pytest
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous fake-row / fixture dicts
+)
 
+import pytest
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightReflectDeps,
     build_preflight_reflect_node,
@@ -176,7 +178,7 @@ class TestPreflightReflectDaily:
 
         called: dict[str, int] = {"resolve": 0}
 
-        def stub_resolve(*, client: Any, run_date: Any, reflector: Any) -> int:  # noqa: ARG001
+        def stub_resolve(*, client: Any, run_date: Any, reflector: Any) -> int:
             called["resolve"] += 1
             return 0
 

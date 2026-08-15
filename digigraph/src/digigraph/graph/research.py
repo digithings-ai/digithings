@@ -1,4 +1,4 @@
-"""Research node: document RAG (tool loop), quant JSON extraction, and DigiSearch-augmented prompts."""
+"""Research node: document RAG (tool loop), quant JSON extraction, and digisearch-augmented prompts."""
 
 from __future__ import annotations
 
@@ -6,12 +6,16 @@ import json
 import logging
 import os
 import re
-from contextvars import ContextVar
 from typing import Any
+
+from langgraph.config import get_store, get_stream_writer
+from langgraph.store.base import BaseStore
+from langgraph.types import StreamWriter
 
 from digigraph.boundaries import PROJECT_CONFIG_ERRORS
 from digigraph.filter_hints import extract_filter_hints
 from digigraph.graph.state import WorkflowState
+from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
@@ -20,9 +24,37 @@ from digigraph.trace_events import merge_rag_sources_accumulator
 
 logger = logging.getLogger(__name__)
 
-# Stream callback for streaming runs. Set by workflow before invoke so the node can use it
-# when LangGraph does not pass config to the node (or strips configurable).
-_stream_callback_ctx: ContextVar[object | None] = ContextVar("stream_callback", default=None)
+
+def _safe_stream_writer() -> StreamWriter:
+    """get_stream_writer() raises RuntimeError when called outside a compiled graph's
+    invocation (e.g. a unit test calling a node function directly, bypassing
+    graph.invoke()/.stream()) -- catch that and fall back to a true no-op, so node
+    logic stays testable in isolation without needing a full graph invocation."""
+    try:
+        return get_stream_writer()
+    except RuntimeError:
+        return lambda _data: None
+
+
+def _safe_get_store() -> BaseStore | None:
+    """get_store() raises RuntimeError when called outside a compiled graph's
+    invocation (e.g. a unit test calling a node function directly, or any other
+    out-of-runnable-context call) -- catch that and return None, mirroring
+    _safe_stream_writer()'s pattern so node logic stays testable/callable in
+    isolation without needing a real graph invocation.
+
+    Also covers the in-graph case where the compiled graph has no store attached
+    at all: LangGraph's get_store() returns None then (no exception), which a bare
+    ``store.put(...)``/``store.get(...)`` call would turn into an AttributeError.
+    Callers must treat a None return here the same as "no store available" and
+    skip the store-dependent logic, exactly as if the calling condition (e.g.
+    ``if subject:``) were false.
+    """
+    try:
+        return get_store()
+    except RuntimeError:
+        return None
+
 
 RESEARCH_SYSTEM = """You are a quant research assistant. Given a user idea for a trading strategy, respond with exactly one JSON object (no markdown fences, no prose before or after) with keys:
 - "strategy_name": snake_case name, e.g. mean_reversion_stat_arb, ema_cross, bollinger_mr
@@ -32,7 +64,7 @@ If the user names tickers or a universe, every symbol must appear in "symbols". 
 
 
 def _coerce_strategy_params(raw: object) -> dict[str, float | int | str] | None:
-    """Normalize LLM-provided strategy_params for DigiQuant (flat JSON numbers/strings only)."""
+    """Normalize LLM-provided strategy_params for digiquant (flat JSON numbers/strings only)."""
     if raw is None:
         return None
     if isinstance(raw, dict) and len(raw) == 0:
@@ -197,33 +229,58 @@ def _is_likely_network_failure(exc: Exception) -> bool:
     return False
 
 
-def _user_facing_llm_error(exc: Exception) -> str:
+def _user_facing_llm_error(exc: Exception) -> tuple[str, str | None]:
+    """Return ``(message, error_code)`` for an LLM failure.
+
+    ``error_code`` is a stable digichat contract value (e.g. ``free_quota_exceeded``)
+    or ``None`` when the failure is unclassified.
+    """
+    from digigraph.llm_errors import (
+        FREE_QUOTA_EXCEEDED,
+        RATE_LIMIT,
+        classify_llm_error,
+        free_quota_message,
+        rate_limit_message,
+    )
+
+    code = classify_llm_error(exc)
+    if code == FREE_QUOTA_EXCEEDED:
+        return free_quota_message(), FREE_QUOTA_EXCEEDED
+    if code == RATE_LIMIT:
+        return rate_limit_message(), RATE_LIMIT
+
     msg = str(exc).lower()
     if "context window exceeds limit" in msg or "context_length_exceeded" in msg:
         return (
             "The conversation or context is too long for this model. "
-            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question."
+            "Try: start a new chat, use a model with a larger context (e.g. set DIGI_LLM_MODE=medium), or shorten your question.",
+            None,
         )
-    if "rate limit" in msg or "rate_limit" in msg:
-        return "Rate limit reached. Please wait a moment and try again."
     if "invalid api key" in msg or "authentication" in msg or "401" in msg:
-        return "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY)."
+        return (
+            "API authentication failed. Check your model provider settings (e.g. OLLAMA_API_KEY, OPENAI_API_KEY).",
+            None,
+        )
     if _is_likely_network_failure(exc):
         base = (os.environ.get("OPENAI_API_BASE") or "").strip() or "(unset — OpenAI default URL)"
         vert = _vertical_url_host_hints()
+        if vert:
+            # Operator diagnostics only — never stream Docker Compose hostnames to embed clients.
+            logger.warning("research network failure host hints: %s", vert)
         return (
-            "A network connection failed during research (LLM and/or tools calling DigiSearch). "
+            "A network connection failed during research (LLM and/or tools calling digisearch). "
             f"OPENAI_API_BASE is {base}. "
-            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure DigiGraph can reach it. "
-            "Document/RAG also needs DigiSearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
-            + (vert + " " if vert else "")
-            + "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
-            "See docs/LOCAL_STACK.md."
+            "Start LiteLLM (http://127.0.0.1:4000/v1) or Ollama (http://127.0.0.1:11434/v1) and ensure digigraph can reach it. "
+            "Document/RAG also needs digisearch orchestrator at DIGISEARCH_URL (host: http://127.0.0.1:8002). "
+            "If you use `make stack-local`, host.docker.internal in OPENAI_API_BASE is rewritten to 127.0.0.1. "
+            "See docs/LOCAL_STACK.md.",
+            None,
         )
     tail = _vertical_url_host_hints()
     if tail:
-        return f"RAG workflow failed: {exc!s} {tail}"
-    return f"RAG workflow failed: {exc!s}"
+        logger.warning("research failure host hints: %s", tail)
+    # Never echo raw exception text (may include Compose service DNS names like digisearch:8002).
+    return "Research failed. Please try again shortly.", None
 
 
 def _plan_result_preview(result: str | dict) -> str:
@@ -236,10 +293,26 @@ def _plan_result_preview(result: str | dict) -> str:
     return s[:400] + "..." if len(s) > 400 else s
 
 
+def _tool_name(tool: dict[str, Any] | str) -> str | None:
+    """Extract the orchestrator tool name from an OpenAI tool dict or SUMMARY string."""
+    if isinstance(tool, str):
+        return tool.split(":", 1)[0].strip() or None
+    if not isinstance(tool, dict):
+        return None
+    fn = tool.get("function")
+    if isinstance(fn, dict):
+        name = fn.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    name = tool.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return None
+
+
 def _run_document_rag_path(
     *,
     state: WorkflowState,
-    config: dict | None,
     cfg: DigiProjectConfig | None,
     system_prompt: str,
     index_name: str,
@@ -270,15 +343,28 @@ def _run_document_rag_path(
     _allowed_names = frozenset(_raw_allowed) if _raw_allowed else None
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
+    # Normalize before constructing ToolContext (#2295 review): an empty or
+    # whitespace-only DIGISEARCH_INDEX (e.g. `DIGISEARCH_INDEX=""` in the
+    # environment) flows straight through `_load_research_settings()` into
+    # `index_name` here unstripped. digisearch happens to fall back to "default"
+    # server-side, but `ToolContext.index_name` should never carry an empty
+    # value — it is now written unconditionally into every digisearch call's
+    # args (`_handle_digisearch`'s #2265 fix), so an empty value here is no
+    # longer harmlessly absent.
+    _resolved_index_name = str(index_name).strip() or "default"
     context = ToolContext(
         session_id=state.get("session_id"),
         run_data_dir=run_data_dir,
-        index_name=index_name,
+        index_name=_resolved_index_name,
         index_config=index_config,
         state=state,
         allowed_tool_names=_allowed_names,
         request_id=None if _ctx_rid is None else (str(_ctx_rid).strip() or None),
         workflow_id=None if _ctx_wid is None else (str(_ctx_wid).strip() or None),
+        vault_path_prefix=(
+            str(state["vault_path_prefix"]).strip() if state.get("vault_path_prefix") else None
+        )
+        or None,
     )
     tools_for_llm = get_tools_for_skills(skill_ids, context)
     collected_stored: dict[str, dict] = {}
@@ -292,26 +378,27 @@ def _run_document_rag_path(
                 collected_stored[p["ref"]] = p
         if isinstance(result, dict) and result.get("rag_sources"):
             merge_rag_sources_accumulator(collected_rag, result["rag_sources"])
+        # Make every tool call visible in the activity UI, including zero-hit
+        # searches: without hit_count, "searched and found nothing" and "never
+        # searched" look identical downstream. setdefault so a tool that already
+        # sets these (e.g. a future handler) is not clobbered.
+        if isinstance(result, dict):
+            result.setdefault("hit_count", len(result.get("rag_sources") or []))
+            query_arg = args.get("query") or args.get("vault_path")
+            if query_arg:
+                result.setdefault("query", str(query_arg))
         return result
 
-    raw_callback = None
-    if config and isinstance(config.get("configurable"), dict):
-        raw_callback = config["configurable"].get("stream_callback")
-    if raw_callback is None:
-        raw_callback = state.get("stream_callback")
-    if raw_callback is None:
-        raw_callback = _stream_callback_ctx.get()
+    writer = _safe_stream_writer()
 
     def stream_callback(event_type: str, data: Any) -> None:
-        if raw_callback is None:
-            return
         if (
             event_type == "tool_call"
             and data
             and data.get("name") in ("digisearch", "digisearch_fetch_all")
         ):
             data = {**data, "index_name": index_display_name}
-        raw_callback(event_type, data)
+        writer((event_type, data))
 
     user_content = str(prompt)
 
@@ -351,6 +438,14 @@ def _run_document_rag_path(
                 + user_content
             )
 
+    # The model drives retrieval: it chooses whether to search, writes its own query,
+    # and may follow a digisearch hit with digivault_get_note to read the whole note.
+    # 4 rounds is enough for locate -> load -> answer with one retry. This bounds
+    # tool-calling rounds, not the completion count outright: run_tools unconditionally
+    # fires one extra tool-free completion to synthesize a final answer once the round
+    # budget is exhausted (digillm/src/digillm/client.py, run_tools' post-loop handling),
+    # so a fully-exhausted budget costs exactly 5 completions per turn (this used to be
+    # exactly 1).
     content = run_tools(
         model=get_model_for_mode(),
         messages=[
@@ -359,7 +454,9 @@ def _run_document_rag_path(
         ],
         tools=tools_for_llm,
         execute_tool=execute_search,
+        max_tool_rounds=4,
         on_tool_step=stream_callback,
+        tool_choice="required" if state.get("require_tool_calls") else "auto",
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
@@ -430,7 +527,7 @@ def _run_quant_or_augmented_path(
     user_content = str(prompt)
     if doc_context:
         user_content = (
-            f"[Document context from DigiSearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
+            f"[Document context from digisearch]\n{doc_context}\n\n[User prompt]\n{prompt}"
         )
 
     try:
@@ -498,17 +595,20 @@ def _run_quant_or_augmented_path(
             out["strategy_params"] = sp
         return out
     except Exception as e:
-        err_msg = _user_facing_llm_error(e)
-        return {
+        err_msg, err_code = _user_facing_llm_error(e)
+        out: dict = {
             "strategy_name": None,
             "symbols": None,
             "research_note": "error",
             "research_response": None,
             "error": err_msg,
         }
+        if err_code:
+            out["error_code"] = err_code
+        return out
 
 
-def research_node(state: WorkflowState, config: dict | None = None) -> dict:
+def research_node(state: WorkflowState) -> dict:
     """Data Science Family (Phase 1): LLM infers strategy/symbols or document-mode RAG with tools."""
     prompt = state.get("prompt")
     if not prompt or not str(prompt).strip():
@@ -520,13 +620,23 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
         }
 
     cfg, index_name, index_display_name, system_prompt = _load_research_settings()
+    override_index = state.get("digisearch_index")
+    if override_index and str(override_index).strip():
+        index_name = str(override_index).strip()
+        index_display_name = index_name
+    override_prompt = state.get("research_system_prompt_override")
+    if override_prompt and str(override_prompt).strip():
+        system_prompt = str(override_prompt).strip()
     is_document_mode = system_prompt != RESEARCH_SYSTEM
+
+    language_directive = resolve_language_directive(state.get("response_language"))
+    if language_directive:
+        system_prompt = f"{system_prompt}\n\n{language_directive}"
 
     if is_document_mode and _digisearch_available():
         try:
             return _run_document_rag_path(
                 state=state,
-                config=config,
                 cfg=cfg,
                 system_prompt=system_prompt,
                 index_name=index_name,
@@ -534,14 +644,33 @@ def research_node(state: WorkflowState, config: dict | None = None) -> dict:
                 prompt=str(prompt),
             )
         except Exception as e:
-            err_msg = _user_facing_llm_error(e)
-            return {
+            err_msg, err_code = _user_facing_llm_error(e)
+            out: dict = {
                 "strategy_name": None,
                 "symbols": None,
                 "research_note": "error",
                 "research_response": None,
                 "error": err_msg,
             }
+            if err_code:
+                out["error_code"] = err_code
+            return out
+
+    # Scope warning, not a guard. `require_tool_calls` is wired into exactly one
+    # tool loop -- the document RAG path above. This path, and the sub-agent runners
+    # under digigraph/agents/*, run at tool_choice="auto" regardless. An operator who
+    # sets DIGI_REQUIRE_TOOL_CALLS=true as a grounding mandate would otherwise get a
+    # silent no-op here (e.g. DIGISEARCH_URL unset, so _digisearch_available() is
+    # False and every request falls through). Log it rather than fail the request:
+    # the flag is advisory outside the RAG path today. Central enforcement is #2384.
+    if state.get("require_tool_calls"):
+        logger.warning(
+            "require_tool_calls=true but this request took the quant/augmented path, "
+            "which does not enforce tool_choice; the grounding mandate is not applied "
+            "(is_document_mode=%s, digisearch_available=%s)",
+            is_document_mode,
+            _digisearch_available(),
+        )
 
     _req_rid = state.get("request_id")
     _norm_rid = None if _req_rid is None else (str(_req_rid).strip() or None)

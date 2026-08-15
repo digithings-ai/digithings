@@ -8,8 +8,13 @@ const TEXT =
   "The whole sentence is readable before anything moves scroll only decides which word carries the weight";
 const WORDS = TEXT.split(" ");
 
-/** Same hold contract as the blur variant: done by 70%, held for the last 30%. */
-const REVEAL_END = 0.7;
+/** Shorter hold than the promoted full-drama variant (0.7): this is one of
+ *  two reference-only variants stacked back-to-back on the same page, each
+ *  riding its own pinned track — three consecutive 30%-of-track dead-scroll
+ *  holds compound into a noticeable "did scrolling stop working" stretch
+ *  reading top to bottom, so these two trade some of that finished-state
+ *  pause for less total dead scroll. Done by 85%, held for the last 15%. */
+const REVEAL_END = 0.85;
 const WORD_SPAN = 0.18;
 
 function wordWindow(index: number, total: number): [number, number] {

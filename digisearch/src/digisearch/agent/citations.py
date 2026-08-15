@@ -1,4 +1,4 @@
-"""RAG citation items aligned with DigiGraph ``rag_sources_from_results`` / trace UI."""
+"""RAG citation items aligned with digigraph ``rag_sources_from_results`` / trace UI."""
 
 from __future__ import annotations
 

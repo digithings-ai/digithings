@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Any  # noqa  # scored-lint: heterogeneous fake-row / fixture dicts
+from typing import (
+    Any,  # score:allow untyped any — scored-lint: heterogeneous fake-row / fixture dicts
+)
 from unittest.mock import patch
 
 import pytest
-
-from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
 from digiquant.olympus.atlas.phases._node_factory import (
     SegmentNodeSpec,
     build_segment_node,
@@ -27,6 +27,8 @@ from digiquant.olympus.atlas.state import (
     SegmentPayload,
 )
 from digiquant.olympus.atlas.triage import evaluate
+from digiquant.olympus.edit_mode import DocumentPatch, PatchOp
+
 from tests.dq.atlas.test_triage_monthly_phase9 import _delta_state, _quiet_bias_for_all_segments
 
 _ATLAS_EDIT_SKILL_SLUGS = (
@@ -378,3 +380,122 @@ class TestEquityEditMode:
     def test_missing_edit_skill_raises(self) -> None:
         with pytest.raises(SkillNotFoundError):
             load_skill_edit("nonexistent-segment-slug")
+
+
+@pytest.mark.unit
+class TestEditMergeFallback:
+    """#1641 — a patch that cannot merge falls back to full regeneration."""
+
+    def test_merge_failure_falls_back_to_full_without_phase_error(self) -> None:
+        state = _macro_state_with_prior(triage_decision="regenerate")
+        spec = SegmentNodeSpec(
+            segment_slug="macro",
+            skill_slug="macro",
+            output_model=MacroRegimeReport,
+            phase_outputs_field="phase3_output",
+        )
+        node = build_segment_node(spec, write_adapter=scalar_slot_write_adapter)
+
+        bad_patch = DocumentPatch(
+            schema_version="1.0",
+            date=date(2026, 4, 27),
+            prior_date=date(2026, 4, 26),
+            target_document_key="macro",
+            status="updated",
+            ops=[
+                # Duplicate sets on one concrete path are a deterministic MergeError.
+                PatchOp(op="set", path="/regime_label", value="A", reason="dup 1"),
+                PatchOp(op="set", path="/regime_label", value="B", reason="dup 2"),
+            ],
+        )
+        full_report = MacroRegimeReport.model_validate(
+            {**_macro_prior_body(), "headline": "fresh full headline"}
+        )
+
+        with patch(
+            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            side_effect=[bad_patch, full_report],
+        ) as mock_run:
+            out = node(state)
+
+        assert mock_run.call_count == 2, "merge failure must trigger a full-mode retry"
+        assert mock_run.call_args_list[1].kwargs["output_model"] is MacroRegimeReport
+        assert not out.get("errors"), "successful fallback must not degrade the run"
+        slot = out["phase3_output"]
+        assert isinstance(slot.payload, SegmentPayload)
+        assert slot.payload.body["headline"] == "fresh full headline"
+
+        # #1741 — non-gating, but no longer invisible: the segment paid for a patch call
+        # AND a full regeneration, and nothing else in the run record says so.
+        fallbacks = out.get("merge_fallbacks")
+        assert fallbacks is not None, "the fallback must be recorded, not just logged"
+        assert set(fallbacks) == {"macro"}
+        assert "MergeError" in fallbacks["macro"]
+        assert len(fallbacks["macro"]) <= 300, "reason must stay jsonb-sized"
+
+    def test_successful_merge_records_no_fallback(self) -> None:
+        """The counter must stay empty on the happy path, or every row reads as degraded."""
+        state = _macro_state_with_prior(triage_decision="regenerate")
+        spec = SegmentNodeSpec(
+            segment_slug="macro",
+            skill_slug="macro",
+            output_model=MacroRegimeReport,
+            phase_outputs_field="phase3_output",
+        )
+        node = build_segment_node(spec, write_adapter=scalar_slot_write_adapter)
+        good_patch = DocumentPatch(
+            schema_version="1.0",
+            date=date(2026, 4, 27),
+            prior_date=date(2026, 4, 26),
+            target_document_key="macro",
+            status="updated",
+            ops=[PatchOp(op="set", path="/regime_label", value="Edited", reason="shift")],
+        )
+
+        with patch(
+            "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+            return_value=good_patch,
+        ):
+            out = node(state)
+
+        assert not out.get("merge_fallbacks")
+
+
+# ─── #1740: schema limits must reach the model ─────────────────────────
+
+
+@pytest.mark.unit
+class TestEditSchemaConstraintsReachTheModel:
+    """Regression for #1740.
+
+    The 240-char `reason` cap was enforced by the schema but stated in none of
+    the 17 *-edit.md skills, so the model was never told the limit it kept
+    breaking. Appended at the single load chokepoint so it cannot drift between
+    17 heterogeneous files.
+    """
+
+    @pytest.mark.parametrize("slug", _ATLAS_EDIT_SKILL_SLUGS)
+    def test_every_atlas_edit_skill_states_the_limits(self, slug: str) -> None:
+        body = load_skill_edit(slug)
+        assert "240 characters maximum" in body
+        assert "Output constraints (schema-enforced)" in body
+        # The skill's own content must survive the append.
+        assert "DocumentPatch" in body
+
+    def test_hermes_edit_skills_get_them_too(self) -> None:
+        from digiquant.olympus.hermes.skills import load_skill_edit as hermes_load_edit
+
+        body = hermes_load_edit("asset-analyst")
+        assert "240 characters maximum" in body
+
+    def test_stated_cap_matches_the_schema(self) -> None:
+        """Drift guard: change PatchOp.reason's cap and this fails loudly."""
+        from annotated_types import MaxLen
+        from digiquant.olympus.atlas.skills import EDIT_SCHEMA_CONSTRAINTS
+        from digiquant.olympus.edit_mode.models import PatchOp
+
+        caps = [
+            m.max_length for m in PatchOp.model_fields["reason"].metadata if isinstance(m, MaxLen)
+        ]
+        assert caps == [240], f"unexpected schema cap: {caps}"
+        assert f"{caps[0]} characters maximum" in EDIT_SCHEMA_CONSTRAINTS

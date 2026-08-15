@@ -6,7 +6,13 @@
  *
  * All functions are pure and side-effect free. Percentages are expressed as
  * whole-number percents (e.g. 12.5 == 12.5%), matching the rest of the schema.
+ *
+ * Daily returns + annualized volatility come from the finance-tearsheet
+ * family (#1463) — its ReturnsMatrix derives the same two — so the math can
+ * never drift between the shared matrix and the app's derived risk stats.
  */
+
+import { annualizedVolPct, dailyReturnsFromEquity } from "@digithings/web";
 
 const MS_PER_YEAR = 365.25 * 24 * 3600 * 1000;
 
@@ -51,16 +57,6 @@ export function calmar(cagrPctValue: number, maxDrawdownPct: number): number {
   return Math.abs(maxDrawdownPct) < 1e-9 ? 0 : cagrPctValue / Math.abs(maxDrawdownPct);
 }
 
-/** Daily simple returns from a mark-to-market equity curve. */
-export function dailyReturnsFromEquity(points: { v: number }[]): number[] {
-  const rets: number[] = [];
-  for (let i = 1; i < points.length; i++) {
-    const prev = points[i - 1].v;
-    if (prev > 0) rets.push(points[i].v / prev - 1);
-  }
-  return rets;
-}
-
 function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
 }
@@ -96,12 +92,6 @@ export function sortinoFromReturns(returns: number[]): number | null {
   const dstd = downsideStd(returns, 0);
   if (dstd < 1e-12) return null;
   return (mean(returns) / dstd) * Math.sqrt(TRADING_DAYS);
-}
-
-/** Annualized volatility (%) from daily returns. */
-export function annualizedVolPct(returns: number[]): number | null {
-  if (returns.length < 2) return null;
-  return sampleStd(returns) * Math.sqrt(TRADING_DAYS) * 100;
 }
 
 /** Omega ratio at threshold 0 — sum of gains / sum of losses. */

@@ -5,7 +5,7 @@ Reuses ``state.phase7_digest``; publish routes via ``doc_type == 'monthly_digest
 
 from __future__ import annotations
 
-from typing import Any  # noqa: F401 — used for JSON-derived dict shape
+from typing import Any  # score:allow untyped any — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from pydantic import Field

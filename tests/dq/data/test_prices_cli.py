@@ -13,9 +13,15 @@ from unittest.mock import Mock, patch
 import polars as pl
 import pytest
 from click.testing import CliRunner
-
-from digiquant.cli.prices import compute_technicals_cmd, fetch_quotes_cmd
+from digiquant.cli.prices import (
+    compute_technicals_cmd,
+    fetch_quotes_cmd,
+    recompute_technicals_cmd,
+)
 from digiquant.data.prices import TECHNICAL_COLUMNS
+from digiquant.data.prices.instrument_metadata import InstrumentMetadataFetchResult
+from digiquant.data.prices.refresh import RefreshResult
+from digiquant.olympus.instrument_metadata import InstrumentMetadata
 
 pytestmark = pytest.mark.unit
 
@@ -73,6 +79,32 @@ def test_fetch_quotes_upsert_failure_exits_zero() -> None:
     assert result.exit_code == 0
     combined = (result.output or "") + (result.stderr or "")
     assert "warning" in combined.lower()
+
+
+def test_fetch_quotes_persists_resolved_instrument_metadata() -> None:
+    runner = CliRunner()
+    client = object()
+    metadata = InstrumentMetadata.fallback("SPY", provider="test")
+
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=client),
+        patch(f"{_WRITER}.upsert_price_history"),
+        patch(f"{_WRITER}.upsert_instruments") as upsert_instruments,
+        patch(f"{_CACHE}.incremental_update", return_value={"SPY": _fake_ohlcv(3)}),
+        patch(
+            "digiquant.data.prices.instrument_metadata.fetch_instrument_metadata",
+            return_value=InstrumentMetadataFetchResult(records={"SPY": metadata}, errors={}),
+        ),
+    ):
+        upsert_instruments.return_value.rows = 1
+        result = runner.invoke(
+            fetch_quotes_cmd,
+            ["--tickers", "SPY", "--supabase", "--instrument-metadata"],
+        )
+
+    assert result.exit_code == 0, result.output
+    upsert_instruments.assert_called_once_with(client, [metadata])
+    assert "upserted 1 rows into instruments" in result.output
 
 
 def test_sector_universe_dedupes_and_includes_single_names() -> None:
@@ -179,3 +211,81 @@ def test_compute_technicals_casts_datetime_trading_days_to_date(tmp_path) -> Non
 
     assert result.exit_code == 0
     assert f"{n} rows into price_technicals" in result.output
+
+
+# ─── recompute-technicals (#1752) ─────────────────────────────────────────
+
+
+_REFRESH = "digiquant.data.prices.refresh"
+
+
+def test_recompute_technicals_requires_credentials() -> None:
+    with patch(f"{_WRITER}.build_supabase_client", return_value=None):
+        result = CliRunner().invoke(recompute_technicals_cmd, ["--tickers", "SPY"])
+    assert result.exit_code != 0
+    assert "Supabase credentials not set" in result.output
+
+
+def test_recompute_technicals_passes_window_through_and_reports() -> None:
+    """--since / --as-of reach the recompute, and every counter is echoed."""
+    recomputed = RefreshResult(
+        tickers_processed=2,
+        rows_upserted=7,
+        rows_computed=7,
+        history_rows_read=900,
+        non_trading_rows_dropped=13,
+    )
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(
+            f"{_REFRESH}.recompute_technicals_from_history", return_value=recomputed
+        ) as recompute,
+    ):
+        result = CliRunner().invoke(
+            recompute_technicals_cmd,
+            ["--tickers", "spy,qqq", "--as-of", "2026-03-01", "--since", "2021-04-08"],
+        )
+    assert result.exit_code == 0, result.output
+    kwargs = recompute.call_args.kwargs
+    assert kwargs["tickers"] == ["SPY", "QQQ"]
+    assert kwargs["as_of"] == date(2026, 3, 1)
+    assert kwargs["since"] == date(2021, 4, 8)
+    assert kwargs["dry_run"] is False
+    assert "write 2021-04-08..2026-03-01" in result.output
+    assert "read 900 OHLCV bars (dropped 13 non-session)" in result.output
+    assert "upserted 7 rows into price_technicals" in result.output
+
+
+def test_recompute_technicals_dry_run_does_not_write() -> None:
+    with (
+        patch(f"{_WRITER}.build_supabase_client", return_value=Mock()),
+        patch(
+            f"{_REFRESH}.recompute_technicals_from_history",
+            return_value=RefreshResult(1, 0, rows_computed=4, history_rows_read=40),
+        ) as recompute,
+    ):
+        result = CliRunner().invoke(
+            recompute_technicals_cmd, ["--tickers", "SPY", "--dry-run", "--as-of", "2026-03-01"]
+        )
+    assert result.exit_code == 0, result.output
+    assert recompute.call_args.kwargs["dry_run"] is True
+    assert "upserted 0 rows into price_technicals" in result.output
+
+
+def test_recompute_technicals_rejects_malformed_and_inverted_dates() -> None:
+    bad_iso = CliRunner().invoke(recompute_technicals_cmd, ["--tickers", "SPY", "--since", "nope"])
+    assert bad_iso.exit_code != 0
+    assert "--since must be ISO YYYY-MM-DD" in bad_iso.output
+
+    inverted = CliRunner().invoke(
+        recompute_technicals_cmd,
+        ["--tickers", "SPY", "--as-of", "2026-01-01", "--since", "2026-02-01"],
+    )
+    assert inverted.exit_code != 0
+    assert "must be on or before" in inverted.output
+
+
+def test_recompute_technicals_needs_a_universe() -> None:
+    result = CliRunner().invoke(recompute_technicals_cmd, [])
+    assert result.exit_code != 0
+    assert "Provide --watchlist or --tickers" in result.output

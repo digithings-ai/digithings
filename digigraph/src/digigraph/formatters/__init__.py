@@ -27,7 +27,7 @@ class StreamFormatter(Protocol):
 
 
 def get_stream_formatter(openwebui_format: bool) -> StreamFormatter:
-    """Return the formatter to use. openwebui_format=True when client asks for Open WebUI (header or param or model)."""
+    """Return the formatter to use. openwebui_format=True when client asks via header or body param."""
     if openwebui_format:
         return OpenWebUIStreamFormatter()
     return NeutralStreamFormatter()

@@ -12,8 +12,9 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { m, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { m, useMotionValueEvent, useScroll, useTransform } from "motion/react";
 import type { MotionStyle, MotionValue } from "motion/react";
+import { useMotionSafe } from "../../motion/primitives";
 
 /**
  * DeckStack / DeckCard — the sticky stacking card deck promoted from the
@@ -25,7 +26,7 @@ import type { MotionStyle, MotionValue } from "motion/react";
  * opaque card's coverage IS the seam (1px hairline, no drop shadow, no clip
  * box, nothing ever cut off). Content is server-rendered, fully laid out,
  * and readable top-to-bottom with no JS; the only JS enhancements are the
- * recede transform (scale + brightness while a card is covered) and the
+ * recede transform (a slight scale-down while a card is covered) and the
  * optional rail's active state. Below 901px the CSS drops sticky entirely
  * and the cards simply appear in sequence. The deck knows nothing about
  * card content.
@@ -80,7 +81,8 @@ function cardClass(className?: string): string {
 
 /**
  * One sticky card. While the next card's slot scrolls through, this card is
- * being covered: it recedes slightly (scale + brightness) so the stack reads
+ * being covered: it recedes slightly (scale only — a brightness dim read as
+ * grime on light-theme paper cards; user ruling #1450) so the stack reads
  * as depth. Function transforms only — numeric range-maps get compiled to a
  * native view() timeline that cannot express this mapping (see the word
  * reveal components for the same pitfall).
@@ -99,13 +101,12 @@ const AnimatedDeckCard = memo(function AnimatedDeckCard({
     return Math.min(1, Math.max(0, (p - start) * total));
   };
   const scale = useTransform(progress, (p) => 1 - cover(p) * 0.05);
-  const filter = useTransform(progress, (p) => `brightness(${1 - cover(p) * 0.12})`);
 
   return (
     <m.article
       role="listitem"
       className={cardClass(className)}
-      style={{ "--stack-index": index, scale, filter, transformOrigin: "top center" } as MotionStyle}
+      style={{ "--stack-index": index, scale, transformOrigin: "top center" } as MotionStyle}
     >
       {children}
     </m.article>
@@ -170,7 +171,14 @@ export function DeckStack({
   className,
 }: DeckStackProps) {
   const deckRef = useRef<HTMLDivElement | null>(null);
-  const reduced = useReducedMotion();
+  // useMotionSafe(), not raw useReducedMotion() -- see WordReveal.tsx's fix
+  // comment (#2244) for the hydration-mismatch mechanism this avoids. `wide`
+  // defaults to false on the first render either way (useSyncExternalStore's
+  // own server-snapshot guard), which already short-circuits `animate` below
+  // to false regardless of `reduced` -- so this specific value never caused
+  // a mismatch in practice, but it's the same unsafe pattern and not worth
+  // leaving as an exception.
+  const reduced = !useMotionSafe();
   const wide = useSyncExternalStore(subscribeWide, getWideSnapshot, getWideServerSnapshot);
   const [active, setActive] = useState(0);
 
@@ -215,15 +223,20 @@ export function DeckStack({
       }
     >
       {slots}
-      <div className="deck-rail-pin">
-        <ol className="deck-rail" aria-label={railAriaLabel}>
-          {rail.map((label, idx) => (
-            <li key={`${label}-${idx}`} className={idx === active ? "on" : undefined}>
-              <span className="dot" />
-              <span className="name">{label}</span>
-            </li>
-          ))}
-        </ol>
+      {/* The column wrapper stops short of the slots' tail runway (deck.css
+          .deck-rail-col) so the pinned rail releases with the last card
+          instead of hanging through the empty scroll-hold. */}
+      <div className="deck-rail-col">
+        <div className="deck-rail-pin">
+          <ol className="deck-rail" aria-label={railAriaLabel}>
+            {rail.map((label, idx) => (
+              <li key={`${label}-${idx}`} className={idx === active ? "on" : undefined}>
+                <span className="dot" />
+                <span className="name">{label}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </div>
   );
