@@ -97,8 +97,17 @@ export function AmbientMesh() {
       raf = requestAnimationFrame(loop);
     }
 
+    // Frame-relative, not window-relative: the production AmbientMesh is
+    // pinned behind a whole page, where window.innerWidth is the right
+    // denominator — but here the canvas is contained in a .fx-mesh-frame
+    // demo panel that does not span the viewport, so e.clientX / innerWidth
+    // read a fraction of the whole browser window while the section copy
+    // ("the blobs lean gently toward the pointer") implies the frame itself.
+    // Same fix HeroGraphReference (one section earlier on this page) already
+    // applies for its own identical contained-demo situation.
     function onMove(e: MouseEvent) {
-      tfx = clamp(e.clientX / window.innerWidth, 0, 1);
+      const r = canvas!.getBoundingClientRect();
+      tfx = clamp((e.clientX - r.left) / r.width, 0, 1);
     }
     const onTheme = () => {
       light = readLight();

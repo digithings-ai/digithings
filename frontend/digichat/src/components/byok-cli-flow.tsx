@@ -10,22 +10,37 @@ import {
 } from "react";
 import {
   type BYOKProvider,
+  type ByokModelOption,
   BYOK_PROVIDER_LIST,
   byokModelPresets,
   byokRequiresModel,
   moveListIndex,
   validateBYOKKey,
+  validateBYOKModel,
 } from "@/hooks/use-byok-key";
 import {
   byokActivationGate,
   pingByokKey,
   type ByokPingResult,
 } from "@/lib/byok-ping";
+import { p } from "@/lib/base-path";
 import { cn } from "@/lib/utils";
 
 type Step = "provider" | "key" | "model" | "validating" | "done";
 
 const CUSTOM_MODEL = "__custom__";
+
+/** Providers whose validation ping already returns a live `models` list and
+ * whose upstream call never reads the `model` parameter (#2347) — so the
+ * ping can (and should) fire as soon as the key is submitted, instead of
+ * waiting for a model to be picked. OpenRouter has its own public-catalog
+ * prefetch (no key needed); x.ai has no live fetch and still needs a model
+ * up front — neither belongs in this list. */
+const LIVE_PING_MODEL_PROVIDERS: readonly BYOKProvider[] = ["openai", "anthropic", "gemini"];
+
+function wantsKeyStepPing(provider: BYOKProvider): boolean {
+  return LIVE_PING_MODEL_PROVIDERS.includes(provider);
+}
 
 function TermLine({
   marker,
@@ -59,6 +74,8 @@ function TermOptionList({
   onHighlight,
   onSelect,
   listLabel,
+  onToggleStar,
+  isStarred,
 }: {
   options: readonly string[];
   labels?: readonly string[];
@@ -66,6 +83,8 @@ function TermOptionList({
   onHighlight: (i: number) => void;
   onSelect: (value: string) => void;
   listLabel: string;
+  onToggleStar?: (value: string) => void;
+  isStarred?: (value: string) => boolean;
 }) {
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -112,6 +131,19 @@ function TermOptionList({
         const active = i === highlighted;
         return (
           <li key={opt || "(default)"} role="option" aria-selected={active} data-idx={i}>
+            {onToggleStar && opt !== CUSTOM_MODEL ? (
+              <button
+                type="button"
+                className="dc-byok-star"
+                aria-label={isStarred?.(opt) ? "remove from custom" : "add to custom"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleStar(opt);
+                }}
+              >
+                {isStarred?.(opt) ? "★" : "☆"}
+              </button>
+            ) : null}
             <button
               type="button"
               className={cn("dc-byok-option", active && "dc-byok-option-active")}
@@ -135,8 +167,20 @@ export type ByokCliFlowProps = {
   /** Called only after a successful provider ping. Parent holds session memory. */
   onActivate: (key: string, provider: BYOKProvider, model: string) => void;
   onClear?: () => void;
-  /** When BYOK is already active this session. */
+  /** When BYOK is already active this session (a validated key is currently
+   * live). Also gates the "done" step / re-key display — a non-null `active`
+   * renders "BYOK active" text, so it must never be used just to seed the
+   * picker's starting selection. */
   active?: { provider: BYOKProvider; model: string } | null;
+  /**
+   * Non-secret provider/model choice to pre-select the picker with, when no
+   * key is currently active — e.g. restored from the digichat_byok_pref
+   * cookie by useBYOKKey(). Distinct from `active`: this does NOT imply a
+   * live/validated key, so it only seeds the initial provider/model state
+   * and never flips the initial step to "done".
+   */
+  initialProvider?: BYOKProvider;
+  initialModel?: string;
   title?: string;
   className?: string;
 };
@@ -146,29 +190,78 @@ export function ByokCliFlow({
   onActivate,
   onClear,
   active = null,
+  initialProvider,
+  initialModel,
   title,
   className,
 }: ByokCliFlowProps) {
   const [step, setStep] = useState<Step>(active ? "done" : "provider");
   const [provider, setProvider] = useState<BYOKProvider>(
-    active?.provider ?? "openrouter",
+    active?.provider ?? initialProvider ?? "openrouter",
   );
   const [providerHi, setProviderHi] = useState(() =>
-    Math.max(0, BYOK_PROVIDER_LIST.indexOf(active?.provider ?? "openrouter")),
+    Math.max(
+      0,
+      BYOK_PROVIDER_LIST.indexOf(active?.provider ?? initialProvider ?? "openrouter"),
+    ),
   );
   const [inputKey, setInputKey] = useState("");
-  const [model, setModel] = useState(active?.model ?? "");
+  const [model, setModel] = useState(active?.model ?? initialModel ?? "");
   const [modelHi, setModelHi] = useState(0);
   const [customModel, setCustomModel] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ping, setPing] = useState<ByokPingResult | null>(null);
+  /** Result of the OpenAI/Anthropic/Gemini key-step ping (see
+   * LIVE_PING_MODEL_PROVIDERS). Cached here so model selection can reuse it
+   * instead of pinging a second time — the single-round-trip contract in
+   * #2347. Reset on provider change / clear / restart, same as `ping`. */
+  const [keyPing, setKeyPing] = useState<ByokPingResult | null>(null);
+  const [keyPingPending, setKeyPingPending] = useState(false);
+  type LiveBuckets = {
+    free: ByokModelOption[];
+    opensource: ByokModelOption[];
+    flagship: ByokModelOption[];
+    all: ByokModelOption[];
+  };
+  const [liveModels, setLiveModels] = useState<LiveBuckets | null>(null);
+  const [modelsFetchFailed, setModelsFetchFailed] = useState(false);
+  const [tier, setTier] = useState<"free" | "opensource" | "flagship" | "all" | "custom">("all");
+  const [customIds, setCustomIds] = useState<Set<string>>(new Set());
   const keyInputRef = useRef<HTMLInputElement>(null);
   const customModelRef = useRef<HTMLInputElement>(null);
   const formId = useId();
   /** Drop in-flight ping activation if the flow unmounts (Escape / cancel). */
   const aliveRef = useRef(true);
 
+  const tieredOptions = provider === "openrouter" && liveModels ? liveModels : null;
+  const liveKeyStepModels: ByokModelOption[] | null =
+    wantsKeyStepPing(provider) && keyPing?.ok && keyPing.models && keyPing.models.length > 0
+      ? keyPing.models.map((m) => ({ id: m.id, label: m.label }))
+      : null;
+
+  const toggleCustom = useCallback((id: string) => {
+    setCustomIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const modelOptions = (() => {
+    if (tieredOptions) {
+      const list =
+        tier === "custom"
+          ? tieredOptions.all.filter((m) => customIds.has(m.id))
+          : tieredOptions[tier];
+      return [...list.map((m) => m.id), CUSTOM_MODEL];
+    }
+    if (liveKeyStepModels) {
+      const liveIds = liveKeyStepModels.map((m) => m.id);
+      return byokRequiresModel(provider)
+        ? [...liveIds, CUSTOM_MODEL]
+        : ["", ...liveIds, CUSTOM_MODEL];
+    }
     const presets = [...byokModelPresets(provider)];
     if (!byokRequiresModel(provider)) {
       return ["", ...presets, CUSTOM_MODEL];
@@ -179,6 +272,12 @@ export function ByokCliFlow({
   const modelLabels = modelOptions.map((m) => {
     if (m === "") return "(provider default)";
     if (m === CUSTOM_MODEL) return "custom…";
+    if (tieredOptions) {
+      return tieredOptions.all.find((o) => o.id === m)?.label ?? m;
+    }
+    if (liveKeyStepModels) {
+      return liveKeyStepModels.find((o) => o.id === m)?.label ?? m;
+    }
     return m;
   });
 
@@ -188,6 +287,23 @@ export function ByokCliFlow({
       aliveRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (provider !== "openrouter" || liveModels || modelsFetchFailed) return;
+    let cancelled = false;
+    fetch(p("/api/byok/models?provider=openrouter"), { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data: LiveBuckets & { ok: boolean }) => {
+        if (cancelled) return;
+        setLiveModels({ free: data.free, opensource: data.opensource, flagship: data.flagship, all: data.all });
+      })
+      .catch(() => {
+        if (!cancelled) setModelsFetchFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [provider, liveModels, modelsFetchFailed]);
 
   useEffect(() => {
     if (step === "key") keyInputRef.current?.focus();
@@ -223,6 +339,9 @@ export function ByokCliFlow({
     setModelHi(0);
     setError(null);
     setPing(null);
+    setKeyPing(null);
+    setKeyPingPending(false);
+    setCustomIds(new Set());
     setStep("key");
   }, []);
 
@@ -234,6 +353,15 @@ export function ByokCliFlow({
     }
     setError(null);
     setStep("model");
+    if (wantsKeyStepPing(provider)) {
+      setKeyPing(null);
+      setKeyPingPending(true);
+      void pingByokKey(inputKey, provider, "", { requireModel: false }).then((result) => {
+        if (!aliveRef.current) return;
+        setKeyPingPending(false);
+        setKeyPing(result);
+      });
+    }
   }, [inputKey, provider]);
 
   const runValidateAndActivate = useCallback(
@@ -242,6 +370,21 @@ export function ByokCliFlow({
       if (gateFormat) {
         setError(gateFormat);
         setStep("key");
+        return;
+      }
+      // Single-round-trip contract (#2347): if the key-step ping already
+      // succeeded for this provider, reuse it directly instead of pinging
+      // /api/byok/test a second time for model selection.
+      if (wantsKeyStepPing(provider) && keyPing?.ok) {
+        const modelFormatErr = validateBYOKModel(chosenModel, provider);
+        if (modelFormatErr) {
+          setError(modelFormatErr);
+          return;
+        }
+        setError(null);
+        setPing(keyPing);
+        onActivate(inputKey.trim(), provider, chosenModel.trim());
+        setStep("done");
         return;
       }
       setError(null);
@@ -259,7 +402,7 @@ export function ByokCliFlow({
       onActivate(inputKey.trim(), provider, chosenModel.trim());
       setStep("done");
     },
-    [inputKey, provider, onActivate],
+    [inputKey, provider, onActivate, keyPing],
   );
 
   const selectModel = useCallback(
@@ -289,8 +432,11 @@ export function ByokCliFlow({
     setInputKey("");
     setModel("");
     setPing(null);
+    setKeyPing(null);
+    setKeyPingPending(false);
     setError(null);
     setCustomModel(false);
+    setCustomIds(new Set());
     setStep("provider");
   }, [onClear]);
 
@@ -298,8 +444,11 @@ export function ByokCliFlow({
     setInputKey("");
     setModel("");
     setPing(null);
+    setKeyPing(null);
+    setKeyPingPending(false);
     setError(null);
     setCustomModel(false);
+    setCustomIds(new Set());
     setStep("provider");
   }, []);
 
@@ -344,6 +493,22 @@ export function ByokCliFlow({
             </TermLine>
           ) : null}
 
+          {provider === "openrouter" && !liveModels && !modelsFetchFailed ? (
+            <TermLine marker="·">
+              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                fetching live model catalog…
+              </span>
+            </TermLine>
+          ) : null}
+
+          {wantsKeyStepPing(provider) && keyPingPending ? (
+            <TermLine marker="·">
+              <span className="font-mono text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                fetching live model list…
+              </span>
+            </TermLine>
+          ) : null}
+
           {step === "provider" ? (
             <TermLine marker=">">
               <p className="dc-byok-prompt">Select provider (↑↓ + Enter, or click)</p>
@@ -384,7 +549,9 @@ export function ByokCliFlow({
                       ? "sk-ant-…"
                       : provider === "gemini"
                         ? "AIza…"
-                        : "sk-or-v1-…"
+                        : provider === "xai"
+                          ? "xai-…"
+                          : "sk-or-v1-…"
                 }
                 autoComplete="off"
                 spellCheck={false}
@@ -429,7 +596,27 @@ export function ByokCliFlow({
                   spellCheck={false}
                   className="dc-byok-input"
                 />
-              ) : (
+              ) : null}
+              {tieredOptions ? (
+                <div className="dc-byok-tier-tabs" role="tablist" aria-label="Model tier">
+                  {(["free", "opensource", "flagship", "all", "custom"] as const).map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      role="tab"
+                      aria-selected={tier === t}
+                      className={cn("dc-byok-tier-tab", tier === t && "dc-byok-tier-tab-active")}
+                      onClick={() => {
+                        setTier(t);
+                        setModelHi(0);
+                      }}
+                    >
+                      {t} ({t === "custom" ? customIds.size : tieredOptions[t].length})
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {!customModel ? (
                 <TermOptionList
                   options={modelOptions}
                   labels={modelLabels}
@@ -437,8 +624,10 @@ export function ByokCliFlow({
                   onHighlight={setModelHi}
                   onSelect={selectModel}
                   listLabel="BYOK models"
+                  onToggleStar={tieredOptions ? toggleCustom : undefined}
+                  isStarred={tieredOptions ? (id) => customIds.has(id) : undefined}
                 />
-              )}
+              ) : null}
             </TermLine>
           ) : null}
 

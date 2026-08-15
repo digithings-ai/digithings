@@ -14,11 +14,11 @@ Usage
 -----
 Dry-run (no DB, no credentials — verifies the parse/mapping)::
 
-    PYTHONPATH=digivault/src:digibase/src python3 -P scripts/sync_architecture_vault.py --dry-run
+    PYTHONPATH=. uv run python scripts/sync_architecture_vault.py --dry-run
 
 Real sync (CI / operator; needs service-role credentials in the environment)::
 
-    python3 scripts/sync_architecture_vault.py
+    PYTHONPATH=. uv run python scripts/sync_architecture_vault.py
 
 Credentials resolve ``CORE_SUPABASE_URL`` / ``CORE_SUPABASE_SERVICE_KEY`` (ADR-0022),
 falling back to ``SUPABASE_URL`` / ``SUPABASE_SERVICE_ROLE_KEY``. The service key is read

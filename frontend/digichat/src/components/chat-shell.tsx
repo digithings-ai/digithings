@@ -473,7 +473,7 @@ export function ChatShell({
               type="button"
               className="dc-sidebar-cmd"
               style={{ width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
-              onClick={() => signOut({ callbackUrl: p("/login") })}
+              onClick={() => signOut({ callbackUrl: p("/embed") })}
             >
               <span>sign out</span>
               <span aria-hidden>⏻</span>

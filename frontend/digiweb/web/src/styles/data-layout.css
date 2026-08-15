@@ -234,8 +234,11 @@
     font-size: 0.58rem;
     letter-spacing: 0.06em;
     color: var(--ink);
-    background: color-mix(in srgb, var(--bg) 78%, transparent);
-    backdrop-filter: blur(6px);
+    /* Solid --surface, not a color-mix + backdrop-filter blur: this tag sits
+       over arbitrary crop content (a screenshot/mock), and a solid fill reads
+       legibly against any of it without reaching for this system's one
+       glassmorphism exception — surfaces here are flat, full stop. */
+    background: var(--surface);
     border: 1px solid var(--hair);
     border-radius: 5px;
     padding: 0.15rem 0.45rem;

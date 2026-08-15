@@ -14,6 +14,7 @@ TraceEventType = Literal[
     "code_block",
     "span",
     "graph_update",
+    "round_boundary",
 ]
 
 

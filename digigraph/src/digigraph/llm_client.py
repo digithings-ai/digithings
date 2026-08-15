@@ -196,6 +196,7 @@ def run_tools(
     *,
     temperature: float = 0.2,
     max_tool_rounds: int = 5,
+    tool_choice: str = "auto",
     on_tool_step: Callable[[str, Any], None] | None = None,
     search_parameters: dict[str, Any] | None = None,
 ) -> str:
@@ -204,7 +205,10 @@ def run_tools(
     Streams each assistant turn (``stream_deltas``) whenever ``on_tool_step`` is
     supplied, so the callback also receives ``("content", delta)`` / ``("reasoning",
     delta)`` alongside the tool-call/result steps. ``search_parameters`` forwards an
-    xAI Live Search descriptor (first tool round only). Returns the model's final answer.
+    xAI Live Search descriptor (first tool round only). ``tool_choice`` forwards to
+    every turn ("auto" default; "required" forces a tool call every round — see
+    :func:`digigraph.tool_policy.require_tool_calls_for_workflow`). Returns the
+    model's final answer.
     """
     with _logical_call_scope(
         CallPurpose.TOOL_SELECTION,
@@ -219,6 +223,7 @@ def run_tools(
             execute_tool,
             temperature=temperature,
             max_tool_rounds=max_tool_rounds,
+            tool_choice=tool_choice,
             on_tool_step=on_tool_step,
             parallel_safe_tools=_parallel_safe_tools(),
             stream_deltas=on_tool_step is not None,

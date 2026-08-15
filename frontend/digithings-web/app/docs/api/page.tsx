@@ -16,7 +16,7 @@ export default function OpenApiIndexPage() {
   return (
     <>
       <DtNav />
-      <main className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)] pb-[clamp(2rem,5vw,4rem)]">
         <div className="docs-shell">
           <div className="docs-content flex min-w-0 flex-col gap-[clamp(1.4rem,3vw,2.2rem)]">
             <header className="docs-hero">

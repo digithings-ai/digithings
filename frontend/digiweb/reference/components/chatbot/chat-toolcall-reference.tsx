@@ -9,7 +9,15 @@ import { ChatToolCall, type ChatToolCallLine } from "@digithings/web";
  * Consumes the shared <ChatToolCall> primitive (@digithings/web); the calls
  * here are illustrative example data.
  */
-type Call = { tool: string; args: string; ms: string; ok: boolean; out: ChatToolCallLine[] };
+// `ok: null` marks a call with no resolved outcome yet — still in flight, no
+// duration or result to show.
+type Call = {
+  tool: string;
+  args: string;
+  ms: string;
+  ok: boolean | null;
+  out: ChatToolCallLine[];
+};
 
 const CALLS: Call[] = [
   {
@@ -38,6 +46,13 @@ const CALLS: Call[] = [
     ok: false,
     out: [{ text: "✕ token revoked — reissue with `digithings key new`", tone: "down" }],
   },
+  {
+    tool: "digiquant.bootstrap",
+    args: "trend_xsec · ETH-USD · 500x resample",
+    ms: "",
+    ok: null,
+    out: [],
+  },
 ];
 
 export function ChatToolCallReference() {
@@ -48,7 +63,8 @@ export function ChatToolCallReference() {
       <p className="section-copy">
         Every tool the model runs lands as a collapsible line — chevron, name, arguments, status,
         timing — the way Claude Code and opencode surface a chain. Scan it at a glance, expand the
-        one you care about. A failed call reads in the down colour and keeps the fix inline.
+        one you care about. A call still in flight breathes its mark with no duration or result
+        yet; a failed call reads in the down colour and keeps the fix inline.
       </p>
 
       <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
@@ -69,14 +85,15 @@ export function ChatToolCallReference() {
                 name={c.tool}
                 args={c.args}
                 duration={c.ms}
-                status={c.ok ? "ok" : "error"}
+                status={c.ok === null ? "running" : c.ok ? "ok" : "error"}
                 lines={c.out}
                 defaultOpen={i === 0}
               />
             ))}
             <div className="min-w-0 border-0 rounded-none bg-transparent p-0 text-ink-soft text-[0.88rem] leading-[1.6]">
-              Backtest passed and the funding notes are attached — but digikey needs a fresh token
-              before anything touches live.
+              Backtest passed and the funding notes are attached — digikey needs a fresh token
+              before anything touches live, and a bootstrap resample is still running in the
+              background.
             </div>
           </div>
         </div>

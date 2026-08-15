@@ -6,6 +6,7 @@ import {
   readTurns,
   resetLiveTrialUnlockedForTests,
   resolveEmbedHost,
+  shouldChargeGateOnSettle,
   writeTrialUnlocked,
   writeTurns,
   writeChatAccessToken,
@@ -190,5 +191,15 @@ describe("chat access token", () => {
 
   it("returns null when nothing was stored", () => {
     expect(readChatAccessToken("https://dev.datatap.stream")).toBeNull();
+  });
+});
+
+describe("shouldChargeGateOnSettle", () => {
+  it("charges a turn that settled without an error", () => {
+    expect(shouldChargeGateOnSettle(false)).toBe(true);
+  });
+
+  it("never charges a turn that settled with an error — a failed/errored send must not spend a free turn", () => {
+    expect(shouldChargeGateOnSettle(true)).toBe(false);
   });
 });

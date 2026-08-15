@@ -10,11 +10,20 @@ from digisearch.ingestion.chunkers.base import Chunker
 
 logger = logging.getLogger(__name__)
 
+# ~512 tokens at a ~4-chars/token heuristic — the benchmarked default chunk size for
+# general RAG. Deliberately character-based: no tokenizer dependency is introduced.
+DEFAULT_CHUNK_CHARS = 2000
+DEFAULT_CHUNK_OVERLAP = 250  # ~12.5%, holding the previous 64/512 ratio
+
 
 class RecursiveChunker(Chunker):
     """Chunk by hierarchical delimiters: \\n\\n\\n, \\n\\n, \\n, space."""
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64) -> None:
+    def __init__(
+        self,
+        chunk_size: int = DEFAULT_CHUNK_CHARS,
+        chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    ) -> None:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self._separators = ["\n\n\n", "\n\n", "\n", ". ", " ", ""]
@@ -73,37 +82,53 @@ class RecursiveChunker(Chunker):
             candidate = current + (sep if current and sep else "") + p
             if len(candidate) <= self.chunk_size:
                 current = candidate
-            else:
-                if current:
-                    chunks.append(
-                        Chunk(
-                            id=f"{doc_id}_{idx}",
-                            content=current.strip(),
-                            doc_id=doc_id,
-                            embedding=None,
-                            metadata={"chunk_index": idx},
-                        )
+                continue
+
+            if current:
+                chunks.append(
+                    Chunk(
+                        id=f"{doc_id}_{idx}",
+                        content=current.strip(),
+                        doc_id=doc_id,
+                        embedding=None,
+                        metadata={"chunk_index": idx},
                     )
-                    idx += 1
-                    overlap = current[-self.chunk_overlap :] if self.chunk_overlap else ""
-                    current = overlap + (sep if sep else "") + p
+                )
+                idx += 1
+                overlap = current[-self.chunk_overlap :] if self.chunk_overlap else ""
+                merged = overlap + (sep if sep else "") + p
+            else:
+                merged = p
+
+            if len(merged) > self.chunk_size:
+                # `merged` (an overlap/separator prefix plus `p`) doesn't fit.
+                # Whether that's because `p` alone exceeds chunk_size or the
+                # overlap prefix pushed an otherwise-fitting `p` over the edge,
+                # the fix is the same: drop the prefix (it can't fit alongside
+                # p either way) and resolve `p` on its own, exactly like the
+                # current-was-empty case below always has.
+                #
+                # Guard against non-progress: str.split on a non-empty
+                # separator that is actually present always yields parts
+                # strictly shorter than the input, so len(p) < len(text)
+                # here for every normal delimited split. The only way p
+                # comes back the same length as text is the separator
+                # search exhausting every real separator and falling
+                # through to sep="" (parts = [text] unchanged) — i.e. a
+                # delimiter-free run. Checking length directly (instead
+                # of trusting the separator list) means even a future
+                # edit to `_separators` can't reopen the infinite
+                # recursion from issue #2180: recursing on unreduced
+                # input is structurally impossible, not just unlikely.
+                if len(p) < len(text):
+                    sub = self._split(p, doc_id, idx)
                 else:
-                    if len(p) > self.chunk_size:
-                        sub = self._split(p, doc_id, idx)
-                        chunks.extend(sub)
-                        idx += len(sub)
-                    else:
-                        chunks.append(
-                            Chunk(
-                                id=f"{doc_id}_{idx}",
-                                content=p.strip(),
-                                doc_id=doc_id,
-                                embedding=None,
-                                metadata={"chunk_index": idx},
-                            )
-                        )
-                        idx += 1
-                    current = ""
+                    sub = self._hard_split(p, doc_id, idx)
+                chunks.extend(sub)
+                idx += len(sub)
+                current = ""
+            else:
+                current = merged
         if current.strip():
             chunks.append(
                 Chunk(
@@ -114,4 +139,34 @@ class RecursiveChunker(Chunker):
                     metadata={"chunk_index": idx},
                 )
             )
+        return chunks
+
+    def _hard_split(self, text: str, doc_id: str, chunk_index: int) -> list[Chunk]:
+        """Force-split a delimiter-free run into fixed-size pieces at character
+        boundaries. Reached only when `text` is longer than `chunk_size` and
+        contains none of `_separators` — e.g. base64-embedded assets, minified
+        JS/CSS, long unbroken table rows or hashes, or CJK text without spaces
+        or punctuation (issue #2180). Content-aware splitting is impossible
+        here, so this slices by character count instead, iteratively (never
+        recursing into `_split`), which makes the loop's termination
+        independent of chunk_size/chunk_overlap values."""
+        step = max(1, self.chunk_size - self.chunk_overlap)
+        chunks: list[Chunk] = []
+        idx = chunk_index
+        pos = 0
+        n = len(text)
+        while pos < n:
+            piece = text[pos : pos + self.chunk_size].strip()
+            if piece:
+                chunks.append(
+                    Chunk(
+                        id=f"{doc_id}_{idx}",
+                        content=piece,
+                        doc_id=doc_id,
+                        embedding=None,
+                        metadata={"chunk_index": idx},
+                    )
+                )
+                idx += 1
+            pos += step
         return chunks

@@ -22,6 +22,11 @@
  *   outlining would ship ~9KB of path data for a glyph-identical result
  *   wherever Geist Mono is loaded. Carries token-backed utilities, so consumers
  *   need an `@source "<path-to>/digiweb/web/src/components/symbols"` line.
+ *   Deliberately ONE TONE — `text-ink`, never `--accent` — regardless of any
+ *   surrounding `.accent-<module>` livery scope: it reads as a real shell
+ *   prompt, and real terminal output does not recolor by module (`.term-body`
+ *   is one ink color throughout). See terminal-marks.render.test.tsx's "does
+ *   not dress the suffix in the accent" case.
  * - HairlineWordmark: the display cut, replicating the footer colophon's
  *   `.colo-word` — stroke 0.538% of the em (a 1px line on a ~186px glyph),
  *   ink at 30%, tracking -0.05em, Geist Mono 500. FULL-BLEED ONLY. The stroke
@@ -41,8 +46,15 @@
  * cut — the static `t` has one merged contour where the variable font has two,
  * and the crossings vanish silently.
  *
- * No CSS ships with this family; the marks are pure SVG and text in
- * currentColor, so a livery scope dresses them automatically.
+ * No CSS ships with this family; TerminalMark and HairlineWordmark are pure
+ * SVG in currentColor, so whatever sets `color` in the ancestor chain dresses
+ * them — note an `.accent-<module>` scope alone does NOT: it only exposes
+ * `--accent` as a custom property, it does not set `color` itself, so a
+ * consumer wanting the livery effect must set `color: var(--accent)`
+ * explicitly somewhere between the scope and the mark (see symbols.css's
+ * `.sym-hairline--accent` for this reference site's opt-in pattern).
+ * TerminalWordmark is the deliberate exception — it never reads --accent at
+ * all, see its own bullet above.
  */
 import type { ReactNode } from "react";
 

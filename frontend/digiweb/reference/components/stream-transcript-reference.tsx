@@ -62,8 +62,22 @@ export function StreamTranscriptReference() {
           <span className="text-ink-mute">412ms</span>
         </div>
         <ChatMessage role="assistant" tone="ink">
-          <span ref={answerRef}>{ANSWER}</span>
+          {/* The visually-typed copy is aria-hidden, not announced live: a
+              plain aria-live region here would have a screen reader attempt
+              to speak every one of the ~75 rapid (22ms) growing-prefix
+              mutations ("d", "do", "don", ...) rather than the finished
+              sentence — the same class of problem this codebase already
+              diagnosed and fixed for TerminalStepCaret (see its own a11y
+              note: a live region on the typed node "would announce every
+              keystroke"). ANSWER never changes after mount, so the fix here
+              is simpler than TerminalStepCaret's role=status sibling (no
+              self-cycling script to gate) — just a plain, static, complete
+              copy for assistive tech, decoupled from the animated one. */}
+          <span ref={answerRef} aria-hidden="true">
+            {ANSWER}
+          </span>
           <ChatStreamCursor ref={caretRef} />
+          <span className="sr-only">{ANSWER}</span>
         </ChatMessage>
       </ChatTranscript>
     </section>

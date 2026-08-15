@@ -15,7 +15,10 @@ export default async function Home() {
 
   const session = await auth();
   if (!session?.user) {
-    redirect("/login");
+    // No standalone /login page — Option B (DIGICHAT_REQUIRE_ROOT_AUTH=1) has
+    // no shipped deployment; fall back to the same anonymous surface Option A
+    // uses rather than a dead route.
+    redirect("/embed");
   }
 
   return (

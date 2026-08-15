@@ -8,6 +8,7 @@ import {
 } from "@digithings/web";
 import { DQ_FOOTER, DQ_FOOTER_META } from "./_nav";
 import { PRICING_TIERS, PRICING_FAQ } from "./_pricing";
+import { ContactMailto } from "@/components/ContactMailto";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { HeroMesh } from "@/components/landing/HeroMesh";
 import { LiveTickerRow } from "@/components/landing/LiveTickerRow";
@@ -148,9 +149,9 @@ export default function Home() {
                       tier.id === "self" ? (
                         <CloneRepoButton />
                       ) : tier.cta ? (
-                        <a className="btn btn-primary" href={tier.cta.href}>
+                        <ContactMailto className="btn btn-primary" href={tier.cta.href}>
                           {tier.cta.label} <span aria-hidden="true">→</span>
-                        </a>
+                        </ContactMailto>
                       ) : null
                     }
                   />

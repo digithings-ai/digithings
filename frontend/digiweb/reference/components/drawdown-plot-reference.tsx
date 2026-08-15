@@ -8,5 +8,10 @@
 import { DrawdownPlot, DRAWDOWN_DEMO } from "@digithings/web";
 
 export function DrawdownPlotReference() {
-  return <DrawdownPlot data={DRAWDOWN_DEMO} />;
+  return (
+    <DrawdownPlot
+      data={DRAWDOWN_DEMO}
+      label="Underwater drawdown curve — demo series, weekly 2022–2026 (max −7.4%)"
+    />
+  );
 }

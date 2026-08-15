@@ -14,7 +14,11 @@ from digigraph.graph import build_workflow_graph
 from digigraph.models import WorkflowRequest, WorkflowResult
 from digigraph.project_config import DigiProjectConfig
 from digigraph.thread_scope import workflow_thread_id
-from digigraph.tool_policy import allowed_tool_names_for_workflow, state_list_from_frozen
+from digigraph.tool_policy import (
+    allowed_tool_names_for_workflow,
+    require_tool_calls_for_workflow,
+    state_list_from_frozen,
+)
 
 __all__ = [
     "run_digigraph_workflow",
@@ -58,6 +62,7 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
     names = state_list_from_frozen(frozen)
     if names is not None:
         initial["allowed_tool_names"] = names
+    initial["require_tool_calls"] = require_tool_calls_for_workflow(req, cfg=cfg)
     if req.trading_profile:
         initial["trading_profile"] = req.trading_profile
     if req.strategy_params:
@@ -72,6 +77,13 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["vault_path_prefix"] = req.vault_path_prefix
     if req.research_system_prompt_override:
         initial["research_system_prompt_override"] = req.research_system_prompt_override
+    if req.digi_subject:
+        initial["digi_subject"] = req.digi_subject
+    # Unlike the three fields above, response_language is a user-toggleable per-turn
+    # preference, not a static tenant-derived value — it must be set unconditionally
+    # (even to None) so switching back to English on a later turn actually clears a
+    # prior non-English value from checkpointed state, rather than leaving it sticky.
+    initial["response_language"] = req.response_language
     return initial
 
 
@@ -151,7 +163,7 @@ def run_digigraph_workflow(req: WorkflowRequest) -> WorkflowResult:
     graph = build_workflow_graph()
     initial: dict[str, Any] = _initial_graph_state(req, workflow_id)
     config: dict = _graph_thread_config(req)
-    final = graph.invoke(initial, config=config)
+    final = graph.invoke(initial, config=config, durability="sync")
     dg_audit_log(
         "workflow_end",
         agent_id="digigraph",
@@ -259,7 +271,7 @@ def run_digigraph_workflow_via_stream(req: WorkflowRequest) -> WorkflowResult:
     graph = build_workflow_graph()
     initial = _initial_graph_state(req, workflow_id)
     config = _graph_thread_config(req)
-    for _ in graph.stream(initial, config=config, stream_mode="updates"):
+    for _ in graph.stream(initial, config=config, stream_mode="updates", durability="sync"):
         pass
     snapshot = graph.get_state(config)
     final = (snapshot.values if snapshot else None) or {}
@@ -297,7 +309,6 @@ def run_digigraph_workflow_streaming(
     tool loop still emits tool/content events via the same callback.
     Intended to be run in a thread; the server consumes the queue and emits SSE.
     """
-    from digigraph.graph.research import _stream_callback_ctx
     from digigraph.trace_events import TraceEventV1
 
     workflow_id = str(uuid.uuid4())
@@ -340,7 +351,54 @@ def run_digigraph_workflow_streaming(
                             ).model_dump(),
                         )
                     )
-        if event_type == "tool_result" and isinstance(data, dict) and data.get("rag_sources"):
+        if event_type == "round_boundary" and isinstance(data, dict):
+            # #2306 follow-up: run_tools fires this the moment a round's tool_calls
+            # becomes known, marking that round's already-streamed "content" as NOT
+            # the final answer. Forwarded as a "trace"/digigraph_trace event — the
+            # same channel code_block/rag_sources use above — because that is the
+            # ONLY event type server.py's _stream_completions_progressive still
+            # forwards to a client with suppress_tool_stream=True (digichat always
+            # sets this): "content" itself is the visible answer channel and cannot
+            # double as this signal without a consumer misreading narration as the
+            # answer, which is precisely the bug this closes.
+            event_queue.put(
+                (
+                    "trace",
+                    TraceEventV1(
+                        type="round_boundary",
+                        workflow_id=trace_ctx["workflow_id"],
+                        request_id=trace_ctx["request_id"],
+                        session_id=trace_ctx["session_id"],
+                        payload={
+                            "round_idx": data.get("round_idx"),
+                            # Capped defensively, matching code_block's 24_000-char cap
+                            # above -- narration is normally short model prose, not
+                            # arbitrary user/tool content, but nothing enforces that.
+                            "narration": str(data.get("narration") or "")[:24_000],
+                        },
+                    ).model_dump(),
+                )
+            )
+        if event_type == "tool_result" and isinstance(data, dict) and "rag_sources" in data:
+            # Fire on any retrieval tool's result, hit or miss. "rag_sources" is a key
+            # only retrieval handlers set on their return dict (digisearch,
+            # digisearch_fetch_all, digivault_search_notes, digivault_get_note,
+            # digisearch_research_delegate) — present even when empty on a zero-hit
+            # search. Non-retrieval tools (visualization_agent, digistore_list, todo,
+            # ...) never set this key, so they still never produce a trace here.
+            # Gating on truthiness (as before) meant a zero-hit search never got a
+            # trace event at all: "searched, found nothing" and "never searched"
+            # looked identical downstream. hit_count/query (set by research.py's
+            # execute_search wrapper) are forwarded when present so the browser can
+            # tell the two apart.
+            rag_payload: dict[str, Any] = {
+                "sources": data["rag_sources"],
+                "tool": data.get("name", "digisearch"),
+            }
+            if "query" in data:
+                rag_payload["query"] = data["query"]
+            if "hit_count" in data:
+                rag_payload["hit_count"] = data["hit_count"]
             event_queue.put(
                 (
                     "trace",
@@ -349,10 +407,7 @@ def run_digigraph_workflow_streaming(
                         workflow_id=trace_ctx["workflow_id"],
                         request_id=trace_ctx["request_id"],
                         session_id=trace_ctx["session_id"],
-                        payload={
-                            "sources": data["rag_sources"],
-                            "tool": data.get("name", "digisearch"),
-                        },
+                        payload=rag_payload,
                     ).model_dump(),
                 )
             )
@@ -365,20 +420,46 @@ def run_digigraph_workflow_streaming(
         **_audit_digi_kwargs(req),
     )
     graph = build_workflow_graph()
-    token = _stream_callback_ctx.set(stream_callback)
     final: dict[str, Any] = {}
     try:
         initial = _initial_graph_state(req, workflow_id)
         config: dict = {
             "configurable": {
                 "thread_id": workflow_thread_id(req.digi_subject, req.session_id),
-                "stream_callback": stream_callback,
             },
         }
-        for update in graph.stream(initial, config=config, stream_mode="updates"):
+        for part in graph.stream(
+            initial,
+            config=config,
+            stream_mode=["updates", "custom"],
+            version="v2",
+            durability="sync",
+            subgraphs=True,
+        ):
             if cancel_event is not None and cancel_event.is_set():
                 event_queue.put(("done", None))
                 return
+            if part["type"] == "custom":
+                # "custom" parts are NOT filtered by ns: research_node and
+                # research_brief_builder_node run inside the compiled "research"
+                # subgraph (graph.py builds it via build_research_subgraph() and adds
+                # it as a single node), so every _safe_stream_writer() write from
+                # _run_document_rag_path (tool_call, tool_result, content, reasoning,
+                # round_boundary) arrives here with a non-empty ns -- without
+                # subgraphs=True above, LangGraph drops these silently before they
+                # ever reach this loop.
+                event_type, data = part["data"]
+                stream_callback(event_type, data)
+                continue
+            if part["ns"]:
+                # subgraphs=True also makes "updates" parts start arriving for nodes
+                # INSIDE the research subgraph (ns=("research:<uuid>",)), which would
+                # double-report a graph_update trace event for both the inner node's
+                # completion and the outer "research" node's completion. Only
+                # top-level graph updates (ns == ()) are reported as graph_update
+                # trace events; this does not affect the "custom" branch above.
+                continue
+            update = part["data"]
             event_queue.put(
                 (
                     "trace",
@@ -410,8 +491,6 @@ def run_digigraph_workflow_streaming(
         event_queue.put(("content", f"Error: {e!s}"))
         event_queue.put(("done", None))
         return
-    finally:
-        _stream_callback_ctx.reset(token)
 
     dg_audit_log(
         "workflow_end",
