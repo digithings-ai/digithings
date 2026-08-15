@@ -438,6 +438,65 @@ def test_invoke_digivault_tool_ok_false_message_survives_the_http_hop() -> None:
 
 
 @pytest.mark.unit
+def test_handle_digivault_search_real_http_failure_reaches_handler_as_ok_false() -> None:
+    """Task 6 review finding: adding `except HUB_CLIENT_ERRORS` inside
+    `invoke_digivault_tool` (to satisfy the circuit-breaker test's requirement that
+    all 5 pre-open failures return `ok:False` rather than raise) changed what a
+    genuine downstream HTTP failure looks like by the time it reaches
+    `_handle_digivault_search`. Before: the real exception propagated out of
+    `invoke_digivault_tool` and was caught one layer up here by this handler's own
+    `except _ORCHESTRATOR_CLIENT_ERRORS`, producing the bare string
+    "digivault orchestrator invoke failed: {e}". After: `invoke_digivault_tool`
+    swallows the error itself and returns `{"ok": False, "error": ...}`, which now
+    flows through this handler's *existing* generic `not inv.get("ok")` passthrough
+    as `json.dumps(inv)` -- the same shape as any other ok=False response. The
+    circuit-breaker test only calls `invoke_digivault_tool` directly, and every other
+    test in this file mocks `invoke_digivault_tool` itself, so nothing previously
+    drove a real failure through both the handler and the hub's HTTP call together.
+    This does, via `httpx.MockTransport` (same pattern as
+    `test_invoke_digivault_tool_ok_false_message_survives_the_http_hop` above, one
+    layer further out): a 503 makes `raise_for_status()` raise a real
+    `httpx.HTTPStatusError`, unmocked at the hub level."""
+    from digigraph.orchestration.builtin import _handle_digivault_search
+    from digigraph.vertical_orchestrator import digivault_hub
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, json={"error": "service unavailable"})
+
+    def fake_sync_client(**kwargs: object) -> httpx.Client:
+        return httpx.Client(transport=httpx.MockTransport(handler))
+
+    ctx = _ctx(vault_path_prefix="clients/digithings")
+    try:
+        with patch.object(digivault_hub, "sync_client", fake_sync_client):
+            out = _handle_digivault_search({"query": "anything"}, ctx)
+    finally:
+        # digivault_hub._cb is a module-level CircuitBreaker singleton shared across
+        # the whole test session. A 503 (HTTPStatusError) doesn't trip it at all under
+        # the corrected design (only httpx.RequestError -- genuine transport failures
+        # -- counts; see digivault_hub.py's invoke_digivault_tool), so this reset is
+        # purely defensive, not compensating for partial progress toward OPEN. Kept
+        # anyway so this test can never leak state into an unrelated test -- mirrors
+        # test_vertical_orchestrator_circuit_breaker.py's own reset fixture.
+        digivault_hub._cb._state = digivault_hub._cb._CLOSED
+        digivault_hub._cb._failures = 0
+        digivault_hub._cb._opened_at = None
+
+    # The merged contract: a real HTTP failure now surfaces as a json.dumps-shaped
+    # ok:False payload with an informative error, via the handler's generic
+    # passthrough branch -- NOT the old bare "digivault orchestrator invoke failed:
+    # ..." plain-string shape (that string is still produced elsewhere, but only
+    # when invoke_digivault_tool itself raises something outside HUB_CLIENT_ERRORS,
+    # which a real HTTP failure no longer does).
+    assert isinstance(out, str)
+    assert "digivault orchestrator invoke failed" not in out
+    payload = json.loads(out)
+    assert payload["ok"] is False
+    assert "digivault invoke failed" in payload["error"]
+    assert "503" in payload["error"]
+
+
+@pytest.mark.unit
 def test_handle_digivault_get_note_requires_vault_path() -> None:
     from digigraph.orchestration.builtin import _handle_digivault_get_note
 

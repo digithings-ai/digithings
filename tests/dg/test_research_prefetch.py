@@ -79,7 +79,6 @@ def test_document_rag_hands_tools_to_the_model_and_does_not_prefetch(
     ):
         research_mod._run_document_rag_path(
             state=state,
-            config=None,
             cfg=cfg,
             system_prompt="You have digisearch. Use it and summarize.",
             index_name="default",

@@ -14,7 +14,7 @@ const INTRO = `digichat — the assistant for the digithings stack.
 
 Ask about the architecture: how the modules fit together, how it's built, how it runs. I search digivault (the docs) before answering, so I cite real docs rather than guess.
 
-Free tier uses OpenRouter's model pool — no key needed. Or bring your own key (OpenRouter, OpenAI, Anthropic, Gemini) for any model.
+Free tier uses OpenRouter's model pool — no key needed. Or bring your own key (OpenRouter, OpenAI, Anthropic, Gemini, xAI) for any model.
 
 Try asking for a diagram of a pipeline.`;
 

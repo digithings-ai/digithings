@@ -5,6 +5,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Fraunces } from "next/font/google";
 import { ThemeProvider, MotionProvider, themeInitScript, HashScrollManager } from "@digithings/web";
+import { LegacyByokPurge } from "@/components/LegacyByokPurge";
 
 // Editorial serif for the v7 landing direction — self-hosted by next/font so it
 // works under `output: "export"` (no runtime CDN <link>). Mirrors digiquant-web.
@@ -100,6 +101,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body>
         <div className="grain" aria-hidden="true" />
         <div className="glow" aria-hidden="true" />
+        <LegacyByokPurge />
         <MotionProvider>
           <ThemeProvider>
             <HashScrollManager />

@@ -8,7 +8,11 @@ import pytest
 from digigraph.models import WorkflowRequest
 from digigraph.orchestration.registry import ToolContext, execute, get_tools
 from digigraph.project_config import DigiProjectConfig
-from digigraph.tool_policy import allowed_tool_names_for_workflow, state_list_from_frozen
+from digigraph.tool_policy import (
+    allowed_tool_names_for_workflow,
+    require_tool_calls_for_workflow,
+    state_list_from_frozen,
+)
 
 
 @pytest.mark.unit
@@ -112,3 +116,101 @@ def test_policy_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_state_list_from_frozen() -> None:
     assert state_list_from_frozen(None) is None
     assert state_list_from_frozen(frozenset({"b", "a"})) == ["a", "b"]
+
+
+@pytest.mark.unit
+def test_require_tool_calls_project_true_wins_even_if_request_false() -> None:
+    """The floor: a request-level False cannot lower a project-mandated True."""
+    cfg = DigiProjectConfig({"agents": {"require_tool_calls": True}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=False)
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_request_true_raises_it_when_project_unset() -> None:
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=True)
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_defaults_false_when_nothing_set() -> None:
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is False
+
+
+@pytest.mark.unit
+def test_require_tool_calls_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DIGI_REQUIRE_TOOL_CALLS", "1")
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_env_false_does_not_win(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_REQUIRE_TOOL_CALLS", raising=False)
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=False)
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is False
+
+
+@pytest.mark.unit
+def test_require_tool_calls_loads_cfg_when_none_passed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Mirrors allowed_tool_names_for_workflow's cfg=None -> DigiProjectConfig.load() fallback."""
+    monkeypatch.setattr(
+        "digigraph.tool_policy.DigiProjectConfig.load",
+        staticmethod(lambda: DigiProjectConfig({"agents": {"require_tool_calls": True}})),
+    )
+    req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req) is True
+
+
+@pytest.mark.unit
+def test_workflow_state_declares_require_tool_calls() -> None:
+    """LangGraph drops undeclared TypedDict keys — see #2097."""
+    from digigraph.graph.state import WorkflowState
+
+    assert "require_tool_calls" in WorkflowState.__annotations__
+
+
+@pytest.mark.unit
+def test_initial_graph_state_carries_require_tool_calls_true() -> None:
+    from digigraph.workflow import _initial_graph_state
+
+    cfg = DigiProjectConfig({"agents": {"require_tool_calls": True}})
+    with patch("digigraph.workflow.DigiProjectConfig.load", return_value=cfg):
+        state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-rtc-1")
+    assert state["require_tool_calls"] is True
+
+
+@pytest.mark.unit
+def test_initial_graph_state_defaults_require_tool_calls_false() -> None:
+    from digigraph.workflow import _initial_graph_state
+
+    cfg = DigiProjectConfig({"agents": {}})
+    with patch("digigraph.workflow.DigiProjectConfig.load", return_value=cfg):
+        state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-rtc-2")
+    assert state["require_tool_calls"] is False
+
+
+@pytest.mark.unit
+def test_langgraph_preserves_require_tool_calls_through_invoke() -> None:
+    """Regression: StateGraph(WorkflowState) must not strip require_tool_calls."""
+    from digigraph.graph.state import WorkflowState
+    from langgraph.graph import END, START, StateGraph
+
+    seen: dict[str, bool | None] = {}
+
+    def _capture(state: WorkflowState) -> dict:
+        seen["require_tool_calls"] = state.get("require_tool_calls")
+        return {}
+
+    builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+    builder.add_node("capture", _capture)
+    builder.add_edge(START, "capture")
+    builder.add_edge("capture", END)
+    graph = builder.compile()
+    graph.invoke({"prompt": "x", "require_tool_calls": True})
+    assert seen["require_tool_calls"] is True

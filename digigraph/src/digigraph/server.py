@@ -171,6 +171,34 @@ _RATE_LIMITS: dict[str, tuple[int, int]] = {
 _DEFAULT_RATE_LIMIT = (30, 60)
 _UNLIMITED_PATHS = {"/health", "/healthz"}
 
+# A request/header-level `require_tool_calls=true` (see _resolve_require_tool_calls_chat)
+# forces tool_choice="required", which reliably exhausts all max_tool_rounds completions
+# instead of returning after one -- a ~4-5x LLM-spend multiplier any caller holding plain
+# digigraph:chat scope can opt into per request (the deployment-mandated floor is separate
+# and not what this limits). Give that class of request its own, stricter budget on top of
+# the general per-path limit above; both checks apply and either can 429 the request.
+_require_tool_calls_limiter = _RateLimiter()
+_REQUIRE_TOOL_CALLS_RATE_LIMIT: tuple[int, int] = (
+    int(os.environ.get("DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX", "3")),
+    60,
+)
+
+
+def _enforce_require_tool_calls_budget(
+    require_tool_calls: bool | None, request: Request
+) -> JSONResponse | None:
+    """429 if this IP is over budget for `require_tool_calls=true` requests.
+
+    Only requests that actually opt into the escalation (see
+    _resolve_require_tool_calls_chat) are metered here -- a deployment that mandates
+    require_tool_calls itself via project config / DIGI_REQUIRE_TOOL_CALLS has already
+    accepted that cost for every request and isn't what this budget defends against.
+    """
+    if not require_tool_calls:
+        return None
+    max_req, window = _REQUIRE_TOOL_CALLS_RATE_LIMIT
+    return _require_tool_calls_limiter.check(request, max_req, window)
+
 
 @app.middleware("http")
 async def gated_sensitive_endpoints(request: Request, call_next):
@@ -235,15 +263,26 @@ def healthz() -> dict[str, bool]:
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
-    from digigraph.corpus_routing import resolve_corpus_override
+    from digigraph.corpus_routing import load_tenant_corpus_map, resolve_corpus_override
 
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
     updates: dict[str, str | None] = {"digi_bearer": bearer}
+    # digi_subject keys the cross-thread Store namespace (supervisor_node,
+    # ARCHITECTURE.md §6.10) and, via workflow_thread_id, the checkpoint thread_id — so
+    # it must NEVER survive from a client-supplied WorkflowRequest.digi_subject unless
+    # backed by verified auth (CWE-639 IDOR). This key must always be present in
+    # `updates` (never merely omitted): `req.model_copy(update=updates)` in
+    # _with_digi_request_context only clears a field when its key is explicitly present
+    # here — an absent key leaves the client's original value untouched. So this is an
+    # unconditional assignment, not a conditional override: it sets the verified
+    # `auth.subject` when `auth` is present and its `subject` claim is non-empty, and
+    # explicitly `None` in every other case — no `auth` object at all, OR an `auth`
+    # object present with an empty/falsy `subject` claim. Both are real overrides, not
+    # skips, because the key is always present.
+    updates["digi_subject"] = auth.subject if (auth is not None and auth.subject) else None
     tenant_from_auth: str | None = None
     if auth is not None:
-        if auth.subject:
-            updates["digi_subject"] = auth.subject
         if auth.key_prefix:
             updates["digi_trace_key_prefix"] = auth.key_prefix
         if auth.tenant_slug:
@@ -253,16 +292,27 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
             updates["digi_trace_project_id"] = auth.project_id
         if auth.jti:
             updates["digi_trace_jti"] = auth.jti
+    corpus_map = load_tenant_corpus_map()
     corpus = resolve_corpus_override(
         headers=http_request.headers,
         tenant_slug=tenant_from_auth,
+        corpus_map=corpus_map,
     )
-    if corpus.digisearch_index:
+    # Same CWE-639 class as digi_subject: when DIGI_TENANT_CORPUS_MAP is configured,
+    # digisearch_index / vault_path_prefix / research_system_prompt_override must be
+    # written unconditionally so a client body value cannot survive into graph state
+    # (digisearch has no server-side tenant→index bind; digivault does for prefixes).
+    if corpus_map:
         updates["digisearch_index"] = corpus.digisearch_index
-    if corpus.vault_path_prefix:
         updates["vault_path_prefix"] = corpus.vault_path_prefix
-    if corpus.research_system_prompt:
         updates["research_system_prompt_override"] = corpus.research_system_prompt
+    else:
+        if corpus.digisearch_index:
+            updates["digisearch_index"] = corpus.digisearch_index
+        if corpus.vault_path_prefix:
+            updates["vault_path_prefix"] = corpus.vault_path_prefix
+        if corpus.research_system_prompt:
+            updates["research_system_prompt_override"] = corpus.research_system_prompt
     # Per-request response language (X-Digi-Language) — a per-request signal, not a
     # tenant-derived value, so it's read directly rather than via resolve_corpus_override.
     # Never interpolated into a prompt (resolve_language_directive only ever emits
@@ -370,6 +420,13 @@ def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> W
     digiclaw custom skill: run_digigraph_workflow.
     Phase 0: user idea → backtest via digiquant → result in < 10s.
     """
+    # WorkflowRequest.require_tool_calls is body-only (no X-Require-Tool-Calls header,
+    # unlike ChatCompletionRequest -- see models.py), but it reaches the identical
+    # tool_choice="required" spend-amplification path via require_tool_calls_for_workflow,
+    # so it needs the same dedicated budget as /v1/chat/completions (#2361 finding 7 gap).
+    limited = _enforce_require_tool_calls_budget(req.require_tool_calls, http_request)
+    if limited is not None:
+        return limited
     rid = _resolve_request_id(http_request)
     if rid and not (req.request_id and str(req.request_id).strip()):
         req = req.model_copy(update={"request_id": rid})
@@ -379,7 +436,10 @@ def api_run_digigraph_workflow(http_request: Request, req: WorkflowRequest) -> W
 
 # --- Thread state (LangGraph get_state) ---
 
-# Keys we expose from checkpointed state (exclude stream_callback and other internals).
+# Keys we expose from checkpointed state (exclude digi_bearer and other internals;
+# streaming now goes through LangGraph's native get_stream_writer(), so there is no
+# stream_callback state key to exclude anymore -- see graph/research.py's
+# _safe_stream_writer()).
 _THREAD_STATE_KEYS = (
     "stored_datasets",
     "research_response",
@@ -624,6 +684,7 @@ def _stream_completions_progressive(
     session_id: str | None,
     openwebui_format: bool = False,
     allowed_tools: list[str] | None = None,
+    require_tool_calls: bool | None = None,
     request_id: str | None = None,
     workflow_extras: dict | None = None,
     suppress_tool_stream: bool = False,
@@ -640,6 +701,7 @@ def _stream_completions_progressive(
         "prompt": prompt,
         "session_id": session_id,
         "allowed_tools": allowed_tools,
+        "require_tool_calls": require_tool_calls,
         "request_id": request_id,
     }
     if workflow_extras:
@@ -790,6 +852,22 @@ def _resolve_allowed_tools_chat(req: ChatCompletionRequest, request: Request) ->
     return None
 
 
+def _resolve_require_tool_calls_chat(req: ChatCompletionRequest, request: Request) -> bool | None:
+    """Per-request tool_choice='required' signal from JSON body or X-Require-Tool-Calls header.
+
+    None = no request-level signal; the deployment-grain floor (project config /
+    DIGI_REQUIRE_TOOL_CALLS) still applies downstream in require_tool_calls_for_workflow.
+    """
+    if req.require_tool_calls is not None:
+        return req.require_tool_calls
+    h = (request.headers.get("X-Require-Tool-Calls") or "").strip().lower()
+    if h in ("1", "true", "yes"):
+        return True
+    if h in ("0", "false", "no"):
+        return False
+    return None
+
+
 def _resolve_session_id(req: ChatCompletionRequest, request: Request) -> str | None:
     """Session id from body, then X-Session-Id, then X-Thread-Id. Ensures digistore/checkpoint are per-conversation when client sends it."""
     sid = getattr(req, "session_id", None)
@@ -855,6 +933,10 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     if subject:
         session_id = workflow_thread_id(subject, session_id)
     allowed_tools = _resolve_allowed_tools_chat(req, request)
+    require_tool_calls = _resolve_require_tool_calls_chat(req, request)
+    limited = _enforce_require_tool_calls_budget(require_tool_calls, request)
+    if limited is not None:
+        return limited
     suppress_tool_stream = _resolve_suppress_tool_stream(request)
     openwebui_format = _resolve_openwebui_format(req, request)
     request_id = _resolve_request_id(request)
@@ -882,6 +964,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
                 session_id,
                 openwebui_format=openwebui_format,
                 allowed_tools=allowed_tools,
+                require_tool_calls=require_tool_calls,
                 request_id=request_id,
                 workflow_extras=wf_extras,
                 suppress_tool_stream=suppress_tool_stream,
@@ -902,6 +985,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
             prompt=prompt,
             session_id=session_id,
             allowed_tools=allowed_tools,
+            require_tool_calls=require_tool_calls,
             request_id=request_id,
         )
         result = run_digigraph_workflow(_with_digi_request_context(request, wf))
