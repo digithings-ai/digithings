@@ -215,15 +215,9 @@ claude_code_surface:
     - name: spec-writer
       path: .claude/agents/spec-writer.md
       purpose: "Emits GitHub Issue bodies matching .github/ISSUE_TEMPLATE/agent_task.yml"
-    - name: pr-reviewer
-      path: .claude/agents/pr-reviewer.md
-      purpose: "Rubric-aware PR review mirroring docs/scoring/ dimensions"
     - name: test-first-implementer
       path: .claude/agents/test-first-implementer.md
       purpose: "Red/green/refactor TDD loop bound to the component test command"
-    - name: security-reviewer
-      path: .claude/agents/security-reviewer.md
-      purpose: "OWASP + digithings security sweep before auth/crypto PRs"
   skills:
     - name: triage
       path: .claude/skills/triage/SKILL.md

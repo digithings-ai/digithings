@@ -17,6 +17,13 @@ on:
       - "digibase/**"
       - "digikey/**"
       - "digigraph/**"
+      # Dockerfile bakes only this one file into the digigraph image (see its
+      # COPY line + comment) -- a catalog-only edit should still trigger a
+      # rebuild/republish, or a fixed catalog never reaches a running deployment
+      # until some unrelated digigraph/** change happens to publish it (#2361
+      # finding 8). Not infra/digichat-release/config/ -- that's the Profile A
+      # bind-mount copy, never baked into this image.
+      - "config/byok-providers.json"
       - "digiquant/**"
       - "digisearch/**"
       - "digismith/**"

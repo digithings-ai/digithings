@@ -37,6 +37,8 @@ export function BYOKSettingsPanel({ inline = false }: { inline?: boolean } = {})
       }}
       onClear={clearKey}
       active={isSet ? { provider: storedProvider, model: storedModel } : null}
+      initialProvider={storedProvider}
+      initialModel={storedModel}
     />
   );
 

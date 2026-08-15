@@ -134,10 +134,9 @@ browser-QA deltas: [`CONTROLS.md`](CONTROLS.md).
 
 | File | Purpose |
 |---|---|
-| `src/app/page.tsx` | Server component: Option A default redirects `/` → `/embed`; `DIGICHAT_REQUIRE_ROOT_AUTH=1` keeps Auth.js gate → `/login` or `ChatShell` |
+| `src/app/page.tsx` | Server component: Option A default redirects `/` → `/embed`; `DIGICHAT_REQUIRE_ROOT_AUTH=1` keeps Auth.js gate → `ChatShell` (no session redirects to `/embed` too — no standalone login page ships) |
 | `src/lib/root-auth.ts` | `isRootAuthRequired()` — root `/` Auth.js wall (default OFF) |
 | `src/app/layout.tsx` | Root layout with `Providers` (session, tooltips) |
-| `src/app/login/` | Login page + form |
 | `src/app/api/chat/route.ts` | Primary BFF chat endpoint |
 | `src/app/api/v1/chat/route.ts` | Machine-client alias — re-exports the chat route |
 | `src/app/api/conversations/route.ts` | List + create conversations |
@@ -317,11 +316,13 @@ src/instrumentation.ts  # Auto-migrate hook
 ```
 
 The root `page.tsx` is a **React Server Component**. By default
-(`DIGICHAT_REQUIRE_ROOT_AUTH` unset/`0` — Option A) it redirects to `/embed` so
-dogfood and most installs never hit the legacy Auth.js `/login` wall. When
-`DIGICHAT_REQUIRE_ROOT_AUTH=1`, it calls `auth()` and redirects to `/login` when
-no session exists. `ChatShell` is a `"use client"` component that owns all thread
-state as React state; the server renders nothing but the initial HTML shell for it.
+(`DIGICHAT_REQUIRE_ROOT_AUTH` unset/`0` — Option A) it redirects to `/embed`. When
+`DIGICHAT_REQUIRE_ROOT_AUTH=1` (Option B — no shipped deployment uses this today),
+it calls `auth()` and, with no session, also redirects to `/embed` — there is no
+standalone `/login` page; a session must come from an OIDC callback, a machine
+key, or the dev-only local-bootstrap credentials provider. `ChatShell` is a
+`"use client"` component that owns all thread state as React state; the server
+renders nothing but the initial HTML shell for it.
 
 ### BFF pattern (route handlers)
 
@@ -361,9 +362,9 @@ BFF route handler
    to `/embed` (tenant `gateMode` applies there — digithings dogfood uses `ungated`).
 2. When root auth is required, the server component calls `auth()` — reads and decrypts
    the session JWT from the httpOnly `__Secure-authjs.session-token` cookie.
-3. No session → `redirect("/login")`.
-4. Login page submits credentials to `POST /api/auth/callback/credentials` (dev) or
-   initiates OIDC redirect (production).
+3. No session → `redirect("/embed")` (no standalone `/login` page ships).
+4. A session is established via `POST /api/auth/callback/credentials` (dev-only
+   providers) or an OIDC redirect (production), not through a digichat-hosted page.
 5. Auth.js writes an encrypted session JWT cookie. `jwt` callback copies `user.id` →
    `token.sub`. `session` callback copies `token.sub` → `session.user.id`.
 5. On subsequent requests, `auth()` decrypts the cookie and returns the session. No
@@ -440,30 +441,137 @@ On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants wit
 (even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
 the visitor activates a validated key, the failed turn is retried with existing
 `X-BYOK-*` headers. BYOK providers listed in the UI: OpenAI, OpenRouter,
-Anthropic, Gemini (model required for all non-OpenAI providers).
+Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
+Provider list is defined by `config/byok-providers.json`.
 
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 
-Visitor API keys are **session memory only** (`useBYOKKey` React state). They
-are never written to `localStorage`, `sessionStorage`, cookies, or Postgres.
-Legacy durable keys (`byok_api_key` / `byok_provider` / `byok_model`) are purged
-on hook mount. A page refresh clears BYOK.
+Visitor API keys are **session memory only** (`useBYOKKey` React state). The
+key itself is never written to `localStorage`, `sessionStorage`, cookies, or
+Postgres — the only thing that persists across sessions is the non-secret
+`digichat_byok_pref` cookie (`readByokPrefCookie`/`writeByokPrefCookie` in
+`use-byok-key.ts`), which holds just `{provider, model}` so a returning
+visitor's picker opens pre-selected instead of always defaulting to
+OpenRouter. `useBYOKKey()` restores that pair into its `provider`/`model`
+state on mount, always with `isSet: false` (no key ever ships with it), and
+`clearKey()` deletes the cookie outright rather than rewriting it — clearing
+a key does not silently reset the remembered provider to OpenRouter. This
+cookie is a known no-op on `/embed`'s cross-site iframe surface when the
+visitor's browser blocks or partitions third-party cookies (Safari/Firefox by
+default, Chrome without CHIPS) — the picker just falls back to its default
+there, nothing breaks. Legacy durable keys (`byok_api_key` / `byok_provider` /
+`byok_model`) are purged on hook mount. A page refresh always clears the live
+key.
 
-UX (`src/components/byok-cli-flow.tsx`) is a stepwise terminal sequence rendered
-**inline in the chat transcript** (DigiChatSession `settingsPanel` slot inside
-`.dc-thread`, and the app shell `ChatPanel` when `/key` opens BYOK mode):
+`ByokCliFlow` (`src/components/byok-cli-flow.tsx`) takes `active` (a
+currently-live, validated key — gates the "done" step and "BYOK active" text)
+and, separately, optional `initialProvider`/`initialModel` (just seeds the
+picker's starting selection, e.g. from the cookie above, without implying a
+live key). All three call sites (`chat-panel.tsx`, `embed/embed-client.tsx`,
+`byok-settings-panel.tsx`) wire `useBYOKKey()`'s `provider`/`model` into the
+latter pair independently of `active`/`isSet`.
 
-1. Select provider (arrow keys + Enter, or click)
-2. Paste API key
-3. Select model from presets (or custom slug)
-4. `POST /api/byok/test` ping — activation is refused until `ok: true`
+UX is a stepwise terminal sequence rendered **inline in the chat transcript**
+(DigiChatSession `settingsPanel` slot inside `.dc-thread`, and the app shell
+`ChatPanel` when `/key` opens BYOK mode):
+
+1. Select provider (arrow keys + Enter, or click) — pre-selected from
+   `initialProvider` above when set
+2. Paste API key. For OpenAI, Anthropic, and Gemini this immediately fires
+   `POST /api/byok/test` in the background, before any model is chosen —
+   see "Key-step live model ping" below.
+3. Select model from presets (or custom slug) — for OpenRouter, from a live
+   catalog with tier tabs instead (see below); for OpenAI/Anthropic/Gemini,
+   from the key-step ping's live `models` list once it resolves, falling
+   back to presets while pending, on failure, or on an empty list.
+4. `POST /api/byok/test` ping — activation is refused until `ok: true`. For
+   OpenAI/Anthropic/Gemini this step is skipped: the key-step ping from
+   step 2 is reused directly, so exactly one validation call happens
+   across the whole flow for these three providers.
 5. On success, key is held in-memory for this tab session and sent as
    `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
-   requests only
+   requests only. Whether `X-BYOK-Model` is sent at all is driven by
+   `byokRequiresModel(provider)`, defined once in the framework-neutral
+   `src/lib/byok-providers.ts` (no `"use client"` directive, so both React
+   client code and Next.js server Route Handlers can import it) and
+   re-exported by `use-byok-key.ts` for its own callers. Every client call
+   site defers to that one predicate (never a hand-maintained per-provider
+   list) — `chat-panel.tsx`, `embed/embed-client.tsx`,
+   `byok-settings-panel.tsx` — and so does `api/chat/route.ts`'s
+   `byokNeedsModel` gate, which now calls `byokRequiresModel(byokProvider)`
+   directly in place of its old 5-provider OR-chain, so a 6th `requiresModel`
+   provider can't silently omit its model header there the way `xai` once
+   did (#2351). `api/byok/test/route.ts` also imports this module —
+   `readByokProvider` replaces its old `readProvider` (which fell through to
+   `"openai"` for any unrecognized value) and `byokKeyPrefixError` replaces
+   its five hand-written prefix `if`-blocks. That route's own `needsModel`
+   gate (which providers require `X-BYOK-Model` before the test ping runs at
+   all) is deliberately its own hand-written check — `provider === "xai"`
+   only (#2347) — and is **not** derived from `byokRequiresModel`. The two
+   guard different things: `byokRequiresModel(provider)` governs whether a
+   model header must be forwarded on the real `/api/chat` request;
+   `needsModel` here governs only whether the *validation ping* needs a
+   model before it can run at all. They diverge on purpose — none of
+   `testOpenAIKey`, `testAnthropicKey`, `testGeminiKey`, or
+   `testOpenRouterKey` read their own `model` parameter, so requiring one
+   before the ping just delayed a call that would have worked without it;
+   only `testXaiKey` has no live-list call, so x.ai is the one provider that
+   still needs a model up front. Deriving `needsModel` from
+   `byokRequiresModel` instead would reintroduce the exact bug #2347 fixed —
+   the two must stay independent.
+
+For OpenRouter, `byok-cli-flow.tsx` prefetches `GET /api/byok/models?provider=openrouter`
+(no key required) as soon as `openrouter` becomes the selected provider, usually
+before the model step even renders. Once that catalog lands, the model step
+replaces the flat preset list with tier tabs (free / opensource / flagship /
+all / a user-starred "custom" set held only in component state) plus a
+per-entry star toggle. Any fetch failure or non-OpenRouter provider falls back
+to the original flat preset list unchanged — the tiered UI is strictly additive
+and never blocks the flow on network.
+
+For OpenAI, Anthropic, and Gemini, `byok-cli-flow.tsx` fires
+`pingByokKey(key, provider, "", { requireModel: false })` as soon as the
+key step is submitted (`submitKey`), before a model is chosen.
+`requireModel: false` (an option `pingByokKey` gained for this) skips its
+own client-side `validateBYOKModel` pre-check, which would otherwise
+refuse to call the server at all for a model-required provider with no
+model chosen yet — exactly the state at the key step for Anthropic and
+Gemini. The result is cached in `keyPing` state; its `models` array
+(already returned by `testOpenAIKey`/`testAnthropicKey`/`testGeminiKey`,
+unused before #2347) populates the model-step picker in place of
+`byokModelPresets(provider)`, falling back to the presets with no visible
+error whenever the ping hasn't resolved yet, failed, or came back with an
+empty list. When the visitor then picks a model, `runValidateAndActivate`
+reuses `keyPing` directly instead of issuing a second
+`POST /api/byok/test` — exactly one validation call happens across the
+whole flow for these three providers, same as it always was for the
+other providers, just moved earlier. OpenRouter's own prefetch and x.ai's
+fallback-preset-only behavior are unchanged.
 
 The BFF forwards BYOK headers to digigraph for the request lifetime and never
 logs or returns the raw key. `byokActivationGate` + Vitest cover the
-session-only / validation-before-activate contract.
+session-only / validation-before-activate contract. `POST /api/byok/test` is
+rate-limited on both the embed-IP path and the authenticated/session path
+(`checkBffRateLimit`, same unconditional-on-both-paths shape as
+`GET /api/byok/models`) — each call makes an outbound credentialed request to
+the provider using digichat's own egress, so the authenticated path needs a
+ceiling too, not just the anonymous-embed one.
+
+`config/byok-providers.json`'s `keyPrefix`/`fallbackModels` fields are read by
+no runtime code (only `id`/`baseUrl`/`requiresModel` feed
+`digigraph/src/digigraph/llm_auth.py`'s loader) but are checked for parity
+against `src/lib/byok-providers.ts`'s own catalog (`BYOK_PROVIDER_LIST`,
+`byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`) by two test
+files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,
+plus its own `byokModelPresets`) and its sibling
+`hooks/byok-providers.catalog-parity.test.ts`
+(the shared module itself, which is what `api/chat/route.ts` and
+`api/byok/test/route.ts` import directly) — so either copy drifting from the
+catalog fails a test instead of drifting silently. `api/byok/test/route.ts`
+also calls `readByokProvider` from that same module: an `X-BYOK-Provider`
+value naming no known provider gets an explicit
+`400 Unknown BYOK provider: "…"` response instead of being silently treated
+as `openai`, the pre-#2351 behavior of that route's old `readProvider`.
 
 **digithings rule:** digithings tenants use `backend.type: digigraph` only.
 digivault and digisearch are digigraph tools (activity mappers under

@@ -1,8 +1,14 @@
 """Per-tenant corpus routing for digisearch index + digivault path prefix.
 
-Resolves overrides from request headers (preferred) or ``DIGI_TENANT_CORPUS_MAP``
-JSON keyed by tenant slug. Used so digithings.ai/chat and /chat/occ share one
-digigraph process without corpus bleed.
+Resolves overrides from ``DIGI_TENANT_CORPUS_MAP`` (keyed by tenant slug) and,
+only when that map is unset, from request headers / body-driven callers.
+
+When the map is configured (multi-tenant isolation mode), it is **authoritative**:
+client headers ``X-Digi-Corpus-Index`` / ``X-Digi-Vault-Prefix`` must not select
+another tenant's corpus. digivault already enforces the vault half server-side
+(``enforce_tenant_path_prefix``); digisearch has no equivalent bind, so digigraph
+must not forward an attacker-chosen index. Used so digithings.ai/chat and
+/chat/occ share one digigraph process without corpus bleed.
 """
 
 from __future__ import annotations
@@ -101,24 +107,68 @@ def resolve_corpus_override(
     tenant_slug: str | None = None,
     corpus_map: dict[str, TenantCorpusOverride] | None = None,
 ) -> TenantCorpusOverride:
-    """Resolve corpus overrides: headers win, then map entry for tenant slug."""
+    """Resolve corpus overrides for one request.
+
+    * When ``DIGI_TENANT_CORPUS_MAP`` (or *corpus_map*) is non-empty, the map is
+      authoritative for the authenticated tenant slug. Client corpus headers are
+      ignored so a digithings principal cannot select ``occ_help`` via
+      ``X-Digi-Corpus-Index`` (CWE-639). Unknown / empty tenant → no corpus
+      override (callers must not fall through to a client-supplied index).
+    * When the map is unset (single-tenant), headers may still select index /
+      prefix — the historical digichat embed path for deployments without a map.
+    """
     hdr_index = _header(headers, _HEADER_CORPUS_INDEX)
     hdr_prefix = _header(headers, _HEADER_VAULT_PREFIX)
     hdr_tenant = _header(headers, _HEADER_TENANT)
+    # Prefer the verified auth tenant (caller passes tenant_from_auth). The
+    # unsigned X-Digi-Tenant header is only a routing hint when auth did not
+    # supply a slug — never used to *authorize* a mapped corpus when auth
+    # already named a different tenant (see digivault tenant_scope / #2303).
     slug = (tenant_slug or hdr_tenant or "").strip().lower() or None
 
-    mapped = TenantCorpusOverride()
-    if slug:
-        table = corpus_map if corpus_map is not None else load_tenant_corpus_map()
-        mapped = table.get(slug) or TenantCorpusOverride()
+    table = corpus_map if corpus_map is not None else load_tenant_corpus_map()
+    if table:
+        if not slug:
+            if hdr_index or hdr_prefix:
+                logger.warning(
+                    "ignoring corpus headers without a tenant slug while "
+                    "DIGI_TENANT_CORPUS_MAP is set"
+                )
+            return TenantCorpusOverride()
+        mapped = table.get(slug)
+        if mapped is None:
+            if hdr_index or hdr_prefix:
+                logger.warning(
+                    "ignoring corpus headers for unmapped tenant %r while "
+                    "DIGI_TENANT_CORPUS_MAP is set",
+                    slug,
+                )
+            return TenantCorpusOverride()
+        index = mapped.digisearch_index
+        if index and not _INDEX.match(index):
+            logger.warning("ignoring invalid corpus index %r from tenant map", index)
+            index = None
+        if (hdr_index and hdr_index != index) or (
+            hdr_prefix and _normalize_prefix(hdr_prefix) != (mapped.vault_path_prefix or "")
+        ):
+            logger.warning(
+                "ignoring client corpus headers for tenant %r; map is authoritative",
+                slug,
+            )
+        return TenantCorpusOverride(
+            digisearch_index=index,
+            vault_path_prefix=mapped.vault_path_prefix,
+            research_system_prompt=mapped.research_system_prompt,
+        )
 
-    index = hdr_index or mapped.digisearch_index
-    prefix = _normalize_prefix(hdr_prefix) if hdr_prefix else mapped.vault_path_prefix
+    # Single-tenant (map unset): headers may select corpus.
+    index = hdr_index
+    prefix = _normalize_prefix(hdr_prefix) if hdr_prefix else None
     if index and not _INDEX.match(index):
         logger.warning("ignoring invalid corpus index %r", index)
         index = None
     return TenantCorpusOverride(
         digisearch_index=index,
         vault_path_prefix=prefix or None,
-        research_system_prompt=mapped.research_system_prompt,
+        research_system_prompt=None,
     )

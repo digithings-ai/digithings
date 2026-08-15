@@ -121,6 +121,12 @@ services:
       - PYTHONUNBUFFERED=1
       - AUDIT_LOG_PATH=/audit/events.jsonl
     volumes:
+      # This mount SHADOWS the Dockerfile's baked-in config/, it does not merge
+      # with it. ./config here must contain byok-providers.json or digigraph
+      # crash-loops at startup (fails loud, by design). A missing
+      # model_modes.yaml does NOT crash -- it silently falls back to a
+      # hardcoded default model -- so supply both regardless. See
+      # digigraph/Dockerfile and ARCHITECTURE.md's DIGI_CONFIG_PATH entry.
       - ./config:/app/config:ro
       - ./digiquant/results/audit:/audit
     depends_on:

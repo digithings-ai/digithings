@@ -190,6 +190,32 @@ class TestRunTools:
             llm_client.run_tools("model", [], [], execute_tool=lambda n, a: "")
         assert rt.call_args[1]["parallel_safe_tools"] == set()
 
+    def test_forwards_tool_choice_required(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch("digigraph.orchestration.registry.list_tool_names", return_value=[]),
+            patch.object(llm_client, "_digillm_run_tools", return_value="done") as rt,
+        ):
+            llm_client.run_tools(
+                "model",
+                [{"role": "user", "content": "go"}],
+                [],
+                execute_tool=lambda n, a: "ok",
+                tool_choice="required",
+            )
+        assert rt.call_args[1]["tool_choice"] == "required"
+
+    def test_defaults_tool_choice_to_auto(self) -> None:
+        with (
+            patch.object(llm_client, "resolve_request_model", return_value="m"),
+            patch("digigraph.orchestration.registry.list_tool_names", return_value=[]),
+            patch.object(llm_client, "_digillm_run_tools", return_value="done") as rt,
+        ):
+            llm_client.run_tools(
+                "model", [{"role": "user", "content": "go"}], [], execute_tool=lambda n, a: "ok"
+            )
+        assert rt.call_args[1]["tool_choice"] == "auto"
+
 
 @pytest.mark.unit
 def test_llm_client_wires_digillm_usage_observer() -> None:

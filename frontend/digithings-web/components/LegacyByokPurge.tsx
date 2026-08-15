@@ -1,0 +1,21 @@
+"use client";
+
+import { useEffect } from "react";
+import { purgeLegacyApiKey } from "@/lib/providerSettings";
+
+/**
+ * Mounted once from the root layout so the legacy `digichat:api_key`
+ * localStorage purge runs on every digithings-web page load — not only on
+ * pages that render `DigiChatSession` / call `useProviderSettings()`.
+ *
+ * Neither `/chat` nor `/chat/occ` render `DigiChatSession` (they render
+ * `ChatEmbedShell`, an iframe, instead), so a returning visitor's stale key
+ * from a prior build was never purged on this site's most-visited routes.
+ * See #2348.
+ */
+export function LegacyByokPurge(): null {
+  useEffect(() => {
+    purgeLegacyApiKey();
+  }, []);
+  return null;
+}

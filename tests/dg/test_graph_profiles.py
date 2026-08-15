@@ -86,3 +86,101 @@ def test_profile_a_digiproject_is_chat_only() -> None:
         assert "digisearch" in tools
         assert "digivault_search_notes" in tools
         assert not any("digiquant" in t or "backtest" in t for t in tools)
+
+
+@pytest.fixture(autouse=False)
+def reset_workflow_graph_cache():
+    """Reset the process-wide compiled-graph cache so build_workflow_graph() rebuilds
+    with this test's env/module state, instead of returning whatever a prior test in
+    this session already compiled and cached (graph.py:23-24, no invalidation)."""
+    import digigraph.graph.graph as _graph_module
+
+    original = _graph_module._workflow_graph_cache
+    _graph_module._workflow_graph_cache = None
+    yield
+    _graph_module._workflow_graph_cache = original
+
+
+@pytest.mark.unit
+def test_build_workflow_graph_has_a_store(reset_workflow_graph_cache, reset_store) -> None:
+    """Cross-thread memory (Store) is distinct from the checkpointer (thread-scoped) --
+    the compiled graph must have one so nodes can call get_store() successfully instead
+    of silently no-op'ing.
+
+    Uses reset_store (not just reset_workflow_graph_cache): build_workflow_graph() calls
+    get_store() internally, which lazily creates and caches a process-wide InMemoryStore
+    in _store_instance -- without reset_store this leaks a live store into every other
+    test in the session, the exact leak reset_store exists to prevent."""
+    graph = build_workflow_graph()
+    assert graph.store is not None
+
+
+@pytest.fixture(autouse=False)
+def reset_store():
+    """Reset the process-wide Store singleton between tests.
+
+    Mirrors reset_checkpointer's save/restore pattern (test_graph.py) for the
+    analogous get_store() singleton (graph.py) -- without this, a test that sets
+    _store_instance = None to force a fresh get_store() call leaves a live
+    InMemoryStore for the rest of the pytest session with no teardown.
+    """
+    import digigraph.graph.graph as _graph_module
+
+    original_instance = _graph_module._store_instance
+    _graph_module._store_instance = None
+    yield
+    _graph_module._store_instance = original_instance
+
+
+@pytest.mark.unit
+def test_get_store_defaults_to_in_memory(
+    monkeypatch: pytest.MonkeyPatch, reset_store
+) -> None:
+    from digigraph.graph.graph import get_store
+
+    monkeypatch.delenv("DIGI_CHECKPOINTER", raising=False)
+    store = get_store()
+    assert type(store).__name__ == "InMemoryStore"
+
+
+@pytest.mark.unit
+def test_get_store_warns_on_postgres_with_missing_uri(
+    monkeypatch: pytest.MonkeyPatch, reset_store, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Finding 5 (MINOR, final whole-branch review): get_store()'s docstring claims
+    the missing-URI fallback path logs a warning "matching that same discipline" as
+    the ImportError branch -- this pins that it actually does now, instead of
+    silently degrading to InMemoryStore with no operator-visible signal."""
+    from digigraph.graph.graph import get_store
+
+    monkeypatch.setenv("DIGI_CHECKPOINTER", "postgres")
+    monkeypatch.delenv("DIGI_CHECKPOINTER_POSTGRES_URI", raising=False)
+    with caplog.at_level("WARNING"):
+        store = get_store()
+    assert type(store).__name__ == "InMemoryStore"
+    assert "DIGI_CHECKPOINTER_POSTGRES_URI is unset" in caplog.text
+
+
+@pytest.mark.unit
+def test_backtest_and_optimize_nodes_have_no_retry_policy(reset_workflow_graph_cache) -> None:
+    """Deliberate non-decision, not a regression: backtest_node/optimize_node (nodes.py)
+    catch httpx.RequestError (via _DIGIQUANT_CLIENT_ERRORS) INSIDE their own function
+    body and return a normal error-state dict, so the exception never escapes the node
+    function. A node-level RetryPolicy only fires on an exception escaping the node --
+    which never happens here -- so a RetryPolicy on these nodes would be dead code that
+    could never actually trigger (previously present as `_DIGIQUANT_RETRY_POLICY`,
+    removed here).
+
+    A real fix (letting httpx.RequestError propagate so a RetryPolicy could fire) is
+    deliberately NOT done: these are POST calls to digiquant with no idempotency-key
+    protection, so a network-blip retry could kick off two backtest/optimize runs.
+    Reintroducing a retry policy here needs real idempotency-key support in digiquant
+    first -- a separate body of work. See graph.py's comment above `build_workflow_graph`."""
+    graph = build_workflow_graph()
+    for name in ("backtest", "optimize"):
+        node = graph.nodes[name]
+        assert not node.retry_policy, (
+            f"{name} node has a retry_policy again -- either digiquant now has "
+            "idempotency-key support (update this test and the graph.py comment "
+            "explaining why it was removed), or this is a regression."
+        )
