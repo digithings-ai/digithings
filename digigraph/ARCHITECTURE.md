@@ -82,7 +82,9 @@ The following is built and functional as of this architecture review (March 2026
 
 Auth is enforced by `DigiAuthMiddleware` from `digikey.integrations.service_middleware`. Path-scope mappings are defined in `digigraph_path_scopes`. When `DIGIKEY_JWKS_URL` or `DIGIKEY_PUBLIC_KEY_PEM` is unset, the middleware operates in passthrough mode.
 
-Rate limits are per-IP (sliding window, in-process `deque`). The `X-Forwarded-For` header is trusted for IP extraction — see Section 6 (Security Analysis) for implications.
+Rate limits are per-IP (sliding window, in-process `deque`). `X-Forwarded-For` is honored only from a configured trusted proxy (`DIGI_TRUSTED_PROXIES`) and validated before use — see Section 12.8 for the extraction algorithm and Section 6 (Security Analysis) for the trust-boundary discussion.
+
+A request that opts into `require_tool_calls=true` (body field or `X-Require-Tool-Calls` header — see §6.2.1) is metered by a **second, stricter** per-IP budget on top of the 10 req/min above: `_enforce_require_tool_calls_budget` in `server.py`, default 3 req/min, overridable via `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX`. Forcing `tool_choice="required"` reliably exhausts all `max_tool_rounds` completions instead of returning after one — a ~4-5x LLM-spend multiplier any caller with plain `digigraph:chat` scope can opt into per request — so the two budgets are checked independently and either can 429 the request. A deployment that itself mandates `require_tool_calls` via project config / `DIGI_REQUIRE_TOOL_CALLS` isn't newly constrained by this: the budget only meters a request's own opt-in signal, not the resolved floor.
 
 ### 3.2 MCP Tools
 
@@ -225,6 +227,7 @@ real node executions rather than compiled graph nodes.
 | `digi_bearer` | `str \| None` | JWT forwarded to digisearch and digiquant |
 | `digi_subject` | `str \| None` | JWT subject; namespaces the cross-thread Store (see §5.5) and the checkpoint `thread_id`. Client-writable on `WorkflowRequest`, but `server.py`'s `_digi_fields_from_request` unconditionally overwrites it — to the verified `auth.subject` when present and non-empty, else `None` (no auth, or an auth object with an empty subject claim) — before it reaches graph state; see §6.10 |
 | `allowed_tool_names` | `list[str] \| None` | Tool allowlist; `None` = unrestricted |
+| `require_tool_calls` | `bool` | Deployment-grain `tool_choice="required"` mandate — see `tool_policy.require_tool_calls_for_workflow`. **Must** be declared — LangGraph drops undeclared keys. |
 | `strategy_name` | `str` | LLM-extracted strategy for digiquant |
 | `symbols` | `list[str]` | Ticker list |
 | `strategy_params` | `dict[str, Any]` | Optional pre-filled digiquant parameters |
@@ -262,6 +265,7 @@ Pydantic v2 model for `POST /workflow` and internal use:
 | `session_id` | `str \| None` | Maps to LangGraph `thread_id` |
 | `request_id` | `str \| None` | Taken from `X-Request-ID` when omitted |
 | `allowed_tools` | `list[str] \| None` | Overrides project/env allowlist |
+| `require_tool_calls` | `bool \| None` | Combined with project config / env as a FLOOR — can only raise, never lower, the deployment's mandate; see 4.1 |
 | `trading_profile` | `dict \| None` | Maps to `optimization_constraints` |
 | `strategy_params` | `dict \| None` | Skip LLM param extraction |
 | `research_filters` | `list[dict] \| None` | Injected into digisearch calls |
@@ -312,6 +316,7 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 | `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
+| `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
 
 ---
 
@@ -573,6 +578,34 @@ When an allowlist is active, `execute()` in `registry.py:106` rejects denied too
 
 An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. `None` means unrestricted.
 
+#### 6.2.1 Tool Choice Requirement
+
+`agents.require_tool_calls` (bool, default `false`) forces `tool_choice="required"`
+on every tool-calling turn in `research_node`'s `run_tools()` call — for deployments
+(e.g. OCC) that depend on multi-round tool calls for retrieval and should never
+silently answer from parametric knowledge alone. Resolved as a **floor**, not an
+override, by `tool_policy.require_tool_calls_for_workflow()`: project config or
+`DIGI_REQUIRE_TOOL_CALLS` wins over a request/`X-Require-Tool-Calls` header value
+of `false` — deliberately the opposite precedence from `agents.allowed_tools`,
+since this flag has no registry-bounded ceiling the way a tool allowlist does.
+
+Forcing `tool_choice="required"` also changes the cost and failure shape of the
+round budget described above. With it off, `tool_calls` can come back empty and
+`run_tools()` returns early, so `max_tool_rounds` is a ceiling the model rarely
+exhausts; with it on, a tool-enabled round returning empty `tool_calls` is no
+longer treated as an early final answer — `run_tools()` raises instead, so a
+provider that ignores the `required` hint doesn't get to silently answer without
+calling a tool. A compliant model still hits every round in the budget, so with
+`research.py`'s current `max_tool_rounds=4` a request with `require_tool_calls:
+true` makes 4 tool rounds plus one tool-free wrap-up completion — 5 total — only
+when the last round's own narration was empty; when that round already carried
+non-empty content, it's returned directly with no wrap-up, for 4. Either way,
+not the fixed 5 this used to claim. It also changes what happens when a model
+can't comply at the provider level: a provider that rejects forced tool use for
+that model outright now returns a hard error for the whole request, rather than
+the model quietly answering without tools the way a tool-incapable model
+degrades today.
+
 ### 6.3 Code Execution Gate
 
 `policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
@@ -593,7 +626,7 @@ When a client disconnects from an SSE stream, the background thread (`run_digigr
 
 ### 6.7 Rate Limiter Trust Boundary
 
-The `RateLimiter._get_ip()` method trusts `X-Forwarded-For` without validation. A client can set `X-Forwarded-For: 1.2.3.4` to impersonate any IP and bypass per-IP rate limits. In a Docker Compose deployment behind a reverse proxy, this is acceptable only if the proxy strips or overrides the header before it reaches digigraph. Currently there is no proxy in the default Compose stack — digigraph is directly exposed on `127.0.0.1:8000`.
+`RateLimiter._get_ip()` (see §12.8) only consults `X-Forwarded-For` when the direct peer is in `DIGI_TRUSTED_PROXIES`; with that unset (the default), a client's `X-Forwarded-For` is ignored entirely and `request.client.host` is used, so `X-Forwarded-For: 1.2.3.4` cannot impersonate another IP. Setting `DIGI_TRUSTED_PROXIES` moves the trust boundary to whichever proxy hops are listed there — see §12.8 for the operational requirement to list every hop in the chain, not just the innermost one. Currently there is no proxy in the default Compose stack — digigraph is directly exposed on `127.0.0.1:8000` — so `DIGI_TRUSTED_PROXIES` should stay unset there.
 
 ### 6.8 MCP Server Auth Gap
 
@@ -629,6 +662,10 @@ The `MemorySaver` default stores all thread state in a Python dict in the digigr
 - State is lost on restart (all rate limit windows reset)
 - Multiple replicas have independent limits, so the effective rate is multiplied by the replica count
 - The lock is a single point of contention under high request rates
+
+Each bucket's own `deque` is already bounded to `max_requests` entries (the `popleft` loop in `check()` drops anything older than the current window), so the growth risk is the *number* of distinct buckets, not any one bucket's size — a client hit once and never again used to leave a permanent dict entry with nothing to reclaim it (#2378). `check()` now sweeps fully-idle buckets out of `_windows` every `_SWEEP_INTERVAL` (1000) calls — every `check()` call counts toward that interval, whether it accepts or 429-rejects the request, so a sustained flood of already-over-quota (rejected) requests against one bucket cannot stall the sweep and leave other, genuinely idle buckets unreclaimed for the flood's duration. This bounds the dict to roughly the number of distinct clients active within a sweep interval rather than every distinct client ever seen. The sweep assumes a single `RateLimiter` instance is always called with the same `window` — true for both instances in `server.py` (`_rate_limiter`, `_require_tool_calls_limiter`), each with exactly one call site.
+
+`_windows` is an `OrderedDict`, not a plain `dict`: `check()` calls `move_to_end` on a bucket exactly when it accepts a request (never on the 429-reject path), so front-to-back order is always ascending by "time of last accepted request." The sweep walks from the front and stops at the first still-active bucket instead of scanning the whole dict — cost is O(evicted), not O(total buckets ever seen). This matters because a naive full-dict scan runs synchronously inside the (single-worker, single-event-loop) `async def rate_limit` middleware while `self._lock` is held, so an O(n) sweep over a `_windows` grown huge by a sustained distinct-source flood would stall every concurrent request for the scan's full duration; the ordered, early-stopping sweep keeps each sweep's cost bounded to roughly one `_SWEEP_INTERVAL` batch regardless of how large `_windows`'s cumulative history gets. A bucket whose very first request was already over quota (`max_requests <= 0`, e.g. a misconfigured `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX=0`) is created but never appended-to, leaving a permanently empty deque; the sweep treats an empty deque as unconditionally idle rather than evaluating its (nonexistent) newest entry, so it gets reclaimed instead of raising.
 
 ### 7.3 Graph Compilation Per Request
 
@@ -672,7 +709,9 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 Four modes — **`llm_mode` is access/cost policy, not a product catalog**: `free` (resolved model must be free-tier: OpenRouter `:free` or local Ollama), `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`. **Actual model id** comes from (in order) `agents.llm` → `DIGI_LLM_PROVIDER`/`DIGI_LLM_MODEL` → LiteLLM alias / deploy config — **not** a shared `model_modes.yaml` `free:` pin (OpenRouter free roster rotates). `llm_mode: free` without an explicit pin raises a clear error (`set agents.llm or DIGI_LLM_MODEL`); non-`:free` (non-Ollama) pins are refused. Having `OPENROUTER_API_KEY` set alone does **not** auto-swap digigraph chat onto paid Olympus models — Olympus/Atlas use `get_model_for_phase()`.
 
-**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1/`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`.
+**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic, x.ai. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`. This allowlist (`_BYOK_BASE_URLS` / `BYOK_ROUTABLE_PROVIDERS` / `BYOK_MODEL_REQUIRED_PROVIDERS`) is no longer a hand-edited Python dict — it loads from `config/byok-providers.json` once at import time, and a missing or malformed catalog raises there, crashing the process at startup rather than silently 400ing every BYOK request. Path resolution honors `DIGI_CONFIG_PATH` when set (falling back to a `__file__`-relative repo path otherwise), and the same catalog file is vendored into `infra/digichat-release/config/byok-providers.json` so the Cloudflare stack image and the Profile A self-host compose target — which bake/mount `infra/digichat-release/config` rather than the repo-root `config/` — get it too; a test (`TestByokCatalogVendoredCopy`) pins the two copies as parsed-JSON-equal (not byte-for-byte — a whitespace reformat of either file would still pass) so they cannot silently diverge in content.
+
+`config/byok-providers.json` is the source of truth for the BYOK allowlist **specifically** — i.e. which providers a user-supplied key is actually routed to and spent on. It is not a general provider-base-URL registry for the monorepo: `digillm`'s own `_EXTERNAL_PROVIDERS` table (`digillm/src/digillm/client.py`) is a deliberately separate table serving a different, non-BYOK concern — routing on the *operator's* keys — and `digillm` is a standalone installable library that must not reach for repo-root config. The two tables are not kept in lockstep and are not expected to be: `_EXTERNAL_PROVIDERS` has no `openai` entry at all (operator OpenAI calls don't go through this table), and its `anthropic` base URL still carries a trailing slash that the BYOK catalog deliberately dropped — harmless on both sides, since `digillm/src/digillm/client.py`'s own base-URL comparison strips trailing slashes and the OpenAI-compatible client normalizes it internally regardless — but proof the two lists already diverge in fields where it happens not to matter. Do not "fix" `_EXTERNAL_PROVIDERS` to import from the BYOK catalog.
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
@@ -809,7 +848,7 @@ digigraph:
 | `OPENAI_API_KEY` | (from `.env`) | API key for LLM proxy (fallback to `LITELLM_PROXY_API_KEY`) |
 | `LITELLM_PROXY_API_KEY` | (from `.env`) | LiteLLM bearer; overrides `OPENAI_API_KEY` for proxy calls |
 | `DIGI_LLM_MODE` | `test` | LLM model tier: `test` / `medium` / `best` |
-| `DIGI_CONFIG_PATH` | `/app/config` | Directory containing `model_modes.yaml` |
+| `DIGI_CONFIG_PATH` | `/app/config` | Directory containing `model_modes.yaml` **and** `byok-providers.json` — a mount missing `byok-providers.json` crashes digigraph at startup (`_load_byok_catalog` fails loud, by design; see the BYOK spend path note above); a mount missing `model_modes.yaml` does **not** crash — `_load_model_modes()` silently falls back to a hardcoded default model instead, so supply both regardless |
 | `DIGI_PROJECT_CONFIG` | (empty) | Path to project YAML (optional) |
 | `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
@@ -825,6 +864,8 @@ digigraph:
 | `DIGI_WORKFLOW_PROFILE` | `full_stack` | Workflow profile when not set in project config |
 | `DIGI_RESEARCH_BRIEF` | (unset → YAML / default on) | Override `agents.research_brief`: `0`/`false` skips ResearchBrief post-pass |
 | `DIGI_ALLOWED_TOOLS` | (empty) | Comma-separated allowlist (env fallback) |
+| `DIGI_REQUIRE_TOOL_CALLS` | (empty) | Force `tool_choice="required"` deployment-wide: `1`/`true` |
+| `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX` | `3` | Per-IP req/min budget for requests opting into `require_tool_calls=true` (see §3.1) |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
 | `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |
@@ -938,7 +979,13 @@ This complements digismith's LangSmith tracing with operational metrics visible 
 
 ### 12.8 X-Forwarded-For Validation
 
-**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs). `X-Forwarded-For` is honored only when the direct client is in that set; otherwise the limiter uses `request.client.host`.
+**Implemented (REM-027):** `rate_limit.py` reads `DIGI_TRUSTED_PROXIES` (comma-separated hosts/CIDRs, matched via `ipaddress` so entries and observed peers are compared as parsed addresses, not raw strings). `X-Forwarded-For` is honored only when the direct client is in that set, walking the chain from the right and skipping trusted hops to find the first non-trusted, IP-parseable entry; otherwise the limiter uses `request.client.host`.
+
+Operators must list **every** hop between the internet and this service, not just the innermost reverse proxy — e.g. a CDN edge in front of an internal load balancer needs the CDN's own egress ranges in `DIGI_TRUSTED_PROXIES` too. Omitting an intermediate hop makes it look like a non-trusted entry, so the limiter returns that hop's own address (not the true client) as the bucket key, coarsely grouping every client behind the omitted hop into one bucket.
+
+A `DIGI_TRUSTED_PROXIES` entry that parses as neither a valid IP/CIDR nor a widen-able one (e.g. a typo like `10.0.0.999`) is dropped and logs a `logger.warning` naming the bad entry (#2378) — previously this failed silently, so a typo'd entry left the intended proxy permanently untrusted with no diagnostic trail.
+
+`_get_ip()` re-reads and re-parses `DIGI_TRUSTED_PROXIES` on every request (so a config change takes effect without a restart), which would otherwise re-run that warning on every single request for a misconfigured entry — a log-flood risk under normal traffic. `_parse_trusted_proxies` caches its parsed result per `RateLimiter` instance, keyed by the exact raw env-var string, so the warning fires once per distinct misconfigured value that instance has seen rather than once per request; a genuine config change (a new raw string) still gets parsed, and still warned about if still invalid.
 
 ## Observability
 

@@ -39,7 +39,10 @@ class TestWorkflow:
     """POST /workflow (run_digigraph_workflow)."""
 
     def test_returns_200_with_valid_prompt(self, client: TestClient) -> None:
-        with patch("digigraph.workflow.run_digigraph_workflow") as m:
+        # Patch target must match the name bound in digigraph.server (where the
+        # endpoint calls it), not digigraph.workflow (where it's defined) --
+        # patch() only rebinds the name in the module you tell it to.
+        with patch("digigraph.server.run_digigraph_workflow") as m:
             from digigraph.models import WorkflowResult
 
             m.return_value = WorkflowResult(
@@ -48,10 +51,14 @@ class TestWorkflow:
                 backtest_result={"status": "ok", "symbols": ["AAPL"]},
             )
             r = client.post("/workflow", json=SAMPLE_WORKFLOW_PAYLOAD)
+        m.assert_called_once()
         assert r.status_code == 200
         data = r.json()
         for field in SAMPLE_WORKFLOW_RESULT_FIELDS:
             assert field in data
+        assert data["success"] is True
+        assert data["message"] == "Done"
+        assert data["backtest_result"] == {"status": "ok", "symbols": ["AAPL"]}
 
     def test_calls_workflow_with_request_body(self, client: TestClient) -> None:
         with patch("digigraph.server.run_digigraph_workflow") as m:
@@ -359,6 +366,25 @@ class TestOpenAICompatible:
         assert "Tool:" in body or "digisearch" in body  # neutral formatter
         assert "Answer" in body
 
+    def test_chat_completions_threads_require_tool_calls_header(self, client: TestClient) -> None:
+        """X-Require-Tool-Calls: 1 reaches the WorkflowRequest passed to run_digigraph_workflow."""
+        with patch("digigraph.server.run_digigraph_workflow") as m:
+            from digigraph.models import WorkflowResult
+
+            m.return_value = WorkflowResult(success=True, message="ok", backtest_result=None)
+            r = client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "sitaas-rag",
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+                headers={"X-Require-Tool-Calls": "1"},
+            )
+        assert r.status_code == 200
+        m.assert_called_once()
+        call_arg = m.call_args[0][0]
+        assert call_arg.require_tool_calls is True
+
 
 @pytest.mark.unit
 class TestDigiSubjectTrustBoundary:
@@ -420,3 +446,48 @@ class TestDigiSubjectTrustBoundary:
         req = WorkflowRequest(prompt="hi", digi_subject="attacker-controlled-subject")
         out = _with_digi_request_context(self._fake_request(digi_auth=auth), req)
         assert out.digi_subject is None
+
+
+def test_resolve_require_tool_calls_chat_from_body() -> None:
+    from digigraph.models import ChatCompletionRequest
+    from digigraph.server import _resolve_require_tool_calls_chat
+
+    class _Headers:
+        def get(self, name: str) -> str | None:
+            return None
+
+    class _Req:
+        headers = _Headers()
+
+    req = ChatCompletionRequest(messages=[], require_tool_calls=True)
+    assert _resolve_require_tool_calls_chat(req, _Req()) is True
+
+
+def test_resolve_require_tool_calls_chat_from_header() -> None:
+    from digigraph.models import ChatCompletionRequest
+    from digigraph.server import _resolve_require_tool_calls_chat
+
+    class _Headers:
+        def get(self, name: str) -> str | None:
+            return "1" if name == "X-Require-Tool-Calls" else None
+
+    class _Req:
+        headers = _Headers()
+
+    req = ChatCompletionRequest(messages=[])
+    assert _resolve_require_tool_calls_chat(req, _Req()) is True
+
+
+def test_resolve_require_tool_calls_chat_none_when_absent() -> None:
+    from digigraph.models import ChatCompletionRequest
+    from digigraph.server import _resolve_require_tool_calls_chat
+
+    class _Headers:
+        def get(self, name: str) -> str | None:
+            return None
+
+    class _Req:
+        headers = _Headers()
+
+    req = ChatCompletionRequest(messages=[])
+    assert _resolve_require_tool_calls_chat(req, _Req()) is None

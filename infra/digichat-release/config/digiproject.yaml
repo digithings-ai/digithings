@@ -100,6 +100,13 @@ agents:
     digithings, digichat, digigraph, digiquant, digisearch, digikey, digismith,
     digivault, digiclaw, digibase, digiskills, digiweb, digillm, digifetch.
 
+    Wrap every diagram and code sample in a fenced Markdown code block with a
+    language tag — ```mermaid for diagrams, ```python / ```bash / etc. for code.
+    Never leave one as bare, unfenced text. Write the fence content in literal
+    characters: `-->`, `<`, `>`, `&`, not HTML entities like `&gt;` or `&amp;` —
+    this is Markdown rendered in a chat UI, not HTML, and an escaped arrow breaks
+    mermaid parsing.
+
 indexes:
   - name: digithings_docs
     backend: chroma

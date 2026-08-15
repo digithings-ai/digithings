@@ -20,6 +20,8 @@ class WorkflowState(TypedDict, total=False):
     digi_bearer: str | None
     # Sorted list of allowed orchestrator tool names; None = unrestricted.
     allowed_tool_names: list[str] | None
+    # Deployment-grain tool_choice="required" mandate — see tool_policy.require_tool_calls_for_workflow.
+    require_tool_calls: bool
     strategy_name: str
     symbols: list[str]
     # Optional parameters passed to digiquant run_backtest (from research extraction or user).
