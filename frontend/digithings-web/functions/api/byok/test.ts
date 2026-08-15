@@ -61,7 +61,15 @@ function validateKey(key: string, provider: ProviderId): string | null {
  */
 function sanitizeUpstreamError(message: string | undefined, key: string): string | undefined {
   if (!message) return message;
-  let sanitized = key ? message.split(key).join("[redacted]") : message;
+  // Redact the percent-encoded form too. Gemini's key rides in the request URL
+  // via encodeURIComponent, so an error quoting that URL echoes the encoded key,
+  // which a literal split(key) would miss. encodeURIComponent is the identity for
+  // a canonical `AIza…[A-Za-z0-9_-]{35}` key — this covers the non-canonical ones
+  // validateKey's `startsWith("AI")` check still lets through.
+  let sanitized = message;
+  for (const form of new Set([key, encodeURIComponent(key)])) {
+    if (form) sanitized = sanitized.split(form).join("[redacted]");
+  }
   if (sanitized.length > MAX_UPSTREAM_ERROR_LEN) {
     sanitized = `${sanitized.slice(0, MAX_UPSTREAM_ERROR_LEN)}…`;
   }
@@ -225,6 +233,9 @@ export async function onRequestPost(ctx: EventContext): Promise<Response> {
     // failure message can quote the request URL, and Gemini's key rides in that
     // URL (`...models?key=`), so an unsanitized `e.message` echoes the caller's
     // key straight back in a 500 body.
-    return jsonResponse({ ok: false, error: sanitizeUpstreamError(abortMessage(e), key) ?? "Request failed" }, 500);
+    // `||`, not `??`: sanitizeUpstreamError("") returns "" — not nullish — so `??`
+    // would ship `{"ok":false,"error":""}` whenever e.message is empty.
+    const detail = sanitizeUpstreamError(abortMessage(e), key) || "Request failed";
+    return jsonResponse({ ok: false, error: detail }, 500);
   }
 }

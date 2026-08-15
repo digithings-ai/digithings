@@ -629,9 +629,25 @@ def orchestrator_invoke(
         # Same empty-normalizing set as digivault_get_note / resolve_path_prefix
         # (including ".md") — bare strip("/").strip() left ".md" as a non-None
         # prefix that D1Store.search rejects with ValueError (#2327 CodeRabbit).
-        path_prefix = (
-            normalize_vault_path(str(path_prefix_raw)) if path_prefix_raw is not None else ""
-        ) or None
+        # A *present* prefix that normalizes to empty is a caller bug, not a request
+        # to search everything. The earlier `... or None` collapsed both cases into
+        # "no prefix", which meant "/", "   ", "///" and ".md" silently disabled
+        # scoping on every backend — the #2359 fail-open, which the local_search
+        # hardening alone did not close because the collapse happens here, before
+        # `resolve_path_prefix` ever sees the value. 400 instead; pass no
+        # path_prefix at all (or null) to opt out deliberately.
+        if path_prefix_raw is None:
+            path_prefix = None
+        else:
+            path_prefix = normalize_vault_path(str(path_prefix_raw))
+            if not path_prefix:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "path_prefix was provided but normalizes to empty; "
+                        "omit it entirely to search without a prefix"
+                    ),
+                )
 
         tenant_slug = _tenant_slug(request)
         # When DIGI_TENANT_CORPUS_MAP is set, an omitted path_prefix must not fall
