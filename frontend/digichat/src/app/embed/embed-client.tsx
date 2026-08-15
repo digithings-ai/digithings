@@ -803,6 +803,8 @@ function EmbedChat({
                 ? { provider: byokProvider, model: byokModel }
                 : null
             }
+            initialProvider={byokProvider}
+            initialModel={byokModel}
             title={
               quotaPrompt
                 ? "byok — free tier exhausted"
@@ -814,12 +816,22 @@ function EmbedChat({
       formReplacement={
         trialLocked ? (
           resolveGateFallbackCard({ noParentChannel, parentUnresponsive }) === "paywall" ? (
-            <PaywallCard lockedContact={tenantCfg.lockedContact} onSave={onByokSaved} />
+            <PaywallCard
+              lockedContact={tenantCfg.lockedContact}
+              onSave={onByokSaved}
+              initialProvider={byokProvider}
+              initialModel={byokModel}
+            />
           ) : (
             <TrialGatePlaceholder onOpen={reopenTrialForm} />
           )
         ) : gate.locked && !ungated && !isTrialForm ? (
-          <PaywallCard lockedContact={tenantCfg.lockedContact} onSave={onByokSaved} />
+          <PaywallCard
+            lockedContact={tenantCfg.lockedContact}
+            onSave={onByokSaved}
+            initialProvider={byokProvider}
+            initialModel={byokModel}
+          />
         ) : undefined
       }
       showIntro={!gate.locked && !trialLocked && !hideIntroForSeed}
@@ -832,9 +844,13 @@ function EmbedChat({
 function PaywallCard({
   lockedContact,
   onSave,
+  initialProvider,
+  initialModel,
 }: {
   lockedContact?: string;
   onSave: (key: string, provider: BYOKProvider, model: string) => void;
+  initialProvider?: BYOKProvider;
+  initialModel?: string;
 }) {
   const [showBYOK, setShowBYOK] = useState(false);
 
@@ -872,6 +888,8 @@ function PaywallCard({
           setShowBYOK(false);
         }}
         onClose={() => setShowBYOK(false)}
+        initialProvider={initialProvider}
+        initialModel={initialModel}
         title={`byok — ${EMBED_FREE_TURN_LIMIT} free questions used`}
       />
     );
