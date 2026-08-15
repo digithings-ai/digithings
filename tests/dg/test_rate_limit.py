@@ -331,16 +331,44 @@ class TestWindowEviction:
         assert "203.0.113.51" in limiter._windows
 
     def test_active_bucket_is_not_evicted_by_a_sweep(self, monkeypatch):
-        """A bucket with a recent request must survive a sweep even while
-        other buckets are being reclaimed."""
+        """A bucket with a recent request must survive a sweep even while a
+        genuinely idle sibling bucket is reclaimed in that same sweep. (A
+        single-bucket version of this test would pass even with eviction
+        deleted entirely -- a lone bucket's own fresh append can never
+        satisfy its own idle check -- so this uses two buckets to actually
+        exercise the discrimination.)"""
         monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 1)
         limiter = RateLimiter()
-        active_req = _make_request("203.0.113.52")
+        idle_req = _make_request("203.0.113.56")
+        active_req = _make_request("203.0.113.57")
+        assert limiter.check(idle_req, max_requests=10, window=60) is None
         assert limiter.check(active_req, max_requests=10, window=60) is None
-        # A second call from the same bucket both re-uses it and triggers the
-        # next sweep -- the bucket must not evict itself.
+        limiter._windows["203.0.113.56"][0] = time.monotonic() - 61
+        # A further touch on the active bucket triggers the next sweep; the
+        # idle sibling must be evicted while the active bucket survives.
         assert limiter.check(active_req, max_requests=10, window=60) is None
-        assert "203.0.113.52" in limiter._windows
+        assert "203.0.113.56" not in limiter._windows
+        assert "203.0.113.57" in limiter._windows
+
+    def test_zero_max_requests_bucket_does_not_crash_a_later_sweep(self, monkeypatch):
+        """A bucket rejected on its very first request (max_requests=0, an
+        edge config that immediately 429s without ever appending -- see
+        check()'s early-return-on-429 path) is left in `_windows` with a
+        permanently empty deque. A later sweep must reclaim it, not raise
+        IndexError on it (#2378 follow-up)."""
+        monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 1)
+        limiter = RateLimiter()
+        zero_req = _make_request("203.0.113.58")
+        result = limiter.check(zero_req, max_requests=0, window=60)
+        assert result is not None
+        assert result.status_code == 429
+        assert len(limiter._windows["203.0.113.58"]) == 0
+        # A later call from a different bucket triggers the sweep and must
+        # not raise, and must reclaim the empty bucket.
+        other_req = _make_request("203.0.113.59")
+        assert limiter.check(other_req, max_requests=10, window=60) is None
+        assert "203.0.113.58" not in limiter._windows
+        assert "203.0.113.59" in limiter._windows
 
     def test_sweep_does_not_run_before_the_interval_elapses(self, monkeypatch):
         """With the default (large) interval, an idle bucket is left alone

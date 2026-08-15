@@ -6,7 +6,7 @@ import ipaddress
 import logging
 import os
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from threading import Lock
 
 from digibase.errors import json_error_response
@@ -36,7 +36,9 @@ _IPV6_BUCKET_PREFIX = 64
 # permanent entry with no later check() call against that same bucket to
 # clean it up. Sweeping on every call would make check() cost O(distinct
 # buckets) instead of O(1); this interval trades sweep frequency for that
-# per-call cost.
+# per-call cost. The sweep itself is O(evicted + 1) rather than O(distinct
+# buckets) -- see `_evict_idle_buckets` -- so this interval only bounds how
+# often the (cheap) sweep runs, not the cost of any single run.
 _SWEEP_INTERVAL = 1000
 
 
@@ -56,8 +58,12 @@ class RateLimiter:
     """
 
     def __init__(self) -> None:
-        # bucket -> deque of request timestamps (monotonic float)
-        self._windows: dict[str, deque[float]] = {}
+        # bucket -> deque of request timestamps (monotonic float). An
+        # OrderedDict, not a plain dict: check() moves a bucket to the end
+        # every time it accepts a request, so front-to-back order is exactly
+        # ascending by "time of last accepted request" -- see
+        # _evict_idle_buckets for why that ordering matters.
+        self._windows: OrderedDict[str, deque[float]] = OrderedDict()
         self._lock = Lock()
         self._checks_since_sweep = 0
 
@@ -249,6 +255,10 @@ class RateLimiter:
                     headers={"Retry-After": str(window)},
                 )
             q.append(now)
+            # Mark this bucket most-recently-touched. Only on the accepted
+            # path (never on the 429-reject path above) -- see
+            # _evict_idle_buckets for why that distinction is load-bearing.
+            self._windows.move_to_end(bucket)
             self._checks_since_sweep += 1
             if self._checks_since_sweep >= _SWEEP_INTERVAL:
                 self._checks_since_sweep = 0
@@ -256,9 +266,41 @@ class RateLimiter:
         return None
 
     def _evict_idle_buckets(self, cutoff: float) -> None:
-        """Drop buckets whose newest timestamp is already older than `cutoff`
-        -- i.e. no request from that bucket since the current window opened.
-        Must be called with `self._lock` held (see `check()`).
+        """Drop buckets that have gone untouched since before `cutoff` --
+        i.e. no accepted request from that bucket since the current window
+        opened. Must be called with `self._lock` held (see `check()`).
+
+        `_windows` is an OrderedDict, and `check()` calls `move_to_end` on a
+        bucket exactly when (and only when) it appends to that bucket's
+        deque -- never on the 429-reject path. So front-to-back order is
+        exactly ascending by "time of last accepted request," which is
+        exactly the deque's own last entry, `q[-1]`: the front of the dict is
+        always the least-recently-touched bucket. That lets this scan stop
+        at the first still-active bucket instead of visiting the whole dict:
+        `_windows` can grow to an attacker-controlled size (one bucket per
+        IP or /64 allocation ever seen), and a full O(n) scan under
+        `self._lock` would stall this process's single asyncio event loop
+        for every concurrent request during a sustained flood. This scan is
+        O(evicted + 1) instead.
+
+        A 429-rejected touch deliberately does NOT call move_to_end: reject
+        only happens when the bucket's deque already holds >= max_requests
+        entries that all survived this call's own popleft-expiry loop
+        (see check()), which means every entry still in it -- including
+        `q[-1]` -- is already known to be >= this call's own cutoff. Bumping
+        the bucket's order on a reject that doesn't change `q[-1]` would
+        desynchronize order from content: a bucket rejected "now" but whose
+        last real append was long ago would jump to the back of the order
+        while its `q[-1]` stays old, breaking the front-to-back early-stop
+        invariant above (a later, still-idle bucket could then hide behind
+        it and never get scanned).
+
+        A bucket whose very first request was already over quota
+        (`max_requests <= 0`) is created but never appended-to or moved (see
+        check()'s early-return-on-429 path), leaving a permanently empty
+        deque. An empty deque is treated as unconditionally idle here --
+        `q[-1]` is never evaluated on it -- so it gets reclaimed once the
+        scan reaches it instead of raising IndexError.
 
         Assumes every `check()` call against this instance uses the same
         `window` -- true for every call site in this codebase, each of which
@@ -267,6 +309,10 @@ class RateLimiter:
         `RateLimiter` per window instead, the same way this codebase already
         does for its general vs. `require_tool_calls` budgets.
         """
-        idle = [key for key, q in self._windows.items() if q[-1] < cutoff]
-        for key in idle:
+        idle_keys = []
+        for key, q in self._windows.items():
+            if q and q[-1] >= cutoff:
+                break
+            idle_keys.append(key)
+        for key in idle_keys:
             del self._windows[key]
