@@ -656,6 +656,22 @@ def research_node(state: WorkflowState) -> dict:
                 out["error_code"] = err_code
             return out
 
+    # Scope warning, not a guard. `require_tool_calls` is wired into exactly one
+    # tool loop -- the document RAG path above. This path, and the sub-agent runners
+    # under digigraph/agents/*, run at tool_choice="auto" regardless. An operator who
+    # sets DIGI_REQUIRE_TOOL_CALLS=true as a grounding mandate would otherwise get a
+    # silent no-op here (e.g. DIGISEARCH_URL unset, so _digisearch_available() is
+    # False and every request falls through). Log it rather than fail the request:
+    # the flag is advisory outside the RAG path today. Central enforcement is #2384.
+    if state.get("require_tool_calls"):
+        logger.warning(
+            "require_tool_calls=true but this request took the quant/augmented path, "
+            "which does not enforce tool_choice; the grounding mandate is not applied "
+            "(is_document_mode=%s, digisearch_available=%s)",
+            is_document_mode,
+            _digisearch_available(),
+        )
+
     _req_rid = state.get("request_id")
     _norm_rid = None if _req_rid is None else (str(_req_rid).strip() or None)
     return _run_quant_or_augmented_path(
