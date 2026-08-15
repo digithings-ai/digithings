@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
 
 import pytest
 from digigraph.rate_limit import RateLimiter
@@ -204,6 +205,22 @@ class TestGetIpTrustFollowUp:
             for record in caplog.records
         )
 
+    def test_invalid_trusted_proxies_warning_is_not_repeated_per_request(self, monkeypatch, caplog):
+        """`_get_ip` re-reads and re-parses DIGI_TRUSTED_PROXIES on every
+        request, so an unbounded warning-per-parse would flood the log under
+        normal traffic for a misconfigured entry -- a distinct issue from
+        whether the entry is dropped at all (CodeRabbit follow-up on
+        #2378/#2379). The warning must fire once per distinct raw value this
+        limiter instance has seen, not once per request."""
+        monkeypatch.setenv("DIGI_TRUSTED_PROXIES", "not-an-ip, 10.0.0.1")
+        limiter = RateLimiter()
+        req = _make_request("10.0.0.1", xff="198.51.100.42")
+        with caplog.at_level(logging.WARNING, logger="digigraph.rate_limit"):
+            for _ in range(5):
+                assert limiter._get_ip(req) == "198.51.100.42"
+        warnings = [r for r in caplog.records if "not-an-ip" in r.getMessage()]
+        assert len(warnings) == 1
+
     def test_unparseable_boundary_hop_falls_back_to_direct_not_further_left(self, monkeypatch):
         """The first non-trusted hop is the boundary our trusted proxy itself
         appended -- everything to its left is exactly the unvalidated,
@@ -355,20 +372,56 @@ class TestWindowEviction:
         edge config that immediately 429s without ever appending -- see
         check()'s early-return-on-429 path) is left in `_windows` with a
         permanently empty deque. A later sweep must reclaim it, not raise
-        IndexError on it (#2378 follow-up)."""
-        monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 1)
+        IndexError on it (#2378 follow-up).
+
+        _SWEEP_INTERVAL is patched to 2, not 1: the sweep counter now
+        advances on rejected calls too (CodeRabbit follow-up on #2378/#2379),
+        so at interval 1 the rejecting call would trigger its own sweep and
+        evict the bucket immediately, collapsing the two steps this test
+        means to check separately -- that the poisoned bucket survives
+        (empty, not crashing anything) up to the point a sweep actually
+        runs, and that the next sweep to reach it reclaims it cleanly."""
+        monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 2)
         limiter = RateLimiter()
         zero_req = _make_request("203.0.113.58")
         result = limiter.check(zero_req, max_requests=0, window=60)
         assert result is not None
         assert result.status_code == 429
         assert len(limiter._windows["203.0.113.58"]) == 0
-        # A later call from a different bucket triggers the sweep and must
-        # not raise, and must reclaim the empty bucket.
+        # A later call from a different bucket crosses the interval, triggers
+        # the sweep, and must not raise -- and must reclaim the empty bucket.
         other_req = _make_request("203.0.113.59")
         assert limiter.check(other_req, max_requests=10, window=60) is None
         assert "203.0.113.58" not in limiter._windows
         assert "203.0.113.59" in limiter._windows
+
+    def test_sweep_still_runs_during_a_sustained_reject_flood(self, monkeypatch):
+        """The sweep counter must advance on rejected requests too, not just
+        accepted ones (CodeRabbit follow-up on #2378/#2379). Before this fix,
+        `_checks_since_sweep` only incremented on the accepted path, so an
+        attacker sending nothing but already-over-quota requests to one
+        bucket would silently stall the sweep for as long as the flood
+        continued -- leaving any other, genuinely idle buckets already in
+        `_windows` unreclaimed the whole time."""
+        monkeypatch.setattr("digigraph.rate_limit._SWEEP_INTERVAL", 3)
+        limiter = RateLimiter()
+        # Both buckets are seeded directly (not via check()) so setup itself
+        # consumes none of the patched interval -- it's crossed purely by
+        # the reject loop below. "203.0.113.60" is idle; "203.0.113.61" is
+        # already at quota, so every check() against it is rejected --
+        # never appended or move_to_end'd.
+        limiter._windows["203.0.113.60"] = deque([time.monotonic() - 61])
+        limiter._windows["203.0.113.61"] = deque([time.monotonic()] * 10)
+        flooded_req = _make_request("203.0.113.61")
+        for _ in range(3):
+            result = limiter.check(flooded_req, max_requests=10, window=60)
+            assert result is not None
+            assert result.status_code == 429
+        # Three straight rejects crossed the (patched) sweep interval on
+        # their own -- the idle sibling must have been reclaimed even though
+        # not one of those three calls was accepted.
+        assert "203.0.113.60" not in limiter._windows
+        assert "203.0.113.61" in limiter._windows
 
     def test_sweep_does_not_run_before_the_interval_elapses(self, monkeypatch):
         """With the default (large) interval, an idle bucket is left alone

@@ -66,9 +66,19 @@ class RateLimiter:
         self._windows: OrderedDict[str, deque[float]] = OrderedDict()
         self._lock = Lock()
         self._checks_since_sweep = 0
+        # trusted_raw string -> parsed networks. _get_ip() re-reads
+        # DIGI_TRUSTED_PROXIES and re-parses it on every request (so a
+        # config change takes effect without a restart), but re-running the
+        # warnings below on every single request for a misconfigured entry
+        # would flood the log under normal traffic. Keyed by the exact raw
+        # string so a genuine config change still gets parsed (and, if still
+        # invalid, still warned about) -- see _parse_trusted_proxies.
+        self._trusted_proxies_cache: dict[
+            str, list[ipaddress.IPv4Network | ipaddress.IPv6Network]
+        ] = {}
 
-    @staticmethod
     def _parse_trusted_proxies(
+        self,
         trusted_raw: str,
     ) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
         """Parse DIGI_TRUSTED_PROXIES ("comma-separated hosts/CIDRs", per
@@ -77,7 +87,17 @@ class RateLimiter:
         valid IP nor a valid CIDR are dropped rather than raising -- a typo
         in the env var should not crash the server, and treating it as "not
         trusted" (its natural effect once dropped) is the safe default.
+
+        Cached per instance by the exact `trusted_raw` string (see
+        `_trusted_proxies_cache` in `__init__`): this runs on every request,
+        and `DIGI_TRUSTED_PROXIES` is operator configuration, not attacker
+        input, so it changes rarely if ever during a process's life --
+        caching means a misconfigured entry logs its warning once per
+        distinct value this instance has seen, not once per request.
         """
+        cached = self._trusted_proxies_cache.get(trusted_raw)
+        if cached is not None:
+            return cached
         networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
         for entry in trusted_raw.split(","):
             entry = entry.strip()
@@ -114,6 +134,7 @@ class RateLimiter:
                     widened,
                 )
                 networks.append(widened)
+        self._trusted_proxies_cache[trusted_raw] = networks
         return networks
 
     @staticmethod
@@ -245,8 +266,20 @@ class RateLimiter:
             q = self._windows[bucket]
             while q and q[0] < cutoff:
                 q.popleft()
+
+            # Every check() call counts toward the next sweep, accepted or
+            # rejected. A sustained flood of requests that are all rejected
+            # (an attacker repeatedly hitting a bucket already over quota)
+            # must not stall the sweep -- otherwise any other, genuinely
+            # idle buckets already sitting in `_windows` would never get
+            # reclaimed for as long as the reject flood continues.
+            self._checks_since_sweep += 1
+            due_for_sweep = self._checks_since_sweep >= _SWEEP_INTERVAL
+            if due_for_sweep:
+                self._checks_since_sweep = 0
+
             if len(q) >= max_requests:
-                return json_error_response(
+                response = json_error_response(
                     status_code=429,
                     code="rate_limit_exceeded",
                     message=f"Rate limit exceeded: {max_requests} requests per {window}s.",
@@ -254,16 +287,18 @@ class RateLimiter:
                     service=service,
                     headers={"Retry-After": str(window)},
                 )
-            q.append(now)
-            # Mark this bucket most-recently-touched. Only on the accepted
-            # path (never on the 429-reject path above) -- see
-            # _evict_idle_buckets for why that distinction is load-bearing.
-            self._windows.move_to_end(bucket)
-            self._checks_since_sweep += 1
-            if self._checks_since_sweep >= _SWEEP_INTERVAL:
-                self._checks_since_sweep = 0
+            else:
+                q.append(now)
+                # Mark this bucket most-recently-touched. Only on the
+                # accepted path (never on the 429-reject path above) -- see
+                # _evict_idle_buckets for why that distinction is
+                # load-bearing.
+                self._windows.move_to_end(bucket)
+                response = None
+
+            if due_for_sweep:
                 self._evict_idle_buckets(cutoff)
-        return None
+        return response
 
     def _evict_idle_buckets(self, cutoff: float) -> None:
         """Drop buckets that have gone untouched since before `cutoff` --
