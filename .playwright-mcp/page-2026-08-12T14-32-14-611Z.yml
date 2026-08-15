@@ -1,5 +1,0 @@
-- generic [ref=e1]:
-  - generic [ref=e2]: "button clicked, paused toggled | hash changed to #navigated"
-  - link [ref=e3] [cursor=pointer]:
-    - /url: "#navigated"
-    - button "Pause" [active] [ref=e4]
