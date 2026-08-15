@@ -111,6 +111,7 @@ def collect_pool_slugs(config_dir: Path) -> list[str]:
 
 
 def _bare_slug(model: str) -> str:
+    """Strip the ``openrouter/`` prefix so a pool entry matches the API's model id."""
     return model.removeprefix("openrouter/").strip()
 
 
@@ -218,6 +219,7 @@ def check_strict_json_call(client: httpx.Client, slug: str) -> str | None:
 
 
 def main() -> int:
+    """Collect pool slugs from config, gate each against the live endpoint checks, and report."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--config-dir", default=os.environ.get("DIGI_CONFIG_PATH", "config"), type=Path
