@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.2.0...digichat-v1.3.0) (2026-08-15)
+
+
+### Features
+
+* **digichat:** BYOK provider/model catalog + live model list at key step ([#2357](https://github.com/digithings-ai/digithings/issues/2357)) ([330a4a0](https://github.com/digithings-ai/digithings/commit/330a4a0e378779cb88ce4f7fad7e8eb3d18b1f49))
+
+
+### Bug Fixes
+
+* address remaining CodeRabbit findings from the [#2327](https://github.com/digithings-ai/digithings/issues/2327) re-review ([1d250c7](https://github.com/digithings-ai/digithings/commit/1d250c7257f1f88e9d7f4a365a0cd110b8194c48))
+* **digichat:** prefix the BYOK models fetch with the app base path ([#2383](https://github.com/digithings-ai/digithings/issues/2383)) ([535a5a9](https://github.com/digithings-ai/digithings/commit/535a5a9e4fd664e5be3b21366c57ad7de9018992))
+
 ## [1.2.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.1.0...digichat-v1.2.0) (2026-08-13)
 
 

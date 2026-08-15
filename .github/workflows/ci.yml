@@ -537,3 +537,83 @@ jobs:
         run: |
           docker compose config -q
           docker compose -f docker-compose.yml -f infra/self-host/compose.ghcr.yml config -q
+
+  # ── Required-check aggregator ─────────────────────────────────────────────────
+  # Every job above is individually path-gated via `changes`, so none of them can
+  # be named directly in develop's branch protection: a PR that doesn't touch a
+  # given component reports no status for that job's name at all, not "skipped",
+  # and GitHub then blocks the merge forever waiting on a check that will never
+  # run (docs/adr/0024 covers the same failure shape for a different gate — this
+  # is the mirror-image mistake, blocking too eagerly instead of not at all).
+  # This job always runs, tolerates `skipped` on every dependency, and fails only
+  # if something it depends on actually failed or was cancelled — so IT is the
+  # one stable name to require on develop.
+  required-checks:
+    name: Required checks passed
+    if: always()
+    needs:
+      - changes
+      - frontend-canon
+      - digibase
+      - digikey
+      - digismith
+      - digivault
+      - digiclaw
+      - digiquant
+      - digisearch
+      - digigraph
+      - digillm
+      - digifetch
+      - digichat
+      - olympus
+      - web
+      - score
+      - e2e-contract
+      - nautilus-smoke
+      - atlas-graph
+      - pip-audit
+      - ruff-and-scripts
+      - actionlint
+      - compose-validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Drift guard: this job's own `needs:` list was hand-enumerated once
+      # and already went stale silently (e2e-contract/nautilus-smoke/
+      # atlas-graph were added to ci.yml after required-checks existed and
+      # never got added here — a real false-green gap, not hypothetical).
+      # Fail loudly instead of trusting the list matches the file forever.
+      - name: Verify needs list covers every job in this file
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 -c "
+          import yaml
+          with open('.github/workflows/ci.yml') as f:
+              doc = yaml.safe_load(f)
+          jobs = set(doc['jobs']) - {'required-checks'}
+          needs = set(doc['jobs']['required-checks']['needs'])
+          missing = jobs - needs
+          extra = needs - jobs
+          if missing or extra:
+              if missing:
+                  print('::error::required-checks is missing these jobs from needs:', sorted(missing))
+              if extra:
+                  print('::error::required-checks needs lists jobs that do not exist:', sorted(extra))
+              raise SystemExit(1)
+          print('required-checks needs matches all', len(jobs), 'other jobs in ci.yml')
+          "
+
+      - name: Fail if any dependency failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 -c "
+          import json, os, sys
+          results = json.loads(os.environ['RESULTS'])
+          bad = {k: v['result'] for k, v in results.items() if v['result'] not in ('success', 'skipped')}
+          if bad:
+              print('Failed or cancelled required jobs:', bad)
+              sys.exit(1)
+          print('All required jobs passed or were skipped:', {k: v['result'] for k, v in results.items()})
+          "

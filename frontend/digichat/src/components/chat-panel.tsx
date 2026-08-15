@@ -30,7 +30,7 @@ import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
 import { p } from "@/lib/base-path";
 import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
-import { useBYOKKey } from "@/hooks/use-byok-key";
+import { byokRequiresModel, useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
 import { ChatActivities } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
@@ -192,12 +192,7 @@ export function ChatPanel({
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
-            if (
-              (byokProvider === "openrouter" ||
-                byokProvider === "anthropic" ||
-                byokProvider === "gemini") &&
-              byokModel.trim()
-            ) {
+            if (byokRequiresModel(byokProvider) && byokModel.trim()) {
               h.set("X-BYOK-Model", byokModel.trim());
             }
           }
@@ -434,6 +429,8 @@ export function ChatPanel({
                   ? { provider: byokProvider, model: byokModel }
                   : null
               }
+              initialProvider={byokProvider}
+              initialModel={byokModel}
             />
           ) : null}
         </div>

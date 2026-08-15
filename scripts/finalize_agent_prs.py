@@ -23,7 +23,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/")
+AGENT_BRANCH_PREFIXES = ("cursor/", "copilot/", "bot/", "task/", "claude/")
+# Kept in sync with scripts/agent_pr_checks.py and
+# scripts/verify_agent_automerge_pr.py by hand (three separate copies of this
+# tuple — flagged by CodeRabbit on #2341 as worth centralizing; not done here
+# to keep this fix minimal, but the next branch-prefix change should define it
+# once and import it in all three places).
 COPILOT_REVIEW_LOGINS = frozenset({"copilot", "copilot-swe-agent", "copilot-swe-agent[bot]"})
 ISSUE_LINK_RE = re.compile(r"(?i)(?:fixes|closes|resolves)\s+#(\d+)")
 FINALIZER_MARKER = "**Agent PR finalizer**"
@@ -56,9 +61,28 @@ def _list_agent_prs(repo: str) -> list[dict]:
         "--limit",
         "100",
         "--json",
-        "number,headRefName,baseRefName,title,body,labels,createdAt,isDraft,mergeable,reviewRequests,reviews,statusCheckRollup",
+        "number,headRefName,baseRefName,title,body,labels,createdAt,isDraft,mergeable,"
+        "reviewRequests,reviews,statusCheckRollup,isCrossRepository",
     )
-    return [pr for pr in prs if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)]
+    # CWE-862 guard, same as agent-pr-autolabel.yml / agent-pr-automerge.yml: a
+    # branch name matching an agent prefix is not proof of origin, and this
+    # finalizer's ready_merge path does the same label-add + auto-merge those
+    # two workflows guard — this script just didn't have the check yet.
+    # isCrossRepository comes from the live PR object via the API, not the
+    # (attacker-controlled) branch name.
+    #
+    # Fail closed: require the field to be exactly `False`, not merely falsy.
+    # `.get(..., False)` treats a MISSING field the same as a confirmed
+    # same-repo PR — the one case where we can't confirm the PR isn't a fork,
+    # that reads as "trust it." A field GitHub always returns for this query
+    # shouldn't be missing in practice, but if it ever is, exclude rather than
+    # include (CodeRabbit finding on #2345).
+    return [
+        pr
+        for pr in prs
+        if pr["headRefName"].startswith(AGENT_BRANCH_PREFIXES)
+        and pr.get("isCrossRepository") is False
+    ]
 
 
 def _issue_labels(repo: str, issue_number: int) -> list[str]:
