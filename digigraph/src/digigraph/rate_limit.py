@@ -6,7 +6,7 @@ import ipaddress
 import logging
 import os
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from threading import Lock
 
 from digibase.errors import json_error_response
@@ -28,6 +28,19 @@ logger = logging.getLogger(__name__)
 # same NAT), so IPv4 addresses are bucketed individually.
 _IPV6_BUCKET_PREFIX = 64
 
+# Number of check() calls between sweeps that drop fully-idle buckets from
+# `_windows`. Each bucket's own deque is already bounded to `max_requests`
+# entries by the popleft loop in check() -- the unbounded-growth risk is the
+# *number* of distinct buckets (one per IP, or /64 allocation, ever seen), not
+# any one bucket's size. A client hit once and never again leaves a
+# permanent entry with no later check() call against that same bucket to
+# clean it up. Sweeping on every call would make check() cost O(distinct
+# buckets) instead of O(1); this interval trades sweep frequency for that
+# per-call cost. The sweep itself is O(evicted + 1) rather than O(distinct
+# buckets) -- see `_evict_idle_buckets` -- so this interval only bounds how
+# often the (cheap) sweep runs, not the cost of any single run.
+_SWEEP_INTERVAL = 1000
+
 
 class RateLimiter:
     """Per-IP sliding-window rate limiter.
@@ -45,12 +58,27 @@ class RateLimiter:
     """
 
     def __init__(self) -> None:
-        # bucket -> deque of request timestamps (monotonic float)
-        self._windows: dict[str, deque[float]] = {}
+        # bucket -> deque of request timestamps (monotonic float). An
+        # OrderedDict, not a plain dict: check() moves a bucket to the end
+        # every time it accepts a request, so front-to-back order is exactly
+        # ascending by "time of last accepted request" -- see
+        # _evict_idle_buckets for why that ordering matters.
+        self._windows: OrderedDict[str, deque[float]] = OrderedDict()
         self._lock = Lock()
+        self._checks_since_sweep = 0
+        # trusted_raw string -> parsed networks. _get_ip() re-reads
+        # DIGI_TRUSTED_PROXIES and re-parses it on every request (so a
+        # config change takes effect without a restart), but re-running the
+        # warnings below on every single request for a misconfigured entry
+        # would flood the log under normal traffic. Keyed by the exact raw
+        # string so a genuine config change still gets parsed (and, if still
+        # invalid, still warned about) -- see _parse_trusted_proxies.
+        self._trusted_proxies_cache: dict[
+            str, list[ipaddress.IPv4Network | ipaddress.IPv6Network]
+        ] = {}
 
-    @staticmethod
     def _parse_trusted_proxies(
+        self,
         trusted_raw: str,
     ) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
         """Parse DIGI_TRUSTED_PROXIES ("comma-separated hosts/CIDRs", per
@@ -59,7 +87,17 @@ class RateLimiter:
         valid IP nor a valid CIDR are dropped rather than raising -- a typo
         in the env var should not crash the server, and treating it as "not
         trusted" (its natural effect once dropped) is the safe default.
+
+        Cached per instance by the exact `trusted_raw` string (see
+        `_trusted_proxies_cache` in `__init__`): this runs on every request,
+        and `DIGI_TRUSTED_PROXIES` is operator configuration, not attacker
+        input, so it changes rarely if ever during a process's life --
+        caching means a misconfigured entry logs its warning once per
+        distinct value this instance has seen, not once per request.
         """
+        cached = self._trusted_proxies_cache.get(trusted_raw)
+        if cached is not None:
+            return cached
         networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
         for entry in trusted_raw.split(","):
             entry = entry.strip()
@@ -76,6 +114,17 @@ class RateLimiter:
                 try:
                     widened = ipaddress.ip_network(entry, strict=False)
                 except ValueError:
+                    # Neither a valid IP/CIDR nor a widen-able one, e.g. a
+                    # typo like "10.0.0.999" or a bare hostname -- log it so a
+                    # misconfigured DIGI_TRUSTED_PROXIES entry shows up as a
+                    # diagnosable warning instead of silently never trusting
+                    # the proxy the operator intended.
+                    logger.warning(
+                        "DIGI_TRUSTED_PROXIES entry %r is neither a valid IP address "
+                        "nor a valid CIDR network; ignoring it. Fix or remove this "
+                        "entry -- as written it will never be trusted.",
+                        entry,
+                    )
                     continue
                 logger.warning(
                     "DIGI_TRUSTED_PROXIES entry %r has host bits set for its prefix; "
@@ -85,6 +134,7 @@ class RateLimiter:
                     widened,
                 )
                 networks.append(widened)
+        self._trusted_proxies_cache[trusted_raw] = networks
         return networks
 
     @staticmethod
@@ -216,8 +266,20 @@ class RateLimiter:
             q = self._windows[bucket]
             while q and q[0] < cutoff:
                 q.popleft()
+
+            # Every check() call counts toward the next sweep, accepted or
+            # rejected. A sustained flood of requests that are all rejected
+            # (an attacker repeatedly hitting a bucket already over quota)
+            # must not stall the sweep -- otherwise any other, genuinely
+            # idle buckets already sitting in `_windows` would never get
+            # reclaimed for as long as the reject flood continues.
+            self._checks_since_sweep += 1
+            due_for_sweep = self._checks_since_sweep >= _SWEEP_INTERVAL
+            if due_for_sweep:
+                self._checks_since_sweep = 0
+
             if len(q) >= max_requests:
-                return json_error_response(
+                response = json_error_response(
                     status_code=429,
                     code="rate_limit_exceeded",
                     message=f"Rate limit exceeded: {max_requests} requests per {window}s.",
@@ -225,5 +287,67 @@ class RateLimiter:
                     service=service,
                     headers={"Retry-After": str(window)},
                 )
-            q.append(now)
-        return None
+            else:
+                q.append(now)
+                # Mark this bucket most-recently-touched. Only on the
+                # accepted path (never on the 429-reject path above) -- see
+                # _evict_idle_buckets for why that distinction is
+                # load-bearing.
+                self._windows.move_to_end(bucket)
+                response = None
+
+            if due_for_sweep:
+                self._evict_idle_buckets(cutoff)
+        return response
+
+    def _evict_idle_buckets(self, cutoff: float) -> None:
+        """Drop buckets that have gone untouched since before `cutoff` --
+        i.e. no accepted request from that bucket since the current window
+        opened. Must be called with `self._lock` held (see `check()`).
+
+        `_windows` is an OrderedDict, and `check()` calls `move_to_end` on a
+        bucket exactly when (and only when) it appends to that bucket's
+        deque -- never on the 429-reject path. So front-to-back order is
+        exactly ascending by "time of last accepted request," which is
+        exactly the deque's own last entry, `q[-1]`: the front of the dict is
+        always the least-recently-touched bucket. That lets this scan stop
+        at the first still-active bucket instead of visiting the whole dict:
+        `_windows` can grow to an attacker-controlled size (one bucket per
+        IP or /64 allocation ever seen), and a full O(n) scan under
+        `self._lock` would stall this process's single asyncio event loop
+        for every concurrent request during a sustained flood. This scan is
+        O(evicted + 1) instead.
+
+        A 429-rejected touch deliberately does NOT call move_to_end: reject
+        only happens when the bucket's deque already holds >= max_requests
+        entries that all survived this call's own popleft-expiry loop
+        (see check()), which means every entry still in it -- including
+        `q[-1]` -- is already known to be >= this call's own cutoff. Bumping
+        the bucket's order on a reject that doesn't change `q[-1]` would
+        desynchronize order from content: a bucket rejected "now" but whose
+        last real append was long ago would jump to the back of the order
+        while its `q[-1]` stays old, breaking the front-to-back early-stop
+        invariant above (a later, still-idle bucket could then hide behind
+        it and never get scanned).
+
+        A bucket whose very first request was already over quota
+        (`max_requests <= 0`) is created but never appended-to or moved (see
+        check()'s early-return-on-429 path), leaving a permanently empty
+        deque. An empty deque is treated as unconditionally idle here --
+        `q[-1]` is never evaluated on it -- so it gets reclaimed once the
+        scan reaches it instead of raising IndexError.
+
+        Assumes every `check()` call against this instance uses the same
+        `window` -- true for every call site in this codebase, each of which
+        owns a dedicated `RateLimiter()` instance (see server.py). A caller
+        that mixes windows on a single shared instance should use a separate
+        `RateLimiter` per window instead, the same way this codebase already
+        does for its general vs. `require_tool_calls` budgets.
+        """
+        idle_keys = []
+        for key, q in self._windows.items():
+            if q and q[-1] >= cutoff:
+                break
+            idle_keys.append(key)
+        for key in idle_keys:
+            del self._windows[key]
