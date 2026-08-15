@@ -54,7 +54,6 @@ All regenerated from `agents.yml` + `agents/sources/*`. Cursor and Copilot don't
 - `component-router` — maps a described change onto the right component + reading list + test command.
 - `dictation-normalizer` — reshapes rambling/dictated input (also `/normalize`).
 - `spec-writer` — emits GitHub Issue bodies matching `.github/ISSUE_TEMPLATE/agent_task.yml` (also `/spec`).
-- `pr-reviewer` — rubric-aware PR review aligned with `docs/scoring/`.
 - `test-first-implementer` — red/green/refactor TDD loop bound to the component test command.
 
 **Skills** (`.claude/skills/`) — workflows triggered by name:
@@ -157,7 +156,7 @@ Rubric lives in `docs/scoring/`. Use `/score-and-fix` (or the `score-and-fix` sk
 
 1. **Pre-push**: local `pre-push` hook blocks pushes to non-origin remotes, pushes to `main` without `ALLOW_MAIN_PUSH=1`, and live-trading-path pushes without a `Human-Approved-By:` trailer.
 2. **CI on open**: lint, unit tests, scoring gate, doc-link check, agents-init drift check.
-3. **Review**: invoke `/review` (pr-reviewer subagent) on your own PR before asking a human. The subagent mirrors the 4-dimension rubric.
+3. **Review**: invoke `/review` on your own PR before asking a human — it fans out into fresh-context lens subagents (correctness, claim accuracy, regression, security, CI/deploy), not a single fixed `pr-reviewer` subagent (there is deliberately no standing one; see CLAUDE.md § Model & subagent policy). Prefer Cursor Bugbot (`bugbot run`) when it's available.
 4. **CI red?** `/triage <N>` buckets failures by type and proposes minimal fix commands.
 5. **Security-sensitive changes**: run `/security-review` on the branch before requesting review.
 

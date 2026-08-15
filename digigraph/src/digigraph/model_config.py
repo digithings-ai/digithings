@@ -62,18 +62,16 @@ _OPEN_WEIGHT_ALLOWED_MODELS = (
     "deepseek/*,meta-llama/*,mistralai/*,nvidia/*,google/gemma*,perplexity/*"
 )
 _BALANCED_ALLOWED_MODELS = (
-    "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-4o-mini*,perplexity/*"
+    "deepseek/*,meta-llama/*,mistralai/*,google/*,x-ai/*,openai/gpt-5.6-luna*,perplexity/*"
 )
 _DEFAULT_COST_QUALITY_TRADEOFF = 10
-# Mid-tier frontier slugs permitted on ``balanced`` (not ``cheap``).
+# Mid-tier OpenAI/Anthropic slugs permitted on ``balanced`` (not ``cheap``). Google and
+# xAI models never reach this check — they're never classified flagship (see
+# _FLAGSHIP_PROVIDER_PREFIXES / _FLAGSHIP_MODEL_ID_MARKERS above), so they're already
+# unrestricted on ``balanced``.
 _BALANCED_FLAGSHIP_MARKERS = frozenset(
     {
-        "gpt-4o-mini",
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "grok-3-mini",
-        "grok-3",
+        "gpt-5.6-luna",
     }
 )
 _NATIVE_SEARCH_ONLY_PREFIXES = frozenset({"perplexity/"})
@@ -397,7 +395,7 @@ def sanitize_allowed_models(allowed_models: str, *, tier: str = "cheap") -> str:
             entry
             for entry in entries
             if not is_flagship_allowed_models_entry(entry)
-            or entry.lower().startswith(("openai/gpt-4o-mini", "google/", "x-ai/"))
+            or entry.lower().startswith(("openai/gpt-5.6-luna", "google/", "x-ai/"))
         ]
         return ",".join(kept) if kept else _BALANCED_ALLOWED_MODELS
     kept = [entry for entry in entries if not is_flagship_allowed_models_entry(entry)]
@@ -628,6 +626,9 @@ def _apply_byok_model_override(resolved: str) -> str:
             user_model[len("anthropic/") :] if user_model.startswith("anthropic/") else user_model
         )
         return f"anthropic/{slug}"
+    if provider == "xai":
+        slug = user_model[len("xai/") :] if user_model.startswith("xai/") else user_model
+        return f"xai/{slug}"
     return resolved
 
 

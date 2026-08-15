@@ -22,13 +22,18 @@ const EMBED_ORIGIN = embedOriginForChat();
 export default function OccChatPage() {
   return (
     <>
-      <DtNav />
+      <DtNav autoHide="hover" />
       <main
+        id="main"
+        tabIndex={-1}
         style={{
           display: "flex",
           flexDirection: "column",
           height: "100dvh",
-          paddingTop: "var(--dq-nav-h)",
+          // No paddingTop here: DtNav is `autoHide="hover"` — fixed-position
+          // and hidden by default, so it overlays on reveal rather than
+          // reserving space. Reserving --dq-nav-h anyway would leave a
+          // permanent gap at the top even while the bar is hidden.
           boxSizing: "border-box",
         }}
       >

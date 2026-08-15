@@ -93,7 +93,12 @@ export function PricingMatrix({
         </div>
       ) : null}
 
-      <div className={cx("overflow-x-auto", className)}>
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Pricing comparison, scrollable horizontally"
+        className={cx("overflow-x-auto", className)}
+      >
         <table className="w-full min-w-[640px] border-collapse text-[0.82rem]">
           <thead>
             <tr>

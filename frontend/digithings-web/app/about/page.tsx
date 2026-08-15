@@ -89,7 +89,7 @@ export default function AboutPage() {
     <>
       <DtNav />
 
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <PageHead
           kicker={"// about"}
           title={

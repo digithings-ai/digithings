@@ -23,11 +23,16 @@ const LINES: Line[] = [
 const MODULES = ["digigraph", "digiquant", "digisearch", "digikey"] as const;
 
 // CLI line colours by kind — migrated from `.terminal-shell .line.<kind>`.
+// output was "text-up" (the reserved P&L money-green token) for plain status
+// text carrying no P&L meaning ("Detected workspace: ...") — a direct
+// violation of the house rule that --up/--down stay reserved for P&L,
+// stated by this same page's own Code Review section. Matches the tool
+// line's tone instead: it is status/confirmation text, not a metric.
 const LINE_COLOR: Record<Line["kind"], string> = {
   prompt: "text-ink",
   comment: "text-term-mute",
   tool: "text-ink-soft",
-  output: "text-up",
+  output: "text-ink-soft",
 };
 
 /**

@@ -84,6 +84,13 @@ export function SortableTable<Row>({
 
   return (
     <div
+      // tabIndex + role/aria-label: this is a horizontally-scrolling region on
+      // narrow viewports (no wrap point in the table itself) — without a tab
+      // stop, a keyboard-only user (no touch, no scrollbar drag) has no way
+      // to focus it and arrow-key-scroll the columns that overflow.
+      tabIndex={0}
+      role="region"
+      aria-label="Table, scrollable horizontally"
       className={`overflow-x-auto rounded-[12px] border border-hair bg-surface${
         className ? ` ${className}` : ""
       }`}
@@ -96,6 +103,7 @@ export function SortableTable<Row>({
               return (
                 <th
                   key={c.key}
+                  scope="col"
                   className={c.numeric ? "srt-r" : "srt-l"}
                   aria-sort={active ? (dir === "asc" ? "ascending" : "descending") : "none"}
                 >

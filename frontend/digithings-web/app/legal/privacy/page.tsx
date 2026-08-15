@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer } from "@digithings/web";
-import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "../../_nav";
+import { DT_FOOTER, DT_FOOTER_META } from "../../_nav";
 import { Mono, PageHead, RuledList, RuledRow } from "../../_company/prose";
+import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -19,7 +20,7 @@ export default function PrivacyPage() {
     <>
       <DtNav />
 
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <PageHead kicker={"// privacy"} title="How this website handles data.">
           This notice explains what the digithings.ai website stores in your browser and what
           happens when you use its optional chat. It does not cover a copy of the open-source
@@ -61,12 +62,13 @@ export default function PrivacyPage() {
                 <div>
                   <dt className="font-mono text-ink-mute">Contact</dt>
                   <dd className="mt-[0.2rem]">
-                    <a
+                    <ContactMailto
                       className="text-accent [text-underline-offset:2px] hover:text-ink"
-                      href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20privacy%20question`}
+                      subject="digithings%20privacy%20question"
+                      showAddress
                     >
-                      {DT_CONTACT_EMAIL}
-                    </a>
+                      Email us
+                    </ContactMailto>
                   </dd>
                 </div>
                 <div>
@@ -156,12 +158,13 @@ export default function PrivacyPage() {
                 <p>
                   To ask what data we hold about you, request deletion of data we control, or raise
                   another privacy question, email{" "}
-                  <a
+                  <ContactMailto
                     className="text-accent [text-underline-offset:2px] hover:text-ink"
-                    href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20privacy%20request`}
+                    subject="digithings%20privacy%20request"
+                    showAddress
                   >
-                    {DT_CONTACT_EMAIL}
-                  </a>
+                    us
+                  </ContactMailto>
                   . We may need enough information to verify and act on the request.
                 </p>
                 <p>

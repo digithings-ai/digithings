@@ -35,6 +35,11 @@ export type ToastItem = {
   message?: string;
   /** Auto-dismiss after this many ms; omit or 0 to hold open. */
   ttlMs?: number;
+  /** Optional one-click recovery control — e.g. "Reissue" on an
+   *  expired-token error toast that names a fix but otherwise has no way to
+   *  let the user actually perform it. Renders as a small text button under
+   *  the message; omit for the current text-only rendering. */
+  action?: { label: string; onClick: () => void };
 };
 
 export type ToastStackProps = {
@@ -146,6 +151,11 @@ export function ToastStack({
             <div className="toast-body">
               <p className="toast-title">{t.title}</p>
               {t.message ? <p className="toast-msg">{t.message}</p> : null}
+              {t.action ? (
+                <button type="button" className="toast-action" onClick={t.action.onClick}>
+                  {t.action.label}
+                </button>
+              ) : null}
             </div>
             <button
               type="button"

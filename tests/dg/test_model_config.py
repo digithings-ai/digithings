@@ -315,3 +315,88 @@ class TestByokModelOverride:
             assert get_model_for_mode() == "openrouter/openai/gpt-4o-mini"
         finally:
             pop_byok(tok)
+
+    def test_get_model_for_mode_uses_byok_model_xai(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """x.ai BYOK must route to the user's model (#2361 review finding).
+
+        Before the ``xai`` branch existed, ``_apply_byok_model_override`` fell
+        through to ``return resolved`` for any provider it didn't recognize,
+        so an x.ai BYOK request silently ran on the operator's own
+        model/key instead of the user's — reproducing #1873 for the new
+        provider.
+        """
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "xai-test",
+                        "x-byok-provider": "xai",
+                        "x-byok-model": "grok-4-3",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert get_model_for_mode() == "xai/grok-4-3"
+        finally:
+            pop_byok(tok)
+
+    def test_every_routable_byok_provider_has_a_model_override_branch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Regression guard: a catalog provider missing a branch in
+        ``_apply_byok_model_override`` silently discards the user's
+        ``X-BYOK-Model`` and falls through to the operator's own model/key
+        (the #2361/#1873 failure mode). Every provider in
+        ``BYOK_ROUTABLE_PROVIDERS`` other than ``openai`` must prefix the
+        resolved model with ``<provider>/`` — so adding a new BYOK provider
+        to ``config/byok-providers.json`` without a matching branch here
+        fails this test instead of merging silently broken.
+        """
+        from digigraph.llm_auth import BYOK_ROUTABLE_PROVIDERS, pop_byok, push_byok_header
+
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self, provider: str) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "test-key",
+                        "x-byok-provider": provider,
+                        "x-byok-model": "some-model",
+                    }
+                )
+
+        assert BYOK_ROUTABLE_PROVIDERS, "catalog produced no routable providers"
+        for provider in BYOK_ROUTABLE_PROVIDERS:
+            tok = push_byok_header(_Req(provider))
+            try:
+                resolved = get_model_for_mode()
+            finally:
+                pop_byok(tok)
+            expected = "some-model" if provider == "openai" else f"{provider}/some-model"
+            assert resolved == expected, (
+                f"provider {provider!r} did not route the user's BYOK model "
+                f"(got {resolved!r}, expected {expected!r}) — add a branch to "
+                "_apply_byok_model_override"
+            )

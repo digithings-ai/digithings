@@ -12,7 +12,7 @@ import { ReturnsMatrix, TEARSHEET_DEMO } from "@digithings/web";
 
 export function MonthlyReturnsReference() {
   return (
-    <section className="section-block monthly-returns">
+    <section className="section-block monthly-returns" id="returns-matrix">
       <p className="kicker">{"// returns matrix"}</p>
       <h2 className="title">Every month, graded by heat.</h2>
       <p className="section-copy">

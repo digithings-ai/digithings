@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { tabId, tabPanelId } from "@digithings/web";
 
 const INSTALL = [
   { id: "docker", label: "docker", code: "docker compose up -d" },
@@ -70,7 +71,15 @@ export function CodeSampleReference() {
               key={t.id}
               type="button"
               role="tab"
+              id={tabId("Install method", t.id)}
               aria-selected={t.id === tab}
+              // Every tab controls the SAME single panel below (its content
+              // swaps rather than one mounted panel per tab), so aria-controls
+              // must track whichever panel id is actually rendered right now
+              // (tab, the active id) — not each button's own t.id, which
+              // would reference a panel id that never exists in the DOM for
+              // any tab besides the active one.
+              aria-controls={tabPanelId("Install method", tab)}
               className={`cs-tab${t.id === tab ? " on" : ""}`}
               onClick={() => setTab(t.id)}
             >
@@ -79,7 +88,12 @@ export function CodeSampleReference() {
           ))}
           <CopyButton text={active.code} k="install" copied={copied} onCopy={onCopy} />
         </div>
-        <pre className="m-0 overflow-x-auto whitespace-pre px-[1rem] py-[0.9rem] font-mono text-[0.8rem] leading-[1.7] text-ink">
+        <pre
+          className="m-0 overflow-x-auto whitespace-pre px-[1rem] py-[0.9rem] font-mono text-[0.8rem] leading-[1.7] text-ink"
+          role="tabpanel"
+          id={tabPanelId("Install method", tab)}
+          aria-labelledby={tabId("Install method", tab)}
+        >
           <span className="text-accent" aria-hidden="true">
             ${" "}
           </span>

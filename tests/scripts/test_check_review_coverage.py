@@ -309,6 +309,88 @@ def test_github_association_failure_fails_closed(monkeypatch: pytest.MonkeyPatch
     assert crc.associated_pr_number("unknown123") is None
 
 
+def test_a_trailing_issue_number_that_is_not_a_real_pr_falls_back_to_association(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ "docs: foo (#2103)" citing issue #2103 must not crash the gate.
+
+    `parse_pr_number` cannot tell a squash-merge PR reference apart from a
+    commit subject that cites an issue in the same "(#N)" shape. `gh pr view`
+    on a number that isn't a real PR raises -- this pins that
+    `resolve_pr_number` catches it and falls back to the real commit -> PR
+    association instead of propagating the crash.
+    """
+    monkeypatch.setattr(crc, "_repo_slug", lambda: "digithings-ai/digithings")
+
+    def fake_pr_view(number: int) -> dict[str, Any]:
+        raise subprocess.CalledProcessError(1, "gh pr view", output=b"", stderr=b"not a PR")
+
+    monkeypatch.setattr(crc, "_pr_review_state", fake_pr_view)
+    monkeypatch.setattr(crc, "associated_pr_number", lambda _sha: 2106)
+
+    resolved = crc.resolve_pr_number(
+        "docs: DigiChat language selector design (#2103)", "abc123", {}
+    )
+    assert resolved == 2106
+
+
+def test_a_second_commit_citing_the_same_bogus_number_does_not_re_attempt_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Several commits can cite the same non-PR "(#N)" (e.g. a whole PR's worth of
+    commits referencing one tracking issue) -- the second one must not re-run the
+    failing `gh pr view` call `resolve_pr_number` already paid for once."""
+    attempts: list[int] = []
+
+    def fake_pr_view(number: int) -> dict[str, Any]:
+        attempts.append(number)
+        raise subprocess.CalledProcessError(1, "gh pr view")
+
+    monkeypatch.setattr(crc, "_pr_review_state", fake_pr_view)
+    monkeypatch.setattr(crc, "associated_pr_number", lambda _sha: None)
+
+    cache: dict[int, dict[str, Any]] = {}
+    invalid: set[int] = set()
+    crc.resolve_pr_number("docs: plan (#2103)", "sha1", cache, invalid)
+    crc.resolve_pr_number("docs: design (#2103)", "sha2", cache, invalid)
+
+    assert attempts == [2103], "the second commit's lookup should be memoized, not re-attempted"
+
+
+def test_a_real_squash_merge_pr_number_is_cached_and_not_re_fetched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The common case: a genuine squash-merge "(#N)" resolves without falling back."""
+    calls: list[int] = []
+
+    def fake_pr_view(number: int) -> dict[str, Any]:
+        calls.append(number)
+        return _state()
+
+    monkeypatch.setattr(crc, "_pr_review_state", fake_pr_view)
+    monkeypatch.setattr(
+        crc,
+        "associated_pr_number",
+        lambda _sha: (_ for _ in ()).throw(AssertionError("should not be called")),
+    )
+
+    cache: dict[int, dict[str, Any]] = {}
+    resolved = crc.resolve_pr_number(
+        "chore(ci): retire the Copilot review request (#1894)", "def456", cache
+    )
+    assert resolved == 1894
+    assert calls == [1894]
+    assert 1894 in cache
+
+    # A second, unrelated commit citing the same PR number (e.g. a merge-commit
+    # child) must reuse the cached state rather than re-fetching it.
+    resolved_again = crc.resolve_pr_number(
+        "chore(ci): retire the Copilot review request (#1894)", "ghi789", cache
+    )
+    assert resolved_again == 1894
+    assert calls == [1894], "the second lookup should hit the cache, not gh pr view again"
+
+
 # ── workflow wiring: a gate that never runs gates nothing ────────────────────
 
 
@@ -343,3 +425,33 @@ def test_the_workflow_can_read_pull_requests() -> None:
 def test_the_baseline_is_a_real_commit_and_pinned() -> None:
     assert crc.BASELINE_SHA
     assert len(crc.BASELINE_SHA) >= 7
+
+
+def test_the_baseline_is_actually_an_ancestor_of_both_branch_tips() -> None:
+    """A baseline that isn't on develop's own history skips nothing there.
+
+    Caught a real mistake with this: an earlier attempt to advance
+    BASELINE_SHA past a squash-merge landed a value that was an ancestor of
+    origin/main but NOT of origin/develop, making the move a no-op for the
+    develop -> main direction this gate actually checks. Pin the property
+    directly instead of trusting a comment to describe it correctly.
+
+    Skips (rather than fails) when a ref can't be resolved at all -- e.g. a
+    shallow or partial clone that never fetched one of these branches -- since
+    that's an environment limitation, not a claim about BASELINE_SHA itself.
+    """
+    for ref in ("origin/main", "origin/develop"):
+        resolvable = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+            cwd=crc.REPO_ROOT,
+            capture_output=True,
+        )
+        if resolvable.returncode != 0:
+            pytest.skip(f"{ref} is not resolvable in this checkout")
+
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", crc.BASELINE_SHA, ref],
+            cwd=crc.REPO_ROOT,
+            capture_output=True,
+        )
+        assert result.returncode == 0, f"BASELINE_SHA is not an ancestor of {ref}"

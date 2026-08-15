@@ -27,6 +27,7 @@ ALLOWED_BRANCH_PREFIXES: tuple[str, ...] = (
     "copilot/",
     "bot/",
     "task/",
+    "claude/",
 )
 
 

@@ -31,16 +31,20 @@ export interface TradeLogTableProps {
   rows: TradeLogRow[];
   /** Extra classes on the scroll wrapper. */
   className?: string;
+  /** Accessible name for the table — no visible <caption> is used by
+   *  design (the page's own heading carries that role), so this becomes
+   *  the table's aria-label. */
+  ariaLabel?: string;
 }
 
-export function TradeLogTable({ columns, rows, className }: TradeLogTableProps) {
+export function TradeLogTable({ columns, rows, className, ariaLabel = "Trade log" }: TradeLogTableProps) {
   return (
     <div className={"ts-table-wrap ts-table-scroll" + (className ? ` ${className}` : "")}>
-      <table className="ts-table ts-trades">
+      <table className="ts-table ts-trades" aria-label={ariaLabel}>
         <thead>
           <tr>
             {columns.map((c, i) => (
-              <th key={i} className={c.numeric ? "ts-num" : undefined}>
+              <th key={i} scope="col" className={c.numeric ? "ts-num" : undefined}>
                 {c.label}
               </th>
             ))}

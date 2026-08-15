@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Footer, Reveal } from "@digithings/web";
-import { DT_CONTACT_EMAIL, DT_FOOTER, DT_FOOTER_META } from "../_nav";
+import { DT_FOOTER, DT_FOOTER_META } from "../_nav";
 import { PageHead, RuledList, RuledRow } from "../_company/prose";
+import { ContactMailto } from "@/components/ContactMailto";
 import { DtNav } from "@/components/DtNav";
 
 export const metadata: Metadata = {
@@ -44,7 +45,7 @@ export default function ServicesPage() {
     <>
       <DtNav />
 
-      <main className="pt-[var(--dq-nav-h)]">
+      <main id="main" tabIndex={-1} className="pt-[var(--dq-nav-h)]">
         <PageHead
           kicker={"// services"}
           title={
@@ -121,12 +122,9 @@ export default function ServicesPage() {
               </p>
             </Reveal>
             <div className="flex flex-wrap gap-[0.8rem]">
-              <a
-                className="btn btn-primary"
-                href={`mailto:${DT_CONTACT_EMAIL}?subject=digithings%20services%20inquiry`}
-              >
+              <ContactMailto className="btn btn-primary" subject="digithings%20services%20inquiry">
                 Email about a project <span aria-hidden="true">→</span>
-              </a>
+              </ContactMailto>
               <Link className="btn btn-ghost" href="/docs">
                 Read the docs
               </Link>
@@ -135,12 +133,12 @@ export default function ServicesPage() {
               </Link>
             </div>
             <p className="mt-[1.4rem] font-mono text-[0.88rem] text-ink-mute">
-              <a
+              <ContactMailto
                 className="text-accent [text-underline-offset:2px] hover:text-ink"
-                href={`mailto:${DT_CONTACT_EMAIL}`}
+                showAddress
               >
-                {DT_CONTACT_EMAIL}
-              </a>
+                Or email us directly
+              </ContactMailto>
             </p>
           </div>
         </section>

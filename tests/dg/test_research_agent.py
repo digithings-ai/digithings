@@ -370,6 +370,16 @@ class TestRunResearchAgent:
         exception out of ``execute_tool`` would discard that record while its physical attempt
         row survives — an attempt whose ``call_id`` has no logical row, which migration 067's
         ``fk_olympus_provider_attempts_call`` will reject once the writer lands.
+
+        The tool must raise something outside digillm's ``run_tools`` recoverable-error tuple
+        (``RuntimeError``/``OSError``/``ValueError``/``TypeError``/``KeyError`` — see
+        digillm/src/digillm/client.py's sequential tool-dispatch branch, added in
+        4e5f14c4e "fix(digillm): recover from sequential tool errors, signal round exhaustion").
+        Any of those five is now caught inside the tool loop and turned into a tool-result
+        message instead of propagating, so the mock's fixed response would just spin through
+        ``max_tool_rounds`` and surface an unrelated "empty LLM response" error. A plain
+        ``Exception`` subclass genuinely escapes the loop and exercises the deferral path this
+        test targets.
         """
         tool_call = ChatCompletion(
             id="cmpl-tool-call",
@@ -402,8 +412,11 @@ class TestRunResearchAgent:
             def observe(self, record: TelemetryRecord) -> None:
                 records.append(record)
 
+        class _ToolExplosion(Exception):
+            """Not in digillm's recoverable-error tuple — must escape ``run_tools`` uncaught."""
+
         def exploding_tool(name: str, arguments: dict[str, object]) -> str:
-            raise RuntimeError("tool blew up")
+            raise _ToolExplosion("tool blew up")
 
         previous_observer = digillm_client._telemetry_observer
         digillm_client.clear_caches()
@@ -412,7 +425,7 @@ class TestRunResearchAgent:
             with (
                 usage.call_context(node_run_id=uuid4()),
                 patch.object(digillm_client, "get_client_for_model", return_value=fake_client),
-                pytest.raises(RuntimeError, match="tool blew up"),
+                pytest.raises(_ToolExplosion, match="tool blew up"),
             ):
                 run_research_agent(
                     skill_text="x",
