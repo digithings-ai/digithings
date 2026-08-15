@@ -58,6 +58,10 @@ function validateKey(key: string, provider: ProviderId): string | null {
  * Defense in depth in case a provider ever echoes the submitted key back in
  * an error: strip any occurrence of the raw key and cap the length so a
  * pathological upstream response can't balloon the reply either.
+ *
+ * Callers must combine this with `||`, never `??`. It returns `""` unchanged
+ * for an empty message — `""` is not nullish, so `??` keeps it and ships
+ * `{"ok":false,"error":""}` instead of falling back to the HTTP-status text.
  */
 function sanitizeUpstreamError(message: string | undefined, key: string): string | undefined {
   if (!message) return message;
@@ -102,7 +106,7 @@ async function testOpenRouter(key: string): Promise<TestResult> {
     return {
       ok: false,
       error:
-        sanitizeUpstreamError(body.error?.message, key) ??
+        sanitizeUpstreamError(body.error?.message, key) ||
         `OpenRouter returned HTTP ${resp.status}`,
     };
   }
@@ -117,7 +121,7 @@ async function testOpenAI(key: string): Promise<TestResult> {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
     return {
       ok: false,
-      error: sanitizeUpstreamError(body.error?.message, key) ?? `OpenAI returned HTTP ${resp.status}`,
+      error: sanitizeUpstreamError(body.error?.message, key) || `OpenAI returned HTTP ${resp.status}`,
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
@@ -133,7 +137,7 @@ async function testAnthropic(key: string): Promise<TestResult> {
     return {
       ok: false,
       error:
-        sanitizeUpstreamError(body.error?.message, key) ?? `Anthropic returned HTTP ${resp.status}`,
+        sanitizeUpstreamError(body.error?.message, key) || `Anthropic returned HTTP ${resp.status}`,
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
@@ -148,7 +152,7 @@ async function testGemini(key: string): Promise<TestResult> {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
     return {
       ok: false,
-      error: sanitizeUpstreamError(body.error?.message, key) ?? `Gemini returned HTTP ${resp.status}`,
+      error: sanitizeUpstreamError(body.error?.message, key) || `Gemini returned HTTP ${resp.status}`,
     };
   }
   return { ok: true, model: "gemini-2.5-flash" };
@@ -162,7 +166,7 @@ async function testXai(key: string): Promise<TestResult> {
     const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
     return {
       ok: false,
-      error: sanitizeUpstreamError(body.error?.message, key) ?? `x.ai returned HTTP ${resp.status}`,
+      error: sanitizeUpstreamError(body.error?.message, key) || `x.ai returned HTTP ${resp.status}`,
     };
   }
   const data = (await resp.json()) as { data?: { id: string }[] };
