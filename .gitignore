@@ -133,10 +133,9 @@ canvases/
 # committed as reusable fallback code.
 **/pinescript/*.pine
 
-# Private client projects — never commit
-docs/projects/client-pilot/
-# (Top-level /projects/ is anchored earlier in this file — do not add an
-# unanchored `projects/` rule here, it would also capture docs/projects/.)
+# Private client projects live under root /projects/* (anchored above) — never
+# add an unanchored `projects/` rule here, it would also capture docs/projects/,
+# which ADR-0006 reserves for public, committed dogfood projects.
 
 # playwright-mcp scratch output (page snapshots, console logs)
 .playwright-mcp/

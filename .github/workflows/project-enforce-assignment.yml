@@ -36,10 +36,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Fetch all 9 module project boards + main project (1-9, client-pilot=10).
-          echo "Fetching project item lists (projects 1-10)..."
+          # Fetch all 9 module project boards + main project + client-pilot +
+          # maintenance (1-9, client-pilot=10, maintenance=11).
+          echo "Fetching project item lists (projects 1-11)..."
           ALL_PROJECT_NUMS=""
-          for proj in 1 2 3 4 5 6 7 8 9 10; do
+          for proj in 1 2 3 4 5 6 7 8 9 10 11; do
             NUMS=$(gh project item-list "$proj" --owner digithings-ai \
               --format json --limit 500 2>/dev/null \
               | jq -r '.items[].content.number | select(. != null) | tostring' || true)
