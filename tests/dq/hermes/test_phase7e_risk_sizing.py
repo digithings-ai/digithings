@@ -16,6 +16,7 @@ import pytest
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
+    ExcludedTicker,
     PhaseHermesState,
     PriorContext,
 )
@@ -752,9 +753,13 @@ class TestActionClassificationAndInvestedCap:
 # --------------------------------------------------------------------------- #2417 adjustment events
 
 
-def test_held_carry_weights_direct_call_emits_continuity_carry() -> None:
+def test_held_carry_weights_direct_call_returns_drifted_weight_only() -> None:
     # Same memo-unaddressed fixture shape as TestHeldContinuityBackstop, exercised
     # directly against the earlier carry-injection function (#1030/#1555/#1649).
+    # #2417 CodeRabbit review on #2434: this function no longer takes/emits events —
+    # whether a carry actually lands (and so whether a CONTINUITY_CARRY event is
+    # warranted) depends on the caller's own sized-dict check, exercised below in
+    # ``TestCarryLoopEventEmission``.
     prior_book = [{"ticker": "DBO", "weight_pct": 7.5}]
     state = AtlasResearchState(
         run_type="delta",
@@ -767,14 +772,69 @@ def test_held_carry_weights_direct_call_emits_continuity_carry() -> None:
     state.phase_hermes = PhaseHermesState(
         pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster)
     )
-    events: list[SizingAdjustment] = []
-    carry = phase7e_risk_sizing._held_carry_weights(state, events=events)
-    assert carry == {"DBO": 7.5}
-    assert len(events) == 1
-    assert events[0].ticker == "DBO"
-    assert events[0].adjustment_type == SizingAdjustmentType.CONTINUITY_CARRY
-    assert events[0].original_pct == pytest.approx(0.0)
-    assert events[0].adjusted_pct == pytest.approx(7.5)
+    assert phase7e_risk_sizing._held_carry_weights(state) == {"DBO": 7.5}
+
+
+@pytest.mark.unit
+class TestCarryLoopEventEmission:
+    """#2417 CodeRabbit review on #2434 (finding: phantom CONTINUITY_CARRY events).
+
+    ``_build_sized_book``'s carry loop (around ``_held_carry_weights``) must emit a
+    CONTINUITY_CARRY event only when the carry actually lands in ``sized`` — not
+    when the ticker was already sized by the PM/sizer and the carry is a no-op. DBO
+    is H4-gated (``focus_roster_excluded``) in both cases, so it is always in
+    ``carried_held_tickers``; the two cases differ only in whether the H7 memo also
+    addresses it as ``long`` (which feeds it into ``size_portfolio`` and pre-fills
+    ``sized`` before the carry loop runs).
+    """
+
+    def _gated_state(self, *, memo_addressed: bool) -> AtlasResearchState:
+        state = AtlasResearchState(
+            run_type="delta",
+            run_date=RUN_DATE,
+            baseline_date=date(2026, 6, 9),
+            config=AtlasConfigBundle(preferences=dict(_RELAXED)),
+            prior_context=PriorContext(prior_book=[{"ticker": "DBO", "weight_pct": 7.5}]),
+        )
+        roster = [TickerDirection(ticker="SPY", direction="long", conviction_rank=1)]
+        if memo_addressed:
+            roster.append(TickerDirection(ticker="DBO", direction="long", conviction_rank=2))
+        state.phase_hermes = PhaseHermesState(
+            pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster),
+            focus_roster_excluded=[ExcludedTicker(ticker="DBO", reason="stale")],
+        )
+        return state
+
+    def test_memo_unaddressed_carry_lands_and_emits_event(self) -> None:
+        # DBO is gated AND memo-unaddressed: absent from size_portfolio's input, so
+        # the carry loop's setdefault-style check finds it not-yet-sized and both
+        # applies the drifted weight and reason-codes it.
+        rebal = _run(
+            self._gated_state(memo_addressed=False),
+            FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})}),
+        )
+        # SPY's memo-derived target plus DBO's 7.5% carry exceed 100%, so
+        # _cap_total_invested legitimately scales both down together — assert the
+        # carry landed (positive weight, reason-coded), not an exact pre-cap value.
+        assert _weights(rebal)["DBO"] > 0
+        carries = [a for a in rebal["adjustments"] if a["adjustment_type"] == "continuity_carry"]
+        assert any(a["ticker"] == "DBO" for a in carries)
+
+    def test_memo_addressed_and_already_sized_skips_duplicate_event(self) -> None:
+        # DBO is gated but ALSO explicitly addressed "long" by the memo, so it flows
+        # through size_portfolio and is already in ``sized`` before the carry loop
+        # runs. Before this fix, the loop appended a CONTINUITY_CARRY event
+        # unconditionally here even though ``setdefault`` was a no-op — a phantom
+        # record describing a carry that never happened.
+        rebal = _run(
+            self._gated_state(memo_addressed=True),
+            FakeSupabaseClient(
+                canned_reads={"price_technicals": _tech_rows({"SPY": 15, "DBO": 15})}
+            ),
+        )
+        assert "DBO" in _weights(rebal)
+        carries = [a for a in rebal["adjustments"] if a["adjustment_type"] == "continuity_carry"]
+        assert not any(a["ticker"] == "DBO" for a in carries)
 
 
 def test_h7_flat_and_omitted_held_never_conflate_on_the_same_ticker() -> None:
@@ -979,6 +1039,28 @@ class TestValidateH8LineageCallSite:
             out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
         rebal = out["phase7d_rebalance"]
         assert rebal["recommended_portfolio"][0]["target_pct"] == pytest.approx(30.0)
+        assert "H8 lineage validation failed" not in caplog.text
+
+    def test_wired_memo_path_logs_nothing_despite_no_matching_adjustment(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # #2417 CodeRabbit review on #2434 (Fix #4): the H7 memo path's "targets" are
+        # conviction-weight placeholders (1.0 per long ticker), not pct-scale PM
+        # requests — comparing them against the sizer's actual pct output as if they
+        # were the same unit produced a spurious "unexplained delta" on every run,
+        # even with zero real adjustments. Default (non-_RELAXED) preferences drive
+        # SPY's vol-scaled weight far from the 1.0 placeholder on purpose, so this
+        # would have false-positived before ``targets_are_weights`` gated it off for
+        # the memo path.
+        client = FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})})
+        state = _state(
+            [{"ticker": "SPY", "target_pct": 50}],
+            analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
+        )
+        with caplog.at_level(logging.ERROR, logger=phase7e_risk_sizing.__name__):
+            out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
+        rebal = out["phase_hermes"].sized_book
+        assert "SPY" in _weights(rebal)
         assert "H8 lineage validation failed" not in caplog.text
 
     def test_wired_end_to_end_catches_a_silent_regression_and_stays_fail_soft(

@@ -318,9 +318,7 @@ def _rebuild_actions(
     return out
 
 
-def _held_carry_weights(
-    state: AtlasResearchState, events: list[SizingAdjustment] | None = None
-) -> dict[str, float]:
+def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
     """Prior (drifted) weights for deliberately carried held names (#1030, #1555, #1649).
 
     Two classes of held name must be carried at their current drifted weight or H9
@@ -339,6 +337,12 @@ def _held_carry_weights(
     exemption set can never diverge into a new silent mismatch. A PM-exited name
     (addressed in the roster, marked ``flat``) is memo-addressed, so it is never
     resurrected here.
+
+    Returns weights only — no ``SizingAdjustment`` event, because whether a carry
+    actually lands depends on the caller's ``setdefault`` (a name already sized by
+    the PM/sizer is left untouched). Emitting the event here, unconditionally,
+    produced a ``CONTINUITY_CARRY`` record for carries that never happened (#2417
+    CodeRabbit review on #2434) — the caller emits it only when the carry sticks.
     """
     # Lazy import: keeps the phase7e ↔ commit_io edge one-directional at import time.
     from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
@@ -351,16 +355,6 @@ def _held_carry_weights(
         weight = _drifted_weight(state, ticker)
         if weight is not None and weight > 0:
             carry[ticker] = weight
-            if events is not None:
-                events.append(
-                    SizingAdjustment(
-                        ticker=ticker,
-                        adjustment_type=SizingAdjustmentType.CONTINUITY_CARRY,
-                        original_pct=0.0,
-                        adjusted_pct=weight,
-                        reason="held ticker gated/memo-unaddressed — carried at drifted weight",
-                    )
-                )
     return carry
 
 
@@ -511,6 +505,8 @@ def _validate_h8_lineage(
     pm_targets: dict[str, float],
     sized_book: RebalancePayload,
     preferences: Mapping[str, Any],
+    *,
+    targets_are_weights: bool = True,
 ) -> None:
     """Separate, louder layer on top of ``_build_sized_book``'s fail-soft guard (#2417 §6).
 
@@ -519,14 +515,20 @@ def _validate_h8_lineage(
     ``size_portfolio``. Never raises past this point and never mutates ``sized_book``:
     a lineage failure is logged, not converted into a dropped rebalance.
 
-    NOTE: in the memo path (H7 direction-only — no PM weights, per the H7/H8 split),
-    ``pm_targets`` is a membership flag (every long-roster ticker = 1.0), not a real
-    requested weight, so this comparison is coarse there and can log more than it
-    should until a follow-up gives the memo path a real pre-H8 target representation
-    (see #2417 design spec §6 "Open items to confirm"). It is exact for the legacy
-    ``phase7d_rebalance`` path, where ``pm_targets`` already holds real target_pct
+    ``targets_are_weights`` must be ``False`` for the memo path (H7 direction-only —
+    no PM weights, per the H7/H8 split), where ``pm_targets`` is a membership flag
+    (every long-roster ticker = 1.0), not a real requested weight. Comparing that
+    flag against a real approved percentage is meaningless — it flagged nearly every
+    sized position as an "unexplained delta" and logged an ERROR with a stack trace
+    on most production runs (#2417 CodeRabbit review on #2434), since the live
+    production path *is* the memo path. This layer no-ops there until a follow-up
+    gives the memo path a real pre-H8 target representation (see #2417 design spec
+    §6 "Open items to confirm"). It is exact for the legacy ``phase7d_rebalance``
+    path (default ``True``), where ``pm_targets`` already holds real target_pct
     weights (``_pm_direction_legacy``).
     """
+    if not targets_are_weights:
+        return
     approved = {
         str(row["ticker"]): _opt_float(row.get("target_pct")) or 0.0
         for row in sized_book.get("recommended_portfolio") or []
@@ -626,10 +628,22 @@ def _build_sized_book(
     events.extend(result.adjustments)
     # Carry deliberately gated-out or memo-unaddressed held names at their current
     # drifted weight (#1030, #1555, #1649) BEFORE the cadence band, so they flow through as continuing positions
-    # (held, not traded). ``setdefault`` never overrides a weight the PM/sizer already
-    # set — it only re-instates a quiet held name that sizing would otherwise drop.
-    for ticker, weight in _held_carry_weights(state, events=events).items():
-        sized.setdefault(ticker, weight)
+    # (held, not traded). Skip (and don't emit an event for) any ticker the PM/sizer
+    # already sized — only a quiet held name that sizing would otherwise drop is
+    # actually carried, and only an actual carry gets a CONTINUITY_CARRY event.
+    for ticker, weight in _held_carry_weights(state).items():
+        if ticker in sized:
+            continue
+        sized[ticker] = weight
+        events.append(
+            SizingAdjustment(
+                ticker=ticker,
+                adjustment_type=SizingAdjustmentType.CONTINUITY_CARRY,
+                original_pct=0.0,
+                adjusted_pct=weight,
+                reason="held ticker gated/memo-unaddressed — carried at drifted weight",
+            )
+        )
     # current_weights is already mark-to-market drifted in preflight (#955). The cadence
     # dispatcher rebalances through the no-trade band on a permitted day, else holds the
     # drifted book (only PM direction changes trade).
@@ -712,8 +726,15 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
 
         # #2417 §6: unexplained-delta lineage check, layered on top of (not inside)
         # _build_sized_book's own fail-soft try/except — logs and continues, never
-        # affects the already-computed sized_book.
-        _validate_h8_lineage(pm_targets, sized_book, state.config.preferences)
+        # affects the already-computed sized_book. The memo path's pm_targets are
+        # membership flags, not weights (see _validate_h8_lineage docstring), so the
+        # comparison only runs for the legacy phase7d_rebalance path.
+        _validate_h8_lineage(
+            pm_targets,
+            sized_book,
+            state.config.preferences,
+            targets_are_weights=memo is None,
+        )
 
         if memo is not None:
             return {"phase_hermes": PhaseHermesState(sized_book=sized_book)}

@@ -1113,8 +1113,11 @@ call site, so a lineage failure cannot turn into a dropped rebalance.
 explanation-only, never persisted) is the wire shape for future in-process readers — H9
 narrative/notes, pre-trade risk review, and outcome-episode logging are the anticipated
 consumers, all downstream of H8, which remains the sole weight owner — but no consumer in this
-codebase reads the field yet. It is populated on every `RebalancePayload` today so a consumer
-can be added later without a schema change.
+codebase reads the field yet. It is populated today only on payloads `phases.phase7e_risk_sizing
+._build_sized_book` produces; the legacy `phase7d_rebalance` payload (`phases.phase7d_pm`) has no
+`adjustments` key at all, so any future consumer must treat the field as absent-safe
+(`.get("adjustments") or []`, the same pattern `_validate_h8_lineage` already uses) rather than
+assuming it is always present.
 
 #### Run robustness + telemetry (Pillar 1B)
 

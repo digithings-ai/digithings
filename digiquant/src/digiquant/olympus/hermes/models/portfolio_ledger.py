@@ -315,6 +315,21 @@ class RequestedTarget(TimedPortfolioLedgerRecord):
         return self
 
 
+# Adjustment types that can only ever reduce a value — a cap, dedup, or breaker
+# by definition trims toward a limit, never expands past it. ``CAP`` is the
+# original (#2415) value; the other three are #2417 additions that share the
+# same reducing-only invariant but were missing from ``validate_lifecycle``
+# until this fix (#2417 CodeRabbit review on #2434).
+_REDUCING_ADJUSTMENT_TYPES: frozenset[TargetAdjustmentType] = frozenset(
+    {
+        TargetAdjustmentType.CAP,
+        TargetAdjustmentType.SINGLE_NAME_CAP,
+        TargetAdjustmentType.SECTOR_CAP,
+        TargetAdjustmentType.DRAWDOWN_BREAKER,
+    }
+)
+
+
 class TargetAdjustment(TimedPortfolioLedgerRecord):
     """A cap, rounding, or carry adjustment applied to a RequestedTarget."""
 
@@ -330,10 +345,12 @@ class TargetAdjustment(TimedPortfolioLedgerRecord):
     @model_validator(mode="after")
     def validate_lifecycle(self) -> TargetAdjustment:
         if (
-            self.adjustment_type is TargetAdjustmentType.CAP
+            self.adjustment_type in _REDUCING_ADJUSTMENT_TYPES
             and self.adjusted_value > self.original_value
         ):
-            raise ValueError("a cap adjustment can only reduce the original value")
+            raise ValueError(
+                f"a {self.adjustment_type.value} adjustment can only reduce the original value"
+            )
         return self
 
 
