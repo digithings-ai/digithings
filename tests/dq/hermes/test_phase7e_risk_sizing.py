@@ -8,6 +8,7 @@ fail-soft (errors keep the PM book) and a no-op when the PM never ran.
 
 from __future__ import annotations
 
+import logging
 from datetime import date, timedelta
 
 import polars as pl
@@ -24,6 +25,13 @@ from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
     RiskSizingDeps,
     build_risk_sizing_node,
 )
+from digiquant.olympus.hermes.sizing_events import (
+    SizingAdjustment,
+    SizingAdjustmentType,
+    UnexplainedDeltaError,
+    validate_sizing_lineage,
+)
+from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book, hold_drifted_book
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -239,6 +247,18 @@ class TestUnchallengedCarryIsLowConfidence:
         # Capped, never ejected — the name stays in the book and is named in the note.
         assert "AAA" in w
         assert "H6 deliberation failed" in rebal["notes"]
+        # #2417 — the crash-carry haircut is reason-coded in the conviction domain, not
+        # the weight-pct domain the book itself is asserted in above.
+        conviction_events = [
+            a for a in rebal["adjustments"] if a["adjustment_type"] == "conviction_floor"
+        ]
+        assert len(conviction_events) == 1
+        event = conviction_events[0]
+        assert event["ticker"] == "AAA"
+        assert event["unit"] == "conviction"
+        assert event["adjusted_pct"] == pytest.approx(2.0)  # default SizingCaps.min_conviction
+        assert event["original_pct"] > event["adjusted_pct"]
+        assert not any(a["ticker"] == "BBB" for a in conviction_events)
 
     def test_benign_fingerprint_skip_keeps_full_conviction(self) -> None:
         # The quiet-ticker carry (#925) is a real prior debate; it must not be haircut.
@@ -246,6 +266,9 @@ class TestUnchallengedCarryIsLowConfidence:
         w = _weights(rebal)
         assert w["AAA"] > w["BBB"]
         assert "H6 deliberation failed" not in rebal["notes"]
+        # #2417 — a benign fingerprint-skip carry is a real debate, not an unchallenged
+        # crash-carry, so it must never emit a conviction-floor event.
+        assert not any(a["adjustment_type"] == "conviction_floor" for a in rebal["adjustments"])
 
     def test_legacy_path_caps_the_crash_carried_name_too(self) -> None:
         # No-memo branch, with the un-carried run as its own control: AAA's analyst
@@ -262,6 +285,10 @@ class TestUnchallengedCarryIsLowConfidence:
         )
         assert _weights(control)["AAA"] > _weights(control)["BBB"]
         assert _weights(crashed)["AAA"] == pytest.approx(_weights(crashed)["BBB"])
+        # #2417 — legacy (no-memo) path fires the same event; the un-carried control run
+        # must not.
+        assert not any(a["adjustment_type"] == "conviction_floor" for a in control["adjustments"])
+        assert any(a["adjustment_type"] == "conviction_floor" for a in crashed["adjustments"])
 
     def test_cap_holds_when_the_bar_is_raised_above_the_default(self) -> None:
         # ``min_conviction`` above the memo floor of 2.0: capping AT the bar still clears
@@ -273,6 +300,12 @@ class TestUnchallengedCarryIsLowConfidence:
         w = _weights(rebal)
         assert "AAA" in w
         assert w["AAA"] == pytest.approx(w["BBB"])
+        # #2417 — a raised bar is reflected verbatim in the event's adjusted_pct.
+        conviction_events = [
+            a for a in rebal["adjustments"] if a["adjustment_type"] == "conviction_floor"
+        ]
+        assert len(conviction_events) == 1
+        assert conviction_events[0]["adjusted_pct"] == pytest.approx(3.0)
 
 
 def test_memo_conviction_rank_orders_weights() -> None:
@@ -612,24 +645,55 @@ class TestHeldContinuityBackstop:
 
     def test_sized_out_held_name_is_readded_at_drifted_weight(self) -> None:
         state = self._held_state()
-        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        events: list[SizingAdjustment] = []
+        out = phase7e_risk_sizing._apply_held_continuity_backstop(
+            {"SPY": 60.0}, state, events=events
+        )
         assert out["DBO"] == 7.5, "held name dropped by sizing must be re-added"
         assert out["SPY"] == 60.0
+        # #2417 — the re-add is a CONTINUITY_CARRY off an implicit (0) prior weight, never
+        # conflated with a FLAT_EXIT (this ticker was never PM-flatted).
+        assert len(events) == 1
+        assert events[0].ticker == "DBO"
+        assert events[0].adjustment_type == SizingAdjustmentType.CONTINUITY_CARRY
+        assert events[0].original_pct == pytest.approx(0.0)
+        assert events[0].adjusted_pct == pytest.approx(7.5)
+        assert not any(e.adjustment_type == SizingAdjustmentType.FLAT_EXIT for e in events)
 
     def test_explicit_flat_is_never_resurrected(self) -> None:
         state = self._held_state(flat=True)
-        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        events: list[SizingAdjustment] = []
+        out = phase7e_risk_sizing._apply_held_continuity_backstop(
+            {"SPY": 60.0}, state, events=events
+        )
         assert "DBO" not in out, "an explicit flat is an exit — never re-added"
+        # #2417 — H7-flat is FLAT_EXIT, structurally distinct from CONTINUITY_CARRY: a
+        # ticker can never carry both event types out of this one call.
+        assert len(events) == 1
+        assert events[0].ticker == "DBO"
+        assert events[0].adjustment_type == SizingAdjustmentType.FLAT_EXIT
+        assert not any(e.adjustment_type == SizingAdjustmentType.CONTINUITY_CARRY for e in events)
 
     def test_unrecoverable_weight_stays_out_and_fails_closed_downstream(self) -> None:
         state = self._held_state(with_weight=False)
-        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0}, state)
+        events: list[SizingAdjustment] = []
+        out = phase7e_risk_sizing._apply_held_continuity_backstop(
+            {"SPY": 60.0}, state, events=events
+        )
         assert "DBO" not in out, "no recoverable weight → leave out; H9 fails closed"
+        # #2417 — no recoverable weight means no adjustment was actually made; nothing to
+        # reason-code.
+        assert events == []
 
     def test_non_held_names_untouched(self) -> None:
         state = self._held_state()
-        out = phase7e_risk_sizing._apply_held_continuity_backstop({"SPY": 60.0, "QQQ": 0.0}, state)
+        events: list[SizingAdjustment] = []
+        out = phase7e_risk_sizing._apply_held_continuity_backstop(
+            {"SPY": 60.0, "QQQ": 0.0}, state, events=events
+        )
         assert out["QQQ"] == 0.0, "backstop is held-only"
+        # #2417 — QQQ is not a held ticker; the backstop never touches it or emits for it.
+        assert not any(e.ticker == "QQQ" for e in events)
 
 
 @pytest.mark.unit
@@ -648,19 +712,319 @@ class TestActionClassificationAndInvestedCap:
         assert verbs == {"AAA": "add", "BBB": "trim", "CCC": "hold", "DDD": "new"}
 
     def test_cap_scales_proportionally_over_100(self) -> None:
-        capped = phase7e_risk_sizing._cap_total_invested({"A": 60.0, "B": 50.0})
+        events: list[SizingAdjustment] = []
+        capped = phase7e_risk_sizing._cap_total_invested({"A": 60.0, "B": 50.0}, events=events)
         assert round(sum(capped.values()), 6) == 100.0
         assert round(capped["A"] / capped["B"], 6) == round(60.0 / 50.0, 6)
+        # #2417 — every rescaled leg gets a FINAL_GROSS_SCALE event carrying the exact
+        # pre/post values already asserted above.
+        assert {e.ticker for e in events} == {"A", "B"}
+        by_ticker = {e.ticker: e for e in events}
+        assert by_ticker["A"].adjustment_type == SizingAdjustmentType.FINAL_GROSS_SCALE
+        assert by_ticker["A"].original_pct == pytest.approx(60.0)
+        assert by_ticker["A"].adjusted_pct == pytest.approx(capped["A"])
+        assert by_ticker["B"].original_pct == pytest.approx(50.0)
+        assert by_ticker["B"].adjusted_pct == pytest.approx(capped["B"])
 
     def test_cap_leaves_valid_books_untouched(self) -> None:
         book = {"A": 60.0, "B": 30.0}
-        assert phase7e_risk_sizing._cap_total_invested(dict(book)) == book
+        events: list[SizingAdjustment] = []
+        assert phase7e_risk_sizing._cap_total_invested(dict(book), events=events) == book
+        # #2417 — a book already at/under 100 is not rescaled, so no event fires.
+        assert events == []
 
     def test_backstop_overshoot_is_capped(self) -> None:
         # The #1649 backstop legitimately re-adds drifted weight onto a full book;
         # the cap must bring the composition back to exactly 100.
         sized = {"A": 70.0, "B": 30.0}
         sized["DBO"] = 7.5  # backstop re-add
-        capped = phase7e_risk_sizing._cap_total_invested(sized)
+        events: list[SizingAdjustment] = []
+        capped = phase7e_risk_sizing._cap_total_invested(sized, events=events)
         assert round(sum(capped.values()), 6) == 100.0
         assert capped["DBO"] > 0, "the rescued position survives the cap"
+        # #2417 — DBO's rescale is reason-coded too, not just A/B's.
+        assert any(
+            e.ticker == "DBO" and e.adjustment_type == SizingAdjustmentType.FINAL_GROSS_SCALE
+            for e in events
+        )
+
+
+# --------------------------------------------------------------------------- #2417 adjustment events
+
+
+def test_held_carry_weights_direct_call_emits_continuity_carry() -> None:
+    # Same memo-unaddressed fixture shape as TestHeldContinuityBackstop, exercised
+    # directly against the earlier carry-injection function (#1030/#1555/#1649).
+    prior_book = [{"ticker": "DBO", "weight_pct": 7.5}]
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=RUN_DATE,
+        baseline_date=date(2026, 6, 9),
+        config=AtlasConfigBundle(preferences={}),
+        prior_context=PriorContext(prior_book=prior_book),
+    )
+    roster = [TickerDirection(ticker="SPY", direction="long", conviction_rank=1)]
+    state.phase_hermes = PhaseHermesState(
+        pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster)
+    )
+    events: list[SizingAdjustment] = []
+    carry = phase7e_risk_sizing._held_carry_weights(state, events=events)
+    assert carry == {"DBO": 7.5}
+    assert len(events) == 1
+    assert events[0].ticker == "DBO"
+    assert events[0].adjustment_type == SizingAdjustmentType.CONTINUITY_CARRY
+    assert events[0].original_pct == pytest.approx(0.0)
+    assert events[0].adjusted_pct == pytest.approx(7.5)
+
+
+def test_h7_flat_and_omitted_held_never_conflate_on_the_same_ticker() -> None:
+    """#2417 — flat (FLAT_EXIT) and omitted/unaddressed (CONTINUITY_CARRY) are structurally
+    exclusive: ``memo_addressed_tickers`` already includes flat-tagged tickers, so a held
+    ticker can reach exactly one of the two backstop branches, never both.
+    """
+    harness = TestHeldContinuityBackstop()
+    flat_events: list[SizingAdjustment] = []
+    carry_events: list[SizingAdjustment] = []
+    phase7e_risk_sizing._apply_held_continuity_backstop(
+        {"SPY": 60.0}, harness._held_state(flat=True), events=flat_events
+    )
+    phase7e_risk_sizing._apply_held_continuity_backstop(
+        {"SPY": 60.0}, harness._held_state(flat=False), events=carry_events
+    )
+    flat_types = {e.adjustment_type for e in flat_events if e.ticker == "DBO"}
+    carry_types = {e.adjustment_type for e in carry_events if e.ticker == "DBO"}
+    assert flat_types == {SizingAdjustmentType.FLAT_EXIT}
+    assert carry_types == {SizingAdjustmentType.CONTINUITY_CARRY}
+    assert flat_types.isdisjoint(carry_types)
+
+
+def test_hold_drifted_book_direct_call_covers_all_three_branches() -> None:
+    events: list[SizingAdjustment] = []
+    out = hold_drifted_book(
+        {"SPY": 25.0, "TLT": 0.0, "QQQ": 10.0},
+        current_weights={"SPY": 20.0, "TLT": 15.0},
+        events=events,
+    )
+    # continuing position (SPY): held at drifted current weight, not rebalanced to target
+    assert out["SPY"] == 20.0
+    # PM exit honored off-cadence (TLT): dropped to flat (residual becomes cash)
+    assert "TLT" not in out
+    # new entry (QQQ): booked at its sized target, no current weight to hold
+    assert out["QQQ"] == 10.0
+
+    by_ticker = {e.ticker: e for e in events}
+    assert by_ticker["SPY"].adjustment_type == SizingAdjustmentType.CADENCE_HOLD
+    assert by_ticker["SPY"].original_pct == pytest.approx(25.0)
+    assert by_ticker["SPY"].adjusted_pct == pytest.approx(20.0)
+    assert by_ticker["TLT"].adjustment_type == SizingAdjustmentType.FLAT_EXIT
+    assert by_ticker["TLT"].original_pct == pytest.approx(15.0)
+    assert by_ticker["TLT"].adjusted_pct == pytest.approx(0.0)
+    # the new-entry branch is not an adjustment — no event for QQQ.
+    assert "QQQ" not in by_ticker
+
+
+def test_apply_turnover_minimum_hold_override_emits_event_band_clamp_does_not() -> None:
+    events: list[SizingAdjustment] = []
+    out = apply_turnover_to_sized_book(
+        {"SPY": 0.0, "TLT": 18.0},
+        current_weights={"SPY": 20.0, "TLT": 20.0},
+        prior_book=[
+            {"ticker": "SPY", "weight_pct": 20, "entry_date": "2026-06-17"},  # inside hold
+            {"ticker": "TLT", "weight_pct": 20, "entry_date": "2026-06-01"},  # outside hold
+        ],
+        preferences={"rebalance_threshold_pct": 3, "holding_days": 5},
+        run_date=date(2026, 6, 19),
+        events=events,
+    )
+    assert out["SPY"] == 20.0  # exit blocked by min-hold lockup
+    assert out["TLT"] == 20.0  # 2pp delta < 3pp band → no-trade-band clamp holds it too
+
+    # Only the min-hold override is a reason-coded adjustment; the no-trade-band clamp
+    # is deliberately silent (#2417 §3 — the suppressed delta is immaterial by construction).
+    assert len(events) == 1
+    event = events[0]
+    assert event.ticker == "SPY"
+    assert event.adjustment_type == SizingAdjustmentType.MINIMUM_HOLD_OVERRIDE
+    assert event.original_pct == pytest.approx(0.0)
+    assert event.adjusted_pct == pytest.approx(20.0)
+
+
+class TestValidateSizingLineage:
+    """#2417 §6/§7 — the standalone validator, exercised directly.
+
+    The wired production call site (``_validate_h8_lineage``, invoked from
+    ``risk_sizing()`` after ``_build_sized_book`` returns) has its own coverage
+    below in ``TestValidateH8LineageCallSite`` — both the golden path (a real,
+    materially-capped book that logs nothing) and the regression path (a
+    monkeypatched silent mutation that the wired check must catch).
+    """
+
+    def test_unexplained_material_delta_raises(self) -> None:
+        with pytest.raises(UnexplainedDeltaError, match="AAA"):
+            validate_sizing_lineage(
+                requested={"AAA": 10.0, "BBB": 5.0},
+                approved={"AAA": 4.0, "BBB": 5.0},
+                adjustments=[],
+                materiality_pct=1.0,
+            )
+
+    def test_fully_explained_delta_does_not_raise(self) -> None:
+        adjustment = SizingAdjustment(
+            ticker="AAA",
+            adjustment_type=SizingAdjustmentType.SINGLE_NAME_CAP,
+            original_pct=10.0,
+            adjusted_pct=4.0,
+            reason="single-name cap",
+        )
+        validate_sizing_lineage(
+            requested={"AAA": 10.0, "BBB": 5.0},
+            approved={"AAA": 4.0, "BBB": 5.0},
+            adjustments=[adjustment],
+            materiality_pct=1.0,
+        )  # must not raise
+
+    def test_delta_inside_materiality_band_does_not_raise(self) -> None:
+        # 0.5pp delta < the 1.0pp band — immaterial by the pipeline's own definition,
+        # so no explaining event is required (mirrors the turnover no-trade-band clamp).
+        validate_sizing_lineage(
+            requested={"AAA": 10.0},
+            approved={"AAA": 10.5},
+            adjustments=[],
+            materiality_pct=1.0,
+        )  # must not raise
+
+
+class TestLineageMaterialityPct:
+    """#2417 §6 — ``_lineage_materiality_pct`` mirrors the turnover no-trade-band formula."""
+
+    def test_defaults_when_preferences_empty(self) -> None:
+        assert phase7e_risk_sizing._lineage_materiality_pct({}) == pytest.approx(3.0)
+
+    def test_relative_band_wins_when_wider_than_the_flat_threshold(self) -> None:
+        # 20% of a 50%-weight current position = 10pp, wider than the 3pp flat floor.
+        pct = phase7e_risk_sizing._lineage_materiality_pct(
+            {
+                "rebalance_threshold_pct": 3,
+                "rebalance_rel_band_pct": 20,
+                "current_weights": {"SPY": 50.0},
+            }
+        )
+        assert pct == pytest.approx(10.0)
+
+    def test_flat_threshold_wins_when_current_weights_are_small(self) -> None:
+        # 20% of a 5%-weight position = 1pp, narrower than the 3pp flat floor.
+        pct = phase7e_risk_sizing._lineage_materiality_pct(
+            {
+                "rebalance_threshold_pct": 3,
+                "rebalance_rel_band_pct": 20,
+                "current_weights": {"SPY": 5.0},
+            }
+        )
+        assert pct == pytest.approx(3.0)
+
+
+class TestValidateH8LineageCallSite:
+    """#2417 §6/§7 — the production call site wired into ``risk_sizing()``, not just the
+    standalone validator (closes the gap flagged in OLY-REV-009 finding #4).
+    """
+
+    def test_direct_call_is_silent_when_every_material_delta_has_an_event(self) -> None:
+        adjustment = SizingAdjustment(
+            ticker="SPY",
+            adjustment_type=SizingAdjustmentType.SINGLE_NAME_CAP,
+            original_pct=50.0,
+            adjusted_pct=30.0,
+            reason="single-name cap",
+        )
+        sized_book: dict = {
+            "recommended_portfolio": [{"ticker": "SPY", "target_pct": 30.0}],
+            "adjustments": [adjustment.model_dump()],
+        }
+        # must not raise and must not log — nothing here is a failure.
+        phase7e_risk_sizing._validate_h8_lineage({"SPY": 50.0}, sized_book, {})
+
+    def test_direct_call_logs_but_does_not_raise_on_unexplained_delta(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        sized_book: dict = {
+            "recommended_portfolio": [{"ticker": "SPY", "target_pct": 10.0}],
+            "adjustments": [],
+        }
+        with caplog.at_level(logging.ERROR, logger=phase7e_risk_sizing.__name__):
+            phase7e_risk_sizing._validate_h8_lineage({"SPY": 50.0}, sized_book, {})
+        assert "H8 lineage validation failed" in caplog.text
+
+    def test_wired_end_to_end_golden_path_logs_nothing(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # A real position-capped book (50% requested -> 30% cap) through the actual
+        # ``risk_sizing()`` node: the cap step emits a SINGLE_NAME_CAP event, so the
+        # wired lineage check finds nothing unexplained and logs no error.
+        client = FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})})
+        state = _state(
+            [{"ticker": "SPY", "target_pct": 50}],
+            analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
+            actions=[
+                {
+                    "ticker": "SPY",
+                    "action": "hold",
+                    "current_pct": 50,
+                    "target_pct": 50,
+                    "rationale": "PM holds SPY.",
+                },
+            ],
+            use_memo=False,
+        )
+        with caplog.at_level(logging.ERROR, logger=phase7e_risk_sizing.__name__):
+            out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
+        rebal = out["phase7d_rebalance"]
+        assert rebal["recommended_portfolio"][0]["target_pct"] == pytest.approx(30.0)
+        assert "H8 lineage validation failed" not in caplog.text
+
+    def test_wired_end_to_end_catches_a_silent_regression_and_stays_fail_soft(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Simulates a future adjustment site silently mutating a weight without emitting
+        a ``SizingAdjustment`` — exactly the regression class this lineage layer exists
+        to catch — by monkeypatching ``_cap_total_invested`` (a real call site inside
+        ``_build_sized_book``) with a variant that mutates but never appends to
+        ``events``. Asserts the wired check (a) logs the failure and (b) stays
+        fail-soft: ``risk_sizing()`` still returns the already-computed sized book
+        unchanged, it never raises past this point.
+        """
+
+        def _silently_mutating_cap_total_invested(
+            sized: dict[str, float], events: list | None = None
+        ) -> dict[str, float]:
+            mutated = dict(sized)
+            if "SPY" in mutated:
+                mutated["SPY"] = mutated["SPY"] * 0.5
+            return mutated
+
+        monkeypatch.setattr(
+            phase7e_risk_sizing,
+            "_cap_total_invested",
+            _silently_mutating_cap_total_invested,
+        )
+
+        # PM's own target_pct (10) is deliberately far from the sizing pipeline's
+        # natural full-conviction allocation (100% for a single long, uncapped under
+        # _RELAXED) so the post-mutation value (50, see below) cannot coincidentally
+        # land back on the PM's requested number and mask the injected regression.
+        client = FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15})})
+        state = _state(
+            [{"ticker": "SPY", "target_pct": 10}],
+            analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
+            preferences=_RELAXED,
+            use_memo=False,
+        )
+        with caplog.at_level(logging.ERROR, logger=phase7e_risk_sizing.__name__):
+            out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
+
+        # fail-soft: the node still returns the sized book, unmutated by the lineage
+        # check itself — the silent 100%→50% regression is the injected fault, not a
+        # side effect of validation. (A single full-conviction ticker sizes to 100%
+        # under _RELAXED caps before the monkeypatched halving runs.)
+        rebal = out["phase7d_rebalance"]
+        assert rebal["recommended_portfolio"][0]["target_pct"] == pytest.approx(50.0)
+        assert "H8 lineage validation failed" in caplog.text
