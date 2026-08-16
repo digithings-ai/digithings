@@ -1,7 +1,7 @@
 # DigiProject Spec — v1alpha1
 
 **Status:** Draft  
-**Reference implementation:** `projects/sitaas/` (gitignored; canonical local copy)
+**Reference implementation:** `projects/client-pilot/` (gitignored; canonical local copy)
 
 ---
 
@@ -32,7 +32,7 @@ digigraph loads the project config from:
 # All fields are optional; defaults shown in comments.
 
 project:
-  name: string            # Short identifier, e.g. "sitaas" (default: "default")
+  name: string            # Short identifier, e.g. "client-pilot" (default: "default")
   description: string     # Human-readable description (default: "")
   version: string         # SemVer, e.g. "0.1.0" (default: "0.0.0")
 
@@ -230,13 +230,13 @@ destination.
 
 ---
 
-## Reference: SITAAS v1alpha1
+## Reference: Client Pilot v1alpha1
 
 ```yaml
-# projects/sitaas/config.yaml (gitignored — local only)
+# projects/client-pilot/config.yaml (gitignored — local only)
 project:
-  name: sitas
-  description: "Sitaas: orchestration agent with digisearch document context."
+  name: client-pilot
+  description: "Client pilot: orchestration agent with digisearch document context."
   version: "0.1.0"
 
 agents:

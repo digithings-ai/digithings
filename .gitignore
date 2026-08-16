@@ -134,7 +134,7 @@ canvases/
 **/pinescript/*.pine
 
 # Private client projects — never commit
-docs/projects/sitaas/
+docs/projects/client-pilot/
 # (Top-level /projects/ is anchored earlier in this file — do not add an
 # unanchored `projects/` rule here, it would also capture docs/projects/.)
 
