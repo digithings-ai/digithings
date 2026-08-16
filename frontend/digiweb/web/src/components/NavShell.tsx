@@ -500,9 +500,23 @@ export function NavShell({
         nav.classList.remove("is-scrolled");
       }
     };
+    // A pending reveal timer only gets cancelled by a later mousemove landing
+    // outside HOT_ZONE — but a fast flick off the *top* edge (toward browser
+    // chrome, another display, alt-tab) leaves the viewport entirely, so no
+    // further mousemove ever fires there to cancel it. Without this, the bar
+    // still reveals 120ms later even though the cursor is no longer anywhere
+    // near it, defeating the dwell delay via the one path it doesn't cover.
+    // documentElement (not window) is what actually receives "left the
+    // viewport": mouseleave doesn't bubble, and it's the html element's
+    // geometry — filling the viewport — that the pointer exits.
+    const onLeaveViewport = () => {
+      if (!revealed) clearRevealTimer();
+    };
     window.addEventListener("mousemove", onMove, { passive: true });
+    document.documentElement.addEventListener("mouseleave", onLeaveViewport);
     return () => {
       window.removeEventListener("mousemove", onMove);
+      document.documentElement.removeEventListener("mouseleave", onLeaveViewport);
       clearRevealTimer();
     };
   }, [autoHide]);
