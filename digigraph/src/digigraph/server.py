@@ -24,7 +24,7 @@ from digibase.http import install_request_id_logging, install_request_id_middlew
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from digigraph import __version__
@@ -263,7 +263,11 @@ def healthz() -> dict[str, bool]:
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
-    from digigraph.corpus_routing import load_tenant_corpus_map, resolve_corpus_override
+    from digigraph.corpus_routing import (
+        TenantCorpusMapError,
+        load_tenant_corpus_map,
+        resolve_corpus_override,
+    )
 
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
@@ -292,7 +296,12 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
             updates["digi_trace_project_id"] = auth.project_id
         if auth.jti:
             updates["digi_trace_jti"] = auth.jti
-    corpus_map = load_tenant_corpus_map()
+    # Mirror digivault tenant_scope: set-but-broken DIGI_TENANT_CORPUS_MAP is 503,
+    # never silently treated as unset (which would re-enable client corpus headers).
+    try:
+        corpus_map = load_tenant_corpus_map()
+    except TenantCorpusMapError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     corpus = resolve_corpus_override(
         headers=http_request.headers,
         tenant_slug=tenant_from_auth,
