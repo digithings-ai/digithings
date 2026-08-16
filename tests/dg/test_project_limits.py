@@ -1,24 +1,24 @@
-"""Unit tests for SitaasLimits — defaults, YAML, and env-var overrides."""
+"""Unit tests for ProjectLimits — defaults, YAML, and env-var overrides."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
 import pytest
-from digigraph.project_config import DigiProjectConfig, SitaasLimits
+from digigraph.project_config import DigiProjectConfig, ProjectLimits
 
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_sitaas_limits_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    """SitaasLimits fields use specified defaults when no YAML or env overrides present."""
+def test_project_limits_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ProjectLimits fields use specified defaults when no YAML or env overrides present."""
     monkeypatch.delenv("DIGI_MAX_ROWS_PER_FETCH", raising=False)
     monkeypatch.delenv("DIGI_DATASET_SIZE_CAP_MB", raising=False)
     monkeypatch.delenv("DIGI_DATA_ENGINEER_TIMEOUT", raising=False)
 
-    limits = SitaasLimits.from_config({})
+    limits = ProjectLimits.from_config({})
     assert limits.max_rows_per_fetch == 1000
     assert limits.dataset_size_cap_mb == 50.0
     assert limits.data_engineer_timeout_s == 120
@@ -29,7 +29,7 @@ def test_sitaas_limits_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_sitaas_limits_yaml_override(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_limits_yaml_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """YAML limits: block overrides defaults."""
     monkeypatch.delenv("DIGI_MAX_ROWS_PER_FETCH", raising=False)
     monkeypatch.delenv("DIGI_DATASET_SIZE_CAP_MB", raising=False)
@@ -42,7 +42,7 @@ def test_sitaas_limits_yaml_override(monkeypatch: pytest.MonkeyPatch) -> None:
             "data_engineer_timeout_s": 60,
         }
     }
-    limits = SitaasLimits.from_config(data)
+    limits = ProjectLimits.from_config(data)
     assert limits.max_rows_per_fetch == 500
     assert limits.dataset_size_cap_mb == 25.0
     assert limits.data_engineer_timeout_s == 60
@@ -53,35 +53,35 @@ def test_sitaas_limits_yaml_override(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.unit
-def test_sitaas_limits_env_override_max_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_limits_env_override_max_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     """DIGI_MAX_ROWS_PER_FETCH env var overrides both default and YAML value."""
     monkeypatch.setenv("DIGI_MAX_ROWS_PER_FETCH", "250")
     monkeypatch.delenv("DIGI_DATASET_SIZE_CAP_MB", raising=False)
     monkeypatch.delenv("DIGI_DATA_ENGINEER_TIMEOUT", raising=False)
 
-    limits = SitaasLimits.from_config({"limits": {"max_rows_per_fetch": 800}})
+    limits = ProjectLimits.from_config({"limits": {"max_rows_per_fetch": 800}})
     assert limits.max_rows_per_fetch == 250  # env beats yaml
 
 
 @pytest.mark.unit
-def test_sitaas_limits_env_override_size_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_limits_env_override_size_cap(monkeypatch: pytest.MonkeyPatch) -> None:
     """DIGI_DATASET_SIZE_CAP_MB env var overrides the YAML value."""
     monkeypatch.delenv("DIGI_MAX_ROWS_PER_FETCH", raising=False)
     monkeypatch.setenv("DIGI_DATASET_SIZE_CAP_MB", "10.5")
     monkeypatch.delenv("DIGI_DATA_ENGINEER_TIMEOUT", raising=False)
 
-    limits = SitaasLimits.from_config({})
+    limits = ProjectLimits.from_config({})
     assert limits.dataset_size_cap_mb == pytest.approx(10.5)
 
 
 @pytest.mark.unit
-def test_sitaas_limits_env_override_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_project_limits_env_override_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     """DIGI_DATA_ENGINEER_TIMEOUT env var overrides the YAML value."""
     monkeypatch.delenv("DIGI_MAX_ROWS_PER_FETCH", raising=False)
     monkeypatch.delenv("DIGI_DATASET_SIZE_CAP_MB", raising=False)
     monkeypatch.setenv("DIGI_DATA_ENGINEER_TIMEOUT", "45")
 
-    limits = SitaasLimits.from_config({"limits": {"data_engineer_timeout_s": 90}})
+    limits = ProjectLimits.from_config({"limits": {"data_engineer_timeout_s": 90}})
     assert limits.data_engineer_timeout_s == 45  # env beats yaml
 
 
@@ -91,14 +91,14 @@ def test_sitaas_limits_env_override_timeout(monkeypatch: pytest.MonkeyPatch) -> 
 
 @pytest.mark.unit
 def test_digi_project_config_get_limits_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    """DigiProjectConfig.get_limits() returns a SitaasLimits with defaults when no limits: key."""
+    """DigiProjectConfig.get_limits() returns a ProjectLimits with defaults when no limits: key."""
     monkeypatch.delenv("DIGI_MAX_ROWS_PER_FETCH", raising=False)
     monkeypatch.delenv("DIGI_DATASET_SIZE_CAP_MB", raising=False)
     monkeypatch.delenv("DIGI_DATA_ENGINEER_TIMEOUT", raising=False)
 
     cfg = DigiProjectConfig({})
     limits = cfg.get_limits()
-    assert isinstance(limits, SitaasLimits)
+    assert isinstance(limits, ProjectLimits)
     assert limits.max_rows_per_fetch == 1000
     assert limits.dataset_size_cap_mb == 50.0
     assert limits.data_engineer_timeout_s == 120
