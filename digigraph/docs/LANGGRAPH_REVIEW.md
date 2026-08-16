@@ -89,7 +89,7 @@ LangGraph supports:
 - **interrupt_before=["node_id"]** / **interrupt_after=["node_id"]** — Pause before or after a node; the graph returns with state marked interrupted.
 - **Command(resume=...)** — Resume from an interrupt by passing a value (e.g. human-approved edit) into the next step.
 
-We don’t use these. In project mode, possible use cases:
+In project mode, current use cases and future possibilities include:
 
 - Pause after search (or after a delegate agent) so a human can approve or edit the dataset list before the model continues.
 - Pause before backtest so a human confirms parameters.

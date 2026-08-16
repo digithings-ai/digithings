@@ -151,6 +151,7 @@ curl -X POST $DIGIGRAPH_URL/v1/chat/completions \
 ```
 
 ```python
+import os
 from openai import OpenAI
 client = OpenAI(base_url=os.environ["DIGIGRAPH_URL"] + "/v1", api_key=os.environ["DIGI_JWT"])
 resp = client.chat.completions.create(
