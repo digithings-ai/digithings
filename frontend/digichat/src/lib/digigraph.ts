@@ -37,7 +37,8 @@ export function createDigiGraphClient(
       }
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
-        // Explicit false opts digichat out of the legacy model=digigraph-rag Open WebUI default.
+        // Explicit body field, belt-and-suspenders alongside the X-Response-Format
+        // header above: Open WebUI chrome is opt-in only, never implied by model id.
         parsed.openwebui_format = openwebui;
         return fetch(url, { ...init, body: JSON.stringify(parsed) });
       } catch {

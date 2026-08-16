@@ -82,6 +82,25 @@ def test_get_tools_filters_by_allowlist(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.unit
+def test_get_tools_warns_on_unknown_skill_id(caplog: pytest.LogCaptureFixture) -> None:
+    """An unregistered skill id (e.g. a stale `sitaas_rag` from before #2426's
+    rename to `project_rag`) contributes zero tools silently -- get_tools()
+    doesn't raise. Assert it at least logs, so a stale project config doesn't
+    lose its whole toolset without a trace."""
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir="/tmp",
+        index_name="default",
+        index_config={},
+        state={},
+    )
+    with caplog.at_level("WARNING", logger="digigraph.orchestration.registry"):
+        tools = get_tools(["not_a_real_skill_id"], ctx)
+    assert tools == []
+    assert any("not_a_real_skill_id" in r.message for r in caplog.records)
+
+
+@pytest.mark.unit
 def test_policy_request_override_wins() -> None:
     req = WorkflowRequest(prompt="hi", allowed_tools=["todo"])
     fs = allowed_tool_names_for_workflow(req, cfg=MagicMock())
