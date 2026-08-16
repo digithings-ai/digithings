@@ -366,11 +366,17 @@ CREATE INDEX IF NOT EXISTS idx_portfolio_ledger_order_intents_run_date_symbol
     ON public.portfolio_ledger_order_intents (run_date, symbol);
 CREATE INDEX IF NOT EXISTS idx_portfolio_ledger_order_intents_status
     ON public.portfolio_ledger_order_intents (status);
--- One pending order per (run_date, symbol) — the literal OLY-REV-009 MEDIUM finding for
--- order_intents. executed/rejected rows are terminal and excluded, so a symbol may
--- accumulate any number of them without tripping this constraint.
+-- One current (non-superseded) pending order per (run_date, symbol) — the literal
+-- OLY-REV-009 MEDIUM finding for order_intents. executed/rejected rows are terminal and
+-- excluded, so a symbol may accumulate any number of them without tripping this
+-- constraint. supersedes_id IS NULL is required too: supersedes_id is orthogonal to
+-- status (see the table comment above), and append-only immutability means the row being
+-- replaced can never transition out of 'pending' — so without this clause, a superseding
+-- replacement order (itself inserted as 'pending') would collide with the stale row it is
+-- meant to replace and the documented supersession flow would be unable to proceed.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_one_pending
-    ON public.portfolio_ledger_order_intents (run_date, symbol) WHERE status = 'pending';
+    ON public.portfolio_ledger_order_intents (run_date, symbol)
+    WHERE status = 'pending' AND supersedes_id IS NULL;
 -- Anti-fork, same rationale as commits above.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_supersedes
     ON public.portfolio_ledger_order_intents (supersedes_id) WHERE supersedes_id IS NOT NULL;

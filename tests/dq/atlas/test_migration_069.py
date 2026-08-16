@@ -446,7 +446,7 @@ def test_order_intent_rejection_reason_is_tied_to_status(sql: str) -> None:
             "uq_portfolio_ledger_order_intents_one_pending",
             "portfolio_ledger_order_intents",
             "run_date, symbol",
-            "status = 'pending'",
+            "status = 'pending' AND supersedes_id IS NULL",
         ),
         (
             "uq_portfolio_ledger_order_intents_supersedes",
@@ -469,6 +469,32 @@ def test_currency_partial_unique_indexes(
         sql,
         re.IGNORECASE,
     ), f"missing or malformed {index_name}"
+
+
+def test_order_intent_one_pending_index_admits_a_superseding_replacement(sql: str) -> None:
+    """Regression coverage for the OLY-REV-009-adjacent bug this predicate closes:
+    supersedes_id is orthogonal to status (see
+    test_order_intent_supersession_is_self_reference_safe) and append-only immutability
+    means a superseded row can never leave 'pending' on its own. A predicate of
+    `status = 'pending'` alone would therefore make `uq_portfolio_ledger_order_intents_one_pending`
+    collide a superseding replacement (also inserted as 'pending') with the stale row it
+    is meant to replace — silently blocking the documented supersession flow. Requiring
+    `supersedes_id IS NULL` too means only the *root* pending row is covered by the
+    uniqueness rule, so a replacement — which always has `supersedes_id` set — is exempt
+    from it and free to coexist with the row it supersedes."""
+    match = re.search(
+        r"CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_one_pending\s+"
+        r"ON public\.portfolio_ledger_order_intents\s*\(run_date, symbol\)\s+WHERE\s+([^;]+);",
+        sql,
+        re.IGNORECASE,
+    )
+    assert match, "missing or malformed uq_portfolio_ledger_order_intents_one_pending"
+    predicate = " ".join(match.group(1).split())
+    conditions = {clause.strip() for clause in predicate.split(" AND ")}
+    assert conditions == {"status = 'pending'", "supersedes_id IS NULL"}, (
+        "the one-pending index must scope to non-superseded rows, or a superseding "
+        "replacement order would collide with the stale pending row it replaces"
+    )
 
 
 def test_holding_lot_lifecycle_ties_closed_fields_to_status(sql: str) -> None:

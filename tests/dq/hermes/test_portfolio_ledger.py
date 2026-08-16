@@ -102,6 +102,67 @@ class TestPortfolioLedgerModel:
         assert copied.supersedes_id == commit.id
 
 
+class TestDecimalFieldsRejectNonFiniteValues:
+    """Weight, Quantity, PositiveQuantity, and PositivePrice all pin
+    ``allow_inf_nan=False`` explicitly (CodeRabbit review on #2432): Pydantic v2's
+    implicit default for a constrained Decimal field is not a reliable guarantee across
+    versions, and a NaN/Infinity slipping through any of these would break every
+    downstream arithmetic comparison (``ge``/``le``/``gt`` all evaluate as false against
+    NaN) without ever raising."""
+
+    def test_weight_rejects_infinity(self) -> None:
+        with pytest.raises(ValidationError):
+            RequestedTarget(
+                id=uuid4(),
+                decision_intent_id=uuid4(),
+                run_date=RUN_DATE,
+                symbol="AAPL",
+                requested_weight=Decimal("Infinity"),
+                effective_at=_ts(),
+                recorded_at=_ts(),
+            )
+
+    def test_quantity_rejects_nan(self) -> None:
+        with pytest.raises(ValidationError):
+            RequestedTarget(
+                id=uuid4(),
+                decision_intent_id=uuid4(),
+                run_date=RUN_DATE,
+                symbol="AAPL",
+                requested_quantity=Decimal("NaN"),
+                effective_at=_ts(),
+                recorded_at=_ts(),
+            )
+
+    def test_positive_quantity_rejects_infinity(self) -> None:
+        with pytest.raises(ValidationError):
+            OrderIntent(
+                id=uuid4(),
+                approved_target_id=uuid4(),
+                run_date=RUN_DATE,
+                symbol="AAPL",
+                quantity=Decimal("Infinity"),
+                status=OrderIntentStatus.PENDING,
+                effective_at=_ts(),
+                recorded_at=_ts(),
+            )
+
+    def test_positive_price_rejects_nan(self) -> None:
+        order_intent_id = uuid4()
+        executed_date = RUN_DATE
+        with pytest.raises(ValidationError):
+            PaperExecution(
+                id=paper_execution_id(order_intent_id, executed_date),
+                order_intent_id=order_intent_id,
+                executed_date=executed_date,
+                symbol="AAPL",
+                quantity=Decimal("100"),
+                price=Decimal("NaN"),
+                executed_at=_ts(),
+                recorded_at=_ts(),
+            )
+
+
 class TestPortfolioCommit:
     def test_root_commit_has_no_supersedes_id(self) -> None:
         commit = make_commit()  # no raise

@@ -242,8 +242,13 @@ WHERE `supersedes_id IS NOT NULL`); the analogous
 (`supersedes_id` WHERE `supersedes_id IS NOT NULL`) pair — note only `_one_root` is keyed
 on `(run_date, symbol)`; `_supersedes` is `(supersedes_id)` alone, same as commits above;
 and `uq_portfolio_ledger_order_intents_one_pending` (`run_date, symbol` WHERE
-`status = 'pending'`) / `uq_portfolio_ledger_order_intents_supersedes` (`supersedes_id`
-WHERE `supersedes_id IS NOT NULL`). Each of the three
+`status = 'pending' AND supersedes_id IS NULL`) / `uq_portfolio_ledger_order_intents_supersedes`
+(`supersedes_id` WHERE `supersedes_id IS NOT NULL`) — the extra `supersedes_id IS NULL`
+clause matters here in a way it doesn't for the `_one_root` indexes above: `supersedes_id`
+is orthogonal to `status`, and append-only immutability means a superseded row can never
+leave `'pending'` on its own, so without it a superseding replacement order (itself
+inserted as `'pending'`) would collide with the stale row it replaces instead of coexisting
+with it. Each of the three
 self-FK tables (`commits`, `approved_targets`, `order_intents`) also carries a
 `CHECK (supersedes_id IS NULL OR supersedes_id <> id)` guarding against a row claiming to
 supersede itself.

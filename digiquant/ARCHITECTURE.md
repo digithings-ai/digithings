@@ -1213,7 +1213,7 @@ OrderIntent → PaperExecution → HoldingLot`
   `UPDATE`/`DELETE` at the grant layer. A shared `reject_portfolio_ledger_mutation()`
   trigger additionally guards every table's `UPDATE`/`DELETE`/`TRUNCATE` at the row
   layer, mirroring migration 067's telemetry-guard pattern.
-- **Append-only, forward-only supersession — never a backward link.** `PortfolioCommit`,
+- **Append-only, backward-only supersession — never a forward pointer.** `PortfolioCommit`,
   `ApprovedTarget`, and `OrderIntent` each carry a self-FK `supersedes_id`: a changed
   same-date row is a new INSERT whose `supersedes_id` points *backward* at the prior row
   it replaces. There is no `superseded_by_id`/forward-pointer column anywhere in this

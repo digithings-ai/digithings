@@ -53,10 +53,10 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 _PAPER_EXECUTION_ID_NAMESPACE = UUID("f6a12e2e-8b1a-5c9d-9e4a-2b6f7a8c9d0e")
 
 Symbol: TypeAlias = Annotated[str, Field(min_length=1, max_length=20)]
-Weight: TypeAlias = Annotated[Decimal, Field(ge=0, le=1)]
-Quantity: TypeAlias = Annotated[Decimal, Field(ge=0)]
-PositiveQuantity: TypeAlias = Annotated[Decimal, Field(gt=0)]
-PositivePrice: TypeAlias = Annotated[Decimal, Field(gt=0)]
+Weight: TypeAlias = Annotated[Decimal, Field(ge=0, le=1, allow_inf_nan=False)]
+Quantity: TypeAlias = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
+PositiveQuantity: TypeAlias = Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
+PositivePrice: TypeAlias = Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
 
 
 class DecisionAction(StrEnum):
