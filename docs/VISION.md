@@ -40,7 +40,7 @@ Two public domains, plus a developer-tooling product line.
 Stored under `projects/` (confidential — never pushed to public remotes). Each is a **digithings Project** (see ADR-0001): a thin config-driven composition of components.
 
 Current and near-term:
-- **SITAAS** — POC with external client, digigraph + digisearch over a unified content index (emails, Teams, SharePoint). First pilot; template for future engagements.
+- **Client pilot** — POC with external client, digigraph + digisearch over a unified content index (emails, Teams, SharePoint). First pilot; template for future engagements.
 
 ### digidev — agentic-coding workflow kit
 A drop-in product line that layers structured tasks, a 4-dimension scoring gate, PreToolUse guardrails, and existing-tool connectors (Jira, Linear, Slack, Supabase, and more) onto any codebase so AI coding agents (Claude Code, Copilot, Cursor) work safely and consistently. This monorepo dogfoods it: the `.claude/` agent surface, scoring rubrics, and task pipeline are digidev. Open core, with premium agents and skills as paid add-ons.
@@ -49,7 +49,7 @@ A drop-in product line that layers structured tasks, a 4-dimension scoring gate,
 
 > **A digithings "project" is a declarative manifest (`config.yaml` + per-index YAMLs) plus a thin `docker-compose.yml` that composes published digithings component images.**
 
-This is the generalization of the SITAAS pattern. It lets us:
+This is the generalization of the client pilot pattern. It lets us:
 - Spin up a new client engagement in hours, not weeks.
 - Keep component code in the monorepo; keep project-specific config out-of-tree or under `projects/`.
 - Version components independently from projects.
@@ -89,7 +89,7 @@ See **ADR-0001: digithings Project Spec** for the formal definition and **ADR-00
        Olympus    ────▶  Atlas + Hermes + Kairos dashboard (frontend/olympus)
                           └─▶ digigraph ──▶ digisearch / digiquant (execution, human-gated)
 
-    projects/sitaas ──▶  digigraph + digisearch (no digiquant)
+    projects/client-pilot ──▶  digigraph + digisearch (no digiquant)
     projects/<next> ──▶  any subset, via Project Spec
 
     digidev ──────────▶  drop-in agentic-coding kit (tasks, scoring, guardrails)
@@ -146,7 +146,7 @@ The exact boundary evolves. Guardrail: anything that's a meaningful moat for the
 ### Incorporation — after 2–3 paying clients and some MRR
 
 - Hold off on incorporation until there's demonstrated market demand — 2–3 paying clients and visible recurring revenue.
-- SITAAS is the first pilot; its conversion to a paid engagement is the clock-start for this decision.
+- The client pilot is the first pilot; its conversion to a paid engagement is the clock-start for this decision.
 - Jurisdiction (Delaware C-corp vs Canadian Inc. vs other) is deferred until incorporation is the next action. When that time comes, choice will be driven by where the paying customers are and where investors (if any) want to see the entity.
 
 ## Open questions
