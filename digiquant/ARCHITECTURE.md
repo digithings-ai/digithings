@@ -1189,6 +1189,79 @@ near-duplicate sector skills were collapsed into one templated
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
 decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
 
+### Portfolio lineage ledger (private, #2415)
+
+Closes finding OLY-REV-009: decision intent, target approval, order intent, fill, and
+holding state were conflated across `positions`/`decision_log`/snapshots with no way to
+replay "why did this weight change" as a chain of discrete facts. Eight new append-only
+Pydantic models + migration 069 introduce that chain:
+
+`PortfolioCommit → DecisionIntent → RequestedTarget → TargetAdjustment → ApprovedTarget →
+OrderIntent → PaperExecution → HoldingLot`
+
+- **Models**: `digiquant/src/digiquant/olympus/hermes/models/portfolio_ledger.py`. Same
+  frozen/strict/UTC-only style as `digillm/src/digillm/telemetry.py`
+  (`ConfigDict(extra="forbid", frozen=True)`, one `StrEnum` per closed vocabulary,
+  `AwareDatetime` fields with `model_validator` UTC enforcement, `Decimal` for every
+  quantity/weight/price — a deliberate break from `commit_io.py`'s legacy float
+  convention, which this task does not touch).
+- **Tables**: `digiquant/supabase/migrations/069_olympus_portfolio_ledger.sql` —
+  `portfolio_ledger_{commits,decision_intents,requested_targets,target_adjustments,
+  approved_targets,order_intents,paper_executions,holding_lots}`. RLS enabled with zero
+  `CREATE POLICY` statements (fully private); `PUBLIC`/`anon`/`authenticated` fully
+  revoked; `service_role` is reset then granted `SELECT, INSERT` only — no
+  `UPDATE`/`DELETE` at the grant layer. A shared `reject_portfolio_ledger_mutation()`
+  trigger additionally guards every table's `UPDATE`/`DELETE`/`TRUNCATE` at the row
+  layer, mirroring migration 067's telemetry-guard pattern.
+- **Append-only, forward-only supersession — never a backward link.** `PortfolioCommit`,
+  `ApprovedTarget`, and `OrderIntent` each carry a self-FK `supersedes_id`: a changed
+  same-date row is a new INSERT whose `supersedes_id` points *backward* at the prior row
+  it replaces. There is no `superseded_by_id`/forward-pointer column anywhere in this
+  chain — under an append-only trigger plus PK uniqueness a row can never learn the id of
+  whatever eventually supersedes it (that row doesn't exist yet at INSERT time, and no
+  later UPDATE can add it), so a backward-only link is the only one that is ever
+  reachable; a forward pointer was the original HIGH finding this design closes.
+  `TargetAdjustment` has no supersession concept at all — it is a point-in-time audit
+  step, not a currency-tracked entity. `portfolio_ledger_commits` has no `status` column;
+  "one root run per `run_date`" and "at most one row supersedes a given prior row" are
+  enforced structurally by six partial unique indexes (`uq_portfolio_ledger_commits_*`,
+  `uq_portfolio_ledger_approved_targets_*`, `uq_portfolio_ledger_order_intents_*` — see
+  `SCHEMA.md`), not by a status value, since a plain `UNIQUE` table constraint cannot
+  carry a `WHERE` clause. `OrderIntent.status` is `pending`/`executed`/`rejected` only —
+  `superseded` was removed because supersession is orthogonal to status, not a status
+  value itself; an `executed` row is terminal because append-only forbids the `UPDATE`
+  and the `PRIMARY KEY` forbids re-`INSERT`ing the same id, not because of a CHECK.
+  `PaperExecution.id` is a deterministic `uuid5(order_intent_id, executed_date)` backed by
+  `UNIQUE (order_intent_id, executed_date)`, so an exact-same-date retry reproduces the
+  identical row instead of creating a duplicate fill.
+- **Missing vs. zero, and XOR vs. OR presence.** `RequestedTarget` weight/quantity are
+  nullable with no DB `DEFAULT` and mutually exclusive — exactly one of the two must be
+  set (`CHECK ((requested_weight IS NOT NULL) <> (requested_quantity IS NOT NULL))`), so a
+  target is always expressed in one unambiguous unit. `ApprovedTarget` weight/quantity are
+  also nullable-not-zero but *not* mutually exclusive — at least one must be set (`CHECK
+  (approved_weight IS NOT NULL OR approved_quantity IS NOT NULL)`), since nothing
+  downstream infers a unit from which column is populated the way `RequestedTarget` does.
+  `PaperExecution` quantity/price and `HoldingLot` quantity/open_price are `NOT NULL CHECK
+  (... > 0)` — a fill or lot that cannot be priced does not get written at all.
+- **Ownership and scope — read this before wiring a producer.** These are private,
+  read-side contracts only. Hermes owns the models; **H9 `commit_run`
+  (`digiquant/src/digiquant/olympus/hermes/writers/commit_io.py`) is unchanged and
+  remains the sole authoritative booking writer** — nothing here is dual-written yet,
+  and nothing here changes H7/H8/H9 responsibility. Producer → consumer chain once
+  wired: H7/H8/H9 → this private ledger → a paper executor → accounting/learning. No
+  broker or live-trading path is touched by this schema.
+- **Failure behavior.** Invalid or conflicting lineage (a bad supersession link, an
+  attempt to re-terminal an executed order, an untimezoned timestamp) fails closed at
+  model-validation time, before it can reach an authoritative commit or fill. A missing
+  economic value stays absent (`NULL` / no row) rather than silently becoming `0`.
+- **Rollback note: keep schema dark until H9 dual-write.** Until a future task wires H9
+  (or a paper executor) to actually write these tables, they receive no traffic —
+  reverting this migration is a no-op for every existing code path.
+- **Tests**: `tests/dq/hermes/test_portfolio_ledger.py` (model/fixture behavior — add,
+  trim, exit, no-op, rejection, cap, rounding, carry, supersession, immutability,
+  idempotency) and `tests/dq/atlas/test_migration_069.py` (structural: RLS, grants,
+  triggers, closed vocab, nullability), mirroring the `test_migration_067.py` pattern.
+
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
 The digiquant shared backend is the **`core`** Supabase project — the project historically

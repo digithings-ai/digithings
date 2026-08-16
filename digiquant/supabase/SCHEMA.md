@@ -205,6 +205,55 @@ blocked; they are made pointless (`200 {"skipped": "not claimed"}`, nothing fetc
   mislabelled terminal disposition cannot be persisted by a writer that bypasses the models. Task #1951 creates no writer or public
   reader; later instrumentation registers the fail-soft observer and batches these records.
 
+### Portfolio lineage ledger - new in migration 069 (#2415)
+
+Prospective, append-only contracts closing finding OLY-REV-009: decision intent, target
+approval, order intent, fill, and holding state were previously conflated across
+`positions`/`decision_log`/snapshots. Eight tables form one replayable chain and add no
+writer — H9 `commit_run` stays the sole authoritative booking path.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `portfolio_ledger_commits` | `(id UUID)` | Root of one lineage run: `run_date`, `policy_version_id`, no `status` column — self-FK `supersedes_id` (backward-only, never a forward pointer) plus a partial unique index (`run_date` WHERE `supersedes_id IS NULL`) enforce currency structurally instead. |
+| `portfolio_ledger_decision_intents` | `(id UUID)` | `action` (add/trim/exit/no_op/reject) plus a mandatory closed-vocabulary `reason`, cross-checked so only a valid action/reason pair persists; FK to `portfolio_ledger_commits`. |
+| `portfolio_ledger_requested_targets` | `(id UUID)` | Pre-adjustment target weight/quantity, nullable with no DEFAULT (missing stays `NULL`, never fabricated to `0`) and mutually exclusive — exactly one of weight/quantity must be set (XOR), never both; an explicit `0` remains a legal value once set; FK to `portfolio_ledger_decision_intents`. |
+| `portfolio_ledger_target_adjustments` | `(id UUID)` | One `cap`/`rounding`/`carry` adjustment step with `original_value`/`adjusted_value` (`>= 0`, may legitimately be zero); a `cap` may only reduce the value; no supersession concept — it's a point-in-time audit step; FK to `portfolio_ledger_requested_targets`. |
+| `portfolio_ledger_approved_targets` | `(id UUID)` | Post-adjustment approved weight/quantity, nullable with no DEFAULT (missing stays `NULL`, never fabricated to `0`) but *not* mutually exclusive — at least one of weight/quantity must be set (OR), both allowed, and an explicit `0` remains legal — with self-FK `supersedes_id` (backward-only) — a changed same-date target is a new row, never a rewrite; FK to `portfolio_ledger_requested_targets`. |
+| `portfolio_ledger_order_intents` | `(id UUID)` | `quantity NOT NULL CHECK (> 0)`, terminal `status` (pending/executed/rejected — no `superseded` value; supersession is orthogonal to status), self-FK `supersedes_id` (backward-only), `rejection_reason` required exactly when rejected; FK to `portfolio_ledger_approved_targets`. |
+| `portfolio_ledger_paper_executions` | `(id UUID)` | Immutable fill: `quantity`/`price` both `NOT NULL CHECK (> 0)`, `id` a deterministic `uuid5(order_intent_id, executed_date)` backed by `UNIQUE (order_intent_id, executed_date)` so an exact-same-date retry reproduces the identical row instead of duplicating; FK to `portfolio_ledger_order_intents`. |
+| `portfolio_ledger_holding_lots` | `(id UUID)` | Lot `quantity`/`open_price` (`NOT NULL CHECK (> 0)`), `status` (open/closed) tying `closed_at`/`closed_by_execution_id` nullability to status, opening and closing executions forced distinct; FKs to `portfolio_ledger_paper_executions`. |
+
+All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
+`opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL
+DEFAULT now()` database write clock, matching the migration-067 telemetry idiom. RLS is
+enabled with **zero** policies and all privileges revoked from `PUBLIC`, `anon`, and
+`authenticated`. `service_role` is reset then granted `SELECT, INSERT` only — no
+`UPDATE`/`DELETE` at the grant layer — and a shared `reject_portfolio_ledger_mutation()`
+trigger denies `UPDATE`/`DELETE` per row and `TRUNCATE` per statement on every table, so
+append-only holds even for a `service_role` session that bypasses the grant.
+
+**Currency via partial unique indexes, not status.** A plain table `UNIQUE` constraint
+cannot carry a `WHERE` clause, so "at most one current row" is expressed instead as six
+partial unique indexes: `uq_portfolio_ledger_commits_one_root` (`run_date` WHERE
+`supersedes_id IS NULL`) and `uq_portfolio_ledger_commits_supersedes` (`supersedes_id`
+WHERE `supersedes_id IS NOT NULL`); the analogous
+`uq_portfolio_ledger_approved_targets_one_root` (`run_date, symbol` WHERE
+`supersedes_id IS NULL`) / `uq_portfolio_ledger_approved_targets_supersedes`
+(`supersedes_id` WHERE `supersedes_id IS NOT NULL`) pair — note only `_one_root` is keyed
+on `(run_date, symbol)`; `_supersedes` is `(supersedes_id)` alone, same as commits above;
+and `uq_portfolio_ledger_order_intents_one_pending` (`run_date, symbol` WHERE
+`status = 'pending'`) / `uq_portfolio_ledger_order_intents_supersedes` (`supersedes_id`
+WHERE `supersedes_id IS NOT NULL`). Each of the three
+self-FK tables (`commits`, `approved_targets`, `order_intents`) also carries a
+`CHECK (supersedes_id IS NULL OR supersedes_id <> id)` guarding against a row claiming to
+supersede itself.
+
+This is schema and contracts only (#2415). No H7/H8/H9 ownership changed, no broker or
+live-trading path is touched, and nothing writes these tables yet — a future task wires a
+producer (dual-writing from H7/H8/H9) before any consumer (a paper executor, then
+accounting/learning) can read them. See `digiquant/ARCHITECTURE.md` → "Portfolio lineage
+ledger (private, #2415)" for the full chain and failure-mode writeup.
+
 ## RLS (consistent across all tables above)
 
 - Every table has `ENABLE ROW LEVEL SECURITY`.
