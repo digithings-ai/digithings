@@ -37,7 +37,7 @@ export function createDigiGraphClient(
       }
       try {
         const parsed = JSON.parse(init.body) as Record<string, unknown>;
-        // Explicit false opts digichat out of the legacy model=sitaas-rag Open WebUI default.
+        // Explicit false opts digichat out of the legacy model=digigraph-rag Open WebUI default.
         parsed.openwebui_format = openwebui;
         return fetch(url, { ...init, body: JSON.stringify(parsed) });
       } catch {
@@ -48,7 +48,7 @@ export function createDigiGraphClient(
 }
 
 export function digigraphModelName() {
-  return (process.env.DIGICHAT_MODEL ?? "sitaas-rag").trim() || "sitaas-rag";
+  return (process.env.DIGICHAT_MODEL ?? "digigraph-rag").trim() || "digigraph-rag";
 }
 
 export function digigraphChatCompletionsUrl(baseUrlOverride?: string | null) {

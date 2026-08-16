@@ -71,7 +71,7 @@ def test_get_tools_filters_by_allowlist(monkeypatch: pytest.MonkeyPatch) -> None
         state={},
         allowed_tool_names=frozenset({"digisearch"}),
     )
-    tools = get_tools(["search", "sitaas_rag"], ctx)
+    tools = get_tools(["search", "project_rag"], ctx)
     names = []
     for t in tools:
         fn = t.get("function")

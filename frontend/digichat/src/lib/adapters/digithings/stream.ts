@@ -119,7 +119,7 @@ export async function createDigigraphTraceStreamResponse(opts: {
           Authorization: `Bearer ${apiKey}`,
           ...opts.upstreamHeaders,
           // After upstreamHeaders so dogfood never inherits Open WebUI format.
-          // digigraph still treats model=sitaas-rag as Open WebUI unless opted out.
+          // digigraph still treats model=digigraph-rag as Open WebUI unless opted out.
           "X-Suppress-Tool-Stream": "1",
           "X-Response-Format": "plain",
         },
