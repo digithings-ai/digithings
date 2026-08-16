@@ -67,7 +67,7 @@ agents:
 
 run_data_dir: string      # Absolute path to session dataset storage (default: null — disables digistore).
                           # In Docker: mount a named volume here (e.g. /data/run).
-                          # When set, enables the sitaas_rag skill:
+                          # When set, enables the project_rag skill:
                           #   digistore_list, digistore_profile, visualization_agent,
                           #   analysis_agent, data_prep_agent, data_manipulation_agent,
                           #   data_engineer_agent (+ DIGI_ALLOW_CODE_EXEC=1 for data_engineer).
@@ -264,4 +264,4 @@ This config activates:
 - Multi-index discovery (via `indexes_dir`)
 - MCP server
 
-See `digigraph/AGENTS.md` → SITAAS / Project-Mode Capabilities for the full tool set table.
+See `digigraph/AGENTS.md` → Project-Mode Capabilities for the full tool set table.

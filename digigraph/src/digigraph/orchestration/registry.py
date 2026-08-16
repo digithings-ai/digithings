@@ -143,6 +143,10 @@ def get_tools(
 
     for skill_id in skill_ids:
         if skill_id not in _skills:
+            log.warning(
+                "skill id %r not registered (renamed or removed?) -- no tools contributed from it",
+                skill_id,
+            )
             continue
         tool_names, when = _skills[skill_id]
         if when is not None and not when(context):
