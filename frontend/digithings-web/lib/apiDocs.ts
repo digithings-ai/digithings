@@ -194,7 +194,8 @@ const { message } = await r.json();`,
           },
           {
             lang: "python",
-            code: `from openai import OpenAI
+            code: `import os
+from openai import OpenAI
 client = OpenAI(base_url=os.environ["DIGIGRAPH_URL"] + "/v1", api_key=os.environ["DIGI_JWT"])
 resp = client.chat.completions.create(
     model="digigraph-rag",
