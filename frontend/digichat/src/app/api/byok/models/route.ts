@@ -16,7 +16,9 @@ export const maxDuration = 15;
  * header is absent and the second check runs only after resp.text() has already
  * buffered everything. Acceptable here because the origin is a single fixed TLS
  * endpoint, not attacker-chosen. Note the post-buffer check counts UTF-16 code
- * units, so it admits up to ~2x this many bytes. */
+ * units, so it admits up to 3x this many bytes: a character in U+0800–U+FFFF is
+ * one UTF-16 code unit but three UTF-8 bytes. (Astral characters are the milder
+ * 2x case — four bytes across two code units.) */
 const MAX_RESPONSE_BYTES = 2_000_000; // 2 MB
 
 function jsonResponse(body: unknown, status: number): Response {

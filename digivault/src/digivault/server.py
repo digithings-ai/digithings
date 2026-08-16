@@ -629,9 +629,25 @@ def orchestrator_invoke(
         # Same empty-normalizing set as digivault_get_note / resolve_path_prefix
         # (including ".md") — bare strip("/").strip() left ".md" as a non-None
         # prefix that D1Store.search rejects with ValueError (#2327 CodeRabbit).
-        path_prefix = (
-            normalize_vault_path(str(path_prefix_raw)) if path_prefix_raw is not None else ""
-        ) or None
+        # A *present* prefix that normalizes to empty is a caller bug, not a request
+        # to search everything. The earlier `... or None` collapsed both cases into
+        # "no prefix", which meant "/", "   ", "///" and ".md" silently disabled
+        # scoping on every backend — the #2359 fail-open, which the local_search
+        # hardening alone did not close because the collapse happens here, before
+        # `resolve_path_prefix` ever sees the value. 400 instead; pass no
+        # path_prefix at all (or null) to opt out deliberately.
+        if path_prefix_raw is None:
+            path_prefix = None
+        else:
+            path_prefix = normalize_vault_path(str(path_prefix_raw))
+            if not path_prefix:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "path_prefix was provided but normalizes to empty; "
+                        "omit it entirely to search without a prefix"
+                    ),
+                )
 
         tenant_slug = _tenant_slug(request)
         # When DIGI_TENANT_CORPUS_MAP is set, an omitted path_prefix must not fall
@@ -709,7 +725,16 @@ def orchestrator_invoke(
             except D1StoreError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
         elif (os.environ.get("DIGIVAULT_ROOT") or "").strip():
-            hits = search_local_vault(_open_vault(), query, limit=limit, path_prefix=path_prefix)
+            try:
+                hits = search_local_vault(
+                    _open_vault(), query, limit=limit, path_prefix=path_prefix
+                )
+            except ValueError as exc:
+                # `resolve_path_prefix` rejects a non-None prefix that normalizes
+                # to empty ("/", "   ", "///", ".md") rather than failing open and
+                # searching the whole root. That is a caller bug, so 400 — not the
+                # 500 an unhandled ValueError would otherwise produce.
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
         else:
             hits = _open_supabase_store().search(query, limit=limit, path_prefix=path_prefix)
         data = {"hits": [h.model_dump(mode="json") for h in hits]}
