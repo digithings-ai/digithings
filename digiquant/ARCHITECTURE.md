@@ -1052,7 +1052,10 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors.
   Real pairwise correlations load from `price_history` via `get_return_correlations`
   (look-ahead-guarded); a pair with no estimate uses the asset-class bucket fallback (#934).
-  The sized book passes through `turnover.apply_turnover_to_sized_book` (#934).
+  The sized book passes through `turnover.apply_rebalancing_cadence`, which dispatches to
+  either `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
+  the minimum-hold override, #934) or `hold_drifted_book` (off-cadence: holds continuing
+  positions at their drifted weight, still honoring an explicit PM exit, #955).
 - `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
   `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
   gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
@@ -1061,6 +1064,69 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   fail-soft → 1.0). phase7e feeds the scale into `size_portfolio`. Thresholds come from
   `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
   `breaker_max_reduction`; defaults −8% / −20% / 0.5).
+
+#### H8 adjustment-event taxonomy (#2417)
+
+Explanation-only layer: every place H8 moves a ticker away from its raw requested value
+emits an in-memory `digiquant.olympus.hermes.sizing_events.SizingAdjustment` (frozen,
+`extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it computes —
+never persisted (no DB write, no `portfolio_ledger` interaction), never fed back into the
+weight math, and never reordering or renaming an existing control. `SizingAdjustmentType`
+enumerates all 12 causes and where each is emitted:
+
+| Type | Emitted by | Reduce-only? |
+|------|-----------|--------------|
+| `CONVICTION_FLOOR` | `phases.phase7e_risk_sizing._cap_unchallenged_convictions` | n/a (clips conviction, `unit="conviction"`) |
+| `SINGLE_NAME_CAP` | `sizing.size_portfolio` (position-cap step) | yes |
+| `SECTOR_CAP` | `sizing.size_portfolio` (sector-cap step) | yes |
+| `CORRELATION_DEDUP` | `sizing.size_portfolio` (correlation de-dup step) | yes |
+| `VOLATILITY_SCALE` | `sizing.size_portfolio` (ex-ante vol-target step) | no — bidirectional by design; #943 added the up-scale path to correct chronic under-risking ("over-cashing") whenever the book sits below its vol budget, so this can raise a weight as well as trim one |
+| `DRAWDOWN_BREAKER` | `sizing.size_portfolio` (breaker-scale step) | yes |
+| `GRID_ROUNDING` | `sizing.size_portfolio` (round-down-to-grid step) | yes |
+| `CADENCE_HOLD` | `turnover.hold_drifted_book` (off-cadence, continuing position) | no — holds at drifted weight |
+| `MINIMUM_HOLD_OVERRIDE` | `turnover.apply_turnover_to_sized_book` (`inside_hold` branch) | no — lockup overrides a PM exit |
+| `CONTINUITY_CARRY` | `phases.phase7e_risk_sizing._apply_held_continuity_backstop` | no — restores a dropped held position |
+| `FINAL_GROSS_SCALE` | `sizing.size_portfolio` (gross/pos/sector-cap-binding scale step); `phases.phase7e_risk_sizing._cap_total_invested` (total-invested cap) | no — two sites, two directions: the `size_portfolio` binding-scale step can raise a weight in an under-invested-book edge case (the candidate scale it picks among is not capped at 1 from below), while `_cap_total_invested` only ever fires when total invested exceeds 100% and is therefore strictly reduce-only |
+| `FLAT_EXIT` | `turnover.hold_drifted_book` (off-cadence PM exit); `phases.phase7e_risk_sizing._apply_held_continuity_backstop` (H7-flat branch) | yes (to 0) |
+
+`_held_carry_weights` computes the drifted-weight candidate for a held-but-memo-unaddressed
+ticker but does not itself emit `CONTINUITY_CARRY` — its caller,
+`_apply_held_continuity_backstop`, is the sole emitter, firing only when the carry actually
+sticks (a prior CodeRabbit round on #2434 fixed a double-emission bug where emitting
+unconditionally inside `_held_carry_weights` produced a record for carries that never
+happened).
+
+Two notes on `FLAT_EXIT` vs. `CONTINUITY_CARRY`: an H7-flat held name (explicit PM exit) is
+never resurrected and always gets `FLAT_EXIT`; a held name the memo simply omitted
+(memo-unaddressed, or H4-gated out of the roster) is carried at its drifted weight and gets
+`CONTINUITY_CARRY` instead. The two are mutually exclusive by control flow, not by set
+membership: inside `_apply_held_continuity_backstop`, the `flats` branch `continue`s
+unconditionally for a flat-tagged ticker before the carry-miss branch is ever reached for
+that same ticker, so a single pass can never emit both for one name.
+
+The no-trade-band clamp in `apply_turnover_to_sized_book` deliberately emits **no** event: by
+construction it only fires when the delta is smaller than the pipeline's own materiality band
+(`max(rebalance_threshold_pct, rebalance_rel_band_pct * current_pct)`), so the suppressed
+delta is not material by the pipeline's own definition.
+
+`sizing_events.validate_sizing_lineage(requested, approved, adjustments, materiality_pct=...)`
+is the corresponding lineage check: any requested→approved delta larger than
+`materiality_pct` with no matching adjustment ticker raises `UnexplainedDeltaError`. Callers
+pass the same no-trade-band width used above (the widest band in play this run) so a
+legitimately-suppressed micro-delta is never flagged as unexplained. This runs as a layer
+**after** (not inside) `phases.phase7e_risk_sizing._build_sized_book`'s own fail-soft
+try/except around `size_portfolio` — in production it only logs and never raises past its own
+call site, so a lineage failure cannot turn into a dropped rebalance.
+
+**Intended consumers (not yet wired)**: `RebalancePayload.adjustments` (`list[dict[str, Any]]`,
+explanation-only, never persisted) is the wire shape for future in-process readers — H9
+narrative/notes, pre-trade risk review, and outcome-episode logging are the anticipated
+consumers, all downstream of H8, which remains the sole weight owner — but no consumer in this
+codebase reads the field yet. It is populated today only on payloads `phases.phase7e_risk_sizing
+._build_sized_book` produces; the legacy `phase7d_rebalance` payload (`phases.phase7d_pm`) has no
+`adjustments` key at all, so any future consumer must treat the field as absent-safe
+(`.get("adjustments") or []`, the same pattern `_validate_h8_lineage` already uses) rather than
+assuming it is always present.
 
 #### Run robustness + telemetry (Pillar 1B)
 

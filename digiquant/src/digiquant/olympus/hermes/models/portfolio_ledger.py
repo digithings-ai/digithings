@@ -103,11 +103,47 @@ _ACTION_REASONS: dict[DecisionAction, frozenset[DecisionReason]] = {
 
 
 class TargetAdjustmentType(StrEnum):
-    """Closed vocabulary of adjustments applied to a RequestedTarget."""
+    """Closed vocabulary of adjustments applied to a RequestedTarget.
+
+    ``CAP``, ``ROUNDING``, and ``CARRY`` are the original (#2415) coarse-grained
+    values and remain for backward compatibility with existing persisted rows
+    and tests. The remaining members are the 12 canonical H8 adjustment reasons
+    defined by ``hermes.sizing_events.SizingAdjustmentType`` (#2417), added here
+    as an additive superset so a persisted ``TargetAdjustment`` row can one day
+    carry the same fine-grained reason an in-memory ``SizingAdjustment`` event
+    carries, without a breaking rename of the coarse legacy values.
+
+    This enum and ``SizingAdjustmentType`` are deliberately kept as two separate
+    types rather than unified into one: this one governs a persisted,
+    append-only ledger row (constrained further by the ``adjustment_type``
+    CHECK in migration 069, which still only allows the 3 legacy values — no
+    code path constructs a persisted row with one of the 12 new values yet, so
+    widening that CHECK is deferred until a real writer exists), while
+    ``SizingAdjustmentType`` governs an in-memory, never-persisted explanation
+    object returned alongside H8's sized book. Importing one into the other
+    would couple the dark persisted ledger to the live sizing pipeline's
+    vocabulary for no present benefit.
+    """
 
     CAP = "cap"
     ROUNDING = "rounding"
     CARRY = "carry"
+
+    # The 12 canonical H8 adjustment reasons (#2417), mirrored from
+    # ``hermes.sizing_events.SizingAdjustmentType``. Not yet CHECK-constrained
+    # at the database layer — see class docstring.
+    CONVICTION_FLOOR = "conviction_floor"
+    SINGLE_NAME_CAP = "single_name_cap"
+    SECTOR_CAP = "sector_cap"
+    CORRELATION_DEDUP = "correlation_dedup"
+    VOLATILITY_SCALE = "volatility_scale"
+    DRAWDOWN_BREAKER = "drawdown_breaker"
+    GRID_ROUNDING = "grid_rounding"
+    CADENCE_HOLD = "cadence_hold"
+    MINIMUM_HOLD_OVERRIDE = "minimum_hold_override"
+    CONTINUITY_CARRY = "continuity_carry"
+    FINAL_GROSS_SCALE = "final_gross_scale"
+    FLAT_EXIT = "flat_exit"
 
 
 class OrderIntentStatus(StrEnum):
@@ -279,6 +315,35 @@ class RequestedTarget(TimedPortfolioLedgerRecord):
         return self
 
 
+# Adjustment types that can only ever reduce a value — a cap, dedup, or breaker
+# by definition trims toward a limit, never expands past it. ``CAP`` is the
+# original (#2415) value; the other six are #2417 additions that share the
+# same reducing-only invariant but were missing from ``validate_lifecycle``
+# until this fix (#2417 CodeRabbit review on #2434). ``CORRELATION_DEDUP``
+# trims an overlapping position's size down, same as a cap — an increasing
+# correlation-dedup record is exactly as invalid as an increasing cap one.
+# ``GRID_ROUNDING`` always rounds down to the sizing grid (never to nearest —
+# see ``sizing._round_to_grid``'s own reduce-only invariant), and ``FLAT_EXIT``
+# always drives a held position to exactly 0 (an H7-flat exit or a PM-exit —
+# see ARCHITECTURE.md's H8 adjustment-event taxonomy table), so both belong
+# here alongside the caps/dedup/breaker set. ``VOLATILITY_SCALE`` and
+# ``FINAL_GROSS_SCALE`` are deliberately absent: both can scale a book UP as
+# well as down (vol-target up-scale toward an under-filled budget, #943; a
+# binding gross/pos/sector candidate scale that exceeds 1), so neither is
+# reduce-only.
+_REDUCING_ADJUSTMENT_TYPES: frozenset[TargetAdjustmentType] = frozenset(
+    {
+        TargetAdjustmentType.CAP,
+        TargetAdjustmentType.SINGLE_NAME_CAP,
+        TargetAdjustmentType.SECTOR_CAP,
+        TargetAdjustmentType.CORRELATION_DEDUP,
+        TargetAdjustmentType.DRAWDOWN_BREAKER,
+        TargetAdjustmentType.GRID_ROUNDING,
+        TargetAdjustmentType.FLAT_EXIT,
+    }
+)
+
+
 class TargetAdjustment(TimedPortfolioLedgerRecord):
     """A cap, rounding, or carry adjustment applied to a RequestedTarget."""
 
@@ -294,10 +359,12 @@ class TargetAdjustment(TimedPortfolioLedgerRecord):
     @model_validator(mode="after")
     def validate_lifecycle(self) -> TargetAdjustment:
         if (
-            self.adjustment_type is TargetAdjustmentType.CAP
+            self.adjustment_type in _REDUCING_ADJUSTMENT_TYPES
             and self.adjusted_value > self.original_value
         ):
-            raise ValueError("a cap adjustment can only reduce the original value")
+            raise ValueError(
+                f"a {self.adjustment_type.value} adjustment can only reduce the original value"
+            )
         return self
 
 
