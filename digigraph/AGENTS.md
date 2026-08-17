@@ -71,23 +71,23 @@ curl http://localhost:8000/test_llm
 
 ---
 
-## SITAAS / Project-Mode Capabilities
+## Project-Mode Capabilities
 
-When a `digiproject.yaml` (or `config.yaml`) sets `run_data_dir`, digigraph operates in **project mode**. The `sitaas_rag` skill is activated, exposing additional tools beyond the base `search` skill.
+When a `digiproject.yaml` (or `config.yaml`) sets `run_data_dir`, digigraph operates in **project mode**. The `project_rag` skill is activated, exposing additional tools beyond the base `search` skill.
 
-### Full tool set (sitaas_rag skill)
+### Full tool set (project_rag skill)
 
 | Tool | Skill | Condition | Description |
 |---|---|---|---|
 | `digisearch` | search | `DIGISEARCH_URL` set | Semantic/keyword search over indexed documents |
 | `digisearch_fetch_all` | search | `DIGISEARCH_URL` set | Paginated full-result fetch with filters |
-| `digistore_list` | sitaas_rag | `run_data_dir` set | List named datasets from current session |
-| `digistore_profile` | sitaas_rag | `run_data_dir` set | Inspect schema, row count, and sample rows of a dataset |
-| `visualization_agent` | sitaas_rag | `run_data_dir` set | Generate charts (ECharts JSON or PNG) from a dataset_ref |
-| `analysis_agent` | sitaas_rag | `run_data_dir` set | Statistical summaries, correlations, histograms |
-| `data_prep_agent` | sitaas_rag | `run_data_dir` set | Filter, sample, sort, export a dataset |
-| `data_manipulation_agent` | sitaas_rag | `run_data_dir` set | Merge, join, reshape, or transform datasets |
-| `data_engineer_agent` | sitaas_rag | `run_data_dir` set + `DIGI_ALLOW_CODE_EXEC=1` | Execute sandboxed Polars code for custom transformations |
+| `digistore_list` | project_rag | `run_data_dir` set | List named datasets from current session |
+| `digistore_profile` | project_rag | `run_data_dir` set | Inspect schema, row count, and sample rows of a dataset |
+| `visualization_agent` | project_rag | `run_data_dir` set | Generate charts (ECharts JSON or PNG) from a dataset_ref |
+| `analysis_agent` | project_rag | `run_data_dir` set | Statistical summaries, correlations, histograms |
+| `data_prep_agent` | project_rag | `run_data_dir` set | Filter, sample, sort, export a dataset |
+| `data_manipulation_agent` | project_rag | `run_data_dir` set | Merge, join, reshape, or transform datasets |
+| `data_engineer_agent` | project_rag | `run_data_dir` set + `DIGI_ALLOW_CODE_EXEC=1` | Execute sandboxed Polars code for custom transformations |
 
 ### Multi-turn dataset context
 
@@ -95,7 +95,7 @@ When `stored_datasets` is in graph state, the research node prepends a `[Current
 
 ### ECharts rendering
 
-`visualization_agent` prefers ECharts tools (`echarts_*`) that return `echarts_option` JSON (optional SVG via Node SSR). Matplotlib-style `plot_*` tools return `image_path`. Stream `<details>` / table chrome for those results requires explicit Open WebUI opt-in (`X-Response-Format: openwebui` or `openwebui_format=true`) — not `model=sitaas-rag` alone. Frontends that consume tool results directly should handle the `echarts_option` key.
+`visualization_agent` prefers ECharts tools (`echarts_*`) that return `echarts_option` JSON (optional SVG via Node SSR). Matplotlib-style `plot_*` tools return `image_path`. Stream `<details>` / table chrome for those results requires explicit Open WebUI opt-in (`X-Response-Format: openwebui` or `openwebui_format=true`) — not `model=digigraph-rag` alone. Frontends that consume tool results directly should handle the `echarts_option` key.
 
 ---
 

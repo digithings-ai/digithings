@@ -70,7 +70,7 @@ The following is built and functional as of this architecture review (March 2026
 | `GET` | `/health` | None | Unlimited | Legacy health check (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Unlimited | Liveness probe — returns `{"ok": true}`; see AGENTS.md "Liveness vs status" |
 | `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digiclaw custom skill; body: `WorkflowRequest` |
-| `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `sitaas-rag` |
+| `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `digigraph-rag` |
 | `GET` | `/v1/model-info` | digikey JWT (optional) | 30 req/min/IP | Current model + mode |
 | `POST` | `/v1/chat/completions` | digikey JWT (optional) | 10 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
 | `GET` | `/v1/debug/input_messages` | digikey JWT | 30 req/min/IP | Last N request summaries; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
@@ -310,10 +310,10 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `model` | `str` | Default `"sitaas-rag"`; not used for routing (LiteLLM handles it) |
+| `model` | `str` | Default `"digigraph-rag"`; not used for routing (LiteLLM handles it) |
 | `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists. Flattened into the workflow `prompt` via `chat_prompt.messages_to_workflow_prompt` — **full user+assistant history** (multi-turn), not user-only |
 | `stream` | `bool` | SSE streaming |
-| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
+| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=digigraph-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 | `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
@@ -417,7 +417,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -440,14 +440,14 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:108`:
 
 | `DIGI_CHECKPOINTER` value | Backend | Notes |
 |--------------------------|---------|-------|
-| unset + project active | `SqliteSaver` | **Default when `digiproject.yaml` is present** (SITAAS / project mode); survives restarts |
+| unset + project active | `SqliteSaver` | **Default when `digiproject.yaml` is present** (project mode); survives restarts |
 | unset + no project | `MemorySaver` (in-process dict) | Default standalone mode; lost on restart |
 | `memory` | `MemorySaver` (in-process dict) | Explicit; lost on restart |
 | `sqlite` | `SqliteSaver` | File path via `DIGI_CHECKPOINTER_SQLITE_URI` |
 | `postgres` | `PostgresSaver` | Connection string via `DIGI_CHECKPOINTER_POSTGRES_URI` |
 | `none` / `off` / `0` / `false` | None (no checkpointing) | Breaks multi-turn and thread APIs |
 
-**Project-mode default (SITAAS):** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
+**Project-mode default:** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
 
 #### 5.5.1 High availability (multi-replica) — REM-099
 
@@ -608,7 +608,7 @@ degrades today.
 
 ### 6.3 Code Execution Gate
 
-`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
+`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `project_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
 
 ### 6.4 Thread State Access
 
@@ -867,7 +867,7 @@ digigraph:
 | `DIGI_REQUIRE_TOOL_CALLS` | (empty) | Force `tool_choice="required"` deployment-wide: `1`/`true` |
 | `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX` | `3` | Per-IP req/min budget for requests opting into `require_tool_calls=true` (see §3.1) |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
-| `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |
+| `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `project_rag` skill |
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |
 | `DIGI_CORS_ORIGINS` / `DIGIGRAPH_CORS_ORIGINS` | (empty) | CORS allowlist — applied via shared `digibase.cors.install_cors`. `DIGI_ALLOWED_ORIGINS` still honored as legacy fallback. See `SECURITY.md` §"CORS policy". |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | `12000` | Max chars per tool result message to LLM |

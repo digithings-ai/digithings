@@ -1,16 +1,17 @@
-# Epic #14 — SITAAS Phase 2: POC improvements
+# Epic #14 — Client Pilot Phase 2: POC improvements
 
 ## Recap
 
-SITAAS (Stock-Idea-To-Actionable-Strategy, per the user's flagship-pilot framing) is the
-first vertical pilot on digithings. As described in [docs/VISION.md](../VISION.md), the
-SITAAS deployment runs digigraph orchestration over digisearch's unified content index
-(emails, Teams, SharePoint) via LiteLLM — no digiquant in the SITAAS data path. Phase 2's
-goal is to turn the working POC into a demo-ready multi-turn research assistant by
-unblocking multi-turn flows (exposing stored-dataset state to the LLM and orchestrator
-tools), improving search quality, and polishing the frontend + configuration story.
-The authoritative backlog lives in `projects/sitaas/IMPROVEMENT_IDEAS.md` (confidential;
-not in this repo).
+The client pilot is the first vertical pilot on digithings. As described in
+[docs/VISION.md](../VISION.md), the client pilot deployment runs digigraph
+orchestration over digisearch's unified content index (emails, Teams,
+SharePoint) via LiteLLM — no digiquant in the client pilot's data path. Phase
+2's goal is to turn the working POC into a demo-ready multi-turn research
+assistant by unblocking multi-turn flows (exposing stored-dataset state to
+the LLM and orchestrator tools), improving search quality, and polishing the
+frontend + configuration story. The authoritative backlog lives in
+`projects/client-pilot/IMPROVEMENT_IDEAS.md` (confidential; not in this
+repo).
 
 ## Remaining sub-tasks
 
@@ -24,14 +25,14 @@ the architecture and the POC-to-pilot transition.
       can reference previously fetched data without re-ingestion.
 - [ ] Expose `digistore_list` and `digistore_profile` as first-class orchestrator tools
       in the digigraph MCP registry (`digigraph/orchestration/registry.py`).
-- [ ] Refresh `projects/sitaas/README.md` and config samples so they match current
+- [ ] Refresh `projects/client-pilot/README.md` and config samples so they match current
       behavior (tool names, env vars, checkpointer defaults).
 
 ### Medium
 
-- [ ] Frontend ECharts rendering — either an Open WebUI plugin or a SITAAS-specific
+- [ ] Frontend ECharts rendering — either an Open WebUI plugin or a client-pilot-specific
       client — so chart payloads render inline instead of as raw JSON.
-- [ ] Enable the LangGraph checkpointer by default for SITAAS (pick `sqlite` or
+- [ ] Enable the LangGraph checkpointer by default for the client pilot (pick `sqlite` or
       `postgres` based on deployment target; document `DIGI_CHECKPOINTER`).
 - [ ] Search-quality improvements: facets inside the agent loop, Azure semantic search,
       and an optional speller stage.
@@ -51,7 +52,7 @@ the architecture and the POC-to-pilot transition.
       the audit JSONL so we can iterate on prompt + ranking.
 - [ ] Demo polish: recorded walkthrough, screenshot set, and a scripted happy-path
       prompt sequence for pilot stakeholders.
-- [ ] Integration-test suite covering the SITAAS workflow end-to-end (digigraph →
+- [ ] Integration-test suite covering the client pilot workflow end-to-end (digigraph →
       digisearch → LiteLLM), runnable under `make test-e2e`.
 - [ ] Cost-per-request tracking — token + vector-query counters attached to each
       `workflow_id` via digismith spans, surfaced on `/v1/status` or an internal
@@ -59,8 +60,8 @@ the architecture and the POC-to-pilot transition.
 
 ## Done-criteria for the epic
 
-- Each sub-task above is a separate GitHub issue on Project #1, labelled `sitaas` and
+- Each sub-task above is a separate GitHub issue on Project #1, labelled `client-pilot` and
   linked back to #14.
-- High-priority items ship before any external SITAAS demo.
-- `projects/sitaas/IMPROVEMENT_IDEAS.md` is reconciled with the issue tracker — items
+- High-priority items ship before any external client-pilot demo.
+- `projects/client-pilot/IMPROVEMENT_IDEAS.md` is reconciled with the issue tracker — items
   either migrated to issues or explicitly dropped with a note.

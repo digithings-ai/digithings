@@ -228,3 +228,49 @@ def test_broken_map_surfaces_503_at_request_boundary(
         _with_digi_request_context(http, req)
     assert exc_info.value.status_code == 503
     assert "DIGI_TENANT_CORPUS_MAP" in str(exc_info.value.detail)
+
+
+def test_resolve_map_drops_invalid_index_keeps_vault_prefix() -> None:
+    """Invalid digisearch index chars must not reach digisearch, but a valid vault
+    prefix from the same map entry must still apply (partial override, not wipe)."""
+    mapped = {
+        "occ": TenantCorpusOverride(
+            digisearch_index="bad index!!",
+            vault_path_prefix="clients/online-compliance-center",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="occ",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix == "clients/online-compliance-center"
+
+
+def test_resolve_headers_drop_invalid_index_when_map_unset() -> None:
+    """Single-tenant path: malformed X-Digi-Corpus-Index is ignored; vault prefix
+    from headers still applies."""
+    out = resolve_corpus_override(
+        headers={
+            "x-digi-corpus-index": "not a valid index",
+            "x-digi-vault-prefix": "clients/other",
+        },
+        corpus_map={},
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix == "clients/other"
+
+
+def test_load_tenant_corpus_map_skips_invalid_slug_and_non_object_entry() -> None:
+    """Soft-skip bad rows so one typo does not discard the rest of the map."""
+    raw = (
+        '{"OCC":{"digisearch_index":"occ_help"},'
+        '"ok-tenant":{"digisearch_index":"ok_docs","vault_path_prefix":"clients/ok"},'
+        '"also-ok":"not-an-object"}'
+    )
+    table = load_tenant_corpus_map(raw)
+    assert "OCC" not in table  # uppercase fails _SLUG
+    assert "also-ok" not in table
+    assert table["ok-tenant"].digisearch_index == "ok_docs"
+    assert table["ok-tenant"].vault_path_prefix == "clients/ok"

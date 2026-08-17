@@ -10,7 +10,7 @@ name: "Project: status automation"
 #
 # One workflow covers all 11 org project boards (digithings #1, digiquant #2,
 # digigraph #3, digisearch #4, digichat #5, digikey #6, digismith #7,
-# digiclaw #8, digibase #9, sitaas #10, maintenance #11). Epics appear on
+# digiclaw #8, digibase #9, client-pilot #10, maintenance #11). Epics appear on
 # multiple boards, so we update the status on every project that contains
 # the issue.
 #
