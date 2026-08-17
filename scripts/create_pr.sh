@@ -63,8 +63,14 @@ LAST_COMMIT="$(git log -1 --format="%s")"
 TITLE="${CUSTOM_TITLE:-$LAST_COMMIT}"
 
 # Extract component from conventional commit format: type(component): ...
+# NOTE: use an explicit [A-Za-z0-9_] class instead of \w — macOS ships bash
+# 3.2.57 as /bin/bash (pre-GPLv3, frozen since ~2007), whose regex engine
+# does not support \w inside [[ =~ ]]. With \w the match silently fails,
+# COMPONENT stays empty, and the script falls back to BASE_BRANCH=develop
+# instead of resolving the correct module/<component> base. Do not
+# reintroduce \w/\d/\s GNU-regex shorthands here for the same reason.
 COMPONENT=""
-if [[ "$LAST_COMMIT" =~ ^\w+\(([a-z]+)\): ]]; then
+if [[ "$LAST_COMMIT" =~ ^[A-Za-z0-9_]+\(([a-z]+)\): ]]; then
   COMPONENT="${BASH_REMATCH[1]}"
 fi
 

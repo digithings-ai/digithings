@@ -111,6 +111,20 @@
   --docs-nav-h: var(--dq-nav-h);
 }
 
+/* /chat, /chat/occ (chat/page.tsx, chat/occ/page.tsx): DtNav there is
+   `autoHide="hover"` and its <main> deliberately reserves no top padding on
+   desktop, since a hover-hidden bar should overlay on reveal rather than
+   leave a permanent gap. But nav-shell.css forces the bar to stay visible —
+   never hidden — on touch/narrow viewports via the same
+   `(max-width: 768px), (hover: none)` query (touch has no mousemove to
+   reveal it with), so on those viewports the fixed nav permanently overlaps
+   the chat's own top row (the digichat embed header, incl. the language
+   selector) unless the page reserves that space too. Mirrors the query
+   exactly so the two rules can never drift out of sync. */
+@media (max-width: 768px), (hover: none) {
+  .dc-chat-main { padding-top: var(--nav-shell-h); }
+}
+
 /* anchor-scroll: center the whole architecture block (head + manifest) in the viewport */
 html {
   scroll-behavior: auto;

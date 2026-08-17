@@ -29,6 +29,12 @@ from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_sum
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
 from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
+from digiquant.olympus.hermes.sizing_events import (
+    LineageValidationError,
+    SizingAdjustment,
+    SizingAdjustmentType,
+    validate_sizing_lineage,
+)
 from digiquant.olympus.hermes.turnover import apply_rebalancing_cadence
 
 logger = logging.getLogger(__name__)
@@ -141,6 +147,7 @@ def _cap_unchallenged_convictions(
     debates: Mapping[str, Mapping[str, Any]],
     *,
     bar: float,
+    events: list[SizingAdjustment] | None = None,
 ) -> tuple[dict[str, float], list[str]]:
     """Hold every crash-carried name at the entry ``bar``; return the book and those names.
 
@@ -157,11 +164,33 @@ def _cap_unchallenged_convictions(
     Correlation de-dup can still drop a capped leg in favour of a challenged one
     (``sizing._corr_dedup`` drops the lower-conviction side of a >0.80 pair); that is the
     intended outcome, not an escape hatch.
+
+    ``events`` (#2417), when passed, gets one ``CONVICTION_FLOOR`` event per capped
+    ticker, emitted right here as a pure side-channel: no counterfactual re-sizing run
+    is performed (a second ``size_portfolio`` call could legitimately drop a *different*
+    ticker via ``_corr_dedup``, which would be a more confusing explanation than none).
+    The event is recorded in the conviction domain (``unit="conviction"``), reading
+    ``conviction`` and ``bar`` — the exact values already used above — before
+    ``convictions`` is reassigned by the caller, so it has zero effect on the real book.
     """
     out: dict[str, float] = {}
     capped: list[str] = []
     for ticker, conviction in convictions.items():
         if conviction > bar and is_unchallenged_carry(debates.get(ticker) or {}):
+            if events is not None:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.CONVICTION_FLOOR,
+                        original_pct=conviction,
+                        adjusted_pct=bar,
+                        unit="conviction",
+                        reason=(
+                            f"unchallenged-carry conviction capped {conviction:.2f} -> "
+                            f"{bar:.2f} (bar)"
+                        ),
+                    )
+                )
             out[ticker] = bar
             capped.append(ticker)
         else:
@@ -308,6 +337,12 @@ def _held_carry_weights(state: AtlasResearchState) -> dict[str, float]:
     exemption set can never diverge into a new silent mismatch. A PM-exited name
     (addressed in the roster, marked ``flat``) is memo-addressed, so it is never
     resurrected here.
+
+    Returns weights only — no ``SizingAdjustment`` event, because whether a carry
+    actually lands depends on the caller's ``setdefault`` (a name already sized by
+    the PM/sizer is left untouched). Emitting the event here, unconditionally,
+    produced a ``CONTINUITY_CARRY`` record for carries that never happened (#2417
+    CodeRabbit review on #2434) — the caller emits it only when the carry sticks.
     """
     # Lazy import: keeps the phase7e ↔ commit_io edge one-directional at import time.
     from digiquant.olympus.hermes.writers.commit_io import carried_held_tickers
@@ -337,7 +372,9 @@ def _drifted_weight(state: AtlasResearchState, ticker: str) -> float | None:
 
 
 def _apply_held_continuity_backstop(
-    sized: dict[str, float], state: AtlasResearchState
+    sized: dict[str, float],
+    state: AtlasResearchState,
+    events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """FINAL-book held invariant (#1649): held ⇒ positive weight or explicit flat.
 
@@ -362,7 +399,24 @@ def _apply_held_continuity_backstop(
     addressed = memo_addressed_tickers(state)
     out = dict(sized)
     for ticker in sorted(held_tickers(state)):
-        if out.get(ticker, 0.0) > 0 or ticker in flats:
+        if out.get(ticker, 0.0) > 0:
+            continue
+        if ticker in flats:
+            # H7 explicitly said "flat" for this held name — never resurrect it. Distinct
+            # from the carry-miss/pm-addressed-sized-out branch below (#2417 FLAT_EXIT vs
+            # CONTINUITY_CARRY): the two are structurally mutually exclusive because
+            # ``memo_addressed_tickers`` already includes flat-tagged tickers, so a flat
+            # ticker can never also reach the carry-miss branch.
+            if events is not None:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.FLAT_EXIT,
+                        original_pct=_drifted_weight(state, ticker) or 0.0,
+                        adjusted_pct=0.0,
+                        reason="H7-flat: held position honored as exit, never resurrected",
+                    )
+                )
             continue
         weight = _drifted_weight(state, ticker)
         cause = "pm-addressed but sized out (caps?)" if ticker in addressed else "carry miss"
@@ -380,11 +434,23 @@ def _apply_held_continuity_backstop(
             weight,
             cause,
         )
+        if events is not None:
+            events.append(
+                SizingAdjustment(
+                    ticker=ticker,
+                    adjustment_type=SizingAdjustmentType.CONTINUITY_CARRY,
+                    original_pct=out.get(ticker, 0.0),
+                    adjusted_pct=weight,
+                    reason=cause,
+                )
+            )
         out[ticker] = weight
     return out
 
 
-def _cap_total_invested(sized: dict[str, float]) -> dict[str, float]:
+def _cap_total_invested(
+    sized: dict[str, float], events: list[SizingAdjustment] | None = None
+) -> dict[str, float]:
     """FINAL-book allocation invariant (#1676): Σ positive weights ≤ 100%.
 
     Nothing upstream enforces the total, and the held-continuity backstop (#1649)
@@ -401,7 +467,84 @@ def _cap_total_invested(sized: dict[str, float]) -> dict[str, float]:
         total,
         scale,
     )
+    if events is not None:
+        for ticker, w in sized.items():
+            if w > 0:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.FINAL_GROSS_SCALE,
+                        original_pct=w,
+                        adjusted_pct=w * scale,
+                        reason=f"total invested {total:.2f}% > 100%; scaled by {scale:.4f}",
+                    )
+                )
     return {t: (w * scale if w > 0 else w) for t, w in sized.items()}
+
+
+def _lineage_materiality_pct(preferences: Mapping[str, Any]) -> float:
+    """Widest no-trade band in play (#2417 §6).
+
+    Mirrors ``turnover.apply_turnover_to_sized_book``'s own
+    ``max(threshold, rel_band * current_pct)`` so the lineage validator never flags a
+    delta that clamp already decided was immaterial with an independently-tuned
+    epsilon. ``validate_sizing_lineage`` takes one scalar, so this uses the widest
+    (most permissive) per-ticker band actually in play this run.
+    """
+    threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)
+    rel_band = float(preferences.get("rebalance_rel_band_pct") or 20.0) / 100.0
+    current_weights = preferences.get("current_weights") or {}
+    widest_current = max(
+        (_opt_float(v) or 0.0 for v in current_weights.values()),
+        default=0.0,
+    )
+    return max(threshold, rel_band * widest_current)
+
+
+def _validate_h8_lineage(
+    pm_targets: dict[str, float],
+    sized_book: RebalancePayload,
+    preferences: Mapping[str, Any],
+    *,
+    targets_are_weights: bool = True,
+) -> None:
+    """Separate, louder layer on top of ``_build_sized_book``'s fail-soft guard (#2417 §6).
+
+    Called only after ``_build_sized_book`` has already returned a payload — never
+    replaces, masks, or is masked by that function's own try/except around
+    ``size_portfolio``. Never raises past this point and never mutates ``sized_book``:
+    a lineage failure is logged, not converted into a dropped rebalance.
+
+    ``targets_are_weights`` must be ``False`` for the memo path (H7 direction-only —
+    no PM weights, per the H7/H8 split), where ``pm_targets`` is a membership flag
+    (every long-roster ticker = 1.0), not a real requested weight. Comparing that
+    flag against a real approved percentage is meaningless — it flagged nearly every
+    sized position as an "unexplained delta" and logged an ERROR with a stack trace
+    on most production runs (#2417 CodeRabbit review on #2434), since the live
+    production path *is* the memo path. This layer no-ops there until a follow-up
+    gives the memo path a real pre-H8 target representation (see #2417 design spec
+    §6 "Open items to confirm"). It is exact for the legacy ``phase7d_rebalance``
+    path (default ``True``), where ``pm_targets`` already holds real target_pct
+    weights (``_pm_direction_legacy``).
+    """
+    if not targets_are_weights:
+        return
+    approved = {
+        str(row["ticker"]): _opt_float(row.get("target_pct")) or 0.0
+        for row in sized_book.get("recommended_portfolio") or []
+    }
+    adjustments = [
+        SizingAdjustment.model_validate(event) for event in sized_book.get("adjustments") or []
+    ]
+    try:
+        validate_sizing_lineage(
+            pm_targets,
+            approved,
+            adjustments,
+            materiality_pct=_lineage_materiality_pct(preferences),
+        )
+    except LineageValidationError:
+        logger.error("H8 lineage validation failed", exc_info=True)
 
 
 def _build_sized_book(
@@ -440,6 +583,7 @@ def _build_sized_book(
         corr_frame = None
 
     unchallenged: list[str] = []
+    events: list[SizingAdjustment] = []
     try:
         analysts = analyst_payloads(state)
         debates = deliberation_summaries(state)
@@ -456,7 +600,7 @@ def _build_sized_book(
         # (H7 writes a memo every run), so a haircut wired only into the no-memo branch
         # would be inert in production (#1742).
         convictions, unchallenged = _cap_unchallenged_convictions(
-            convictions, debates, bar=caps.min_conviction
+            convictions, debates, bar=caps.min_conviction, events=events
         )
         if unchallenged:
             logger.warning(
@@ -479,12 +623,27 @@ def _build_sized_book(
         return None
 
     sized = {p.ticker: p.target_pct for p in result.positions}
+    # #2417: bring in every event size_portfolio already emitted (caps, corr-dedup,
+    # vol-scale, breaker, grid-rounding) alongside the conviction-floor event above.
+    events.extend(result.adjustments)
     # Carry deliberately gated-out or memo-unaddressed held names at their current
     # drifted weight (#1030, #1555, #1649) BEFORE the cadence band, so they flow through as continuing positions
-    # (held, not traded). ``setdefault`` never overrides a weight the PM/sizer already
-    # set — it only re-instates a quiet held name that sizing would otherwise drop.
+    # (held, not traded). Skip (and don't emit an event for) any ticker the PM/sizer
+    # already sized — only a quiet held name that sizing would otherwise drop is
+    # actually carried, and only an actual carry gets a CONTINUITY_CARRY event.
     for ticker, weight in _held_carry_weights(state).items():
-        sized.setdefault(ticker, weight)
+        if ticker in sized:
+            continue
+        sized[ticker] = weight
+        events.append(
+            SizingAdjustment(
+                ticker=ticker,
+                adjustment_type=SizingAdjustmentType.CONTINUITY_CARRY,
+                original_pct=0.0,
+                adjusted_pct=weight,
+                reason="held ticker gated/memo-unaddressed — carried at drifted weight",
+            )
+        )
     # current_weights is already mark-to-market drifted in preflight (#955). The cadence
     # dispatcher rebalances through the no-trade band on a permitted day, else holds the
     # drifted book (only PM direction changes trade).
@@ -497,9 +656,10 @@ def _build_sized_book(
         prior_book=list(state.prior_context.prior_book),
         preferences=dict(state.config.preferences),
         run_date=state.run_date,
+        events=events,
     )
-    sized = _apply_held_continuity_backstop(sized, state)
-    sized = _cap_total_invested(sized)
+    sized = _apply_held_continuity_backstop(sized, state, events=events)
+    sized = _cap_total_invested(sized, events=events)
     updated: RebalancePayload = {
         "recommended_portfolio": [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
@@ -507,6 +667,10 @@ def _build_sized_book(
         "actions": _rebuild_actions(original_actions, pm_targets, sized, current_weights),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
         + f"Risk-sizing (H8): {result.explanation}{breaker_note}{_unchallenged_note(unchallenged)}",
+        # #2417: reason-coded, in-memory explanation of every material adjustment this
+        # H8 pass made — explanation-only, never persisted, never affects the weights
+        # computed above.
+        "adjustments": [event.model_dump() for event in events],
     }
 
     logger.info(
@@ -559,6 +723,18 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
         )
         if sized_book is None:
             return {}
+
+        # #2417 §6: unexplained-delta lineage check, layered on top of (not inside)
+        # _build_sized_book's own fail-soft try/except — logs and continues, never
+        # affects the already-computed sized_book. The memo path's pm_targets are
+        # membership flags, not weights (see _validate_h8_lineage docstring), so the
+        # comparison only runs for the legacy phase7d_rebalance path.
+        _validate_h8_lineage(
+            pm_targets,
+            sized_book,
+            state.config.preferences,
+            targets_are_weights=memo is None,
+        )
 
         if memo is not None:
             return {"phase_hermes": PhaseHermesState(sized_book=sized_book)}

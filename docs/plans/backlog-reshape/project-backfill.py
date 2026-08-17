@@ -30,13 +30,13 @@ OPT = {
         "Phase 4 — Atlas on digigraph": "5c4138a8",
         "Phase 5 — Atlas tiering": "dac4d6ce",
         "Phase 6 — Platform": "1ecee05a",
-        "SITAAS pilot": "cea67c2c",
+        "Client Pilot": "cea67c2c",
     },
     "area": {
         "DigiGraph": "64fb1b51", "DigiSearch": "c4d1712a", "DigiQuant": "320e44e0",
         "DigiChat":  "f2e0930b", "DigiKey":    "87c52e14", "DigiClaw":  "2ab0471a",
         "DigiSmith": "733214e8", "DigiBase":   "67bc54a2", "Website":   "61caae04",
-        "Atlas":     "e78729ab", "SITAAS":     "e911491e", "Docs":      "820a5756",
+        "Atlas":     "e78729ab", "Client Pilot": "e911491e", "Docs":      "820a5756",
         "Infra":     "d3fbf4c4", "Cross-cutting": "70e7b58f",
     },
     "priority": {"P0": "0efbf390", "P1": "cc02d53a", "P2": "fc431d36", "P3": "c4bda5c6"},
@@ -122,8 +122,8 @@ def derive_area(labels, title):
     tl = title.lower()
     if "atlas" in tl or any("atlas" in lbl for lbl in labels):
         return "Atlas"
-    if "sitaas" in ls or "sitaas" in tl:
-        return "SITAAS"
+    if "client-pilot" in ls or "sitaas" in tl:
+        return "Client Pilot"
     for comp, area in COMPONENT_TO_AREA.items():
         if comp in ls:
             return area
@@ -149,8 +149,8 @@ def derive_phase(labels, title):
         return "Phase 5 — Atlas tiering"
     if "phase-2" in ls:
         return "Phase 2 — Hardening"
-    if "sitaas" in ls:
-        return "SITAAS pilot"
+    if "client-pilot" in ls:
+        return "Client Pilot"
     # Everything current is platform-phase work
     return "Phase 6 — Platform"
 

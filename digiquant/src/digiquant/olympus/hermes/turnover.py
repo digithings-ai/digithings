@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any  # score:allow untyped any — scored-lint suppression: entry_date coercion
 
+from digiquant.olympus.hermes.sizing_events import SizingAdjustment, SizingAdjustmentType
+
 # Cadence values read from config preferences (``preferences["rebalancing_cadence"]``),
 # sourced from portfolio.json ``constraints`` during preflight. Default "daily".
 _VALID_CADENCES = frozenset({"daily", "weekly", "monthly", "none"})
@@ -98,6 +100,7 @@ def hold_drifted_book(
     sized: dict[str, float],
     *,
     current_weights: dict[str, float],
+    events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """Non-rebalance-day book: hold drifted weights; honor PM direction changes only (#955).
 
@@ -107,6 +110,10 @@ def hold_drifted_book(
     immediately: a target of 0 exits the name, and a name with no current weight is a
     new entry booked at its sized target. This is the "weights drift; rebalance only on
     an explicit decision" behavior the configured cadence asks for.
+
+    ``events``, when passed, is mutated in place with reason-coded ``SizingAdjustment``
+    entries (#2417): ``FLAT_EXIT`` for the PM-exit branch, ``CADENCE_HOLD`` for the
+    continuing-position branch. The new-entry branch is not an adjustment — no event.
     """
     if not current_weights:
         return sized
@@ -116,11 +123,31 @@ def hold_drifted_book(
             continue
         current = float(current_weights.get(ticker, 0.0))
         if target <= 0:
+            if events is not None and current > 0:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.FLAT_EXIT,
+                        original_pct=current,
+                        adjusted_pct=0.0,
+                        reason="PM exit honored off-cadence (target <= 0)",
+                    )
+                )
             continue  # PM exit → drop to flat (residual becomes cash)
         if current <= 0:
             out[ticker] = target  # new entry → book at target
         else:
             out[ticker] = current  # continuing position → hold drifted weight
+            if events is not None and abs(current - target) > 1e-9:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.CADENCE_HOLD,
+                        original_pct=target,
+                        adjusted_pct=current,
+                        reason="off-cadence: held at drifted weight, not rebalanced to target",
+                    )
+                )
     return out
 
 
@@ -131,6 +158,7 @@ def apply_rebalancing_cadence(
     prior_book: list[dict[str, Any]],
     preferences: dict[str, Any],
     run_date: date,
+    events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """Dispatch sizing through the rebalancing cadence (#955).
 
@@ -138,6 +166,9 @@ def apply_rebalancing_cadence(
     (:func:`apply_turnover_to_sized_book`). Otherwise hold the drifted book
     (:func:`hold_drifted_book`). ``current_weights`` must already be mark-to-market
     drifted (see :func:`mark_to_market_weights`).
+
+    ``events``, when passed, is threaded through unchanged to whichever function is
+    dispatched to (#2417) — this function's own dispatch logic is untouched.
     """
     cadence = str(preferences.get("rebalancing_cadence") or "daily")
     if should_rebalance_today(cadence, run_date, preferences):
@@ -147,8 +178,9 @@ def apply_rebalancing_cadence(
             prior_book=prior_book,
             preferences=preferences,
             run_date=run_date,
+            events=events,
         )
-    return hold_drifted_book(sized, current_weights=current_weights)
+    return hold_drifted_book(sized, current_weights=current_weights, events=events)
 
 
 def apply_turnover_to_sized_book(
@@ -158,6 +190,7 @@ def apply_turnover_to_sized_book(
     prior_book: list[dict[str, Any]],
     preferences: dict[str, Any],
     run_date: date,
+    events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """Clamp sized targets toward current weights when inside the no-trade band or min-hold.
 
@@ -166,6 +199,14 @@ def apply_turnover_to_sized_book(
     A relative band keeps a large position from churning on a small drift (a 30% name with a
     3pp move stays put) while small positions still use the absolute floor — research-backed
     turnover discipline that lets the book *evolve* day-over-day instead of rewriting.
+
+    ``events``, when passed, is mutated in place with reason-coded ``SizingAdjustment``
+    entries (#2417) for the ``inside_hold`` branch only (``MINIMUM_HOLD_OVERRIDE`` — PM wanted
+    out, lockup kept the position). The no-trade-band clamp below is deliberately excluded: by
+    construction it only fires when ``delta < band``, i.e. the suppressed delta is immaterial by
+    the pipeline's own definition, so it is not a "requested->approved delta" the acceptance
+    criteria's materiality qualifier requires an event for. The lineage validator (sizing_events)
+    is parameterized with this same band so these micro-deltas are never flagged as unexplained.
     """
     if not current_weights:
         return sized
@@ -192,7 +233,22 @@ def apply_turnover_to_sized_book(
 
         if target_pct <= 0 and inside_hold:
             out[ticker] = current_pct
+            if events is not None:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.MINIMUM_HOLD_OVERRIDE,
+                        original_pct=target_pct,
+                        adjusted_pct=current_pct,
+                        reason="minimum-hold lockup overrides PM exit",
+                    )
+                )
             continue
+        # No-trade band: deliberately not an adjustment event (#2417 §3). By construction
+        # this only fires when the delta is smaller than the pipeline's own materiality band,
+        # so it is not a material requested->approved delta — the lineage validator uses this
+        # same band as its materiality threshold, so these suppressed micro-deltas are never
+        # flagged as unexplained.
         band = max(threshold, rel_band * current_pct)
         if delta < band and target_pct > 0:
             out[ticker] = current_pct

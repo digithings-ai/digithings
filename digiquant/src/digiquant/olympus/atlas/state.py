@@ -347,6 +347,13 @@ class RebalancePayload(TypedDict, total=False):
     recommended_portfolio: list[TargetWeightRow]
     actions: list[RebalanceActionRow]
     notes: str
+    # Reason-coded H8 sizing adjustments (#2417) — explanation-only, in-memory,
+    # never persisted. Each row mirrors ``SizingAdjustment.model_dump()``. Intended
+    # for future in-process consumers (H9 narrative/notes, pre-trade risk explaining
+    # a requested->approved delta, outcome-episode logging) — no such consumer reads
+    # this field yet. Absent/empty is valid (fully flat book, or sizing failed soft
+    # before any adjustment ran).
+    adjustments: list[dict[str, Any]]
 
 
 class Phase9EvolutionPayload(TypedDict, total=False):
