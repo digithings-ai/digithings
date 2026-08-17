@@ -738,10 +738,12 @@ def test_zero_unexplained_deltas_across_scenario_battery(scenario: dict) -> None
     grid-rounding both mid-value and snap-to-zero, min-floor drop, full-drop, a
     no-conviction-clears-the-bar flat book, kelly mode, and a multi-pressure default-caps
     case). No ``hypothesis`` dependency: this repo has none, so the acceptance-criteria
-    property ("every material requested->approved delta has exactly one explaining event,
-    zero unexplained") is pinned by an explicit, deterministic scenario matrix run through
-    ``validate_sizing_lineage`` against real ``size_portfolio`` output, instead of by
-    generated/random inputs.
+    property ("every material requested->approved delta is accounted for by its ticker's
+    adjustment chain, zero unexplained") is pinned by an explicit, deterministic scenario
+    matrix run through ``validate_sizing_lineage`` against real ``size_portfolio`` output,
+    instead of by generated/random inputs. "Accounted for" means the chain *ends* at the
+    approved value — see ``validate_sizing_lineage``'s docstring for why the chain's start
+    is deliberately not checked here.
     """
     result = size_portfolio(**scenario)
     _assert_zero_unexplained_deltas(result)

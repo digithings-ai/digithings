@@ -138,7 +138,7 @@ def hold_drifted_book(
             out[ticker] = target  # new entry → book at target
         else:
             out[ticker] = current  # continuing position → hold drifted weight
-            if events is not None and current != target:
+            if events is not None and abs(current - target) > 1e-9:
                 events.append(
                     SizingAdjustment(
                         ticker=ticker,

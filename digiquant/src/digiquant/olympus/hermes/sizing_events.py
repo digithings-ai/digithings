@@ -23,6 +23,7 @@ weight-calculation path.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from enum import StrEnum
 from typing import Annotated, Literal
 
@@ -54,7 +55,7 @@ class SizingAdjustment(BaseModel):
     values are conviction scores, not portfolio percentages.
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
     ticker: str
     adjustment_type: SizingAdjustmentType
@@ -94,15 +95,49 @@ def validate_sizing_lineage(
     this never re-flags a delta that clamp already decided was immaterial with an
     independently-tuned epsilon. Callers pass the largest (most permissive) band in
     play when a single scalar is required.
+
+    Membership alone is not enough: a ticker can carry a ``SizingAdjustment`` for
+    an unrelated reason while its actual requested->approved delta remains
+    unexplained. So this walks each ticker's ``pct``-unit adjustment chain in
+    emission order and requires it to *end* at (approximately) ``approved`` — not
+    merely that some adjustment mentioning the ticker exists. ``unit="conviction"``
+    events describe a conviction-score haircut, not a weight-percentage delta, so
+    they never participate in this chain.
+
+    Deliberately **not** checked: that the chain *starts* at (approximately)
+    ``requested``. The two call sites in this codebase disagree on what
+    ``requested`` even means — ``sizing.SizingResult.requested_pct`` (used by the
+    ``test_sizing.py`` lineage battery) is the sizer's own pre-adjustment raw
+    weight, so it does line up with ``chain[0].original_pct`` by construction; but
+    ``phase7e_risk_sizing._validate_h8_lineage`` passes the **PM's own
+    ``target_pct`` ask** as ``requested``, and ``size_portfolio`` derives its raw
+    weight from conviction/stance, entirely independent of what the PM asked for
+    (see ``_effective_inputs``/``_memo_effective_inputs``). Requiring
+    ``chain_start ≈ requested`` is therefore only an accident of the first
+    call site and a false positive on the second — a bound PM ask reconciled by a
+    real ``SizingAdjustment`` chain would still get flagged as unexplained. Only
+    the chain's *end* needs to match the actually-approved value; where that
+    chain started is not this function's business.
     """
-    explained = {a.ticker for a in adjustments}
+    by_ticker: dict[str, list[SizingAdjustment]] = defaultdict(list)
+    for adjustment in adjustments:
+        if adjustment.unit == "pct":
+            by_ticker[adjustment.ticker].append(adjustment)
+
     tickers = set(requested) | set(approved)
-    unexplained = sorted(
-        ticker
-        for ticker in tickers
-        if abs(approved.get(ticker, 0.0) - requested.get(ticker, 0.0)) > materiality_pct
-        and ticker not in explained
-    )
+    unexplained = []
+    for ticker in sorted(tickers):
+        requested_pct = requested.get(ticker, 0.0)
+        approved_pct = approved.get(ticker, 0.0)
+        if abs(approved_pct - requested_pct) <= materiality_pct:
+            continue
+        chain = by_ticker.get(ticker)
+        if not chain:
+            unexplained.append(ticker)
+            continue
+        chain_end = chain[-1].adjusted_pct
+        if abs(chain_end - approved_pct) > materiality_pct:
+            unexplained.append(ticker)
     if unexplained:
         raise UnexplainedDeltaError(f"unexplained sizing delta(s) for: {unexplained}")
 

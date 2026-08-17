@@ -317,11 +317,20 @@ class RequestedTarget(TimedPortfolioLedgerRecord):
 
 # Adjustment types that can only ever reduce a value — a cap, dedup, or breaker
 # by definition trims toward a limit, never expands past it. ``CAP`` is the
-# original (#2415) value; the other four are #2417 additions that share the
+# original (#2415) value; the other six are #2417 additions that share the
 # same reducing-only invariant but were missing from ``validate_lifecycle``
 # until this fix (#2417 CodeRabbit review on #2434). ``CORRELATION_DEDUP``
 # trims an overlapping position's size down, same as a cap — an increasing
 # correlation-dedup record is exactly as invalid as an increasing cap one.
+# ``GRID_ROUNDING`` always rounds down to the sizing grid (never to nearest —
+# see ``sizing._round_to_grid``'s own reduce-only invariant), and ``FLAT_EXIT``
+# always drives a held position to exactly 0 (an H7-flat exit or a PM-exit —
+# see ARCHITECTURE.md's H8 adjustment-event taxonomy table), so both belong
+# here alongside the caps/dedup/breaker set. ``VOLATILITY_SCALE`` and
+# ``FINAL_GROSS_SCALE`` are deliberately absent: both can scale a book UP as
+# well as down (vol-target up-scale toward an under-filled budget, #943; a
+# binding gross/pos/sector candidate scale that exceeds 1), so neither is
+# reduce-only.
 _REDUCING_ADJUSTMENT_TYPES: frozenset[TargetAdjustmentType] = frozenset(
     {
         TargetAdjustmentType.CAP,
@@ -329,6 +338,8 @@ _REDUCING_ADJUSTMENT_TYPES: frozenset[TargetAdjustmentType] = frozenset(
         TargetAdjustmentType.SECTOR_CAP,
         TargetAdjustmentType.CORRELATION_DEDUP,
         TargetAdjustmentType.DRAWDOWN_BREAKER,
+        TargetAdjustmentType.GRID_ROUNDING,
+        TargetAdjustmentType.FLAT_EXIT,
     }
 )
 

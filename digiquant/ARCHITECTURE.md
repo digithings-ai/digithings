@@ -1080,20 +1080,29 @@ enumerates all 12 causes and where each is emitted:
 | `SINGLE_NAME_CAP` | `sizing.size_portfolio` (position-cap step) | yes |
 | `SECTOR_CAP` | `sizing.size_portfolio` (sector-cap step) | yes |
 | `CORRELATION_DEDUP` | `sizing.size_portfolio` (correlation de-dup step) | yes |
-| `VOLATILITY_SCALE` | `sizing.size_portfolio` (ex-ante vol-target step) | yes |
+| `VOLATILITY_SCALE` | `sizing.size_portfolio` (ex-ante vol-target step) | no — bidirectional by design; #943 added the up-scale path to correct chronic under-risking ("over-cashing") whenever the book sits below its vol budget, so this can raise a weight as well as trim one |
 | `DRAWDOWN_BREAKER` | `sizing.size_portfolio` (breaker-scale step) | yes |
 | `GRID_ROUNDING` | `sizing.size_portfolio` (round-down-to-grid step) | yes |
 | `CADENCE_HOLD` | `turnover.hold_drifted_book` (off-cadence, continuing position) | no — holds at drifted weight |
 | `MINIMUM_HOLD_OVERRIDE` | `turnover.apply_turnover_to_sized_book` (`inside_hold` branch) | no — lockup overrides a PM exit |
-| `CONTINUITY_CARRY` | `phases.phase7e_risk_sizing._held_carry_weights`, `_apply_held_continuity_backstop` | no — restores a dropped held position |
-| `FINAL_GROSS_SCALE` | `sizing.size_portfolio` (gross/pos/sector-cap-binding scale step); `phases.phase7e_risk_sizing._cap_total_invested` (total-invested cap) | yes |
+| `CONTINUITY_CARRY` | `phases.phase7e_risk_sizing._apply_held_continuity_backstop` | no — restores a dropped held position |
+| `FINAL_GROSS_SCALE` | `sizing.size_portfolio` (gross/pos/sector-cap-binding scale step); `phases.phase7e_risk_sizing._cap_total_invested` (total-invested cap) | no — two sites, two directions: the `size_portfolio` binding-scale step can raise a weight in an under-invested-book edge case (the candidate scale it picks among is not capped at 1 from below), while `_cap_total_invested` only ever fires when total invested exceeds 100% and is therefore strictly reduce-only |
 | `FLAT_EXIT` | `turnover.hold_drifted_book` (off-cadence PM exit); `phases.phase7e_risk_sizing._apply_held_continuity_backstop` (H7-flat branch) | yes (to 0) |
+
+`_held_carry_weights` computes the drifted-weight candidate for a held-but-memo-unaddressed
+ticker but does not itself emit `CONTINUITY_CARRY` — its caller,
+`_apply_held_continuity_backstop`, is the sole emitter, firing only when the carry actually
+sticks (a prior CodeRabbit round on #2434 fixed a double-emission bug where emitting
+unconditionally inside `_held_carry_weights` produced a record for carries that never
+happened).
 
 Two notes on `FLAT_EXIT` vs. `CONTINUITY_CARRY`: an H7-flat held name (explicit PM exit) is
 never resurrected and always gets `FLAT_EXIT`; a held name the memo simply omitted
 (memo-unaddressed, or H4-gated out of the roster) is carried at its drifted weight and gets
-`CONTINUITY_CARRY` instead. `memo_addressed_tickers` already includes flat-tagged tickers, so
-the two branches are structurally mutually exclusive — a ticker cannot earn both.
+`CONTINUITY_CARRY` instead. The two are mutually exclusive by control flow, not by set
+membership: inside `_apply_held_continuity_backstop`, the `flats` branch `continue`s
+unconditionally for a flat-tagged ticker before the carry-miss branch is ever reached for
+that same ticker, so a single pass can never emit both for one name.
 
 The no-trade-band clamp in `apply_turnover_to_sized_book` deliberately emits **no** event: by
 construction it only fires when the delta is smaller than the pipeline's own materiality band
