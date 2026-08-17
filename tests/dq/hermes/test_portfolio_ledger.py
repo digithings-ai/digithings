@@ -340,6 +340,25 @@ class TestTargetAdjustmentCapRoundingCarry:
                 adjusted_value=Decimal("0.08"),
             )
 
+    def test_correlation_dedup_reduces_value(self) -> None:
+        adj = self._adjustment(
+            TargetAdjustmentType.CORRELATION_DEDUP,
+            reason="trimmed for overlap with an existing correlated position",
+        )
+        assert adj.adjusted_value < adj.original_value
+
+    def test_correlation_dedup_increasing_value_raises(self) -> None:
+        """Regression for #2417 CodeRabbit review on #2434: CORRELATION_DEDUP was
+        missing from ``_REDUCING_ADJUSTMENT_TYPES``, so ``validate_lifecycle`` let
+        an increasing correlation-dedup record through unchallenged."""
+        with pytest.raises(ValidationError):
+            self._adjustment(
+                TargetAdjustmentType.CORRELATION_DEDUP,
+                original_value=Decimal("0.05"),
+                adjusted_value=Decimal("0.08"),
+                reason="trimmed for overlap with an existing correlated position",
+            )
+
     def test_rounding_adjustment_ok(self) -> None:
         adj = self._adjustment(
             TargetAdjustmentType.ROUNDING,
