@@ -52,7 +52,7 @@ add_field "Phase" \
   "Phase 3 — Domain unification" \
   "Phase 4 — Atlas on digigraph" \
   "Phase 5 — Atlas tiering" \
-  "SITAAS pilot"
+  "Client Pilot"
 
 add_field "Area" \
   "Cross-cutting" \
@@ -65,7 +65,7 @@ add_field "Area" \
   "digibase" \
   "digiclaw" \
   "Website" \
-  "SITAAS" \
+  "Client Pilot" \
   "Docs" \
   "Atlas"
 

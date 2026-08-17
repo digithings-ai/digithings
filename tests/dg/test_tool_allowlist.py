@@ -71,7 +71,7 @@ def test_get_tools_filters_by_allowlist(monkeypatch: pytest.MonkeyPatch) -> None
         state={},
         allowed_tool_names=frozenset({"digisearch"}),
     )
-    tools = get_tools(["search", "sitaas_rag"], ctx)
+    tools = get_tools(["search", "project_rag"], ctx)
     names = []
     for t in tools:
         fn = t.get("function")
@@ -79,6 +79,25 @@ def test_get_tools_filters_by_allowlist(monkeypatch: pytest.MonkeyPatch) -> None
             names.append(fn["name"])
     assert "digisearch" in names
     assert "visualization_agent" not in names
+
+
+@pytest.mark.unit
+def test_get_tools_warns_on_unknown_skill_id(caplog: pytest.LogCaptureFixture) -> None:
+    """An unregistered skill id (e.g. a stale `sitaas_rag` from before #2426's
+    rename to `project_rag`) contributes zero tools silently -- get_tools()
+    doesn't raise. Assert it at least logs, so a stale project config doesn't
+    lose its whole toolset without a trace."""
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir="/tmp",
+        index_name="default",
+        index_config={},
+        state={},
+    )
+    with caplog.at_level("WARNING", logger="digigraph.orchestration.registry"):
+        tools = get_tools(["not_a_real_skill_id"], ctx)
+    assert tools == []
+    assert any("not_a_real_skill_id" in r.message for r in caplog.records)
 
 
 @pytest.mark.unit
@@ -145,6 +164,19 @@ def test_require_tool_calls_env_fallback(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("DIGI_REQUIRE_TOOL_CALLS", "1")
     cfg = DigiProjectConfig({"agents": {}})
     req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_env_true_wins_even_if_request_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Env floor mirrors project floor: request-level False cannot opt out of
+    DIGI_REQUIRE_TOOL_CALLS. Project=True+request=False is covered above; this
+    pins the env half of the same OR-floor contract."""
+    monkeypatch.setenv("DIGI_REQUIRE_TOOL_CALLS", "1")
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=False)
     assert require_tool_calls_for_workflow(req, cfg=cfg) is True
 
 

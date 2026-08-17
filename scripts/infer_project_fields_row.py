@@ -19,8 +19,8 @@ def infer_row(issue_number: int, labels: list[dict[str, str]]) -> tuple[str, str
         phase = "Phase 4 — Atlas on digigraph"
     elif "phase-5" in names:
         phase = "Phase 5 — Atlas tiering"
-    elif "sitaas" in names:
-        phase = "SITAAS pilot"
+    elif "client-pilot" in names:
+        phase = "Client Pilot"
 
     area = "Cross-cutting"
     component_map = {
@@ -36,8 +36,8 @@ def infer_row(issue_number: int, labels: list[dict[str, str]]) -> tuple[str, str
         if label in names:
             area = board_area
             break
-    if "sitaas" in names:
-        area = "SITAAS"
+    if "client-pilot" in names:
+        area = "Client Pilot"
 
     kind = "Task"
     if "epic" in names:
