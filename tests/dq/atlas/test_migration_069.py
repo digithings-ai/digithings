@@ -87,11 +87,6 @@ def test_tables_use_stable_uuid_primary_keys(sql: str, table: str) -> None:
     ("table", "column", "referenced_table"),
     (
         (
-            "portfolio_ledger_commits",
-            "supersedes_id",
-            "portfolio_ledger_commits",
-        ),
-        (
             "portfolio_ledger_decision_intents",
             "portfolio_commit_id",
             "portfolio_ledger_commits",
@@ -112,19 +107,9 @@ def test_tables_use_stable_uuid_primary_keys(sql: str, table: str) -> None:
             "portfolio_ledger_requested_targets",
         ),
         (
-            "portfolio_ledger_approved_targets",
-            "supersedes_id",
-            "portfolio_ledger_approved_targets",
-        ),
-        (
             "portfolio_ledger_order_intents",
             "approved_target_id",
             "portfolio_ledger_approved_targets",
-        ),
-        (
-            "portfolio_ledger_order_intents",
-            "supersedes_id",
-            "portfolio_ledger_order_intents",
         ),
         (
             "portfolio_ledger_paper_executions",
@@ -149,6 +134,58 @@ def test_lineage_foreign_keys_point_at_prior_stage(
     body = _table_body(sql, table)
     assert re.search(
         rf"FOREIGN KEY\s*\({column}\)\s+REFERENCES\s+public\.{referenced_table}",
+        body,
+        re.IGNORECASE,
+    )
+
+
+@pytest.mark.parametrize(
+    ("table", "key_columns"),
+    (
+        ("portfolio_ledger_commits", "id,\\s*run_date"),
+        (
+            "portfolio_ledger_approved_targets",
+            "id,\\s*run_date,\\s*symbol",
+        ),
+        (
+            "portfolio_ledger_order_intents",
+            "id,\\s*run_date,\\s*symbol",
+        ),
+    ),
+)
+def test_self_referencing_tables_have_a_lineage_scoped_unique_key(
+    sql: str, table: str, key_columns: str
+) -> None:
+    """The UNIQUE (id, run_date[, symbol]) key backing the composite supersedes_id FK.
+
+    Without this, the composite FK below has nothing to reference: Postgres requires
+    a unique or primary key on exactly the referenced column tuple.
+    """
+    body = _table_body(sql, table)
+    assert re.search(rf"UNIQUE\s*\({key_columns}\)", body, re.IGNORECASE)
+
+
+@pytest.mark.parametrize(
+    ("table", "key_columns"),
+    (
+        ("portfolio_ledger_commits", "run_date"),
+        ("portfolio_ledger_approved_targets", "run_date,\\s*symbol"),
+        ("portfolio_ledger_order_intents", "run_date,\\s*symbol"),
+    ),
+)
+def test_supersedes_id_is_scoped_to_its_own_lineage_by_composite_fk(
+    sql: str, table: str, key_columns: str
+) -> None:
+    """supersedes_id can only point at a row in the SAME run_date (and symbol, where
+    applicable) lineage — enforced by a composite FK, not the plain single-column FK
+    used elsewhere in this table. A plain FK would let a supersession link jump
+    across run_dates or symbols, corrupting the lineage chain; MATCH SIMPLE (the
+    Postgres default for composite FKs) still lets supersedes_id be NULL for a root
+    row without requiring every column in the tuple to be non-NULL.
+    """
+    body = _table_body(sql, table)
+    assert re.search(
+        rf"FOREIGN KEY\s*\(supersedes_id,\s*{key_columns}\)\s+REFERENCES\s+public\.{table}\s*\(id,\s*{key_columns}\)",
         body,
         re.IGNORECASE,
     )
@@ -290,6 +327,35 @@ def test_economic_numeric_columns_reject_nan(sql: str, table: str, column: str) 
     normalized = " ".join(body.split())
     assert f"NOT ({column} = 'NaN'::numeric)" in normalized, (
         f"{table}.{column} is missing the explicit NaN guard"
+    )
+
+
+@pytest.mark.parametrize(
+    ("table", "column"),
+    (
+        ("portfolio_ledger_requested_targets", "requested_quantity"),
+        ("portfolio_ledger_target_adjustments", "original_value"),
+        ("portfolio_ledger_target_adjustments", "adjusted_value"),
+        ("portfolio_ledger_approved_targets", "approved_quantity"),
+        ("portfolio_ledger_order_intents", "quantity"),
+        ("portfolio_ledger_paper_executions", "quantity"),
+        ("portfolio_ledger_paper_executions", "price"),
+        ("portfolio_ledger_holding_lots", "quantity"),
+        ("portfolio_ledger_holding_lots", "open_price"),
+    ),
+)
+def test_economic_numeric_columns_reject_infinity(sql: str, table: str, column: str) -> None:
+    """Postgres `numeric` also admits `'Infinity'::numeric` (and `-Infinity`), and it
+    passes the same positivity/non-negativity CHECKs an IEEE float's infinity would
+    fail closed against: `'Infinity'::numeric > 0` and `>= 0` are both TRUE. Every
+    economically meaningful numeric column in this migration must carry an explicit
+    `NOT (column = 'Infinity'::numeric)` guard alongside its NaN guard. (Weight
+    columns are exempt: `Infinity BETWEEN 0 AND 1` is already false, so they reject
+    Infinity "by accident" with no extra guard needed.)"""
+    body = _table_body(sql, table)
+    normalized = " ".join(body.split())
+    assert f"NOT ({column} = 'Infinity'::numeric)" in normalized, (
+        f"{table}.{column} is missing the explicit Infinity guard"
     )
 
 
@@ -443,10 +509,10 @@ def test_order_intent_rejection_reason_is_tied_to_status(sql: str) -> None:
             "supersedes_id IS NOT NULL",
         ),
         (
-            "uq_portfolio_ledger_order_intents_one_pending",
+            "uq_portfolio_ledger_order_intents_one_root",
             "portfolio_ledger_order_intents",
             "run_date, symbol",
-            "status = 'pending' AND supersedes_id IS NULL",
+            "supersedes_id IS NULL",
         ),
         (
             "uq_portfolio_ledger_order_intents_supersedes",
@@ -471,29 +537,35 @@ def test_currency_partial_unique_indexes(
     ), f"missing or malformed {index_name}"
 
 
-def test_order_intent_one_pending_index_admits_a_superseding_replacement(sql: str) -> None:
+def test_order_intent_one_root_index_admits_a_superseding_replacement(sql: str) -> None:
     """Regression coverage for the OLY-REV-009-adjacent bug this predicate closes:
-    supersedes_id is orthogonal to status (see
+    the original index scoped its predicate to `status = 'pending' AND supersedes_id
+    IS NULL`. supersedes_id is orthogonal to status (see
     test_order_intent_supersession_is_self_reference_safe) and append-only immutability
-    means a superseded row can never leave 'pending' on its own. A predicate of
-    `status = 'pending'` alone would therefore make `uq_portfolio_ledger_order_intents_one_pending`
-    collide a superseding replacement (also inserted as 'pending') with the stale row it
-    is meant to replace — silently blocking the documented supersession flow. Requiring
-    `supersedes_id IS NULL` too means only the *root* pending row is covered by the
-    uniqueness rule, so a replacement — which always has `supersedes_id` set — is exempt
-    from it and free to coexist with the row it supersedes."""
+    means a superseded row can never leave 'pending' on its own, so that predicate
+    would collide a superseding replacement (also inserted as 'pending') with the
+    stale row it is meant to replace — silently blocking the documented supersession
+    flow whenever the pending currency window spans a same-day correction, exactly
+    the OLY-REV-009 scenario for the sibling commits/approved_targets tables.
+
+    The fix drops the `status` predicate entirely and scopes to `supersedes_id IS
+    NULL` alone, matching the pattern already used by
+    uq_portfolio_ledger_commits_one_root and uq_portfolio_ledger_approved_targets_one_root:
+    only the *root* row (no predecessor) is covered by the uniqueness rule, so a
+    replacement — which always has `supersedes_id` set — is exempt from it and free
+    to coexist with the row it supersedes, regardless of either row's `status`."""
     match = re.search(
-        r"CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_one_pending\s+"
+        r"CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_one_root\s+"
         r"ON public\.portfolio_ledger_order_intents\s*\(run_date, symbol\)\s+WHERE\s+([^;]+);",
         sql,
         re.IGNORECASE,
     )
-    assert match, "missing or malformed uq_portfolio_ledger_order_intents_one_pending"
+    assert match, "missing or malformed uq_portfolio_ledger_order_intents_one_root"
     predicate = " ".join(match.group(1).split())
-    conditions = {clause.strip() for clause in predicate.split(" AND ")}
-    assert conditions == {"status = 'pending'", "supersedes_id IS NULL"}, (
-        "the one-pending index must scope to non-superseded rows, or a superseding "
-        "replacement order would collide with the stale pending row it replaces"
+    assert predicate.strip() == "supersedes_id IS NULL", (
+        "the one-root index must scope to supersedes_id IS NULL only — reintroducing "
+        "a status predicate would let a superseding replacement order collide with "
+        "the stale pending row it replaces"
     )
 
 

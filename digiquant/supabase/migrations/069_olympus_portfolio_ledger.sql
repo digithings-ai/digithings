@@ -58,10 +58,10 @@
 -- a `rejected`/`executed` row is INSERTed with that status already populated — it is
 -- never a `pending` row later flipped in place (UPDATE is rejected by the trigger above;
 -- re-INSERTing the same id is rejected by the PRIMARY KEY). Supersession is recorded the
--- same way, and every supersession link in this schema is forward-only: a new row's
+-- same way, and every supersession link in this schema is backward-only: a new row's
 -- `supersedes_id` (`commits.supersedes_id`, `approved_targets.supersedes_id`,
--- `order_intents.supersedes_id`) points back at the prior row it replaces. A backward
--- link — the row being replaced pointing forward at its not-yet-existing successor —
+-- `order_intents.supersedes_id`) points back at the prior row it replaces. A forward
+-- link — the row being replaced pointing at its not-yet-existing successor —
 -- cannot be recorded under this same append-only rule: populating it after the successor
 -- exists is an UPDATE (rejected by the trigger), and there is no other row to populate it
 -- on at INSERT time, since the successor doesn't exist yet.
@@ -77,9 +77,17 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_commits (
     supersedes_id uuid,
     effective_at timestamptz NOT NULL,
     recorded_at timestamptz NOT NULL DEFAULT now(),
+    -- Composite target for the FK below: lets supersedes_id's FK also pin run_date, so a
+    -- row can only supersede a prior row from the same run_date's lineage.
+    CONSTRAINT uq_portfolio_ledger_commits_id_run_date
+        UNIQUE (id, run_date),
+    -- Composite FK (not a plain id-only reference): default MATCH SIMPLE means a NULL
+    -- supersedes_id (root rows) short-circuits the whole check, but a populated
+    -- supersedes_id must match both id and run_date on the superseded row, so a commit
+    -- can never "supersede" a row from an unrelated run_date.
     CONSTRAINT fk_portfolio_ledger_commits_supersedes
-        FOREIGN KEY (supersedes_id)
-        REFERENCES public.portfolio_ledger_commits (id),
+        FOREIGN KEY (supersedes_id, run_date)
+        REFERENCES public.portfolio_ledger_commits (id, run_date),
     -- No status column: a same-date recommit is always a new row whose supersedes_id
     -- points back at the prior commit it replaces (mirroring approved_targets below),
     -- never a mutation of that prior row. Currency is purely structural — a commit is
@@ -135,16 +143,23 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_requested_targets (
     requested_weight numeric CHECK (
         requested_weight IS NULL OR requested_weight BETWEEN 0 AND 1
     ),
-    -- `AND NOT (... = 'NaN'::numeric)` is required, not decorative: unlike IEEE floats,
-    -- Postgres `numeric` treats NaN as equal to itself and greater than every other value,
-    -- so `'NaN'::numeric >= 0` is TRUE and a bare `>= 0`/`> 0` guard does not fail closed
-    -- against it. Weight columns are safe by accident (`NaN BETWEEN 0 AND 1` is false);
-    -- every other economically meaningful numeric column in this migration (here and in
-    -- target_adjustments, approved_targets, order_intents, paper_executions, holding_lots
-    -- below) carries this same explicit guard.
+    -- `AND NOT (... = 'NaN'::numeric)` and `AND NOT (... = 'Infinity'::numeric)` are both
+    -- required, not decorative: unlike IEEE floats, Postgres `numeric` treats NaN as equal
+    -- to itself and greater than every other value, so `'NaN'::numeric >= 0` is TRUE, and
+    -- `'Infinity'::numeric` is a legitimate positive `numeric` value that also passes a
+    -- bare `>= 0`/`> 0` guard — neither fails closed without an explicit exclusion. Weight
+    -- columns need neither guard: `NaN BETWEEN 0 AND 1` and `'Infinity'::numeric BETWEEN 0
+    -- AND 1` are both false, so the BETWEEN already fails closed; every other economically
+    -- meaningful numeric column in this migration (here and in target_adjustments,
+    -- approved_targets, order_intents, paper_executions, holding_lots below) carries both
+    -- explicit guards.
     requested_quantity numeric CHECK (
         requested_quantity IS NULL
-        OR (requested_quantity >= 0 AND NOT (requested_quantity = 'NaN'::numeric))
+        OR (
+            requested_quantity >= 0
+            AND NOT (requested_quantity = 'NaN'::numeric)
+            AND NOT (requested_quantity = 'Infinity'::numeric)
+        )
     ),
     effective_at timestamptz NOT NULL,
     recorded_at timestamptz NOT NULL DEFAULT now(),
@@ -179,10 +194,14 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_target_adjustments (
     -- (XOR, not OR), so the dimension is always inferable, never ambiguous.
     -- NaN guard: see portfolio_ledger_requested_targets above.
     original_value numeric NOT NULL CHECK (
-        original_value >= 0 AND NOT (original_value = 'NaN'::numeric)
+        original_value >= 0
+        AND NOT (original_value = 'NaN'::numeric)
+        AND NOT (original_value = 'Infinity'::numeric)
     ),
     adjusted_value numeric NOT NULL CHECK (
-        adjusted_value >= 0 AND NOT (adjusted_value = 'NaN'::numeric)
+        adjusted_value >= 0
+        AND NOT (adjusted_value = 'NaN'::numeric)
+        AND NOT (adjusted_value = 'Infinity'::numeric)
     ),
     reason text NOT NULL CHECK (length(reason) BETWEEN 1 AND 200),
     effective_at timestamptz NOT NULL,
@@ -200,10 +219,14 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_approved_targets (
     run_date date NOT NULL,
     symbol text NOT NULL CHECK (length(symbol) BETWEEN 1 AND 20),
     approved_weight numeric CHECK (approved_weight IS NULL OR approved_weight BETWEEN 0 AND 1),
-    -- NaN guard: see portfolio_ledger_requested_targets above.
+    -- NaN/Infinity guard: see portfolio_ledger_requested_targets above.
     approved_quantity numeric CHECK (
         approved_quantity IS NULL
-        OR (approved_quantity >= 0 AND NOT (approved_quantity = 'NaN'::numeric))
+        OR (
+            approved_quantity >= 0
+            AND NOT (approved_quantity = 'NaN'::numeric)
+            AND NOT (approved_quantity = 'Infinity'::numeric)
+        )
     ),
     supersedes_id uuid,
     effective_at timestamptz NOT NULL,
@@ -211,9 +234,14 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_approved_targets (
     CONSTRAINT fk_portfolio_ledger_approved_targets_requested_target
         FOREIGN KEY (requested_target_id)
         REFERENCES public.portfolio_ledger_requested_targets (id),
+    -- Composite target for the FK below: see uq_portfolio_ledger_commits_id_run_date above.
+    CONSTRAINT uq_portfolio_ledger_approved_targets_id_run_date_symbol
+        UNIQUE (id, run_date, symbol),
+    -- Composite FK: see fk_portfolio_ledger_commits_supersedes above — a row can never
+    -- "supersede" a row from an unrelated (run_date, symbol) lineage.
     CONSTRAINT fk_portfolio_ledger_approved_targets_supersedes
-        FOREIGN KEY (supersedes_id)
-        REFERENCES public.portfolio_ledger_approved_targets (id),
+        FOREIGN KEY (supersedes_id, run_date, symbol)
+        REFERENCES public.portfolio_ledger_approved_targets (id, run_date, symbol),
     -- A changed same-date target is always a new row whose supersedes_id points back to
     -- the prior ApprovedTarget it replaces — never a mutation of that prior row.
     CONSTRAINT chk_portfolio_ledger_approved_targets_presence
@@ -227,8 +255,12 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_order_intents (
     approved_target_id uuid NOT NULL,
     run_date date NOT NULL,
     symbol text NOT NULL CHECK (length(symbol) BETWEEN 1 AND 20),
-    -- NaN guard: see portfolio_ledger_requested_targets above.
-    quantity numeric NOT NULL CHECK (quantity > 0 AND NOT (quantity = 'NaN'::numeric)),
+    -- NaN/Infinity guard: see portfolio_ledger_requested_targets above.
+    quantity numeric NOT NULL CHECK (
+        quantity > 0
+        AND NOT (quantity = 'NaN'::numeric)
+        AND NOT (quantity = 'Infinity'::numeric)
+    ),
     status text NOT NULL CHECK (status IN ('pending', 'executed', 'rejected')),
     supersedes_id uuid,
     rejection_reason text CHECK (
@@ -246,12 +278,17 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_order_intents (
     CONSTRAINT fk_portfolio_ledger_order_intents_approved_target
         FOREIGN KEY (approved_target_id)
         REFERENCES public.portfolio_ledger_approved_targets (id),
+    -- Composite target for the FK below: see uq_portfolio_ledger_commits_id_run_date above.
+    CONSTRAINT uq_portfolio_ledger_order_intents_id_run_date_symbol
+        UNIQUE (id, run_date, symbol),
+    -- Composite FK: see fk_portfolio_ledger_commits_supersedes above — a row can never
+    -- "supersede" a row from an unrelated (run_date, symbol) lineage.
     CONSTRAINT fk_portfolio_ledger_order_intents_supersedes
-        FOREIGN KEY (supersedes_id)
-        REFERENCES public.portfolio_ledger_order_intents (id),
+        FOREIGN KEY (supersedes_id, run_date, symbol)
+        REFERENCES public.portfolio_ledger_order_intents (id, run_date, symbol),
     -- supersedes_id is orthogonal to status and, like approved_targets above, always
-    -- forward: a changed same-date order is a new row pointing back at the prior one it
-    -- replaces, never a backward link recorded on the row being replaced. An executed row
+    -- backward: a changed same-date order is a new row pointing back at the prior one it
+    -- replaces, never a forward link recorded on the row being replaced. An executed row
     -- is still terminal — no other field lets a later write rewrite it in place — but a
     -- fresh replacement order is free to reach its own pending/executed/rejected status
     -- independently of whether it happens to supersede an earlier row.
@@ -269,9 +306,17 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_paper_executions (
     order_intent_id uuid NOT NULL,
     executed_date date NOT NULL,
     symbol text NOT NULL CHECK (length(symbol) BETWEEN 1 AND 20),
-    -- NaN guard: see portfolio_ledger_requested_targets above.
-    quantity numeric NOT NULL CHECK (quantity > 0 AND NOT (quantity = 'NaN'::numeric)),
-    price numeric NOT NULL CHECK (price > 0 AND NOT (price = 'NaN'::numeric)),
+    -- NaN/Infinity guard: see portfolio_ledger_requested_targets above.
+    quantity numeric NOT NULL CHECK (
+        quantity > 0
+        AND NOT (quantity = 'NaN'::numeric)
+        AND NOT (quantity = 'Infinity'::numeric)
+    ),
+    price numeric NOT NULL CHECK (
+        price > 0
+        AND NOT (price = 'NaN'::numeric)
+        AND NOT (price = 'Infinity'::numeric)
+    ),
     executed_at timestamptz NOT NULL,
     recorded_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT fk_portfolio_ledger_paper_executions_order_intent
@@ -291,10 +336,18 @@ CREATE TABLE IF NOT EXISTS public.portfolio_ledger_holding_lots (
     closed_by_execution_id uuid,
     run_date date NOT NULL,
     symbol text NOT NULL CHECK (length(symbol) BETWEEN 1 AND 20),
-    -- See portfolio_ledger_paper_executions above: Postgres `numeric` NaN passes a bare
-    -- `> 0` guard, so both columns exclude it explicitly.
-    quantity numeric NOT NULL CHECK (quantity > 0 AND NOT (quantity = 'NaN'::numeric)),
-    open_price numeric NOT NULL CHECK (open_price > 0 AND NOT (open_price = 'NaN'::numeric)),
+    -- See portfolio_ledger_paper_executions above: Postgres `numeric` NaN (and Infinity)
+    -- both pass a bare `> 0` guard, so both columns exclude them explicitly.
+    quantity numeric NOT NULL CHECK (
+        quantity > 0
+        AND NOT (quantity = 'NaN'::numeric)
+        AND NOT (quantity = 'Infinity'::numeric)
+    ),
+    open_price numeric NOT NULL CHECK (
+        open_price > 0
+        AND NOT (open_price = 'NaN'::numeric)
+        AND NOT (open_price = 'Infinity'::numeric)
+    ),
     status text NOT NULL CHECK (status IN ('open', 'closed')),
     opened_at timestamptz NOT NULL,
     closed_at timestamptz,
@@ -366,17 +419,18 @@ CREATE INDEX IF NOT EXISTS idx_portfolio_ledger_order_intents_run_date_symbol
     ON public.portfolio_ledger_order_intents (run_date, symbol);
 CREATE INDEX IF NOT EXISTS idx_portfolio_ledger_order_intents_status
     ON public.portfolio_ledger_order_intents (status);
--- One current (non-superseded) pending order per (run_date, symbol) — the literal
--- OLY-REV-009 MEDIUM finding for order_intents. executed/rejected rows are terminal and
--- excluded, so a symbol may accumulate any number of them without tripping this
--- constraint. supersedes_id IS NULL is required too: supersedes_id is orthogonal to
--- status (see the table comment above), and append-only immutability means the row being
--- replaced can never transition out of 'pending' — so without this clause, a superseding
--- replacement order (itself inserted as 'pending') would collide with the stale row it is
--- meant to replace and the documented supersession flow would be unable to proceed.
-CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_one_pending
-    ON public.portfolio_ledger_order_intents (run_date, symbol)
-    WHERE status = 'pending' AND supersedes_id IS NULL;
+-- One current (non-superseded) order per (run_date, symbol) — the literal OLY-REV-009
+-- MEDIUM finding for order_intents, closed the same way as commits/approved_targets above.
+-- An earlier version of this index scoped the predicate to `status = 'pending'` as well
+-- as `supersedes_id IS NULL`, which let any row with supersedes_id populated skip the
+-- constraint on the status check alone — so once a root left 'pending' (rejected or
+-- executed), a brand-new, unrelated pending root could be inserted for the same
+-- (run_date, symbol) without colliding, defeating the "at most one live lineage" intent.
+-- Scoping on supersedes_id IS NULL alone, independent of status (mirroring
+-- commits/approved_targets), closes that gap: a genuine superseding replacement is still
+-- exempt because its own supersedes_id is populated, but a second untethered root is not.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_one_root
+    ON public.portfolio_ledger_order_intents (run_date, symbol) WHERE supersedes_id IS NULL;
 -- Anti-fork, same rationale as commits above.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_portfolio_ledger_order_intents_supersedes
     ON public.portfolio_ledger_order_intents (supersedes_id) WHERE supersedes_id IS NOT NULL;
@@ -558,7 +612,7 @@ COMMENT ON TABLE public.portfolio_ledger_order_intents IS
     'Private append-only paper order intents (#2415). Once status is executed or rejected '
     'the row is terminal: append-only forbids the UPDATE and the PRIMARY KEY forbids '
     're-INSERTing the same id, so no later write can rewrite it. supersedes_id is a '
-    'forward link only, orthogonal to status.';
+    'backward link only, orthogonal to status.';
 
 COMMENT ON TABLE public.portfolio_ledger_paper_executions IS
     'Private append-only immutable fill ledger (#2415). id is derived deterministically '

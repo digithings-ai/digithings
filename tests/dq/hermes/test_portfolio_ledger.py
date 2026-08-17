@@ -418,7 +418,7 @@ class TestOrderIntentLifecycle:
             self._order(rejection_reason=OrderRejectionReason.STALE_TARGET)
 
     def test_pending_with_supersedes_id_ok(self) -> None:
-        """supersedes_id is a forward link orthogonal to status: a still-pending order
+        """supersedes_id is a backward link orthogonal to status: a still-pending order
         can legally point back at the row it replaces."""
         order = self._order(supersedes_id=uuid4())
         assert order.supersedes_id is not None
@@ -461,7 +461,7 @@ class TestOrderIntentLifecycle:
 
     def test_changed_same_date_target_supersedes_pending_order(self) -> None:
         """A changed same-date ApprovedTarget supersedes a pending OrderIntent: the
-        replacement is a brand-new row with a forward link to the one it replaces —
+        replacement is a brand-new row with a backward link to the one it replaces —
         the original row is never rewritten, only ever pointed at."""
         pending = self._order(status=OrderIntentStatus.PENDING)
         replacement = self._order(

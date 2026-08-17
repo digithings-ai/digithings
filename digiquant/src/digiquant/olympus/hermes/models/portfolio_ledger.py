@@ -336,10 +336,10 @@ class OrderIntent(TimedPortfolioLedgerRecord):
     would let a later write "rewrite" it (also enforced by the migration's mutation
     trigger). A ``rejected`` row always carries ``rejection_reason``.
 
-    ``supersedes_id`` is orthogonal to ``status``, and forward-linking like
+    ``supersedes_id`` is orthogonal to ``status``, and backward-linking like
     ``ApprovedTarget.supersedes_id``: a changed same-date order is always a new row
     pointing back at the prior one it replaces, never a mutation of that prior row (and
-    never a backward link recorded on the row being replaced — that would require either
+    never a forward link recorded on the row being replaced — that would require either
     an UPDATE, rejected by the append-only trigger, or a second row re-using the same id,
     rejected by the PRIMARY KEY). A fresh replacement order is free to independently
     reach its own eventual ``pending``/``executed``/``rejected`` status regardless of

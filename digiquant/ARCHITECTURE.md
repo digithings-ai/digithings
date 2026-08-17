@@ -1196,8 +1196,13 @@ holding state were conflated across `positions`/`decision_log`/snapshots with no
 replay "why did this weight change" as a chain of discrete facts. Eight new append-only
 Pydantic models + migration 069 introduce that chain:
 
-`PortfolioCommit → DecisionIntent → RequestedTarget → TargetAdjustment → ApprovedTarget →
-OrderIntent → PaperExecution → HoldingLot`
+`PortfolioCommit → DecisionIntent → RequestedTarget → ApprovedTarget → OrderIntent →
+PaperExecution → HoldingLot`, with `TargetAdjustment` hanging directly off
+`RequestedTarget` as a sibling of `ApprovedTarget` rather than a serial link between
+them — both `TargetAdjustment.requested_target_id` and
+`ApprovedTarget.requested_target_id` FK to the same `RequestedTarget` row (see
+`SCHEMA.md`), since an adjustment is a point-in-time audit step alongside the approval,
+not a row the approval chains through.
 
 - **Models**: `digiquant/src/digiquant/olympus/hermes/models/portfolio_ledger.py`. Same
   frozen/strict/UTC-only style as `digillm/src/digillm/telemetry.py`
@@ -1250,10 +1255,19 @@ OrderIntent → PaperExecution → HoldingLot`
   and nothing here changes H7/H8/H9 responsibility. Producer → consumer chain once
   wired: H7/H8/H9 → this private ledger → a paper executor → accounting/learning. No
   broker or live-trading path is touched by this schema.
-- **Failure behavior.** Invalid or conflicting lineage (a bad supersession link, an
-  attempt to re-terminal an executed order, an untimezoned timestamp) fails closed at
-  model-validation time, before it can reach an authoritative commit or fill. A missing
-  economic value stays absent (`NULL` / no row) rather than silently becoming `0`.
+- **Failure behavior — two enforcement layers, not one.** A self-referencing
+  `supersedes_id`, an untimezoned timestamp, an invalid action/reason pairing, or a
+  target missing both weight and quantity all fail closed at Pydantic model-validation
+  time, before the row is ever constructed. What depends on *other rows already in the
+  table* can't be caught by a single model in isolation and is enforced at the database
+  layer instead: an attempt to re-terminal an executed order is blocked by the
+  append-only trigger plus the `PRIMARY KEY` (no `UPDATE`, no re-`INSERT` of the same
+  id); a supersession link reaching outside its own `run_date`/symbol lineage is blocked
+  by the composite `FOREIGN KEY (supersedes_id, ...)`; more than one row claiming to be
+  current for the same key is blocked by the partial unique indexes. Either layer
+  failing closed keeps the row out before it can reach an authoritative commit or fill.
+  A missing economic value stays absent (`NULL` / no row) rather than silently becoming
+  `0`.
 - **Rollback note: keep schema dark until H9 dual-write.** Until a future task wires H9
   (or a paper executor) to actually write these tables, they receive no traffic —
   reverting this migration is a no-op for every existing code path.
