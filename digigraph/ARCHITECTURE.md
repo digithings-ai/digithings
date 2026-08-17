@@ -248,9 +248,9 @@ real node executions rather than compiled graph nodes.
 | `error` | `str \| None` | Terminal error; stops further node execution |
 | `stored_datasets` | `dict[str, dict]` | Ref → profile map (survives across turns via checkpointer) |
 | `workflow_profile` | `str` | Active profile (`full_stack`, `research_rag`, `quant_backtest`, `plan_execute`) |
-| `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. |
-| `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map) |
-| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map |
+| `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. `_initial_graph_state` writes this (and `vault_path_prefix` / `research_system_prompt_override` / `digi_subject`) **unconditionally including `None`**, so a map-driven clear for an unmapped tenant actually clears checkpointed state instead of leaving the prior turn's corpus sticky. |
+| `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map); same unconditional-None write as `digisearch_index`. |
+| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. See `digigraph.languages`. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
 | `supervisor_route` | `str \| None` | Next route chosen by supervisor |
@@ -856,7 +856,7 @@ digigraph:
 | `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
-| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). When unset (single-tenant), those headers may still select corpus. **Unset ≠ broken:** a set-but-unusable value (invalid JSON, non-object top level, or every entry individually dropped) raises `TenantCorpusMapError` → HTTP 503 — same fail-closed contract as digivault `tenant_scope` — and never silently re-enables client corpus selection. Slug keys are lowercased on parse so `OCC` matches digivault's keys. |
+| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). Unmapped / empty-tenant requests clear those fields to `None` on the request **and** in `_initial_graph_state` so LangGraph checkpoints do not keep a prior turn's index sticky on a reused `session_id`. When unset (single-tenant), those headers may still select corpus. **Unset ≠ broken:** a set-but-unusable value (invalid JSON, non-object top level, or every entry individually dropped) raises `TenantCorpusMapError` → HTTP 503 — same fail-closed contract as digivault `tenant_scope` — and never silently re-enables client corpus selection. Slug keys are lowercased on parse so `OCC` matches digivault's keys. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |
 | `DIGI_ENABLE_THREAD_API` | `0` | Enable `/threads/*` and `/files/*` |
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |
