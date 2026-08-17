@@ -71,18 +71,20 @@ def _initial_graph_state(req: WorkflowRequest, workflow_id: str) -> dict[str, An
         initial["research_filters"] = req.research_filters
     if req.evidence_tier_preference:
         initial["evidence_tier_preference"] = req.evidence_tier_preference
-    if req.digisearch_index:
-        initial["digisearch_index"] = req.digisearch_index
-    if req.vault_path_prefix:
-        initial["vault_path_prefix"] = req.vault_path_prefix
-    if req.research_system_prompt_override:
-        initial["research_system_prompt_override"] = req.research_system_prompt_override
-    if req.digi_subject:
-        initial["digi_subject"] = req.digi_subject
-    # Unlike the three fields above, response_language is a user-toggleable per-turn
-    # preference, not a static tenant-derived value — it must be set unconditionally
-    # (even to None) so switching back to English on a later turn actually clears a
-    # prior non-English value from checkpointed state, rather than leaving it sticky.
+    # Corpus + subject must be written unconditionally (including explicit None).
+    # LangGraph checkpoints use per-key last-write-wins: omitting a key leaves the
+    # prior turn's value sticky. server.py's DIGI_TENANT_CORPUS_MAP path clears
+    # digisearch_index / vault_path_prefix / research_system_prompt_override to None
+    # for unmapped tenants (CWE-639 — digisearch has no server-side tenant→index
+    # bind), and clears digi_subject when auth is absent. If those Nones never reach
+    # initial state, a later turn on the same thread_id keeps querying the previous
+    # tenant's corpus. digichat embeds share subject ``embed:anonymous`` across
+    # tenants and clients control X-Digichat-Session, so reuse is a concrete trigger.
+    # Same pattern as response_language (#2103).
+    initial["digisearch_index"] = req.digisearch_index
+    initial["vault_path_prefix"] = req.vault_path_prefix
+    initial["research_system_prompt_override"] = req.research_system_prompt_override
+    initial["digi_subject"] = req.digi_subject
     initial["response_language"] = req.response_language
     return initial
 
