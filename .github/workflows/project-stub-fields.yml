@@ -103,14 +103,14 @@ jobs:
 
   stub-tsv-phase:
     name: Append inferred row for non-agent-task phase-labeled issues
-    # Fire when a phase-N or sitaas label is applied, but NOT for agent-task (job 1 covers that)
+    # Fire when a phase-N or client-pilot label is applied, but NOT for agent-task (job 1 covers that)
     # and NOT for housekeeping issues (those are exempt from project-field requirements).
     if: |
       github.event.label.name != 'agent-task' &&
       github.event.label.name != 'housekeeping' &&
       (
         startsWith(github.event.label.name, 'phase-') ||
-        github.event.label.name == 'sitaas'
+        github.event.label.name == 'client-pilot'
       )
     runs-on: ubuntu-latest
 

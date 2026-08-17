@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from digigraph.corpus_routing import (
+    TenantCorpusMapError,
     TenantCorpusOverride,
     load_tenant_corpus_map,
     resolve_corpus_override,
@@ -11,6 +12,7 @@ from digigraph.corpus_routing import (
 from digigraph.graph.state import WorkflowState
 from digigraph.models import WorkflowRequest
 from digigraph.workflow import _initial_graph_state
+from fastapi import HTTPException
 
 pytestmark = pytest.mark.unit
 
@@ -75,6 +77,15 @@ def test_load_tenant_corpus_map_parses_camel_and_snake() -> None:
     assert table["occ"].vault_path_prefix == "clients/online-compliance-center"
     assert table["digithings"].digisearch_index == "digithings_docs"
     assert table["digithings"].vault_path_prefix == "clients/digithings"
+
+
+def test_load_tenant_corpus_map_lowercases_slug_keys() -> None:
+    """Parity with digivault tenant_scope: slug keys are lowercased so OCC matches occ."""
+    raw = '{"OCC":{"digisearchIndex":"occ_help","vaultPathPrefix":"clients/occ"}}'
+    table = load_tenant_corpus_map(raw)
+    assert "occ" in table
+    assert "OCC" not in table
+    assert table["occ"].digisearch_index == "occ_help"
 
 
 def test_resolve_map_is_authoritative_over_headers() -> None:
@@ -173,6 +184,93 @@ def test_resolve_headers_win_when_map_unset() -> None:
     assert out.vault_path_prefix == "clients/other"
 
 
-def test_invalid_map_json_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_invalid_map_json_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set-but-broken map must not silently become {} (CWE-639 fail-open)."""
     monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", "{not-json")
+    with pytest.raises(TenantCorpusMapError, match="not valid JSON"):
+        load_tenant_corpus_map()
+
+
+def test_non_object_map_raises() -> None:
+    with pytest.raises(TenantCorpusMapError, match="JSON object"):
+        load_tenant_corpus_map("[]")
+
+
+def test_all_entries_dropped_raises() -> None:
+    """Every entry individually unusable → still fail closed, not 'map unset'."""
+    with pytest.raises(TenantCorpusMapError, match="no usable"):
+        load_tenant_corpus_map('{"!!!":"not-an-object"}')
+
+
+def test_genuinely_unset_map_is_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGI_TENANT_CORPUS_MAP", raising=False)
     assert load_tenant_corpus_map() == {}
+
+
+def test_broken_map_surfaces_503_at_request_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """server._digi_fields_from_request must not fall through to client headers."""
+    from types import SimpleNamespace
+
+    from digigraph.models import WorkflowRequest
+    from digigraph.server import _with_digi_request_context
+    from digikey.models import DigiAuthContext
+
+    monkeypatch.setenv("DIGI_TENANT_CORPUS_MAP", "{not-json")
+    auth = DigiAuthContext(subject="user-1", tenant_slug="digithings")
+    req = WorkflowRequest(prompt="hi", digisearch_index="occ_help")
+    http = SimpleNamespace(
+        state=SimpleNamespace(digi_auth=auth, digi_bearer=None),
+        headers={"x-digi-corpus-index": "occ_help"},
+    )
+    with pytest.raises(HTTPException) as exc_info:
+        _with_digi_request_context(http, req)
+    assert exc_info.value.status_code == 503
+    assert "DIGI_TENANT_CORPUS_MAP" in str(exc_info.value.detail)
+
+
+def test_resolve_map_drops_invalid_index_keeps_vault_prefix() -> None:
+    """Invalid digisearch index chars must not reach digisearch, but a valid vault
+    prefix from the same map entry must still apply (partial override, not wipe)."""
+    mapped = {
+        "occ": TenantCorpusOverride(
+            digisearch_index="bad index!!",
+            vault_path_prefix="clients/online-compliance-center",
+        ),
+    }
+    out = resolve_corpus_override(
+        headers={},
+        tenant_slug="occ",
+        corpus_map=mapped,
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix == "clients/online-compliance-center"
+
+
+def test_resolve_headers_drop_invalid_index_when_map_unset() -> None:
+    """Single-tenant path: malformed X-Digi-Corpus-Index is ignored; vault prefix
+    from headers still applies."""
+    out = resolve_corpus_override(
+        headers={
+            "x-digi-corpus-index": "not a valid index",
+            "x-digi-vault-prefix": "clients/other",
+        },
+        corpus_map={},
+    )
+    assert out.digisearch_index is None
+    assert out.vault_path_prefix == "clients/other"
+
+
+def test_load_tenant_corpus_map_skips_invalid_slug_and_non_object_entry() -> None:
+    """Soft-skip bad rows so one typo does not discard the rest of the map."""
+    raw = (
+        '{"OCC":{"digisearch_index":"occ_help"},'
+        '"ok-tenant":{"digisearch_index":"ok_docs","vault_path_prefix":"clients/ok"},'
+        '"also-ok":"not-an-object"}'
+    )
+    table = load_tenant_corpus_map(raw)
+    assert "OCC" not in table  # uppercase fails _SLUG
+    assert "also-ok" not in table
+    assert table["ok-tenant"].digisearch_index == "ok_docs"
+    assert table["ok-tenant"].vault_path_prefix == "clients/ok"
