@@ -337,7 +337,7 @@ def _run_document_rag_path(
     from digigraph.orchestration import ToolContext, execute
     from digigraph.skills import get_tools_for_skills
 
-    skill_ids = cfg.get_enabled_skills() if cfg else ["search", "sitaas_rag"]
+    skill_ids = cfg.get_enabled_skills() if cfg else ["search", "project_rag"]
 
     _raw_allowed = state.get("allowed_tool_names")
     _allowed_names = frozenset(_raw_allowed) if _raw_allowed else None
@@ -402,7 +402,7 @@ def _run_document_rag_path(
 
     user_content = str(prompt)
 
-    # SITAAS-only (project mode): prepend NL filter hints so the LLM folds them into
+    # Project mode only: prepend NL filter hints so the LLM folds them into
     # digisearch tool args. Opt out via DIGI_FILTER_HINTS=0. extract_filter_hints is fail-open.
     if run_data_dir:
         hint_block = extract_filter_hints(user_content).as_context_block()

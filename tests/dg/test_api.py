@@ -113,7 +113,7 @@ class TestOpenAICompatible:
         assert "mode" in data
         assert "base_url" in data
 
-    def test_list_models_returns_sitaas_rag(self, client: TestClient) -> None:
+    def test_list_models_returns_project_rag(self, client: TestClient) -> None:
         r = client.get("/v1/models")
         assert r.status_code == 200
         data = r.json()
@@ -121,7 +121,7 @@ class TestOpenAICompatible:
         models = data.get("data", [])
         assert len(models) >= 1
         ids = [m.get("id") for m in models]
-        assert "sitaas-rag" in ids
+        assert "digigraph-rag" in ids
 
     def test_chat_completions_returns_openai_format(self, client: TestClient) -> None:
         with patch("digigraph.server.run_digigraph_workflow") as m:
@@ -133,7 +133,7 @@ class TestOpenAICompatible:
             r = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "search for X"}],
                 },
             )
@@ -154,7 +154,7 @@ class TestOpenAICompatible:
             r = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [
                         {"role": "user", "content": [{"type": "text", "text": "search for X"}]},
                     ],
@@ -176,7 +176,7 @@ class TestOpenAICompatible:
             r = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [
                         {"role": "user", "content": "What is digigraph?"},
                         {
@@ -195,7 +195,7 @@ class TestOpenAICompatible:
         assert "Say more about that." in prompt
 
     def test_chat_completions_empty_messages(self, client: TestClient) -> None:
-        r = client.post("/v1/chat/completions", json={"model": "sitaas-rag", "messages": []})
+        r = client.post("/v1/chat/completions", json={"model": "digigraph-rag", "messages": []})
         assert r.status_code == 200
         data = r.json()
         assert "No messages provided" in data["choices"][0]["message"]["content"]
@@ -209,7 +209,7 @@ class TestOpenAICompatible:
             r = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "hi"}],
                     "stream": True,
                 },
@@ -221,10 +221,10 @@ class TestOpenAICompatible:
         assert "[DONE]" in body
         assert "chat.completion.chunk" in body
 
-    def test_chat_completions_stream_sitaas_rag_alone_uses_neutral_formatter(
+    def test_chat_completions_stream_project_rag_alone_uses_neutral_formatter(
         self, client: TestClient
     ) -> None:
-        """model=sitaas-rag alone must not enable Open WebUI <details> chrome."""
+        """model=digigraph-rag alone must not enable Open WebUI <details> chrome."""
 
         def fake_streaming(req, queue, cancel_event=None):
             queue.put(("tool_call", {"name": "digisearch", "arguments": {"query": "test q"}}))
@@ -236,7 +236,7 @@ class TestOpenAICompatible:
             r = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "search"}],
                     "stream": True,
                 },
@@ -264,7 +264,7 @@ class TestOpenAICompatible:
                 "/v1/chat/completions",
                 headers={"X-Response-Format": "openwebui"},
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "search"}],
                     "stream": True,
                 },
@@ -293,7 +293,7 @@ class TestOpenAICompatible:
             r = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "hi"}],
                     "stream": True,
                     "openwebui_format": True,
@@ -325,7 +325,7 @@ class TestOpenAICompatible:
                     "X-Response-Format": "openwebui",
                 },
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "search"}],
                     "stream": True,
                 },
@@ -354,7 +354,7 @@ class TestOpenAICompatible:
                 "/v1/chat/completions",
                 headers={"X-Response-Format": "plain"},
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "hi"}],
                     "stream": True,
                     "openwebui_format": True,
@@ -375,7 +375,7 @@ class TestOpenAICompatible:
             r = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": "sitaas-rag",
+                    "model": "digigraph-rag",
                     "messages": [{"role": "user", "content": "hi"}],
                 },
                 headers={"X-Require-Tool-Calls": "1"},

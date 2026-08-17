@@ -623,7 +623,7 @@ Open WebUI.
   (If the file is unavailable it falls back to `Image: <path>`.)
 * The formatter lives in `digigraph/formatters/openwebui.py` and is invoked by
   `get_stream_formatter()` when `openwebui_format=True`.
-* **Opt-in required:** `model=sitaas-rag` alone does **not** enable this
+* **Opt-in required:** `model=digigraph-rag` alone does **not** enable this
   formatter. Open WebUI (or any proxy) must send
   `X-Response-Format: openwebui` and/or body `openwebui_format=true`.
 * Unit tests live in `tests/dg/test_openwebui_formatter.py`; they cover
