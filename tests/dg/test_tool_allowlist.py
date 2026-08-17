@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from digigraph.models import WorkflowRequest
+from digigraph.orchestration import builtin  # noqa: F401 - triggers registration
 from digigraph.orchestration.registry import ToolContext, execute, get_tools
 from digigraph.project_config import DigiProjectConfig
 from digigraph.tool_policy import (
