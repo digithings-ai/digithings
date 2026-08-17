@@ -84,6 +84,50 @@ def test_handle_digisearch_no_hits_still_dict_for_trace() -> None:
     assert out == {"content": "No results found.", "results": [], "rag_sources": []}
 
 
+def test_handle_digisearch_fetch_all_overwrites_model_supplied_index_name() -> None:
+    """#2265 sibling of `_handle_digisearch`: fetch_all must not let a model-supplied
+    index_name reach digisearch. Latent today (not in digichat allowlist) but the
+    production comment warns that leaving this on default-if-missing reopens the
+    tenant boundary the moment the tool is allowlisted."""
+    from digigraph.orchestration.builtin import _handle_digisearch_fetch_all
+
+    ctx = _ctx(index_name="digithings_docs")
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        return_value={"ok": True, "data": {"results": [], "total": 0}},
+    ) as mock_invoke:
+        _handle_digisearch_fetch_all({"query": "q", "index_name": "occ_help"}, ctx)
+
+    call_args = mock_invoke.call_args
+    assert call_args.args[1] == "digisearch_fetch_all"
+    assert call_args.args[2]["index_name"] == "digithings_docs"
+    assert call_args.kwargs["default_index_name"] == "digithings_docs"
+
+
+def test_handle_digisearch_research_delegate_overwrites_model_supplied_index_name() -> None:
+    """#2265 third shape: research_delegate must overwrite index_name unconditionally
+    even though it is hub-gated / not allowlisted in production today."""
+    from digigraph.orchestration.builtin import _handle_digisearch_research_delegate
+
+    ctx = _ctx(index_name="digithings_docs")
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        return_value={
+            "ok": True,
+            "data": {"formatted_context": "ctx", "results": [], "rag_sources": []},
+        },
+    ) as mock_invoke:
+        _handle_digisearch_research_delegate(
+            {"user_message": "summarize", "index_name": "occ_help"},
+            ctx,
+        )
+
+    call_args = mock_invoke.call_args
+    assert call_args.args[1] == "digisearch_research_delegate"
+    assert call_args.args[2]["index_name"] == "digithings_docs"
+    assert call_args.kwargs["default_index_name"] == "digithings_docs"
+
+
 @pytest.mark.unit
 def test_search_payload_keeps_metadata_addressable_as_json() -> None:
     """#2306: metadata must reach the model as an object, not a Python repr.
