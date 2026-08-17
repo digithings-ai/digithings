@@ -168,6 +168,19 @@ def test_require_tool_calls_env_fallback(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @pytest.mark.unit
+def test_require_tool_calls_env_true_wins_even_if_request_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Env floor mirrors project floor: request-level False cannot opt out of
+    DIGI_REQUIRE_TOOL_CALLS. Project=True+request=False is covered above; this
+    pins the env half of the same OR-floor contract."""
+    monkeypatch.setenv("DIGI_REQUIRE_TOOL_CALLS", "1")
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=False)
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
 def test_require_tool_calls_env_false_does_not_win(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGI_REQUIRE_TOOL_CALLS", raising=False)
     cfg = DigiProjectConfig({"agents": {}})
