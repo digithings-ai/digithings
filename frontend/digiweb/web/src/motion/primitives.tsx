@@ -25,7 +25,9 @@ export const baseTransition: Transition = { duration: 0.6, ease: EASE };
 export function useMotionSafe(): boolean {
   const reduced = useReducedMotion();
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (reduced) setMounted(true);
+  }, [reduced]);
   return mounted ? !reduced : true;
 }
 
