@@ -302,9 +302,12 @@ finally:
 
 ### Precedence notes (decisions)
 
-- **Provider prefix wins over BYOK on routing.** `get_client_for_model` checks
-  the prefix first; BYOK/proxy overrides only affect the *default* (non-prefixed)
-  client path. This mirrors digigraph's behavior.
+- **BYOK + provider prefix.** When a BYOK override is active, `get_client_for_model`
+  requires the override ``base_url`` to match the model's registered provider
+  endpoint (trailing-slash-insensitive). A match yields an uncached client with
+  the user's key. A mismatch **raises** rather than falling through to operator
+  credentials (#1873 — e.g. OpenAI BYOK with an ``openrouter/…`` deployment pin).
+  Unprefixed models use :func:`get_client`, which already honors BYOK.
 - **BYOK is `(api_key, base_url)` — provider-agnostic.** digigraph carried
   `(key, provider)` with an unfinished Anthropic-passthrough special-case. That
   provider coupling is intentionally **dropped**: a BYOK caller supplies the

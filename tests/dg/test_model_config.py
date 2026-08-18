@@ -191,7 +191,10 @@ class TestResolveRequestModel:
     def test_provider_model_passthrough_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A provider/ model with its key set is handed to digillm unchanged (digillm routes)."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
-        assert resolve_request_model("openrouter/mistral/mistral-7b") == "openrouter/mistral/mistral-7b"
+        assert (
+            resolve_request_model("openrouter/mistral/mistral-7b")
+            == "openrouter/mistral/mistral-7b"
+        )
 
     def test_provider_falls_back_to_ollama_when_key_missing(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -350,6 +353,77 @@ class TestByokModelOverride:
         tok = push_byok_header(_Req())
         try:
             assert get_model_for_mode() == "xai/grok-4-3"
+        finally:
+            pop_byok(tok)
+
+    def test_openai_byok_without_model_remaps_foreign_deployment_pin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OpenAI BYOK may omit X-BYOK-Model, but must not keep an openrouter/ pin.
+
+        Dogfood pins ``agents.llm`` to ``openrouter/…:free``. Without this remap,
+        digillm's BYOK URL (api.openai.com) mismatches the openrouter/ model and
+        previously fell through to the operator OpenRouter key (#1873).
+        """
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_PROVIDER", "openrouter")
+        monkeypatch.setenv("DIGI_LLM_MODEL", "openai/gpt-oss-20b:free")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-openai-user",
+                        "x-byok-provider": "openai",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert get_model_for_mode() == "gpt-4o-mini"
+        finally:
+            pop_byok(tok)
+
+    def test_openai_byok_without_model_keeps_unprefixed_deployment_pin(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Unprefixed pins are already served via get_client() + OpenAI BYOK."""
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+        monkeypatch.setenv("DIGI_CONFIG_PATH", "/nonexistent_xyz")
+        monkeypatch.setenv("DIGI_LLM_PROVIDER", "openai")
+        monkeypatch.setenv("DIGI_LLM_MODEL", "gpt-4o")
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-openai-user",
+                        "x-byok-provider": "openai",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert get_model_for_mode() == "gpt-4o"
         finally:
             pop_byok(tok)
 

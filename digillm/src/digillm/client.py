@@ -383,17 +383,28 @@ def get_client_for_model(model: str) -> OpenAI:
 
     When a BYOK override is active and its ``base_url`` matches the provider's
     endpoint, returns an *uncached* client with the user's key (never cached).
+    When BYOK is active but ``base_url`` does **not** match the model's provider,
+    raises rather than falling through to operator credentials (#1873): a user
+    who supplied their own key must never silently spend the operator's.
 
     Raises:
-        RuntimeError: when a registered provider's API key env var is unset.
+        RuntimeError: when a registered provider's API key env var is unset, or
+            when a BYOK override is active but does not match the model provider.
     """
     provider, _ = _parse_provider_prefix(model)
     byok_override = _byok_override.get()
-    if provider is not None and byok_override:
+    if byok_override:
         api_key, base_url = byok_override
+        if provider is None:
+            # Unprefixed model → default client path, which already honors BYOK.
+            return get_client()
         cfg = _EXTERNAL_PROVIDERS.get(provider)
         if cfg and base_url.rstrip("/") == cfg["base_url"].rstrip("/"):
             return OpenAI(api_key=api_key, base_url=base_url, timeout=_REQUEST_TIMEOUT)
+        raise RuntimeError(
+            f"BYOK override base_url does not match model provider {provider!r} "
+            f"for model {model!r}; refusing to spend operator credentials"
+        )
     if provider is None:
         return get_client()
     cfg = _EXTERNAL_PROVIDERS[provider]

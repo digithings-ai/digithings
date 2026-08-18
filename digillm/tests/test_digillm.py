@@ -132,6 +132,16 @@ def test_get_client_for_model_openrouter_byok_uses_user_key() -> None:
     assert made[0]["base_url"] == "https://openrouter.ai/api/v1"
 
 
+def test_get_client_for_model_byok_mismatch_refuses_operator_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OpenAI BYOK + openrouter/ model must not fall through to OPENROUTER_API_KEY (#1873)."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-operator-must-not-be-used")
+    with digillm.byok("sk-openai-user", "https://api.openai.com/v1"):
+        with pytest.raises(RuntimeError, match="refusing to spend operator credentials"):
+            digillm.get_client_for_model("openrouter/openai/gpt-oss-20b:free")
+
+
 def test_get_client_for_model_missing_key_raises() -> None:
     with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
         digillm.get_client_for_model("gemini/gemini-2.5-flash")

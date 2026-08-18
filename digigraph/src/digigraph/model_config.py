@@ -602,17 +602,36 @@ def apply_olympus_openrouter_env(*, force: bool = False) -> str:
     return tier
 
 
+# OpenAI BYOK may omit X-BYOK-Model (requiresModel:false). Digillm then serves the
+# resolved model via get_client() only when it has no external-provider prefix. A
+# foreign pin (e.g. dogfood ``openrouter/openai/gpt-oss-20b:free``) must not be
+# left in place: digillm would otherwise spend the operator OpenRouter key while
+# the user believes their OpenAI key is active (#1873). Catalog fallbackModels[0].
+_OPENAI_BYOK_DEFAULT_MODEL = "gpt-4o-mini"
+
+
 def _apply_byok_model_override(resolved: str) -> str:
-    """When BYOK + X-BYOK-Model is active for a non-OpenAI provider, use the user's model."""
+    """When BYOK is active, ensure the model string is spent on the user's provider.
+
+    Non-OpenAI providers require ``X-BYOK-Model`` and are rewritten to
+    ``<provider>/<slug>``. OpenAI may omit a model; keep the deployment pin only
+    when digillm will serve it on the default/BYOK path (no registered
+    external-provider prefix). Otherwise substitute ``gpt-4o-mini``.
+    """
     byok = get_byok_override()
     if not byok:
         return resolved
     _key, provider = byok
     user_model = get_byok_model_override()
+    if provider == "openai":
+        if user_model:
+            return user_model
+        head, sep, _rest = resolved.partition("/")
+        if sep and is_registered_provider(head):
+            return _OPENAI_BYOK_DEFAULT_MODEL
+        return resolved
     if not user_model:
         return resolved
-    if provider == "openai":
-        return user_model or resolved
     if provider == "openrouter":
         slug = (
             user_model[len("openrouter/") :] if user_model.startswith("openrouter/") else user_model
