@@ -2,8 +2,17 @@
 
 import { NavShell, type NavItem } from "@digithings/web";
 
+// Two groups, deliberately: the frame's claim is that opening one closes the
+// other, and a single group cannot show it.
 const ITEMS: NavItem[] = [
-  { label: "Docs", href: "#" },
+  {
+    label: "Docs",
+    items: [
+      { label: "Overview", href: "#" },
+      { label: "Quickstart", href: "#" },
+      { label: "API", href: "#" },
+    ],
+  },
   { label: "Architecture", href: "#" },
   { label: "Services", href: "#" },
   {
@@ -28,6 +37,9 @@ function DemoNav() {
       }
       links={ITEMS}
       homeLabel="digithings home"
+      // This page frames three bars; each names its own landmark so they stay
+      // distinguishable to a screen reader's landmark list.
+      navLabel="Nav menu specimen"
     />
   );
 }
@@ -38,17 +50,14 @@ function DemoNav() {
  * document pages: `button[aria-haspopup=menu]` + `div[role=menu]` +
  * `a[role=menuitem]`, one group open at a time. The panel opens on click and
  * on Enter/Space/ArrowDown from the trigger, moves with the arrow keys plus
- * Home/End, activates on Enter or Space, and closes on Escape (focus returns to
- * the trigger), on an outside press, on choosing an item, and when focus leaves
- * the group by any route. Items are `tabindex="-1"` — the trigger is the menu's
- * single tab stop — so a closed panel can ship its whole index to the server
- * without parking a tab trap on the page. Two deliberate omissions: no
- * first-character type-ahead (four items don't need it), and the bar is a nav
- * of links rather than a `role="menubar"`, so ArrowLeft/ArrowRight do not walk
- * between top-level items. This frame is live: click "Company" (or tab to it
- * and press ArrowDown). Below 880px there is no disclosure at all — the sheet
- * behind the hamburger is already a vertical index, so a group arrives there as
- * a labelled section of links.
+ * Home/End, chooses with Enter or Space, and closes on Escape (focus returns to
+ * the trigger), on Tab out (focus carries on from the trigger), on an outside
+ * press, and on choosing an item. Items are `tabindex="-1"` — the trigger is
+ * the menu's single tab stop — so a closed panel can ship its whole index in
+ * the server-rendered HTML without parking a tab trap on the page. This frame
+ * is live: click "Company", then "Docs", to watch the first close. Below 880px
+ * there is no disclosure at all — the sheet behind the hamburger is already a
+ * vertical index, so a group arrives there as a labelled section of links.
  */
 export function NavMenuReference() {
   return (
@@ -59,15 +68,15 @@ export function NavMenuReference() {
         A <code>NavGroup</code> (<code>{"{ label, items }"}</code>) in <code>NavShell</code>&apos;s{" "}
         <code>links</code> array opens a short index of document pages under the bar — the pattern
         the top-level routes outgrew once About, Team, Security and Quality all wanted a place. The
-        panel wears the settled bar&apos;s own dress (hairline, blurred band, no shadow) and hangs
-        off the bar&apos;s bottom edge, never inside it. The keyboard grammar is the WAI-ARIA menu
-        button&apos;s, less type-ahead: open on Enter, Space or ArrowDown, walk with the arrows and
-        Home/End, activate on Enter or Space, dismiss on Escape or on tabbing out. Reduced motion
-        keeps every state and drops the travel.
+        panel wears the settled bar&apos;s idiom (hairline, blurred band, no shadow) at the
+        menu-open bar&apos;s density, and hangs off the bar&apos;s bottom edge, never inside it.
+        Keyboard grammar is the menu-button pattern&apos;s core — Enter/Space, arrows, Home/End,
+        Escape, Tab out, outside press — everything but the APG&apos;s character typeahead. Reduced
+        motion keeps every state and drops the travel.
       </p>
 
       <p className="mt-[1.4rem] mb-[0.5rem] font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
-        live — click Company, or tab to it and press ArrowDown / Escape
+        live — click Company or Docs, or tab to one and press ArrowDown / Escape
       </p>
       <div className="nsr-frame nsr-frame--settled nmr-frame">
         <DemoNav />

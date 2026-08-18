@@ -49,7 +49,11 @@
 .nav-shell.is-hidden {
   transform: translateY(calc(-1 * var(--nav-shell-h, 62px) - 1px));
 }
-/* An open dropdown pins the bar: yielding would take the panel with it. */
+/* An open dropdown pins the bar: yielding would take the panel with it. The
+   component keeps .is-hidden *off* while a group is open as well (see the
+   scroll listener in NavShell.tsx), so closing a group can never reveal a
+   stale yield and slide the bar out from under the cursor; this rule is the
+   belt for the bar that was already hidden when the group opened. */
 .nav-shell[data-group-open="true"].is-hidden {
   transform: none;
 }

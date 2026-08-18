@@ -13,8 +13,10 @@
  *
  * A `links` entry may be a NavGroup ({ label, items }) instead of a NavLink: on
  * the wide bar it becomes a real dropdown menu (button[aria-haspopup=menu] +
- * div[role=menu] + a[role=menuitem], WAI-ARIA menu-button keyboard grammar,
- * one open at a time); in the narrow sheet — already a vertical list — it
+ * div[role=menu] + a[role=menuitem], one open at a time) carrying the
+ * menu-button pattern's core keyboard grammar — Enter/Space, ArrowDown/ArrowUp,
+ * Home/End, Escape, Tab out, outside press — but not the WAI-ARIA APG's
+ * character typeahead; in the narrow sheet — already a vertical list — it
  * becomes a labelled section of links, no disclosure at all.
  */
 import {
@@ -31,6 +33,7 @@ import {
 import { createPortal } from "react-dom";
 import { ThemeToggle } from "./ThemeProvider";
 import { isNavGroup, type NavGroup, type NavItem, type NavLink } from "./chrome";
+import { navMenuIntent } from "./nav-menu-core";
 
 // Mount gate: server + first (hydration) client render read `false`; the client
 // re-reads `true` post-hydration. Keeps the portal out of the SSR/hydration tree
@@ -56,6 +59,12 @@ export interface NavShellProps {
   homeHref?: string;
   /** Accessible label for the brand home link (e.g. "digiquant home"). */
   homeLabel?: string;
+  /** Accessible name for the wayfinding <nav> landmark (strip and sheet share
+   *  it — only one of the two is ever exposed at a given breakpoint/state).
+   *  Default "Primary". Override it when a page mounts more than one bar (the
+   *  design reference frames several specimens), so the landmarks stay
+   *  distinguishable. */
+  navLabel?: string;
 }
 
 /** Key for a NavItem: groups have no href, so the label carries the identity. */
@@ -169,56 +178,58 @@ function NavShellGroup({
       e.preventDefault();
       onOpen();
       setFocusIndex(last);
+    } else if (e.key === "Tab" && open) {
+      // The pointer path opens the panel and leaves focus right here, so Tab is
+      // a real exit from an open menu — and it must take the panel with it, or
+      // it hangs over the page with aria-expanded="true" while focus walks on
+      // (and Escape, a document listener, could later yank focus back). No
+      // preventDefault: the move itself is the browser's to make. Guarded on
+      // `open` because onClose() writes the parent's single open-group slot,
+      // which a closed group must never touch.
+      onClose();
     }
+  };
+
+  // Focus leaving the group closes it — one path covering the trigger, the
+  // panel, Tab, Shift+Tab and a click that lands on some other control.
+  // `relatedTarget` has to be a real element: focus going nowhere (a press on
+  // inert page furniture, or on the panel's own padding) is the pointerdown
+  // listener's business, which knows whether the press was actually outside.
+  const onWrapBlur = (e: ReactFocusEvent<HTMLDivElement>) => {
+    if (!open) return;
+    const next = e.relatedTarget as Node | null;
+    if (next && !wrapRef.current?.contains(next)) onClose();
   };
 
   const onMenuKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const current = focusIndex ?? 0;
-    if (e.key === "ArrowDown") {
+    // focusIndex is authoritative: items are tabIndex=-1, so focus only ever
+    // enters the panel programmatically — whenever this handler can fire, the
+    // focused item is the one focusIndex names.
+    const intent = navMenuIntent(e.key, focusIndex ?? 0, group.items.length);
+    if (!intent) return;
+    if (intent.kind === "focus") {
       e.preventDefault();
-      setFocusIndex(current >= last ? 0 : current + 1);
-    } else if (e.key === "ArrowUp") {
+      setFocusIndex(intent.index);
+    } else if (intent.kind === "activate") {
+      // Space on an <a href> does nothing but scroll — and a dropdown locks no
+      // scroll (unlike the sheet), so the page would slide under an open menu.
       e.preventDefault();
-      setFocusIndex(current <= 0 ? last : current - 1);
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      setFocusIndex(0);
-    } else if (e.key === " ") {
-      // A menuitem activates on Space as well as Enter — but this one is an <a>,
-      // where the browser's default for Space is to scroll the page, and no
-      // click is synthesised. So synthesise it and swallow the scroll. Read the
-      // focused element rather than focusIndex: focus is the source of truth
-      // here, and the index is still null after a pointer open.
-      const item = (e.target as HTMLElement).closest<HTMLAnchorElement>("a.nav-shell-menu-item");
-      if (item) {
-        e.preventDefault();
-        item.click();
-      }
-    } else if (e.key === "End") {
-      e.preventDefault();
-      setFocusIndex(last);
+      itemRefs.current[intent.index]?.click();
+    } else {
+      // Tab out: park focus on the trigger *before* closing. focus() is
+      // synchronous, so the browser's sequential navigation starts from a
+      // visible element; left on an item, it would restart from the top of the
+      // page once the close turns the panel `visibility: hidden`. No
+      // preventDefault — Tab and Shift+Tab both stay the browser's move.
+      triggerRef.current?.focus();
+      onClose();
     }
     // Escape is handled by the document listener above (one code path for
-    // "close and return focus", wherever focus currently sits). Tab is handled
-    // by onFocusLeave below, not here — closing on keydown would re-hide the
-    // panel *before* the browser picks the next tab stop.
-  };
-
-  // Tab out of the group — from the trigger or from an item — closes it. Doing
-  // this on focusout rather than on the Tab keydown means focus has already
-  // landed before the panel re-hides, and it catches every other way focus can
-  // leave (a click that focuses something else, a screen reader's own
-  // navigation). React's onBlur is focusout, so it bubbles from the children.
-  // A null relatedTarget (the window itself lost focus) also closes: returning
-  // to the tab with a menu still hanging open is the worse of the two.
-  const onFocusLeave = (e: ReactFocusEvent<HTMLDivElement>) => {
-    if (!open) return;
-    if (wrapRef.current?.contains(e.relatedTarget as Node | null)) return;
-    onClose();
+    // "close and return focus", wherever focus currently sits).
   };
 
   return (
-    <div className="nav-shell-group" ref={wrapRef} data-open={open} onBlur={onFocusLeave}>
+    <div className="nav-shell-group" ref={wrapRef} data-open={open} onBlur={onWrapBlur}>
       <button
         type="button"
         ref={triggerRef}
@@ -279,16 +290,18 @@ function NavShellGroup({
 function NavShellStrip({
   items,
   className,
+  label,
   openKey,
   setOpenKey,
 }: {
   items: NavItem[];
   className?: string;
+  label: string;
   openKey: string | null;
   setOpenKey: (key: string | null) => void;
 }) {
   return (
-    <nav className={className} aria-label="Primary">
+    <nav className={className} aria-label={label}>
       {items.map((item, i) => {
         const key = itemKey(item, i);
         return isNavGroup(item) ? (
@@ -334,14 +347,16 @@ function NavShellSheetSection({
 function NavShellSheetNav({
   items,
   className,
+  label,
   onNavigate,
 }: {
   items: NavItem[];
   className?: string;
+  label: string;
   onNavigate?: () => void;
 }) {
   return (
-    <nav className={className} aria-label="Primary">
+    <nav className={className} aria-label={label}>
       {items.map((item, i) =>
         isNavGroup(item) ? (
           <NavShellSheetSection key={itemKey(item, i)} group={item} onNavigate={onNavigate} />
@@ -361,6 +376,7 @@ export function NavShell({
   showThemeToggle = true,
   homeHref = "/",
   homeLabel = "home",
+  navLabel = "Primary",
 }: NavShellProps) {
   const navRef = useRef<HTMLElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -385,7 +401,12 @@ export function NavShell({
     const onScroll = () => {
       const y = window.scrollY;
       nav.classList.toggle("is-scrolled", y > 8);
-      if (y > last && y > 180) nav.classList.add("is-hidden");
+      // An open dropdown pins the bar (nav-shell.css overrides the transform),
+      // so .is-hidden must not accumulate underneath it: closing the group
+      // would hand the class back and the bar would slide away under the
+      // cursor. Read the attribute React owns instead of taking a dep, so the
+      // listener still subscribes exactly once.
+      if (y > last && y > 180 && nav.dataset.groupOpen !== "true") nav.classList.add("is-hidden");
       else nav.classList.remove("is-hidden");
       last = y;
     };
@@ -393,6 +414,15 @@ export function NavShell({
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // The other half of that pin: the bar may already be yielded when a group
+  // opens (a keyboard user can reach a trigger on a bar the CSS then brings
+  // back). Clear the class as well as override it, so the close is not where
+  // the user discovers a stale .is-hidden.
+  useEffect(() => {
+    if (openGroup === null) return;
+    navRef.current?.classList.remove("is-hidden");
+  }, [openGroup]);
 
   useEffect(() => {
     document.body.style.overflow = menuOpen ? "hidden" : "";
@@ -436,6 +466,7 @@ export function NavShell({
           <NavShellSheetNav
             items={links}
             className="nav-shell-sheet-links"
+            label={navLabel}
             onNavigate={closeMenu}
           />
           {cta && <div className="nav-shell-sheet-cta">{cta}</div>}
@@ -469,6 +500,7 @@ export function NavShell({
           <NavShellStrip
             items={links}
             className="nav-shell-links flex gap-[1.8rem] text-[0.9rem] text-ink-soft max-[880px]:hidden"
+            label={navLabel}
             openKey={openGroup}
             setOpenKey={setOpenGroup}
           />

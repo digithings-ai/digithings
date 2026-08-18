@@ -1,13 +1,18 @@
 /**
  * SSR smoke tests for <NavShell/>'s dropdown groups: the wide bar's trigger
  * carries the menu-button ARIA contract, the panel ships its full index of
- * menuitems on the server (so the links are crawlable and the panel can
- * transition rather than mount), and nothing is open by default.
+ * menuitems in the server-rendered HTML (so the links are crawlable and the
+ * panel can transition rather than mount), and nothing is open by default.
  *
  * The strip is the only surface asserted here: the narrow sheet lives behind a
  * portal + mount gate, so it renders to nothing on the server by design.
  * `showThemeToggle={false}` keeps ThemeProvider (and its context) out of it.
+ *
+ * The keyboard grammar itself is covered by nav-menu-core.test.ts (the pure
+ * key→intent map) — this package has no DOM harness, so the last block below
+ * guards the one styling contract that grammar silently depends on.
  */
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -74,5 +79,61 @@ describe("NavShell groups", () => {
     ]);
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
+  });
+
+  it("names the wayfinding landmark Primary, and lets a page rename it", () => {
+    // A page that frames more than one bar (the design reference) needs
+    // distinguishable landmarks; every product site keeps the default.
+    expect(render()).toContain('aria-label="Primary"');
+    const specimen = renderToStaticMarkup(
+      <NavShell brand="digithings" links={ITEMS} showThemeToggle={false} navLabel="Bar specimen" />,
+    );
+    expect(specimen).toContain('aria-label="Bar specimen"');
+    expect(specimen).not.toContain('aria-label="Primary"');
+  });
+});
+
+/* The panel's dress is load-bearing for its keyboard grammar, and this package
+   has no DOM harness to catch a regression in it — so the contract is asserted
+   against the stylesheet text itself (read from disk: vitest stubs CSS imports,
+   `?raw` included — see src/node-fs.d.ts). */
+const CSS = readFileSync(new URL("../styles/nav-shell.css", import.meta.url), "utf8");
+
+/** Body of the top-level rule whose selector list is exactly `selector`. The
+ *  leading newline anchors it to column 0, so the indented restatements inside
+ *  the reduced-motion media query can't match. */
+function ruleBody(selector: string): string {
+  const at = CSS.indexOf(`\n${selector} {`);
+  if (at < 0) throw new Error(`nav-shell.css has no top-level \`${selector}\` rule`);
+  const open = CSS.indexOf("{", at);
+  const close = CSS.indexOf("}", open);
+  return CSS.slice(open + 1, close);
+}
+
+/** The rule's `transition` value, comments stripped. */
+function transitionOf(selector: string): string {
+  const body = ruleBody(selector).replace(/\/\*[\s\S]*?\*\//g, "");
+  const match = /transition:([^;]*);/.exec(body);
+  if (!match) throw new Error(`\`${selector}\` declares no transition`);
+  return match[1];
+}
+
+describe("dropdown panel visibility contract", () => {
+  it("steps visibility on close and flips it instantly on open", () => {
+    // Opening a group focuses an item, and focus() on a `visibility: hidden`
+    // element is a silent no-op — so the open state must not interpolate
+    // visibility (a transitioned `visibility` still computes as `hidden` at
+    // t=0), while the closed state has to wait out the fade before hiding.
+    // A restyle that folds `visibility` back into the open transition would
+    // make the keyboard grammar look dead; this is the guard for it.
+    expect(transitionOf(".nav-shell-menu")).toContain("visibility 0s");
+    expect(transitionOf(".nav-shell-menu.is-open")).not.toContain("visibility");
+    expect(ruleBody(".nav-shell-menu.is-open")).toContain("visibility: visible");
+  });
+
+  it("keeps the open panel out of the bar's yield", () => {
+    // The pinned-bar rule the scroll listener cooperates with: without it, a
+    // scroll-down would carry an open panel off the top of the page.
+    expect(CSS).toContain('.nav-shell[data-group-open="true"].is-hidden');
   });
 });

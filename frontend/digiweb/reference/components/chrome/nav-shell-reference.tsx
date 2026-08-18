@@ -9,7 +9,12 @@ const LINKS: NavLink[] = [
   { label: "digiquant.io", href: "https://digiquant.io", external: true },
 ];
 
-function DemoNav() {
+// `state` names this frame's nav landmark: the page frames several bars, and
+// identically-named landmarks are indistinguishable in a screen reader's
+// landmark list (axe: landmark-unique). Product sites mount one bar and keep
+// NavShell's "Primary" default. Line comments, not a docblock: the manifest
+// scraper reads the file's first block comment as the component's summary.
+function DemoNav({ state }: { state: string }) {
   return (
     <NavShell
       brand={
@@ -19,6 +24,7 @@ function DemoNav() {
       }
       links={LINKS}
       homeLabel="digithings home"
+      navLabel={`Nav shell specimen — ${state}`}
       actions={
         <a
           className="btn-icon"
@@ -70,7 +76,7 @@ export function NavShellReference() {
         at rest — top of page, transparent over the hero
       </p>
       <div className="nsr-frame nsr-frame--rest">
-        <DemoNav />
+        <DemoNav state="at rest" />
         <p
           className="m-0 px-[var(--gutter,1.5rem)] pt-[4.4rem] font-display text-[1.7rem] text-ink"
           aria-hidden="true"
@@ -83,7 +89,7 @@ export function NavShellReference() {
         settled — after 8px of scroll: hairline + blurred band
       </p>
       <div className="nsr-frame nsr-frame--settled">
-        <DemoNav />
+        <DemoNav state="settled" />
         <div
           className="flex flex-col gap-[0.7rem] px-[var(--gutter,1.5rem)] pt-[1.1rem] text-[0.86rem] text-ink-soft"
           aria-hidden="true"

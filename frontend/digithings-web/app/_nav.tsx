@@ -29,13 +29,13 @@ export const Brand = () => (
  *  right. GitHub lives in the CTA cluster as an icon button, so it is intentionally
  *  omitted here to avoid rendering it twice.
  *
- *  Four wayfinding entries, the last a NavGroup: the company pages (About,
- *  Team, Security, Quality) are a small index, not four more top-level slots —
- *  NavShell renders a group as a dropdown on the wide bar and as a labelled
- *  section inside the narrow sheet. "Contact" left the bar with them: it is an
- *  anchor on the home page and it lives in the footer. The legal pages
- *  (terms, privacy, disclaimer) are footer-only by design — nobody navigates
- *  to a disclaimer from a top bar. */
+ *  Four wayfinding entries plus the trailing cross-domain link; the fourth is a
+ *  NavGroup: the company pages (About, Team, Security, Quality) are a small
+ *  index, not four more top-level slots — NavShell renders a group as a
+ *  dropdown on the wide bar and as a labelled section inside the narrow sheet.
+ *  "Contact" left the bar with them: it is an anchor on the home page and it
+ *  lives in the footer. The legal pages (terms, privacy, disclaimer) are
+ *  footer-only by design — nobody navigates to a disclaimer from a top bar. */
 export const DT_NAV_PRIMARY: NavItem[] = [
   { label: "Docs", href: "/docs" },
   { label: "Architecture", href: "/#architecture" },
