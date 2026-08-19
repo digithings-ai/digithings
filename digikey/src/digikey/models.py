@@ -33,6 +33,12 @@ class DigiAuthContext(BaseModel):
 
     subject: str
     tenant_slug: str = ""
+    tenant_slug_verified: bool = False
+    """True only when tenant_slug came from the decoded, signature-verified JWT
+    claim. False when empty, or when filled in from the unsigned X-Digi-Tenant /
+    X-Digichat-Tenant header fallback (see service_middleware.jwt_context).
+    Consumers doing real tenant *authorization* (not just routing/logging) must
+    check this before trusting tenant_slug. See #2303."""
     project_id: str | None = None
     project_config_ref: str | None = None
     scopes: list[str] = Field(default_factory=list)
@@ -52,6 +58,7 @@ def claims_to_context(claims: TokenClaims, *, bearer_token: str | None) -> DigiA
     return DigiAuthContext(
         subject=claims.sub,
         tenant_slug=claims.tenant_slug,
+        tenant_slug_verified=bool(claims.tenant_slug),
         project_id=claims.project_id,
         project_config_ref=claims.project_config_ref,
         scopes=list(claims.scopes),
