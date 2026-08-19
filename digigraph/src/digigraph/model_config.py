@@ -614,9 +614,16 @@ def _apply_byok_model_override(resolved: str) -> str:
     path. A model naming a *different* registered provider is discarded, which leaves
     the request exactly where it would have been had the header been absent; see
     :func:`digigraph.llm_auth.byok_model_routes_elsewhere` for why that check is one
-    rule rather than a per-provider ladder. Over HTTP ``byok_header_context`` refuses
-    such a request with a 400 first, so reaching the discard here means an in-process
-    caller — the same invariant, held at both doors.
+    rule rather than a per-provider ladder.
+
+    This is an *independent* second door, not a backstop that assumes the first one
+    fired: it re-derives the verdict from the bound slug and never consults the
+    middleware. The two doors hold different strings — the middleware holds the raw
+    header, this holds the once-stripped slug from ``_normalize_byok_model_slug`` —
+    and they agree only because :func:`byok_routable_model` strips a provider's own
+    prefix to a *fixpoint*, which makes the verdict invariant under that stripping.
+    Given that invariant an HTTP mismatch is always refused with a 400 before the
+    override is ever bound, so reaching this discard means an in-process caller.
 
     The model slug is never logged (see ``_byok_model_override`` in llm_auth), so the
     warning names the provider and not the value that was dropped.

@@ -612,6 +612,23 @@ class TestByokModelCannotRedirectTheBill:
         assert once == expected
         assert byok_routable_model(provider, once) == expected
 
+    @pytest.mark.parametrize("provider", list(BYOK_ROUTABLE_PROVIDERS))
+    @pytest.mark.parametrize("depth", [0, 1, 2, 3, 4])
+    def test_routable_form_strips_the_own_prefix_to_a_fixpoint(
+        self, provider: str, depth: int
+    ) -> None:
+        """A stacked self-prefix must collapse, not merely shrink by one.
+
+        This is the property the two doors rely on: ``byok_routable_model`` has to
+        give the same answer whether or not ``_normalize_byok_model_slug`` already
+        removed a ``provider/``. Turning the strip loop back into a single ``if``
+        fails here at ``depth >= 2``, before it can fail as a silent 400-bypass.
+        """
+        stacked = f"{provider}/" * depth + "gemini/gemini-2.5-flash"
+        assert byok_routable_model(provider, stacked) == byok_routable_model(
+            provider, f"{provider}/" * (depth + 1) + "gemini/gemini-2.5-flash"
+        )
+
     def test_every_catalog_fallback_model_is_self_consistent(self) -> None:
         """No model this product actually offers may be refused by the new 400.
 
@@ -665,6 +682,64 @@ class TestByokModelMismatchOverHttp:
             },
         )
         assert res.status_code == 200, res.text
+
+    @pytest.mark.parametrize("depth", [1, 2, 3, 4])
+    def test_a_stacked_own_prefix_cannot_smuggle_a_foreign_model(self, depth: int) -> None:
+        """``openai/openai/gemini/…`` must be refused exactly like ``gemini/…``.
+
+        The middleware tests the *raw* header while the resolver tests the slug
+        ``_normalize_byok_model_slug`` bound — one strip apart. With a single-strip
+        ``byok_routable_model`` the two disagreed from ``depth == 2`` on: the
+        middleware answered 200 because the head of ``openai/gemini/…`` is
+        ``openai``, which is not a registered provider, and the resolver then
+        dropped the slug anyway. A 200 that silently ignores the caller's model is
+        not the contract the 400 advertises.
+        """
+        res = self._client().get(
+            "/healthz",
+            headers={
+                "x-byok-key": "sk-secret",
+                "x-byok-provider": "openai",
+                "x-byok-model": "openai/" * depth + "gemini/gemini-2.5-flash",
+            },
+        )
+        assert res.status_code == 400, res.text
+        assert "byok_model_provider_mismatch" in str(res.json())
+        assert "sk-secret" not in res.text
+
+    @pytest.mark.parametrize("provider", list(BYOK_ROUTABLE_PROVIDERS))
+    @pytest.mark.parametrize(
+        "tail",
+        [
+            "gemini/gemini-2.5-flash",
+            "anthropic/claude-sonnet-4",
+            "xai/grok-4",
+            "openrouter/auto",
+            "gpt-4o-mini",
+        ],
+    )
+    @pytest.mark.parametrize("depth", [0, 1, 2, 3])
+    def test_both_doors_reach_the_same_verdict(self, provider: str, tail: str, depth: int) -> None:
+        """The middleware and the resolver must never disagree about one header.
+
+        Walked through the real ingest path rather than a re-implementation of the
+        normalizer: ``push_byok_header`` is the only production writer of
+        ``_byok_model_override``, so ``get_byok_model_override()`` is exactly the
+        string the resolver will test.
+        """
+        raw = f"{provider}/" * depth + tail
+        at_middleware = byok_model_routes_elsewhere(provider, raw)
+        tok = push_byok_header(_byok_request(key="sk-ok", provider=provider, model=raw))
+        try:
+            bound = get_byok_model_override()
+        finally:
+            pop_byok(tok)
+        assert bound is not None
+        at_resolver = byok_model_routes_elsewhere(provider, bound)
+        assert at_middleware == at_resolver, (
+            f"{provider!r} + {raw!r}: middleware says {at_middleware}, "
+            f"resolver sees {bound!r} and says {at_resolver}"
+        )
 
 
 @pytest.mark.unit

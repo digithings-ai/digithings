@@ -160,11 +160,23 @@ def byok_routable_model(provider: str, model: str) -> str:
     ``openai`` is deliberately *not* in that registry — its canonical model string is
     bare (``gpt-4o-mini``) — so nothing is prefixed onto it. That asymmetry is the
     whole reason :func:`byok_model_routes_elsewhere` exists.
+
+    The provider's own prefix is stripped to a **fixpoint**, not once, and that loop
+    is load-bearing rather than tidiness. :func:`byok_model_routes_elsewhere` is
+    asked the same question at two doors that hold two different strings — the
+    middleware holds the raw header, the resolver holds the once-stripped slug from
+    ``_normalize_byok_model_slug`` — so the verdict must not depend on how many of
+    the provider's own prefixes have already been removed. Stripping to a fixpoint
+    is exactly that invariance. Weaken it to a single strip and the doors diverge at
+    depth two: ``X-BYOK-Provider: openai`` with ``openai/openai/gemini/…`` leaves the
+    middleware's copy reading ``openai/gemini/…``, whose head ``openai`` is *not* a
+    registered provider, so it passes — and is then dropped at the resolver, which
+    sees one prefix fewer. Same header, two answers.
     """
     prov = provider.strip().lower()
     slug = model.strip()
     prefix = f"{prov}/"
-    if slug.startswith(prefix):
+    while slug.startswith(prefix):
         slug = slug[len(prefix) :]
     return f"{prov}/{slug}" if is_registered_provider(prov) else slug
 
@@ -228,12 +240,22 @@ class _ByokToken(NamedTuple):
 
 
 def _normalize_byok_model_slug(raw: str, provider: str) -> str:
+    """Drop one redundant ``provider/`` prefix from a caller-supplied model slug.
+
+    One strip, deliberately — not a fixpoint. The guard that decides whether this
+    slug may be routed reads it through :func:`byok_routable_model`, which strips the
+    provider's own prefix to a fixpoint, so how many prefixes *this* function leaves
+    behind cannot change any verdict or any routed model. A second strip here would
+    only alter what ``get_byok_model_override`` reports.
+
+    (The former ``provider == "openrouter"`` special case was unreachable: when the
+    provider *is* ``openrouter``, ``prefix`` already equals ``"openrouter/"`` and the
+    branch above consumed it; when it is not, the conjunct is false.)
+    """
     trimmed = raw.strip()
     prefix = f"{provider}/"
     if trimmed.startswith(prefix):
         return trimmed[len(prefix) :]
-    if provider == "openrouter" and trimmed.startswith("openrouter/"):
-        return trimmed[len("openrouter/") :]
     return trimmed
 
 
