@@ -469,6 +469,7 @@ def _install_git_hooks() -> None:
 
     script = REPO_ROOT / "scripts" / "install-hooks.sh"
     if not script.exists():
+        print(f"  WARNING: pre-push hook not installed — {script} is missing.")
         return
     result = subprocess.run(
         ["bash", str(script)],
