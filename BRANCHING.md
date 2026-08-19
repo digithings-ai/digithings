@@ -40,7 +40,7 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 | Branch | Purpose | Protection |
 |--------|---------|------------|
 | `main` | What is actually deployed / released. | PR required (**0** approvals), no force-push, no deletion. One required status check: `Every commit reaching main was reviewed`. Linear history is **not** enforced. |
-| `develop` | Integration branch — merge target for module sprints and cross-cutting work. Also the repo's **default branch**. | PR required (0 approvals), no force-push, no deletion. Three required checks, `strict: true` — so a PR must be up to date with `develop` before it can merge. |
+| `develop` | Integration branch — merge target for module sprints and cross-cutting work. Also the repo's **default branch**. | No force-push, no deletion. **No PR gate** — `required_pull_request_reviews` is `null`, so unlike `main` a pull request is not required server-side. Three required checks, `strict: true` — so a PR that *is* opened must be up to date with `develop` before it can merge. |
 | `module/<component>` | Per-module integration branch. One per digithings module. PRs into develop. | No force-push, no deletion, PR required (0 approvals) — the `module-branch-protection` ruleset on `refs/heads/module/**`. |
 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
@@ -145,9 +145,9 @@ the delete only strands the branches the rule meant to discourage. Until #2463 t
 hook checked the name first and `exit 1`ed before it reached the deletion skip, so
 `git push origin --delete bot/stub-tsv-2459` failed with a name-taxonomy error and
 no server-side cause, and `bot/*` refs had piled up on `origin` behind it (~100 as
-of 2026-08-18, pending the reap in #2465). The `main` guard still covers deletions
-— deleting `main` is at least as serious as pushing to it, so it needs the same
-`ALLOW_MAIN_PUSH=1`.
+of 2026-08-18; #2465 reaped them on 2026-08-19 and 5 heads remain). The `main`
+guard still covers deletions — deleting `main` is at least as serious as pushing
+to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
 
 ## What is not allowed
 
