@@ -60,7 +60,12 @@ jobs:
             exit 0
           fi
           TEXT=$(echo "$PR" | jq -r '.body + "\n" + .title')
-          if ! printf '%s' "$TEXT" | grep -Eqi '(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
+          # Not -q: under `set -o pipefail` (set above) -q exits at the first match,
+          # printf takes SIGPIPE and the pipeline reports 141 -- so a body near
+          # GitHub's 65,536-char cap can read as unlinked: the threshold is
+          # grep-version-dependent (~56KB on GNU grep 3.11, ~131KB on 3.8), so it
+          # can sit below that cap. Redirecting lets grep drain stdin.
+          if ! printf '%s' "$TEXT" | grep -Ei '(fixes|closes|resolves)[[:space:]]+#[0-9]+' >/dev/null; then
             echo "PR #$NUM not issue-linked — skipping autolabel"
             exit 0
           fi

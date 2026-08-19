@@ -116,6 +116,19 @@ Middleware behaviour on each request:
 7. Check `scope_grants_required`. If insufficient: 403 `insufficient_scope`.
 8. Attach `DigiAuthContext` to `request.state.digi_auth`. Downstream handlers read tenant, scopes, and project context from there.
 
+**`tenant_slug` provenance (#2303).** If the verified JWT's own `tenant_slug` claim is
+empty, `jwt_context` falls back to the unsigned `X-Digi-Tenant` / `X-Digichat-Tenant`
+request header — this keeps routing/logging usable for legacy callers that predate
+per-tenant tokens, but it means `tenant_slug` alone does not prove the caller is
+authorized for that tenant. `DigiAuthContext.tenant_slug_verified` disambiguates: `True`
+only when `tenant_slug` came from the decoded JWT claim, `False` when it is empty or was
+filled from the header. **Any consumer using `tenant_slug` for real authorization (not
+just routing/logging) must check `tenant_slug_verified is True` first** — trusting
+`tenant_slug` alone lets a caller with an empty-tenant token pick any tenant via the
+header. No currently-issued token can carry an empty `tenant_slug` through the
+documented issuance API (`POST /v1/oauth/token` and `digikey issue-key` both reject it);
+this flag guards against future issuance paths, admin tooling, or bugs that might.
+
 ---
 
 ## 4. Data Model
