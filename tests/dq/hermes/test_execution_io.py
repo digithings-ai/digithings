@@ -456,6 +456,112 @@ class TestSellClosesLots:
         assert "over-closed" in caplog.text
 
 
+class TestResidualIsMeasured:
+    """``prior_quantity`` and ``residual_quantity`` are what name the projected event.
+
+    `execute_at_open.py` calls a sell EXIT when the residual is zero and a buy OPEN when
+    the prior is zero — the event names in Olympus's Activity table are these two numbers
+    and nothing else. So they are part of this module's contract, not incidental fields:
+    the residual is read back out of the mutated lineages after the close, never computed
+    as ``prior - quantity``, and the difference is visible whenever a sell asks for more
+    shares than the record holds.
+    """
+
+    def test_a_buy_into_nothing_has_a_zero_prior(self) -> None:
+        chain = _Chain()
+        chain.order(symbol="AAPL", action="add", quantity="5")
+
+        result = _run(chain.client(), {"AAPL": "195.50"})
+
+        assert result.fills[0].prior_quantity == Decimal("0")
+
+    def test_a_buy_on_top_of_a_lot_reports_the_live_quantity(self) -> None:
+        chain = _Chain()
+        chain.lot(
+            symbol="AAPL",
+            quantity="10",
+            open_price="150.00",
+            opened_at="2026-05-04T13:31:00+00:00",
+            tag="a",
+            closed="4",
+        )
+        chain.order(symbol="AAPL", action="add", quantity="5")
+
+        result = _run(chain.client(), {"AAPL": "195.50"})
+
+        # 10 opened less 4 already closed: the prior is the *live* size, not the opened one.
+        assert result.fills[0].prior_quantity == Decimal("6")
+
+    def test_a_partial_trim_leaves_the_untouched_shares_as_the_residual(self) -> None:
+        chain = _Chain()
+        chain.lot(
+            symbol="AAPL",
+            quantity="10",
+            open_price="150.00",
+            opened_at="2026-05-04T13:31:00+00:00",
+            tag="a",
+        )
+        chain.order(symbol="AAPL", action="trim", quantity="4")
+
+        result = _run(chain.client(), {"AAPL": "195.50"})
+
+        assert result.fills[0].residual_quantity == Decimal("6")
+
+    def test_a_sell_beyond_the_lots_is_flat_and_not_negative(self) -> None:
+        """The mutation this test exists to kill.
+
+        Five shares sold against three live ones leaves the position **flat**: there is no
+        such thing as −2 shares here, and the surplus is logged as a data error by the
+        caller above. ``prior - quantity`` would report −2, which reads as a short position
+        to anything downstream that looks at magnitude rather than sign.
+        """
+        chain = _Chain()
+        chain.lot(
+            symbol="AAPL",
+            quantity="10",
+            open_price="150.00",
+            opened_at="2026-05-04T13:31:00+00:00",
+            tag="a",
+            closed="7",
+        )
+        chain.order(symbol="AAPL", action="exit", quantity="5")
+
+        result = _run(chain.client(), {"AAPL": "195.50"})
+
+        assert result.fills[0].residual_quantity == Decimal("0")
+
+    def test_a_sell_with_no_lots_at_all_is_flat(self) -> None:
+        chain = _Chain()
+        chain.order(symbol="AAPL", action="exit", quantity="5")
+
+        result = _run(chain.client(), {"AAPL": "195.50"})
+
+        assert result.fills[0].prior_quantity == Decimal("0")
+        assert result.fills[0].residual_quantity == Decimal("0")
+
+    def test_a_second_order_sees_the_first_ones_residual(self) -> None:
+        """Two orders, one symbol, one run: the second reads the state the first left.
+
+        Without this the two fills would both measure against the pre-run book, and a
+        trim-then-trim would project two TRIMs over a position that is already flat.
+        """
+        chain = _Chain()
+        chain.lot(
+            symbol="AAPL",
+            quantity="10",
+            open_price="150.00",
+            opened_at="2026-05-04T13:31:00+00:00",
+            tag="a",
+        )
+        chain.order(symbol="AAPL", action="trim", quantity="4", tag="first")
+        chain.order(symbol="AAPL", action="trim", quantity="6", tag="second")
+
+        result = _run(chain.client(), {"AAPL": "195.50"})
+
+        assert [f.prior_quantity for f in result.fills] == [Decimal("10"), Decimal("6")]
+        assert [f.residual_quantity for f in result.fills] == [Decimal("6"), Decimal("0")]
+
+
 class TestRejections:
     def test_missing_mark_is_rejected_with_no_fill_row(self) -> None:
         """A fill needs a price. Guessing one is the read-time invention this task removes."""
@@ -660,3 +766,60 @@ class TestDeterministicIds:
         assert close_lot_id(
             closing_execution_id=execution_id, opened_by_execution_id=first
         ) != close_lot_id(closing_execution_id=execution_id, opened_by_execution_id=second)
+
+
+class TestSoleAuthority:
+    """One writer for fills and lots, one caller for the executor.
+
+    The point of migration 069 is that a position's history has a single origin. That
+    holds only while nothing else writes `paper_executions` or `holding_lots` — a second
+    writer would give the same position two irreconcilable records, and the append-only
+    trigger cannot tell a rogue insert from a legitimate one. So this is a *structural*
+    guard, the sibling of ``test_h9_is_the_only_ledger_writer``: it fails when a new module
+    starts naming those tables, and the fix is to route through the executor, not to widen
+    the allow-list.
+
+    ``digiquant/scripts`` is searched too — that is where the cron entrypoints live, and
+    a script writing the fill tables directly would bypass every invariant above.
+    """
+
+    _ROOTS = ("digiquant/src", "digiquant/scripts")
+
+    def _files_naming(self, needle: str) -> list[str]:
+        import pathlib
+        import subprocess
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        out = subprocess.run(
+            ["grep", "-rl", "--include=*.py", "-e", needle, *self._ROOTS],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        ).stdout
+        return sorted(out.split())
+
+    def test_only_execution_io_names_the_fill_tables(self) -> None:
+        writers = "digiquant/src/digiquant/olympus/hermes/writers"
+        # ``ledger_io`` declares the paper_executions name because H9 reads it to decide
+        # whether a symbol is already filled and therefore frozen. Reading is fine; it
+        # never inserts there, which ``test_h9_is_the_only_ledger_writer`` pins from the
+        # other side.
+        assert self._files_naming("portfolio_ledger_paper_executions") == [
+            f"{writers}/execution_io.py",
+            f"{writers}/ledger_io.py",
+        ]
+        # Nothing but the executor has any reason to know lots exist.
+        assert self._files_naming("portfolio_ledger_holding_lots") == [f"{writers}/execution_io.py"]
+
+    def test_the_executor_has_exactly_one_caller(self) -> None:
+        """``execute_pending_orders(`` — the paren keeps prose cross-references out.
+
+        A second caller means two processes could fill the same pending order on the same
+        day. The ids are deterministic so the rows would collide rather than duplicate,
+        but the second caller would still be marking orders executed against its own
+        marks, and nobody would know which set of prices the book was built from.
+        """
+        assert self._files_naming("execute_pending_orders(") == [
+            "digiquant/scripts/atlas/execute_at_open.py",
+            "digiquant/src/digiquant/olympus/hermes/writers/execution_io.py",
+        ]

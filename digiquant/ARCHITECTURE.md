@@ -1342,8 +1342,10 @@ not a row the approval chains through.
 - **Rollback note: the schema is no longer dark.** Since #2418 wired H9, these tables take
   traffic on every commit run, so reverting migration 069 on its own now breaks H9 — drop the
   writer first, or set `OLYMPUS_PORTFOLIO_LEDGER=0` (below). Reverting the *writer* alone is
-  safe in either order: no legacy projection reads the ledger, so a chain that stops growing
-  costs lineage, not correctness.
+  still safe in either order, but no longer because nothing reads the chain — since #2420 the
+  at-open job does. It is safe because a chain that stops growing makes that read *decline*
+  and hand the day back to the prose builders, so the cost is lineage rather than correctness.
+  That stops being true the moment `--require-ledger` joins the pipeline invocation.
 - **Tests**: `tests/dq/hermes/test_portfolio_ledger.py` (model/fixture behavior — add,
   trim, exit, no-op, rejection, cap, rounding, carry, supersession, immutability,
   idempotency) and `tests/dq/atlas/test_migration_069.py` (structural: RLS, grants,
@@ -1417,6 +1419,81 @@ a dark schema needs opting into, a live writer needs an escape hatch.
   them. Parsed, not transcribed — narrowing a CHECK fails those tests instead of silently
   outdating them. Keep it: mutation shows loosening the `Weight` mirror to `le=100` *and*
   dropping the writer's `/100.0` leaves 46 of this file's 48 ledger tests green.
+
+#### The at-open fill path — `execution_io` (#2420, Task 2.4)
+
+H9 records what the portfolio *decided*; this is what it *did*.
+`digiquant/src/digiquant/olympus/hermes/writers/execution_io.py` is the only writer into
+`portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots`, and
+`execute_pending_orders(...)` has exactly one caller: `digiquant/scripts/atlas/execute_at_open.py`,
+the job the prices pipeline runs at 09:35 ET. Two structural tests hold both halves of that
+(`tests/dq/hermes/test_execution_io.py::TestSoleAuthority`) — a second writer would give one
+position two irreconcilable records, and the append-only trigger cannot tell a rogue insert
+from a legitimate one.
+
+The executor reads the day's pending `OrderIntent` heads, resolves each one's direction from
+its `ApprovedTarget` against the symbol's live lots, and writes three batched inserts in FK
+order: `paper_executions` → `holding_lots` → the `order_intents` head marking the order
+`executed` or `rejected`. Every id is a `uuid5` of its inputs
+(`executed_intent_id(pending_id, executed_date)`, `open_lot_id`, `close_lot_id`), so a rerun
+collides on the PK rather than duplicating the day — idempotency without a read-modify-write
+the grants would refuse anyway.
+
+- **A close is a second lot row, not an update.** The tables reject `UPDATE` by trigger, so
+  closing a lot appends a row carrying the *same* `opened_by_execution_id` plus
+  `closed_by_execution_id`/`closed_at`/`status = 'closed'`. Readers therefore group lots by
+  `opened_by_execution_id` and take the latest state per group; a lot's identity is the
+  execution that opened it, never its own row id. This needed no migration.
+- **Costs are measured zero, not absent.** Migration 070 adds nullable `fee` and `slippage`
+  to `paper_executions`. A paper fill at the declared open has an effective price equal to
+  its mark, so both are an exact `0` — `FillCosts` records that rather than leaving the
+  columns NULL, and `slippage` is signed (`(price − mark) × quantity`) so a real broker
+  adapter later fills the same fields without a schema change.
+- **The event name comes from the lots, not from the action label.** `DecisionAction` has no
+  "open": a buy is `add`. So `Fill` carries `prior_quantity` and `residual_quantity`, both
+  measured, and the projection names the event from them — `OPEN` when the prior live total
+  is 0 else `ADD`, `EXIT` when the residual is 0 else `TRIM`. There is no epsilon ladder;
+  that ladder is what made `EXIT` unreachable in #1743 (31 OPEN rows in one day, zero EXITs).
+- **The residual is read back, never computed.** After booking the close rows the executor
+  re-reads `_live_quantity` out of the lineages it just mutated. `prior − quantity` would
+  report −2 shares for a sell of 5 against 3 live ones, which reads as a *short* to anything
+  looking at magnitude; the position is flat and the surplus is logged as a data error.
+  Reading it back is also what makes two orders on one symbol in one run chain correctly —
+  the second sees the first's residual, not the pre-run book.
+- **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
+  row for the execution date get `data_unavailable` on the order head and no `position_events`
+  row at all.
+
+`execute_at_open.py` tries the ledger first and reaches the prose builders only when it
+declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
+opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off, or the
+read raising — and `([], "")` for "authoritatively a quiet day", which the caller must not
+conflate. The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
+guard so a partial write stays loud. Exit codes: `2` for conflicting flags or an unresolvable
+prior trading date, `3` for `--require-ledger` when the ledger declined, `0` otherwise.
+
+Two projection details are easy to get wrong. `approved_weight` is a 0..1 fraction while
+`position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
+becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`. And
+`prev_weight_pct` is **display only**, read from the last committed `positions` book: migration
+069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
+all, and the book may be a different date than the run date.
+
+Cutover is a property of the data, not of a flag. Production's migration tail is 065, the kill
+switch defaults *on*, and `--require-ledger` is absent from the pipeline — so today the job
+probes tables prod does not have, degrades to prose, and stays green;
+`tests/scripts/test_prices_cron_dst.py` pins the invocation carrying neither
+`--require-ledger` (a daily red cron before 069/070 are applied) nor `--no-ledger` (which
+would freeze the prose path forever). Deleting the two prose builders is a follow-up gated on
+prod reaching 070, not part of this task: they still carry the whole #1743 regression suite.
+
+- **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
+  `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and
+  `tests/dq/atlas/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,
+  `TestBuildEventsFromPaperFillsDeclines`, `TestMainPrefersTheLedger` — the last proves the
+  prose builders are never called when the ledger speaks, that HOLD continuity survives, and
+  that both new exit codes are reachable). The atlas module imports the table names from the
+  writers rather than restating them, so a rename breaks the test instead of drifting past it.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 

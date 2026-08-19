@@ -45,7 +45,7 @@ and a full exit is just the case where that difference reaches zero.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import (
@@ -152,7 +152,16 @@ class FillCosts:
 
 @dataclass(frozen=True)
 class Fill:
-    """One booked paper fill, for the caller's manifest and projection."""
+    """One booked paper fill, for the caller's manifest and projection.
+
+    ``prior_quantity`` and ``residual_quantity`` are the symbol's live lot total either
+    side of this fill, both *measured* from the lot lineages rather than inferred from
+    ``action``. They exist so a projection can name the event from the position instead of
+    from the label: a buy into nothing is an open and a buy on top of something is an add;
+    a sell to zero is an exit and a sell to anything else is a trim. Deriving that from
+    ``action`` alone would call a trim-to-zero a trim, which is exactly the class of
+    mislabelling the #1743 incident was — 31 OPEN rows, and not one EXIT.
+    """
 
     symbol: str
     action: DecisionAction
@@ -162,6 +171,8 @@ class Fill:
     price: Decimal
     fee: Decimal
     slippage: Decimal
+    prior_quantity: Decimal = Decimal(0)
+    residual_quantity: Decimal = Decimal(0)
 
     @property
     def is_sell(self) -> bool:
@@ -381,6 +392,55 @@ def _lineages(rows: list[dict[str, Any]]) -> dict[str, list[_Lineage]]:
     return by_symbol
 
 
+def _live_quantity(lineages: dict[str, list[_Lineage]], symbol: str) -> Decimal:
+    """The symbol's live share count across its lot lineages."""
+    return _shares(sum((item.live for item in lineages.get(symbol, [])), Decimal(0)))
+
+
+def pending_symbols(*, client: SupabaseClient, run_date: date) -> list[str]:
+    """Symbols carrying a pending order head on ``run_date``, sorted and de-duplicated.
+
+    A caller has to supply ``marks`` to :func:`execute_pending_orders` but cannot know
+    which symbols to price until it has read the chain — and reading the chain is this
+    module's job, not the caller's. So the executor exposes the question rather than
+    making every caller re-derive the heads-only, supersession-aware walk that
+    :func:`_pending_order_heads` performs. The alternative, a marks *callable* invoked
+    per symbol, would push one price read per symbol through a loop; this way the caller
+    can fetch them in a single bounded query.
+
+    Cheap and read-only: it is one ``order_intents`` select for the date, and it returns
+    ``[]`` for a date the ledger never spoke for, so it is safe to call before
+    :func:`ledger_is_authoritative`.
+    """
+    pending, _ = _pending_order_heads(client=client, run_date=run_date)
+    return sorted({_symbol(row.get("symbol")) for row in pending if _symbol(row.get("symbol"))})
+
+
+def approved_weights(*, client: SupabaseClient, run_date: date) -> dict[str, Decimal]:
+    """Head approved portfolio weight per symbol for ``run_date``, as a 0..1 fraction.
+
+    The only weight the ledger holds. ``portfolio_ledger_commits`` carries no NAV column,
+    so a *position* weight cannot be derived from the lots — shares and a cost basis do
+    not make a fraction of a portfolio without a denominator. What migration 069 does
+    record is ``approved_targets.approved_weight``, H8's approved target, and that is what
+    this returns: the weight the portfolio was *approved to hold*, not a weight measured
+    from the book afterwards.
+
+    Heads only, so a re-approval on the same ``run_date`` reports the surviving target and
+    not the superseded one. Symbols whose approved target was expressed as a quantity
+    rather than a weight are absent rather than zero — 069 requires one or the other, and
+    a missing weight is unknown, not flat.
+    """
+    rows = _rows_for_date(client=client, table=APPROVED_TARGETS, run_date=run_date)
+    weights: dict[str, Decimal] = {}
+    for row in _heads(rows):
+        symbol = _symbol(row.get("symbol"))
+        weight = _decimal(row.get("approved_weight"))
+        if symbol and weight is not None:
+            weights[symbol] = weight
+    return weights
+
+
 def _zero_cost(*, price: Decimal, quantity: Decimal) -> FillCosts:
     """The paper venue: fill exactly at the declared mark.
 
@@ -494,6 +554,7 @@ def execute_pending_orders(
             price=costs.price,
             fee=costs.fee,
             slippage=costs.slippage,
+            prior_quantity=_live_quantity(lineages, symbol),
         )
         execution_rows.append(
             PaperExecution(
@@ -520,7 +581,13 @@ def execute_pending_orders(
         intent_rows.append(
             _executed_intent_row(pending_row=row, executed_date=executed_date, now=now)
         )
-        fills.append(fill)
+        # Read the residual back out of the lineages the call above just mutated rather
+        # than computing prior ± quantity. The two differ when a sell exceeds the lots on
+        # the record: the arithmetic would report a negative position, the measurement
+        # reports the zero that is actually there. Two orders on one symbol in a single
+        # run also chain correctly this way — the second one's prior is the first one's
+        # residual, because both are read from the same running state.
+        fills.append(replace(fill, residual_quantity=_live_quantity(lineages, symbol)))
 
     # FK order: a lot references its executions, so fills land first. The executed and
     # rejected order rows go last because nothing references them — a failure there leaves
