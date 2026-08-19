@@ -56,7 +56,19 @@ status:
 # ── Hooks ─────────────────────────────────────────────────────────────────────
 
 # Install the pre-push git hook.
+#
+# Resolve the hooks dir via --git-common-dir, never the literal `.git/hooks`:
+# inside a linked worktree `.git` is a file, so the literal path fails with
+# "Not a directory". Every worktree shares this one installed hook.
+#
+# Unlike digithings' own scripts/install-hooks.sh, this installs the working
+# tree's copy — digidev scaffolds arbitrary repos, so there is no known-good
+# ref (origin/develop) it can assume exists here.
 hooks-install:
-	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
-	@echo "installed: .git/hooks/pre-push"
+	@set -e; \
+	hooks_dir="$$(cd "$$(git rev-parse --git-common-dir)" && pwd)/hooks"; \
+	mkdir -p "$$hooks_dir"; \
+	bash -n scripts/hooks/pre-push.sh; \
+	install -m 755 scripts/hooks/pre-push.sh "$$hooks_dir/pre-push"; \
+	echo "installed: $$hooks_dir/pre-push"
 
