@@ -20,6 +20,10 @@ allowed_url_regex='^({{REPO_URL_HTTPS}}(\.git)?|{{REPO_URL_SSH}}(\.git)?)$'
 CONTRIBUTOR_HANDLES='{{CONTRIBUTOR_HANDLES}}'
 branch_regex="^({{MAIN_BRANCH}}|{{DEFAULT_BRANCH}}|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+)$"
 
+# A deletion pushes this as the local sha — there are no commits to scan and no
+# name worth validating, because the ref is going away.
+zero_sha='0000000000000000000000000000000000000000'
+
 if [ -n "$url" ] && ! [[ "$url" =~ $allowed_url_regex ]]; then
   echo "pre-push: refusing to push to '$url'." >&2
   echo "         Only the pinned origin ({{REPO_FULL}}) is allowed." >&2
@@ -29,8 +33,17 @@ fi
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
 
-  # Branch name validation.
-  if [[ "$remote_ref" == refs/heads/* ]]; then
+  # Deletions are exempt from the taxonomy: a ref created outside it — or one
+  # predating a tightening of the rules — must still be deletable. Enforcing a
+  # name on the way out only strands the branches the rule meant to discourage.
+  # The main/default guard below still applies to deletions.
+  is_deletion=0
+  if [ "$local_sha" = "$zero_sha" ]; then
+    is_deletion=1
+  fi
+
+  # Branch name validation — deletions exempt.
+  if [ "$is_deletion" -eq 0 ] && [[ "$remote_ref" == refs/heads/* ]]; then
     branch_name="${remote_ref#refs/heads/}"
     if ! [[ "$branch_name" =~ $branch_regex ]]; then
       echo "pre-push: refusing to push branch '$branch_name' — doesn't match the taxonomy." >&2
@@ -53,13 +66,13 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     exit 1
   fi
 
-  # Skip deletions and new-branch pushes (no range to scan).
-  if [ "$local_sha" = "0000000000000000000000000000000000000000" ]; then
+  # Deletions have no commit range to scan; new-branch pushes are handled below.
+  if [ "$is_deletion" -eq 1 ]; then
     continue
   fi
 
   # Determine diff range.
-  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ] || [ -z "$remote_sha" ]; then
+  if [ "$remote_sha" = "$zero_sha" ] || [ -z "$remote_sha" ]; then
     base="$(git merge-base "$local_sha" "origin/{{DEFAULT_BRANCH}}" 2>/dev/null || echo '')"
   else
     base="$remote_sha"
