@@ -70,7 +70,7 @@ The following is built and functional as of this architecture review (March 2026
 | `GET` | `/health` | None | Unlimited | Legacy health check (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Unlimited | Liveness probe — returns `{"ok": true}`; see AGENTS.md "Liveness vs status" |
 | `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digiclaw custom skill; body: `WorkflowRequest` |
-| `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `sitaas-rag` |
+| `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `digigraph-rag` |
 | `GET` | `/v1/model-info` | digikey JWT (optional) | 30 req/min/IP | Current model + mode |
 | `POST` | `/v1/chat/completions` | digikey JWT (optional) | 10 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
 | `GET` | `/v1/debug/input_messages` | digikey JWT | 30 req/min/IP | Last N request summaries; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
@@ -248,9 +248,9 @@ real node executions rather than compiled graph nodes.
 | `error` | `str \| None` | Terminal error; stops further node execution |
 | `stored_datasets` | `dict[str, dict]` | Ref → profile map (survives across turns via checkpointer) |
 | `workflow_profile` | `str` | Active profile (`full_stack`, `research_rag`, `quant_backtest`, `plan_execute`) |
-| `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. |
-| `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map) |
-| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map |
+| `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. `_initial_graph_state` writes this (and `vault_path_prefix` / `research_system_prompt_override` / `digi_subject`) **unconditionally including `None`**, so a map-driven clear for an unmapped tenant actually clears checkpointed state instead of leaving the prior turn's corpus sticky. |
+| `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map); same unconditional-None write as `digisearch_index`. |
+| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. See `digigraph.languages`. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
 | `supervisor_route` | `str \| None` | Next route chosen by supervisor |
@@ -310,10 +310,10 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `model` | `str` | Default `"sitaas-rag"`; not used for routing (LiteLLM handles it) |
+| `model` | `str` | Default `"digigraph-rag"`; not used for routing (LiteLLM handles it) |
 | `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists. Flattened into the workflow `prompt` via `chat_prompt.messages_to_workflow_prompt` — **full user+assistant history** (multi-turn), not user-only |
 | `stream` | `bool` | SSE streaming |
-| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
+| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=digigraph-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 | `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
@@ -417,7 +417,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -440,14 +440,14 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:108`:
 
 | `DIGI_CHECKPOINTER` value | Backend | Notes |
 |--------------------------|---------|-------|
-| unset + project active | `SqliteSaver` | **Default when `digiproject.yaml` is present** (SITAAS / project mode); survives restarts |
+| unset + project active | `SqliteSaver` | **Default when `digiproject.yaml` is present** (project mode); survives restarts |
 | unset + no project | `MemorySaver` (in-process dict) | Default standalone mode; lost on restart |
 | `memory` | `MemorySaver` (in-process dict) | Explicit; lost on restart |
 | `sqlite` | `SqliteSaver` | File path via `DIGI_CHECKPOINTER_SQLITE_URI` |
 | `postgres` | `PostgresSaver` | Connection string via `DIGI_CHECKPOINTER_POSTGRES_URI` |
 | `none` / `off` / `0` / `false` | None (no checkpointing) | Breaks multi-turn and thread APIs |
 
-**Project-mode default (SITAAS):** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
+**Project-mode default:** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
 
 #### 5.5.1 High availability (multi-replica) — REM-099
 
@@ -608,7 +608,7 @@ degrades today.
 
 ### 6.3 Code Execution Gate
 
-`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
+`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `project_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
 
 ### 6.4 Thread State Access
 
@@ -712,6 +712,7 @@ Four modes — **`llm_mode` is access/cost policy, not a product catalog**: `fre
 **BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic, x.ai. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`. This allowlist (`_BYOK_BASE_URLS` / `BYOK_ROUTABLE_PROVIDERS` / `BYOK_MODEL_REQUIRED_PROVIDERS`) is no longer a hand-edited Python dict — it loads from `config/byok-providers.json` once at import time, and a missing or malformed catalog raises there, crashing the process at startup rather than silently 400ing every BYOK request. Path resolution honors `DIGI_CONFIG_PATH` when set (falling back to a `__file__`-relative repo path otherwise), and the same catalog file is vendored into `infra/digichat-release/config/byok-providers.json` so the Cloudflare stack image and the Profile A self-host compose target — which bake/mount `infra/digichat-release/config` rather than the repo-root `config/` — get it too; a test (`TestByokCatalogVendoredCopy`) pins the two copies as parsed-JSON-equal (not byte-for-byte — a whitespace reformat of either file would still pass) so they cannot silently diverge in content.
 
 `config/byok-providers.json` is the source of truth for the BYOK allowlist **specifically** — i.e. which providers a user-supplied key is actually routed to and spent on. It is not a general provider-base-URL registry for the monorepo: `digillm`'s own `_EXTERNAL_PROVIDERS` table (`digillm/src/digillm/client.py`) is a deliberately separate table serving a different, non-BYOK concern — routing on the *operator's* keys — and `digillm` is a standalone installable library that must not reach for repo-root config. The two tables are not kept in lockstep and are not expected to be: `_EXTERNAL_PROVIDERS` has no `openai` entry at all (operator OpenAI calls don't go through this table), and its `anthropic` base URL still carries a trailing slash that the BYOK catalog deliberately dropped — harmless on both sides, since `digillm/src/digillm/client.py`'s own base-URL comparison strips trailing slashes and the OpenAI-compatible client normalizes it internally regardless — but proof the two lists already diverge in fields where it happens not to matter. Do not "fix" `_EXTERNAL_PROVIDERS` to import from the BYOK catalog.
+**`X-BYOK-Model` cannot redirect the bill.** The three headers are independent strings from the caller, so a request could declare `X-BYOK-Provider: openai`, paste a real OpenAI key, and pass `X-BYOK-Model: gemini/gemini-2.5-flash`. Every *registered* provider's slug is re-prefixed to itself before routing and so cannot carry a foreign prefix, but `openai` is deliberately absent from `_EXTERNAL_PROVIDERS` (its canonical slug is bare), so an `openai/`-declared request was the one shape where a foreign prefix survived all the way to `digillm`, which then built a Gemini client on the **operator's** `GEMINI_API_KEY`. The user's key was accepted, shown as active, and never spent. Two predicates in `llm_auth.py` close it: `byok_routable_model(provider, model)` returns the exact slug that will be routed (it strips the provider's own prefix to a **fixpoint**, so applying it twice never doubles a prefix *and* the verdict cannot depend on how many self-prefixes a caller stacked — that invariance is what keeps the middleware, which reads the raw header, and `_apply_byok_model_override`, which reads the once-stripped slug, from disagreeing at prefix depth two), and `byok_model_routes_elsewhere(provider, model)` is true when that routable form leads with a *registered* provider other than the declared one. The rule is a post-condition on the routable form, not prefix equality, because OpenRouter's shipped `anthropic/claude-sonnet-4` vendor sub-slug is legitimate — `openrouter` is registered, so its slug becomes `openrouter/anthropic/…` and the head stays `openrouter`. Membership is read from `digillm`'s registry via `is_registered_provider`, not the BYOK catalog, because the registry is what decides which env-keyed client gets built; `openai`'s absence from it falls out of the rule rather than being special-cased. A mismatch is refused at the middleware with HTTP 400 `byok_model_provider_mismatch` rather than silently answered on the wrong credential, and `_apply_byok_model_override` independently drops a foreign slug (falling back to the operator-resolved model, i.e. exactly where the request would have landed had the header been absent) so the invariant holds for any caller that reaches the resolver without passing the middleware. The warning names the provider only — the model slug is contractually never logged (see `_byok_model_override`).
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
@@ -856,7 +857,7 @@ digigraph:
 | `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
-| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). When unset (single-tenant), those headers may still select corpus. |
+| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). Unmapped / empty-tenant requests clear those fields to `None` on the request **and** in `_initial_graph_state` so LangGraph checkpoints do not keep a prior turn's index sticky on a reused `session_id`. When unset (single-tenant), those headers may still select corpus. **Unset ≠ broken:** a set-but-unusable value (invalid JSON, non-object top level, or every entry individually dropped) raises `TenantCorpusMapError` → HTTP 503 — same fail-closed contract as digivault `tenant_scope` — and never silently re-enables client corpus selection. Slug keys are lowercased on parse so `OCC` matches digivault's keys. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |
 | `DIGI_ENABLE_THREAD_API` | `0` | Enable `/threads/*` and `/files/*` |
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |
@@ -867,7 +868,7 @@ digigraph:
 | `DIGI_REQUIRE_TOOL_CALLS` | (empty) | Force `tool_choice="required"` deployment-wide: `1`/`true` |
 | `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX` | `3` | Per-IP req/min budget for requests opting into `require_tool_calls=true` (see §3.1) |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
-| `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |
+| `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `project_rag` skill |
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |
 | `DIGI_CORS_ORIGINS` / `DIGIGRAPH_CORS_ORIGINS` | (empty) | CORS allowlist — applied via shared `digibase.cors.install_cors`. `DIGI_ALLOWED_ORIGINS` still honored as legacy fallback. See `SECURITY.md` §"CORS policy". |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | `12000` | Max chars per tool result message to LLM |

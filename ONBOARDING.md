@@ -84,7 +84,7 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 | Branch | When to use |
 |---|---|
 | `main` | Releases only. Never push directly. |
-| `develop` | Cross-cutting work: tooling, CI, docs, SITAAS, Atlas, releases. |
+| `develop` | Cross-cutting work: tooling, CI, docs, the client pilot, Atlas, releases. |
 | `module/<component>` | Focused session on a single module (`digigraph`, `digiquant`, `digichat`, `digisearch`, `digikey`, `digismith`, `digiclaw`, `digibase`). |
 | `task/<N>-<slug>` | Individual backlog task. Auto-created by `make task ISSUE=N`. |
 

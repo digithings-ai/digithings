@@ -4,10 +4,14 @@ reads WorkflowState["require_tool_calls"] and threads tool_choice into run_tools
 
 from __future__ import annotations
 
+import logging
+
 import pytest
-from digigraph.graph.research import research_node
+from digigraph.graph.research import RESEARCH_SYSTEM, research_node
 
 pytestmark = pytest.mark.unit
+
+_SCOPE_WARN = "quant/augmented path"
 
 
 def _patch_research_settings(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -64,3 +68,70 @@ def test_research_node_defaults_tool_choice_auto_when_state_key_absent(
     monkeypatch.setattr("digigraph.graph.research.run_tools", fake_run_tools)
     research_node({"prompt": "build me a strategy"})
     assert captured["tool_choice"] == "auto"
+
+
+def test_research_node_warns_when_require_tool_calls_takes_quant_path(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """#2386: DIGI_REQUIRE_TOOL_CALLS / require_tool_calls must not fail silently on
+    the quant path — the gate only wires tool_choice into the document-RAG loop."""
+    monkeypatch.delenv("DIGISEARCH_URL", raising=False)
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", RESEARCH_SYSTEM),
+    )
+    monkeypatch.setattr(
+        "digigraph.graph.research._run_quant_or_augmented_path",
+        lambda **_kwargs: {
+            "strategy_name": None,
+            "symbols": None,
+            "research_note": "ok",
+        },
+    )
+
+    with caplog.at_level(logging.WARNING, logger="digigraph.graph.research"):
+        research_node({"prompt": "build me a strategy", "require_tool_calls": True})
+
+    assert any(_SCOPE_WARN in r.message for r in caplog.records)
+
+
+def test_research_node_does_not_warn_on_quant_path_when_require_tool_calls_false(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.delenv("DIGISEARCH_URL", raising=False)
+    monkeypatch.setattr(
+        "digigraph.graph.research._load_research_settings",
+        lambda: (None, "default", "default", RESEARCH_SYSTEM),
+    )
+    monkeypatch.setattr(
+        "digigraph.graph.research._run_quant_or_augmented_path",
+        lambda **_kwargs: {
+            "strategy_name": None,
+            "symbols": None,
+            "research_note": "ok",
+        },
+    )
+
+    with caplog.at_level(logging.WARNING, logger="digigraph.graph.research"):
+        research_node({"prompt": "build me a strategy", "require_tool_calls": False})
+
+    assert not any(_SCOPE_WARN in r.message for r in caplog.records)
+
+
+def test_research_node_does_not_warn_on_document_rag_path(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Document RAG is the one path that enforces tool_choice — no scope warning."""
+    _patch_research_settings(monkeypatch)
+    monkeypatch.setattr(
+        "digigraph.graph.research.run_tools",
+        lambda **_kwargs: "ok",
+    )
+
+    with caplog.at_level(logging.WARNING, logger="digigraph.graph.research"):
+        research_node({"prompt": "build me a strategy", "require_tool_calls": True})
+
+    assert not any(_SCOPE_WARN in r.message for r in caplog.records)
