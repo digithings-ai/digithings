@@ -305,6 +305,119 @@ def test_chat_completion_passes_model_as_given_no_prefix(monkeypatch: pytest.Mon
     assert kwargs["model"] == "gpt-4o-mini"  # used verbatim, no env substitution
 
 
+# ── Self-prefixed model ids: OpenRouter's auto-router ────────────────────────
+
+
+def test_wire_model_restores_a_self_prefixed_id() -> None:
+    """``openrouter/auto`` IS the model id, so stripping one prefix must not consume it.
+
+    Both accepted spellings have to land on the same wire id. Operators write the
+    doubled form (README, digigraph/ARCHITECTURE.md), but a BYOK caller cannot produce
+    it: ``byok_routable_model`` strips the provider's own prefix to a fixpoint and
+    re-applies exactly one, and that fixpoint is load-bearing for the middleware/resolver
+    agreement on a hostile header. So the single-prefix form is all BYOK can emit.
+    """
+    assert client_mod._wire_model("openrouter", "auto", "openrouter/auto") == "openrouter/auto"
+    assert (
+        client_mod._wire_model("openrouter", "openrouter/auto", "openrouter/openrouter/auto")
+        == "openrouter/auto"
+    )
+    # Controls. An ordinary id still loses exactly one prefix; the table is per-provider,
+    # so a same-named id under another provider is untouched; and the default client is
+    # handed the string verbatim.
+    assert (
+        client_mod._wire_model("openrouter", "openai/gpt-4o-mini", "openrouter/openai/gpt-4o-mini")
+        == "openai/gpt-4o-mini"
+    )
+    assert client_mod._wire_model("xai", "auto", "xai/auto") == "auto"
+    assert client_mod._wire_model(None, "gpt-4o-mini", "gpt-4o-mini") == "gpt-4o-mini"
+
+
+@pytest.mark.parametrize("model", ["openrouter/auto", "openrouter/openrouter/auto"])
+def test_completion_reaches_the_auto_router_from_either_spelling(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: the BYOK spelling used to reach the wire as a bare ``auto``.
+
+    ``auto`` is not an OpenRouter model id, so the request failed at the provider — on the
+    user's own key. A BYOK user could not reach the auto-router at all.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion(model, [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["model"] == "openrouter/auto"
+
+
+def test_completion_still_strips_one_prefix_for_an_ordinary_openrouter_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Control for the test above — the vendor sub-slug must still lose the routing prefix."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion(
+            "openrouter/anthropic/claude-sonnet-4", [{"role": "user", "content": "hi"}]
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["model"] == "anthropic/claude-sonnet-4"
+
+
+def test_auto_router_pool_constraint_applies_to_the_single_prefix_spelling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The #802 curated pool keys off ``endswith("/auto")`` on the *wire* model.
+
+    While the BYOK spelling collapsed to a bare ``auto`` that test was False, so the
+    capability guard silently did not apply to it either. Restoring the id restores the
+    guard — a BYOK auto-router request is now constrained exactly like an operator one.
+    """
+    monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "a/x,b/y")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion("openrouter/auto", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    plugins = kwargs["extra_body"]["plugins"]
+    assert [p for p in plugins if p["id"] == "auto-router"] == [
+        {"id": "auto-router", "allowed_models": ["a/x", "b/y"]}
+    ]
+    # Control: a pinned model is not the auto-router, so the plugin must NOT be attached.
+    fake_client.chat.completions.create.reset_mock()
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion(
+            "openrouter/anthropic/claude-sonnet-4", [{"role": "user", "content": "hi"}]
+        )
+    _, pinned = fake_client.chat.completions.create.call_args
+    assert "plugins" not in (pinned.get("extra_body") or {})
+
+
+def test_streaming_path_reaches_the_auto_router_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_stream_completion_one_turn`` derives the wire model separately from ``completion``.
+
+    Same bug, second door: a BYOK chat request streams by default in digichat, so the
+    streaming derivation has to agree or the fix only covers half the traffic.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = [_stream_chunk("hi")]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "openrouter/auto",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["stream"] is True
+    assert kwargs["model"] == "openrouter/auto"
+
+
 # ── Empty-response self-heal (#726, 1C) ──────────────────────────────────────
 
 

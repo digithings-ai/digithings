@@ -171,6 +171,22 @@ chat_completion(
   any other string is passed through unchanged. There is **no hidden env/YAML
   model substitution** (that was a digigraph deployment behavior; here mode
   selection is the explicit, opt-in `resolve_model`).
+- **Self-prefixed model ids** (`_SELF_PREFIXED_MODELS` → `_wire_model`). Stripping
+  one prefix assumes a provider's model id never repeats the provider's own name.
+  OpenRouter's auto-router breaks that: its id *is* `openrouter/auto`, so its
+  litellm form carries the prefix twice (`openrouter/openrouter/auto` — the form
+  operators write in the README and `config/model_modes.yaml`) and stripping one
+  still has to leave one behind. Ids listed in the table are restored after the
+  split, so **both spellings reach the wire as `openrouter/auto`**.
+
+  This matters for BYOK, which can only produce the single-prefix form:
+  `digigraph.llm_auth.byok_routable_model` strips the provider's own prefix to a
+  *fixpoint* and re-applies exactly one, and that fixpoint is load-bearing — it is
+  what stops the middleware and the resolver disagreeing about a hostile header. So
+  the seam was fixed here rather than in the normalizer, leaving the credential-path
+  invariant untouched. Before this, a BYOK auto-router request reached the wire as a
+  bare `auto`, which OpenRouter rejects, and the `endswith("/auto")` test that gates
+  the #802 curated candidate pool silently never fired for it either.
 - **Empty-response self-heal.** A 200-OK with no usable output (empty `choices` /
   blank content and no `tool_calls`) is treated as a transient provider hiccup and
   retried with a short backoff (`DIGILLM_EMPTY_RETRY_MAX` / `DIGILLM_EMPTY_RETRY_DELAY`).

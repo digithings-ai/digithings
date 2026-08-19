@@ -296,6 +296,42 @@ def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
     return None, model
 
 
+# A provider's model id normally does not repeat the provider's own name, so the wire
+# id is the litellm string minus exactly one routing prefix
+# (``openrouter/anthropic/claude-sonnet-4`` -> ``anthropic/claude-sonnet-4``). A few ids
+# break that assumption by *being* prefixed with their provider: OpenRouter's auto-router
+# is itself called ``openrouter/auto``, so its litellm form carries the prefix twice and
+# stripping one still has to leave one behind.
+#
+# Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
+# write the doubled ``openrouter/openrouter/auto`` (README, model_modes.yaml), but a BYOK
+# caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
+# prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
+# the middleware and the resolver from disagreeing about a hostile header. So the single-
+# prefix form is the only one BYOK can produce, and without this table it reached the wire
+# as a bare ``auto``, which OpenRouter rejects. Fixing it here rather than in the
+# normalizer keeps the credential-path invariant untouched.
+_SELF_PREFIXED_MODELS: dict[str, frozenset[str]] = {
+    "openrouter": frozenset({"auto"}),
+}
+
+
+def _wire_model(provider: str | None, model_id: str, model: str) -> str:
+    """Return the model id to send to *provider*'s endpoint.
+
+    ``model`` is the caller's full litellm string and ``(provider, model_id)`` its
+    :func:`_parse_provider_prefix` split. Normally the wire id is ``model_id`` (one prefix
+    stripped), but for an id listed in :data:`_SELF_PREFIXED_MODELS` the provider's name is
+    part of the id itself, so it is restored. Both ``openrouter/auto`` and
+    ``openrouter/openrouter/auto`` therefore reach the wire as ``openrouter/auto``.
+    """
+    if provider is None:
+        return model
+    if model_id in _SELF_PREFIXED_MODELS.get(provider, frozenset()):
+        return f"{provider}/{model_id}"
+    return model_id
+
+
 def _default_client_api_key() -> str:
     """Bearer token for the default (non-prefixed) client.
 
@@ -1363,7 +1399,7 @@ def completion(
     """
     provider, model_id = _parse_provider_prefix(model)
     client = get_client_for_model(model)
-    effective_model = model_id if provider is not None else model
+    effective_model = _wire_model(provider, model_id, model)
     usage_started = time.perf_counter()
     provider_attempts = 0
 
@@ -1799,7 +1835,7 @@ def _stream_completion_one_turn(
     """
     provider, model_id = _parse_provider_prefix(model)
     client = get_client_for_model(model)
-    effective_model = model_id if provider is not None else model
+    effective_model = _wire_model(provider, model_id, model)
 
     kwargs: dict[str, Any] = {
         "model": effective_model,

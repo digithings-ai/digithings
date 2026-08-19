@@ -26,6 +26,7 @@ from digigraph.llm_auth import (
     push_lite_llm_proxy_header,
 )
 
+from digillm import client as client_mod
 from digillm import get_byok as digillm_get_byok
 from digillm import get_proxy_key as digillm_get_proxy_key
 
@@ -959,3 +960,59 @@ class TestByokSurvivesTheParallelFanOut:
         )
         assert results["a"] == {"dg": None, "llm": None}
         assert results["b"] == {"dg": None, "llm": None}
+
+
+@pytest.mark.unit
+class TestByokReachesTheOpenRouterAutoRouter:
+    """The full header -> normalizer -> wire chain for OpenRouter's auto-router.
+
+    ``openrouter/auto`` is the one model id that repeats its own provider's name, so it
+    is the only id whose litellm form carries the prefix twice. Operators write that
+    doubled form by hand; BYOK cannot, because :func:`byok_routable_model` strips the
+    provider's own prefix to a **fixpoint** and re-applies exactly one — deliberately, to
+    keep the middleware and the resolver from disagreeing about a hostile header.
+
+    The two halves are pinned separately in ``digillm/tests``; what this class asserts is
+    that they compose, i.e. that no header a user can send is silently downgraded to a
+    model OpenRouter does not have. This test crosses the package boundary on purpose:
+    each side is individually correct, and the defect lived only in the seam.
+    """
+
+    @staticmethod
+    def _wire(provider: str, header: str) -> str:
+        """Walk a raw header through the production path to the string sent to the API."""
+        token = push_byok_header(_byok_request(key="sk-user", provider=provider, model=header))
+        try:
+            slug = get_byok_model_override() or ""
+        finally:
+            pop_byok(token)
+        litellm_string = byok_routable_model(provider, slug)
+        prov, model_id = client_mod._parse_provider_prefix(litellm_string)
+        return client_mod._wire_model(prov, model_id, litellm_string)
+
+    @pytest.mark.parametrize("header", ["auto", "openrouter/auto", "openrouter/openrouter/auto"])
+    def test_every_spelling_a_user_can_send_reaches_the_auto_router(self, header: str) -> None:
+        """Regression: all three used to arrive as a bare ``auto`` and fail at OpenRouter."""
+        assert self._wire("openrouter", header) == "openrouter/auto"
+
+    @pytest.mark.parametrize(
+        ("header", "expected"),
+        [
+            ("openai/gpt-4o-mini", "openai/gpt-4o-mini"),
+            ("anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4"),
+            ("openrouter/openai/gpt-4o-mini", "openai/gpt-4o-mini"),
+        ],
+    )
+    def test_ordinary_models_are_unchanged(self, header: str, expected: str) -> None:
+        """Control: the vendor sub-slug still reaches the wire with the routing prefix gone."""
+        assert self._wire("openrouter", header) == expected
+
+    def test_the_fixpoint_strip_is_still_intact(self) -> None:
+        """The fix must not have been bought by weakening the credential-path invariant.
+
+        ``byok_routable_model`` still collapses any depth of the provider's own prefix to
+        exactly one, so the middleware and the resolver cannot diverge at depth two.
+        """
+        for depth in range(4):
+            raw = "openrouter/" * depth + "openai/gpt-4o-mini"
+            assert byok_routable_model("openrouter", raw) == "openrouter/openai/gpt-4o-mini"
