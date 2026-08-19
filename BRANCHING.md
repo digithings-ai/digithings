@@ -79,6 +79,7 @@ module branch being force-pushed also stops it being quietly dropped.
 | `codex/<slug>` | Work driven by ChatGPT Codex. | `codex/refactor-rag-chunker` |
 | `cursor/<slug>` | Work driven by Cursor Agent. | `cursor/docs-migration` |
 | `copilot/<slug>` | Work driven by GitHub Copilot. | `copilot/fix-import-order` |
+| `bot/<slug>` | Opened by a repo workflow, not a person — `project-stub-fields.yml` pushes one per issue it fields. | `bot/stub-tsv-2459` |
 | `<handle>/<slug>` | Direct human commits by a named contributor (GitHub login). | `chrizefan/vision-pass` |
 | `feat/<slug>` | Feature work not bound to a single Issue. | `feat/model-picker` |
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
@@ -131,10 +132,22 @@ git branch -d <branch>                          # local
 `main` and `develop` are protected server-side against deletion. `release/v*` is
 **not** — see the gap note below.
 
+**Deletions are exempt from the name check.** The hook validates the branch name
+on the way in, not on the way out: a ref that predates a tightening of the
+taxonomy, or one a workflow created outside it, must still be deletable — refusing
+the delete only strands the branches the rule meant to discourage. Until #2463 the
+hook checked the name first and `exit 1`ed before it reached the deletion skip, so
+`git push origin --delete bot/stub-tsv-2459` failed with a name-taxonomy error and
+no server-side cause, and `bot/*` refs had piled up on `origin` behind it (~100 as
+of 2026-08-18, pending the reap in #2465). The `main` guard still covers deletions
+— deleting `main` is at least as serious as pushing to it, so it needs the same
+`ALLOW_MAIN_PUSH=1`.
+
 ## What is not allowed
 
-- Branch names outside the taxonomy — rejected by the client pre-push hook.
-  Nothing enforces this server-side.
+- Branch names outside the taxonomy — rejected by the client pre-push hook when
+  the branch is created or updated, though not when it is deleted. Nothing
+  enforces this server-side.
 - Force-pushes to `main` or `develop` — blocked server-side.
 - Force-pushes to, or deletion of, `module/**` — blocked by the
   `module-branch-protection` ruleset.
