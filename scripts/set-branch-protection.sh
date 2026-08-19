@@ -71,8 +71,12 @@ fi
 # required_status_checks.strict=true  — branch must be up-to-date before merge.
 # contexts                            — these exact check names must pass.
 # enforce_admins=false                — admins can bypass in emergencies (use sparingly).
-# required_pull_request_reviews=null  — no mandatory review count for now; revisit
-#                                       once the team grows.
+# required_pull_request_reviews=null  — not "0 approvals": null means no pull
+#                                       request is required on develop at all.
+#                                       main differs — it sends an object with
+#                                       required_approving_review_count: 0, which
+#                                       *does* require a PR. Verified live
+#                                       2026-08-19; revisit as the team grows.
 # restrictions=null                   — no push restrictions beyond the checks above.
 PAYLOAD=$(cat <<'EOF'
 {

@@ -111,7 +111,12 @@ jobs:
             exit 0
           fi
           BODY=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json body,title --jq '.body + "\n" + .title')
-          if ! printf '%s' "$BODY" | grep -Eqi '(fixes|closes|resolves)[[:space:]]+#[0-9]+'; then
+          # Not -q: under `set -o pipefail` (set above) -q exits at the first match,
+          # printf takes SIGPIPE and the pipeline reports 141 -- so a body near
+          # GitHub's 65,536-char cap can read as unlinked: the threshold is
+          # grep-version-dependent (~56KB on GNU grep 3.11, ~131KB on 3.8), so it
+          # can sit below that cap. Redirecting lets grep drain stdin.
+          if ! printf '%s' "$BODY" | grep -Ei '(fixes|closes|resolves)[[:space:]]+#[0-9]+' >/dev/null; then
             echo "PR #$PR_NUMBER not linked to an issue — skipping."
             echo "eligible=false" >> "$GITHUB_OUTPUT"
             exit 0
