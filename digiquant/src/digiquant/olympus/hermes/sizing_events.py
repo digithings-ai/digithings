@@ -4,13 +4,17 @@ pipeline (#2417, Olympus WP2 Task 2.2, OLY-REV-009).
 Explanation-only: nothing here is written to Supabase, and this is a deliberately
 separate type from the persisted portfolio-lineage ledger models in
 :mod:`digiquant.olympus.hermes.models.portfolio_ledger` (``TargetAdjustmentType`` /
-``TargetAdjustment``, #2415) — that ledger is append-only, persisted, and currently
-fully dark (zero production traffic). ``TargetAdjustmentType`` was extended
+``TargetAdjustment``, #2415) — that ledger is append-only, persisted, and — since
+#2418 wired H9 — takes traffic on every committing run its kill switch allows. Its
+``TargetAdjustment`` table is the exception, and the reason this module still matters:
+H8 applies its caps upstream of H9, so Phase 0 persists no adjustment rows at all and
+these in-memory events are the only record of a requested->approved delta.
+``TargetAdjustmentType`` was extended
 (#2417) to carry the same 12 string values defined here as an additive superset
 of its original 3 (``cap``/``rounding``/``carry``), so the two vocabularies agree
 on their reason codes even though the two *types* stay separate — one governs
 an in-memory event, the other a persisted row, and unifying them would couple
-the dark ledger to the live sizing pipeline for no present benefit. These
+the persisted ledger to the live sizing pipeline for no present benefit. These
 events are plain return-value objects threaded through the H8 sizing call chain
 and intended for future in-process consumers that want an explanation of a
 requested->approved delta (H9, pre-trade risk, outcome episodes) — no such
