@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { DigiChatActivity, DigiChatController, DigiChatMessage } from "@digithings/digichat-ui";
 import { formatEmbedChatError } from "@/lib/embed-chat-error";
-import { byokRequiresModel, type BYOKProvider } from "@/hooks/use-byok-key";
+import { type BYOKProvider } from "@/hooks/use-byok-key";
 import { p } from "@/lib/base-path";
 import { readTrialUnlocked, readChatAccessToken, resolveEmbedHost } from "@/lib/embed-gate";
 import { resolveLanguageCode } from "@/lib/languages";
@@ -196,7 +196,9 @@ export function useEmbedDigiChat({
             headers["X-BYOK-Key"] = byokKey;
             const provider = (byokProvider ?? "openrouter") as BYOKProvider;
             headers["X-BYOK-Provider"] = provider;
-            if (byokRequiresModel(provider) && byokModel?.trim()) {
+            // Same as chat-panel: a model the user chose is forwarded whatever the
+            // provider's requiresModel flag says (#2490).
+            if (byokModel?.trim()) {
               headers["X-BYOK-Model"] = byokModel.trim();
             }
           }

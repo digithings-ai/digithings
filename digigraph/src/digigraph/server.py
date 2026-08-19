@@ -111,6 +111,26 @@ async def lite_llm_proxy_header_context(request: Request, call_next):
         pop_lite_llm_proxy(tok)
 
 
+def _byok_default_routes_elsewhere(provider: str) -> bool:
+    """True when this deployment's default model would bill someone other than *provider*.
+
+    Resolution failures answer ``False`` rather than refusing. ``operator_default_model``
+    raises in ``llm_mode: free`` without an explicit pin, and this middleware is not the
+    place to convert a *server* misconfiguration into a 400 blaming the caller's key —
+    the request proceeds and fails where it actually breaks. The billing invariant is
+    not weakened by that: ``_apply_byok_model_override`` re-derives the same verdict at
+    the resolver, on the same string, and refuses there.
+    """
+    from digigraph.llm_auth import byok_operator_model_routes_elsewhere
+    from digigraph.model_config import operator_default_model
+
+    try:
+        default_model = operator_default_model()
+    except _LLM_PROBE_ERRORS:
+        return False
+    return byok_operator_model_routes_elsewhere(provider, default_model)
+
+
 @app.middleware("http")
 async def byok_header_context(request: Request, call_next):
     """Apply per-request BYOK user API key from X-BYOK-Key / X-BYOK-Provider (digichat BYOK flow).
@@ -120,7 +140,9 @@ async def byok_header_context(request: Request, call_next):
     overrides the LLM client credentials for that single execution.
     """
     from digigraph.llm_auth import (
+        BYOK_DEFAULT_MODEL_MISMATCH_CODE,
         BYOK_ROUTABLE_PROVIDERS,
+        byok_default_model_refusal,
         byok_model_required,
         byok_model_routes_elsewhere,
         byok_provider_supported,
@@ -150,6 +172,20 @@ async def byok_header_context(request: Request, call_next):
                     f"BYOK provider {provider!r} requires X-BYOK-Model "
                     "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
                 ),
+                request=request,
+                service="digigraph",
+            )
+        if not model and _byok_default_routes_elsewhere(provider):
+            # A key with no model is not a request to use the operator's default: the
+            # default is *this deployment's* string, so if it names a registered
+            # provider digillm bills that provider's env key and the pasted key is
+            # accepted, shown active, and never spent. Same invariant as the mismatch
+            # below, reached by omission rather than by input. Refusing beats
+            # substituting a model the caller did not choose (see #2490).
+            return json_error_response(
+                status_code=400,
+                code=BYOK_DEFAULT_MODEL_MISMATCH_CODE,
+                message=byok_default_model_refusal(provider),
                 request=request,
                 service="digigraph",
             )
