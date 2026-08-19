@@ -69,7 +69,16 @@ jobs:
 
           changed_files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
 
-          if echo "$changed_files" | grep -qE '^(frontend/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)'; then
+          # grep is deliberately not -q, and stdout is redirected instead: under
+          # `set -o pipefail`, -q exits at the first match, the writer takes SIGPIPE
+          # and the pipeline reports 141, so a changed-file list larger than the
+          # 64KB pipe buffer would read as NO match. This step runs under the
+          # implicit `bash -e {0}` (no pipefail), so -q would be correct today --
+          # but every other run: step in this repo sets `-o pipefail`, and $BEFORE
+          # here spans a whole develop->main promotion: the largest measured on main
+          # is 30,813 bytes / 576 paths, already 47% of the buffer. Draining stdin
+          # means the gate no longer depends on nobody adding pipefail later.
+          if echo "$changed_files" | grep -E '^(frontend/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)' >/dev/null; then
             echo "Container wrapper itself changed -- deploying."
             echo "deploy=true" >> "$GITHUB_OUTPUT"
             exit 0

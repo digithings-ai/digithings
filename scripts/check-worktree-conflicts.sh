@@ -38,7 +38,11 @@ infer_globs() {
 
   local matched=""
   for comp in $COMPONENTS; do
-    if echo "$text" | grep -qi "$comp"; then
+    # Not -q: under `set -o pipefail` (set above) -q exits at the first match,
+    # echo takes SIGPIPE and the pipeline reports 141, so an issue body at
+    # GitHub's 65,536-char cap -- the 64KB pipe buffer -- would read as no match
+    # and drop the advisory. Redirecting instead lets grep drain stdin.
+    if echo "$text" | grep -i "$comp" >/dev/null; then
       matched="${matched} ${comp}/**"
     fi
   done
