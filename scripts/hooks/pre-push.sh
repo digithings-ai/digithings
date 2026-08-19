@@ -120,10 +120,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # Require an explicit human co-sign trailer in at least one commit in the range.
     # Only `Human-Approved-By:` counts — the trailer that ONBOARDING.md, SECURITY.md
     # and this hook's own error message all promise. The former second arm,
-    # `Co-Authored-By:[[:space:]]+[^C]`, could not test humanity at all: -i case-folds
-    # the bracket expression, so `[^C]` meant `[^Cc]` and every bot co-author cleared
-    # the human gate, while the one human contributor here — name starting with a C —
-    # was blocked by it. The `:` and the non-blank value requirement also close
+    # `Co-Authored-By:[[:space:]]+[^C]`, tested the first letter of a co-author's
+    # name and nothing else: -i case-folds the bracket expression, so `[^C]` meant
+    # `[^Cc]`. It cleared unrelated bots (`dependabot`, `github-actions`) on a gate
+    # labelled *human*, while blocking both the `Claude` trailer this repo mandates
+    # on every commit and the one human contributor here, whose name also starts
+    # with a C. The `:` and the non-blank value requirement also close
     # `Human-Approved-Byte:` and a bare label with nothing after it.
     if ! git log --format=%B "$base..$local_sha" | grep -Ei '^Human-Approved-By:[[:space:]]*[^[:space:]]' >/dev/null; then
       echo "pre-push: live-trading paths changed but no Human-Approved-By trailer found in commits." >&2
