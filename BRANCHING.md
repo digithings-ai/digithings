@@ -146,8 +146,13 @@ of 2026-08-18, pending the reap in #2465). The `main` guard still covers deletio
 ## What is not allowed
 
 - Branch names outside the taxonomy — rejected by the client pre-push hook when
-  the branch is created or updated, though not when it is deleted. Nothing
-  enforces this server-side.
+  the branch is created or updated, though not when it is deleted. **Nothing
+  enforces this server-side today**: `scripts/github-rulesets/01-branch-naming.json`
+  declares the same regex and reads `"enforcement": "active"`, but that file is
+  desired state that was never applied — the only ruleset on `origin` is
+  `module-branch-protection`. The ~100 `bot/*` refs sitting on `origin` are the
+  proof. Keep the JSON in sync with the table above anyway, so applying it later
+  doesn't reject refs this document calls legal.
 - Force-pushes to `main` or `develop` — blocked server-side.
 - Force-pushes to, or deletion of, `module/**` — blocked by the
   `module-branch-protection` ruleset.
