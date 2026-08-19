@@ -24,7 +24,7 @@ from digibase.http import install_request_id_logging, install_request_id_middlew
 from digibase.metrics import install_metrics
 from digibase.otel import setup_otel_fastapi
 from digikey.integrations.service_middleware import DigiAuthMiddleware, digigraph_path_scopes
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from digigraph import __version__
@@ -263,7 +263,11 @@ def healthz() -> dict[str, bool]:
 
 
 def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
-    from digigraph.corpus_routing import load_tenant_corpus_map, resolve_corpus_override
+    from digigraph.corpus_routing import (
+        TenantCorpusMapError,
+        load_tenant_corpus_map,
+        resolve_corpus_override,
+    )
 
     bearer = getattr(http_request.state, "digi_bearer", None)
     auth = getattr(http_request.state, "digi_auth", None)
@@ -292,7 +296,12 @@ def _digi_fields_from_request(http_request: Request) -> dict[str, str | None]:
             updates["digi_trace_project_id"] = auth.project_id
         if auth.jti:
             updates["digi_trace_jti"] = auth.jti
-    corpus_map = load_tenant_corpus_map()
+    # Mirror digivault tenant_scope: set-but-broken DIGI_TENANT_CORPUS_MAP is 503,
+    # never silently treated as unset (which would re-enable client corpus headers).
+    try:
+        corpus_map = load_tenant_corpus_map()
+    except TenantCorpusMapError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     corpus = resolve_corpus_override(
         headers=http_request.headers,
         tenant_slug=tenant_from_auth,
@@ -545,7 +554,7 @@ def resume_thread(http_request: Request, thread_id: str, body: ResumeThreadReque
 
 @v1.get("/model-info")
 def model_info() -> dict:
-    """Return the LLM model used for Sitaas RAG completions. Use to validate config."""
+    """Return the LLM model used for Project RAG completions. Use to validate config."""
     from digigraph.model_config import get_model_for_mode
 
     mode = os.environ.get("DIGI_LLM_MODE", "test")
@@ -588,12 +597,12 @@ def status() -> dict:
 
 @v1.get("/models")
 def list_models() -> dict:
-    """List available models. Open WebUI discovers sitaas-rag here."""
+    """List available models. Open WebUI discovers digigraph-rag here."""
     return {
         "object": "list",
         "data": [
             {
-                "id": "sitaas-rag",
+                "id": "digigraph-rag",
                 "object": "model",
                 "created": int(time.time()),
                 "owned_by": "digigraph",
@@ -817,7 +826,7 @@ def _resolve_suppress_tool_stream(request: Request) -> bool:
 def _resolve_openwebui_format(req: ChatCompletionRequest, request: Request) -> bool:
     """True only when the client explicitly requests Open WebUI format.
 
-    ``model=sitaas-rag`` alone does **not** enable ``<details>`` tool chrome
+    ``model=digigraph-rag`` alone does **not** enable ``<details>`` tool chrome
     (that id is the OpenAI-compat discovery name shared by digichat and Open WebUI).
     ``<thinking>`` chrome is separate: it is suppressed only by
     ``X-Suppress-Tool-Stream``, not by this flag.
@@ -918,7 +927,7 @@ def chat_completions(req: ChatCompletionRequest, request: Request):
     the response as a chat message. Use as a model in Open WebUI.
     When stream=true: progressive SSE with tool-call blocks then final answer.
     To get Open WebUI–style tool blocks (<details>, markdown tables), send header
-    X-Response-Format: openwebui or body openwebui_format=true. model=sitaas-rag alone
+    X-Response-Format: openwebui or body openwebui_format=true. model=digigraph-rag alone
     does not enable that chrome. digichat sends X-Suppress-Tool-Stream /
     X-Response-Format: plain as belt-and-suspenders; activity arrives via digigraph_trace.
     """

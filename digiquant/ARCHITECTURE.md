@@ -1052,7 +1052,10 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors.
   Real pairwise correlations load from `price_history` via `get_return_correlations`
   (look-ahead-guarded); a pair with no estimate uses the asset-class bucket fallback (#934).
-  The sized book passes through `turnover.apply_turnover_to_sized_book` (#934).
+  The sized book passes through `turnover.apply_rebalancing_cadence`, which dispatches to
+  either `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
+  the minimum-hold override, #934) or `hold_drifted_book` (off-cadence: holds continuing
+  positions at their drifted weight, still honoring an explicit PM exit, #955).
 - `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
   `compute_breaker_scale(navs)` maps the book's drawdown from its recent NAV peak to a
   gross-exposure `scale ∈ [1 − max_reduction, 1.0]` (1.0 above the soft drawdown, ramping
@@ -1061,6 +1064,69 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   fail-soft → 1.0). phase7e feeds the scale into `size_portfolio`. Thresholds come from
   `BreakerConfig.from_preferences` (`breaker_soft_dd_pct` / `breaker_hard_dd_pct` /
   `breaker_max_reduction`; defaults −8% / −20% / 0.5).
+
+#### H8 adjustment-event taxonomy (#2417)
+
+Explanation-only layer: every place H8 moves a ticker away from its raw requested value
+emits an in-memory `digiquant.olympus.hermes.sizing_events.SizingAdjustment` (frozen,
+`extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it computes —
+never persisted (no DB write, no `portfolio_ledger` interaction), never fed back into the
+weight math, and never reordering or renaming an existing control. `SizingAdjustmentType`
+enumerates all 12 causes and where each is emitted:
+
+| Type | Emitted by | Reduce-only? |
+|------|-----------|--------------|
+| `CONVICTION_FLOOR` | `phases.phase7e_risk_sizing._cap_unchallenged_convictions` | n/a (clips conviction, `unit="conviction"`) |
+| `SINGLE_NAME_CAP` | `sizing.size_portfolio` (position-cap step) | yes |
+| `SECTOR_CAP` | `sizing.size_portfolio` (sector-cap step) | yes |
+| `CORRELATION_DEDUP` | `sizing.size_portfolio` (correlation de-dup step) | yes |
+| `VOLATILITY_SCALE` | `sizing.size_portfolio` (ex-ante vol-target step) | no — bidirectional by design; #943 added the up-scale path to correct chronic under-risking ("over-cashing") whenever the book sits below its vol budget, so this can raise a weight as well as trim one |
+| `DRAWDOWN_BREAKER` | `sizing.size_portfolio` (breaker-scale step) | yes |
+| `GRID_ROUNDING` | `sizing.size_portfolio` (round-down-to-grid step) | yes |
+| `CADENCE_HOLD` | `turnover.hold_drifted_book` (off-cadence, continuing position) | no — holds at drifted weight |
+| `MINIMUM_HOLD_OVERRIDE` | `turnover.apply_turnover_to_sized_book` (`inside_hold` branch) | no — lockup overrides a PM exit |
+| `CONTINUITY_CARRY` | `phases.phase7e_risk_sizing._apply_held_continuity_backstop` | no — restores a dropped held position |
+| `FINAL_GROSS_SCALE` | `sizing.size_portfolio` (gross/pos/sector-cap-binding scale step); `phases.phase7e_risk_sizing._cap_total_invested` (total-invested cap) | no — two sites, two directions: the `size_portfolio` binding-scale step can raise a weight in an under-invested-book edge case (the candidate scale it picks among is not capped at 1 from below), while `_cap_total_invested` only ever fires when total invested exceeds 100% and is therefore strictly reduce-only |
+| `FLAT_EXIT` | `turnover.hold_drifted_book` (off-cadence PM exit); `phases.phase7e_risk_sizing._apply_held_continuity_backstop` (H7-flat branch) | yes (to 0) |
+
+`_held_carry_weights` computes the drifted-weight candidate for a held-but-memo-unaddressed
+ticker but does not itself emit `CONTINUITY_CARRY` — its caller,
+`_apply_held_continuity_backstop`, is the sole emitter, firing only when the carry actually
+sticks (a prior CodeRabbit round on #2434 fixed a double-emission bug where emitting
+unconditionally inside `_held_carry_weights` produced a record for carries that never
+happened).
+
+Two notes on `FLAT_EXIT` vs. `CONTINUITY_CARRY`: an H7-flat held name (explicit PM exit) is
+never resurrected and always gets `FLAT_EXIT`; a held name the memo simply omitted
+(memo-unaddressed, or H4-gated out of the roster) is carried at its drifted weight and gets
+`CONTINUITY_CARRY` instead. The two are mutually exclusive by control flow, not by set
+membership: inside `_apply_held_continuity_backstop`, the `flats` branch `continue`s
+unconditionally for a flat-tagged ticker before the carry-miss branch is ever reached for
+that same ticker, so a single pass can never emit both for one name.
+
+The no-trade-band clamp in `apply_turnover_to_sized_book` deliberately emits **no** event: by
+construction it only fires when the delta is smaller than the pipeline's own materiality band
+(`max(rebalance_threshold_pct, rebalance_rel_band_pct * current_pct)`), so the suppressed
+delta is not material by the pipeline's own definition.
+
+`sizing_events.validate_sizing_lineage(requested, approved, adjustments, materiality_pct=...)`
+is the corresponding lineage check: any requested→approved delta larger than
+`materiality_pct` with no matching adjustment ticker raises `UnexplainedDeltaError`. Callers
+pass the same no-trade-band width used above (the widest band in play this run) so a
+legitimately-suppressed micro-delta is never flagged as unexplained. This runs as a layer
+**after** (not inside) `phases.phase7e_risk_sizing._build_sized_book`'s own fail-soft
+try/except around `size_portfolio` — in production it only logs and never raises past its own
+call site, so a lineage failure cannot turn into a dropped rebalance.
+
+**Intended consumers (not yet wired)**: `RebalancePayload.adjustments` (`list[dict[str, Any]]`,
+explanation-only, never persisted) is the wire shape for future in-process readers — H9
+narrative/notes, pre-trade risk review, and outcome-episode logging are the anticipated
+consumers, all downstream of H8, which remains the sole weight owner — but no consumer in this
+codebase reads the field yet. It is populated today only on payloads `phases.phase7e_risk_sizing
+._build_sized_book` produces; the legacy `phase7d_rebalance` payload (`phases.phase7d_pm`) has no
+`adjustments` key at all, so any future consumer must treat the field as absent-safe
+(`.get("adjustments") or []`, the same pattern `_validate_h8_lineage` already uses) rather than
+assuming it is always present.
 
 #### Run robustness + telemetry (Pillar 1B)
 
@@ -1188,6 +1254,93 @@ near-duplicate sector skills were collapsed into one templated
 
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
 decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
+
+### Portfolio lineage ledger (private, #2415)
+
+Closes finding OLY-REV-009: decision intent, target approval, order intent, fill, and
+holding state were conflated across `positions`/`decision_log`/snapshots with no way to
+replay "why did this weight change" as a chain of discrete facts. Eight new append-only
+Pydantic models + migration 069 introduce that chain:
+
+`PortfolioCommit → DecisionIntent → RequestedTarget → ApprovedTarget → OrderIntent →
+PaperExecution → HoldingLot`, with `TargetAdjustment` hanging directly off
+`RequestedTarget` as a sibling of `ApprovedTarget` rather than a serial link between
+them — both `TargetAdjustment.requested_target_id` and
+`ApprovedTarget.requested_target_id` FK to the same `RequestedTarget` row (see
+`SCHEMA.md`), since an adjustment is a point-in-time audit step alongside the approval,
+not a row the approval chains through.
+
+- **Models**: `digiquant/src/digiquant/olympus/hermes/models/portfolio_ledger.py`. Same
+  frozen/strict/UTC-only style as `digillm/src/digillm/telemetry.py`
+  (`ConfigDict(extra="forbid", frozen=True)`, one `StrEnum` per closed vocabulary,
+  `AwareDatetime` fields with `model_validator` UTC enforcement, `Decimal` for every
+  quantity/weight/price — a deliberate break from `commit_io.py`'s legacy float
+  convention, which this task does not touch).
+- **Tables**: `digiquant/supabase/migrations/069_olympus_portfolio_ledger.sql` —
+  `portfolio_ledger_{commits,decision_intents,requested_targets,target_adjustments,
+  approved_targets,order_intents,paper_executions,holding_lots}`. RLS enabled with zero
+  `CREATE POLICY` statements (fully private); `PUBLIC`/`anon`/`authenticated` fully
+  revoked; `service_role` is reset then granted `SELECT, INSERT` only — no
+  `UPDATE`/`DELETE` at the grant layer. A shared `reject_portfolio_ledger_mutation()`
+  trigger additionally guards every table's `UPDATE`/`DELETE`/`TRUNCATE` at the row
+  layer, mirroring migration 067's telemetry-guard pattern.
+- **Append-only, backward-only supersession — never a forward pointer.** `PortfolioCommit`,
+  `ApprovedTarget`, and `OrderIntent` each carry a self-FK `supersedes_id`: a changed
+  same-date row is a new INSERT whose `supersedes_id` points *backward* at the prior row
+  it replaces. There is no `superseded_by_id`/forward-pointer column anywhere in this
+  chain — under an append-only trigger plus PK uniqueness a row can never learn the id of
+  whatever eventually supersedes it (that row doesn't exist yet at INSERT time, and no
+  later UPDATE can add it), so a backward-only link is the only one that is ever
+  reachable; a forward pointer was the original HIGH finding this design closes.
+  `TargetAdjustment` has no supersession concept at all — it is a point-in-time audit
+  step, not a currency-tracked entity. `portfolio_ledger_commits` has no `status` column;
+  "one root run per `run_date`" and "at most one row supersedes a given prior row" are
+  enforced structurally by six partial unique indexes (`uq_portfolio_ledger_commits_*`,
+  `uq_portfolio_ledger_approved_targets_*`, `uq_portfolio_ledger_order_intents_*` — see
+  `SCHEMA.md`), not by a status value, since a plain `UNIQUE` table constraint cannot
+  carry a `WHERE` clause. `OrderIntent.status` is `pending`/`executed`/`rejected` only —
+  `superseded` was removed because supersession is orthogonal to status, not a status
+  value itself; an `executed` row is terminal because append-only forbids the `UPDATE`
+  and the `PRIMARY KEY` forbids re-`INSERT`ing the same id, not because of a CHECK.
+  `PaperExecution.id` is a deterministic `uuid5(order_intent_id, executed_date)` backed by
+  `UNIQUE (order_intent_id, executed_date)`, so an exact-same-date retry reproduces the
+  identical row instead of creating a duplicate fill.
+- **Missing vs. zero, and XOR vs. OR presence.** `RequestedTarget` weight/quantity are
+  nullable with no DB `DEFAULT` and mutually exclusive — exactly one of the two must be
+  set (`CHECK ((requested_weight IS NOT NULL) <> (requested_quantity IS NOT NULL))`), so a
+  target is always expressed in one unambiguous unit. `ApprovedTarget` weight/quantity are
+  also nullable-not-zero but *not* mutually exclusive — at least one must be set (`CHECK
+  (approved_weight IS NOT NULL OR approved_quantity IS NOT NULL)`), since nothing
+  downstream infers a unit from which column is populated the way `RequestedTarget` does.
+  `PaperExecution` quantity/price and `HoldingLot` quantity/open_price are `NOT NULL CHECK
+  (... > 0)` — a fill or lot that cannot be priced does not get written at all.
+- **Ownership and scope — read this before wiring a producer.** These are private,
+  read-side contracts only. Hermes owns the models; **H9 `commit_run`
+  (`digiquant/src/digiquant/olympus/hermes/writers/commit_io.py`) is unchanged and
+  remains the sole authoritative booking writer** — nothing here is dual-written yet,
+  and nothing here changes H7/H8/H9 responsibility. Producer → consumer chain once
+  wired: H7/H8/H9 → this private ledger → a paper executor → accounting/learning. No
+  broker or live-trading path is touched by this schema.
+- **Failure behavior — two enforcement layers, not one.** A self-referencing
+  `supersedes_id`, an untimezoned timestamp, an invalid action/reason pairing, or a
+  target missing both weight and quantity all fail closed at Pydantic model-validation
+  time, before the row is ever constructed. What depends on *other rows already in the
+  table* can't be caught by a single model in isolation and is enforced at the database
+  layer instead: an attempt to re-terminal an executed order is blocked by the
+  append-only trigger plus the `PRIMARY KEY` (no `UPDATE`, no re-`INSERT` of the same
+  id); a supersession link reaching outside its own `run_date`/symbol lineage is blocked
+  by the composite `FOREIGN KEY (supersedes_id, ...)`; more than one row claiming to be
+  current for the same key is blocked by the partial unique indexes. Either layer
+  failing closed keeps the row out before it can reach an authoritative commit or fill.
+  A missing economic value stays absent (`NULL` / no row) rather than silently becoming
+  `0`.
+- **Rollback note: keep schema dark until H9 dual-write.** Until a future task wires H9
+  (or a paper executor) to actually write these tables, they receive no traffic —
+  reverting this migration is a no-op for every existing code path.
+- **Tests**: `tests/dq/hermes/test_portfolio_ledger.py` (model/fixture behavior — add,
+  trim, exit, no-op, rejection, cap, rounding, carry, supersession, immutability,
+  idempotency) and `tests/dq/atlas/test_migration_069.py` (structural: RLS, grants,
+  triggers, closed vocab, nullability), mirroring the `test_migration_067.py` pattern.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 

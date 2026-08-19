@@ -119,7 +119,10 @@ export async function createDigigraphTraceStreamResponse(opts: {
           Authorization: `Bearer ${apiKey}`,
           ...opts.upstreamHeaders,
           // After upstreamHeaders so dogfood never inherits Open WebUI format.
-          // digigraph still treats model=sitaas-rag as Open WebUI unless opted out.
+          // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
+          // (X-Response-Format: openwebui or openwebui_format=true), never implied
+          // by model id, but dogfood forces plain explicitly rather than relying
+          // on that default.
           "X-Suppress-Tool-Stream": "1",
           "X-Response-Format": "plain",
         },

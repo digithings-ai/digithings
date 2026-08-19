@@ -35,7 +35,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+from digiquant.olympus.hermes.sizing_events import SizingAdjustment, SizingAdjustmentType
 
 
 @dataclass(frozen=True)
@@ -119,6 +121,20 @@ class SizingResult:
     realized_portfolio_vol: float | None  # ex-ante annualized vol % of the final book
     applied_scales: dict[str, float]
     explanation: str
+    # #2417: reason-coded, in-memory-only explanation of every material adjustment this
+    # pass made (caps / de-dup / vol-scale / breaker / grid-rounding). Explanation-only —
+    # never changes a weight, never persisted. Empty list is valid (nothing was adjusted).
+    adjustments: list[SizingAdjustment] = field(default_factory=list)
+    # H8's own pre-cap/pre-scale request for every selected ticker (the "requested"
+    # side of a requested->approved delta), keyed by ticker, in percent. Distinct from
+    # ``SizedPosition.pre_cap_pct`` in that it also covers tickers this pass dropped
+    # entirely (min-floor, sector cap, corr-dedup) — those never make it into
+    # ``positions`` at all, so a caller reconciling "what did H8 want" needs this map,
+    # not just the survivors.
+    requested_pct: dict[str, float] = field(default_factory=dict)
+    # Set only on a fully-flat (100% cash) result, distinguishing WHY the book is
+    # empty — never conflate an H7-driven flat decision with a sizing-side dropout.
+    flat_reason: Literal["no_conviction_cleared_bar", "all_candidates_dropped"] | None = None
 
 
 _ANNUALIZE = 16.0  # ≈ sqrt(252) — daily → annual vol scaling for the ATR fallback
@@ -171,23 +187,64 @@ def _raw_weights(
 
 
 def _apply_position_caps(
-    weights: dict[str, float], caps: SizingCaps, notes: dict[str, list[str]]
+    weights: dict[str, float],
+    caps: SizingCaps,
+    notes: dict[str, list[str]],
+    events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """Clamp each weight to [min, max] (as fractions), drop sub-min, renormalize."""
     lo, hi = caps.min_position_pct / 100.0, caps.max_position_pct / 100.0
     out: dict[str, float] = {}
     for ticker, w in weights.items():
         if w < lo:
-            notes.setdefault(ticker, []).append(f"dropped (<{caps.min_position_pct:g}% min)")
+            reason = f"dropped (<{caps.min_position_pct:g}% min)"
+            notes.setdefault(ticker, []).append(reason)
+            if events is not None:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.SINGLE_NAME_CAP,
+                        original_pct=round(w * 100.0, 4),
+                        adjusted_pct=0.0,
+                        reason=reason,
+                    )
+                )
             continue
         if w > hi:
-            notes.setdefault(ticker, []).append(f"capped @{caps.max_position_pct:g}%")
+            reason = f"capped @{caps.max_position_pct:g}%"
+            notes.setdefault(ticker, []).append(reason)
+            if events is not None:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.SINGLE_NAME_CAP,
+                        original_pct=round(w * 100.0, 4),
+                        adjusted_pct=round(hi * 100.0, 4),
+                        reason=reason,
+                    )
+                )
             w = hi
         out[ticker] = w
     # Reduce-only: weight freed by capping/dropping becomes cash — never scale UP past
     # the caps (which a plain renormalize would do). Renormalize down only if over-allocated.
     total = sum(out.values())
-    return {t: w / total for t, w in out.items()} if total > 1.0 else out
+    if total <= 1.0:
+        return out
+    scale = 1.0 / total
+    if events is not None:
+        for ticker, w in out.items():
+            new_w = w * scale
+            if abs(new_w - w) > 1e-9:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.SINGLE_NAME_CAP,
+                        original_pct=round(w * 100.0, 4),
+                        adjusted_pct=round(new_w * 100.0, 4),
+                        reason=f"renormalized (post-cap total {total * 100.0:.2f}% > 100%)",
+                    )
+                )
+    return {t: w * scale for t, w in out.items()}
 
 
 def _apply_sector_caps(
@@ -195,6 +252,7 @@ def _apply_sector_caps(
     risk: Mapping[str, TickerRisk],
     caps: SizingCaps,
     notes: dict[str, list[str]],
+    events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """Scale down any sector bucket whose summed weight exceeds the cap, then renormalize."""
     cap = caps.max_sector_pct / 100.0
@@ -209,12 +267,43 @@ def _apply_sector_caps(
             for ticker in weights:
                 t_sector = risk.get(ticker).sector if risk.get(ticker) else "UNKNOWN"
                 if t_sector == sector:
+                    reason = f"{sector} sector-capped"
                     out[ticker] *= scale
-                    notes.setdefault(ticker, []).append(f"{sector} sector-capped")
+                    notes.setdefault(ticker, []).append(reason)
+                    if events is not None:
+                        # One event per affected ticker even though ``scale`` is shared
+                        # portfolio-wide for the sector — do not collapse to a single
+                        # portfolio-level event (#2417 spec §1 row 3). Read straight off
+                        # the values already computed above — never re-derive.
+                        events.append(
+                            SizingAdjustment(
+                                ticker=ticker,
+                                adjustment_type=SizingAdjustmentType.SECTOR_CAP,
+                                original_pct=round(weights[ticker] * 100.0, 4),
+                                adjusted_pct=round(out[ticker] * 100.0, 4),
+                                reason=reason,
+                            )
+                        )
     # Reduce-only (cash-first): sector scaling only ever lowers a weight, so the freed
     # weight becomes cash — never renormalize the under-cap buckets back up past the caps.
     grand = sum(out.values())
-    return {t: w / grand for t, w in out.items()} if grand > 1.0 else out
+    if grand <= 1.0:
+        return out
+    scale = 1.0 / grand
+    if events is not None:
+        for ticker, w in out.items():
+            new_w = w * scale
+            if abs(new_w - w) > 1e-9:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.SECTOR_CAP,
+                        original_pct=round(w * 100.0, 4),
+                        adjusted_pct=round(new_w * 100.0, 4),
+                        reason=f"renormalized (post-sector-cap total {grand * 100.0:.2f}% > 100%)",
+                    )
+                )
+    return {t: w * scale for t, w in out.items()}
 
 
 def _corr_dedup(
@@ -223,6 +312,7 @@ def _corr_dedup(
     corr: Any | None,
     caps: SizingCaps,
     notes: dict[str, list[str]],
+    events: list[SizingAdjustment] | None = None,
 ) -> dict[str, float]:
     """Drop the lower-conviction leg of any pair with |corr| > threshold, then renormalize.
 
@@ -250,14 +340,39 @@ def _corr_dedup(
                 loser = max(a, b)
             keeper = b if loser == a else a
             dropped.add(loser)
-            notes.setdefault(loser, []).append(
-                f"corr-dedup (>{caps.corr_dedup_threshold:g} with {keeper})"
-            )
+            reason = f"corr-dedup (>{caps.corr_dedup_threshold:g} with {keeper})"
+            notes.setdefault(loser, []).append(reason)
+            if events is not None:
+                events.append(
+                    SizingAdjustment(
+                        ticker=loser,
+                        adjustment_type=SizingAdjustmentType.CORRELATION_DEDUP,
+                        original_pct=round(weights[loser] * 100.0, 4),
+                        adjusted_pct=0.0,
+                        reason=reason,
+                    )
+                )
     # Reduce-only (cash-first): a dropped leg's weight becomes cash, not redistributed to
     # the surviving leg. Renormalize down only in the defensive over-allocation case.
     kept = {t: w for t, w in weights.items() if t not in dropped}
     total = sum(kept.values())
-    return {t: w / total for t, w in kept.items()} if total > 1.0 else kept
+    if total <= 1.0:
+        return kept
+    scale = 1.0 / total
+    if events is not None:
+        for ticker, w in kept.items():
+            new_w = w * scale
+            if abs(new_w - w) > 1e-9:
+                events.append(
+                    SizingAdjustment(
+                        ticker=ticker,
+                        adjustment_type=SizingAdjustmentType.CORRELATION_DEDUP,
+                        original_pct=round(w * 100.0, 4),
+                        adjusted_pct=round(new_w * 100.0, 4),
+                        reason=f"renormalized (post-dedup total {total * 100.0:.2f}% > 100%)",
+                    )
+                )
+    return {t: w * scale for t, w in kept.items()}
 
 
 # Asset-class pairwise correlation defaults for pairs lacking an *estimated* rho
@@ -387,6 +502,9 @@ def size_portfolio(
     """
     caps = caps or SizingCaps()
     breaker = max(0.0, min(1.0, float(breaker_scale)))
+    # #2417: reason-coded, in-memory-only adjustment events accumulated across every
+    # reduce-only step below. Explanation-only — never read back into the weight math.
+    events: list[SizingAdjustment] = []
 
     selected = _select(convictions, stances, caps.min_conviction)
     if not selected:
@@ -397,14 +515,15 @@ def size_portfolio(
             realized_portfolio_vol=0.0,
             applied_scales={"breaker_scale": round(breaker, 3)},
             explanation="No ticker cleared the conviction bar → 100% cash (defensive).",
+            flat_reason="no_conviction_cleared_bar",
         )
 
     notes: dict[str, list[str]] = {t: [] for t in selected}
     raw = _raw_weights(selected, risk, caps)
     pre_cap_pct = {t: round(w * 100.0, 4) for t, w in raw.items()}
-    raw = _apply_position_caps(raw, caps, notes)
-    raw = _apply_sector_caps(raw, risk, caps, notes)
-    raw = _corr_dedup(raw, convictions, corr, caps, notes)
+    raw = _apply_position_caps(raw, caps, notes, events=events)
+    raw = _apply_sector_caps(raw, risk, caps, notes, events=events)
+    raw = _corr_dedup(raw, convictions, corr, caps, notes, events=events)
 
     if not raw:
         return SizingResult(
@@ -414,6 +533,9 @@ def size_portfolio(
             realized_portfolio_vol=0.0,
             applied_scales={"breaker_scale": round(breaker, 3)},
             explanation="All candidates dropped by caps/de-dup → 100% cash.",
+            adjustments=list(events),
+            requested_pct=dict(pre_cap_pct),
+            flat_reason="all_candidates_dropped",
         )
 
     port_vol = _portfolio_vol(raw, risk, corr, caps)
@@ -435,13 +557,75 @@ def size_portfolio(
     gross_cap_scale = (caps.max_gross_pct / 100.0) / gross_sum if gross_sum > 0 else 1.0
     pos_cap_scale = (caps.max_position_pct / 100.0) / max_weight if max_weight > 0 else 1.0
     sector_cap_scale = (caps.max_sector_pct / 100.0) / max_sector if max_sector > 0 else 1.0
-    gross_scale = (
-        max(0.0, min(vol_scale, gross_cap_scale, pos_cap_scale, sector_cap_scale)) * breaker
-    )
+    pre_breaker_scale = max(0.0, min(vol_scale, gross_cap_scale, pos_cap_scale, sector_cap_scale))
+    gross_scale = pre_breaker_scale * breaker
+    # Whichever of the four candidate scales is binding determines the adjustment reason:
+    # vol → VOLATILITY_SCALE (this stage); gross/pos/sector binding → FINAL_GROSS_SCALE
+    # (#2417 site (a)) — every material scale-down at this stage now gets exactly one event,
+    # whichever candidate scale actually bound.
+    binding_label = min(
+        (vol_scale, "vol"),
+        (gross_cap_scale, "gross"),
+        (pos_cap_scale, "pos"),
+        (sector_cap_scale, "sector"),
+        key=lambda pair: pair[0],
+    )[1]
+    if abs(pre_breaker_scale - 1.0) > 1e-9:
+        if binding_label == "vol":
+            adj_type = SizingAdjustmentType.VOLATILITY_SCALE
+            reason = (
+                f"vol-target scale x{pre_breaker_scale:.3f} "
+                f"(port_vol={port_vol:.2f}% vs target {caps.target_portfolio_vol:g}%)"
+            )
+        else:
+            adj_type = SizingAdjustmentType.FINAL_GROSS_SCALE
+            binding_desc = {
+                "gross": f"gross cap {caps.max_gross_pct:g}%",
+                "pos": f"position cap {caps.max_position_pct:g}%",
+                "sector": f"sector cap {caps.max_sector_pct:g}%",
+            }[binding_label]
+            reason = f"scaled x{pre_breaker_scale:.3f} (binding: {binding_desc})"
+        for t, w in raw.items():
+            events.append(
+                SizingAdjustment(
+                    ticker=t,
+                    adjustment_type=adj_type,
+                    original_pct=round(w * 100.0, 4),
+                    adjusted_pct=round(w * pre_breaker_scale * 100.0, 4),
+                    reason=reason,
+                )
+            )
+    if abs(breaker - 1.0) > 1e-9:
+        for t, w in raw.items():
+            pre_breaker_pct = w * pre_breaker_scale * 100.0
+            events.append(
+                SizingAdjustment(
+                    ticker=t,
+                    adjustment_type=SizingAdjustmentType.DRAWDOWN_BREAKER,
+                    original_pct=round(pre_breaker_pct, 4),
+                    adjusted_pct=round(pre_breaker_pct * breaker, 4),
+                    reason=f"drawdown breaker x{breaker:.3f}",
+                )
+            )
 
-    sized_pct = _round_to_grid(
-        {t: w * gross_scale * 100.0 for t, w in raw.items()}, caps.weight_increment_pct
-    )
+    pre_round_pct = {t: w * gross_scale * 100.0 for t, w in raw.items()}
+    sized_pct = _round_to_grid(pre_round_pct, caps.weight_increment_pct)
+    for t, snapped in sized_pct.items():
+        pre_p = pre_round_pct.get(t, 0.0)
+        if abs(snapped - pre_p) > 1e-9:
+            events.append(
+                SizingAdjustment(
+                    ticker=t,
+                    adjustment_type=SizingAdjustmentType.GRID_ROUNDING,
+                    original_pct=round(pre_p, 4),
+                    adjusted_pct=round(snapped, 4),
+                    reason=(
+                        f"rounded to zero on the {caps.weight_increment_pct:g}% sizing grid"
+                        if snapped <= 0
+                        else f"grid-rounded down to {caps.weight_increment_pct:g}% increments"
+                    ),
+                )
+            )
 
     positions = [
         SizedPosition(
@@ -473,6 +657,8 @@ def size_portfolio(
         realized_portfolio_vol=round(final_vol, 2),
         applied_scales={"vol_scale": round(vol_scale, 3), "breaker_scale": round(breaker, 3)},
         explanation=explanation,
+        adjustments=list(events),
+        requested_pct=dict(pre_cap_pct),
     )
 
 

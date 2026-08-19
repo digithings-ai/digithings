@@ -3,6 +3,23 @@
 Branch-protection rulesets for `digithings-ai/digithings`. Apply these to
 `origin` to enforce the branch taxonomy defined in `BRANCHING.md`.
 
+**Desired state, not live state.** `"enforcement": "active"` in a file says
+nothing about `origin` — only `module-branch-protection` is applied there today,
+and the taxonomy is enforced client-side by `scripts/hooks/pre-push.sh`. Keep
+`01-branch-naming.json`'s regex equal to that hook's `branch_regex`.
+
+**Before applying `01-branch-naming.json`, audit the refs it would reject:**
+
+```
+git ls-remote --heads origin | sed 's|.*refs/heads/||'
+```
+
+Two known classes fail the taxonomy today — the ~100 `bot/*` refs (#2465, legal
+names, just stale) and `release-please--branches--*--components--*`, which
+`release-please-digichat.yml` and `release-please-digiskills.yml` push on their
+own fixed naming scheme. A server-side rule would block the release PRs; the
+client hook never sees them, because Actions push through the API.
+
 ## Apply all four
 
 ```

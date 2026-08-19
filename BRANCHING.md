@@ -42,7 +42,31 @@ Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
 
 **Module branches managed by the tooling:** `module/digigraph`, `module/digiquant`, `module/digisearch`, `module/digichat`, `module/digikey`, `module/digismith`, `module/digiclaw`, `module/digibase` — this is the `MODULES` array in `scripts/module_branches.sh`, so `make module-status`/`-sync`/`-switch`/`-pr` only know these eight.
 
-Four more `module/*` branches exist on `origin` outside that set and are not managed by any command here: `module/website`, `module/olympus`, `module/digiskills`, `module/digiquant-atlas`. Treat any module branch as dead until you check it — several have not moved since 2026-04 and sit >1700 commits behind `develop`, and `module/digiquant-atlas` predates the `apps/digiquant-atlas` → `digiquant/src/digiquant/olympus` migration entirely.
+Other `module/*` branches exist on `origin` outside that set and are not managed by any
+command here. As of 2026-08 that was `module/website`, `module/olympus`,
+`module/digiskills` and `module/digiquant-atlas` — **a snapshot, not an invariant**
+(`module/digiquant-atlas` was queued for deletion when this was written). Check rather
+than trust the list:
+
+```bash
+git branch -r --list 'origin/module/*'                       # which ones still exist
+git rev-list --no-merges origin/module/<x> ^origin/develop   # empty ⇒ nothing stranded
+```
+
+The second was empty for all four at the 2026-08 sync (PRs #2397, #2401, #2402;
+`module/digiskills` needed none — it is a plain ancestor of `develop`). Where such a branch
+is ahead of `develop` at all, the extra commits are its own `chore/sync-*` merges:
+**dormant, not divergent, with no work stranded on any of them.** Don't revive one —
+branch from `develop`. `module/digiquant-atlas` was cut in the pre-migration
+`apps/digiquant-atlas/` era, and the Wave 1 / Wave 2 plan docs that name it as a PR target
+are archival.
+
+Deleting a dormant module branch is **not** a plain `git push origin --delete`. The
+`module-branch-protection` ruleset lists `deletion` over `refs/heads/module/**` with an
+empty bypass-actor list, and a ruleset grants no implicit admin exemption — both the push
+and the web UI's delete button are refused until the ref is excluded or enforcement is
+relaxed. That is a repo-settings change, deliberately: the same rule that stops a stale
+module branch being force-pushed also stops it being quietly dropped.
 
 ## Short-lived branches
 
@@ -55,6 +79,7 @@ Four more `module/*` branches exist on `origin` outside that set and are not man
 | `codex/<slug>` | Work driven by ChatGPT Codex. | `codex/refactor-rag-chunker` |
 | `cursor/<slug>` | Work driven by Cursor Agent. | `cursor/docs-migration` |
 | `copilot/<slug>` | Work driven by GitHub Copilot. | `copilot/fix-import-order` |
+| `bot/<slug>` | Opened by a repo workflow, not a person — `project-stub-fields.yml` pushes one per issue it fields. | `bot/stub-tsv-2459` |
 | `<handle>/<slug>` | Direct human commits by a named contributor (GitHub login). | `chrizefan/vision-pass` |
 | `feat/<slug>` | Feature work not bound to a single Issue. | `feat/model-picker` |
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
@@ -107,10 +132,27 @@ git branch -d <branch>                          # local
 `main` and `develop` are protected server-side against deletion. `release/v*` is
 **not** — see the gap note below.
 
+**Deletions are exempt from the name check.** The hook validates the branch name
+on the way in, not on the way out: a ref that predates a tightening of the
+taxonomy, or one a workflow created outside it, must still be deletable — refusing
+the delete only strands the branches the rule meant to discourage. Until #2463 the
+hook checked the name first and `exit 1`ed before it reached the deletion skip, so
+`git push origin --delete bot/stub-tsv-2459` failed with a name-taxonomy error and
+no server-side cause, and `bot/*` refs had piled up on `origin` behind it (~100 as
+of 2026-08-18, pending the reap in #2465). The `main` guard still covers deletions
+— deleting `main` is at least as serious as pushing to it, so it needs the same
+`ALLOW_MAIN_PUSH=1`.
+
 ## What is not allowed
 
-- Branch names outside the taxonomy — rejected by the client pre-push hook.
-  Nothing enforces this server-side.
+- Branch names outside the taxonomy — rejected by the client pre-push hook when
+  the branch is created or updated, though not when it is deleted. **Nothing
+  enforces this server-side today**: `scripts/github-rulesets/01-branch-naming.json`
+  declares the same regex and reads `"enforcement": "active"`, but that file is
+  desired state that was never applied — the only ruleset on `origin` is
+  `module-branch-protection`. The ~100 `bot/*` refs sitting on `origin` are the
+  proof. Keep the JSON in sync with the table above anyway, so applying it later
+  doesn't reject refs this document calls legal.
 - Force-pushes to `main` or `develop` — blocked server-side.
 - Force-pushes to, or deletion of, `module/**` — blocked by the
   `module-branch-protection` ruleset.

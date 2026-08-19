@@ -153,12 +153,16 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
      068, with `path_prefix` null when unset; anon-key, read-only); returns
      503 only if
      `CORE_SUPABASE_URL`/`CORE_SUPABASE_ANON_KEY` are unset.
-  `limit` is clamped to `[1, 50]` regardless of caller input. An empty-ish
-  caller-supplied `path_prefix` (`""`, `"/"`, ...) is coalesced to `None`
-  ("no prefix") before it reaches any backend — `D1Store.search` deliberately
-  raises `ValueError` for a non-`None` prefix that normalizes to empty (a
-  caller bug, not an isolation boundary to skip), so this coalescing is load-
-  bearing for the D1 path, not just cosmetic.
+  `limit` is clamped to `[1, 50]` regardless of caller input. A **present**
+  `path_prefix` that normalizes to empty (`""`, `"/"`, `"   "`, `"///"`,
+  `".md"`) is a **400 at parse time**, before any backend is selected —
+  omitting the key (or sending `null`) is the only way to search without a
+  prefix. This replaced an earlier coalesce-to-`None`, which treated "the
+  caller sent a prefix that means nothing" and "the caller asked for no
+  scoping" as the same request and so silently disabled scoping on every
+  backend (#2359). `D1Store.search` and `resolve_path_prefix` still raise
+  `ValueError` on the same input one layer down — deliberate defense in
+  depth, not the primary guard.
   **Two independent enforcement layers now cover `path_prefix`, not one.**
   Layer 1, in digigraph: as of #2240, `_handle_digivault_search` overwrites
   `path_prefix` from `ToolContext.vault_path_prefix` unconditionally,

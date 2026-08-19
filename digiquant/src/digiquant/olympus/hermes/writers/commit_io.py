@@ -621,12 +621,19 @@ def publish_portfolio_brief(
     state: AtlasResearchState,
     book: RebalancePayload | dict[str, Any],
 ) -> PublishedArtifact:
-    """Publish operator brief — weights from H8 ``sized_book`` only."""
+    """Publish operator brief — weights from H8 ``sized_book`` only.
+
+    ``adjustments`` is excluded from the persisted payload: per its own docstring
+    on ``RebalancePayload`` (atlas/state.py), the H8 adjustment-event list is
+    in-memory/explanation-only and "never persisted" (#2417) — ``dict(book)``
+    would otherwise carry it into Supabase unconditionally whenever present.
+    """
     date_str = state.run_date.isoformat()
+    payload = {k: v for k, v in dict(book).items() if k != "adjustments"}
     return publish_document(
         client=client,
         document_key="pm-rebalance",
-        payload=dict(book),
+        payload=payload,
         doc_type="Rebalance Decision",
         run_type=state.run_type,
         title=f"PM Rebalance {date_str}",

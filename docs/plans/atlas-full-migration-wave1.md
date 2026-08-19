@@ -1,6 +1,6 @@
 # Atlas Full Migration — Wave 1 Decomposition
 
-> **Historical note (2026-06):** Written for the pre-migration `apps/digiquant-atlas/` layout. Runtime Atlas code is `digiquant/src/digiquant/olympus/atlas/`; the UI is `frontend/olympus/`. Paths below are archival.
+> **Historical note (2026-06):** Written for the pre-migration `apps/digiquant-atlas/` layout. Runtime Atlas code is `digiquant/src/digiquant/olympus/atlas/`; the UI is `frontend/olympus/`. The `module/digiquant-atlas` branch each unit names as its base held no unique work and may no longer exist — branch from `develop`. **Paths and branch targets below are archival**; they record what was planned, not what to do now.
 
 **Scope:** Complete the Atlas → digigraph migration (research + portfolio + deliberation), add LiteLLM batch-API optimization, add GitHub Actions scheduling, migrate price pipeline to digiquant, and deploy to production.
 
