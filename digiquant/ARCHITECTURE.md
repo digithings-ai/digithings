@@ -1396,9 +1396,10 @@ Conventions this writer fixes, each of which is easy to get backwards:
 
 The manifest carries the join into this chain: `schema_version` is now **`"1.2"`**, adding
 `ledger_commit_id`, `ledger_frozen_symbols`, and `ledger_unpriced_symbols`. The no-op
-short-circuit path leaves all three at `null`/`[]`, which is what keeps an identical same-date
-rerun distinguishable from a first commit. `frozen_symbols` is a manifest field only — there is
-no such column on any ledger table.
+short-circuit path leaves all three at `null`/`[]` — and so does a first commit with the kill
+switch off, so the three fields are absent-safe for a 1.1 reader rather than a rerun signal;
+`status` (`"noop"` vs. `"committed"`) stays the discriminator. `ledger_frozen_symbols` is a
+manifest field only — there is no such column on any ledger table.
 
 `OLYMPUS_PORTFOLIO_LEDGER` is the kill switch, and it is **opt-out — default on**: set it to
 `0`, `off`, `false`, `no`, or `disabled` to skip the append and leave the legacy projections

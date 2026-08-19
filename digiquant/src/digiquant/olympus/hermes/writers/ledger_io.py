@@ -65,6 +65,16 @@ _OFF_VALUES = frozenset({"0", "off", "false", "no", "disabled"})
 _CASH = "CASH"
 _WEIGHT_EPSILON = 1e-9
 _CLOSE_LOOKBACK_DAYS = 14
+# Supabase caps an unbounded PostgREST response at 1000 rows, and ``price_history``
+# carries one row per *calendar* day per ticker (migration 013 forward-fills weekends
+# and holidays from the prior close), so one lookback window is up to
+# ``_CLOSE_LOOKBACK_DAYS + 1`` rows per ticker. Unbatched, ~72 tickers would silently
+# truncate the read, and a truncated ticker is indistinguishable from an unpriced one —
+# it lands in ``unpriced_symbols`` and its committed target gets no order intent at all.
+# Batch so a full window for every ticker in a request always fits under the cap, and
+# derive the batch from the lookback so widening the window cannot reintroduce this.
+_CLOSE_ROW_BUDGET = 900
+_CLOSE_TICKER_BATCH = max(1, _CLOSE_ROW_BUDGET // (_CLOSE_LOOKBACK_DAYS + 1))
 _QUANTUM = Decimal("0.000001")
 _POLICY_PREFIX = "hermes-h8-sizing"
 
@@ -149,27 +159,29 @@ def _last_closes(*, client: SupabaseClient, tickers: set[str], run_date: date) -
     if not tickers:
         return {}
     floor = (run_date - timedelta(days=_CLOSE_LOOKBACK_DAYS)).isoformat()
-    resp = (
-        client.table(_PRICE_HISTORY)
-        .select("date, ticker, close")
-        .in_("ticker", sorted(tickers))
-        .gte("date", floor)
-        .lt("date", run_date.isoformat())
-        .execute()
-    )
+    ordered = sorted(tickers)
     latest: dict[str, tuple[str, float]] = {}
-    for row in resp.data or []:
-        ticker = _symbol(row.get("ticker"))
-        day = str(row.get("date") or "")
-        try:
-            close = float(row.get("close"))
-        except (TypeError, ValueError):
-            continue
-        if not ticker or not day or close <= 0:
-            continue
-        current = latest.get(ticker)
-        if current is None or day > current[0]:
-            latest[ticker] = (day, close)
+    for start in range(0, len(ordered), _CLOSE_TICKER_BATCH):
+        resp = (
+            client.table(_PRICE_HISTORY)
+            .select("date, ticker, close")
+            .in_("ticker", ordered[start : start + _CLOSE_TICKER_BATCH])
+            .gte("date", floor)
+            .lt("date", run_date.isoformat())
+            .execute()
+        )
+        for row in resp.data or []:
+            ticker = _symbol(row.get("ticker"))
+            day = str(row.get("date") or "")
+            try:
+                close = float(row.get("close"))
+            except (TypeError, ValueError):
+                continue
+            if not ticker or not day or close <= 0:
+                continue
+            current = latest.get(ticker)
+            if current is None or day > current[0]:
+                latest[ticker] = (day, close)
     return {ticker: close for ticker, (_, close) in latest.items()}
 
 

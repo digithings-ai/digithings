@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pathlib
 import re
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
 import pytest
@@ -22,6 +22,11 @@ from digiquant.olympus.hermes.writers.commit_io import (
     _canonical_thesis_ids,
     load_commit_manifests,
     resolve_prior_commit,
+)
+from digiquant.olympus.hermes.writers.ledger_io import (
+    _CLOSE_LOOKBACK_DAYS,
+    _CLOSE_TICKER_BATCH,
+    _last_closes,
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
@@ -1273,3 +1278,68 @@ class TestLedgerRowsSatisfyMigration069:
             assert symbols, f"no symbols emitted for {table}"
             for symbol in symbols:
                 assert 1 <= len(symbol) <= 20, f"{table} symbol {symbol!r} breaks length CHECK"
+
+
+class TestPriceReadRowCap:
+    """Regression (CodeRabbit, PR #2482): the last-close read must not depend on an
+    unbounded response.
+
+    ``price_history`` holds one row per *calendar* day per ticker — migration 013
+    forward-fills weekends and holidays from the prior close — so a 14-day window is
+    up to 15 rows per ticker, while Supabase truncates an unbounded PostgREST
+    response at 1000 rows. A truncated ticker is indistinguishable from an unpriced
+    one: it lands in ``unpriced_symbols`` and its committed target books no order
+    intent at all. Silent, and it only appears once the universe grows.
+    """
+
+    CAP = 1000
+
+    def _capped_client(self, tickers: list[str]) -> FakeSupabaseClient:
+        """Canned history for ``tickers``, served through Supabase's row cap."""
+        rows = [
+            {
+                "date": (RUN_DATE - timedelta(days=offset)).isoformat(),
+                "ticker": ticker,
+                "close": 100.0 + index,
+            }
+            for index, ticker in enumerate(tickers)
+            for offset in range(1, _CLOSE_LOOKBACK_DAYS + 1)
+        ]
+        cap = self.CAP
+
+        class _Capped(FakeSupabaseClient):
+            def table(self, name: str):  # type: ignore[no-untyped-def]
+                query = super().table(name)
+                if name != "price_history":
+                    return query
+                inner = query.execute
+
+                def _execute():  # type: ignore[no-untyped-def]
+                    resp = inner()
+                    resp.data = list(resp.data or [])[:cap]
+                    return resp
+
+                query.execute = _execute  # type: ignore[method-assign]
+                return query
+
+        return _Capped(canned_reads={"price_history": rows})
+
+    def test_wide_universe_is_fully_priced_under_the_row_cap(self) -> None:
+        # 80 tickers x 14 rows = 1120: a single unbatched request loses the tail.
+        tickers = [f"TK{index:03d}" for index in range(80)]
+        assert len(tickers) * _CLOSE_LOOKBACK_DAYS > self.CAP, "universe must exceed the cap"
+        closes = _last_closes(
+            client=self._capped_client(tickers), tickers=set(tickers), run_date=RUN_DATE
+        )
+        missing = sorted(set(tickers) - set(closes))
+        assert not missing, (
+            f"{len(missing)} ticker(s) lost to the row cap ({missing[:5]}...) — "
+            "a truncated read is reported as unpriced and books no order intent"
+        )
+
+    def test_batch_is_derived_from_the_lookback(self) -> None:
+        """Widening the window must not silently reintroduce truncation."""
+        worst_case = _CLOSE_TICKER_BATCH * (_CLOSE_LOOKBACK_DAYS + 1)
+        assert worst_case <= self.CAP, (
+            f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
+        )
