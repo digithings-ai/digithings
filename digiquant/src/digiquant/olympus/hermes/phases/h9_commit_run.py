@@ -27,6 +27,7 @@ from digiquant.olympus.hermes.writers.commit_io import (
     weights_fingerprint,
     weights_from_sized_book,
 )
+from digiquant.olympus.hermes.writers.ledger_io import LedgerAppend, append_commit_chain
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ def _manifest_payload(
     commit_seq: int = 1,
     supersedes: list[str] | None = None,
     pruned_tickers: list[str] | None = None,
+    ledger: LedgerAppend | None = None,
 ) -> dict[str, Any]:
     """Commit manifest body.
 
@@ -73,9 +75,16 @@ def _manifest_payload(
     ``pruned_tickers`` (rows deleted because the new book dropped them). Readers of
     1.0 manifests must treat all three as absent, which ``manifest_commit_seq``
     already does.
+
+    ``schema_version`` moves to 1.2 for the three the authoritative commit chain adds
+    (#2418): ``ledger_commit_id`` is the manifest's only pointer into the append-only
+    lineage, and the two symbol lists name what the chain deliberately left out — a
+    symbol frozen by an existing fill, and one with no close to price a share count
+    against. All three are ``None``/empty when the ledger kill switch is off, which is
+    exactly how a 1.1 reader already sees them.
     """
     return {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "source_run_id": source_run_id,
         "status": status,
         "weights_fingerprint": weights_fingerprint(weights),
@@ -85,6 +94,9 @@ def _manifest_payload(
         "commit_seq": commit_seq,
         "supersedes": list(supersedes or []),
         "pruned_tickers": list(pruned_tickers or []),
+        "ledger_commit_id": ledger.commit_id if ledger else None,
+        "ledger_frozen_symbols": list(ledger.frozen_symbols) if ledger else [],
+        "ledger_unpriced_symbols": list(ledger.unpriced_symbols) if ledger else [],
     }
 
 
@@ -149,6 +161,18 @@ def build_commit_run_node(deps: CommitRunDeps):
         hermes_docs = publish_hermes_documents(client=deps.client, state=state)
         n_decisions = persist_decision_log(client=deps.client, state=state)
 
+        # Before ``save_commit_manifest``, deliberately. The manifest is what the next
+        # attempt reads to decide "already committed", so a partial chain must leave no
+        # manifest behind — otherwise a failed append reports as a clean no-op and the
+        # lineage is silently short a commit. Raising here is the honest outcome.
+        ledger = append_commit_chain(
+            client=deps.client,
+            state=state,
+            weights=booked.weights,
+            cash_pct=booked.cash_pct,
+            nav=booked.nav,
+        )
+
         manifest = _manifest_payload(
             source_run_id=source_run_id,
             status="committed",
@@ -158,6 +182,7 @@ def build_commit_run_node(deps: CommitRunDeps):
             commit_seq=commit_seq,
             supersedes=superseded,
             pruned_tickers=booked.pruned_tickers,
+            ledger=ledger,
         )
         save_commit_manifest(client=deps.client, state=state, manifest=manifest)
 
