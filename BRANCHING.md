@@ -4,11 +4,17 @@ This repository enforces a specific branch taxonomy **client-side only**, via
 `scripts/hooks/pre-push.sh` (installed by `make hooks-install`). Pushes of
 branches whose names don't match the taxonomy are rejected before they leave
 your machine — but a clone that never ran `make hooks-install` has no name
-enforcement at all. There is no branch-naming ruleset on `origin`: its two
-rulesets are `module-branch-protection` (on `module/**`) and `Copilot review for
-default branch` (on the default branch, which is `develop`). That second one
-outlived the Copilot subscription retired in #1904 — the ruleset object is still
-configured, but nothing behind it reviews any more.
+enforcement at all. There is no branch-naming ruleset on `origin`: the repo's
+only ruleset is `module-branch-protection` (on `module/**`). The `Copilot review
+for default branch` ruleset this section used to name — left behind by the
+Copilot subscription retired in #1904 — is gone; `gh api
+repos/digithings-ai/digithings/rulesets?includes_parents=true` returns the one
+entry.
+
+Rulesets are not the whole picture. `main` and `develop` also carry **classic
+branch protection**, which the rulesets endpoint does not report at all — see the
+table below, and query `…/branches/<name>/protection` before concluding a branch
+is unguarded.
 
 ## Three-tier branching model
 
@@ -33,8 +39,8 @@ git rev-list --count origin/module/<component>..origin/develop   # 0 = current; 
 
 | Branch | Purpose | Protection |
 |--------|---------|------------|
-| `main` | What is actually deployed / released. | PR required (1 approval), no force-push, no deletion. Linear history is **not** enforced. |
-| `develop` | Integration branch — merge target for module sprints and cross-cutting work. Also the repo's **default branch**. | PR required (0 approvals), no force-push, no deletion. |
+| `main` | What is actually deployed / released. | PR required (**0** approvals), no force-push, no deletion. One required status check: `Every commit reaching main was reviewed`. Linear history is **not** enforced. |
+| `develop` | Integration branch — merge target for module sprints and cross-cutting work. Also the repo's **default branch**. | PR required (0 approvals), no force-push, no deletion. Three required checks, `strict: true` — so a PR must be up to date with `develop` before it can merge. |
 | `module/<component>` | Per-module integration branch. One per digithings module. PRs into develop. | No force-push, no deletion, PR required (0 approvals) — the `module-branch-protection` ruleset on `refs/heads/module/**`. |
 
 Local pushes to `main` require `ALLOW_MAIN_PUSH=1` as an environment variable
@@ -148,16 +154,20 @@ of 2026-08-18, pending the reap in #2465). The `main` guard still covers deletio
 - Branch names outside the taxonomy — rejected by the client pre-push hook when
   the branch is created or updated, though not when it is deleted. **Nothing
   enforces this server-side today**: `scripts/github-rulesets/01-branch-naming.json`
-  declares the same regex and reads `"enforcement": "active"`, but that file is
-  desired state that was never applied — the only ruleset on `origin` is
-  `module-branch-protection`. The ~100 `bot/*` refs sitting on `origin` are the
-  proof. Keep the JSON in sync with the table above anyway, so applying it later
-  doesn't reject refs this document calls legal.
+  declares the same regex (bar the `main`/`develop` arms, which its
+  `conditions.ref_name.exclude` covers instead) and reads `"enforcement":
+  "active"`, but that file is desired state that was never applied — the only
+  ruleset on `origin` is `module-branch-protection`, and the live
+  `release-please--branches--*--components--*` refs, which the taxonomy does not
+  admit, are the proof. (The `bot/*` refs are **not** proof of anything: `bot/<slug>`
+  is in the taxonomy, so a server-side rule would have accepted them.) Keep the JSON
+  in sync with the table above anyway, so applying it later doesn't reject refs this
+  document calls legal.
 - Force-pushes to `main` or `develop` — blocked server-side.
 - Force-pushes to, or deletion of, `module/**` — blocked by the
   `module-branch-protection` ruleset.
 
-## Enforcement gaps (verified 2026-08-01)
+## Enforcement gaps (verified 2026-08-19)
 
 Two protections this document previously asserted are not actually configured.
 Both are a human call to close — changing branch protection is a settings
@@ -166,6 +176,13 @@ change, not a docs change:
 - **`release/v*` has no protection rule.** Only the `main` and `develop`
   patterns exist, so a release branch can be force-pushed or deleted by anyone
   with write access.
-- **`main` requires no status checks.** `required_status_checks` is empty and
-  neither ruleset adds any, so a PR into `main` can merge with CI red. The one
-  required approval is the only gate.
+- **`main` requires no *approval*.** `required_approving_review_count` is `0`, so
+  a PR into `main` can be merged by whoever opened it. Its one required status
+  check is `Every commit reaching main was reviewed` — the review-coverage gate in
+  `scripts/check_review_coverage.py` — which asserts each commit in the range was
+  reviewed at its own task PR, and clears on a label. Nothing requires CI green
+  beyond that check.
+
+  (This bullet previously said `main` requires no status checks at all, on the
+  strength of `gh api …/rulesets` returning nothing for it. That endpoint does not
+  report classic protection; `…/branches/main/protection` does.)

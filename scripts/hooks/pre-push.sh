@@ -58,7 +58,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>  (human contributors by GitHub handle)" >&2
       echo "           {feat,fix,docs,chore}/<slug>" >&2
-      echo "           bot/<slug>  (created by project-stub-fields.yml)" >&2
+      echo "           bot/<slug>  (pushed by project-stub-fields.yml," >&2
+      echo "                        agent-backlog-snapshot.yml, pipeline-provider-review.yml)" >&2
       exit 1
     fi
   fi
