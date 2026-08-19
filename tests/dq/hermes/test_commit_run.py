@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pathlib
+import re
 from datetime import date
 from uuid import UUID
 
@@ -1050,3 +1052,224 @@ class TestCommitChainLedger:
         assert {r["ticker"] for r in _rows(client, "positions")} == {"SPY"}
         manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
         assert manifest.get("ledger_commit_id") is None
+
+
+_MIGRATION_069 = (
+    pathlib.Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "069_olympus_portfolio_ledger.sql"
+)
+
+
+def _migration_sql() -> str:
+    raw = _MIGRATION_069.read_text(encoding="utf-8")
+    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
+
+
+def _table_body(sql: str, table: str) -> str:
+    match = re.search(rf"CREATE TABLE IF NOT EXISTS public\.{table} \((.*?)\n\);", sql, re.S)
+    assert match, f"table {table} not found in migration 069"
+    return match.group(1)
+
+
+def _allowed_values(sql: str, table: str, column: str) -> set[str]:
+    """The closed vocabulary migration 069 actually permits for one column."""
+    body = _table_body(sql, table)
+    match = re.search(rf"{column} text NOT NULL CHECK \(\s*{column} IN \(([^)]*)\)", body, re.S)
+    assert match, f"no closed CHECK found for {table}.{column}"
+    values = set(re.findall(r"'([^']+)'", match.group(1)))
+    assert values, f"parsed an empty vocabulary for {table}.{column}"
+    return values
+
+
+def _allowed_action_reason_pairs(sql: str) -> set[tuple[str, str]]:
+    body = _table_body(sql, "portfolio_ledger_decision_intents")
+    match = re.search(
+        r"chk_portfolio_ledger_decision_intents_action_reason\s*CHECK \((.*)", body, re.S
+    )
+    assert match, "the action/reason pairing CHECK is gone"
+    pairs: set[tuple[str, str]] = set()
+    for action, single, group in re.findall(
+        r"action = '(\w+)'\s+AND reason (?:= '(\w+)'|IN \(([^)]*)\))", match.group(1), re.S
+    ):
+        for reason in [single] if single else re.findall(r"'([^']+)'", group):
+            pairs.add((action, reason))
+    assert pairs, "parsed no action/reason pairs"
+    return pairs
+
+
+def _multi_book(**target_pcts: float) -> dict:
+    return {
+        "recommended_portfolio": [
+            {"ticker": t, "target_pct": pct} for t, pct in target_pcts.items()
+        ],
+        "actions": [],
+        "notes": "H8 sized book",
+    }
+
+
+def _multi_analysts(*tickers: str) -> dict:
+    # coherence_errors fails closed on an open position with no H5 doc, so a
+    # multi-ticker book needs one per name or H9 writes nothing at all.
+    return {
+        t: {
+            "ticker": t,
+            "stance": "buy",
+            "conviction_score": 4,
+            "thesis": "risk-on",
+            "risks": "",
+            "sources": [],
+        }
+        for t in tickers
+    }
+
+
+class TestLedgerRowsSatisfyMigration069:
+    """Guard the seam between migration 069's CHECKs and the models that mirror them.
+
+    The models in ``hermes.models.portfolio_ledger`` hand-mirror this DDL:
+    ``Weight`` repeats ``BETWEEN 0 AND 1``, ``Symbol`` repeats ``length(symbol)
+    BETWEEN 1 AND 20``, ``_ACTION_REASONS`` repeats the action/reason pairing CHECK.
+    A mirror can drift **loose** — widen the Python side, or narrow the SQL side
+    without it, and the model accepts a row Postgres answers with a 23514. Neither
+    existing suite sees that: ``tests/dq/atlas/test_migration_069.py`` reads the DDL
+    but no Python, and ``tests/dq/hermes/test_portfolio_ledger.py`` checks the models
+    against their own literals. The failure would land in the nightly pipeline after
+    promotion rather than on the PR, which is how this class of bug reached production
+    three times already (#628, #1005, #1383).
+
+    So parse the vocabularies out of migration 069 itself and assert the emitted rows
+    satisfy them — parsed, not transcribed, so narrowing a CHECK fails these tests
+    instead of silently outdating them. Confirmed by mutation: loosening ``Weight`` to
+    ``le=100`` *and* dropping the writer's ``/100.0`` leaves 46 of the 48 tests in this
+    file green, and ``test_weight_columns_stay_inside_the_zero_to_one_domain`` is what
+    catches it. Mutating only the writer proves nothing — the models reject it first.
+
+    ``test_emitted_columns_all_exist_in_the_migration`` covers the one thing no
+    validator can: ``extra="forbid"`` guards what a caller passes *into* a model, not
+    a model field with no column behind it, which is a PostgREST 400 rather than a
+    CHECK violation.
+    """
+
+    def test_emitted_columns_all_exist_in_the_migration(self) -> None:
+        # A key the table lacks is a PostgREST 400, not a CHECK violation.
+        sql = _migration_sql()
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        for table in _LEDGER_TABLES:
+            columns = set(
+                re.findall(
+                    r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
+                    _table_body(sql, table),
+                    re.M,
+                )
+            )
+            assert columns, f"parsed no columns for {table}"
+            rows = _rows(client, table)
+            assert rows, f"{table} got no rows — the assertion below would be vacuous"
+            for row in rows:
+                unknown = set(row) - columns
+                assert not unknown, f"{table} row carries column(s) the table lacks: {unknown}"
+
+    def test_closed_vocabulary_columns_only_emit_permitted_values(self) -> None:
+        sql = _migration_sql()
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=60.0, AAPL=30.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+            ),
+        )
+        for table, column in (
+            (_INTENTS, "action"),
+            (_INTENTS, "reason"),
+            (_ORDERS, "status"),
+        ):
+            allowed = _allowed_values(sql, table, column)
+            emitted = {r[column] for r in _rows(client, table)}
+            assert emitted, f"no {table}.{column} values emitted — assertion would be vacuous"
+            extra = emitted - allowed
+            assert not extra, f"{table}.{column} emitted {extra}; DB allows {allowed}"
+
+    def test_action_reason_pairs_are_permitted_by_the_pairing_check(self) -> None:
+        # reason is legal and action is legal does not imply the PAIR is: the pairing
+        # CHECK is a second axis, and an earlier read of this vocabulary was wrong.
+        allowed = _allowed_action_reason_pairs(_migration_sql())
+        client = _ledger_client(SPY=100.0, AAPL=50.0, MSFT=25.0)
+        # exercise trim / add / exit / no_op together: SPY trimmed from 70, AAPL added
+        # from nothing, MSFT held then dropped to zero, CASH the residual no_op.
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=40.0, AAPL=20.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+                preferences={"current_weights": {"SPY": 70.0, "MSFT": 10.0}},
+            ),
+        )
+        emitted = {(r["action"], r["reason"]) for r in _rows(client, _INTENTS)}
+        assert len(emitted) >= 2, f"only {emitted} — too uniform to prove the pairing holds"
+        assert emitted <= allowed, f"illegal action/reason pair(s): {emitted - allowed}"
+
+    def test_weight_columns_stay_inside_the_zero_to_one_domain(self) -> None:
+        # H8's book is in percent; the DDL stores a [0, 1] fraction. A missed
+        # conversion passes every fake-client test and 23514s on the first real run.
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=60.0, AAPL=30.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+            ),
+        )
+        for table, column in ((_REQUESTED, "requested_weight"), (_APPROVED, "approved_weight")):
+            values = [r[column] for r in _rows(client, table) if r[column] is not None]
+            assert values, f"no {table}.{column} values emitted"
+            for value in values:
+                number = float(value)
+                assert number == number, f"{table}.{column} emitted NaN"
+                infinite = number in (float("inf"), float("-inf"))
+                assert not infinite, f"{table}.{column} emitted infinity"
+                assert 0.0 <= number <= 1.0, f"{table}.{column}={number} violates BETWEEN 0 AND 1"
+
+    def test_requested_targets_satisfy_the_exclusive_or_presence_check(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        rows = _rows(client, _REQUESTED)
+        assert rows, "no requested_targets emitted"
+        for row in rows:
+            has_weight = row["requested_weight"] is not None
+            has_quantity = row["requested_quantity"] is not None
+            assert has_weight != has_quantity, f"XOR presence CHECK violated by {row}"
+
+    def test_order_rows_satisfy_the_quantity_and_rejection_checks(self) -> None:
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=60.0, AAPL=30.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+            ),
+        )
+        rows = _rows(client, _ORDERS)
+        assert rows, "no order_intents emitted"
+        for row in rows:
+            quantity = float(row["quantity"])
+            assert quantity > 0, f"quantity {quantity} violates the > 0 CHECK"
+            assert quantity == quantity and quantity != float("inf"), "quantity is NaN/infinity"
+            if row["status"] == "rejected":
+                assert row["rejection_reason"] is not None, "rejected row needs a reason"
+            else:
+                assert row["rejection_reason"] is None, f"{row['status']} row carries a reason"
+
+    def test_symbols_fit_the_length_check(self) -> None:
+        # Guards the CASH sentinel too: a rename to something longer 23514s.
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        for table in (_INTENTS, _REQUESTED, _APPROVED, _ORDERS):
+            symbols = {r["symbol"] for r in _rows(client, table)}
+            assert symbols, f"no symbols emitted for {table}"
+            for symbol in symbols:
+                assert 1 <= len(symbol) <= 20, f"{table} symbol {symbol!r} breaks length CHECK"
