@@ -9,63 +9,54 @@ always releasable.
 
 ## Required status checks
 
-Required checks differ by branch and have drifted from `set-branch-protection.sh`'s
-original single-payload design — verify live state with the commands in
-[Verify the configuration](#verify-the-configuration) rather than trusting this doc blindly.
+Required checks are branch-specific — `develop` and `main` are gated by entirely different
+mechanisms (see below) and are managed by different tooling. Verify live state with the
+commands in [Verify the configuration](#verify-the-configuration) rather than trusting this
+doc blindly; it has drifted from reality before (that's the story this section tells).
 
 ### On `develop`
 
-**Current live state (verified 2026-08-19):** zero `required_status_checks` — the key is
-absent from the API response entirely. Nothing merging into `develop` is actually gated on
-CI passing.
-
-This table is what `set-branch-protection.sh` still applies if run today — it is **stale,
-not aspirational**: `Require Fixes` was deleted outright in `c0cdd8d1b` (#2341, "drop
-unenforced PR-linkage gate"), and `baseline / tests` no longer exists as a check name (its
-tests were folded into the `ruff-and-scripts` job as a step, not a separate job). Do not run
-the script against `develop` expecting this table's effect.
-
-| Check name (stale) | Workflow | What it validated |
-|---|---|---|
-| ~~`baseline / tests`~~ | `ci.yml` (job added by #291) | No longer a distinct job — its tests are now a step inside `ruff-and-scripts`. |
-| `ruff-and-scripts` | `ci.yml` | Still a real job/check name. Ruff lint across all source trees + `tests/scripts/` unit tests. |
-| ~~`Require Fixes`~~ | `ci-pr-hygiene.yml` | Removed 2026-08-13 (#2341) — issue linkage is now a documented convention only, not a CI check. See `docs/adr/0024-drop-pr-linkage-enforcement.md`. |
-
-**This is a known, paused migration, not unexplained drift.** On 2026-08-13, `fd6de617f`
-("ci: make CI/type-check/docs checks safe to require on develop") found and recorded this
-exact zero-required-checks state, then did the prep work needed to safely require checks
-without a false "waiting forever" merge block: it dropped the `pull_request` path filters
-on `ci-docs.yml` and `ci-type-check.yml` (a path-filtered check never posts on a PR outside
-its paths, and GitHub then blocks merge forever waiting on a status that will never arrive
-once the name is required) and added a `required-checks` aggregator job to `ci.yml` — every
-job there is individually path-gated via a `changes` job, so no single existing job name was
-stable across every PR shape. The commit is explicit that it stops short of the branch
-protection API call itself: *"This commit only changes what CI reports; it does not touch
-branch protection."* That follow-up call was never made — six days later, live state is
-still zero required checks.
-
-**The three checks now safe to require, ready to apply:**
+**Current live state (applied 2026-08-19, #2469):**
 
 | Check name | Workflow | What it validates |
 |---|---|---|
 | `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled`. Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
-| `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. No longer path-filtered on `pull_request`, so it posts on every PR. |
-| `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. No longer path-filtered on `pull_request`, so it posts on every PR. |
+| `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. Not path-filtered on `pull_request`, so it posts on every PR. |
+| `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. Not path-filtered on `pull_request`, so it posts on every PR. |
 
-Applying this needs its own `gh api` call with these three exact context strings — **not**
-`scripts/set-branch-protection.sh`, which still carries the stale trio above. See
-[#2469](https://github.com/digithings-ai/digithings/issues/2469) for the actual apply step
-(deliberately left for explicit sign-off rather than done as part of this doc fix).
+`strict: true` — the PR branch must be up-to-date with `develop` before merging.
+`scripts/set-branch-protection.sh` applies exactly this payload and refuses `--branch main`
+(its contexts are develop-specific — see [On `main`](#on-main)).
+
+Verified before applying: a throwaway PR touching no component path (the worst case for
+`ci.yml`'s per-job path gating) confirmed all three checks post a real conclusion rather
+than sitting `pending` forever — see #2469 and the closed [PR #2471](https://github.com/digithings-ai/digithings/pull/2471).
+
+**History — this was a known, paused migration, not unexplained drift.** Until 2026-08-19,
+`develop` had *zero* required status checks (the `required_status_checks` key was absent
+from the API entirely) — the two-check trio this doc used to describe here
+(`baseline / tests`, `Require Fixes`) no longer existed as check names by the time anyone
+looked: `Require Fixes` was deleted outright in `c0cdd8d1b` (#2341, "drop unenforced
+PR-linkage gate"), and `baseline / tests` was folded into `ruff-and-scripts` as a step, not
+a separate job. On 2026-08-13, `fd6de617f` ("ci: make CI/type-check/docs checks safe to
+require on develop") found and recorded the zero-required-checks state, then did the prep
+work needed to safely require checks without a false "waiting forever" merge block: dropped
+the `pull_request` path filters on `ci-docs.yml` and `ci-type-check.yml` (a path-filtered
+check never posts on a PR outside its paths, and GitHub then blocks merge forever waiting on
+a status that will never arrive once the name is required), and added the
+`required-checks` aggregator job to `ci.yml` — every job there is individually path-gated
+via a `changes` job, so no single existing job name was stable across every PR shape. That
+commit stopped short of the branch-protection API call itself on purpose: *"This commit only
+changes what CI reports; it does not touch branch protection."* #2469 made that follow-up
+call, six days later, after the throwaway-PR verification above.
 
 ### On `main`
 
-`main`'s only required status check today is **`Every commit reaching main was reviewed`**,
-from [`ci-review-coverage.yml`](../.github/workflows/ci-review-coverage.yml) — not the
-`develop` table above. `scripts/set-branch-protection.sh` was never updated for this: it
-still applies the `develop`-era three-context payload to whichever `--branch` you pass it.
-**Do not run it against `main`** without first updating the script's `contexts` array —
-doing so would silently replace the review-coverage check with the stale set and break the
-main gate.
+`main`'s only required status check is **`Every commit reaching main was reviewed`**, from
+[`ci-review-coverage.yml`](../.github/workflows/ci-review-coverage.yml) — a different
+mechanism from `develop`'s, not a subset or superset of it. `scripts/set-branch-protection.sh`
+does not touch `main` at all (it refuses `--branch main`); `main`'s protection was set up as
+a one-off `gh api` call, not tracked by any script.
 
 This check does not require a live approving review on the promotion PR
 (`required_approving_review_count: 0`, `require_code_owner_reviews: false` — verified via
@@ -94,37 +85,28 @@ unreliable as a *required* check (it reports `neutral` on a usage-limit skip, wh
 have blocked all ten promotions on 2026-08-05 had it been required). #1612 was closed as
 not planned; see its closing comment for the full comparison.
 
-## Dependency
-
-**This script must be run after issue #291 (baseline CI suite) is merged and the
-`baseline / tests` check appears green on at least one PR.** Running it before #291 lands
-will register a required check that can never pass, blocking all merges.
-
 ## How to apply protection
 
-Apply to `develop` (the default integration branch):
+Re-apply `develop`'s three checks (idempotent — safe to re-run any time the contexts in the
+script match what's actually live):
 
 ```bash
-bash scripts/set-branch-protection.sh --branch develop
+bash scripts/set-branch-protection.sh
 ```
 
-Apply to `main` (production):
-
-```bash
-bash scripts/set-branch-protection.sh --branch main
-```
-
-> **Stale for `main` — see [On `main`](#on-main).** This command applies the `develop`-era
-> three-context payload and would overwrite the live `Every commit reaching main was
-> reviewed` check. Update the script's `contexts` array first if you actually need to
-> re-apply `main`'s protection.
+`--branch main` is refused on purpose — see [On `main`](#on-main) for how `main`'s
+protection is actually managed.
 
 Preview what would be applied without calling the API:
 
 ```bash
 bash scripts/set-branch-protection.sh --dry-run
-bash scripts/set-branch-protection.sh --branch main --dry-run
 ```
+
+**Before adding a new check name to `develop`'s required set:** confirm with a throwaway PR
+that it actually posts a status on a PR shape that doesn't exercise it — a path-filtered
+workflow that never fires on some PRs will hang those PRs' merge button forever once
+required. See #2469's verification (a closed throwaway PR, #2471) for the pattern.
 
 The script requires the `gh` CLI to be installed and authenticated (`gh auth login`).
 
@@ -136,9 +118,8 @@ gh api repos/digithings-ai/digithings/branches/main/protection    | python3 -m j
 ```
 
 Look at `required_status_checks.contexts`: on `develop` it should list the three checks in
-[On `develop`](#on-develop) with `strict: true` (currently doesn't — see the drift note
-there); on `main` it should list only `Every commit reaching main was reviewed` per
-[On `main`](#on-main).
+[On `develop`](#on-develop) with `strict: true`; on `main` it should list only
+`Every commit reaching main was reviewed` per [On `main`](#on-main).
 
 ## Emergency bypass procedure
 
