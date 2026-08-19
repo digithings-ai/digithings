@@ -903,8 +903,13 @@ class TestCommitChainLedger:
         import subprocess
 
         root = pathlib.Path(__file__).resolve().parents[3]
+        # ``append_commit_chain(`` — with the paren — matches the definition and every
+        # call, but not a prose cross-reference in another module's docstring. Task 2.4's
+        # ``execution_io`` legitimately names this function when explaining why its
+        # supersession ids must be deterministic; that is documentation, not a second
+        # commit authority, and a bare-name grep cannot tell the two apart.
         hits = subprocess.run(
-            ["grep", "-rln", "append_commit_chain", "--include=*.py", "digiquant/src"],
+            ["grep", "-rln", "append_commit_chain(", "--include=*.py", "digiquant/src"],
             cwd=root,
             capture_output=True,
             text=True,
