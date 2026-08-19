@@ -1153,9 +1153,9 @@ class TestLedgerRowsSatisfyMigration069:
     So parse the vocabularies out of migration 069 itself and assert the emitted rows
     satisfy them — parsed, not transcribed, so narrowing a CHECK fails these tests
     instead of silently outdating them. Confirmed by mutation: loosening ``Weight`` to
-    ``le=100`` *and* dropping the writer's ``/100.0`` leaves 46 of the 48 tests in this
-    file green, and ``test_weight_columns_stay_inside_the_zero_to_one_domain`` is what
-    catches it. Mutating only the writer proves nothing — the models reject it first.
+    ``le=100`` *and* dropping the writer's ``/100.0`` leaves 48 of the 50 tests in this
+    file green; ``test_weight_columns_stay_inside_the_zero_to_one_domain`` is the direct
+    catch, and ``test_changed_pre_fill_commit_supersedes_pending_orders`` fails with it. Mutating only the writer proves nothing — the models reject it first.
 
     ``test_emitted_columns_all_exist_in_the_migration`` covers the one thing no
     validator can: ``extra="forbid"`` guards what a caller passes *into* a model, not
