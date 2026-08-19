@@ -1410,6 +1410,12 @@ a dark schema needs opting into, a live writer needs an escape hatch.
   same-date rerun appends nothing; a changed pre-fill commit supersedes pending orders; an
   existing fill freezes the symbol; orphan pruning still converges with the ledger on; a partial
   failure does not masquerade as committed; and the kill switch writes no rows.
+  `::TestLedgerRowsSatisfyMigration069` guards the other seam: the models in
+  `hermes/models/portfolio_ledger.py` hand-mirror 069's CHECKs, so that class parses the
+  vocabularies and bounds out of the migration itself and asserts the emitted rows satisfy
+  them. Parsed, not transcribed — narrowing a CHECK fails those tests instead of silently
+  outdating them. Keep it: mutation shows loosening the `Weight` mirror to `le=100` *and*
+  dropping the writer's `/100.0` leaves 46 of this file's 48 ledger tests green.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
