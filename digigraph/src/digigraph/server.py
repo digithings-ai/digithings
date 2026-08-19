@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -734,9 +735,19 @@ def _stream_completions_progressive(
     if workflow_extras:
         wf_kw.update(workflow_extras)
     workflow_req = WorkflowRequest(**wf_kw)
+    # Run the worker inside a copy of *this* frame's context. A bare Thread starts
+    # with an empty context, so every ContextVar bound per-request -- above all the
+    # three BYOK bindings pushed by ``push_byok_header`` (digigraph's key/provider and
+    # model overrides, plus digillm's own) -- reads as its default inside the worker.
+    # Streaming BYOK requests were therefore answered on the *operator's* key while
+    # the user's was shown as active: the same billing invariant the X-BYOK-Model
+    # guard in ``byok_header_context`` refuses a whole request to protect. Copy at
+    # spawn rather than re-binding inside the worker: this frame still holds the
+    # bindings (measured), and the worker has no request to re-read them from.
+    ctx = contextvars.copy_context()
     worker = Thread(
-        target=run_digigraph_workflow_streaming,
-        args=(workflow_req, event_queue, cancel_event),
+        target=ctx.run,
+        args=(run_digigraph_workflow_streaming, workflow_req, event_queue, cancel_event),
     )
     worker.start()
 

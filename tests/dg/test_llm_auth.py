@@ -790,3 +790,98 @@ class TestByokModelOverrideResolution:
         from digigraph.model_config import _apply_byok_model_override
 
         assert _apply_byok_model_override("gpt-4o-mini") == "gpt-4o-mini"
+
+
+@pytest.mark.unit
+class TestByokSurvivesIntoTheStreamingWorker:
+    """The binding has to reach the code that spends the key, not just the request.
+
+    ``/v1/chat/completions`` with ``stream=true`` runs the workflow on a worker
+    thread. A bare ``threading.Thread`` starts with an empty context, so all three
+    BYOK bindings read as their defaults inside it and the operator's key pays --
+    accepted, shown as active, never spent, which is exactly what the middleware's
+    ``byok_model_provider_mismatch`` refusal exists to prevent. The classes above
+    pin the predicate and the middleware; this pins the one hop between them.
+
+    Measured, not assumed: on the unfixed code the worker sees ``None`` for all
+    three while the spawning frame still holds them, so the fix has something live
+    to copy.
+    """
+
+    def _run(self, monkeypatch, provider: str, model: str) -> dict:
+        import digigraph.server as srv
+        from fastapi.testclient import TestClient
+
+        from tests.digi_test_jwt import auth_headers
+
+        seen: dict = {}
+
+        def recording_worker(workflow_req, event_queue, cancel_event):
+            seen["dg"] = get_byok_override()
+            seen["model"] = get_byok_model_override()
+            seen["llm"] = digillm_get_byok()
+            event_queue.put(("content", "ok"))
+            event_queue.put(("done",))
+
+        monkeypatch.setattr(srv, "run_digigraph_workflow_streaming", recording_worker)
+
+        headers = {"x-byok-key": "sk-probe", "x-byok-provider": provider}
+        if model:
+            headers["x-byok-model"] = model
+        res = TestClient(srv.app, headers=auth_headers()).post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "digigraph-rag",
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert seen, "the streaming worker never ran"
+        return seen
+
+    def test_the_worker_sees_the_users_key_not_the_operators(self, monkeypatch) -> None:
+        seen = self._run(monkeypatch, "openrouter", "openai/gpt-4o-mini")
+        assert seen["dg"] == ("sk-probe", "openrouter")
+        assert seen["llm"] == ("sk-probe", "https://openrouter.ai/api/v1")
+
+    def test_the_worker_sees_the_users_model(self, monkeypatch) -> None:
+        """Without this the user's key pays for the *operator's* default model."""
+        assert self._run(monkeypatch, "openrouter", "openai/gpt-4o-mini")["model"] == (
+            "openai/gpt-4o-mini"
+        )
+
+    def test_openai_byok_carries_over_with_no_model_header(self, monkeypatch) -> None:
+        """openai is the one provider that may omit X-BYOK-Model; the key must
+        still cross the thread boundary."""
+        seen = self._run(monkeypatch, "openai", "")
+        assert seen["dg"] == ("sk-probe", "openai")
+        assert seen["llm"] == ("sk-probe", "https://api.openai.com/v1")
+        assert seen["model"] is None
+
+    def test_no_byok_header_leaves_the_worker_unbound(self, monkeypatch) -> None:
+        """Copying the context must not invent a binding where the caller sent none."""
+        import digigraph.server as srv
+        from fastapi.testclient import TestClient
+
+        from tests.digi_test_jwt import auth_headers
+
+        seen: dict = {}
+
+        def recording_worker(workflow_req, event_queue, cancel_event):
+            seen["dg"] = get_byok_override()
+            seen["llm"] = digillm_get_byok()
+            event_queue.put(("done",))
+
+        monkeypatch.setattr(srv, "run_digigraph_workflow_streaming", recording_worker)
+        res = TestClient(srv.app, headers=auth_headers()).post(
+            "/v1/chat/completions",
+            json={
+                "model": "digigraph-rag",
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert seen == {"dg": None, "llm": None}

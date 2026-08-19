@@ -106,7 +106,7 @@ The MCP server uses FastAPI's `TestClient` internally for `chat` and `thread_sta
 
 When `stream: true` in `POST /v1/chat/completions`:
 
-1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:245`).
+1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:245`). The target is wrapped in `contextvars.copy_context().run(...)` taken at spawn, because a bare `Thread` starts with an **empty** context: without the copy every per-request `ContextVar` — including all three BYOK bindings `push_byok_header` sets (`llm_auth.py`) — reads as its default inside the worker, so a streaming BYOK request was answered on the operator's key and the operator's model while the user's key was shown as active. The copy is taken in the generator frame, which still holds the bindings; the worker has no `Request` to re-read them from. (Distinct from the `ThreadPoolExecutor` note in §4.0 — same root cause, different subsystem, and Olympus passes labels explicitly instead.)
 2. The HTTP response is a `StreamingResponse` whose generator consumes the queue and yields SSE chunks.
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
@@ -516,7 +516,7 @@ HTTP request (stream=true)
         ▼
 _stream_completions_progressive (server.py generator)
         │
-        ├── spawns Thread → run_digigraph_workflow_streaming(req, event_queue)
+        ├── spawns Thread(ctx.run) → run_digigraph_workflow_streaming(req, event_queue)
         │                           │
         │                           ├── defines stream_callback(event_type, data) closure
         │                           │     (content/tool_call/round_boundary/tool_result handling)
