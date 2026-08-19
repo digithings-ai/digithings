@@ -352,8 +352,9 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     comes from the ledger itself (`pending_symbols`). One `in_` read rather than the
     per-ticker `_fetch_open` loop the legacy paths use: the set is bounded by the day's
     pending orders (~30), and a row-per-symbol round trip is the shape #2484 exists to
-    stop adding to. Tickers with no row, or a null open, are simply absent — the executor
-    rejects those orders `data_unavailable` rather than filling at a guessed price.
+    stop adding to. Tickers with no row, a null open, or a non-finite one are simply
+    absent — the executor rejects those orders `data_unavailable` rather than filling at
+    a guessed price.
 
     `Decimal(str(raw))`, never `float(raw)`: this mark becomes a fill price and then a
     lot's cost basis, and the ledger's whole numeric contract is that money never passes
@@ -381,7 +382,16 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
             price = Decimal(str(raw))
         except (TypeError, ValueError, InvalidOperation):
             continue
-        if price > 0:
+        # `is_finite()` first, and not merely for tidiness. `price_history.open` is a bare
+        # `numeric` with no CHECK, and Postgres `numeric` stores `NaN` and `Infinity`, both
+        # of which `Decimal(str(raw))` parses happily. `Decimal("NaN") > 0` *raises*
+        # `InvalidOperation`, and this call sits outside the decline contract — so a single
+        # poisoned row would take down the morning job rather than skipping one symbol.
+        # `Decimal("Infinity") > 0` is worse for being quiet here: it clears the gate,
+        # becomes a mark, and dies later inside `PaperExecution`, whose `PositivePrice` sets
+        # `allow_inf_nan=False`. Neither is a declared price, so both take the same exit as
+        # a null: absent from `marks`, and `data_unavailable` on the ledger.
+        if price.is_finite() and price > 0:
             marks[str(ticker).upper()] = price
     return marks
 

@@ -652,9 +652,39 @@ class TestOpenMarksAreDecimal:
                     {"ticker": "XLF", "date": _RUN_D, "open": "52.10"},  # yesterday's open
                     {"ticker": "DBO", "date": _EXEC_D, "open": "0"},  # not a tradeable price
                     {"ticker": "XLE", "date": _EXEC_D, "open": "n/a"},  # unparseable
+                    {"ticker": "GLD", "date": _EXEC_D, "open": "NaN"},  # storable in `numeric`
+                    {"ticker": "SLV", "date": _EXEC_D, "open": "Infinity"},
                 ]
             ),
-            ["UUP", "IBIT", "XLF", "DBO", "XLE", "VGK"],
+            ["UUP", "IBIT", "XLF", "DBO", "XLE", "GLD", "SLV", "VGK"],
+            _EXEC_D,
+        )
+        assert got == {"UUP": Decimal("27.40")}
+
+    @pytest.mark.parametrize("raw", ["NaN", "-NaN", "sNaN", "Infinity", "-Infinity", float("inf")])
+    def test_a_non_finite_open_is_absent_rather_than_an_exception(self, raw: Any) -> None:
+        """A poisoned price row skips its symbol; it does not take the morning down.
+
+        `price_history.open` is a bare `numeric` with no CHECK, and Postgres `numeric` holds
+        `NaN` and `Infinity`. Both survive `Decimal(str(raw))`, and each then fails in its
+        own way: `Decimal("NaN") > 0` raises `InvalidOperation`, while `Decimal("Infinity")`
+        clears a `> 0` gate and only dies further downstream in `PaperExecution`, whose
+        `PositivePrice` sets `allow_inf_nan=False`. `_open_marks` is called as an argument to
+        `execute_pending_orders`, which is deliberately *outside* the decline contract, so
+        either failure is an uncaught traceback out of the job that books the day's fills —
+        one bad row for one symbol, every order left pending.
+
+        Asserting the good mark alongside is what makes this a skip rather than a bail: a
+        guard that returned early on the first non-finite row would also raise nothing.
+        """
+        got = _mod._open_marks(
+            self._client(
+                [
+                    {"ticker": "GLD", "date": _EXEC_D, "open": raw},
+                    {"ticker": "UUP", "date": _EXEC_D, "open": "27.40"},
+                ]
+            ),
+            ["GLD", "UUP"],
             _EXEC_D,
         )
         assert got == {"UUP": Decimal("27.40")}
