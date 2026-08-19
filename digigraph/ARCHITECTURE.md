@@ -131,7 +131,12 @@ When `stream: true` in `POST /v1/chat/completions`:
 telemetry buffer for an Olympus process. `digillm` contributes terminal model/search events;
 `graph/research_agent.py` times actual tool execution. `call_context(node_run_id, phase, operation,
 document_key)` labels model/search calls, while the tool wrapper also passes display labels
-explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers.
+explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers
+on its own. That is a property of the pool, not of Olympus: the two pools on the *credential*
+path (§6.2, `planning/executor.py` and `digillm.run_tools`) submit through
+`contextvars.copy_context().run(...)` instead, which is the alternative to threading the value
+through by hand. Olympus keeps the explicit labels — passing a display string is cheaper than
+a context copy and does not silently widen what a worker inherits.
 
 `RunCallEvent` is a frozen Pydantic v2 model. It stores fixed labels, status, duration, retries,
 usage totals, source count, and code-generated shape summaries. All public text is length-bounded.
@@ -725,6 +730,8 @@ Search results from digisearch are written to `{run_data_dir}/{session_id}/datas
 ### 8.4 Parallel Tool Execution
 
 When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor` inside `digillm.run_tools` (the `parallel_safe` set is computed from the registry in `llm_client.py` and passed through). Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
+
+Every submission — here and in `planning/executor.py`'s layer fan-out — goes through a **freshly copied context** (`contextvars.copy_context().run(...)`). A pool worker starts with an empty context, and these tools are the delegate agents: each one runs its *own* LLM completion, so without the copy a BYOK request spends the operator's key inside the fan-out while the user's is bound on the calling thread. Unlike the streaming worker in §3.3 this hop is on the non-streaming path too. The copy must be per submit: one shared `Context` cannot be entered by two threads at once and raises `RuntimeError: cannot enter context ... is already entered` in the second — `test_parallel_branch_carries_the_byok_override_into_each_worker` uses a `threading.Barrier` to force the overlap that makes that regression visible.
 
 ### 8.5 SSE Streaming for Time-to-First-Token
 

@@ -7,6 +7,7 @@ tests (module-global response/client caches would otherwise mask the mock).
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any  # score:allow untyped any — fake OpenAI client dict shapes
 from unittest.mock import MagicMock, patch
 
@@ -943,6 +944,110 @@ def test_chat_completion_with_tools_parallel_branch() -> None:
     result_names = {p["name"] for k, p in steps if k == "tool_result"}
     assert call_names == {"alpha", "beta"}
     assert result_names == {"alpha", "beta"}
+
+
+def test_parallel_branch_carries_the_byok_override_into_each_worker() -> None:
+    """A parallel-safe tool must still see the caller's BYOK key.
+
+    A pool worker starts with an empty context, so without a copied one
+    :func:`digillm.get_byok` reads ``None`` inside the branch and any tool that
+    calls an LLM itself bills the *operator's* key while the caller's is bound.
+
+    The barrier forces both tools to be in flight at once, which is what
+    distinguishes a per-submit ``copy_context()`` from one shared Context: a
+    single Context cannot be entered by two threads and raises "is already
+    entered" in the second. Without the barrier the calls can serialize and a
+    shared-Context regression would pass unnoticed.
+    """
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    barrier = threading.Barrier(2, timeout=10)
+    seen: dict[str, tuple[str, str] | None] = {}
+
+    def execute_tool(name: str, args: dict) -> dict:
+        barrier.wait()
+        seen[name] = digillm.get_byok()
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    token = digillm.set_byok("sk-caller", "https://openrouter.ai/api/v1")
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            out = digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool,
+                parallel_safe_tools={"alpha", "beta"},
+            )
+    finally:
+        digillm.reset_byok(token)
+
+    assert out == "done"
+    expected = ("sk-caller", "https://openrouter.ai/api/v1")
+    assert seen == {"alpha": expected, "beta": expected}
+
+
+def test_parallel_branch_leaves_an_unbound_caller_unbound() -> None:
+    """Copying a context must not invent an override the caller never set."""
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    seen: dict[str, tuple[str, str] | None] = {}
+
+    def execute_tool(name: str, args: dict) -> dict:
+        seen[name] = digillm.get_byok()
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool,
+            parallel_safe_tools={"alpha", "beta"},
+        )
+    assert seen == {"alpha": None, "beta": None}
 
 
 # ── Streaming tool-calling loop (stream_deltas=True) ──────────────────────────

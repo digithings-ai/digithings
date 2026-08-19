@@ -885,3 +885,77 @@ class TestByokSurvivesIntoTheStreamingWorker:
         )
         assert res.status_code == 200, res.text
         assert seen == {"dg": None, "llm": None}
+
+
+@pytest.mark.unit
+class TestByokSurvivesTheParallelFanOut:
+    """The binding also has to reach tools that run *concurrently*.
+
+    ``TestByokSurvivesIntoTheStreamingWorker`` pins the worker's entry frame, but
+    two thread pools sit downstream of it and a pool worker starts with an empty
+    context exactly as a bare ``Thread`` does. Both dispatch tools that call an
+    LLM themselves -- the delegate agents (``visualization_agent`` et al.) are
+    tagged ``parallel_safe`` in ``orchestration/builtin.py`` and each one runs its
+    own completion -- so without a copied context they spend the *operator's* key.
+
+    Unlike the streaming worker, this hop is on the non-streaming path too: the
+    request thread holds the binding, the pool workers still would not.
+    """
+
+    def test_run_plan_layer_keeps_the_binding(self) -> None:
+        """digigraph's planning executor fans a layer out over a pool."""
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {
+                "dg": get_byok_override(),
+                "model": get_byok_model_override(),
+                "llm": digillm_get_byok(),
+            }
+
+        token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
+        try:
+            # Two steps in one layer: len(resolved) > 1 is what selects the pool
+            # branch over the inline single-step path.
+            results = run_plan(
+                [{"id": "a", "agent": "t", "args": {}}, {"id": "b", "agent": "t", "args": {}}],
+                sample,
+            )
+        finally:
+            pop_byok(token)
+
+        expected = {
+            "dg": ("sk-fan", "openrouter"),
+            "model": "openai/gpt-4o-mini",
+            "llm": ("sk-fan", "https://openrouter.ai/api/v1"),
+        }
+        assert results["a"] == expected
+        assert results["b"] == expected
+
+    def test_a_single_step_layer_still_keeps_it(self) -> None:
+        """The one-step path skips the pool entirely; it must not regress either."""
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {"dg": get_byok_override()}
+
+        token = push_byok_header(_byok_request("sk-solo", "openai"))
+        try:
+            results = run_plan([{"id": "only", "agent": "t", "args": {}}], sample)
+        finally:
+            pop_byok(token)
+        assert results["only"] == {"dg": ("sk-solo", "openai")}
+
+    def test_unbound_stays_unbound_across_the_pool(self) -> None:
+        """Copying a context must not invent a binding the caller never made."""
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {"dg": get_byok_override(), "llm": digillm_get_byok()}
+
+        results = run_plan(
+            [{"id": "a", "agent": "t", "args": {}}, {"id": "b", "agent": "t", "args": {}}],
+            sample,
+        )
+        assert results["a"] == {"dg": None, "llm": None}
+        assert results["b"] == {"dg": None, "llm": None}

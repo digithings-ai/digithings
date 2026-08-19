@@ -46,7 +46,7 @@ import re
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -2183,9 +2183,15 @@ def run_tools(
         run_parallel = len(parsed) > 1 and all(name in safe for (_, name, _) in parsed)
         if run_parallel:
             results: dict[int, str | dict[str, Any]] = {}
+            # A pool worker starts with an *empty* context, so every ContextVar bound
+            # per-request -- the BYOK key/base-url override above all (:func:`set_byok`)
+            # -- reads as its default inside it. A parallel-safe tool that itself calls
+            # an LLM would then bill the operator's key while the caller's was bound.
+            # Copy per submit, never once for the batch: a single Context cannot be
+            # entered concurrently and raises "is already entered" on the second thread.
             with ThreadPoolExecutor(max_workers=len(parsed)) as executor:
                 future_to_idx = {
-                    executor.submit(execute_tool, name, args): i
+                    executor.submit(copy_context().run, execute_tool, name, args): i
                     for i, (_, name, args) in enumerate(parsed)
                 }
                 for future in as_completed(future_to_idx):

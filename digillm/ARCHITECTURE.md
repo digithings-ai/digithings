@@ -196,6 +196,13 @@ Non-streaming loop. `parallel_safe_tools` replaces digigraph's import of
 tool calls in a round are in this set (and there is more than one), they run
 concurrently; otherwise calls run sequentially.
 
+Each concurrent call is submitted as `copy_context().run(execute_tool, ...)`. A pool
+worker starts with an *empty* context, so an override bound by `set_byok` /
+`set_proxy_key` reads as `None` inside a bare submit — and a parallel-safe tool that
+calls an LLM itself would then bill the wrong key. The copy is taken **per submit**:
+a single `Context` cannot be entered by two threads and raises `RuntimeError: cannot
+enter context ... is already entered` in the second.
+
 ### `structured_completion`
 
 ```python

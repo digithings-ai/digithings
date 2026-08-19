@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from typing import Any, Callable
 
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{(\w+)\.(\w+)\}\}")
@@ -106,9 +107,13 @@ def run_plan(
             s, agent, args = resolved[0]
             results[s["id"]] = _run_step(execute_tool, agent, args)
             continue
+        # Each step runs inside a copy of *this* context: a pool worker starts with an
+        # empty one, so a step that reaches an LLM (the delegate agents are exactly that)
+        # would lose the per-request BYOK binding and spend the operator's key. A fresh
+        # copy per submit -- one shared Context cannot be entered by two threads at once.
         with ThreadPoolExecutor(max_workers=len(resolved)) as executor:
             future_to_sid = {
-                executor.submit(_run_step, execute_tool, agent, args): s["id"]
+                executor.submit(copy_context().run, _run_step, execute_tool, agent, args): s["id"]
                 for s, agent, args in resolved
             }
             for future in as_completed(future_to_sid):
