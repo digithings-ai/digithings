@@ -5,7 +5,11 @@ Explanation-only: nothing here is written to Supabase, and this is a deliberatel
 separate type from the persisted portfolio-lineage ledger models in
 :mod:`digiquant.olympus.hermes.models.portfolio_ledger` (``TargetAdjustmentType`` /
 ``TargetAdjustment``, #2415) — that ledger is append-only, persisted, and — since
-#2418 wired H9 — takes traffic on every commit run. ``TargetAdjustmentType`` was extended
+#2418 wired H9 — takes traffic on every committing run its kill switch allows. Its
+``TargetAdjustment`` table is the exception, and the reason this module still matters:
+H8 applies its caps upstream of H9, so Phase 0 persists no adjustment rows at all and
+these in-memory events are the only record of a requested->approved delta.
+``TargetAdjustmentType`` was extended
 (#2417) to carry the same 12 string values defined here as an additive superset
 of its original 3 (``cap``/``rounding``/``carry``), so the two vocabularies agree
 on their reason codes even though the two *types* stay separate — one governs

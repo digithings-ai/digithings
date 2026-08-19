@@ -19,9 +19,13 @@ replayable chain:
 Scope — contracts and schema only. This module does not change H7/H8/H9 ownership and
 does not touch any live-trading or broker path. ``hermes/writers/commit_io.py`` (H9)
 remains the sole authoritative booking writer. Since #2418 these models are **no longer
-dark**: ``hermes/writers/ledger_io.py`` appends this chain on every H9 commit run, gated
-only by the ``OLYMPUS_PORTFOLIO_LEDGER`` kill switch (see ``digiquant/ARCHITECTURE.md``).
-A producer therefore exists; no consumer reads these rows back yet.
+dark**: ``hermes/writers/ledger_io.py`` appends this chain from every H9 run that
+actually commits, unless the ``OLYMPUS_PORTFOLIO_LEDGER`` kill switch is off (see
+``digiquant/ARCHITECTURE.md``). Two exceptions are worth naming, because "no rows" does
+not mean "broken": a run that short-circuits as ``status="noop"`` returns before the
+append, and ``TargetAdjustment`` has no producer at all in Phase 0 — H8 applies its caps
+upstream inside ``size_portfolio``, so H9 never sees a distinct pre-cap number to record.
+Producers therefore exist for seven of the eight; no consumer reads any of them back yet.
 
 Anti-goals carried over from the issue: no broker/live-trading paths, no mutable fills,
 no second H9 writer. Every quantity/weight/price field below is ``Decimal`` (never
