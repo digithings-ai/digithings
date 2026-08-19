@@ -39,6 +39,14 @@ if [ -n "$url" ] && ! [[ "$url" =~ $allowed_url_regex ]]; then
   exit 1
 fi
 
+# A non-zero exit aborts the whole push either way — git has no partial push — but
+# exiting *inside* the loop also stops the refs after this one from being examined.
+# That loses the live-trading scan on every later ref, so one ref with no diff base
+# would hide a real violation on the next. Record the refusal, keep going, and exit
+# after the loop. `while read` runs in this shell (git feeds stdin directly, no
+# pipeline), so `failed` survives the loop.
+failed=0
+
 # Read refs being pushed from stdin: `<local_ref> <local_sha> <remote_ref> <remote_sha>`
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
@@ -67,14 +75,16 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           {feat,fix,docs,chore}/<slug>" >&2
       echo "           bot/<slug>  (pushed by project-stub-fields.yml," >&2
       echo "                        agent-backlog-snapshot.yml, pipeline-provider-review.yml)" >&2
-      exit 1
+      failed=1
+      continue
     fi
   fi
 
   # Block push to main without explicit opt-in.
   if [ "$remote_ref" = "refs/heads/main" ] && [ "${ALLOW_MAIN_PUSH:-0}" != "1" ]; then
     echo "pre-push: refusing to push to 'main'. Set ALLOW_MAIN_PUSH=1 if this is intentional." >&2
-    exit 1
+    failed=1
+    continue
   fi
 
   # Deletions have no commit range to scan; new-branch pushes are handled below.
@@ -94,10 +104,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   # the one guard standing between a live-trading edit and origin.
   if [ -z "$base" ]; then
     echo "pre-push: cannot determine a diff base for '$local_ref' — refusing to push unscanned." >&2
-    echo "         Run 'git fetch origin' so origin/develop is present locally, then retry." >&2
-    echo "         A branch with history unrelated to develop has no base by nature; push it" >&2
-    echo "         with --no-verify and say why in the commit message." >&2
-    exit 1
+    echo "         Usually origin/develop is just missing locally: run 'git fetch origin' and retry." >&2
+    echo "         A ref whose history is unrelated to develop — an imported tag, a grafted" >&2
+    echo "         branch — has no base by nature and cannot be scanned at all; that is the" >&2
+    echo "         emergency the --no-verify escape at the top of this file exists for." >&2
+    failed=1
+    continue
   fi
 
   # Scan changed paths for live-trading touch. The directory fragment is
@@ -108,31 +120,40 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   if ! changed="$(git diff --name-only "$base" "$local_sha" 2>/dev/null)"; then
     echo "pre-push: 'git diff $base $local_sha' failed — refusing to push unscanned." >&2
     echo "         Run 'git fetch origin' and retry; the live-trading scan needs a diff." >&2
-    exit 1
+    failed=1
+    continue
   fi
 
   # grep is deliberately not -q. Under `set -o pipefail`, -q exits at the first
-  # match, the writer takes SIGPIPE, and the pipeline reports 141 — so a path list
-  # larger than the pipe buffer (~2000 changed paths) makes a *matching* diff read
-  # as no match and skips the guard. Without -q, grep drains stdin and only its own
-  # status matters.
+  # match, the writer takes SIGPIPE, and the pipeline reports 141 — so a *matching*
+  # diff reads as no match and skips the guard. The threshold is the pipe buffer in
+  # bytes, not a path count, and it is implementation-split: measured here, BSD grep
+  # inverts once the path list passes ~64KB while GNU grep 3.8 holds to ~128KB, so
+  # the same push can be scanned on CI and skipped on a maintainer's mac. It also
+  # needs the match to precede grep draining the buffer. Without -q, grep reads all
+  # of stdin and only its own status matters.
   if echo "$changed" | grep -E '(live_trading|execute_trade|place_order|(^|/)digiquant/(.*/)?live/)' >/dev/null; then
     # Require an explicit human co-sign trailer in at least one commit in the range.
     # Only `Human-Approved-By:` counts — the trailer that ONBOARDING.md, SECURITY.md
     # and this hook's own error message all promise. The former second arm,
     # `Co-Authored-By:[[:space:]]+[^C]`, tested the first letter of a co-author's
-    # name and nothing else: -i case-folds the bracket expression, so `[^C]` meant
-    # `[^Cc]`. It cleared unrelated bots (`dependabot`, `github-actions`) on a gate
-    # labelled *human*, while blocking both the `Claude` trailer this repo mandates
-    # on every commit and the one human contributor here, whose name also starts
-    # with a C. The `:` and the non-blank value requirement also close
-    # `Human-Approved-Byte:` and a bare label with nothing after it.
+    # name and nothing else. So it cleared unrelated bots (`dependabot`,
+    # `github-actions`) on a gate labelled *human*, while rejecting every name
+    # starting with a C — which is most of what this repo actually writes: the agent
+    # `Claude` trailer that `scripts/commit_helper.sh` appends (opt-in, not mandated
+    # anywhere) and the one human contributor here, whose name starts with a C too.
+    # `-i` only widened the rejection: it case-folds the bracket expression, so
+    # `[^C]` also excluded a lowercase `c`. The `:` and the non-blank value
+    # requirement close `Human-Approved-Byte:` and a bare label with nothing after it.
     if ! git log --format=%B "$base..$local_sha" | grep -Ei '^Human-Approved-By:[[:space:]]*[^[:space:]]' >/dev/null; then
       echo "pre-push: live-trading paths changed but no Human-Approved-By trailer found in commits." >&2
       echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the live-trading changes." >&2
-      exit 1
+      failed=1
+      continue
     fi
   fi
 done
+
+[ "$failed" -eq 0 ] || exit 1
 
 exit 0

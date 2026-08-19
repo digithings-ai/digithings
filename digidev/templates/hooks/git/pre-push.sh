@@ -35,6 +35,12 @@ if [ -n "$url" ] && ! [[ "$url" =~ $allowed_url_regex ]]; then
   exit 1
 fi
 
+# Exiting inside the loop aborts the push (git has no partial push) *and* stops the
+# refs after this one from being scanned, so one unscannable ref would mask a real
+# violation on the next. Record and continue; exit after the loop. `while read` runs
+# in this shell — git feeds stdin directly, no pipeline — so `failed` survives.
+failed=0
+
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "$local_ref" ] && continue
 
@@ -59,7 +65,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>" >&2
       echo "           {feat,fix,docs,chore}/<slug>" >&2
-      exit 1
+      failed=1
+      continue
     fi
   fi
 
@@ -68,7 +75,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       && [ "${ALLOW_MAIN_PUSH:-0}" != "1" ]; then
     branch_name="${remote_ref#refs/heads/}"
     echo "pre-push: refusing to push to '${branch_name}'. Set ALLOW_MAIN_PUSH=1 if this is intentional." >&2
-    exit 1
+    failed=1
+    continue
   fi
 
   # Deletions have no commit range to scan; new-branch pushes are handled below.
@@ -85,6 +93,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 
   # Scan for sensitive paths.
   sensitive_regex='{{LIVE_TRADING_REGEX}}'
+  # An unsubstituted placeholder is a non-empty string, so it passes the -n test
+  # below and the guard looks armed while `grep -E '{{...}}'` can never match a
+  # path. That is the exact fail-open shape this hook exists to avoid, so refuse.
+  case "$sensitive_regex" in
+    *'{{'*)
+      echo "pre-push: hook template was installed without substituting LIVE_TRADING_REGEX." >&2
+      echo "         Reinstall the hook via digidev so the placeholder is filled, then retry." >&2
+      failed=1
+      continue
+      ;;
+  esac
   if [ -n "$sensitive_regex" ]; then
     # Refuse rather than skip when the scan cannot run — "we could not look" must
     # not read the same as "we looked and it was clean". Both checks live inside
@@ -93,28 +112,47 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     if [ -z "$base" ]; then
       echo "pre-push: cannot determine a diff base for '$local_ref' — refusing to push unscanned." >&2
       echo "         Run 'git fetch origin' so origin/{{DEFAULT_BRANCH}} is present, then retry." >&2
-      echo "         A branch with unrelated history has no base by nature; use --no-verify." >&2
-      exit 1
+      echo "         A ref whose history is unrelated to {{DEFAULT_BRANCH}} has no base by nature" >&2
+      echo "         and cannot be scanned at all; that is what the --no-verify escape is for." >&2
+      failed=1
+      continue
     fi
     # `|| true` would turn a failed diff into an empty file list, and an empty list
     # can never match — silently disarming the scan.
     if ! changed="$(git diff --name-only "$base" "$local_sha" 2>/dev/null)"; then
       echo "pre-push: 'git diff $base $local_sha' failed — refusing to push unscanned." >&2
       echo "         Run 'git fetch origin' and retry." >&2
-      exit 1
+      failed=1
+      continue
     fi
     # grep is deliberately not -q: under `set -o pipefail`, -q exits at the first
     # match, the writer takes SIGPIPE and the pipeline reports 141, so a path list
     # exceeding the pipe buffer makes a matching diff read as no match.
-    if echo "$changed" | grep -E "$sensitive_regex" >/dev/null; then
+    # Unlike the repo's own hook, this pattern comes from configuration, so it can be
+    # malformed. grep answers "no match" with 1 and "bad pattern" with 2, and a bare
+    # `if grep ...` collapses the two into the same else branch — a typo'd regex would
+    # skip the scan and exit 0. Capture the status and treat anything above 1 as a
+    # refusal. `|| grep_rc=$?` keeps errexit from firing on a plain no-match.
+    grep_rc=0
+    echo "$changed" | grep -E "$sensitive_regex" >/dev/null || grep_rc=$?
+    if [ "$grep_rc" -gt 1 ]; then
+      echo "pre-push: sensitive-path regex is not valid ERE (grep exit $grep_rc) — refusing" >&2
+      echo "         to push unscanned. Fix LIVE_TRADING_REGEX and reinstall the hook." >&2
+      failed=1
+      continue
+    fi
+    if [ "$grep_rc" -eq 0 ]; then
       # The ':' and a non-blank value reject 'Human-Approved-Byte' and a bare label.
       if ! git log --format=%B "$base..$local_sha" | grep -Ei '^Human-Approved-By:[[:space:]]*[^[:space:]]' >/dev/null; then
         echo "pre-push: sensitive paths changed but no Human-Approved-By trailer found in commits." >&2
         echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the sensitive changes." >&2
-        exit 1
+        failed=1
+        continue
       fi
     fi
   fi
 done
+
+[ "$failed" -eq 0 ] || exit 1
 
 exit 0
