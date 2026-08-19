@@ -15,24 +15,47 @@ original single-payload design — verify live state with the commands in
 
 ### On `develop`
 
-The set the script below applies (and re-applies if you re-run it):
+**Current live state (verified 2026-08-19):** zero `required_status_checks` — the key is
+absent from the API response entirely. Nothing merging into `develop` is actually gated on
+CI passing.
+
+This table is what `set-branch-protection.sh` still applies if run today — it is **stale,
+not aspirational**: `Require Fixes` was deleted outright in `c0cdd8d1b` (#2341, "drop
+unenforced PR-linkage gate"), and `baseline / tests` no longer exists as a check name (its
+tests were folded into the `ruff-and-scripts` job as a step, not a separate job). Do not run
+the script against `develop` expecting this table's effect.
+
+| Check name (stale) | Workflow | What it validated |
+|---|---|---|
+| ~~`baseline / tests`~~ | `ci.yml` (job added by #291) | No longer a distinct job — its tests are now a step inside `ruff-and-scripts`. |
+| `ruff-and-scripts` | `ci.yml` | Still a real job/check name. Ruff lint across all source trees + `tests/scripts/` unit tests. |
+| ~~`Require Fixes`~~ | `ci-pr-hygiene.yml` | Removed 2026-08-13 (#2341) — issue linkage is now a documented convention only, not a CI check. See `docs/adr/0024-drop-pr-linkage-enforcement.md`. |
+
+**This is a known, paused migration, not unexplained drift.** On 2026-08-13, `fd6de617f`
+("ci: make CI/type-check/docs checks safe to require on develop") found and recorded this
+exact zero-required-checks state, then did the prep work needed to safely require checks
+without a false "waiting forever" merge block: it dropped the `pull_request` path filters
+on `ci-docs.yml` and `ci-type-check.yml` (a path-filtered check never posts on a PR outside
+its paths, and GitHub then blocks merge forever waiting on a status that will never arrive
+once the name is required) and added a `required-checks` aggregator job to `ci.yml` — every
+job there is individually path-gated via a `changes` job, so no single existing job name was
+stable across every PR shape. The commit is explicit that it stops short of the branch
+protection API call itself: *"This commit only changes what CI reports; it does not touch
+branch protection."* That follow-up call was never made — six days later, live state is
+still zero required checks.
+
+**The three checks now safe to require, ready to apply:**
 
 | Check name | Workflow | What it validates |
 |---|---|---|
-| `baseline / tests` | `ci.yml` (job added by #291) | Cross-module smoke tests: import health, config loading, known regressions |
-| `ruff-and-scripts` | `ci.yml` | Ruff lint across all source trees + `tests/scripts/` unit tests |
-| `Require Fixes` | `ci-pr-hygiene.yml` | Issue linkage, unless a bypass applies — promotion (`develop` → `main`, same repo), `module/*`, `docs/*`, `chore/*`, or `task/<N>-*` head. Otherwise the body **or title** needs `Closes/Fixes/Resolves #N`. See CLAUDE.md § Check linkage for the full order. |
+| `Required checks passed` | `ci.yml` aggregator job | Fans in every path-gated component job (`digibase`, `digikey`, `digiquant`, `score`, `pip-audit`, `ruff-and-scripts`, `actionlint`, `compose-validate`, etc.) — tolerates `skipped`, fails only on real `failure`/`cancelled`. Includes `changes` in its `needs` list as of `2825a57d3`, a CodeRabbit finding on #2341 (without it, a broken change-detector produced a false-green result). |
+| `doc-links + agents-init` | `ci-docs.yml` | Internal markdown link validation + `agents-init --check`. No longer path-filtered on `pull_request`, so it posts on every PR. |
+| `mypy — digibase + digikey` | `ci-type-check.yml` | Type checking for `digibase`/`digikey`. No longer path-filtered on `pull_request`, so it posts on every PR. |
 
-`strict: true` is set, meaning the PR branch must be up-to-date with the base branch before
-merging. This prevents "works on my branch" situations where a passing PR would introduce a
-regression when integrated.
-
-**Current live state (verified 2026-08-19):** `develop`'s branch protection has no
-`required_status_checks` configured at all — the key is absent from the API response. This
-has drifted from the table above; not addressed by this doc update. If the gap turns out to
-be intentional, this section should say so instead; if not, re-apply with
-`bash scripts/set-branch-protection.sh --branch develop` (open a follow-up issue rather than
-just re-running it, since something removed the checks and that cause is still unknown).
+Applying this needs its own `gh api` call with these three exact context strings — **not**
+`scripts/set-branch-protection.sh`, which still carries the stale trio above. See
+[#2469](https://github.com/digithings-ai/digithings/issues/2469) for the actual apply step
+(deliberately left for explicit sign-off rather than done as part of this doc fix).
 
 ### On `main`
 
