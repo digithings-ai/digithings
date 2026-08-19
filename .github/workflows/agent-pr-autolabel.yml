@@ -61,9 +61,9 @@ jobs:
           fi
           TEXT=$(echo "$PR" | jq -r '.body + "\n" + .title')
           # Not -q: under `set -o pipefail` (set above) -q exits at the first match,
-          # printf takes SIGPIPE and the pipeline reports 141 -- so a body at
-          # GitHub's 65,536-char cap, which is the 64KB pipe buffer, would read as
-          # unlinked. Redirecting instead lets grep drain stdin.
+          # printf takes SIGPIPE and the pipeline reports 141 -- so a body near
+          # GitHub's 65,536-char cap would read as unlinked, since GNU grep 3.11 on
+          # ubuntu-latest diverges around 56KB. Redirecting lets grep drain stdin.
           if ! printf '%s' "$TEXT" | grep -Ei '(fixes|closes|resolves)[[:space:]]+#[0-9]+' >/dev/null; then
             echo "PR #$NUM not issue-linked — skipping autolabel"
             exit 0
