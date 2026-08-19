@@ -15,7 +15,9 @@ from pathlib import Path
 import pytest
 from digigraph.llm_auth import (
     BYOK_ROUTABLE_PROVIDERS,
+    byok_model_routes_elsewhere,
     byok_provider_supported,
+    byok_routable_model,
     get_byok_model_override,
     get_byok_override,
     pop_byok,
@@ -512,3 +514,204 @@ class TestByokCatalogVendoredCopy:
         assert json.loads(canonical.read_text(encoding="utf-8")) == json.loads(
             vendored.read_text(encoding="utf-8")
         )
+
+
+@pytest.mark.unit
+class TestByokModelCannotRedirectTheBill:
+    """``X-BYOK-Model`` is caller-supplied, so it must not choose whose key pays.
+
+    The provider guard above asks "is this provider routable"; the model-required
+    guard asks "did they send a model". Neither asks whether the model belongs to the
+    provider that was declared, and for openai nothing else closes the gap: openai is
+    absent from digillm's registry because its canonical model string is bare, so it
+    is the one provider that adds no prefix of its own and therefore the one that can
+    carry a foreign prefix all the way to :func:`digillm.get_client_for_model`. There
+    the BYOK override is skipped (its base_url is api.openai.com, not the target's)
+    and the client is built on the operator's env key instead.
+    """
+
+    @pytest.mark.parametrize(
+        "provider,model",
+        [
+            ("openai", "gemini/gemini-2.5-flash"),
+            ("openai", "xai/grok-4-3"),
+            ("openai", "anthropic/claude-sonnet-4-20250514"),
+            ("openai", "openrouter/openai/gpt-4o-mini"),
+        ],
+    )
+    def test_a_foreign_prefix_is_detected(self, provider: str, model: str) -> None:
+        """Each of these would otherwise be answered on an operator env key."""
+        assert byok_model_routes_elsewhere(provider, model)
+
+    @pytest.mark.parametrize(
+        "provider,model",
+        [
+            ("openai", "gpt-4o-mini"),
+            ("openai", "openai/gpt-4o-mini"),
+            ("openai", "o4-mini"),
+            # OpenRouter's whole product is vendor sub-slugs; rejecting these would
+            # break the shipped digichat path, so the rule must not be prefix equality.
+            ("openrouter", "openai/gpt-4o-mini"),
+            ("openrouter", "anthropic/claude-sonnet-4"),
+            ("openrouter", "google/gemini-2.0-flash"),
+            ("openrouter", "openrouter/anthropic/claude-sonnet-4"),
+            ("gemini", "gemini-2.5-flash"),
+            ("gemini", "gemini/gemini-2.0-flash"),
+            ("anthropic", "claude-sonnet-4-20250514"),
+            ("xai", "grok-4-3"),
+            # Not a hole: membership is case-sensitive on *both* sides of this
+            # (see test_the_guard_and_the_router_read_one_registry), so an
+            # uppercased prefix names no provider anywhere and lands on the
+            # user's own key, not an operator one.
+            ("openai", "GEMINI/gemini-2.5-flash"),
+            ("openai", "OpenRouter/openai/gpt-4o-mini"),
+        ],
+    )
+    def test_a_legitimate_model_is_not_flagged(self, provider: str, model: str) -> None:
+        assert not byok_model_routes_elsewhere(provider, model)
+
+    @pytest.mark.parametrize("model", ["GEMINI/gemini-2.5-flash", "OpenRouter/openai/gpt-4o"])
+    def test_the_guard_and_the_router_read_one_registry(self, model: str) -> None:
+        """What the guard lets through, the router must not route to an operator key.
+
+        The guard tests membership with :func:`digillm.is_registered_provider`, which is
+        plain case-sensitive dict membership; both prefix splitters (digillm's
+        ``_parse_provider_prefix`` and model_config's) call that same predicate on the
+        head they partition off, and neither lowercases first. So a miscased prefix is
+        unknown to the router too: it parses to ``None``, falls to :func:`digillm.get_client`,
+        and under BYOK that returns the *user's* key — a wrong-model error billed to them,
+        never an operator key. Reading membership from the registry rather than
+        re-implementing it is what makes the guard exact instead of approximate; this test
+        fails the moment either side starts normalizing case on its own.
+        """
+        from digillm.client import _parse_provider_prefix as router_parse
+
+        assert not byok_model_routes_elsewhere("openai", model)
+        assert router_parse(byok_routable_model("openai", model)) == (None, model)
+
+    def test_the_check_normalizes_like_the_middleware(self) -> None:
+        assert byok_model_routes_elsewhere("OpenAI", "  gemini/gemini-2.5-flash  ")
+        assert not byok_model_routes_elsewhere(" OpenRouter ", "anthropic/claude-sonnet-4")
+
+    @pytest.mark.parametrize(
+        "provider,model,expected",
+        [
+            ("gemini", "gemini-2.5-flash", "gemini/gemini-2.5-flash"),
+            ("gemini", "gemini/gemini-2.0-flash", "gemini/gemini-2.0-flash"),
+            ("openrouter", "anthropic/claude-sonnet-4", "openrouter/anthropic/claude-sonnet-4"),
+            ("anthropic", "claude-sonnet-4-20250514", "anthropic/claude-sonnet-4-20250514"),
+            ("xai", "grok-4-3", "xai/grok-4-3"),
+            ("openai", "gpt-4o-mini", "gpt-4o-mini"),
+            ("openai", "openai/gpt-4o-mini", "gpt-4o-mini"),
+        ],
+    )
+    def test_routable_form_is_idempotent(self, provider: str, model: str, expected: str) -> None:
+        """Applying it twice must not double a prefix — the catalog ships prefixed
+        fallbacks (``gemini/gemini-2.0-flash``) and bare ones in the same file."""
+        once = byok_routable_model(provider, model)
+        assert once == expected
+        assert byok_routable_model(provider, once) == expected
+
+    def test_every_catalog_fallback_model_is_self_consistent(self) -> None:
+        """No model this product actually offers may be refused by the new 400.
+
+        Every entry, not just the first: ``byokModelPresets(provider)`` in digichat's
+        ``use-byok-key.ts`` is asserted equal to this file's ``fallbackModels`` by
+        ``use-byok-key.catalog-parity.test.ts``, so covering the catalog covers exactly
+        the set the terminal's model picker can send. A cross-component regression is
+        otherwise invisible from Python, and ``normalizeOpenRouterModel`` — the only
+        transform digichat applies on the way out — merely strips a leading
+        ``openrouter/``; it never adds a prefix, so it cannot manufacture a foreign one.
+        """
+        catalog = json.loads((_REPO_ROOT / "config" / "byok-providers.json").read_text())
+        for entry in catalog:
+            for model in entry.get("fallbackModels") or []:
+                assert not byok_model_routes_elsewhere(entry["id"], model), (
+                    f"catalog fallback {model!r} for {entry['id']!r} would be refused"
+                )
+
+
+@pytest.mark.unit
+class TestByokModelMismatchOverHttp:
+    """The same invariant at the door the attacker actually knocks on."""
+
+    def _client(self):
+        from digigraph.server import app
+        from fastapi.testclient import TestClient
+
+        return TestClient(app)
+
+    def test_a_foreign_model_is_refused_not_billed_to_the_operator(self) -> None:
+        res = self._client().get(
+            "/healthz",
+            headers={
+                "x-byok-key": "sk-secret",
+                "x-byok-provider": "openai",
+                "x-byok-model": "gemini/gemini-2.5-flash",
+            },
+        )
+        assert res.status_code == 400, res.text
+        assert "byok_model_provider_mismatch" in str(res.json())
+        assert "sk-secret" not in res.text
+
+    def test_the_shipped_openrouter_sub_slug_still_passes(self) -> None:
+        """digichat sends exactly this; a prefix-equality rule would 400 it."""
+        res = self._client().get(
+            "/healthz",
+            headers={
+                "x-byok-key": "sk-ok",
+                "x-byok-provider": "openrouter",
+                "x-byok-model": "anthropic/claude-sonnet-4",
+            },
+        )
+        assert res.status_code == 200, res.text
+
+
+@pytest.mark.unit
+class TestByokModelOverrideResolution:
+    """``_apply_byok_model_override`` is the second door: in-process callers."""
+
+    def _resolve(self, provider: str, model: str, resolved: str) -> str:
+        from digigraph.model_config import _apply_byok_model_override
+
+        tok = push_byok_header(_byok_request(key="sk-test", provider=provider, model=model))
+        try:
+            return _apply_byok_model_override(resolved)
+        finally:
+            pop_byok(tok)
+
+    def test_a_foreign_model_is_discarded(self) -> None:
+        """The poisoned model must not come back out; the request lands where it
+        would have landed had the header been absent."""
+        assert self._resolve("openai", "gemini/gemini-2.5-flash", "gpt-4o-mini") == "gpt-4o-mini"
+
+    @pytest.mark.parametrize(
+        "provider,model,resolved,expected",
+        [
+            ("openai", "gpt-4o", "gpt-4o-mini", "gpt-4o"),
+            ("gemini", "gemini-2.5-flash", "gpt-4o-mini", "gemini/gemini-2.5-flash"),
+            ("xai", "grok-4-3", "gpt-4o-mini", "xai/grok-4-3"),
+            (
+                "anthropic",
+                "claude-sonnet-4-20250514",
+                "gpt-4o-mini",
+                "anthropic/claude-sonnet-4-20250514",
+            ),
+            (
+                "openrouter",
+                "anthropic/claude-sonnet-4",
+                "gpt-4o-mini",
+                "openrouter/anthropic/claude-sonnet-4",
+            ),
+        ],
+    )
+    def test_a_legitimate_model_still_wins(
+        self, provider: str, model: str, resolved: str, expected: str
+    ) -> None:
+        """Replacing the per-provider ladder must not change any routable answer."""
+        assert self._resolve(provider, model, resolved) == expected
+
+    def test_no_byok_leaves_the_resolved_model_alone(self) -> None:
+        from digigraph.model_config import _apply_byok_model_override
+
+        assert _apply_byok_model_override("gpt-4o-mini") == "gpt-4o-mini"

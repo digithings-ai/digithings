@@ -31,7 +31,13 @@ from pathlib import Path
 from typing import Any, NamedTuple  # score:allow untyped any — Starlette Request kept loose
 from urllib.parse import urlsplit
 
-from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
+from digillm import (
+    is_registered_provider,
+    reset_byok,
+    reset_proxy_key,
+    set_byok,
+    set_proxy_key,
+)
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 
@@ -140,6 +146,52 @@ def byok_provider_supported(provider: str) -> bool:
 def byok_model_required(provider: str) -> bool:
     """True when *provider* must send ``X-BYOK-Model`` to spend the user key."""
     return provider.strip().lower() in BYOK_MODEL_REQUIRED_PROVIDERS
+
+
+def byok_routable_model(provider: str, model: str) -> str:
+    """Return *model* in the form that actually spends a BYOK key for *provider*.
+
+    A provider in digillm's registry carries its own prefix in its canonical model
+    string (``gemini/…``, ``openrouter/…``), so the prefix is stripped and re-applied.
+    That is idempotent, and it preserves OpenRouter's legitimate vendor sub-slugs:
+    ``anthropic/claude-sonnet-4`` becomes ``openrouter/anthropic/claude-sonnet-4``,
+    not a request billed to the operator's Anthropic key.
+
+    ``openai`` is deliberately *not* in that registry — its canonical model string is
+    bare (``gpt-4o-mini``) — so nothing is prefixed onto it. That asymmetry is the
+    whole reason :func:`byok_model_routes_elsewhere` exists.
+    """
+    prov = provider.strip().lower()
+    slug = model.strip()
+    prefix = f"{prov}/"
+    if slug.startswith(prefix):
+        slug = slug[len(prefix) :]
+    return f"{prov}/{slug}" if is_registered_provider(prov) else slug
+
+
+def byok_model_routes_elsewhere(provider: str, model: str) -> bool:
+    """True when *model* under BYOK *provider* would be billed to an operator key.
+
+    ``X-BYOK-Model`` is caller-supplied and untrusted. ``X-BYOK-Provider: openai``
+    with ``X-BYOK-Model: gemini/gemini-2.5-flash`` survives every other check: the
+    provider is routable, a model is present, and openai adds no prefix of its own —
+    so the gemini prefix reaches digillm intact, which builds the gemini client on the
+    operator's ``GEMINI_API_KEY``. The user's key is accepted, displayed as active,
+    never spent, and someone else pays.
+
+    The test is on the *routable* form rather than on the raw header, which is why it
+    is one rule for all providers instead of an openai special case: a registered
+    provider's model is re-prefixed to itself and can never conflict, so only a
+    provider that adds no prefix can carry a foreign one through. Prefixes are read
+    from digillm's registry — the same source ``_parse_provider_prefix`` in
+    model_config uses — because that registry, not the BYOK catalog, is what decides
+    which env-keyed client gets built.
+    """
+    routable = byok_routable_model(provider, model)
+    head, sep, _rest = routable.partition("/")
+    if not sep or not is_registered_provider(head):
+        return False
+    return head != provider.strip().lower()
 
 
 # digigraph's own per-request BYOK record: (api_key, provider) where provider is

@@ -31,7 +31,12 @@ import yaml
 from digillm import get_provider_api_key_env, is_registered_provider
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from digigraph.llm_auth import get_byok_model_override, get_byok_override
+from digigraph.llm_auth import (
+    byok_model_routes_elsewhere,
+    byok_routable_model,
+    get_byok_model_override,
+    get_byok_override,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -603,7 +608,19 @@ def apply_olympus_openrouter_env(*, force: bool = False) -> str:
 
 
 def _apply_byok_model_override(resolved: str) -> str:
-    """When BYOK + X-BYOK-Model is active for a non-OpenAI provider, use the user's model."""
+    """Point an active BYOK request at the user's own model — never at an operator key.
+
+    ``X-BYOK-Model`` is caller-supplied, so it is untrusted input on a credential
+    path. A model naming a *different* registered provider is discarded, which leaves
+    the request exactly where it would have been had the header been absent; see
+    :func:`digigraph.llm_auth.byok_model_routes_elsewhere` for why that check is one
+    rule rather than a per-provider ladder. Over HTTP ``byok_header_context`` refuses
+    such a request with a 400 first, so reaching the discard here means an in-process
+    caller — the same invariant, held at both doors.
+
+    The model slug is never logged (see ``_byok_model_override`` in llm_auth), so the
+    warning names the provider and not the value that was dropped.
+    """
     byok = get_byok_override()
     if not byok:
         return resolved
@@ -611,25 +628,14 @@ def _apply_byok_model_override(resolved: str) -> str:
     user_model = get_byok_model_override()
     if not user_model:
         return resolved
-    if provider == "openai":
-        return user_model or resolved
-    if provider == "openrouter":
-        slug = (
-            user_model[len("openrouter/") :] if user_model.startswith("openrouter/") else user_model
+    if byok_model_routes_elsewhere(provider, user_model):
+        logger.warning(
+            "BYOK provider %r sent an X-BYOK-Model naming another provider; ignoring it "
+            "so the user's key is the one that pays",
+            provider,
         )
-        return f"openrouter/{slug}"
-    if provider == "gemini":
-        slug = user_model[len("gemini/") :] if user_model.startswith("gemini/") else user_model
-        return f"gemini/{slug}"
-    if provider == "anthropic":
-        slug = (
-            user_model[len("anthropic/") :] if user_model.startswith("anthropic/") else user_model
-        )
-        return f"anthropic/{slug}"
-    if provider == "xai":
-        slug = user_model[len("xai/") :] if user_model.startswith("xai/") else user_model
-        return f"xai/{slug}"
-    return resolved
+        return resolved
+    return byok_routable_model(provider, user_model)
 
 
 def effective_llm_settings() -> dict[str, object]:

@@ -122,6 +122,7 @@ async def byok_header_context(request: Request, call_next):
     from digigraph.llm_auth import (
         BYOK_ROUTABLE_PROVIDERS,
         byok_model_required,
+        byok_model_routes_elsewhere,
         byok_provider_supported,
         pop_byok,
         push_byok_header,
@@ -148,6 +149,23 @@ async def byok_header_context(request: Request, call_next):
                 message=(
                     f"BYOK provider {provider!r} requires X-BYOK-Model "
                     "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
+                ),
+                request=request,
+                service="digigraph",
+            )
+        if model and byok_model_routes_elsewhere(provider, model):
+            # Not a typo-catcher: this is the same billing invariant as the
+            # unsupported-provider refusal above. A model naming another registered
+            # provider is served by that provider's client on the *operator's* env
+            # key, so the pasted key is accepted, shown as active, and never spent.
+            # Refuse instead of silently answering on the wrong credential.
+            return json_error_response(
+                status_code=400,
+                code="byok_model_provider_mismatch",
+                message=(
+                    f"X-BYOK-Model names a provider other than {provider!r}, so your key "
+                    "would not be the one billed. Send a model for the provider you "
+                    "declared in X-BYOK-Provider."
                 ),
                 request=request,
                 service="digigraph",
