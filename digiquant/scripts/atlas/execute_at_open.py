@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from datetime import date as dt_date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -33,6 +34,21 @@ def _sb():
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
+
+
+def _is_calendar_date(raw: str) -> bool:
+    """True when `raw` is a plain ISO calendar date — `YYYY-MM-DD` and nothing more.
+
+    Strictly narrower than :func:`_trading_day_only`, which parses with
+    `datetime.fromisoformat` and so accepts `2026-08-19T09:35:00` as a Wednesday. That
+    string then reaches `date.fromisoformat` downstream, which rejects it — so the loose
+    gate would wave through a value nothing after it can use.
+    """
+    try:
+        dt_date.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def _trading_day_only(d: str) -> bool:
@@ -329,8 +345,8 @@ def _ensure_importable() -> None:
             sys.path.insert(0, path)
 
 
-def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, float]:
-    """Declared opens for `tickers` on `d`, in one batched read.
+def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
+    """Declared opens for `tickers` on `d`, in one batched read, as `Decimal`.
 
     The executor needs a mark per symbol before it will fill anything, and the symbol list
     comes from the ledger itself (`pending_symbols`). One `in_` read rather than the
@@ -338,6 +354,11 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, float]:
     pending orders (~30), and a row-per-symbol round trip is the shape #2484 exists to
     stop adding to. Tickers with no row, or a null open, are simply absent — the executor
     rejects those orders `data_unavailable` rather than filling at a guessed price.
+
+    `Decimal(str(raw))`, never `float(raw)`: this mark becomes a fill price and then a
+    lot's cost basis, and the ledger's whole numeric contract is that money never passes
+    through binary floating point. Every other path in this file returns floats because
+    `position_events` is a display table; this one feeds the record of what was bought.
     """
     if not tickers:
         return {}
@@ -348,7 +369,7 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, float]:
         .eq("date", d)
         .execute()
     )
-    marks: Dict[str, float] = {}
+    marks: Dict[str, Decimal] = {}
     for row in getattr(res, "data", None) or []:
         if not isinstance(row, dict):
             continue
@@ -357,8 +378,8 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, float]:
         if not ticker or raw is None:
             continue
         try:
-            price = float(raw)
-        except (TypeError, ValueError):
+            price = Decimal(str(raw))
+        except (TypeError, ValueError, InvalidOperation):
             continue
         if price > 0:
             marks[str(ticker).upper()] = price
@@ -380,9 +401,10 @@ def build_events_from_paper_fills(
     Two different "nothing" answers, and the caller must not conflate them:
 
     * ``(None, reason)`` — **the ledger declined to speak.** The kill switch is off, no
-      commit exists for `run_d`, or a ledger read raised (the tables are not there yet).
-      Falling back to a prose reconstruction is legitimate. `reason` names which of the
-      three it was, because each implies a different operator action.
+      commit exists for `run_d`, a ledger read raised (the tables are not there yet), or
+      a date argument is not a calendar date. Falling back to a prose reconstruction is
+      legitimate. `reason` names which one it was, because each implies a different
+      operator action.
     * ``([], "")`` — **the ledger spoke and nothing traded.** A quiet day. HOLD continuity
       rows still belong on the book, but reconstructing events from prose would be
       inventing activity the authority says did not happen.
@@ -410,8 +432,17 @@ def build_events_from_paper_fills(
     if not ledger_enabled():
         return None, "the OLYMPUS_PORTFOLIO_LEDGER kill switch is off"
 
-    run_date = dt_date.fromisoformat(run_d)
-    execution_date = dt_date.fromisoformat(execution_d)
+    # Parsed here, inside the decline contract, rather than at the first use below. This
+    # function's promise to its caller is `(None, reason)` on every way the ledger can
+    # fail to speak, and a hand-typed `--rebalance-date` is one of those ways: an
+    # unguarded parse would raise out of a function documented never to, taking the prose
+    # fallback down with it. `main` rejects a malformed date up front with exit 2, so
+    # reaching this branch means a programmatic caller, which still deserves the contract.
+    try:
+        run_date = dt_date.fromisoformat(run_d)
+        execution_date = dt_date.fromisoformat(execution_d)
+    except (TypeError, ValueError) as exc:
+        return None, f"a date argument is not an ISO-8601 calendar date ({exc})"
     stamp = now or datetime.now(timezone.utc)
 
     try:
@@ -445,6 +476,14 @@ def build_events_from_paper_fills(
         print(
             f"↩️  {len(result.already_booked)} order(s) were already filled on a previous run "
             f"({', '.join(result.already_booked)}) — fills are immutable, nothing re-booked."
+        )
+    if result.rejections and not result.fills:
+        # Without this line the run ends on `_record_ledger_events`' "booked no fills"
+        # summary, which reads as a quiet day. The ledger had orders and refused every
+        # one of them — a different situation, and the only one of the two worth paging on.
+        print(
+            f"⚠️  the ledger was authoritative for run_date={run_d} and rejected all "
+            f"{len(result.rejections)} order(s) — this was not a quiet day."
         )
 
     prior_book_d = _prior_book_date(sb, execution_d)
@@ -710,6 +749,17 @@ def main() -> int:
     )
     args = ap.parse_args()
     d = args.date
+
+    # Both dates are validated before anything else runs. `--rebalance-date` had no check
+    # at all, and `--date`'s weekday gate accepts an ISO *datetime*, so either flag could
+    # carry a value past this point that only fails much later, mid-read, as a traceback.
+    for flag, value in (("--date", d), ("--rebalance-date", args.rebalance_date)):
+        if value is not None and not _is_calendar_date(value):
+            print(
+                f"error: {flag} must be an ISO-8601 calendar date (YYYY-MM-DD), got {value!r}",
+                file=sys.stderr,
+            )
+            return 2
 
     if not _trading_day_only(d):
         print("Skipping execution: non-trading day (weekend).")

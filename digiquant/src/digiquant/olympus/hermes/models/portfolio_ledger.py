@@ -18,14 +18,28 @@ replayable chain:
 
 Scope — contracts and schema only. This module does not change H7/H8/H9 ownership and
 does not touch any live-trading or broker path. ``hermes/writers/commit_io.py`` (H9)
-remains the sole authoritative booking writer. Since #2418 these models are **no longer
-dark**: ``hermes/writers/ledger_io.py`` appends this chain from every H9 run that
-actually commits, unless the ``OLYMPUS_PORTFOLIO_LEDGER`` kill switch is off (see
-``digiquant/ARCHITECTURE.md``). Two exceptions are worth naming, because "no rows" does
-not mean "broken": a run that short-circuits as ``status="noop"`` returns before the
-append, and ``TargetAdjustment`` has no producer at all in Phase 0 — H8 applies its caps
-upstream inside ``size_portfolio``, so H9 never sees a distinct pre-cap number to record.
-Producers therefore exist for seven of the eight; no consumer reads any of them back yet.
+remains the sole authoritative writer of the ``positions`` **book** — the portfolio's
+official state. That is a narrower claim than "the only writer of these tables": since
+#2420 (Task 2.4) ``hermes/writers/execution_io.py`` appends ``PaperExecution`` and
+``HoldingLot`` rows for the day's fills, which records what an order *did* rather than
+what the portfolio *is*, and it neither writes nor rewrites the book.
+
+Since #2418 these models are **no longer dark**: ``hermes/writers/ledger_io.py`` appends
+the first five links of the chain from every H9 run that actually commits, unless the
+``OLYMPUS_PORTFOLIO_LEDGER`` kill switch is off (see ``digiquant/ARCHITECTURE.md``), and
+``execution_io.py`` appends the last two. Two exceptions are worth naming, because "no
+rows" does not mean "broken": a run that short-circuits as ``status="noop"`` returns
+before the append, and ``TargetAdjustment`` has no producer at all in Phase 0 — H8
+applies its caps upstream inside ``size_portfolio``, so H9 never sees a distinct pre-cap
+number to record. Producers therefore exist for seven of the eight.
+
+They are also **read back** now, which they were not before #2420:
+``digiquant/scripts/atlas/execute_at_open.py`` walks the chain forward from
+``PortfolioCommit`` through ``OrderIntent``, ``ApprovedTarget``, ``PaperExecution`` and
+``HoldingLot``, and projects it into the public ``position_events`` table — naming each
+event from the lots it can see rather than from a diff of two snapshots, which is the
+whole point of having a lineage. A contract with a producer and no consumer is a schema;
+this one is now a data path, so a change to a field below has a reader to break.
 
 Anti-goals carried over from the issue: no broker/live-trading paths, no mutable fills,
 no second H9 writer. Every quantity/weight/price field below is ``Decimal`` (never

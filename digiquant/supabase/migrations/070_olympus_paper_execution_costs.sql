@@ -45,27 +45,42 @@ ALTER TABLE public.portfolio_ledger_paper_executions
 -- bare `>= 0`, and NaN poisons every downstream SUM it reaches, so both are
 -- excluded explicitly. Each CHECK admits NULL (see the header) and is added
 -- separately from the columns so the constraint names are explicit and reversible.
-ALTER TABLE public.portfolio_ledger_paper_executions
-    ADD CONSTRAINT chk_portfolio_ledger_paper_executions_fee
-        CHECK (
-            fee IS NULL
-            OR (
-                fee >= 0
-                AND NOT (fee = 'NaN'::numeric)
-                AND NOT (fee = 'Infinity'::numeric)
-            )
-        );
+--
+-- Wrapped in the repo's `EXCEPTION WHEN duplicate_object` idiom (see 002) because
+-- `ADD CONSTRAINT` has no `IF NOT EXISTS` form: bare, a second run of this file
+-- raises 42710 and fails the whole migration, while the `ADD COLUMN IF NOT EXISTS`
+-- above would have succeeded — a half-idempotent file is worse than a plain one,
+-- since it reads as re-runnable right up to the point where it isn't. Only the
+-- name collision is swallowed; a CHECK that existing rows violate still raises
+-- `check_violation` and still fails loudly, which is the outcome worth keeping.
 
-ALTER TABLE public.portfolio_ledger_paper_executions
-    ADD CONSTRAINT chk_portfolio_ledger_paper_executions_slippage
-        CHECK (
-            slippage IS NULL
-            OR (
-                NOT (slippage = 'NaN'::numeric)
-                AND NOT (slippage = 'Infinity'::numeric)
-                AND NOT (slippage = '-Infinity'::numeric)
-            )
-        );
+DO $$ BEGIN
+    ALTER TABLE public.portfolio_ledger_paper_executions
+        ADD CONSTRAINT chk_portfolio_ledger_paper_executions_fee
+            CHECK (
+                fee IS NULL
+                OR (
+                    fee >= 0
+                    AND NOT (fee = 'NaN'::numeric)
+                    AND NOT (fee = 'Infinity'::numeric)
+                )
+            );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TABLE public.portfolio_ledger_paper_executions
+        ADD CONSTRAINT chk_portfolio_ledger_paper_executions_slippage
+            CHECK (
+                slippage IS NULL
+                OR (
+                    NOT (slippage = 'NaN'::numeric)
+                    AND NOT (slippage = 'Infinity'::numeric)
+                    AND NOT (slippage = '-Infinity'::numeric)
+                )
+            );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 COMMENT ON COLUMN public.portfolio_ledger_paper_executions.fee IS
     'Total commission/fee in dollars for this whole fill (not per-share, not bps). '

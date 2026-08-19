@@ -1441,9 +1441,15 @@ the grants would refuse anyway.
 
 - **A close is a second lot row, not an update.** The tables reject `UPDATE` by trigger, so
   closing a lot appends a row carrying the *same* `opened_by_execution_id` plus
-  `closed_by_execution_id`/`closed_at`/`status = 'closed'`. Readers therefore group lots by
-  `opened_by_execution_id` and take the latest state per group; a lot's identity is the
-  execution that opened it, never its own row id. This needed no migration.
+  `closed_by_execution_id`/`closed_at`/`status = 'closed'`. A lot's identity is therefore the
+  execution that opened it, never its own row id, and readers group by
+  `opened_by_execution_id` and **subtract**:
+  `live = opened.quantity − Σ(quantity of the closed rows sharing that id)`. Not "take the
+  latest state per group" — a trim appends a *partial* close, so latest-state would read a
+  lineage trimmed by one share as fully closed and lose the rest of the position. A negative
+  residue means the ledger over-closed a lot; `_lineages` logs it and drops the lineage rather
+  than clamping to zero, because clamping would hide a real inconsistency. This needed no
+  migration.
 - **Costs are measured zero, not absent.** Migration 070 adds nullable `fee` and `slippage`
   to `paper_executions`. A paper fill at the declared open has an effective price equal to
   its mark, so both are an exact `0` — `FillCosts` records that rather than leaving the

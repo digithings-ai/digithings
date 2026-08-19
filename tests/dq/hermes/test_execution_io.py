@@ -12,7 +12,7 @@ import logging
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
 from digiquant.olympus.hermes.models.portfolio_ledger import (
@@ -50,8 +50,15 @@ NOW = datetime(2026, 6, 15, 13, 31, tzinfo=UTC)
 
 
 def _uuid(tag: str) -> UUID:
-    """Stable, readable ids so a failure message points at the row that broke."""
-    return UUID(int=abs(hash(tag)) % (1 << 128), version=5)
+    """A tag-derived id, stable *across processes*, so a failure names the row that broke.
+
+    ``uuid5`` rather than ``hash()``: str hashing is salted per interpreter, so a
+    hash-derived id hands the same fixture different values on every run. That is
+    invisible until something orders by id — which the executor now does deliberately,
+    because PostgREST's read order is unspecified. Tests must therefore never assume
+    fixture order is processing order; assert order-agnostically, or against the ids.
+    """
+    return uuid5(NAMESPACE_URL, tag)
 
 
 class _Chain:
@@ -173,6 +180,53 @@ class _Chain:
                 }
             )
         return execution_id
+
+    def fill(
+        self,
+        *,
+        order_id: str,
+        symbol: str,
+        quantity: str,
+        price: str | None,
+        with_lot: bool = False,
+    ) -> str:
+        """Append a fill already booked against ``order_id``; return its execution id.
+
+        ``with_lot=False`` is the crashed state the repair branch exists for: the fill,
+        its lots and its order status are three separate INSERTs, so a failure after the
+        first leaves the execution row on the record with nothing behind it.
+
+        ``price=None`` omits the column. 069 declares it ``NOT NULL``, so that row cannot
+        come out of a healthy table — it is here to exercise the guard that refuses to
+        rebuild a lot without a recorded basis, rather than fabricate one.
+        """
+        execution_id = paper_execution_id(UUID(order_id), EXECUTED_DATE)
+        row: dict[str, Any] = {
+            "id": str(execution_id),
+            "order_intent_id": order_id,
+            "executed_date": EXECUTED_DATE.isoformat(),
+            "symbol": symbol,
+            "quantity": quantity,
+        }
+        if price is not None:
+            row["price"] = price
+        self.executions.append(row)
+        if with_lot:
+            self.lots.append(
+                {
+                    "id": str(open_lot_id(execution_id)),
+                    "opened_by_execution_id": str(execution_id),
+                    "closed_by_execution_id": None,
+                    "run_date": RUN_DATE.isoformat(),
+                    "symbol": symbol,
+                    "quantity": quantity,
+                    "open_price": price,
+                    "status": "open",
+                    "opened_at": NOW.isoformat(),
+                    "closed_at": None,
+                }
+            )
+        return str(execution_id)
 
     def client(self, *, with_commit: bool = True) -> FakeSupabaseClient:
         return FakeSupabaseClient(
@@ -558,8 +612,17 @@ class TestResidualIsMeasured:
 
         result = _run(chain.client(), {"AAPL": "195.50"})
 
-        assert [f.prior_quantity for f in result.fills] == [Decimal("10"), Decimal("6")]
-        assert [f.residual_quantity for f in result.fills] == [Decimal("6"), Decimal("0")]
+        # Asserted as a chain rather than as two fixed pairs: which of the two orders the
+        # executor takes first is fixed by the ``(symbol, id)`` sort, not by the order they
+        # were added here. What must hold either way is that the first one measures against
+        # the pre-run book, the second measures against what the first left, and the day
+        # ends flat — the whole point being that the second does not re-read the book.
+        priors = [f.prior_quantity for f in result.fills]
+        residuals = [f.residual_quantity for f in result.fills]
+        assert sorted(f.quantity for f in result.fills) == [Decimal("4"), Decimal("6")]
+        assert priors[0] == Decimal("10")
+        assert residuals[0] == priors[1]
+        assert residuals[1] == Decimal("0")
 
 
 class TestRejections:
@@ -677,24 +740,20 @@ class TestIdempotency:
         assert client.store.get(HOLDING_LOTS, []) == []
 
     def test_crash_between_the_fill_and_the_status_row_is_repaired(self) -> None:
-        """The fill is immutable and already on the record; only the status was missing.
+        """The fill and its lots are on the record; only the status was missing.
 
         Leaving it ``pending`` would make a filled order look unfilled forever, and the
         append-only trigger means the pending row can never be edited — so the repair is
         to append the executed row that the crashed run never wrote.
+
+        The lot row is part of the fixture on purpose: this test's subject is the status
+        row *alone*, so the fill is given its lots and the assertion below requires that
+        none are re-appended. A fill missing its lots is a different crash, and
+        ``TestCrashRecoveryRebuildsLots`` owns it.
         """
         chain = _Chain()
         order_id = chain.order(symbol="AAPL", action="add", quantity="10")
-        chain.executions.append(
-            {
-                "id": str(paper_execution_id(UUID(order_id), EXECUTED_DATE)),
-                "order_intent_id": order_id,
-                "executed_date": EXECUTED_DATE.isoformat(),
-                "symbol": "AAPL",
-                "quantity": "10",
-                "price": "195.50",
-            }
-        )
+        chain.fill(order_id=order_id, symbol="AAPL", quantity="10", price="195.50", with_lot=True)
         client = chain.client()
 
         _run(client, {"AAPL": "195.50"})
@@ -703,6 +762,7 @@ class TestIdempotency:
         assert [row["status"] for row in repaired] == [OrderIntentStatus.EXECUTED]
         assert repaired[0]["id"] == str(executed_intent_id(UUID(order_id), EXECUTED_DATE))
         assert repaired[0]["supersedes_id"] == order_id
+        assert client.store.get(HOLDING_LOTS, []) == [], "the lot was already there"
 
     def test_repair_is_skipped_when_the_executed_row_already_exists(self) -> None:
         chain = _Chain()
@@ -733,6 +793,181 @@ class TestIdempotency:
         _run(client, {"AAPL": "195.50"})
 
         assert client.store == {}
+
+
+class TestCrashRecoveryRebuildsLots:
+    """A fill on the record with no lot behind it is a position nobody can see.
+
+    The fill, its lots and its order status are three separate INSERTs and PostgREST has
+    no cross-table transaction, so a crash after the first leaves the fill alone. Because
+    the status row is written *last*, the order stays ``pending`` and the next run comes
+    back to it — and ``_live_quantity`` measures positions from lots, so retiring the order
+    without rebuilding them would make those shares invisible forever: the next buy would
+    book an OPEN on top of a position already held, and a sell would find nothing to close.
+    That is the #1743 mislabelling class re-entered through a crash, which is why the
+    repair rebuilds the lots and not only the status.
+    """
+
+    def test_a_buy_missing_its_lot_has_the_open_lot_rebuilt(self) -> None:
+        chain = _Chain()
+        order_id = chain.order(symbol="AAPL", action="add", quantity="10")
+        execution_id = chain.fill(order_id=order_id, symbol="AAPL", quantity="10", price="195.50")
+        client = chain.client()
+
+        result = _run(client, {"AAPL": "195.50"})
+
+        assert result.already_booked == ["AAPL"]
+        lots = client.store[HOLDING_LOTS]
+        assert len(lots) == 1
+        # The id the crashed run would have written, not a fresh one — so a crash *during*
+        # the repair still converges on one row instead of doubling the position.
+        assert lots[0]["id"] == str(open_lot_id(UUID(execution_id)))
+        assert lots[0]["opened_by_execution_id"] == execution_id
+        assert lots[0]["status"] == HoldingLotStatus.OPEN
+        assert Decimal(lots[0]["quantity"]) == Decimal("10")
+
+    def test_the_rebuilt_lot_uses_the_recorded_price_not_todays_mark(self) -> None:
+        """Cost basis is a historical fact; today's mark would silently restate it."""
+        chain = _Chain()
+        order_id = chain.order(symbol="AAPL", action="add", quantity="10")
+        chain.fill(order_id=order_id, symbol="AAPL", quantity="10", price="195.50")
+        client = chain.client()
+
+        _run(client, {"AAPL": "240.00"})
+
+        assert Decimal(client.store[HOLDING_LOTS][0]["open_price"]) == Decimal("195.50")
+
+    def test_a_crashed_sell_has_its_closing_rows_rebuilt(self) -> None:
+        chain = _Chain()
+        opening_execution = chain.lot(
+            symbol="AAPL",
+            quantity="10",
+            open_price="150.00",
+            opened_at="2026-05-04T13:31:00+00:00",
+            tag="a",
+        )
+        order_id = chain.order(symbol="AAPL", action="trim", quantity="4")
+        execution_id = chain.fill(order_id=order_id, symbol="AAPL", quantity="4", price="195.50")
+        client = chain.client()
+
+        _run(client, {"AAPL": "195.50"})
+
+        lots = client.store[HOLDING_LOTS]
+        assert len(lots) == 1
+        assert lots[0]["id"] == str(
+            close_lot_id(
+                closing_execution_id=UUID(execution_id),
+                opened_by_execution_id=UUID(opening_execution),
+            )
+        )
+        assert lots[0]["status"] == HoldingLotStatus.CLOSED
+        assert Decimal(lots[0]["quantity"]) == Decimal("4")
+        # The close row describes part of the *original* lot, so it inherits that basis.
+        assert Decimal(lots[0]["open_price"]) == Decimal("150.00")
+
+    def test_a_rebuilt_lot_is_still_not_reported_as_a_fill(self) -> None:
+        """The lots are repaired; the caller's manifest is not retro-fitted.
+
+        A recovered fill's ``prior_quantity``/``residual_quantity`` would be measured
+        against today's lots rather than against the day it happened, and naming a
+        ``position_events`` row from a stale residual is exactly the mislabelling the
+        measured residual exists to prevent. A missing event row is a display gap to
+        backfill; a wrong one is a false claim about the portfolio.
+        """
+        chain = _Chain()
+        order_id = chain.order(symbol="AAPL", action="add", quantity="10")
+        chain.fill(order_id=order_id, symbol="AAPL", quantity="10", price="195.50")
+        client = chain.client()
+
+        result = _run(client, {"AAPL": "195.50"})
+
+        assert client.store[HOLDING_LOTS], "the lot should have been rebuilt"
+        assert result.fills == []
+        assert result.already_booked == ["AAPL"]
+
+    def test_lots_are_not_guessed_when_the_direction_is_not_derivable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A ``no_op`` decision carrying a fill: the status is repairable, the lots are not.
+
+        Reachable because the repair branch runs *before* ``_rejection_reason`` — an
+        already-filled order never reaches the rejection logic, so the recorded direction
+        can legitimately be neither a buy nor a sell. Whether that fill opened or closed
+        the position is not on the record, and inventing it is the read-time
+        reconstruction this task exists to remove.
+        """
+        chain = _Chain()
+        order_id = chain.order(symbol="AAPL", action="no_op", quantity="10")
+        chain.fill(order_id=order_id, symbol="AAPL", quantity="10", price="195.50")
+        client = chain.client()
+
+        with caplog.at_level(logging.ERROR, logger=execution_io.__name__):
+            _run(client, {"AAPL": "195.50"})
+
+        assert client.store.get(HOLDING_LOTS, []) == []
+        assert "no derivable direction" in caplog.text
+        # The status repair does not depend on the direction, so it still happens.
+        assert [row["status"] for row in client.store[ORDER_INTENTS]] == [
+            OrderIntentStatus.EXECUTED
+        ]
+
+    def test_lots_are_not_guessed_when_the_fill_row_has_no_price(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """No recorded basis, no rebuilt lot. Today's mark is not a substitute."""
+        chain = _Chain()
+        order_id = chain.order(symbol="AAPL", action="add", quantity="10")
+        chain.fill(order_id=order_id, symbol="AAPL", quantity="10", price=None)
+        client = chain.client()
+
+        with caplog.at_level(logging.ERROR, logger=execution_io.__name__):
+            _run(client, {"AAPL": "195.50"})
+
+        assert client.store.get(HOLDING_LOTS, []) == []
+        assert "needed to rebuild" in caplog.text
+
+
+class TestReadOrderIsNotTrusted:
+    """The fill sequence must be a function of the data, not of how the rows arrived.
+
+    ``_rows_for_date`` issues no ``ORDER BY``, so PostgREST can hand the executor one
+    day's pending orders in any order. Two orders on one symbol consume the same lot
+    lineage in sequence, so an unstable order gives identical data two different lot
+    records — and a projection reading them would call the same trade a trim one day and
+    an exit the next. Sorting on ``(symbol, id)`` fixes the sequence; sorting on ``symbol``
+    alone does not, because Python's sort is stable and simply preserves the read order.
+    """
+
+    @staticmethod
+    def _lots_under(*, reverse: bool) -> list[dict[str, Any]]:
+        chain = _Chain()
+        chain.lot(
+            symbol="AAPL",
+            quantity="10",
+            open_price="150.00",
+            opened_at="2026-05-04T13:31:00+00:00",
+            tag="a",
+        )
+        chain.order(symbol="AAPL", action="trim", quantity="6", tag="first")
+        chain.order(symbol="AAPL", action="trim", quantity="6", tag="second")
+        if reverse:
+            chain.orders.reverse()
+        client = chain.client()
+
+        _run(client, {"AAPL": "195.50"})
+
+        return sorted(client.store[HOLDING_LOTS], key=lambda row: str(row["id"]))
+
+    def test_two_orders_on_one_symbol_book_the_same_lots_in_either_read_order(self) -> None:
+        forward = self._lots_under(reverse=False)
+        backward = self._lots_under(reverse=True)
+
+        assert forward == backward
+        # Not vacuous: both orders really did close shares — 6, then the 4 still left.
+        assert sorted(Decimal(row["quantity"]) for row in forward) == [
+            Decimal("4"),
+            Decimal("6"),
+        ]
 
 
 class TestDeterministicIds:

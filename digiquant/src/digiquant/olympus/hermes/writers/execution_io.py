@@ -392,6 +392,104 @@ def _lineages(rows: list[dict[str, Any]]) -> dict[str, list[_Lineage]]:
     return by_symbol
 
 
+def _execution_ids_with_lots(rows: list[dict[str, Any]]) -> set[str]:
+    """Execution ids that already have at least one lot row, opening or closing.
+
+    A buy's execution appears as an ``opened_by_execution_id``, a sell's as a
+    ``closed_by_execution_id``; either one proves that execution's lot write landed.
+    """
+    return {
+        str(row.get(column))
+        for row in rows
+        for column in ("opened_by_execution_id", "closed_by_execution_id")
+        if row.get(column)
+    }
+
+
+def _recovered_lot_rows(
+    *,
+    execution_row: dict[str, Any],
+    symbol: str,
+    action: DecisionAction | None,
+    lot_execution_ids: set[str],
+    run_date: date,
+    lineages: dict[str, list[_Lineage]],
+    now: datetime,
+) -> list[dict[str, Any]]:
+    """Lot rows for a fill that is on the record without any, or ``[]`` if it has them.
+
+    The hole this closes: ``paper_executions``, ``holding_lots`` and ``order_intents`` are
+    three separate INSERTs, and if the lot write fails after the fill lands, the order stays
+    pending (its status row is written last) and the next run reaches the already-booked
+    branch. Repairing only the status row there would retire the order with no lot behind
+    it, and ``_live_quantity`` reads lots — so that position would be invisible forever:
+    the next buy would book as an OPEN on top of shares already held, and a sell would find
+    nothing to close. That is the #1743 mislabelling class, re-entered through a crash.
+
+    Everything is taken from the immutable execution row, never from today's marks: the
+    fill happened at a price the ledger already recorded, and a lot rebuilt from a fresh
+    mark would give the position a cost basis the fill never had. ``open_lot_id`` and
+    ``close_lot_id`` are derived from that execution id, so the rebuilt rows carry the ids
+    the crashed run would have written — the repair is a re-derivation, not a new opinion.
+
+    The recovered fill is deliberately *not* added to ``ExecutionResult.fills``. Its
+    ``prior_quantity``/``residual_quantity`` would be measured against today's lots rather
+    than the day it happened, and naming an event from a stale residual is the very error
+    the measured-residual design removes. Lots are the durable record; a missing
+    ``position_events`` row is a display gap to backfill, not a corrupted position.
+    """
+    execution_id = str(execution_row.get("id") or "")
+    if not execution_id or execution_id in lot_execution_ids:
+        return []
+    if action is None or action not in (DecisionAction.ADD, *_SELL_ACTIONS):
+        # Without a direction there is no way to know whether this fill opened or closed,
+        # and guessing is the read-time reconstruction this task exists to remove.
+        logger.error(
+            "portfolio ledger: execution %s for %s has no lot rows and no derivable "
+            "direction — its lots cannot be recovered",
+            execution_id,
+            symbol,
+        )
+        return []
+
+    quantity = _shares(_decimal(execution_row.get("quantity")) or Decimal(0))
+    price = _decimal(execution_row.get("price"))
+    order_intent_id = str(execution_row.get("order_intent_id") or "")
+    if quantity <= 0 or price is None or price <= 0 or not order_intent_id:
+        logger.error(
+            "portfolio ledger: execution %s for %s has no lot rows and is missing the "
+            "quantity/price needed to rebuild them",
+            execution_id,
+            symbol,
+        )
+        return []
+
+    rows = _lot_rows_for_fill(
+        fill=Fill(
+            symbol=symbol,
+            action=action,
+            order_intent_id=UUID(order_intent_id),
+            execution_id=UUID(execution_id),
+            quantity=quantity,
+            price=price,
+            fee=_decimal(execution_row.get("fee")) or Decimal(0),
+            slippage=_decimal(execution_row.get("slippage")) or Decimal(0),
+        ),
+        run_date=run_date,
+        lineages=lineages,
+        now=now,
+    )
+    if rows:
+        logger.warning(
+            "portfolio ledger: execution %s for %s was on the record with no lot rows — "
+            "a prior run's lot write did not land; rebuilding %s row(s) from the fill",
+            execution_id,
+            symbol,
+            len(rows),
+        )
+    return rows
+
+
 def _live_quantity(lineages: dict[str, list[_Lineage]], symbol: str) -> Decimal:
     """The symbol's live share count across its lot lineages."""
     return _shares(sum((item.live for item in lineages.get(symbol, [])), Decimal(0)))
@@ -495,9 +593,11 @@ def execute_pending_orders(
         for row in all_orders
         if str(row.get("status") or "") == OrderIntentStatus.EXECUTED
     }
-    lineages = _lineages(
-        _lot_rows(client=client, symbols=sorted({_symbol(r.get("symbol")) for r in pending}))
+    prior_lot_rows = _lot_rows(
+        client=client, symbols=sorted({_symbol(r.get("symbol")) for r in pending})
     )
+    lineages = _lineages(prior_lot_rows)
+    lot_execution_ids = _execution_ids_with_lots(prior_lot_rows)
     normalized_marks = {_symbol(k): _decimal(v) for k, v in marks.items()}
 
     execution_rows: list[dict[str, Any]] = []
@@ -507,23 +607,40 @@ def execute_pending_orders(
     rejections: list[Rejection] = []
     already_booked: list[str] = []
 
-    for row in sorted(pending, key=lambda r: _symbol(r.get("symbol"))):
+    # Sorted by (symbol, id), not symbol alone: `_rows_for_date` issues no ORDER BY, so
+    # PostgREST's row order is unspecified, and a stable sort on symbol alone preserves
+    # whatever order the read happened to return. Two orders on one symbol in one run must
+    # consume lots in a fixed sequence — otherwise the same data books an EXIT one day and
+    # an OPEN the next, which is precisely the mislabelling this module exists to end.
+    for row in sorted(pending, key=lambda r: (_symbol(r.get("symbol")), str(r.get("id")))):
         order_id = str(row["id"])
         symbol = _symbol(row.get("symbol"))
         quantity = _shares(_decimal(row.get("quantity")) or Decimal(0))
         existing = fills_by_order.get(order_id)
 
         if existing is not None:
-            # The fill is already on the record and is immutable. Only the terminal
-            # order status might be missing — that is the crash-between-inserts case,
-            # and appending the executed row now repairs it instead of leaving a filled
-            # order reading ``pending`` forever.
+            # The fill is already on the record and is immutable. What may be missing is
+            # the terminal order status, the lot rows, or both — the writes below are three
+            # separate statements, so a crash can land the fill and lose either follower.
+            # Appending them now repairs the record instead of leaving a filled order
+            # reading ``pending`` forever, or a position with no lot behind it.
             already_booked.append(symbol)
             repair_id = executed_intent_id(UUID(order_id), executed_date)
             if str(repair_id) not in executed_ids:
                 intent_rows.append(
                     _executed_intent_row(pending_row=row, executed_date=executed_date, now=now)
                 )
+            lot_rows.extend(
+                _recovered_lot_rows(
+                    execution_row=existing,
+                    symbol=symbol,
+                    action=actions.get(order_id),
+                    lot_execution_ids=lot_execution_ids,
+                    run_date=run_date,
+                    lineages=lineages,
+                    now=now,
+                )
+            )
             continue
 
         reason = _rejection_reason(
@@ -590,9 +707,12 @@ def execute_pending_orders(
         fills.append(replace(fill, residual_quantity=_live_quantity(lineages, symbol)))
 
     # FK order: a lot references its executions, so fills land first. The executed and
-    # rejected order rows go last because nothing references them — a failure there leaves
-    # a fill on the record with a still-pending order, which the repair branch above fixes
-    # on the next run.
+    # rejected order rows go last because nothing references them. Neither follower is in
+    # the same transaction as the fill — PostgREST has no cross-table one — so a failure at
+    # either leaves the fill on the record alone, and the repair branch above re-derives
+    # whichever is missing on the next run. The window is closed, not merely narrow: the
+    # order status is written *last*, so any follower that failed leaves the order pending,
+    # and a pending order is exactly what brings the repair branch back to it.
     _insert(client=client, table=PAPER_EXECUTIONS, rows=execution_rows)
     _insert(client=client, table=HOLDING_LOTS, rows=lot_rows)
     _insert(client=client, table=ORDER_INTENTS, rows=intent_rows)

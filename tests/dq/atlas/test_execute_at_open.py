@@ -22,6 +22,7 @@ import sys
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -599,6 +600,100 @@ def _ledger_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLYMPUS_PORTFOLIO_LEDGER", raising=False)
 
 
+class TestOpenMarksAreDecimal:
+    """The at-open mark becomes a fill price and then a lot's cost basis.
+
+    Every other read in this script feeds `position_events`, which is a display table, and
+    is allowed to hand back floats. This one feeds the immutable record of what was bought,
+    and the ledger's whole numeric contract is that money never passes through binary
+    floating point — so the type is asserted here, not assumed from the annotation.
+    """
+
+    @staticmethod
+    def _client(rows: list[dict[str, Any]]) -> _FakeClient:
+        return _FakeClient(tables={"price_history": rows})
+
+    def test_marks_arrive_as_decimal_not_float(self) -> None:
+        marks = self._client([{"ticker": "UUP", "date": _EXEC_D, "open": "27.40"}])
+        got = _mod._open_marks(marks, ["UUP"], _EXEC_D)
+        assert got == {"UUP": Decimal("27.40")}
+        # `Decimal("27.40") == 27.40` is False — Python compares the exact values, and the
+        # float is 27.39999999999999857891452847979962825775146484375. So the equality above
+        # already fails under a `float(raw)` mutation; this pins the type outright anyway,
+        # because a float reaching the executor is a contract break even where it round-trips.
+        assert type(got["UUP"]) is Decimal
+
+    def test_a_mark_that_arrives_as_a_json_number_is_not_widened(self) -> None:
+        """`Decimal(str(raw))`, never `Decimal(raw)`.
+
+        A `numeric` column comes back as a JSON number when the client parses it that way,
+        and `Decimal(1.1)` is 1.10000000000000008881784197001...: the binary expansion of
+        the float, not the price anybody declared. Stringifying first keeps the decimal the
+        table actually stores, whichever type the driver hands over.
+        """
+        got = _mod._open_marks(
+            self._client([{"ticker": "FXI", "date": _EXEC_D, "open": 1.1}]), ["FXI"], _EXEC_D
+        )
+        assert got == {"FXI": Decimal("1.1")}
+
+    def test_an_unusable_open_leaves_the_symbol_absent(self) -> None:
+        """Absent is the interface: `execute_pending_orders` rejects those orders.
+
+        A missing row, a null open, a non-positive open and an unparseable one are all the
+        same answer — no declared price — and the executor turns that into a
+        `data_unavailable` rejection on the ledger. Substituting any number here would fill
+        the order at a guess, which is the class of invention the ledger exists to stop.
+        """
+        got = _mod._open_marks(
+            self._client(
+                [
+                    {"ticker": "UUP", "date": _EXEC_D, "open": "27.40"},
+                    {"ticker": "IBIT", "date": _EXEC_D, "open": None},
+                    {"ticker": "XLF", "date": _RUN_D, "open": "52.10"},  # yesterday's open
+                    {"ticker": "DBO", "date": _EXEC_D, "open": "0"},  # not a tradeable price
+                    {"ticker": "XLE", "date": _EXEC_D, "open": "n/a"},  # unparseable
+                ]
+            ),
+            ["UUP", "IBIT", "XLF", "DBO", "XLE", "VGK"],
+            _EXEC_D,
+        )
+        assert got == {"UUP": Decimal("27.40")}
+
+    def test_the_marks_are_one_batched_read(self) -> None:
+        """One `in_` over the day's pending symbols — the shape #2484 exists to stop.
+
+        The legacy `_fetch_open` loop issues a round trip per ticker. The symbol list here
+        is bounded by the day's pending orders, so it fits in one read, and the count is
+        asserted rather than the filter because a per-ticker loop would still produce the
+        right marks and pass every value assertion above.
+        """
+        reads: list[str] = []
+
+        class _Counting(_FakeClient):
+            def table(self, name: str) -> _FakeQuery:
+                reads.append(name)
+                return super().table(name)
+
+        client = _Counting(
+            tables={
+                "price_history": [
+                    {"ticker": t, "date": _EXEC_D, "open": "10.00"} for t in ("FXI", "UUP", "XLF")
+                ]
+            }
+        )
+        assert len(_mod._open_marks(client, ["FXI", "UUP", "XLF"], _EXEC_D)) == 3
+        assert reads == ["price_history"]
+
+    def test_no_pending_symbols_means_no_read_at_all(self) -> None:
+        """A quiet day must not turn into an unfiltered scan of `price_history`."""
+
+        class _NoRead(_FakeClient):
+            def table(self, name: str) -> _FakeQuery:
+                raise AssertionError(f"read {name} for an empty ticker list")
+
+        assert _mod._open_marks(_NoRead(), [], _EXEC_D) == {}
+
+
 class TestBuildEventsFromPaperFills:
     def test_event_names_come_from_the_position_not_the_label(self) -> None:
         events, declined = _mod.build_events_from_paper_fills(
@@ -805,6 +900,74 @@ class TestBuildEventsFromPaperFillsDeclines:
         assert events == []
         assert declined == ""
 
+    def test_declines_when_a_date_argument_is_not_a_calendar_date(self) -> None:
+        """`main` rejects this at exit 2, so reaching here means a programmatic caller.
+
+        The parse lives inside the decline contract rather than at its first use: this
+        function promises `(None, reason)` on every way the ledger can fail to speak, and
+        an unguarded `date.fromisoformat` would instead raise out of a function documented
+        never to — taking the prose fallback down with it.
+        """
+        events, declined = _mod.build_events_from_paper_fills(
+            _day().client(), "2026-07-30T09:35:00", _EXEC_D, now=_NOW
+        )
+        assert events is None
+        assert "ISO-8601" in declined
+
+
+class TestAnAllRejectedDayIsNotAQuietDay:
+    """The ledger was authoritative, had orders, and refused every one of them.
+
+    Without this line the run ends on `_record_ledger_events`' "booked no fills" summary,
+    which reads exactly like a day with nothing to trade. Only one of the two is worth
+    paging on: every order the PM approved was unfillable, which in practice means the
+    price feed had no open for any of them that morning.
+    """
+
+    def test_the_run_says_so_when_every_order_was_rejected(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Two pending orders, neither with a declared open: both `data_unavailable`.
+        ledger = (
+            _Ledger()
+            .order("FXI", "add", "40", weight="0.07")
+            .order("UUP", "add", "20", weight="0.25")
+        )
+        events, declined = _mod.build_events_from_paper_fills(
+            ledger.client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+
+        # Not a decline — the ledger spoke. It just filled nothing, so there is no event
+        # to project and no prose reconstruction to fall back to.
+        assert declined == ""
+        assert events == []
+        out = capsys.readouterr().out
+        assert "rejected all 2 order(s)" in out
+        assert "not a quiet day" in out
+
+    def test_a_genuinely_quiet_day_stays_quiet(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """The discriminating half: no orders at all must not raise the alarm.
+
+        Asserted because an unconditional warning would satisfy the test above while
+        firing on every no-op day — and an alarm that cries on quiet days is one an
+        operator learns to scroll past.
+        """
+        _mod.build_events_from_paper_fills(_Ledger().client(), _RUN_D, _EXEC_D, now=_NOW)
+        assert "not a quiet day" not in capsys.readouterr().out
+
+    def test_a_day_that_filled_something_does_not_warn(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """`_day()` rejects IBIT and fills four others: one rejection is not the headline.
+
+        The per-rejection line still prints — that is the operator's record of *which*
+        order was refused, and it is what makes the summary warning redundant here.
+        """
+        _mod.build_events_from_paper_fills(_day().client(), _RUN_D, _EXEC_D, now=_NOW)
+        out = capsys.readouterr().out
+        assert "IBIT" in out and "data_unavailable" in out
+        assert "not a quiet day" not in out
+
 
 class TestMainPrefersTheLedger:
     """`main()`'s wiring: authoritative first, prose only on a decline."""
@@ -891,5 +1054,68 @@ class TestMainPrefersTheLedger:
         rc = self._run(
             monkeypatch, sb, "--date", _EXEC_D, "--rebalance-date", _RUN_D, "--no-ledger"
         )
-        # No events from any source: the prose path's own "nothing to record" exit.
-        assert rc in (0, 1)
+        # No events from any source: the prose path's own "nothing to record" exit, which
+        # is a clean 0. Pinned exactly rather than `in (0, 1)` — `main` has no `return 1`
+        # at all, so the looser form would also pass if this path started raising and the
+        # exception were swallowed into a generic failure code somewhere upstream.
+        assert rc == 0
+
+
+class TestMainRejectsMalformedDates:
+    """Exit 2, and before a Supabase client exists — a bad date must not fail mid-read.
+
+    Both dates are hand-typed into a `workflow_dispatch`, and neither had a usable gate:
+    `--rebalance-date` had no check at all, and `--date`'s only check was the weekday one,
+    which parses with `datetime.fromisoformat` and so accepts an ISO *datetime*. Either
+    flag could therefore carry a value past the top of `main` that fails much later as a
+    traceback out of a read — after the ledger had already been written to.
+    """
+
+    def _rc(self, monkeypatch: pytest.MonkeyPatch, *argv: str) -> int:
+        def _no_client() -> None:
+            raise AssertionError("main() built a Supabase client before rejecting the date")
+
+        monkeypatch.setattr(_mod, "_sb", _no_client)
+        monkeypatch.setattr(sys, "argv", ["execute_at_open.py", *argv])
+        return int(_mod.main())
+
+    def test_an_iso_datetime_is_not_a_calendar_date(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The exact hole the loose gate left open, named in both directions.
+
+        `2026-07-31T09:35:00` is a Friday, so the weekday check waves it through; every
+        consumer downstream parses with `date.fromisoformat`, which rejects it. A gate that
+        approves a string nothing after it can use is worse than no gate, because the
+        failure surfaces somewhere unrelated.
+        """
+        assert _mod._trading_day_only("2026-07-31T09:35:00") is True
+        assert _mod._is_calendar_date("2026-07-31T09:35:00") is False
+        assert self._rc(monkeypatch, "--date", "2026-07-31T09:35:00") == 2
+
+    def test_a_value_that_is_not_a_date_at_all_is_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert self._rc(monkeypatch, "--date", "yesterday") == 2
+
+    def test_the_rebalance_date_is_checked_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """It had no gate whatsoever, and it is the one a human types by hand."""
+        assert self._rc(monkeypatch, "--date", _EXEC_D, "--rebalance-date", "2026-07-3") == 2
+
+    def test_the_message_names_the_flag_and_the_value(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """There are two date flags, so "bad date" alone would not tell an operator which."""
+        self._rc(monkeypatch, "--date", _EXEC_D, "--rebalance-date", "07/30/2026")
+        err = capsys.readouterr().err
+        assert "--rebalance-date" in err
+        assert "07/30/2026" in err
+
+    def test_the_production_pair_still_gets_past_the_guard(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-vacuous: the guard refuses malformed dates, not all dates.
+
+        Reaching `_sb` *is* the assertion — the sentinel client raises, so a clean `2`
+        here would mean the guard had started rejecting the arguments the daily job passes.
+        """
+        with pytest.raises(AssertionError, match="before rejecting the date"):
+            self._rc(monkeypatch, "--date", _EXEC_D, "--rebalance-date", _RUN_D)
