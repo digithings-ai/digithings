@@ -143,9 +143,17 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     # `Claude` trailer that `scripts/commit_helper.sh` appends (opt-in, not mandated
     # anywhere) and the one human contributor here, whose name starts with a C too.
     # `-i` only widened the rejection: it case-folds the bracket expression, so
-    # `[^C]` also excluded a lowercase `c`. The `:` and the non-blank value
-    # requirement close `Human-Approved-Byte:` and a bare label with nothing after it.
-    if ! git log --format=%B "$base..$local_sha" | grep -Ei '^Human-Approved-By:[[:space:]]*[^[:space:]]' >/dev/null; then
+    # `[^C]` also excluded a lowercase `c`.
+    #
+    # Read the trailer with git's own parser rather than grepping %B for a line.
+    # `^Human-Approved-By:` matches the marker anywhere in the message, so a commit
+    # that merely *documents* the gate — "add a line reading Human-Approved-By:
+    # <name>" — cleared it, as did the marker sitting mid-body above ordinary prose.
+    # `%(trailers:key=...)` only considers the trailer block, matches the key
+    # case-insensitively (so the old `-i` tolerance is kept), and emits nothing for a
+    # bare label, which the non-blank test then rejects.
+    if ! git log --format='%(trailers:key=Human-Approved-By,valueonly)' "$base..$local_sha" \
+         | grep -E '[^[:space:]]' >/dev/null; then
       echo "pre-push: live-trading paths changed but no Human-Approved-By trailer found in commits." >&2
       echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the live-trading changes." >&2
       failed=1

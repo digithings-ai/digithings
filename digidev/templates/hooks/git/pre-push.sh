@@ -142,8 +142,12 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       continue
     fi
     if [ "$grep_rc" -eq 0 ]; then
-      # The ':' and a non-blank value reject 'Human-Approved-Byte' and a bare label.
-      if ! git log --format=%B "$base..$local_sha" | grep -Ei '^Human-Approved-By:[[:space:]]*[^[:space:]]' >/dev/null; then
+      # Use git's trailer parser, not a line regex over %B: `^Human-Approved-By:`
+      # also matches the marker quoted in ordinary body text, so a commit that
+      # merely documents the gate cleared it. `key=` matches case-insensitively and
+      # emits nothing for a bare label, which the non-blank test rejects.
+      if ! git log --format='%(trailers:key=Human-Approved-By,valueonly)' "$base..$local_sha" \
+           | grep -E '[^[:space:]]' >/dev/null; then
         echo "pre-push: sensitive paths changed but no Human-Approved-By trailer found in commits." >&2
         echo "         Add 'Human-Approved-By: <name>' to a commit message, or remove the sensitive changes." >&2
         failed=1
