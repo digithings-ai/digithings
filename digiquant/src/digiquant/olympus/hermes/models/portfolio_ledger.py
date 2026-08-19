@@ -57,6 +57,14 @@ Weight: TypeAlias = Annotated[Decimal, Field(ge=0, le=1, allow_inf_nan=False)]
 Quantity: TypeAlias = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
 PositiveQuantity: TypeAlias = Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
 PositivePrice: TypeAlias = Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
+# Money, in total dollars for a whole fill (migration 070). Deliberately NOT reusing
+# ``Quantity``/``Weight`` above: those carry the same numeric constraint but mean shares
+# and portfolio fraction, and a dollar amount typed as a share count is the kind of unit
+# confusion that reads as correct forever. ``Fee`` is a cost so it cannot be negative;
+# ``SignedAmount`` must admit both signs because favourable slippage is real and clamping
+# it would silently discard better-than-mark execution.
+Fee: TypeAlias = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
+SignedAmount: TypeAlias = Annotated[Decimal, Field(allow_inf_nan=False)]
 
 
 class DecisionAction(StrEnum):
@@ -442,6 +450,16 @@ class PaperExecution(PortfolioLedgerModel):
     ``paper_execution_id(order_intent_id, executed_date)``, so an exact same-date retry
     with the same inputs is idempotent: it computes the identical id/field values
     rather than a fresh, divergent row.
+
+    ``fee`` and ``slippage`` (migration 070) are **total dollars for the whole fill**,
+    not per-share and not basis points, so ``fee + slippage`` is directly the fill's cash
+    cost. ``slippage`` is signed: ``(effective fill price - declared mark) * quantity``,
+    positive when the fill was worse than the mark. Both are ``None``-able only because
+    the append-only trigger makes rows written before migration 070 impossible to
+    backfill — ``None`` means "predates cost tracking". A writer that has a cost model,
+    including the degenerate one where a paper fill executes exactly at the declared open,
+    always sends an explicit value: ``Decimal(0)`` there is a *measured* zero, not a
+    missing one.
     """
 
     id: UUID
@@ -450,6 +468,8 @@ class PaperExecution(PortfolioLedgerModel):
     symbol: Symbol
     quantity: PositiveQuantity
     price: PositivePrice
+    fee: Fee | None = None
+    slippage: SignedAmount | None = None
     executed_at: AwareDatetime
     recorded_at: AwareDatetime
 
