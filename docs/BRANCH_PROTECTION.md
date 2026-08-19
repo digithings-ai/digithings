@@ -3,9 +3,9 @@
 ## Why branch protection matters
 
 PRs have landed on `develop` and `main` while CI was red or while no baseline tests ran.
-Branch protection makes the three most important status checks required gates — a PR cannot
-merge until all of them pass. This eliminates silent failures and keeps the default branch
-always releasable.
+Branch protection makes the most important status checks required gates — a PR cannot merge
+until they pass. `develop` and `main` require different checks for different reasons (see
+below); together they eliminate silent failures and keep both branches always releasable.
 
 ## Required status checks
 
@@ -34,7 +34,7 @@ than sitting `pending` forever — see #2469 and the closed [PR #2471](https://g
 
 **History — this was a known, paused migration, not unexplained drift.** Until 2026-08-19,
 `develop` had *zero* required status checks (the `required_status_checks` key was absent
-from the API entirely) — the two-check trio this doc used to describe here
+from the API entirely) — two of the three checks this doc used to describe here
 (`baseline / tests`, `Require Fixes`) no longer existed as check names by the time anyone
 looked: `Require Fixes` was deleted outright in `c0cdd8d1b` (#2341, "drop unenforced
 PR-linkage gate"), and `baseline / tests` was folded into `ruff-and-scripts` as a step, not

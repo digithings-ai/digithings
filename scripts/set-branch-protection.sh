@@ -5,8 +5,9 @@
 # check ("Every commit reaching main was reviewed", from ci-review-coverage.yml)
 # set up as a one-off `gh api` call, not by this script. See docs/BRANCH_PROTECTION.md
 # § On main. Passing --branch main is refused rather than silently applying
-# develop's contexts and clobbering it (that's exactly what happened before #2469 —
-# this script's old payload no longer matched what either branch actually needed).
+# develop's contexts and clobbering it — before #2469 this script's payload was
+# already develop-specific, so pointing it at main would have overwritten main's
+# one check with develop's three.
 #
 # Usage:
 #   bash scripts/set-branch-protection.sh [--dry-run]
@@ -42,7 +43,7 @@ while [[ $# -gt 0 ]]; do
       fi
       BRANCH="$2"; shift 2 ;;
     -h|--help)
-      sed -n '2,25p' "$0" | sed 's/^# \?//'
+      sed -n '2,/^$/p' "$0" | sed '$d; s/^# \?//'
       exit 0
       ;;
     *) echo "ERROR: Unknown argument: $1" >&2; exit 1 ;;
