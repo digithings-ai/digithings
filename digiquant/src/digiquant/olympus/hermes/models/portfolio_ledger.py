@@ -18,10 +18,10 @@ replayable chain:
 
 Scope — contracts and schema only. This module does not change H7/H8/H9 ownership and
 does not touch any live-trading or broker path. ``hermes/writers/commit_io.py`` (H9)
-remains the sole authoritative booking writer; it is untouched and is not dual-written
-by these models yet (see ``digiquant/ARCHITECTURE.md``). Nothing here is wired to a
-producer or consumer — this is deliberately dark schema, read-side lineage only, until
-a follow-up task teaches H9 to dual-write into it.
+remains the sole authoritative booking writer. Since #2418 these models are **no longer
+dark**: ``hermes/writers/ledger_io.py`` appends this chain on every H9 commit run, gated
+only by the ``OLYMPUS_PORTFOLIO_LEDGER`` kill switch (see ``digiquant/ARCHITECTURE.md``).
+A producer therefore exists; no consumer reads these rows back yet.
 
 Anti-goals carried over from the issue: no broker/live-trading paths, no mutable fills,
 no second H9 writer. Every quantity/weight/price field below is ``Decimal`` (never
@@ -121,7 +121,7 @@ class TargetAdjustmentType(StrEnum):
     widening that CHECK is deferred until a real writer exists), while
     ``SizingAdjustmentType`` governs an in-memory, never-persisted explanation
     object returned alongside H8's sized book. Importing one into the other
-    would couple the dark persisted ledger to the live sizing pipeline's
+    would couple the persisted ledger to the live sizing pipeline's
     vocabulary for no present benefit.
     """
 

@@ -1416,7 +1416,7 @@ a dark schema needs opting into, a live writer needs an escape hatch.
   vocabularies and bounds out of the migration itself and asserts the emitted rows satisfy
   them. Parsed, not transcribed — narrowing a CHECK fails those tests instead of silently
   outdating them. Keep it: mutation shows loosening the `Weight` mirror to `le=100` *and*
-  dropping the writer's `/100.0` leaves 46 of this file's 48 ledger tests green.
+  dropping the writer's `/100.0` leaves 48 of this file's 50 ledger tests green.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 

@@ -150,8 +150,10 @@ def _id_of(row: dict[str, Any] | None) -> UUID | None:
 def _last_closes(*, client: SupabaseClient, tickers: set[str], run_date: date) -> dict[str, float]:
     """Last close strictly before ``run_date``, per ticker.
 
-    The same window ``commit_io._interval_price_returns`` uses, so a share count and
-    the NAV it is derived from are priced off one snapshot. A read failure is
+    A fixed ``_CLOSE_LOOKBACK_DAYS``-day lookback — deliberately *not* the window
+    ``commit_io._interval_price_returns`` builds, which is anchored on the prior book
+    date and so spans 8-127 days. Only the most recent close per ticker matters here.
+    A read failure is
     deliberately **not** swallowed: a commit that silently booked no orders is exactly
     the false-final-value state Phase-0 invariant 12 forbids, and the sanctioned way to
     stop writing is the kill switch above, not a swallowed exception.
