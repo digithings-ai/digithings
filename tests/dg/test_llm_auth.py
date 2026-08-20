@@ -1119,17 +1119,17 @@ class TestOperatorDefaultLadderHasOneCopy:
     """
 
     @staticmethod
-    def _fallback_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml: str) -> None:
+    def _fallback_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml_text: str) -> None:
         """Reach the ladder: no explicit pin, so ``_resolve_explicit_model`` returns None."""
         monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
         monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
         monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
         monkeypatch.delenv("DIGI_MODEL_MODES_FILE", raising=False)
-        (tmp_path / "model_modes.yaml").write_text(yaml)
+        (tmp_path / "model_modes.yaml").write_text(yaml_text)
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
 
     @pytest.mark.parametrize(
-        ("yaml", "expected", "expected_source"),
+        ("yaml_text", "expected", "expected_source"),
         [
             # default_model wins outright.
             (
@@ -1175,13 +1175,13 @@ class TestOperatorDefaultLadderHasOneCopy:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        yaml: str,
+        yaml_text: str,
         expected: str,
         expected_source: str,
     ) -> None:
         from digigraph.model_config import effective_llm_settings, operator_default_model
 
-        self._fallback_env(monkeypatch, tmp_path, yaml)
+        self._fallback_env(monkeypatch, tmp_path, yaml_text)
         monkeypatch.setenv("DIGI_LLM_MODE", "medium")
         assert operator_default_model() == expected
         settings = effective_llm_settings()

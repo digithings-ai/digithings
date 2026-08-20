@@ -694,7 +694,8 @@ def effective_llm_settings() -> dict[str, object]:
     """Return effective LLM settings for CLI / diagnostics (never includes secret values).
 
     Keys: ``provider``, ``model``, ``llm_mode``, ``api_key_env``, ``api_key_present``,
-    ``source`` (``agents.llm`` | ``env`` | ``model_modes`` | ``default``).
+    ``source`` (``agents.llm`` | ``env`` | ``model_modes.default_model`` |
+    ``model_modes`` | ``default``).
     """
     mode = _get_llm_mode()
     provider, model, api_key_env = _explicit_llm_config()
@@ -814,7 +815,10 @@ def get_model_for_phase(phase_slug: str) -> str | None:
         # short-circuit instead of reaching it.
         capability_model = _model_for_olympus_capability(capability, tier, phase_slug)
         if not capability_model:
-            return capability_model
+            # Signature is ``str | None``; a blank pool entry must read as "unresolved",
+            # not as an empty model name. Callers chain ``or get_model_for_mode()``, so
+            # this is inert today — it stays None so it cannot become a bug later.
+            return None
         return _apply_byok_model_override(capability_model)
     return None
 
