@@ -1102,3 +1102,90 @@ class TestOperatorDefaultRefusalOverHttp:
         with pytest.raises(ValueError):
             operator_default_model()
         assert self._get().status_code == 200
+
+
+@pytest.mark.unit
+class TestOperatorDefaultLadderHasOneCopy:
+    """The middleware's verdict and ``digi llm-settings`` must name the same model.
+
+    ``operator_default_model`` and ``effective_llm_settings`` used to run the same
+    fallback ladder in two copies (default_model → defaults[mode] → defaults['test']
+    → ``gpt-4o-mini``). ``effective_llm_settings`` cannot simply call the former —
+    it also reports ``provider`` / ``api_key_env`` / ``source`` — so the shared part
+    is extracted into ``_fallback_model_for_mode``. That extraction is invisible at
+    runtime, so re-duplicating it would go unnoticed; this pins the consequence
+    instead. Drift here means the BYOK middleware refuses (or allows) a request on a
+    model the operator's own diagnostic says is not in use, on a credential path.
+    """
+
+    @staticmethod
+    def _fallback_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml: str) -> None:
+        """Reach the ladder: no explicit pin, so ``_resolve_explicit_model`` returns None."""
+        monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+        monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+        monkeypatch.delenv("DIGI_MODEL_MODES_FILE", raising=False)
+        (tmp_path / "model_modes.yaml").write_text(yaml)
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+
+    @pytest.mark.parametrize(
+        ("yaml", "expected"),
+        [
+            # default_model wins outright.
+            (
+                "default_model: openrouter/deepseek/deepseek-chat\n",
+                "openrouter/deepseek/deepseek-chat",
+            ),
+            # default_model outranks defaults[mode] when both are present. Pinned
+            # separately because a copy that consulted ``defaults`` first would still
+            # agree with the other entry point on every single-rung fixture.
+            (
+                "default_model: gemini/gemini-2.5-pro\n"
+                "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n",
+                "gemini/gemini-2.5-pro",
+            ),
+            # defaults[mode] — the shape the shipped release config actually has.
+            (
+                "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n",
+                "openrouter/qwen/qwen3-next-80b",
+            ),
+            # defaults[mode] outranks defaults['test'] when both are present. Without
+            # this rung an inverted copy passes: every other fixture sets one key, so
+            # ``get(mode) or get("test")`` and ``get("test") or get(mode)`` agree.
+            (
+                "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n"
+                "  test: gemini/gemini-2.5-flash\n",
+                "openrouter/qwen/qwen3-next-80b",
+            ),
+            # defaults['test'] as the cross-mode fallback.
+            ("defaults:\n  test: gemini/gemini-2.5-flash\n", "gemini/gemini-2.5-flash"),
+            # No usable entry at all — the hard floor.
+            ("defaults: {}\n", "gpt-4o-mini"),
+        ],
+    )
+    def test_both_entry_points_resolve_the_same_model(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml: str, expected: str
+    ) -> None:
+        from digigraph.model_config import effective_llm_settings, operator_default_model
+
+        self._fallback_env(monkeypatch, tmp_path, yaml)
+        monkeypatch.setenv("DIGI_LLM_MODE", "medium")
+        assert operator_default_model() == expected
+        assert effective_llm_settings()["model"] == expected
+
+    def test_both_entry_points_refuse_free_mode_without_a_pin(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``defaults.free`` is access policy, never a slug — so neither may invent one.
+
+        Pinned on both because a copy that answered here would hand the middleware a
+        model in a mode where the deployment has deliberately declined to name one.
+        """
+        from digigraph.model_config import effective_llm_settings, operator_default_model
+
+        self._fallback_env(monkeypatch, tmp_path, "defaults:\n  free: openrouter/some/model:free\n")
+        monkeypatch.setenv("DIGI_LLM_MODE", "free")
+        with pytest.raises(ValueError):
+            operator_default_model()
+        with pytest.raises(ValueError):
+            effective_llm_settings()

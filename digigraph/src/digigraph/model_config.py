@@ -667,6 +667,29 @@ def _apply_byok_model_override(resolved: str) -> str:
     return byok_routable_model(provider, user_model)
 
 
+def _fallback_model_for_mode(mode: str) -> tuple[str, str]:
+    """Resolve the deployment default when no explicit operator pin is configured.
+
+    Returns ``(model, source_label)``. Extracted because two callers need the same
+    ladder and a credential-adjacent rule must not exist in two copies:
+    :func:`effective_llm_settings` (which also reports ``provider`` / ``api_key_env`` /
+    ``source``, so it cannot just call :func:`operator_default_model`) and
+    :func:`operator_default_model` itself, whose answer the BYOK middleware uses to
+    decide whether the deployment default would bill someone other than the caller.
+
+    Raises :class:`ValueError` in ``llm_mode: free``, where an explicit pin is
+    mandatory — ``defaults.free`` is access policy, never a product slug.
+    """
+    if mode == "free":
+        raise ValueError(_FREE_MODE_MODEL_REQUIRED)
+    data = _load_model_modes()
+    if data.default_model:
+        return str(data.default_model), "model_modes.default_model"
+    # ``free`` is policy-only — never read a product slug from defaults.free.
+    resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
+    return resolved, ("model_modes" if data.defaults else "default")
+
+
 def effective_llm_settings() -> dict[str, object]:
     """Return effective LLM settings for CLI / diagnostics (never includes secret values).
 
@@ -690,17 +713,8 @@ def effective_llm_settings() -> dict[str, object]:
                     source = "env"
             except (ImportError, OSError, AttributeError, TypeError, ValueError):
                 source = "env"
-    elif mode == "free":
-        raise ValueError(_FREE_MODE_MODEL_REQUIRED)
     else:
-        data = _load_model_modes()
-        if data.default_model:
-            resolved = str(data.default_model)
-            source = "model_modes.default_model"
-        else:
-            # ``free`` is policy-only — never read a product slug from defaults.free.
-            resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
-            source = "model_modes" if data.defaults else "default"
+        resolved, source = _fallback_model_for_mode(mode)
         if "/" in resolved:
             provider = resolved.split("/", 1)[0]
         else:
@@ -743,14 +757,7 @@ def operator_default_model() -> str:
     provider, model, _api_key_env = _explicit_llm_config()
     resolved = _resolve_explicit_model(provider, model)
     if resolved is None:
-        if mode == "free":
-            raise ValueError(_FREE_MODE_MODEL_REQUIRED)
-        data = _load_model_modes()
-        if data.default_model:
-            resolved = str(data.default_model)
-        else:
-            # Never consult defaults.free — free is access policy, not a model pin.
-            resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
+        resolved, _source = _fallback_model_for_mode(mode)
     return _refuse_paid_in_free_mode(resolved, mode)
 
 
