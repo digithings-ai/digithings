@@ -40,7 +40,15 @@ pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
 
-WORKFLOWS = sorted(p for p in WORKFLOW_DIR.glob("*.yml"))
+# Both suffixes: GitHub reads either, so a `.yaml` workflow is not exempt from the
+# invariant just because the repo happens to spell most of them `.yml`.
+WORKFLOWS = sorted(p for p in WORKFLOW_DIR.iterdir() if p.suffix in {".yml", ".yaml"})
+
+# A `${{ }}` in a concurrency group does NOT imply the group varies per run. `github.ref`
+# is the constant `refs/heads/main` for every push to main, and
+# `github.event.pull_request.number` is constant for the life of a PR — both queue exactly
+# like a literal. Only the run's own identity is genuinely distinct every time.
+PER_RUN_TOKENS = ("github.run_id", "github.run_number", "github.run_attempt", "github.sha")
 
 
 def _gated_jobs(workflow: dict) -> dict[str, dict]:
@@ -106,8 +114,8 @@ def test_an_environment_gated_job_does_not_queue(path: Path) -> None:
         )
 
         group = str(concurrency.get("group", ""))
-        if "${{" in group:
-            continue  # varies per run, so nothing queues in the first place
+        if any(token in group for token in PER_RUN_TOKENS):
+            continue  # genuinely distinct per run, so nothing ever queues behind it
 
         assert concurrency.get("cancel-in-progress") is True, (
             f"{where} is gated on environment {job['environment']!r} and shares the static "
