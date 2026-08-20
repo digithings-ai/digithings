@@ -810,9 +810,9 @@ class TestByokSurvivesIntoTheStreamingWorker:
     """
 
     def _run(self, monkeypatch, provider: str, model: str) -> dict:
-        import digigraph.server as srv
         from fastapi.testclient import TestClient
 
+        from digigraph import server as srv
         from tests.digi_test_jwt import auth_headers
 
         seen: dict = {}
@@ -863,9 +863,9 @@ class TestByokSurvivesIntoTheStreamingWorker:
 
     def test_no_byok_header_leaves_the_worker_unbound(self, monkeypatch) -> None:
         """Copying the context must not invent a binding where the caller sent none."""
-        import digigraph.server as srv
         from fastapi.testclient import TestClient
 
+        from digigraph import server as srv
         from tests.digi_test_jwt import auth_headers
 
         seen: dict = {}
