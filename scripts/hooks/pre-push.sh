@@ -4,8 +4,15 @@
 #   • pushes to `main` without ALLOW_MAIN_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
 #
-# Installed by `make hooks-install`. Bypass with `git push --no-verify` only
-# in genuine emergencies (the commit message should say so).
+# Installed by `make hooks-install` (and by `make agents-init`), which installs
+# this file **as committed on origin/develop**, not your working copy — one hook
+# is shared by every linked worktree, so installing a task branch's copy would
+# change the policy for all of them. When editing this hook, install your
+# uncommitted version with `HOOKS_REF=WORKTREE make hooks-install` — an
+# override that any later default install, from any worktree, replaces.
+#
+# Bypass with `git push --no-verify` only in genuine emergencies (the commit
+# message should say so).
 
 set -euo pipefail
 

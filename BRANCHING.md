@@ -101,7 +101,14 @@ new contributor:
 
 1. Edit `scripts/hooks/pre-push.sh` and add the handle to `CONTRIBUTOR_HANDLES`
    (pipe-separated: `chrizefan|alice|bob`).
-2. Re-run `make hooks-install` in every developer's clone so the new regex lands.
+2. Install your *uncommitted* edit to test it: `HOOKS_REF=WORKTREE make hooks-install`.
+   A plain `make hooks-install` installs the copy committed on `origin/develop`,
+   so on its own it would not pick your edit up. The override is not durable:
+   every worktree shares this one hook file, so the next plain `make
+   hooks-install` — or any `make agents-init`, in any worktree — puts
+   `origin/develop`'s copy back. Re-run the `HOOKS_REF=WORKTREE` command if so.
+3. Merge to `develop`. Other clones pick the new regex up on their next
+   `git fetch` followed by `make hooks-install` (or any `make agents-init`).
 
 There is no server-side counterpart to update. `scripts/github-ruleset.json`,
 which this section used to point at, does not exist in the repo, and `origin`
