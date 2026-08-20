@@ -621,6 +621,9 @@ describe("POST /api/chat", () => {
       expect(call?.upstreamHeaders["X-BYOK-Provider"]).toBe("openrouter");
       expect(call?.upstreamHeaders["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
       expect(call?.upstreamHeaders["X-Digichat-Tenant"]).toBe(mockAuthCtx.tenantSlug);
+      // `route.ts:241-242` emits both spellings, and the short one is the only one
+      // digigraph actually consumes (`corpus_routing.py:39`) — so assert it too.
+      expect(call?.upstreamHeaders["X-Digi-Tenant"]).toBe(mockAuthCtx.tenantSlug);
       expect(call?.digigraphBaseUrl).toBe("http://127.0.0.1:8000");
       // No embed config on an authenticated request, so the adapter gets the default.
       expect(call?.activityDetail).toBe("full");
