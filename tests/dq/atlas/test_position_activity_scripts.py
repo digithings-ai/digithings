@@ -105,28 +105,42 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
     books EXIT and every add books OPEN, into rows migration 069 makes append-only.
 
     Asserted over the AST rather than by matching source text, so a reordered argument list is
-    still covered. Every literal-argv `subprocess.run` in the file is classified, and the
-    partition must be exhaustive: a new call site naming neither known script fails as
-    unclassified rather than escaping a substring match, and hoisting an argv out of a literal
-    list fails the count. The dry-run prints are asserted alongside the real calls, because the
-    printed command is what an operator reads before trusting a repair run. Deleting the flag
-    from every call site at once is the cutover; this test is what makes that deliberate rather
-    than incidental.
+    still covered. Every `subprocess.run` in the file is accounted for, and the partition must be
+    exhaustive: a new call site naming neither known script fails as unclassified rather than
+    escaping a substring match, and one whose argv is not a literal list — hoisted into a
+    variable, or handed over as `args=` — fails as opaque rather than going unseen. The dry-run
+    prints are asserted alongside the real calls, because the printed command is what an operator
+    reads before trusting a repair run. Deleting the flag from every call site at once is the
+    cutover; this test is what makes that deliberate rather than incidental.
     """
     source = (_SCRIPT_DIR / "backfill_position_events.py").read_text()
     tree = ast.parse(source)
 
     call_sites: list[list[str]] = []
+    opaque: list[str] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Call) or not node.args:
+        if not isinstance(node, ast.Call):
             continue
         func = node.func
         if not (isinstance(func, ast.Attribute) and func.attr == "run"):
             continue
-        argv = node.args[0]
-        if not isinstance(argv, ast.List):
-            continue
-        call_sites.append([ast.unparse(element) for element in argv.elts])
+        # argv can arrive positionally or as `args=`; read whichever this call site used, so the
+        # keyword form is not a way past the classification below.
+        argv: ast.expr | None = node.args[0] if node.args else None
+        if argv is None:
+            argv = next((kw.value for kw in node.keywords if kw.arg == "args"), None)
+        if isinstance(argv, ast.List):
+            call_sites.append([ast.unparse(element) for element in argv.elts])
+        else:
+            opaque.append(ast.unparse(node))
+
+    # A hoisted argv (`cmd = [...]; subprocess.run(cmd)`) carries no flags this walk can read.
+    # Skipping it would leave the literal-invocation count below still satisfied while a third
+    # door onto execute_at_open.py stood open with no flag on it, so it fails here instead.
+    assert not opaque, (
+        f"subprocess call site(s) with a non-literal argv: {opaque}; a hoisted argv hides its "
+        "flags from this test — inline the list, or teach the test to follow the variable"
+    )
 
     # Classify every call site rather than filtering for the ones we expect. A third door onto
     # `execute_at_open.py` opened under a different variable name would satisfy a substring
