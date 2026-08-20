@@ -69,7 +69,7 @@ def test_success_routes_through_digillm_and_passes(vp: Any) -> None:
     assert request["model"] == vp._CONNECTIVITY_PING_MODEL
     assert request["messages"] == [{"role": "user", "content": "Reply with the single word: ok"}]
     assert request["temperature"] == 0
-    assert request["max_tokens"] == 5
+    assert "max_tokens" not in request
 
 
 def test_empty_completion_fails_after_digillm_self_heal(vp: Any) -> None:
