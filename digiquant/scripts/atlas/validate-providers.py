@@ -121,8 +121,9 @@ def check_env_vars() -> bool:
 # response_format/tools requests) even when routed through digillm. Every real Olympus phase
 # already routes on a PINNED model (RUNBOOK.md "OpenRouter model tiers" — never bare auto),
 # and the daily-failure pattern since 2026-08-11 (#1633) was this exact bare ping hard-failing
-# preflight while the digillm-routed checks below (3/3b/4, which DO exercise openrouter/auto
-# but deliberately, with response_format/tools present) passed cleanly.
+# preflight while check 3 below — the only other check that deliberately exercises
+# openrouter/auto, but with a structured-output request that DOES trigger require_parameters —
+# passed cleanly. (3b and 4 route to pinned models, not auto, and are unaffected either way.)
 #
 # Fix: route through digillm's completion() (same self-heal every real call gets) AND pin the
 # ping to a known-good open-weight model instead of the flaky bare auto-router.
@@ -143,22 +144,20 @@ def check_env_vars() -> bool:
 #
 # A first fix pinned ``max_tokens=64`` (~2.5x headroom over an initial 21-24-completion-token
 # sample). That was still a guess at a "safe" finite ceiling against a fundamentally variable
-# quantity: a follow-up CI run (#2517 PR) burned all 4 of digillm's empty-completion retries on
-# this exact model before finally landing under 64 tokens on the 5th attempt — passing, but only
-# by luck of eventually getting routed to a shorter reasoning trace, which is exactly the
-# retry-dependent behavior this fix is supposed to eliminate. A wider live sample (30+ calls
-# against the same providers, temperature=0) never exceeded 24 completion tokens even when given
-# up to 2000 to work with, so the CI failure was a genuine tail event, not a typical one — but
-# guessing a bigger "safe" number just moves the tail, it doesn't remove it.
+# quantity: a wider live sample (30+ calls against the same providers, temperature=0) never
+# exceeded 24 completion tokens even when given up to 2000 to work with, so 64 wasn't "not
+# enough headroom" so much as an arbitrary bet against a provider-controlled quantity — any
+# finite number just moves the tail, it doesn't remove it.
 #
 # Root-cause fix: don't cap it. Every real Olympus phase call already runs with
-# ``max_tokens=None`` (see ``research_agent.py``) and has never shown this failure mode — the
-# bug was never "these providers need N tokens," it was "an artificial ceiling exists at all" on
-# a call whose length is provider-controlled, not caller-controlled. ``completion()`` genuinely
-# omits ``max_tokens`` from the wire request when ``None`` (not sent as literal null), so the
-# provider's own stop condition governs — confirmed clean (``finish_reason: "stop"``) across 10/10
-# live samples with no cap. Retries remain as a backstop for real transience, not as the
-# mechanism this check depends on to pass.
+# ``max_tokens=None`` (see ``digigraph/src/digigraph/graph/research_agent.py::run_research_agent``,
+# the same completion path ``check_openrouter_structured`` above calls) and has never shown this
+# failure mode — the bug was never "these providers need N tokens," it was "an artificial
+# ceiling exists at all" on a call whose length is provider-controlled, not caller-controlled.
+# ``completion()`` genuinely omits ``max_tokens`` from the wire request when ``None`` (not sent
+# as literal null), so the provider's own stop condition governs — confirmed clean
+# (``finish_reason: "stop"``) across 10/10 live samples with no cap. Retries remain as a
+# backstop for real transience, not as the mechanism this check depends on to pass.
 _CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
 
 
