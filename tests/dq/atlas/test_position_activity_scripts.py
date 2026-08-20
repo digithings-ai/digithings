@@ -104,9 +104,13 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
     `positions` book while residuals come only from the lot table, so every trim of a held name
     books EXIT and every add books OPEN, into rows migration 069 makes append-only.
 
-    Asserted over the AST rather than by matching source text, so a reordered argument list or a
-    third invocation added later is still covered. Deleting the flag from both call sites at once
-    is the cutover; this test is what makes that deliberate rather than incidental.
+    Asserted over the AST rather than by matching source text, so a reordered argument list is
+    still covered. The walk only sees argv written as a literal list, so the count is pinned too:
+    hoisting a command into a variable, or adding a third call site, fails here rather than
+    silently escaping the check. The dry-run prints are asserted alongside the real calls, because
+    the printed command is what an operator reads before trusting a repair run. Deleting the flag
+    from both call sites at once is the cutover; this test is what makes that deliberate rather
+    than incidental.
     """
     source = (_SCRIPT_DIR / "backfill_position_events.py").read_text()
     tree = ast.parse(source)
@@ -125,7 +129,29 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
         if any("exe_script" in element for element in rendered):
             invocations.append(rendered)
 
-    assert invocations, "found no subprocess.run(execute_at_open) call to check"
+    assert len(invocations) == 2, (
+        f"expected 2 literal-argv execute_at_open invocations, found {len(invocations)}; "
+        "a call site was added, removed, or hoisted out of a literal list"
+    )
     for argv in invocations:
         assert "'--no-ledger'" in argv, f"invocation missing --no-ledger: {argv}"
         assert "'--require-ledger'" not in argv, f"invocation must not require the ledger: {argv}"
+
+    # The dry-run branch prints the command instead of running it, so it escapes the walk above.
+    # An operator reads that line to decide whether the real run is safe; if it drifts from the
+    # command actually issued, the dry run is worse than no output at all.
+    previews = [
+        ast.unparse(node.args[0])
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "print"
+        and node.args
+        and "exe_script" in ast.unparse(node.args[0])
+    ]
+
+    assert len(previews) == 2, (
+        f"expected 2 dry-run previews of execute_at_open, found {len(previews)}"
+    )
+    for preview in previews:
+        assert "--no-ledger" in preview, f"dry-run preview missing --no-ledger: {preview}"
