@@ -458,8 +458,8 @@ def _install_git_hooks() -> None:
     the policy in scripts/hooks/. The installer is shared with `make
     hooks-install` rather than reimplemented here, because this ran on every
     `make agents-init` and quietly copied whatever branch the working tree had
-    checked out — into a hooks dir that every linked worktree shares. Three
-    different versions of the hook were found installed that way.
+    checked out — into a hooks dir that every linked worktree shares, so the
+    worktree that ran it last set the hook policy for all of them.
 
     Deliberately non-fatal: this is a side effect of a generator, and a clone
     that cannot reach origin/develop should still be able to regenerate the

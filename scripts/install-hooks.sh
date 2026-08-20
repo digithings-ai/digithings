@@ -10,9 +10,11 @@
 #
 #   2. Because that one installed hook is shared by every worktree, installing
 #      whatever the *working tree* happens to have checked out lets a session
-#      parked on a task branch silently downgrade the hook for all of them.
-#      Three different versions were found live at once this way. So the source
-#      defaults to a known-good ref rather than to the working tree.
+#      parked on a task branch silently downgrade the hook for all of them:
+#      whichever worktree installed last set the policy for every other one.
+#      Four different candidate versions of this file were sitting across the
+#      worktrees when that was found. So the source defaults to a known-good ref
+#      rather than to the working tree.
 #
 # Override with HOOKS_REF=<ref>, or HOOKS_REF=WORKTREE to install the
 # uncommitted local copy when you are developing the hook itself.
