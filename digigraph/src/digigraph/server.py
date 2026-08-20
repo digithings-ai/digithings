@@ -118,8 +118,13 @@ def _byok_default_routes_elsewhere(provider: str) -> bool:
     raises in ``llm_mode: free`` without an explicit pin, and this middleware is not the
     place to convert a *server* misconfiguration into a 400 blaming the caller's key —
     the request proceeds and fails where it actually breaks. The billing invariant is
-    not weakened by that: ``_apply_byok_model_override`` re-derives the same verdict at
-    the resolver, on the same string, and refuses there.
+    not weakened by that: ``_apply_byok_model_override`` re-derives the verdict at the
+    resolver and refuses there. It judges the model *it* is about to return, which is
+    only sometimes the string judged here — ``get_model_for_mode`` hands it
+    ``operator_default_model()``, but ``get_model_for_phase`` hands it a ``phase_models``
+    override or an ``olympus_models.yaml`` capability model, neither of which this
+    middleware ever sees. That is the stronger guarantee, not a weaker one: the refusal
+    lands on whatever the request would actually have been billed for.
     """
     from digigraph.llm_auth import byok_operator_model_routes_elsewhere
     from digigraph.model_config import operator_default_model

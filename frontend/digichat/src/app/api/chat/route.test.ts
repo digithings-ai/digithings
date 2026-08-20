@@ -23,6 +23,10 @@ vi.mock("@/lib/adapters/foundry/stream", () => ({
   createFoundryStreamResponse: vi.fn(async () => new Response("foundry", { status: 200 })),
 }));
 
+vi.mock("@/lib/adapters/digithings/stream", () => ({
+  createDigigraphTraceStreamResponse: vi.fn(async () => new Response("trace", { status: 200 })),
+}));
+
 vi.mock("@/lib/digigraph-upstream", () => ({
   resolveDigigraphUpstreamAuth: vi.fn(),
   DigigraphUpstreamAuthError: class DigigraphUpstreamAuthError extends Error {},
@@ -66,6 +70,7 @@ import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { resolveDigigraphUpstreamAuth } from "@/lib/digigraph-upstream";
 import { createFoundryStreamResponse } from "@/lib/adapters/foundry/stream";
+import { createDigigraphTraceStreamResponse } from "@/lib/adapters/digithings/stream";
 import { resetEmbedTrialQuotaForTests } from "@/lib/embed-turn-quota";
 import { EMBED_FREE_TURN_LIMIT } from "@/lib/embed-turn-limits";
 import { streamText } from "ai";
@@ -85,6 +90,7 @@ describe("POST /api/chat", () => {
     vi.mocked(checkEmbedIpRateLimit).mockReturnValue({ allowed: true, retryAfterSec: 0 });
     resetEmbedTrialQuotaForTests();
     vi.mocked(createFoundryStreamResponse).mockClear();
+    vi.mocked(createDigigraphTraceStreamResponse).mockClear();
   });
 
   afterEach(() => {
@@ -572,6 +578,60 @@ describe("POST /api/chat", () => {
       } finally {
         spy.mockReturnValue("127.0.0.1");
       }
+    });
+  });
+  describe("trace stream (the production default)", () => {
+    // Every other test in this file pins DIGICHAT_TRACE_UI="0", which routes through
+    // `streamText`. Production does the opposite: the flag is unset, so `useTraceStream`
+    // is true and the request goes to `createDigigraphTraceStreamResponse` instead. The
+    // header assertions above therefore only ever observed the *fallback* branch — the
+    // branch production actually takes was uncovered, mock included.
+    beforeEach(() => {
+      delete process.env.DIGICHAT_TRACE_UI;
+    });
+
+    function chatReq(headers: Record<string, string> = {}): Request {
+      return new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      });
+    }
+
+    it("takes the trace adapter, not streamText, when nothing opts out", async () => {
+      vi.mocked(streamText).mockClear();
+      const res = await POST(chatReq());
+      expect(res.status).toBe(200);
+      expect(createDigigraphTraceStreamResponse).toHaveBeenCalledTimes(1);
+      expect(streamText).not.toHaveBeenCalled();
+    });
+
+    it("forwards tenant and BYOK upstream headers to the trace adapter", async () => {
+      await POST(
+        chatReq({
+          "x-byok-key": "sk-or-v1-test",
+          "x-byok-provider": "openrouter",
+          "x-byok-model": "openai/gpt-4o-mini",
+        })
+      );
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0];
+      expect(call?.upstreamHeaders["X-BYOK-Key"]).toBe("sk-or-v1-test");
+      expect(call?.upstreamHeaders["X-BYOK-Provider"]).toBe("openrouter");
+      expect(call?.upstreamHeaders["X-BYOK-Model"]).toBe("openai/gpt-4o-mini");
+      expect(call?.upstreamHeaders["X-Digichat-Tenant"]).toBe(mockAuthCtx.tenantSlug);
+      expect(call?.digigraphBaseUrl).toBe("http://127.0.0.1:8000");
+      // No embed config on an authenticated request, so the adapter gets the default.
+      expect(call?.activityDetail).toBe("full");
+    });
+
+    it("falls back to streamText when the caller sends x-digichat-trace: 0", async () => {
+      vi.mocked(streamText).mockClear();
+      const res = await POST(chatReq({ "x-digichat-trace": "0" }));
+      expect(res.status).toBe(200);
+      expect(createDigigraphTraceStreamResponse).not.toHaveBeenCalled();
+      expect(streamText).toHaveBeenCalledTimes(1);
     });
   });
 });
