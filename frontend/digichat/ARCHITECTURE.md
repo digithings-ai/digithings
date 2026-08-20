@@ -444,6 +444,16 @@ the visitor activates a validated key, the failed turn is retried with existing
 Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
 Provider list is defined by `config/byok-providers.json`.
 
+A non-2xx digigraph reply is **not** relayed to an embed visitor: the body is
+logged server-side and the stream carries a generic "unavailable right now",
+because a 500 body can hold stack traces, internal hostnames and prompt echoes.
+The one exception is a refusal the visitor can act on — `relayableUpstreamCode`
+in `lib/adapters/digithings/stream.ts` passes through the *code* alone, and only
+for codes in `BYOK_MODEL_REMEDIABLE_CODES`, so the BYOK sequence opens instead
+of the turn dead-ending. The upstream `message` is never relayed on that path:
+digigraph's text for `byok_default_model_provider_mismatch` reflects the
+caller's own `X-BYOK-Provider` header back at them.
+
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 
 Visitor API keys are **session memory only** (`useBYOKKey` React state). The
