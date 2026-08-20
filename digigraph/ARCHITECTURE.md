@@ -106,7 +106,7 @@ The MCP server uses FastAPI's `TestClient` internally for `chat` and `thread_sta
 
 When `stream: true` in `POST /v1/chat/completions`:
 
-1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:245`). The target is wrapped in `contextvars.copy_context().run(...)` taken at spawn, because a bare `Thread` starts with an **empty** context: without the copy every per-request `ContextVar` — including all three BYOK bindings `push_byok_header` sets (`llm_auth.py`) — reads as its default inside the worker, so a streaming BYOK request was answered on the operator's key and the operator's model while the user's key was shown as active. The copy is taken in the generator frame, which still holds the bindings; the worker has no `Request` to re-read them from. (Distinct from the `ThreadPoolExecutor` note in §4.0 — same root cause, different subsystem, and Olympus passes labels explicitly instead.)
+1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:300`). The target is wrapped in `contextvars.copy_context().run(...)` taken at spawn, because a bare `Thread` starts with an **empty** context: without the copy every per-request `ContextVar` — including all three BYOK bindings `push_byok_header` sets (`llm_auth.py`) — reads as its default inside the worker, so a streaming BYOK request was answered on the operator's key and the operator's model while the user's key was shown as active. The copy is taken in the generator frame, which still holds the bindings; the worker has no `Request` to re-read them from. Because the copy outlives the request — the thread is neither daemonic nor joined, and `byok_header_context`'s `finally` runs `pop_byok` as soon as streaming starts, resetting the *parent's* vars only — the worker calls `clear_byok_bindings()` in its own `finally`, so the user's key does not stay resident in a context copy after the request it came from is gone. (Distinct from the `ThreadPoolExecutor` note in §4.0 — same root cause, different subsystem, and Olympus passes labels explicitly instead.)
 2. The HTTP response is a `StreamingResponse` whose generator consumes the queue and yields SSE chunks.
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
@@ -119,7 +119,7 @@ When `stream: true` in `POST /v1/chat/completions`:
      (with `stream_deltas`, content deltas were already emitted; without streaming,
      `round_boundary` is the only callback that exposes that narration).
    - `done` — terminates the generator loop
-4. If the client disconnects mid-stream, the generator raises an exception; the background thread continues running until it completes naturally. There is no cancellation token or thread interrupt mechanism — see Section 6 (Security Analysis).
+4. If the client disconnects mid-stream, the generator sets the `threading.Event` it passed the worker (`server.py`, on both `GeneratorExit` and the generator's `finally`). The worker polls it between graph nodes (`workflow.py:441`), so overshoot is bounded by one node — not zero, since there is still no interrupt injected into a node already in flight. See §6.6.
 
 ---
 
@@ -133,7 +133,7 @@ telemetry buffer for an Olympus process. `digillm` contributes terminal model/se
 document_key)` labels model/search calls, while the tool wrapper also passes display labels
 explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers
 on its own. That is a property of the pool, not of Olympus: the two pools on the *credential*
-path (§6.2, `planning/executor.py` and `digillm.run_tools`) submit through
+path (§8.4, `planning/executor.py` and `digillm.run_tools`) submit through
 `contextvars.copy_context().run(...)` instead, which is the alternative to threading the value
 through by hand. Olympus keeps the explicit labels — passing a display string is cheaper than
 a context copy and does not silently widen what a worker inherits.
@@ -627,7 +627,7 @@ degrades today.
 
 ### 6.6 Streaming Cancellation Gap
 
-When a client disconnects from an SSE stream, the background thread (`run_digigraph_workflow_streaming`) continues executing until it completes or errors. There is no cancellation mechanism — no `threading.Event`, no exception injection into the thread. Under high load, many orphaned workflow threads can accumulate, each holding LLM connections and potentially making outbound HTTP calls to digisearch and digiquant. The `Queue.get()` in `_stream_completions_progressive` will eventually raise a `GeneratorExit` exception (when the generator is garbage-collected), which surfaces as a logged exception in the generator but does not stop the background thread.
+When a client disconnects from an SSE stream, the background thread (`run_digigraph_workflow_streaming`) continues executing until it completes or errors. A cooperative `threading.Event` does bound this: the generator sets it on disconnect and the worker checks it between graph nodes (`workflow.py:441`). What is still missing is preemption — no exception is injected into a node already running, so a single long LLM call or tool round runs to completion after the client is gone. Under load, workflow threads can therefore still accumulate for up to one node each, each holding LLM connections and potentially making outbound HTTP calls to digisearch and digiquant. The `Queue.get()` in `_stream_completions_progressive` will eventually raise a `GeneratorExit` exception (when the generator is garbage-collected), which surfaces as a logged exception in the generator but does not stop the background thread.
 
 ### 6.7 Rate Limiter Trust Boundary
 
@@ -738,6 +738,8 @@ Search results from digisearch are written to `{run_data_dir}/{session_id}/datas
 When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor` inside `digillm.run_tools` (the `parallel_safe` set is computed from the registry in `llm_client.py` and passed through). Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
 
 Every submission — here and in `planning/executor.py`'s layer fan-out — goes through a **freshly copied context** (`contextvars.copy_context().run(...)`). A pool worker starts with an empty context, and these tools are the delegate agents: each one runs its *own* LLM completion, so without the copy a BYOK request spends the operator's key inside the fan-out while the user's is bound on the calling thread. Unlike the streaming worker in §3.3 this hop is on the non-streaming path too. The copy must be per submit: one shared `Context` cannot be entered by two threads at once and raises `RuntimeError: cannot enter context ... is already entered` in the second — `test_parallel_branch_carries_the_byok_override_into_each_worker` uses a `threading.Barrier` to force the overlap that makes that regression visible.
+
+A copy propagates *references*, so the same submission must **not** carry digillm's logical-call telemetry handle: all N workers would hold the one mutable `ProviderCallContextHandle` the caller holds and race its `last_call_id` and deferred-record list. Both fan-out sites therefore call `digillm.detach_provider_call_context()` inside the worker before doing any work — propagate credentials, not the mutable handle — which restores exactly what a worker inheriting an empty context saw. The single-step path in `planning/executor.py` deliberately skips that wrapper: it runs in the caller's own context rather than a copy of it, so it keeps the handle it was given.
 
 ### 8.5 SSE Streaming for Time-to-First-Token
 

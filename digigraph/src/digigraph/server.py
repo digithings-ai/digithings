@@ -139,6 +139,11 @@ async def byok_header_context(request: Request, call_next):
     The key is bound to a ContextVar for the duration of the request only.
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
+
+    "Duration of the request" is bounded by ``pop_byok`` below for everything that
+    runs in the request task. A streaming response outlives that: its worker thread
+    holds a *copy* of this context, which ``pop_byok`` cannot reach, and clears its
+    own copy in its ``finally`` instead (see ``_stream_completions_progressive``).
     """
     from digigraph.llm_auth import (
         BYOK_DEFAULT_MODEL_MISMATCH_CODE,
@@ -771,6 +776,9 @@ def _stream_completions_progressive(
     if workflow_extras:
         wf_kw.update(workflow_extras)
     workflow_req = WorkflowRequest(**wf_kw)
+
+    from digigraph.llm_auth import clear_byok_bindings
+
     # Run the worker inside a copy of *this* frame's context. A bare Thread starts
     # with an empty context, so every ContextVar bound per-request -- above all the
     # three BYOK bindings pushed by ``push_byok_header`` (digigraph's key/provider and
@@ -780,11 +788,23 @@ def _stream_completions_progressive(
     # guard in ``byok_header_context`` refuses a whole request to protect. Copy at
     # spawn rather than re-binding inside the worker: this frame still holds the
     # bindings (measured), and the worker has no request to re-read them from.
+    #
+    # The copy outlives the request: this thread is neither daemonic nor joined, and
+    # ``byok_header_context``'s ``finally`` runs ``pop_byok`` as soon as the response
+    # starts streaming -- which resets the *parent's* vars only, a copy being a
+    # snapshot rather than a view. So the worker clears its own copy when it finishes,
+    # keeping the middleware's "for the duration of the request only" contract true of
+    # the process and not just of the request task. The residual window is the
+    # worker's own runtime, bounded by its ``cancel_event`` poll between nodes.
     ctx = contextvars.copy_context()
-    worker = Thread(
-        target=ctx.run,
-        args=(run_digigraph_workflow_streaming, workflow_req, event_queue, cancel_event),
-    )
+
+    def _run_worker() -> None:
+        try:
+            run_digigraph_workflow_streaming(workflow_req, event_queue, cancel_event)
+        finally:
+            clear_byok_bindings()
+
+    worker = Thread(target=ctx.run, args=(_run_worker,))
     worker.start()
 
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"

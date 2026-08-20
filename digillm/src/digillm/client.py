@@ -203,6 +203,19 @@ def get_byok() -> tuple[str, str] | None:
     return _byok_override.get()
 
 
+def clear_byok() -> None:
+    """Drop the BYOK override outright, without the token :func:`set_byok` returned.
+
+    :func:`reset_byok` needs that token, and the token only exists in the frame that
+    bound it. A worker thread running inside a *copy* of a request's context inherits
+    the binding but never the token, so this is how such a worker drops its own copy
+    when the work finishes -- see ``clear_byok_bindings`` in digigraph's ``llm_auth``.
+    Calling it in the binding frame instead would clear the value but strand the
+    parent's token, so prefer :func:`reset_byok` there.
+    """
+    _byok_override.set(None)
+
+
 @contextlib.contextmanager
 def proxy_key(token: str | None) -> Iterator[None]:
     """Context manager: set the proxy-key override for the duration of the block."""
@@ -304,7 +317,8 @@ def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
 # stripping one still has to leave one behind.
 #
 # Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
-# write the doubled ``openrouter/openrouter/auto`` (README, model_modes.yaml), but a BYOK
+# write the doubled ``openrouter/openrouter/auto`` (README, and the Atlas provider
+# diagnostics under ``digiquant/scripts/atlas/``; no tier config lists it), but a BYOK
 # caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
 # prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
 # the middleware and the resolver from disagreeing about a hostile header. So the single-
@@ -618,6 +632,24 @@ def provider_call_context(
         yield call_handle
     finally:
         _provider_call_metadata.reset(token)
+
+
+def detach_provider_call_context() -> None:
+    """Drop the inherited logical-call metadata in the *current* context, token-free.
+
+    For a thread running inside a :func:`contextvars.copy_context` snapshot taken to
+    carry a request's *credentials* across the boundary. A copy propagates references
+    rather than values, so the snapshot hands every fan-out worker the same mutable
+    :class:`ProviderCallContextHandle`: they all write its ``last_call_id`` (leaving a
+    follow-up call parented on whichever sibling happened to finish last) and all append
+    to the one deferred-record list that ``finalize`` tuples and clears. A worker that
+    inherited an empty context read ``None`` here, so this restores exactly that.
+
+    Nesting fan-out calls under their parent's logical call is a separate feature, and a
+    real one -- it needs a per-worker handle plus a merge at the join, not a shared
+    handle written concurrently.
+    """
+    _provider_call_metadata.set(None)
 
 
 @dataclass
@@ -2001,6 +2033,16 @@ def _stream_completion_one_turn(
     return content, tc_list
 
 
+def _execute_tool_in_fan_out(
+    execute_tool: Callable[[str, ToolArguments], str | dict[str, Any]],
+    name: str,
+    args: ToolArguments,
+) -> str | dict[str, Any]:
+    """Run one parallel tool call: credentials inherited, telemetry handle dropped."""
+    detach_provider_call_context()
+    return execute_tool(name, args)
+
+
 @_traceable("run_tools")
 def run_tools(
     model: str,
@@ -2225,9 +2267,16 @@ def run_tools(
             # an LLM would then bill the operator's key while the caller's was bound.
             # Copy per submit, never once for the batch: a single Context cannot be
             # entered concurrently and raises "is already entered" on the second thread.
+            #
+            # What the copy must NOT carry is the logical-call telemetry handle: a copy
+            # propagates references, so all N workers would share one mutable handle and
+            # race its ``last_call_id`` and deferred-record list. Hence the wrapper --
+            # propagate credentials, not the mutable telemetry handle.
             with ThreadPoolExecutor(max_workers=len(parsed)) as executor:
                 future_to_idx = {
-                    executor.submit(copy_context().run, execute_tool, name, args): i
+                    executor.submit(
+                        copy_context().run, _execute_tool_in_fan_out, execute_tool, name, args
+                    ): i
                     for i, (_, name, args) in enumerate(parsed)
                 }
                 for future in as_completed(future_to_idx):

@@ -90,6 +90,20 @@ def _run_step(
         return {"content": str(e)}
 
 
+def _run_step_in_fan_out(
+    execute_tool: Callable[[str, dict[str, Any]], str | dict[str, Any]],
+    agent: str,
+    args: dict[str, Any],
+) -> str | dict[str, Any]:
+    """Run one layer step in a pool worker: credentials inherited, telemetry handle dropped."""
+    # Local import so this module stays importable without the LLM stack, as it was
+    # before it had any reason to reach into digillm at all.
+    from digillm import detach_provider_call_context
+
+    detach_provider_call_context()
+    return _run_step(execute_tool, agent, args)
+
+
 def run_plan(
     steps: list[dict[str, Any]],
     execute_tool: Callable[[str, dict[str, Any]], str | dict[str, Any]],
@@ -111,9 +125,16 @@ def run_plan(
         # empty one, so a step that reaches an LLM (the delegate agents are exactly that)
         # would lose the per-request BYOK binding and spend the operator's key. A fresh
         # copy per submit -- one shared Context cannot be entered by two threads at once.
+        #
+        # A copy propagates references, so it would also hand every step in the layer the
+        # same mutable logical-call telemetry handle to race. Propagate credentials, not
+        # the handle -- hence ``_run_step_in_fan_out``, which the serial branch above
+        # deliberately does not use: it runs in this context, not a copy of it.
         with ThreadPoolExecutor(max_workers=len(resolved)) as executor:
             future_to_sid = {
-                executor.submit(copy_context().run, _run_step, execute_tool, agent, args): s["id"]
+                executor.submit(
+                    copy_context().run, _run_step_in_fan_out, execute_tool, agent, args
+                ): s["id"]
                 for s, agent, args in resolved
             }
             for future in as_completed(future_to_sid):

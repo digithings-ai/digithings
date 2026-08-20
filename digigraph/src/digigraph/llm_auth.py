@@ -32,6 +32,7 @@ from typing import Any, NamedTuple  # score:allow untyped any — Starlette Requ
 from urllib.parse import urlsplit
 
 from digillm import (
+    clear_byok,
     is_registered_provider,
     reset_byok,
     reset_proxy_key,
@@ -356,6 +357,25 @@ def pop_byok(token: _ByokToken) -> None:
         reset_byok(token.llm)
     _byok_model_override.reset(token.model)
     _byok_override.reset(token.dg)
+
+
+def clear_byok_bindings() -> None:
+    """Drop every BYOK binding in the *current* context, token-free.
+
+    For code that inherited the bindings through :func:`contextvars.copy_context`
+    rather than binding them itself: a copy carries the values but none of the reset
+    tokens, so :func:`pop_byok` cannot be used. The streaming worker in ``server.py``
+    calls this from its own ``finally`` -- its copy is taken while the request is
+    still open, and outlives the request's ``pop_byok``, so without this the user's
+    key stays resident in the worker's context until the thread ends. Clearing the
+    copy cannot disturb the request that spawned it; a copy is a snapshot, not a view.
+
+    Do not call this in the frame that ran :func:`push_byok_header`: it would blank
+    the values while stranding that frame's tokens. Use :func:`pop_byok` there.
+    """
+    clear_byok()
+    _byok_model_override.set(None)
+    _byok_override.set(None)
 
 
 def get_byok_override() -> tuple[str, str] | None:

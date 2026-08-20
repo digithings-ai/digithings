@@ -1163,6 +1163,85 @@ def test_parallel_branch_leaves_an_unbound_caller_unbound() -> None:
     assert seen == {"alpha": None, "beta": None}
 
 
+def test_parallel_branch_does_not_share_the_telemetry_handle() -> None:
+    """The copy carries credentials; it must not carry the mutable telemetry handle.
+
+    ``copy_context()`` propagates *references*, so a naive copy hands all N workers the
+    one :class:`ProviderCallContextHandle` the caller is holding -- and they all write
+    its ``last_call_id`` (leaving a later follow-up call parented on whichever sibling
+    finished last) and all append to the single deferred-record list that ``finalize``
+    tuples and clears. A worker that inherited an *empty* context read ``None`` here, so
+    ``None`` is the behaviour to hold: nesting fan-out calls under the parent's logical
+    call needs a per-worker handle and a join-time merge, which is a separate feature.
+
+    The barrier forces both workers to be in flight together, which is the only state in
+    which a shared handle is a race rather than merely wrong.
+    """
+    from uuid import uuid4
+
+    from digillm.telemetry import CallPurpose
+
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    barrier = threading.Barrier(2, timeout=10)
+    seen_metadata: dict[str, Any] = {}
+    seen_byok: dict[str, tuple[str, str] | None] = {}
+
+    def execute_tool(name: str, args: dict) -> dict:
+        barrier.wait()
+        seen_metadata[name] = client_mod._provider_call_metadata.get()
+        seen_byok[name] = digillm.get_byok()
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    token = digillm.set_byok("sk-caller", "https://openrouter.ai/api/v1")
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            with digillm.provider_call_context(
+                node_run_id=uuid4(),
+                purpose=CallPurpose.INITIAL_GENERATION,
+                no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+            ) as handle:
+                digillm.run_tools(
+                    "gpt-4o-mini",
+                    [{"role": "user", "content": "go"}],
+                    tools,
+                    execute_tool,
+                    parallel_safe_tools={"alpha", "beta"},
+                )
+                # The caller keeps its own binding: the workers cleared their copies of
+                # the context, and a copy is a snapshot rather than a view.
+                still_bound = client_mod._provider_call_metadata.get()
+    finally:
+        digillm.reset_byok(token)
+
+    assert seen_metadata == {"alpha": None, "beta": None}
+    # ... and dropping the handle must not have dropped the credentials with it.
+    expected = ("sk-caller", "https://openrouter.ai/api/v1")
+    assert seen_byok == {"alpha": expected, "beta": expected}
+    assert still_bound is not None and still_bound.handle is handle
+
+
 # ── Streaming tool-calling loop (stream_deltas=True) ──────────────────────────
 
 

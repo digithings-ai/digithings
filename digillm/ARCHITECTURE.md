@@ -35,7 +35,7 @@ from digillm import (
     chat_completion, chat_completion_with_tools, structured_completion,
     get_client_for_model, get_client, register_provider, resolve_model,
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
-    set_byok, reset_byok, get_byok, byok,                       # BYOK override
+    set_byok, reset_byok, get_byok, byok, clear_byok,           # BYOK override
     clear_caches,
 )
 ```
@@ -175,8 +175,9 @@ chat_completion(
   one prefix assumes a provider's model id never repeats the provider's own name.
   OpenRouter's auto-router breaks that: its id *is* `openrouter/auto`, so its
   litellm form carries the prefix twice (`openrouter/openrouter/auto` — the form
-  operators write in the README and `config/model_modes.yaml`) and stripping one
-  still has to leave one behind. Ids listed in the table are restored after the
+  operators write in the README and in the Atlas provider diagnostics under
+  `digiquant/scripts/atlas/`; no tier config lists it) and stripping one still has
+  to leave one behind. Ids listed in the table are restored after the
   split, so **both spellings reach the wire as `openrouter/auto`**.
 
   This matters for BYOK, which can only produce the single-prefix form:
@@ -212,12 +213,23 @@ Non-streaming loop. `parallel_safe_tools` replaces digigraph's import of
 tool calls in a round are in this set (and there is more than one), they run
 concurrently; otherwise calls run sequentially.
 
-Each concurrent call is submitted as `copy_context().run(execute_tool, ...)`. A pool
-worker starts with an *empty* context, so an override bound by `set_byok` /
+Each concurrent call is submitted as `copy_context().run(_execute_tool_in_fan_out, ...)`.
+A pool worker starts with an *empty* context, so an override bound by `set_byok` /
 `set_proxy_key` reads as `None` inside a bare submit — and a parallel-safe tool that
 calls an LLM itself would then bill the wrong key. The copy is taken **per submit**:
 a single `Context` cannot be entered by two threads and raises `RuntimeError: cannot
 enter context ... is already entered` in the second.
+
+What the copy must *not* carry is the logical-call telemetry handle. A copy propagates
+references, not values, so a bare submit would hand all N workers the one mutable
+`ProviderCallContextHandle` the caller holds: each writes its `last_call_id` (leaving a
+later follow-up call parented on whichever sibling finished last) and each appends to
+the single deferred-record list that `finalize()` tuples and clears. So the wrapper
+calls `detach_provider_call_context()` first — **propagate credentials, not the mutable
+telemetry handle** — which is exactly what a worker inheriting an empty context saw, and
+what keeps the "context-local" half of the telemetry contract above true. Nesting
+fan-out calls under their parent's logical call is a separate feature needing a
+per-worker handle and a join-time merge.
 
 ### `structured_completion`
 
@@ -311,6 +323,8 @@ plain contextvar setters and reads them when building clients.
 |--------|----------|--------|
 | `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY`. |
 | `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` default path | Bring-your-own-key. Returns an **uncached** client (user creds must not accumulate in process memory) and **bypasses the response cache**. |
+| `clear_byok()` | same var, no token | Drops the override token-free — for a thread running inside a `copy_context()` snapshot, which inherits the binding but not the reset token. Use `reset_byok` in the frame that bound it; clearing there would strand that frame's token. |
+| `detach_provider_call_context()` | `_provider_call_metadata`, no token | Drops the inherited logical-call metadata — for a fan-out worker running inside a `copy_context()` snapshot, which would otherwise share the caller's *mutable* `ProviderCallContextHandle` with every sibling. Restores what a worker with an empty context saw. |
 
 digigraph's middleware will translate (today's code shown for reference):
 
