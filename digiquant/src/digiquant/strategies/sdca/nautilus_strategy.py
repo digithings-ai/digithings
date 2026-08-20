@@ -6,9 +6,12 @@ composite-risk index (produced upstream via ``compute_composite_risk()`` and
 and passed in by path, since neither a Polars DataFrame nor a ``RiskModel``
 can live in a frozen Nautilus ``StrategyConfig`` (msgspec struct). On each
 bar, the strategy looks up that day's risk, converts it to a trade rate via
-``AccumDistCurve.value_at_risk()``, and applies the exact buy/sell sizing
-loop from ``sdca/backtest.py::run_backtest`` so the two never diverge into
-separate sources of truth for the allocation decision.
+``AccumDistCurve.value_at_risk()``, and sizes the trade via
+``sdca/backtest.py::size_trade`` so the two never diverge into separate
+sources of truth for the allocation decision. Shadow ``_cash``/
+``_asset_units`` are updated from real ``OrderFilled`` events, not the
+pre-submission estimate, so they track Nautilus's actual (quantized)
+execution state.
 
 Usage:
     import polars as pl
@@ -35,10 +38,12 @@ from nautilus_trader.config import PositiveFloat, StrategyConfig
 from nautilus_trader.core.datetime import unix_nanos_to_dt
 from nautilus_trader.model.data import Bar, BarType
 from nautilus_trader.model.enums import OrderSide, TimeInForce
+from nautilus_trader.model.events import OrderFilled
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
 
+from digiquant.strategies.sdca.backtest import size_trade
 from digiquant.strategies.sdca.curve import DEFAULT_BTC_NODES, RISK_NODES, AccumDistCurve
 
 
@@ -73,9 +78,9 @@ class SdcaStrategyConfig(StrategyConfig, frozen=True):
 class SdcaStrategy(Strategy):
     """Drives the SDCA curve/composite-risk allocation decision bar-by-bar.
 
-    Reuses ``AccumDistCurve.value_at_risk()`` directly and mirrors the exact
-    buy/sell sizing loop in ``sdca/backtest.py::run_backtest`` so the
-    standalone parity harness and this live/backtest strategy never diverge.
+    Reuses ``AccumDistCurve.value_at_risk()`` and ``sdca/backtest.py::size_trade``
+    directly so the standalone parity harness and this live/backtest strategy
+    never diverge.
     """
 
     def __init__(self, config: SdcaStrategyConfig) -> None:
@@ -89,6 +94,12 @@ class SdcaStrategy(Strategy):
     def _load_risk_index(self) -> dict[date, float | None]:
         """Load the pre-computed risk parquet into a date -> risk map."""
         df = pl.read_parquet(self.config.risk_path)
+        missing = {"date", "risk"} - set(df.columns)
+        if missing:
+            raise ValueError(f"risk_path parquet is missing required columns: {sorted(missing)}")
+        dupes = df.filter(df["date"].is_duplicated())["date"].unique().sort().to_list()
+        if dupes:
+            raise ValueError(f"risk_path parquet has duplicate date(s): {dupes}")
         return dict(df.select(["date", "risk"]).iter_rows())
 
     # ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -113,20 +124,15 @@ class SdcaStrategy(Strategy):
             rate = max(rate, 0.0)
 
         close = bar.close.as_double()
+        buy_usd, sell_units = size_trade(rate, self._cash, self._asset_units)
 
         if rate > 0:
-            buy_usd = min(max(self._cash * rate / 100.0, 0.0), self._cash)
             if buy_usd <= 0:
                 return
-            self._cash -= buy_usd
-            self._asset_units += buy_usd / close
             self._submit_market(OrderSide.BUY, buy_usd / close)
         elif rate < 0:
-            sell_units = min(max(self._asset_units * (-rate) / 100.0, 0.0), self._asset_units)
             if sell_units <= 0:
                 return
-            self._cash += sell_units * close
-            self._asset_units -= sell_units
             self._submit_market(OrderSide.SELL, sell_units)
 
     def _submit_market(self, side: OrderSide, quantity: float) -> None:
@@ -142,6 +148,24 @@ class SdcaStrategy(Strategy):
             time_in_force=TimeInForce.GTC,
         )
         self.submit_order(order)
+
+    def on_order_filled(self, event: OrderFilled) -> None:
+        """Sync shadow cash/asset_units from a real fill (post-quantization).
+
+        ``on_bar()`` deliberately does not update ``_cash``/``_asset_units``
+        itself — ``_submit_market()`` quantizes the requested quantity to the
+        instrument's ``size_precision`` before submission, so the pre-submit
+        estimate can diverge from what actually fills. Using ``last_qty``/
+        ``last_px`` (not cumulative) keeps this correct across partial fills.
+        """
+        filled_units = event.last_qty.as_double()
+        filled_price = event.last_px.as_double()
+        if event.is_buy:
+            self._cash -= filled_units * filled_price
+            self._asset_units += filled_units
+        else:
+            self._cash += filled_units * filled_price
+            self._asset_units -= filled_units
 
     def on_stop(self) -> None:
         self.cancel_all_orders(self.config.instrument_id)

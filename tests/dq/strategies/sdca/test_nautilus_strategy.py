@@ -135,6 +135,44 @@ class TestSdcaStrategyInstantiation:
         index = strategy._load_risk_index()
         assert index[date(2020, 1, 1)] is None
 
+    def test_risk_index_rejects_duplicate_dates(self, instrument_id, bar_type, tmp_path) -> None:
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        one_date = date(2020, 1, 1)
+        df = pl.DataFrame(
+            {
+                "date": [one_date, one_date, date(2020, 1, 2)],
+                "risk": pl.Series([1.0, 2.0, 3.0], dtype=pl.Float64),
+            }
+        )
+        path = tmp_path / "risk_dupe.parquet"
+        df.write_parquet(path)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=str(path),
+        )
+        strategy = SdcaStrategy(cfg)
+        with pytest.raises(ValueError, match="duplicate"):
+            strategy._load_risk_index()
+
+    def test_risk_index_rejects_missing_columns(self, instrument_id, bar_type, tmp_path) -> None:
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        df = pl.DataFrame({"date": [date(2020, 1, 1)], "value": [1.0]})
+        path = tmp_path / "risk_bad_cols.parquet"
+        df.write_parquet(path)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=str(path),
+        )
+        strategy = SdcaStrategy(cfg)
+        with pytest.raises(ValueError, match="missing"):
+            strategy._load_risk_index()
+
     def test_initial_state_matches_config(self, instrument_id, bar_type, tmp_path) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 

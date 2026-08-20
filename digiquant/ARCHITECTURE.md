@@ -423,12 +423,17 @@ depend on NautilusTrader — it wraps the engine as `SdcaStrategyConfig`/
 `StrategyConfig` (msgspec struct), so the caller runs `compute_composite_risk()`
 and `valuation_z_score()` upstream, writes the resulting `date`/`risk` frame to
 a parquet, and passes its path in as `risk_path`. `on_start()` loads that
-parquet into a `date -> risk` map; `on_bar()` looks up the day's risk, converts
-it to a trade rate via `AccumDistCurve.value_at_risk()`, and applies the exact
-buy/sell sizing loop from `sdca/backtest.py::run_backtest()` (line-for-line,
-not reimplemented) so live/backtest and the standalone parity harness never
-diverge. `long_only=True` clamps the rate to `>= 0` regardless of the curve's
-own sign, as a safety override independent of which curve is configured.
+parquet into a `date -> risk` map (validating the `date`/`risk` columns are
+present and rejecting duplicate dates); `on_bar()` looks up the day's risk,
+converts it to a trade rate via `AccumDistCurve.value_at_risk()`, and sizes
+the trade via the shared `sdca/backtest.py::size_trade()` helper — both
+`run_backtest()` and `on_bar()` call this one function, so live/backtest and
+the standalone parity harness never diverge. `long_only=True` clamps the rate
+to `>= 0` regardless of the curve's own sign, as a safety override independent
+of which curve is configured. Shadow `_cash`/`_asset_units` are updated from
+real `OrderFilled` events (`on_order_filled()`), not the pre-submission
+estimate, so they track Nautilus's actual quantity-quantized execution state
+rather than drifting from it.
 Like `m2_liquidity`, **SDCA is not registered in `strategies/registry.py`** —
 `risk_path` has no sensible static default (it's produced by a specific
 upstream `RiskModel` run), so `SdcaStrategyConfig` must be instantiated
@@ -457,9 +462,9 @@ reference numbers in milliseconds, without a data fetch or Nautilus's actor/bar
 infrastructure — see the issue #1080 acceptance criteria (`pytest -m unit -k
 sdca`, parity fixture). Its `SdcaBacktestReport` must never be surfaced to
 users or dashboards as an actual backtest result. **`nautilus_strategy.py`
-(#1081) calls `AccumDistCurve.value_at_risk()` directly and mirrors
-`run_backtest()`'s buy/sell sizing loop rather than reimplementing it** — that
-is what keeps this module and the real Nautilus backtest from silently
+(#1081) calls `AccumDistCurve.value_at_risk()` and `size_trade()` directly
+rather than reimplementing them** — that is what keeps this module and the
+real Nautilus backtest from silently
 diverging into two sources of truth for the same allocation decision.
 `compute_composite_risk()`/`valuation_z_score()` are the caller's
 responsibility to invoke upstream of `SdcaStrategy` (to build the `risk_path`
