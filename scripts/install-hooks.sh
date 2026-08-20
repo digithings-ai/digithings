@@ -23,9 +23,48 @@ set -euo pipefail
 ref="${HOOKS_REF:-origin/develop}"
 src_path="scripts/hooks/pre-push.sh"
 
-cd "$(git rev-parse --show-toplevel)"
-hooks_dir="$(cd "$(git rev-parse --git-common-dir)" && pwd)/hooks"
-mkdir -p "$hooks_dir"
+# Check these explicitly. `set -e` does NOT help here: when rev-parse fails it
+# prints nothing, so `cd "$(git rev-parse ...)"` becomes `cd ""` — which succeeds
+# as a no-op and leaves you silently operating on $PWD. Outside a repo that put a
+# hook in ./hooks/, where git never looks, and still exited 0.
+if ! toplevel="$(git rev-parse --show-toplevel 2>/dev/null)" || [ -z "$toplevel" ]; then
+  echo "install-hooks: not inside a git work tree — nothing to install into." >&2
+  echo "  Run this from a clone (after 'git init' if you are scaffolding a new repo)." >&2
+  exit 1
+fi
+cd "$toplevel"
+
+# `--git-path hooks` rather than `--git-common-dir`/hooks: it is the form that
+# honours core.hooksPath, and it still resolves to the shared common dir from
+# inside a linked worktree — which is the whole point of this script.
+if ! hooks_path="$(git rev-parse --git-path hooks 2>/dev/null)" || [ -z "$hooks_path" ]; then
+  echo "install-hooks: could not resolve this repository's hooks directory." >&2
+  exit 1
+fi
+
+# Resolve the source *before* creating anything, so the run that correctly
+# refuses does not leave a stray hooks/ directory behind for `git add .` to find.
+if [ "$ref" = "WORKTREE" ]; then
+  if [ ! -f "$src_path" ]; then
+    echo "install-hooks: $src_path not found in the working tree." >&2
+    exit 1
+  fi
+  source_desc="working tree (uncommitted)"
+else
+  # Let git's own stderr through: it distinguishes a stale remote from a
+  # malformed ref from a ref that exists without this path, and swallowing it
+  # made every one of those read as "run git fetch".
+  if ! git cat-file -e "$ref:$src_path"; then
+    echo "install-hooks: cannot read $src_path at '$ref' (see git's message above)." >&2
+    echo "  If the ref is merely stale, 'git fetch origin' fixes it; to install the" >&2
+    echo "  local copy instead, set HOOKS_REF=WORKTREE." >&2
+    exit 1
+  fi
+  source_desc="$ref"
+fi
+
+mkdir -p "$hooks_path"
+hooks_dir="$(cd "$hooks_path" && pwd)"
 
 # Stage inside the destination dir so the final mv is atomic: a failed read or a
 # syntax error can never leave a truncated hook behind, and a hook that is
@@ -34,20 +73,9 @@ tmp="$(mktemp "$hooks_dir/.pre-push.XXXXXX")"
 trap 'rm -f "$tmp"' EXIT
 
 if [ "$ref" = "WORKTREE" ]; then
-  if [ ! -f "$src_path" ]; then
-    echo "install-hooks: $src_path not found in the working tree." >&2
-    exit 1
-  fi
   cat "$src_path" >"$tmp"
-  source_desc="working tree (uncommitted)"
 else
-  if ! git cat-file -e "$ref:$src_path" 2>/dev/null; then
-    echo "install-hooks: cannot read $src_path at '$ref'." >&2
-    echo "  Run 'git fetch origin' first, or set HOOKS_REF=WORKTREE to install the local copy." >&2
-    exit 1
-  fi
   git show "$ref:$src_path" >"$tmp"
-  source_desc="$ref"
 fi
 
 if ! bash -n "$tmp" 2>/dev/null; then
