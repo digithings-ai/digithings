@@ -350,3 +350,49 @@ def test_at_open_cannot_run_without_the_gate(workflow: dict) -> None:
     assert writer_checkout["with"]["ref"] == "main"
     run = next(step["run"] for step in clock["steps"] if step.get("id") == "clock")
     assert '>> "$GITHUB_OUTPUT"' in run, "the gate's decision never reaches the job output"
+
+
+# --------------------------------------------------------------------------- #
+# What the at-open job actually invokes (#2420, Task 2.4)
+# --------------------------------------------------------------------------- #
+
+
+def _at_open_command(workflow: dict) -> str:
+    """The shell line that runs the at-open writer, wherever in the job it sits.
+
+    Found by the script's own name rather than by step index or step name, so reordering
+    the job or renaming the step keeps the flag assertions below pointed at the right line.
+    """
+    steps = workflow["jobs"]["at-open"]["steps"]
+    runs = [str(step["run"]) for step in steps if "execute_at_open.py" in str(step.get("run", ""))]
+    assert len(runs) == 1, f"expected exactly one at-open invocation, found {len(runs)}"
+    return runs[0]
+
+
+def test_at_open_fills_the_prior_days_rebalance(workflow: dict) -> None:
+    """The decision is made after one close and filled at the next open.
+
+    Without ``--prior-trading-day-rebalance`` the script looks for a rebalance dated today,
+    finds none at 09:35, and books nothing — a silent no-op, not an error. The flag is the
+    only thing that points it at yesterday's approved targets.
+    """
+    assert "--prior-trading-day-rebalance" in _at_open_command(workflow)
+
+
+def test_at_open_does_not_yet_require_the_ledger(workflow: dict) -> None:
+    """Production's migration tail is 065; the ledger tables arrive with 069.
+
+    ``build_events_from_paper_fills`` is tried first and the kill switch defaults *on*, so
+    every morning this job probes tables prod does not have, catches the failure, and
+    reconstructs the day from prose instead. ``--require-ledger`` turns that decline into
+    exit 3 — correct after the cutover, and a daily red cron before it.
+
+    So this asserts the flag is *absent*, and adopting it is a deliberate edit that must
+    come with the evidence that prod has 069 and 070 applied. ``--no-ledger`` is pinned
+    absent for the opposite reason: it would freeze the prose path in place and the cutover
+    would never happen on its own. The invocation carries neither, which is what makes the
+    switch-over a property of the data rather than of this file.
+    """
+    command = _at_open_command(workflow)
+    assert "--require-ledger" not in command
+    assert "--no-ledger" not in command

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
+import pathlib
+import re
+from datetime import date, timedelta
 from uuid import UUID
 
 import pytest
@@ -20,6 +22,11 @@ from digiquant.olympus.hermes.writers.commit_io import (
     _canonical_thesis_ids,
     load_commit_manifests,
     resolve_prior_commit,
+)
+from digiquant.olympus.hermes.writers.ledger_io import (
+    _CLOSE_LOOKBACK_DAYS,
+    _CLOSE_TICKER_BATCH,
+    _last_closes,
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
@@ -778,3 +785,566 @@ class TestMemoUnaddressedHeldCarry:
         state.config.preferences["current_weights"] = {"DBO": 12.5, "SPY": 60.0}
         assert carried_held_tickers(state) == {"DBO"}, "non-held names must never be carried"
         assert _held_carry_weights(state) == {"DBO": 12.5}
+
+
+# ─── Authoritative commit chain (#2418, migration 069) ──────────────────────
+
+_COMMITS = "portfolio_ledger_commits"
+_INTENTS = "portfolio_ledger_decision_intents"
+_REQUESTED = "portfolio_ledger_requested_targets"
+_APPROVED = "portfolio_ledger_approved_targets"
+_ORDERS = "portfolio_ledger_order_intents"
+_EXECUTIONS = "portfolio_ledger_paper_executions"
+
+_LEDGER_TABLES = (_COMMITS, _INTENTS, _REQUESTED, _APPROVED, _ORDERS)
+
+
+def _ledger_client(**closes: float) -> FakeSupabaseClient:
+    """Fake client with a priceable close for each ticker the day before ``RUN_DATE``.
+
+    H9 converts a weight delta to a share count at the last close strictly before
+    ``run_date`` (the same window ``_interval_price_returns`` uses), so a ticker
+    with no row here is deliberately unpriceable.
+    """
+    prior = "2026-06-11"
+    return FakeSupabaseClient(
+        canned_reads={
+            "price_history": [
+                {"date": prior, "ticker": ticker, "close": close}
+                for ticker, close in closes.items()
+            ]
+        }
+    )
+
+
+def _mirror_ledger(client: FakeSupabaseClient) -> None:
+    """Make the rows a prior run wrote readable by the next run in the same test.
+
+    The fake reads from ``canned_reads`` and writes to ``store`` (see the ``delete``
+    docstring on ``_FakeQuery``), so a two-attempt supersession test has to bridge
+    them by hand.
+    """
+    for table in (*_LEDGER_TABLES, _EXECUTIONS):
+        client.canned_reads[table] = [dict(r) for r in client.store.get(table, [])]
+
+
+def _rows(client: FakeSupabaseClient, table: str) -> list[dict]:
+    return list(client.store.get(table, []))
+
+
+def _heads(rows: list[dict]) -> list[dict]:
+    """Rows nobody supersedes — the *current* rows.
+
+    ``supersedes_id IS NULL`` is the permanent chain **root**, not the head: the
+    ledger is append-only, so attempt 1's row keeps its NULL forever.
+    """
+    superseded = {r.get("supersedes_id") for r in rows if r.get("supersedes_id")}
+    return [r for r in rows if r["id"] not in superseded]
+
+
+def _assert_linear_chain(rows: list[dict], label: str) -> None:
+    """The DB invariants the fake cannot enforce, asserted directly.
+
+    ``FakeSupabaseClient`` has no partial unique indexes, no foreign keys and no
+    append-only trigger, so every supersession test would pass against it even with
+    the root/head confusion above. Assert the *shape* instead: exactly one root, no
+    two rows superseding the same row, and one linear root→head chain covering
+    every row.
+    """
+    roots = [r for r in rows if not r.get("supersedes_id")]
+    assert len(roots) == 1, f"{label}: expected exactly one root, got {len(roots)}"
+    links = [r["supersedes_id"] for r in rows if r.get("supersedes_id")]
+    assert len(links) == len(set(links)), f"{label}: two rows supersede the same row"
+    seen, cursor = 1, roots[0]["id"]
+    by_prior = {r["supersedes_id"]: r for r in rows if r.get("supersedes_id")}
+    while cursor in by_prior:
+        cursor = by_prior[cursor]["id"]
+        seen += 1
+    assert seen == len(rows), f"{label}: chain covers {seen} of {len(rows)} rows"
+
+
+class TestCommitChainLedger:
+    """Task 2.3 — H9 appends the authoritative commit chain (#2418)."""
+
+    def test_h9_appends_the_chain_for_every_final_ticker_and_cash(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        out = _run(client, _state())
+        assert not out.get("errors"), out.get("errors")
+
+        symbols = {r["symbol"] for r in _rows(client, _APPROVED)}
+        assert symbols == {"SPY", "CASH"}, "the cash residual must be queryable too"
+        assert len(_rows(client, _COMMITS)) == 1
+        assert {r["symbol"] for r in _rows(client, _INTENTS)} == {"SPY", "CASH"}
+        assert {r["symbol"] for r in _rows(client, _REQUESTED)} == {"SPY", "CASH"}
+
+        # CASH is a residual, never an order.
+        assert [r["symbol"] for r in _rows(client, _ORDERS)] == ["SPY"]
+        order = _rows(client, _ORDERS)[0]
+        assert order["status"] == "pending"
+        # nav 100 (seed), +100% of nav at a 100.0 close = 1 share.
+        assert float(order["quantity"]) == pytest.approx(1.0)
+
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest["ledger_commit_id"] == _rows(client, _COMMITS)[0]["id"]
+
+    def test_ledger_rows_are_inserted_never_upserted(self) -> None:
+        # service_role holds SELECT + INSERT only on the 069 tables, and the
+        # append-only trigger rejects UPDATE — an upsert would fail in production.
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        for table in _LEDGER_TABLES:
+            rows = _rows(client, table)
+            assert rows, f"{table} got no rows — the assertion below would be vacuous"
+            for row in rows:
+                assert "_on_conflict" not in row, f"{table} was written with upsert()"
+
+    def test_h9_is_the_only_ledger_writer(self) -> None:
+        import pathlib
+        import subprocess
+
+        root = pathlib.Path(__file__).resolve().parents[3]
+        # ``append_commit_chain(`` — with the paren — matches the definition and every
+        # call, but not a prose cross-reference in another module's docstring. Task 2.4's
+        # ``execution_io`` legitimately names this function when explaining why its
+        # supersession ids must be deterministic; that is documentation, not a second
+        # commit authority, and a bare-name grep cannot tell the two apart.
+        hits = subprocess.run(
+            ["grep", "-rln", "append_commit_chain(", "--include=*.py", "digiquant/src"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+        ).stdout.split()
+        assert sorted(hits) == [
+            "digiquant/src/digiquant/olympus/hermes/phases/h9_commit_run.py",
+            "digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py",
+        ], f"a second commit authority appeared: {hits}"
+
+    def test_identical_same_date_fingerprint_appends_nothing(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        before = {t: len(_rows(client, t)) for t in _LEDGER_TABLES}
+        assert before[_COMMITS] == 1, "attempt 1 wrote nothing — 0 == 0 proves no idempotency"
+        _mirror_ledger(client)
+
+        out = _run(client, _state(run_id=UUID("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")))
+
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("status") == "noop"
+        assert {t: len(_rows(client, t)) for t in _LEDGER_TABLES} == before
+
+    def test_changed_pre_fill_commit_supersedes_pending_orders(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        _mirror_ledger(client)
+
+        _run(
+            client,
+            _state(
+                sized_book=_sized_book(spy_pct=50.0),
+                run_id=UUID("bbbbbbbb-cccc-dddd-eeee-ffffffffffff"),
+            ),
+        )
+
+        commits = _rows(client, _COMMITS)
+        assert len(commits) == 2
+        _assert_linear_chain(commits, "commits")
+
+        spy_targets = [r for r in _rows(client, _APPROVED) if r["symbol"] == "SPY"]
+        _assert_linear_chain(spy_targets, "approved_targets/SPY")
+        assert float(_heads(spy_targets)[0]["approved_weight"]) == pytest.approx(0.50)
+
+        spy_orders = [r for r in _rows(client, _ORDERS) if r["symbol"] == "SPY"]
+        assert len(spy_orders) == 2, "the changed commit must supersede the pending order"
+        _assert_linear_chain(spy_orders, "order_intents/SPY")
+        assert float(_heads(spy_orders)[0]["quantity"]) == pytest.approx(0.5)
+
+    def test_existing_fill_freezes_the_symbol(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        _mirror_ledger(client)
+
+        # The executor records a fill by appending a terminal ``executed`` row that
+        # supersedes the pending one — it cannot UPDATE the pending row in place.
+        pending = _rows(client, _ORDERS)[0]
+        filled_order_id = "11111111-2222-3333-4444-555555555555"
+        client.canned_reads[_ORDERS] = [
+            *client.canned_reads[_ORDERS],
+            {
+                **pending,
+                "id": filled_order_id,
+                "status": "executed",
+                "supersedes_id": pending["id"],
+            },
+        ]
+        client.canned_reads[_EXECUTIONS] = [
+            {
+                "id": "99999999-8888-7777-6666-555555555555",
+                "order_intent_id": filled_order_id,
+                "executed_date": "2026-06-15",
+                "symbol": "SPY",
+                "quantity": 1.0,
+                "price": 100.0,
+            }
+        ]
+        before = {t: len(_rows(client, t)) for t in _LEDGER_TABLES}
+
+        out = _run(
+            client,
+            _state(
+                sized_book=_sized_book(spy_pct=50.0),
+                run_id=UUID("bbbbbbbb-cccc-dddd-eeee-ffffffffffff"),
+            ),
+        )
+
+        # The book still changed (CASH 0% -> 50%), so this is a real commit, not a noop.
+        assert len(_rows(client, _COMMITS)) == before[_COMMITS] + 1
+
+        # SPY is frozen: no *new* row in any table names it. Counting new rows per table
+        # is what makes this falsifiable — slicing one table by another table's length
+        # passes for the wrong reason.
+        for table in (_INTENTS, _REQUESTED, _APPROVED, _ORDERS):
+            fresh = [r for r in _rows(client, table)[before[table] :] if r["symbol"] == "SPY"]
+            assert not fresh, f"{table}: a filled symbol was re-targeted — {fresh}"
+
+        # 069's commits table has no ``frozen_symbols`` column (id, run_date,
+        # policy_version_id, supersedes_id, effective_at, recorded_at) and
+        # ``PortfolioCommit`` is extra="forbid" — so the skip is recorded where a reader
+        # can see it, the manifest. Invariant 12: the gap must be visible, not silent.
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest["ledger_frozen_symbols"] == ["SPY"]
+
+    def test_orphan_pruning_still_converges_with_the_ledger_on(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        client.store["positions"] = [
+            {"date": RUN_DATE.isoformat(), "ticker": "OLD", "weight_pct": 40.0}
+        ]
+        client.canned_reads["positions"] = [dict(r) for r in client.store["positions"]]
+
+        _run(client, _state())
+
+        tickers = {r["ticker"] for r in _rows(client, "positions")}
+        assert "OLD" not in tickers, "legacy orphan pruning regressed"
+        assert "SPY" in tickers
+
+    def test_partial_ledger_failure_does_not_masquerade_as_committed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.olympus.hermes.writers import ledger_io
+
+        real_insert = ledger_io._insert
+
+        def _fail_on_orders(*, client, table, rows):
+            if table == _ORDERS:
+                raise RuntimeError("ledger insert failed")
+            return real_insert(client=client, table=table, rows=rows)
+
+        monkeypatch.setattr(ledger_io, "_insert", _fail_on_orders)
+        client = _ledger_client(SPY=100.0)
+
+        with pytest.raises(RuntimeError, match="ledger insert failed"):
+            _run(client, _state())
+
+        # No manifest ⇒ the next attempt cannot short-circuit into "noop"; it
+        # re-commits and supersedes instead of reporting a false success.
+        assert not load_commit_manifests(client=client, run_date=RUN_DATE)
+        assert _rows(client, _COMMITS), "the partial chain stays visible for triage"
+
+    def test_kill_switch_keeps_legacy_projections_and_writes_no_ledger(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_PORTFOLIO_LEDGER", "off")
+        client = _ledger_client(SPY=100.0)
+
+        out = _run(client, _state())
+
+        assert not out.get("errors"), out.get("errors")
+        assert all(not _rows(client, t) for t in _LEDGER_TABLES)
+        assert {r["ticker"] for r in _rows(client, "positions")} == {"SPY"}
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("ledger_commit_id") is None
+
+
+_MIGRATION_069 = (
+    pathlib.Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "069_olympus_portfolio_ledger.sql"
+)
+
+
+def _migration_sql() -> str:
+    raw = _MIGRATION_069.read_text(encoding="utf-8")
+    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
+
+
+def _table_body(sql: str, table: str) -> str:
+    match = re.search(rf"CREATE TABLE IF NOT EXISTS public\.{table} \((.*?)\n\);", sql, re.S)
+    assert match, f"table {table} not found in migration 069"
+    return match.group(1)
+
+
+def _allowed_values(sql: str, table: str, column: str) -> set[str]:
+    """The closed vocabulary migration 069 actually permits for one column."""
+    body = _table_body(sql, table)
+    match = re.search(rf"{column} text NOT NULL CHECK \(\s*{column} IN \(([^)]*)\)", body, re.S)
+    assert match, f"no closed CHECK found for {table}.{column}"
+    values = set(re.findall(r"'([^']+)'", match.group(1)))
+    assert values, f"parsed an empty vocabulary for {table}.{column}"
+    return values
+
+
+def _allowed_action_reason_pairs(sql: str) -> set[tuple[str, str]]:
+    body = _table_body(sql, "portfolio_ledger_decision_intents")
+    match = re.search(
+        r"chk_portfolio_ledger_decision_intents_action_reason\s*CHECK \((.*)", body, re.S
+    )
+    assert match, "the action/reason pairing CHECK is gone"
+    pairs: set[tuple[str, str]] = set()
+    for action, single, group in re.findall(
+        r"action = '(\w+)'\s+AND reason (?:= '(\w+)'|IN \(([^)]*)\))", match.group(1), re.S
+    ):
+        for reason in [single] if single else re.findall(r"'([^']+)'", group):
+            pairs.add((action, reason))
+    assert pairs, "parsed no action/reason pairs"
+    return pairs
+
+
+def _multi_book(**target_pcts: float) -> dict:
+    return {
+        "recommended_portfolio": [
+            {"ticker": t, "target_pct": pct} for t, pct in target_pcts.items()
+        ],
+        "actions": [],
+        "notes": "H8 sized book",
+    }
+
+
+def _multi_analysts(*tickers: str) -> dict:
+    # coherence_errors fails closed on an open position with no H5 doc, so a
+    # multi-ticker book needs one per name or H9 writes nothing at all.
+    return {
+        t: {
+            "ticker": t,
+            "stance": "buy",
+            "conviction_score": 4,
+            "thesis": "risk-on",
+            "risks": "",
+            "sources": [],
+        }
+        for t in tickers
+    }
+
+
+class TestLedgerRowsSatisfyMigration069:
+    """Guard the seam between migration 069's CHECKs and the models that mirror them.
+
+    The models in ``hermes.models.portfolio_ledger`` hand-mirror this DDL:
+    ``Weight`` repeats ``BETWEEN 0 AND 1``, ``Symbol`` repeats ``length(symbol)
+    BETWEEN 1 AND 20``, ``_ACTION_REASONS`` repeats the action/reason pairing CHECK.
+    A mirror can drift **loose** — widen the Python side, or narrow the SQL side
+    without it, and the model accepts a row Postgres answers with a 23514. Neither
+    existing suite sees that: ``tests/dq/atlas/test_migration_069.py`` reads the DDL
+    but no Python, and ``tests/dq/hermes/test_portfolio_ledger.py`` checks the models
+    against their own literals. The failure would land in the nightly pipeline after
+    promotion rather than on the PR, which is how this class of bug reached production
+    three times already (#628, #1005, #1383).
+
+    So parse the vocabularies out of migration 069 itself and assert the emitted rows
+    satisfy them — parsed, not transcribed, so narrowing a CHECK fails these tests
+    instead of silently outdating them. Confirmed by mutation: loosening ``Weight`` to
+    ``le=100`` *and* dropping the writer's ``/100.0`` leaves 48 of the 50 tests in this
+    file green; ``test_weight_columns_stay_inside_the_zero_to_one_domain`` is the direct
+    catch, and ``test_changed_pre_fill_commit_supersedes_pending_orders`` fails with it. Mutating only the writer proves nothing — the models reject it first.
+
+    ``test_emitted_columns_all_exist_in_the_migration`` covers the one thing no
+    validator can: ``extra="forbid"`` guards what a caller passes *into* a model, not
+    a model field with no column behind it, which is a PostgREST 400 rather than a
+    CHECK violation.
+    """
+
+    def test_emitted_columns_all_exist_in_the_migration(self) -> None:
+        # A key the table lacks is a PostgREST 400, not a CHECK violation.
+        sql = _migration_sql()
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        for table in _LEDGER_TABLES:
+            columns = set(
+                re.findall(
+                    r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
+                    _table_body(sql, table),
+                    re.M,
+                )
+            )
+            assert columns, f"parsed no columns for {table}"
+            rows = _rows(client, table)
+            assert rows, f"{table} got no rows — the assertion below would be vacuous"
+            for row in rows:
+                unknown = set(row) - columns
+                assert not unknown, f"{table} row carries column(s) the table lacks: {unknown}"
+
+    def test_closed_vocabulary_columns_only_emit_permitted_values(self) -> None:
+        sql = _migration_sql()
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=60.0, AAPL=30.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+            ),
+        )
+        for table, column in (
+            (_INTENTS, "action"),
+            (_INTENTS, "reason"),
+            (_ORDERS, "status"),
+        ):
+            allowed = _allowed_values(sql, table, column)
+            emitted = {r[column] for r in _rows(client, table)}
+            assert emitted, f"no {table}.{column} values emitted — assertion would be vacuous"
+            extra = emitted - allowed
+            assert not extra, f"{table}.{column} emitted {extra}; DB allows {allowed}"
+
+    def test_action_reason_pairs_are_permitted_by_the_pairing_check(self) -> None:
+        # reason is legal and action is legal does not imply the PAIR is: the pairing
+        # CHECK is a second axis, and an earlier read of this vocabulary was wrong.
+        allowed = _allowed_action_reason_pairs(_migration_sql())
+        client = _ledger_client(SPY=100.0, AAPL=50.0, MSFT=25.0)
+        # exercise trim / add / exit / no_op together: SPY trimmed from 70, AAPL added
+        # from nothing, MSFT held then dropped to zero, CASH the residual no_op.
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=40.0, AAPL=20.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+                preferences={"current_weights": {"SPY": 70.0, "MSFT": 10.0}},
+            ),
+        )
+        emitted = {(r["action"], r["reason"]) for r in _rows(client, _INTENTS)}
+        assert len(emitted) >= 2, f"only {emitted} — too uniform to prove the pairing holds"
+        assert emitted <= allowed, f"illegal action/reason pair(s): {emitted - allowed}"
+
+    def test_weight_columns_stay_inside_the_zero_to_one_domain(self) -> None:
+        # H8's book is in percent; the DDL stores a [0, 1] fraction. A missed
+        # conversion passes every fake-client test and 23514s on the first real run.
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=60.0, AAPL=30.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+            ),
+        )
+        for table, column in ((_REQUESTED, "requested_weight"), (_APPROVED, "approved_weight")):
+            values = [r[column] for r in _rows(client, table) if r[column] is not None]
+            assert values, f"no {table}.{column} values emitted"
+            for value in values:
+                number = float(value)
+                assert number == number, f"{table}.{column} emitted NaN"
+                infinite = number in (float("inf"), float("-inf"))
+                assert not infinite, f"{table}.{column} emitted infinity"
+                assert 0.0 <= number <= 1.0, f"{table}.{column}={number} violates BETWEEN 0 AND 1"
+
+    def test_requested_targets_satisfy_the_exclusive_or_presence_check(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        rows = _rows(client, _REQUESTED)
+        assert rows, "no requested_targets emitted"
+        for row in rows:
+            has_weight = row["requested_weight"] is not None
+            has_quantity = row["requested_quantity"] is not None
+            assert has_weight != has_quantity, f"XOR presence CHECK violated by {row}"
+
+    def test_order_rows_satisfy_the_quantity_and_rejection_checks(self) -> None:
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=60.0, AAPL=30.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+            ),
+        )
+        rows = _rows(client, _ORDERS)
+        assert rows, "no order_intents emitted"
+        for row in rows:
+            quantity = float(row["quantity"])
+            assert quantity > 0, f"quantity {quantity} violates the > 0 CHECK"
+            assert quantity == quantity and quantity != float("inf"), "quantity is NaN/infinity"
+            if row["status"] == "rejected":
+                assert row["rejection_reason"] is not None, "rejected row needs a reason"
+            else:
+                assert row["rejection_reason"] is None, f"{row['status']} row carries a reason"
+
+    def test_symbols_fit_the_length_check(self) -> None:
+        # Guards the CASH sentinel too: a rename to something longer 23514s.
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        for table in (_INTENTS, _REQUESTED, _APPROVED, _ORDERS):
+            symbols = {r["symbol"] for r in _rows(client, table)}
+            assert symbols, f"no symbols emitted for {table}"
+            for symbol in symbols:
+                assert 1 <= len(symbol) <= 20, f"{table} symbol {symbol!r} breaks length CHECK"
+
+
+class TestPriceReadRowCap:
+    """Regression (CodeRabbit, PR #2482): the last-close read must not depend on an
+    unbounded response.
+
+    ``price_history`` holds one row per *calendar* day per ticker — migration 013
+    forward-fills weekends and holidays from the prior close — so a 14-day window is
+    up to 15 rows per ticker, while Supabase truncates an unbounded PostgREST
+    response at 1000 rows. A truncated ticker is indistinguishable from an unpriced
+    one: it lands in ``unpriced_symbols`` and its committed target books no order
+    intent at all. Silent, and it only appears once the universe grows.
+    """
+
+    CAP = 1000
+
+    def _capped_client(self, tickers: list[str]) -> FakeSupabaseClient:
+        """Canned history for ``tickers``, served through Supabase's row cap."""
+        rows = [
+            {
+                "date": (RUN_DATE - timedelta(days=offset)).isoformat(),
+                "ticker": ticker,
+                "close": 100.0 + index,
+            }
+            for index, ticker in enumerate(tickers)
+            for offset in range(1, _CLOSE_LOOKBACK_DAYS + 1)
+        ]
+        cap = self.CAP
+
+        class _Capped(FakeSupabaseClient):
+            def table(self, name: str):  # type: ignore[no-untyped-def]
+                query = super().table(name)
+                if name != "price_history":
+                    return query
+                inner = query.execute
+
+                def _execute():  # type: ignore[no-untyped-def]
+                    resp = inner()
+                    resp.data = list(resp.data or [])[:cap]
+                    return resp
+
+                query.execute = _execute  # type: ignore[method-assign]
+                return query
+
+        return _Capped(canned_reads={"price_history": rows})
+
+    def test_wide_universe_is_fully_priced_under_the_row_cap(self) -> None:
+        # 80 tickers x 14 rows = 1120: a single unbatched request loses the tail.
+        tickers = [f"TK{index:03d}" for index in range(80)]
+        assert len(tickers) * _CLOSE_LOOKBACK_DAYS > self.CAP, "universe must exceed the cap"
+        closes = _last_closes(
+            client=self._capped_client(tickers), tickers=set(tickers), run_date=RUN_DATE
+        )
+        missing = sorted(set(tickers) - set(closes))
+        assert not missing, (
+            f"{len(missing)} ticker(s) lost to the row cap ({missing[:5]}...) — "
+            "a truncated read is reported as unpriced and books no order intent"
+        )
+
+    def test_batch_is_derived_from_the_lookback(self) -> None:
+        """Widening the window must not silently reintroduce truncation."""
+        worst_case = _CLOSE_TICKER_BATCH * (_CLOSE_LOOKBACK_DAYS + 1)
+        assert worst_case <= self.CAP, (
+            f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
+        )
