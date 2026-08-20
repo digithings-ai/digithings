@@ -1129,12 +1129,13 @@ class TestOperatorDefaultLadderHasOneCopy:
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
 
     @pytest.mark.parametrize(
-        ("yaml", "expected"),
+        ("yaml", "expected", "expected_source"),
         [
             # default_model wins outright.
             (
                 "default_model: openrouter/deepseek/deepseek-chat\n",
                 "openrouter/deepseek/deepseek-chat",
+                "model_modes.default_model",
             ),
             # default_model outranks defaults[mode] when both are present. Pinned
             # separately because a copy that consulted ``defaults`` first would still
@@ -1143,11 +1144,13 @@ class TestOperatorDefaultLadderHasOneCopy:
                 "default_model: gemini/gemini-2.5-pro\n"
                 "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n",
                 "gemini/gemini-2.5-pro",
+                "model_modes.default_model",
             ),
             # defaults[mode] — the shape the shipped release config actually has.
             (
                 "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n",
                 "openrouter/qwen/qwen3-next-80b",
+                "model_modes",
             ),
             # defaults[mode] outranks defaults['test'] when both are present. Without
             # this rung an inverted copy passes: every other fixture sets one key, so
@@ -1156,22 +1159,38 @@ class TestOperatorDefaultLadderHasOneCopy:
                 "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n"
                 "  test: gemini/gemini-2.5-flash\n",
                 "openrouter/qwen/qwen3-next-80b",
+                "model_modes",
             ),
             # defaults['test'] as the cross-mode fallback.
-            ("defaults:\n  test: gemini/gemini-2.5-flash\n", "gemini/gemini-2.5-flash"),
+            (
+                "defaults:\n  test: gemini/gemini-2.5-flash\n",
+                "gemini/gemini-2.5-flash",
+                "model_modes",
+            ),
             # No usable entry at all — the hard floor.
-            ("defaults: {}\n", "gpt-4o-mini"),
+            ("defaults: {}\n", "gpt-4o-mini", "default"),
         ],
     )
     def test_both_entry_points_resolve_the_same_model(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml: str, expected: str
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        yaml: str,
+        expected: str,
+        expected_source: str,
     ) -> None:
         from digigraph.model_config import effective_llm_settings, operator_default_model
 
         self._fallback_env(monkeypatch, tmp_path, yaml)
         monkeypatch.setenv("DIGI_LLM_MODE", "medium")
         assert operator_default_model() == expected
-        assert effective_llm_settings()["model"] == expected
+        settings = effective_llm_settings()
+        assert settings["model"] == expected
+        # The helper returns ``(model, source_label)`` and only ``effective_llm_settings``
+        # reports the label, so a re-duplication that got the rung right but mislabelled
+        # it would be invisible above: ``digi llm-settings`` would name the right model
+        # and lie about where it came from.
+        assert settings["source"] == expected_source
 
     def test_both_entry_points_refuse_free_mode_without_a_pin(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
