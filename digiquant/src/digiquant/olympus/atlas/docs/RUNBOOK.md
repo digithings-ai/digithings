@@ -265,7 +265,7 @@ No other OpenRouter env vars are required in CI (`olympus-pipeline.yml`).
 | **`cost_quality_tradeoff`** | `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**) | Auto Router plugin dial **0–10**: 0 = most capable, **10 = cheapest** |
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
-| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — not set in Olympus CI |
+| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — set in Olympus CI for the pipeline run step since #1622; the preflight-validation step needs it set too for its digillm-routed checks to self-heal the same way (#2374) |
 | **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; uses `grounding_model` from tier config |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto

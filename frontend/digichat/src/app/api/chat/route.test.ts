@@ -440,6 +440,33 @@ describe("POST /api/chat", () => {
     expect(body.error).toBe("byok_model_required");
   });
 
+  // The BFF used to forward X-BYOK-Model only when byokRequiresModel(provider)
+  // was true, so a caller who *did* name a model for OpenAI had it stripped
+  // here and digigraph answered on the deployment's own default — billed to the
+  // operator while the caller's key sat bound and unspent (#2490). Requiring a
+  // model and forwarding one the caller sent are different questions.
+  it("forwards X-BYOK-Model for a provider that does not require one", async () => {
+    const res = await POST(
+      new Request("http://localhost/api/chat", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-byok-key": "sk-test",
+          "x-byok-provider": "openai",
+          "x-byok-model": "gpt-4o-mini",
+        },
+        body: JSON.stringify({
+          messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+        }),
+      })
+    );
+    expect(res.status).toBe(200);
+    const call = vi.mocked(streamText).mock.calls.at(-1)?.[0] as {
+      headers?: Record<string, string>;
+    };
+    expect(call?.headers?.["X-BYOK-Model"]).toBe("gpt-4o-mini");
+  });
+
   // OpenAI is the one requiresModel:false provider today — byokRequiresModel
   // must still exempt it after the OR-chain → shared-predicate swap (#2351).
   it("does not require a model for OpenAI BYOK (byokRequiresModel exemption)", async () => {
