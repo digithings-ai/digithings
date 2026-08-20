@@ -146,8 +146,9 @@ class TestValuationZScore:
 
         Per the contract, validation covers only fully-populated rows -- ``median <
         high`` is not even checkable when ``high`` is null. What matters is that the
-        row yields null: this input used to return a clean-looking ``0.0`` produced
-        by a negative denominator clipped to the floor.
+        row yields null: because ``price == median`` the below branch's numerator is
+        exactly zero, so this input used to return a clean-looking ``-0.0`` without
+        ever reading the null ``high`` at all.
         """
         price = pl.Series("price", [100.0])
         low = pl.Series("low", [999.0])

@@ -50,9 +50,9 @@ def valuation_z_score(
     below = (3.0 * (log_median - log_price) / (log_median - log_low)).clip(0.0, 3.0)
     above = (-3.0 * (log_price - log_median) / (log_high - log_median)).clip(-3.0, 0.0)
 
-    # Gate on `has_data` last: `below`/`above` each read only one rail, so a null in
-    # the *other* rail would otherwise leave the taken branch finite and emit a real
-    # z-score for a no-data day.
+    # Gate on `has_data` last: `below`/`above` each read only one of the outer rails
+    # (`low` / `high`), so a null in the *other* one would otherwise leave the taken
+    # branch finite and emit a real z-score for a no-data day.
     return pl.select(
         pl.when(has_data)
         .then(pl.when(df["price"] <= df["median"]).then(below).otherwise(above))

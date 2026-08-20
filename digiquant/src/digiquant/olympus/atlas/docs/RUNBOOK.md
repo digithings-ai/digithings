@@ -268,7 +268,7 @@ the pipeline run step and the preflight-validation step — see the table below.
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
 | **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — set in Olympus CI on the pipeline run step since #1622 and on the preflight-validation step since #2512, so the preflight's digillm-routed checks self-heal the same way (#2374) |
-| **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; model comes from `get_grounding_model()`, which picks from the tier's `web_search_models` pool (falling back to the merged research/extraction/reasoning pools) |
+| **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; model comes from `get_grounding_model()`, which picks from the tier's `web_search_models` pool — when that resolves to nothing the grounding pre-pass is skipped, never substituted |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
 Router knobs still apply to any auto/fallback path and keep operator overrides bounded.

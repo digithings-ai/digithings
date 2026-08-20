@@ -468,8 +468,8 @@ lump-sum benchmark: all
 true percents (×100 at `backtest.py:162,164`, so `-15.0` means −15%), while
 `dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` are negative *fractions*
 (`-0.15` for a 15% drawdown — `_max_drawdown_pct` applies no ×100). The drawdown
-pair therefore matches `OptimizationConstraints.max_drawdown_pct` in `models.py`
-and **not** `BacktestResult.max_drawdown_pct`, which is a negative percent. Also
+pair is therefore **not** interchangeable with `BacktestResult.max_drawdown_pct`,
+which is a negative percent — check each field's own docstring before comparing them. Also
 `buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
 non-null days only).
 
