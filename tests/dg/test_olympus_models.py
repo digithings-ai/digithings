@@ -646,3 +646,53 @@ def test_get_model_for_mode_keeps_dev_default_without_openrouter_key(
     resolved = get_model_for_mode()
     # model_modes.yaml defaults are dev models (ollama/*); not forced to OpenRouter here.
     assert not resolved.startswith("openrouter/")
+
+
+@pytest.mark.unit
+def test_unresolved_capability_returns_none_under_a_bound_byok_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unresolved capability must short-circuit *before* ``_apply_byok_model_override``.
+
+    The guard above the override is only observable with a BYOK key bound. Without a
+    key the override is a pass-through, so ``None`` reaches the caller either way and
+    every other test in this file agrees whether the guard is there or not — deleting
+    it outright leaves the whole ``tests/dg`` suite green. With a key bound and no
+    ``X-BYOK-Model``, the override *refuses* ("no header is not consent"), so an empty
+    capability that reached it would turn a benign "no phase model configured" into a
+    crash on a credential path — ``AttributeError: 'NoneType' has no attribute
+    'partition'`` from ``llm_auth._routes_to_another_provider``, which is *not* in
+    ``server._LLM_PROBE_ERRORS``, so ``/test_llm`` would 500 instead of degrading. The
+    five production callers
+    (``research_agent.py``, ``portfolio_common.py``, ``thesis_common.py``,
+    ``h6_deliberation.py``, ``_node_factory.py``) all chain ``or get_model_for_mode()``
+    and expect a value, not a raise.
+    """
+    from digigraph.llm_auth import pop_byok, push_byok_header
+
+    monkeypatch.setenv("OLYMPUS_MODEL_TIER", "cheap")
+    monkeypatch.setattr(model_config, "_olympus_models_cache", None)
+    monkeypatch.setattr(model_config, "_model_modes_cache", None)
+    # 'macro' maps to a capability, so the capability branch is entered; the resolver
+    # then comes back empty, which is the state the guard exists for.
+    monkeypatch.setattr(model_config, "_model_for_olympus_capability", lambda *a, **k: None)
+
+    class _Headers:
+        def __init__(self, d: dict[str, str]) -> None:
+            self._d = {k.lower(): v for k, v in d.items()}
+
+        def get(self, name: str) -> str | None:
+            return self._d.get(name.lower())
+
+    class _Req:
+        def __init__(self) -> None:
+            # No x-byok-model: the header being absent is what makes the override refuse.
+            self.headers = _Headers(
+                {"x-byok-key": "sk-or-v1-test", "x-byok-provider": "openrouter"}
+            )
+
+    tok = push_byok_header(_Req())
+    try:
+        assert get_model_for_phase("macro") is None
+    finally:
+        pop_byok(tok)
