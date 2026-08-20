@@ -260,3 +260,13 @@ class TestRunBacktestInputValidation:
                 curve=AccumDistCurve(),
                 initial_cash=1000.0,
             )
+
+    def test_null_date_raises(self) -> None:
+        with pytest.raises(ValueError, match="null"):
+            run_backtest(
+                dates=pl.Series([None], dtype=pl.Date),
+                price=pl.Series([100.0]),
+                risk=pl.Series([0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )
