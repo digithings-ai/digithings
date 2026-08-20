@@ -237,3 +237,26 @@ class TestRunBacktestInputValidation:
                 curve=AccumDistCurve(),
                 initial_cash=float("nan"),
             )
+
+    def test_reversed_dates_raises(self) -> None:
+        reversed_dates = pl.Series(list(reversed(_dates(2).to_list())))
+        with pytest.raises(ValueError, match="strictly increasing"):
+            run_backtest(
+                dates=reversed_dates,
+                price=pl.Series([100.0, 100.0]),
+                risk=pl.Series([0.0, 0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )
+
+    def test_duplicate_dates_raises(self) -> None:
+        one_date = _dates(1)[0]
+        duplicate_dates = pl.Series([one_date, one_date])
+        with pytest.raises(ValueError, match="strictly increasing"):
+            run_backtest(
+                dates=duplicate_dates,
+                price=pl.Series([100.0, 100.0]),
+                risk=pl.Series([0.0, 0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )

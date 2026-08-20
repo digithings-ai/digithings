@@ -69,6 +69,9 @@ def run_backtest(
             f"run_backtest requires dates, price, and risk to have the same length, "
             f"got {dates.len()}, {price.len()}, {risk.len()}"
         )
+    date_list = dates.to_list()
+    if any(date_list[i] >= date_list[i + 1] for i in range(len(date_list) - 1)):
+        raise ValueError("run_backtest requires dates to be strictly increasing")
     if price.is_null().any():
         raise ValueError("run_backtest requires price to have no null values")
     if not price.is_finite().all():
