@@ -103,7 +103,10 @@ new contributor:
    (pipe-separated: `chrizefan|alice|bob`).
 2. Install your *uncommitted* edit to test it: `HOOKS_REF=WORKTREE make hooks-install`.
    A plain `make hooks-install` installs the copy committed on `origin/develop`,
-   so on its own it would not pick your edit up.
+   so on its own it would not pick your edit up. The override is not durable:
+   every worktree shares this one hook file, so the next plain `make
+   hooks-install` — or any `make agents-init`, in any worktree — puts
+   `origin/develop`'s copy back. Re-run the `HOOKS_REF=WORKTREE` command if so.
 3. Merge to `develop`. Other clones pick the new regex up on their next
    `git fetch` followed by `make hooks-install` (or any `make agents-init`).
 

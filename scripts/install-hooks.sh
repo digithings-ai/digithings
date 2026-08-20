@@ -90,3 +90,18 @@ trap - EXIT
 echo "installed: $hooks_dir/pre-push"
 echo "  source:  $src_path @ $source_desc"
 echo "  blob:    $(git hash-object "$hooks_dir/pre-push")"
+
+# A WORKTREE install is an override, and overrides here are not durable: every
+# worktree shares this one file, and `make agents-init` runs the *default*
+# install on every invocation. So a concurrent session regenerating its agent
+# surface silently puts origin/develop's copy back, and you find out when a push
+# behaves unexpectedly. Say so at install time rather than let it surprise.
+if [ "$ref" = "WORKTREE" ]; then
+  cat >&2 <<EOF
+  NOTE:    this is an override, and it is not durable. Every worktree shares
+           this one hook, so the next plain 'make hooks-install' — or any
+           'make agents-init', in any worktree — reinstalls origin/develop's
+           copy over it. Re-run this command if that happens; to check which
+           copy is live: git hash-object '$hooks_dir/pre-push'
+EOF
+fi
