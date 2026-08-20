@@ -31,7 +31,13 @@ from pathlib import Path
 from typing import Any, NamedTuple  # score:allow untyped any — Starlette Request kept loose
 from urllib.parse import urlsplit
 
-from digillm import reset_byok, reset_proxy_key, set_byok, set_proxy_key
+from digillm import (
+    is_registered_provider,
+    reset_byok,
+    reset_proxy_key,
+    set_byok,
+    set_proxy_key,
+)
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 
@@ -142,6 +148,129 @@ def byok_model_required(provider: str) -> bool:
     return provider.strip().lower() in BYOK_MODEL_REQUIRED_PROVIDERS
 
 
+def byok_routable_model(provider: str, model: str) -> str:
+    """Return *model* in the form that actually spends a BYOK key for *provider*.
+
+    A provider in digillm's registry carries its own prefix in its canonical model
+    string (``gemini/…``, ``openrouter/…``), so the prefix is stripped and re-applied.
+    That is idempotent, and it preserves OpenRouter's legitimate vendor sub-slugs:
+    ``anthropic/claude-sonnet-4`` becomes ``openrouter/anthropic/claude-sonnet-4``,
+    not a request billed to the operator's Anthropic key.
+
+    ``openai`` is deliberately *not* in that registry — its canonical model string is
+    bare (``gpt-4o-mini``) — so nothing is prefixed onto it. That asymmetry is the
+    whole reason :func:`byok_model_routes_elsewhere` exists.
+
+    The provider's own prefix is stripped to a **fixpoint**, not once, and that loop
+    is load-bearing rather than tidiness. :func:`byok_model_routes_elsewhere` is
+    asked the same question at two doors that hold two different strings — the
+    middleware holds the raw header, the resolver holds the once-stripped slug from
+    ``_normalize_byok_model_slug`` — so the verdict must not depend on how many of
+    the provider's own prefixes have already been removed. Stripping to a fixpoint
+    is exactly that invariance. Weaken it to a single strip and the doors diverge at
+    depth two: ``X-BYOK-Provider: openai`` with ``openai/openai/gemini/…`` leaves the
+    middleware's copy reading ``openai/gemini/…``, whose head ``openai`` is *not* a
+    registered provider, so it passes — and is then dropped at the resolver, which
+    sees one prefix fewer. Same header, two answers.
+    """
+    prov = provider.strip().lower()
+    slug = model.strip()
+    prefix = f"{prov}/"
+    while slug.startswith(prefix):
+        slug = slug[len(prefix) :]
+    return f"{prov}/{slug}" if is_registered_provider(prov) else slug
+
+
+def _routes_to_another_provider(provider: str, model: str) -> bool:
+    """True when *model*, sent exactly as given, is served by a provider other than *provider*.
+
+    The single billing rule behind both public predicates below: a model leading with
+    a *registered* provider prefix is routed to that provider's env-keyed client, so
+    if that prefix is not the declared BYOK provider the operator pays. A bare model,
+    or one whose head is not in digillm's registry (``ollama/…``, ``openai``'s bare
+    slugs), carries no such prefix and is served by whatever client the BYOK override
+    already installed — the user's.
+
+    The two callers differ only in *which string* they hand in; see each for why.
+    """
+    head, sep, _rest = model.partition("/")
+    if not sep or not is_registered_provider(head):
+        return False
+    return head != provider.strip().lower()
+
+
+def byok_model_routes_elsewhere(provider: str, model: str) -> bool:
+    """True when *model* under BYOK *provider* would be billed to an operator key.
+
+    ``X-BYOK-Model`` is caller-supplied and untrusted. ``X-BYOK-Provider: openai``
+    with ``X-BYOK-Model: gemini/gemini-2.5-flash`` survives every other check: the
+    provider is routable, a model is present, and openai adds no prefix of its own —
+    so the gemini prefix reaches digillm intact, which builds the gemini client on the
+    operator's ``GEMINI_API_KEY``. The user's key is accepted, displayed as active,
+    never spent, and someone else pays.
+
+    The test is on the *routable* form rather than on the raw header, which is why it
+    is one rule for all providers instead of an openai special case: a registered
+    provider's model is re-prefixed to itself and can never conflict, so only a
+    provider that adds no prefix can carry a foreign one through. Prefixes are read
+    from digillm's registry — the same source ``_parse_provider_prefix`` in
+    model_config uses — because that registry, not the BYOK catalog, is what decides
+    which env-keyed client gets built.
+    """
+    return _routes_to_another_provider(provider, byok_routable_model(provider, model))
+
+
+def byok_operator_model_routes_elsewhere(provider: str, model: str) -> bool:
+    """True when the *operator-resolved* *model* would be billed to an operator key.
+
+    Same billing rule as :func:`byok_model_routes_elsewhere`, asked about a model the
+    caller never sent: the deployment's own tier default, which reaches digillm
+    **verbatim**. That difference is the whole reason this is a second entry point
+    rather than a reuse, and it is not a latent distinction — it changes the answer.
+
+    ``byok_model_routes_elsewhere`` first normalizes through
+    :func:`byok_routable_model`, which is correct for an ``X-BYOK-Model`` header
+    because ``_apply_byok_model_override`` really does route the normalized form. But
+    for a *registered* provider that normalization re-prefixes to the provider
+    itself, so the head always equals the declared provider and the verdict is
+    unconditionally ``False``. Ask it about ``provider="openrouter"`` with an
+    operator default of ``gemini/gemini-2.5-flash`` and it answers "fine" — while
+    digillm builds a Gemini client on the operator's ``GEMINI_API_KEY``. Over HTTP
+    that shape cannot arrive (every registered provider is ``requiresModel: true``,
+    so the middleware refuses first), but ``_apply_byok_model_override`` exists
+    precisely to hold for in-process callers that never passed the middleware, and
+    there it would be wrong today rather than eventually.
+
+    So the operator's model is tested as-sent, with no normalization at all.
+    """
+    return _routes_to_another_provider(provider, model)
+
+
+BYOK_DEFAULT_MODEL_MISMATCH_CODE = "byok_default_model_provider_mismatch"
+
+
+def byok_default_model_refusal(provider: str) -> str:
+    """Refusal text for a bound BYOK key the deployment's own default would not spend.
+
+    Distinct from ``byok_model_required`` on purpose, with the same remediation
+    sentence. ``byok_model_required`` is a property of the *provider* — digichat's
+    own catalog knows it and never lets such a request leave the browser — so
+    answering it here for a provider whose catalog entry says ``requiresModel:
+    false`` would tell the operator their frontend is broken when it is not. This
+    code says something the frontend cannot know: *this deployment's* default is
+    served by someone else.
+
+    Names neither the model slug nor the key. The slug is the operator's
+    configuration, not the caller's input, and disclosing it to an anonymous caller
+    buys no remediation — the fix is the same either way.
+    """
+    return (
+        f"This deployment's default model is served by a provider other than {provider!r}, "
+        f"so your {provider} key would not be the one billed. Send X-BYOK-Model naming a "
+        f"{provider} model (e.g. gpt-4o-mini) to spend your own key."
+    )
+
+
 # digigraph's own per-request BYOK record: (api_key, provider) where provider is
 # "openai" | "anthropic" | "openrouter" | "gemini". Distinct from digillm's
 # (api_key, base_url) override so get_byok_override() can still report the provider.
@@ -176,12 +305,22 @@ class _ByokToken(NamedTuple):
 
 
 def _normalize_byok_model_slug(raw: str, provider: str) -> str:
+    """Drop one redundant ``provider/`` prefix from a caller-supplied model slug.
+
+    One strip, deliberately — not a fixpoint. The guard that decides whether this
+    slug may be routed reads it through :func:`byok_routable_model`, which strips the
+    provider's own prefix to a fixpoint, so how many prefixes *this* function leaves
+    behind cannot change any verdict or any routed model. A second strip here would
+    only alter what ``get_byok_model_override`` reports.
+
+    (The former ``provider == "openrouter"`` special case was unreachable: when the
+    provider *is* ``openrouter``, ``prefix`` already equals ``"openrouter/"`` and the
+    branch above consumed it; when it is not, the conjunct is false.)
+    """
     trimmed = raw.strip()
     prefix = f"{provider}/"
     if trimmed.startswith(prefix):
         return trimmed[len(prefix) :]
-    if provider == "openrouter" and trimmed.startswith("openrouter/"):
-        return trimmed[len("openrouter/") :]
     return trimmed
 
 

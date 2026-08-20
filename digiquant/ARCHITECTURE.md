@@ -1023,7 +1023,8 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   `digiquant.olympus.hermes.schemas.load_schema`.
 - **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
   **H8** (`phase7e_risk_sizing`) is the sole weight owner. **H9** (`commit_run`) is the
-  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append.
+  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append, and
+  the portfolio lineage ledger commit chain (see below).
 
 #### Risk-sizing layer (Pillar 2)
 
@@ -1242,7 +1243,8 @@ assuming it is always present.
 
 Per ADR-0009: Atlas research writes via `publish_phase` (`documents`, `daily_snapshots`).
 Hermes terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `theses`,
-portfolio brief, `decision_log`). `preflight_reflect` resolves due `decision_log` rows daily;
+portfolio brief, `decision_log`, plus the append-only `portfolio_ledger_*` commit chain —
+see below). `preflight_reflect` resolves due `decision_log` rows daily;
 beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_document.py`
 and `materialize_snapshot.py` are frozen.
 
@@ -1255,7 +1257,7 @@ near-duplicate sector skills were collapsed into one templated
 See `docs/adr/0009-atlas-supabase-persistence.md` for the persistence
 decision and `docs/adr/0015-atlas-vs-hermes.md` for the engine split.
 
-### Portfolio lineage ledger (private, #2415)
+### Portfolio lineage ledger (private, #2415, #2418)
 
 Closes finding OLY-REV-009: decision intent, target approval, order intent, fill, and
 holding state were conflated across `positions`/`decision_log`/snapshots with no way to
@@ -1314,13 +1316,16 @@ not a row the approval chains through.
   downstream infers a unit from which column is populated the way `RequestedTarget` does.
   `PaperExecution` quantity/price and `HoldingLot` quantity/open_price are `NOT NULL CHECK
   (... > 0)` — a fill or lot that cannot be priced does not get written at all.
-- **Ownership and scope — read this before wiring a producer.** These are private,
-  read-side contracts only. Hermes owns the models; **H9 `commit_run`
-  (`digiquant/src/digiquant/olympus/hermes/writers/commit_io.py`) is unchanged and
-  remains the sole authoritative booking writer** — nothing here is dual-written yet,
-  and nothing here changes H7/H8/H9 responsibility. Producer → consumer chain once
-  wired: H7/H8/H9 → this private ledger → a paper executor → accounting/learning. No
-  broker or live-trading path is touched by this schema.
+- **Ownership and scope — read this before wiring a producer.** These tables are private
+  (no `anon`/`authenticated` grant, no RLS policy). Hermes owns the models, and **H9
+  `commit_run` is the sole writer** — `writers/commit_io.py` still owns the authoritative
+  legacy booking (`positions`, `nav_history`, `theses`, `decision_log`), and
+  `writers/ledger_io.py` appends the lineage chain beside it, in the same node, for the same
+  `run_date`. As of #2418 the two are **dual-written**: the ledger is the record of *why*,
+  the legacy tables remain what every reader still reads. Nothing here changes H7/H8/H9
+  responsibility — H7 still owns direction, H8 still owns weights, H9 still commits. Chain
+  from here: this ledger → a paper executor (#2420) → accounting/learning. No broker or
+  live-trading path is touched.
 - **Failure behavior — two enforcement layers, not one.** A self-referencing
   `supersedes_id`, an untimezoned timestamp, an invalid action/reason pairing, or a
   target missing both weight and quantity all fail closed at Pydantic model-validation
@@ -1334,13 +1339,167 @@ not a row the approval chains through.
   failing closed keeps the row out before it can reach an authoritative commit or fill.
   A missing economic value stays absent (`NULL` / no row) rather than silently becoming
   `0`.
-- **Rollback note: keep schema dark until H9 dual-write.** Until a future task wires H9
-  (or a paper executor) to actually write these tables, they receive no traffic —
-  reverting this migration is a no-op for every existing code path.
+- **Rollback note: the schema is no longer dark.** Since #2418 wired H9, these tables take
+  traffic on every commit run, so reverting migration 069 on its own now breaks H9 — drop the
+  writer first, or set `OLYMPUS_PORTFOLIO_LEDGER=0` (below). Reverting the *writer* alone is
+  still safe in either order, but no longer because nothing reads the chain — since #2420 the
+  at-open job does. It is safe because a chain that stops growing makes that read *decline*
+  and hand the day back to the prose builders, so the cost is lineage rather than correctness.
+  That stops being true the moment `--require-ledger` joins the pipeline invocation.
 - **Tests**: `tests/dq/hermes/test_portfolio_ledger.py` (model/fixture behavior — add,
   trim, exit, no-op, rejection, cap, rounding, carry, supersession, immutability,
   idempotency) and `tests/dq/atlas/test_migration_069.py` (structural: RLS, grants,
   triggers, closed vocab, nullability), mirroring the `test_migration_067.py` pattern.
+
+#### H9 appends the commit chain (#2418)
+
+`digiquant/src/digiquant/olympus/hermes/writers/ledger_io.py` is the only writer into these
+tables, called from exactly one place: `phases/h9_commit_run.py`, after `persist_decision_log`
+and **before `save_commit_manifest`**. That ordering is load-bearing — the manifest is what the
+next attempt reads to decide "already committed", so a partial chain must leave no manifest
+behind. Raising is the honest outcome (invariant 12); a manifest written first would report a
+failed append as a clean no-op and leave the lineage silently one commit short.
+
+`append_commit_chain(...)` writes one `PortfolioCommit` plus, per symbol, a `DecisionIntent`, a
+`RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an
+`OrderIntent`: five batched `.insert()` calls in FK order. It never calls `.upsert()`.
+`service_role` holds `SELECT, INSERT` only, so an upsert whose conflict path fires is a `55000`
+from the append-only trigger, not an update.
+
+Conventions this writer fixes, each of which is easy to get backwards:
+
+- **The head is found by exclusion, not by `supersedes_id IS NULL`.** That predicate identifies
+  the permanent chain *root*; the current head is the row nobody supersedes, so `_heads()`
+  subtracts the set of referenced `supersedes_id` values from the row set. More than one commit
+  head for a `run_date` is a fork the writer cannot resolve — it raises rather than guessing
+  which lineage to extend.
+- **Only three tables chain.** `commits`, `approved_targets`, and `order_intents` carry
+  `supersedes_id`; `decision_intents` and `requested_targets` have no such column. They are
+  per-commit children, so a changed recommit appends *fresh* intent and requested rows under the
+  new commit instead of superseding the old ones.
+- **`OrderIntent.quantity` is an absolute share count** — not notional, not signed:
+  `abs(Δweight) × nav / close`, quantized to 6dp, and the row is dropped entirely when that
+  rounds to zero. The table has no `side` column and enforces `quantity > 0`, so direction is
+  derived downstream from the approved target against holdings.
+- **Price convention: the last available `price_history` close strictly before `run_date`**,
+  within a 14-day lookback. A symbol with no such close still gets a committed target — it just
+  gets no `OrderIntent`, and is named in `ledger_unpriced_symbols` rather than priced at a guess.
+  A `price_history` read failure propagates; it does not degrade to "unpriced".
+- **A symbol with a fill is frozen.** If its head order is `executed`, or any `paper_executions`
+  row references one of its order ids, the symbol is dropped from the append: only fills alter
+  realized quantity (invariant 9), and superseding an order that already traded would rewrite
+  history.
+- **Requested equals approved, for now.** H8 applies its caps upstream inside `size_portfolio`,
+  so H9 never sees a distinct pre-cap number and Phase 0 writes no `TargetAdjustment` rows.
+  Recording the pre-cap target is a later task, not an omission in this one.
+- **Prior weights come from Atlas preflight** (`state.config.preferences["current_weights"]`) and
+  are simply absent on a first run, so every delta is measured against 0. A first commit being
+  all `add` is correct, not a bug.
+
+The manifest carries the join into this chain: `schema_version` is now **`"1.2"`**, adding
+`ledger_commit_id`, `ledger_frozen_symbols`, and `ledger_unpriced_symbols`. The no-op
+short-circuit path leaves all three at `null`/`[]` — and so does a first commit with the kill
+switch off, so the three fields are absent-safe for a 1.1 reader rather than a rerun signal;
+`status` (`"noop"` vs. `"committed"`) stays the discriminator. `ledger_frozen_symbols` is a
+manifest field only — there is no such column on any ledger table.
+
+`OLYMPUS_PORTFOLIO_LEDGER` is the kill switch, and it is **opt-out — default on**: set it to
+`0`, `off`, `false`, `no`, or `disabled` to skip the append and leave the legacy projections
+untouched. The polarity is deliberately the inverse of `OLYMPUS_POSITION_RISK_FIELDS` (opt-in) —
+a dark schema needs opting into, a live writer needs an escape hatch.
+
+- **Tests**: `tests/dq/hermes/test_commit_run.py::TestCommitChainLedger` — every final ticker
+  plus cash appears; inserts are never upserts; H9 is the only ledger writer; an identical
+  same-date rerun appends nothing; a changed pre-fill commit supersedes pending orders; an
+  existing fill freezes the symbol; orphan pruning still converges with the ledger on; a partial
+  failure does not masquerade as committed; and the kill switch writes no rows.
+  `::TestLedgerRowsSatisfyMigration069` guards the other seam: the models in
+  `hermes/models/portfolio_ledger.py` hand-mirror 069's CHECKs, so that class parses the
+  vocabularies and bounds out of the migration itself and asserts the emitted rows satisfy
+  them. Parsed, not transcribed — narrowing a CHECK fails those tests instead of silently
+  outdating them. Keep it: mutation shows loosening the `Weight` mirror to `le=100` *and*
+  dropping the writer's `/100.0` leaves 48 of this file's 50 ledger tests green.
+
+#### The at-open fill path — `execution_io` (#2420, Task 2.4)
+
+H9 records what the portfolio *decided*; this is what it *did*.
+`digiquant/src/digiquant/olympus/hermes/writers/execution_io.py` is the only writer into
+`portfolio_ledger_paper_executions` and `portfolio_ledger_holding_lots`, and
+`execute_pending_orders(...)` has exactly one caller: `digiquant/scripts/atlas/execute_at_open.py`,
+the job the prices pipeline runs at 09:35 ET. Two structural tests hold both halves of that
+(`tests/dq/hermes/test_execution_io.py::TestSoleAuthority`) — a second writer would give one
+position two irreconcilable records, and the append-only trigger cannot tell a rogue insert
+from a legitimate one.
+
+The executor reads the day's pending `OrderIntent` heads, resolves each one's direction from
+its `ApprovedTarget` against the symbol's live lots, and writes three batched inserts in FK
+order: `paper_executions` → `holding_lots` → the `order_intents` head marking the order
+`executed` or `rejected`. Every id is a `uuid5` of its inputs
+(`executed_intent_id(pending_id, executed_date)`, `open_lot_id`, `close_lot_id`), so a rerun
+collides on the PK rather than duplicating the day — idempotency without a read-modify-write
+the grants would refuse anyway.
+
+- **A close is a second lot row, not an update.** The tables reject `UPDATE` by trigger, so
+  closing a lot appends a row carrying the *same* `opened_by_execution_id` plus
+  `closed_by_execution_id`/`closed_at`/`status = 'closed'`. A lot's identity is therefore the
+  execution that opened it, never its own row id, and readers group by
+  `opened_by_execution_id` and **subtract**:
+  `live = opened.quantity − Σ(quantity of the closed rows sharing that id)`. Not "take the
+  latest state per group" — a trim appends a *partial* close, so latest-state would read a
+  lineage trimmed by one share as fully closed and lose the rest of the position. A negative
+  residue means the ledger over-closed a lot; `_lineages` logs it and drops the lineage rather
+  than clamping to zero, because clamping would hide a real inconsistency. This needed no
+  migration.
+- **Costs are measured zero, not absent.** Migration 070 adds nullable `fee` and `slippage`
+  to `paper_executions`. A paper fill at the declared open has an effective price equal to
+  its mark, so both are an exact `0` — `FillCosts` records that rather than leaving the
+  columns NULL, and `slippage` is signed (`(price − mark) × quantity`) so a real broker
+  adapter later fills the same fields without a schema change.
+- **The event name comes from the lots, not from the action label.** `DecisionAction` has no
+  "open": a buy is `add`. So `Fill` carries `prior_quantity` and `residual_quantity`, both
+  measured, and the projection names the event from them — `OPEN` when the prior live total
+  is 0 else `ADD`, `EXIT` when the residual is 0 else `TRIM`. There is no epsilon ladder;
+  that ladder is what made `EXIT` unreachable in #1743 (31 OPEN rows in one day, zero EXITs).
+- **The residual is read back, never computed.** After booking the close rows the executor
+  re-reads `_live_quantity` out of the lineages it just mutated. `prior − quantity` would
+  report −2 shares for a sell of 5 against 3 live ones, which reads as a *short* to anything
+  looking at magnitude; the position is flat and the surplus is logged as a data error.
+  Reading it back is also what makes two orders on one symbol in one run chain correctly —
+  the second sees the first's residual, not the pre-run book.
+- **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
+  row for the execution date get `data_unavailable` on the order head and no `position_events`
+  row at all.
+
+`execute_at_open.py` tries the ledger first and reaches the prose builders only when it
+declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
+opinion" — no `portfolio_ledger_commits` row for the run date, the kill switch off, or the
+read raising — and `([], "")` for "authoritatively a quiet day", which the caller must not
+conflate. The read probe is wrapped; `execute_pending_orders` is deliberately **outside** the
+guard so a partial write stays loud. Exit codes: `2` for conflicting flags or an unresolvable
+prior trading date, `3` for `--require-ledger` when the ledger declined, `0` otherwise.
+
+Two projection details are easy to get wrong. `approved_weight` is a 0..1 fraction while
+`position_events.weight_pct` is a percent, so the ×100 happens in `Decimal` and only then
+becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`. And
+`prev_weight_pct` is **display only**, read from the last committed `positions` book: migration
+069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
+all, and the book may be a different date than the run date.
+
+Cutover is a property of the data, not of a flag. Production's migration tail is 065, the kill
+switch defaults *on*, and `--require-ledger` is absent from the pipeline — so today the job
+probes tables prod does not have, degrades to prose, and stays green;
+`tests/scripts/test_prices_cron_dst.py` pins the invocation carrying neither
+`--require-ledger` (a daily red cron before 069/070 are applied) nor `--no-ledger` (which
+would freeze the prose path forever). Deleting the two prose builders is a follow-up gated on
+prod reaching 070, not part of this task: they still carry the whole #1743 regression suite.
+
+- **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
+  `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and
+  `tests/dq/atlas/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,
+  `TestBuildEventsFromPaperFillsDeclines`, `TestMainPrefersTheLedger` — the last proves the
+  prose builders are never called when the ledger speaks, that HOLD continuity survives, and
+  that both new exit codes are reachable). The atlas module imports the table names from the
+  writers rather than restating them, so a rename breaks the test instead of drifting past it.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 

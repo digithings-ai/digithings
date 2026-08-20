@@ -289,8 +289,7 @@ parse-error:
 
 # Install git hooks (currently: pre-push guard against non-origin remotes + main pushes + unreviewed live-trading touches)
 hooks-install:
-	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
-	@echo "installed: .git/hooks/pre-push"
+	@scripts/install-hooks.sh
 
 # Run gitleaks locally against the working tree. Mirrors the CI scan so
 # developers can reproduce findings before pushing.

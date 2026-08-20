@@ -353,17 +353,21 @@ class TestByokModelOverride:
         finally:
             pop_byok(tok)
 
-    def test_every_routable_byok_provider_has_a_model_override_branch(
+    def test_every_routable_byok_provider_routes_the_users_model(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Regression guard: a catalog provider missing a branch in
-        ``_apply_byok_model_override`` silently discards the user's
-        ``X-BYOK-Model`` and falls through to the operator's own model/key
-        (the #2361/#1873 failure mode). Every provider in
-        ``BYOK_ROUTABLE_PROVIDERS`` other than ``openai`` must prefix the
-        resolved model with ``<provider>/`` — so adding a new BYOK provider
-        to ``config/byok-providers.json`` without a matching branch here
-        fails this test instead of merging silently broken.
+        """Regression guard: a catalog provider whose model is not routed
+        silently discards the user's ``X-BYOK-Model`` and falls through to the
+        operator's own model/key (the #2361/#1873 failure mode). Every provider
+        in ``BYOK_ROUTABLE_PROVIDERS`` other than ``openai`` must prefix the
+        resolved model with ``<provider>/`` — so adding a new BYOK provider to
+        ``config/byok-providers.json`` that ``byok_routable_model`` does not
+        handle fails this test instead of merging silently broken.
+
+        ``_apply_byok_model_override`` no longer carries a per-provider ladder:
+        it defers to ``llm_auth.byok_routable_model``, which reads digillm's
+        registry. This test is unchanged in what it asserts — a new provider
+        still has to come out routed — only in where the answer comes from.
         """
         from digigraph.llm_auth import BYOK_ROUTABLE_PROVIDERS, pop_byok, push_byok_header
 
@@ -397,6 +401,6 @@ class TestByokModelOverride:
             expected = "some-model" if provider == "openai" else f"{provider}/some-model"
             assert resolved == expected, (
                 f"provider {provider!r} did not route the user's BYOK model "
-                f"(got {resolved!r}, expected {expected!r}) — add a branch to "
-                "_apply_byok_model_override"
+                f"(got {resolved!r}, expected {expected!r}) — check "
+                "llm_auth.byok_routable_model and digillm's provider registry"
             )

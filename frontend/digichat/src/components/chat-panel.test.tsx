@@ -115,7 +115,7 @@ describe("ChatPanel prepareSendMessagesRequest — X-BYOK-Model (Fix 1 regressio
   // than a hardcoded list here) is what makes this regress loudly the next
   // time a provider is added without updating this predicate.
   it.each(BYOK_PROVIDER_LIST)(
-    "sets X-BYOK-Model for provider=%s iff byokRequiresModel(provider) is true and a model is set",
+    "sets X-BYOK-Model for provider=%s whenever the user chose a model",
     async (provider: BYOKProvider) => {
       const { headers } = await callPrepareSendMessagesRequest({
         key: "test-key",
@@ -126,13 +126,33 @@ describe("ChatPanel prepareSendMessagesRequest — X-BYOK-Model (Fix 1 regressio
 
       expect(headers.get("X-BYOK-Key")).toBe("test-key");
       expect(headers.get("X-BYOK-Provider")).toBe(provider);
-      if (byokRequiresModel(provider)) {
-        expect(headers.get("X-BYOK-Model")).toBe("some-model-slug");
-      } else {
-        expect(headers.has("X-BYOK-Model")).toBe(false);
-      }
+      expect(headers.get("X-BYOK-Model")).toBe("some-model-slug");
     },
   );
+
+  // This assertion used to read `iff byokRequiresModel(provider)`, dropping the
+  // header for providers whose catalog entry says the model is optional. Optional
+  // is not "discard it": with no X-BYOK-Model, digigraph answers on *its own*
+  // default, which on the shipped release config is an openrouter/… model billed
+  // to the operator's key while the user's sits bound and unspent (#2490). The
+  // flag governs whether a model is *mandatory*, never whether a chosen one is
+  // forwarded.
+  it("forwards a chosen model even where byokRequiresModel is false", async () => {
+    const optional = BYOK_PROVIDER_LIST.filter((p) => !byokRequiresModel(p));
+    // If the catalog ever makes every provider require a model this test would
+    // pass by iterating nothing — fail loudly instead, since the regression it
+    // guards is exactly about the optional case.
+    expect(optional.length).toBeGreaterThan(0);
+    for (const provider of optional) {
+      const { headers } = await callPrepareSendMessagesRequest({
+        key: "test-key",
+        provider,
+        model: "gpt-4o-mini",
+        isSet: true,
+      });
+      expect(headers.get("X-BYOK-Model")).toBe("gpt-4o-mini");
+    }
+  });
 
   it("never sets X-BYOK-* headers at all when no key is set", async () => {
     const { headers } = await callPrepareSendMessagesRequest({
