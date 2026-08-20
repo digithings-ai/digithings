@@ -4,8 +4,10 @@ Atlas provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
-  2. OpenRouter connectivity (1-token ping via openrouter/auto)
-     Note: all phases route through OpenRouter Auto Router (config/model_modes.yaml).
+  2. OpenRouter connectivity (1-token ping via digillm, pinned to a known-good model)
+     Note: phases route on PINNED per-capability models from config/olympus_models.yaml
+     (see RUNBOOK.md "OpenRouter model tiers") — bare openrouter/auto is exercised
+     deliberately in checks 3/3b/4 below, not as the connectivity probe.
   3. OpenRouter structured-output routing (real digillm json_schema call)
   3b. OpenRouter function tools — each active-tier phase model accepts the query_data
      tool (guards the ``:online`` "No endpoints found that support tool use" regression)
@@ -97,7 +99,7 @@ def check_env_vars() -> bool:
     required = {
         "SUPABASE_URL": "Supabase project URL",
         "SUPABASE_SERVICE_ROLE_KEY": "Supabase service-role key",
-        "OPENROUTER_API_KEY": "OpenRouter API key (all phases route via Auto Router — see config/model_modes.yaml)",
+        "OPENROUTER_API_KEY": "OpenRouter API key (phases route on pinned models per tier — see config/olympus_models.yaml)",
     }
     all_ok = True
     for var, desc in required.items():
@@ -109,78 +111,56 @@ def check_env_vars() -> bool:
     return all_ok
 
 
-# openrouter/auto (OpenRouter's own auto-router) has been observed returning empty
-# completions in isolated bursts independent of the phase-model routing path — the same
-# failure class digillm's _EMPTY_RETRY_MAX/_EMPTY_RETRY_DELAY already self-heals for real
-# pipeline calls (digillm/src/digillm/client.py). This bare ping predates digillm import
-# (it's the fast, dependency-free first check), so it retries locally instead of pulling
-# digillm in just for this. Empty-completion daily failures since 2026-08-11 (#1633) were
-# this check hard-failing the preflight on a single unretried empty response while the real
-# digillm-routed checks below (3/3b/4, which do retry) passed cleanly every time.
+# This ping used to hit the bare, unconstrained ``openrouter/auto`` Auto Router directly
+# through a standalone OpenAI client (its own 3-retry/5s-backoff loop, no digillm). That
+# combination is the least-defended path in the whole script: OpenRouter documents the Auto
+# Router as a Beta, task-classification feature (each request is classified and routed to
+# "the most popular model for that task" — openrouter.ai/docs/features/model-routing), not a
+# connectivity probe, and a bare "ok" ping carries no response_format/tools — so it never
+# triggered digillm's provider.require_parameters guard (client.py: forced ON for
+# response_format/tools requests) even when routed through digillm. Every real Olympus phase
+# already routes on a PINNED model (RUNBOOK.md "OpenRouter model tiers" — never bare auto),
+# and the daily-failure pattern since 2026-08-11 (#1633, recurring #2374) was this exact bare
+# ping hard-failing preflight while the digillm-routed checks below (3/3b/4, which DO exercise
+# openrouter/auto but deliberately, with response_format/tools present) passed cleanly.
 #
-# _OPENROUTER_PING_TIMEOUT bounds each attempt: the openai SDK otherwise defaults to a
-# 600s request timeout (with its own internal retries on top), which combined with our
-# 4-attempt loop could stall the "fast" preflight check for a very long time on a hung
-# connection rather than a clean empty response.
-_OPENROUTER_PING_RETRY_MAX = 3
-_OPENROUTER_PING_RETRY_DELAY = 5.0
-_OPENROUTER_PING_TIMEOUT = 20.0
+# Fix: route through digillm's completion() (same self-heal every real call gets — up to
+# DIGILLM_EMPTY_RETRY_MAX retries with backoff, plus an OPENROUTER_FALLBACK_MODELS provider
+# swap on the first retry when that env is set, as it now is for this CI step) AND pin the
+# ping to a known-good open-weight model instead of the flaky bare auto-router, so this check
+# exercises the same kind of path production actually uses rather than a strictly worse one.
+_CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
 
 
-def check_openrouter(model: str = "openrouter/auto") -> bool:
+def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
     print(_bold("\n2. OpenRouter connectivity"))
-    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
-    if not api_key:
+    if not os.environ.get("OPENROUTER_API_KEY", "").strip():
         check("OpenRouter ping", False, "OPENROUTER_API_KEY not set — skipping")
         return False
     try:
-        from openai import OpenAI
+        _ensure_importable()
+        from digillm.client import completion
 
-        client = OpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
-            timeout=_OPENROUTER_PING_TIMEOUT,
-            max_retries=0,  # we own the retry loop below; don't stack SDK retries on top
-        )
         t0 = time.monotonic()
-        content = ""
-        attempt = 0
-        while True:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "user", "content": "Reply with the single word: ok"}],
-                max_tokens=5,
-                temperature=0,
-            )
-            content = resp.choices[0].message.content or ""
-            if content.strip() or attempt >= _OPENROUTER_PING_RETRY_MAX:
-                break
-            attempt += 1
-            print(
-                f"        empty response from {model} "
-                f"(retry {attempt}/{_OPENROUTER_PING_RETRY_MAX}); "
-                f"backing off {_OPENROUTER_PING_RETRY_DELAY:.1f}s"
-            )
-            time.sleep(_OPENROUTER_PING_RETRY_DELAY)
+        resp = completion(
+            model,
+            [{"role": "user", "content": "Reply with the single word: ok"}],
+            max_tokens=5,
+            temperature=0,
+        )
         elapsed = time.monotonic() - t0
-        ok = bool(content.strip())
+        content = ""
+        if resp is not None and resp.choices:
+            content = (resp.choices[0].message.content or "").strip()
         return check(
             f"OpenRouter {model}",
-            ok,
-            f"{elapsed:.1f}s — response: {content.strip()!r}"
-            if ok
-            else f"empty response after {attempt + 1} attempt(s)",
+            bool(content),
+            f"{elapsed:.1f}s — response: {content!r}"
+            if content
+            else "empty response after digillm's empty-retry self-heal",
         )
-    except (
-        OSError,
-        RuntimeError,
-        KeyError,
-        AttributeError,
-        ImportError,
-        TypeError,
-        ValueError,
-    ) as exc:
-        return check("OpenRouter ping", False, str(exc))
+    except Exception as exc:
+        return check("OpenRouter ping", False, f"{type(exc).__name__}: {exc}")
 
 
 def check_openrouter_structured() -> bool:
@@ -196,10 +176,9 @@ def check_openrouter_structured() -> bool:
         return check("Structured-output ping", False, "OPENROUTER_API_KEY not set")
     try:
         _ensure_importable()
-        from pydantic import BaseModel, Field
-
         from digigraph import usage as usage_mod
         from digigraph.graph.research_agent import run_research_agent
+        from pydantic import BaseModel, Field
 
         class _Ping(BaseModel):
             status: str = Field(description="the single word: ok")
@@ -223,7 +202,7 @@ def check_openrouter_structured() -> bool:
             bool(out.status),
             f"{elapsed:.1f}s — model={served}, cost=${snap.get('cost_usd', 0.0):.4f}",
         )
-    except Exception as exc:  # noqa: BLE001 — diagnostic: any failure (incl. OpenRouter HTTP
+    except Exception as exc:
         # 4xx like the 404 "No models match … model restrictions") must report a clean FAIL,
         # not crash the preflight with a traceback. Catching broadly is correct for a probe.
         return check(
@@ -250,6 +229,7 @@ def check_openrouter_function_tools() -> bool:
         _ensure_importable()
         from digigraph.model_config import _load_olympus_models, get_olympus_tier
         from digillm.client import completion
+
         from digiquant.olympus.atlas.data.tools import DATA_TOOLS
 
         tier = get_olympus_tier()
@@ -283,12 +263,12 @@ def check_openrouter_function_tools() -> bool:
                 ok = resp is not None
                 check(f"tools accepted: {model}", ok, f"{elapsed:.1f}s" if ok else "no response")
                 all_ok = all_ok and ok
-            except Exception as exc:  # noqa: BLE001 — a 404 "No endpoints …support tool use" here
+            except Exception as exc:
                 # is exactly the regression we are guarding; report a clean FAIL per-model.
                 check(f"tools accepted: {model}", False, f"{type(exc).__name__}: {exc}")
                 all_ok = False
         return all_ok
-    except Exception as exc:  # noqa: BLE001 — diagnostic probe must not crash preflight
+    except Exception as exc:
         return check("Function-tool smoke test", False, f"{type(exc).__name__}: {exc}")
 
 
@@ -316,14 +296,16 @@ def check_openrouter_web_search() -> bool:
             else "no grounding text returned (check server-tool routing / grounding_model)"
         )
         return check(f"Web search ({model})", ok, detail)
-    except Exception as exc:  # noqa: BLE001 — diagnostic probe must not crash preflight
+    except Exception as exc:
         return check("Web search ping", False, f"{type(exc).__name__}: {exc}")
 
 
 def check_supabase() -> bool:
     print(_bold("\n5. Supabase connectivity + baseline row"))
     url = os.environ.get("CORE_SUPABASE_URL", os.environ.get("SUPABASE_URL", "")).strip()
-    key = os.environ.get("CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")).strip()
+    key = os.environ.get(
+        "CORE_SUPABASE_SERVICE_KEY", os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+    ).strip()
     if not url or not key:
         check("Supabase ping", False, "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set — skipping")
         return False
@@ -430,7 +412,7 @@ def main() -> int:
     check_env_vars()
 
     if not args.skip_llm:
-        check_openrouter("openrouter/auto")
+        check_openrouter()
         check_openrouter_structured()
         check_openrouter_function_tools()
         check_openrouter_web_search()
