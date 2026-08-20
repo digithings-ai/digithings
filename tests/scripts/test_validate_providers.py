@@ -1,6 +1,6 @@
 """Unit tests for OpenRouter connectivity check in scripts/atlas/validate-providers.py (#2374).
 
-The 2026-08-11/12/17/18/19 daily olympus runs all died at this preflight ping: a bare,
+The 2026-08-11/12/15/18/19/20 daily olympus runs all died at this preflight ping: a bare,
 unconstrained ``openrouter/auto`` call made through a standalone OpenAI client with its own
 ad-hoc retry loop — bypassing every protection (empty-completion self-heal, provider fallback
 swap) that digillm gives every other call in the codebase, and pinging a model no real phase
