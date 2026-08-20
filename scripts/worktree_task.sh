@@ -213,13 +213,16 @@ cmd_create() {
   base_ref="$(resolve_base_ref "$base")"
   assert_module_base_is_current "$base_ref"
 
-  echo "Base branch: ${base_ref#refs/remotes/}"
   mkdir -p "$WORKTREES_DIR"
 
-  # Create branch from base if it doesn't exist; otherwise reuse
+  # Create branch from base if it doesn't exist; otherwise reuse. Only the second
+  # path is cut from the base, so only it may claim one — a reused local branch is
+  # wherever its last session left it, which is the whole hazard #2547 is about.
   if git show-ref --verify --quiet "refs/heads/${branch}"; then
+    warn "Reusing existing local branch ${branch} — not cut from ${base_ref#refs/remotes/}."
     git worktree add "$wt_path" "$branch"
   else
+    echo "Base branch: ${base_ref#refs/remotes/}"
     git worktree add -b "$branch" "$wt_path" "$base_ref"
   fi
 

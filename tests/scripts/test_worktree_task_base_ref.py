@@ -25,7 +25,6 @@ import json
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -62,8 +61,25 @@ ONE_HOP_COMPONENT = _ONE_HOP[0] if _ONE_HOP else "component:root"
 TWO_HOP_COMPONENT, TWO_HOP_BRANCH = _TWO_HOP[0] if _TWO_HOP else ("component:digiquant", "module/x")
 
 
+# A developer's global config is not this test's business. `commit.gpgsign`,
+# `core.hooksPath` or a commit template would fail `_commit` and error the module
+# instead of exercising the script — and this repo does install a git hook.
+_HERMETIC_GIT_ENV = {
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_SYSTEM": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+}
+
+
 def _git(cwd: Path, *args: str) -> str:
-    done = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True)
+    done = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, **_HERMETIC_GIT_ENV},
+    )
     return done.stdout.strip()
 
 
@@ -139,17 +155,18 @@ def _seed(root: Path, *, module_at_tip: bool) -> dict[str, object]:
 
 
 @pytest.fixture()
-def seed():
-    created: list[Path] = []
+def seed(tmp_path_factory: pytest.TempPathFactory):
+    """Hand back a factory, so one test can seed both the accepted and refused case.
+
+    pytest owns the directories: it retains the last few runs, which is what you want
+    when a failure is "the script chose the wrong ref" and the repos are the evidence.
+    """
 
     def make(*, module_at_tip: bool = False) -> dict[str, object]:
-        root = Path(tempfile.mkdtemp(prefix="worktree-task.")).resolve()
-        created.append(root)
+        root = tmp_path_factory.mktemp("worktree-task").resolve()
         return _seed(root, module_at_tip=module_at_tip)
 
-    yield make
-    for root in created:
-        shutil.rmtree(root, ignore_errors=True)
+    return make
 
 
 def _run(
@@ -161,7 +178,7 @@ def _run(
     work = fixture["work"]
     assert isinstance(work, Path)
     bin_dir = _install_gh_stub(work.parent, component)
-    environ = dict(os.environ)
+    environ = {**os.environ, **_HERMETIC_GIT_ENV}
     environ["PATH"] = f"{bin_dir}{os.pathsep}{environ['PATH']}"
     # The script would otherwise inherit this run's own repository context.
     for leaked in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
@@ -173,6 +190,10 @@ def _run(
         env=environ,
         capture_output=True,
         text=True,
+        # `git fetch origin` is against a local bare repo here, but a credential
+        # helper or a stray remote would otherwise hang the lane instead of failing.
+        stdin=subprocess.DEVNULL,
+        timeout=120,
     )
 
 
