@@ -1090,8 +1090,10 @@ class TestOperatorDefaultRefusalOverHttp:
 
         That is a server misconfiguration, and converting it into a 400 about the
         caller's key would send every BYOK user chasing their own credentials. The
-        middleware fails open; the invariant survives because the resolver re-derives
-        the same verdict on the same string and refuses there.
+        middleware fails open, which is all this test pins: the probe answers 200 while
+        ``operator_default_model`` itself still raises. The billing invariant is held
+        elsewhere on this path — by that same raise surfacing out of
+        ``get_model_for_mode``, not by a second verdict reached inside the resolver.
         """
         monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
         monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)

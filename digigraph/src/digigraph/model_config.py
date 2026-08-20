@@ -631,8 +631,10 @@ def _apply_byok_model_override(resolved: str) -> str:
     warning names the provider and not the value that was dropped.
 
     **No header is not consent.** When the key is bound and no ``X-BYOK-Model`` came
-    with it, *resolved* is the operator's own default — and if that default names a
-    registered provider, digillm serves it from the operator's env key while the
+    with it, *resolved* is whatever the operator's own configuration produced — the
+    tier default on the mode path, a ``phase_models`` override or a capability model
+    on the phase path — and if that names a registered provider, digillm serves it
+    from the operator's env key while the
     user's key sits bound, displayed as active, and unspent. That is the same
     mis-billing as a foreign ``X-BYOK-Model``, arrived at by omission instead of by
     input, so it gets the same answer: refuse. :class:`ValueError` rather than a
