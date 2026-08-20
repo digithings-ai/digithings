@@ -362,11 +362,23 @@ def _at_open_command(workflow: dict) -> str:
 
     Found by the script's own name rather than by step index or step name, so reordering
     the job or renaming the step keeps the flag assertions below pointed at the right line.
+
+    Narrowed to the invoking line with shell comments stripped, so the flag assertions read
+    the command and nothing else. Today the prose above this step is a YAML comment, which
+    the parser drops before `step["run"]` ever exists — but a `run: |` block that grew a
+    second line and an inline `# ... --require-ledger ...` note would otherwise turn a
+    comment into a passing or failing assertion about behaviour.
     """
     steps = workflow["jobs"]["at-open"]["steps"]
     runs = [str(step["run"]) for step in steps if "execute_at_open.py" in str(step.get("run", ""))]
     assert len(runs) == 1, f"expected exactly one at-open invocation, found {len(runs)}"
-    return runs[0]
+    lines = [
+        line.split("#", 1)[0].strip()
+        for line in runs[0].splitlines()
+        if "execute_at_open.py" in line.split("#", 1)[0]
+    ]
+    assert len(lines) == 1, f"expected one at-open command line, found {len(lines)}: {lines}"
+    return lines[0]
 
 
 def test_at_open_fills_the_prior_days_rebalance(workflow: dict) -> None:

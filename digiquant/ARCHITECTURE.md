@@ -1488,8 +1488,8 @@ all, and the book may be a different date than the run date.
 Cutover is a deliberate edit, **not** a property of the data (#2508). It was the latter first:
 the kill switch defaults *on* and the pipeline passed no ledger flag, so the morning job would
 have started trusting the ledger the day the ledger *writers* reached `main` with 069 applied.
-Two conditions, not one — 069's file is already on `main` and nothing switched, because
-`ledger_io.py` and `execution_io.py` are not there yet. That is unsafe at the boundary —
+Two conditions, not one, and `main` meets only the first today: 069's file is there, while the
+writers described above are on `develop` and not yet promoted. That is unsafe at the boundary —
 order size is a weight delta against the legacy `positions` book while residuals are measured
 only from `portfolio_ledger_holding_lots`, which starts empty and has no backfill, so the first
 run would book EXIT for every trim of a held name and OPEN for every add, into rows 069 makes

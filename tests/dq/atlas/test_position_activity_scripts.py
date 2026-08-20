@@ -105,17 +105,18 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
     books EXIT and every add books OPEN, into rows migration 069 makes append-only.
 
     Asserted over the AST rather than by matching source text, so a reordered argument list is
-    still covered. The walk only sees argv written as a literal list, so the count is pinned too:
-    hoisting a command into a variable, or adding a third call site, fails here rather than
-    silently escaping the check. The dry-run prints are asserted alongside the real calls, because
-    the printed command is what an operator reads before trusting a repair run. Deleting the flag
-    from both call sites at once is the cutover; this test is what makes that deliberate rather
+    still covered. Every literal-argv `subprocess.run` in the file is classified, and the
+    partition must be exhaustive: a new call site naming neither known script fails as
+    unclassified rather than escaping a substring match, and hoisting an argv out of a literal
+    list fails the count. The dry-run prints are asserted alongside the real calls, because the
+    printed command is what an operator reads before trusting a repair run. Deleting the flag
+    from every call site at once is the cutover; this test is what makes that deliberate rather
     than incidental.
     """
     source = (_SCRIPT_DIR / "backfill_position_events.py").read_text()
     tree = ast.parse(source)
 
-    invocations: list[list[str]] = []
+    call_sites: list[list[str]] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not node.args:
             continue
@@ -125,10 +126,21 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
         argv = node.args[0]
         if not isinstance(argv, ast.List):
             continue
-        rendered = [ast.unparse(element) for element in argv.elts]
-        if any("exe_script" in element for element in rendered):
-            invocations.append(rendered)
+        call_sites.append([ast.unparse(element) for element in argv.elts])
 
+    # Classify every call site rather than filtering for the ones we expect. A third door onto
+    # `execute_at_open.py` opened under a different variable name would satisfy a substring
+    # filter's count while carrying no flag; here it fails as unclassified instead.
+    invocations = [argv for argv in call_sites if any("exe_script" in el for el in argv)]
+    price_runs = [argv for argv in call_sites if any("price_script" in el for el in argv)]
+    unclassified = [
+        argv for argv in call_sites if argv not in invocations and argv not in price_runs
+    ]
+
+    assert not unclassified, (
+        f"unclassified subprocess call site(s): {unclassified}; if this invokes execute_at_open.py "
+        "it must carry --no-ledger, and this test must be taught to see it"
+    )
     assert len(invocations) == 2, (
         f"expected 2 literal-argv execute_at_open invocations, found {len(invocations)}; "
         "a call site was added, removed, or hoisted out of a literal list"
@@ -155,3 +167,6 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
     )
     for preview in previews:
         assert "--no-ledger" in preview, f"dry-run preview missing --no-ledger: {preview}"
+        assert "--require-ledger" not in preview, (
+            f"dry-run preview must not require the ledger: {preview}"
+        )
