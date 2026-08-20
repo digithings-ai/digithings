@@ -291,12 +291,15 @@ Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module b
 
 Task branches for these PR into `develop` directly. The two-hop model applies to the remaining backend modules (`module/digiquant`, `module/digikey`, `module/digigraph`, etc.).
 
-**Sync the module branch with develop *before* you branch off it.** Module branches drift behind `develop` fast because we iterate on develop constantly — and a task branch cut from a stale module branch edits dead code. (Real incident, 2026-06-17: `module/digiquant` was ~2 months / ~400 commits behind, predating the `apps/digiquant-atlas → digiquant/src/digiquant/olympus` migration; backend PRs cut from it touched files that no longer exist on develop.) `make task ISSUE=N` does **not** sync for you — check first:
+**A task branch must be cut from a current base.** Module branches drift behind `develop` fast because we iterate on develop constantly — and a task branch cut from a stale module branch edits dead code. (Real incident, 2026-06-17: `module/digiquant` was ~2 months / ~400 commits behind, predating the `apps/digiquant-atlas → digiquant/src/digiquant/olympus` migration; backend PRs cut from it touched files that no longer exist on develop.) The same hazard applied to the one-hop components until 2026-08-20: `scripts/worktree_task.sh` fetched the base branch only when no *local* ref of that name existed, and `refs/heads/develop` always exists, so `make task` handed out worktrees cut from whatever stale local `develop` you last pulled — one was measured 50 commits behind `origin/develop` (#2547).
 
-```bash
-git fetch origin
-git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale, sync before branching
-```
+`make task ISSUE=N` now enforces this itself, so there is no manual pre-flight check to remember:
+
+- it runs `git fetch origin` first, then branches from `refs/remotes/origin/<base>` — never from the local branch of the same name;
+- if the resolved base is a `module/*` branch behind `origin/develop`, it prints the behind-count and **refuses**, with the `gh pr create` recipe for syncing it (below);
+- `WORKTREE_TASK_OFFLINE=1` skips the fetch and `WORKTREE_TASK_ALLOW_STALE_MODULE=1` downgrades the refusal to a warning. Both are loud, and both exist so this is a detour rather than a dead end.
+
+`tests/scripts/test_worktree_task_base_ref.py` pins that behaviour, deriving its one-hop and two-hop fixtures from `project_routing.json` rather than hard-coding a component.
 
 Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §9](docs/agents/AGENT_WORKFLOW.md) for which stage gets the full review vs. a diff-scoped check.
 
