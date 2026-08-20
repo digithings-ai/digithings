@@ -13,7 +13,7 @@ If you're a Claude Code session picking this up fresh, the later sections are th
 git clone https://github.com/digithings-ai/digithings
 cd digithings
 make agents-init         # regenerates .claude/, .cursor/rules, .github/copilot-instructions.md from agents.yml
-make hooks-install       # installs .git/hooks/pre-push guardrails
+make hooks-install       # installs the pre-push guardrails from origin/develop
 gh auth login            # GitHub CLI — required for make pr and issue workflow
 ```
 
