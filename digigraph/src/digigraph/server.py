@@ -117,14 +117,21 @@ def _byok_default_routes_elsewhere(provider: str) -> bool:
     Resolution failures answer ``False`` rather than refusing. ``operator_default_model``
     raises in ``llm_mode: free`` without an explicit pin, and this middleware is not the
     place to convert a *server* misconfiguration into a 400 blaming the caller's key —
-    the request proceeds and fails where it actually breaks. The billing invariant is
-    not weakened by that: ``_apply_byok_model_override`` re-derives the verdict at the
-    resolver and refuses there. It judges the model *it* is about to return, which is
-    only sometimes the string judged here — ``get_model_for_mode`` hands it
-    ``operator_default_model()``, but ``get_model_for_phase`` hands it a ``phase_models``
+    the request proceeds and fails where it actually breaks.
+
+    The billing invariant survives that open failure two ways, and which one applies
+    turns on the *path*, not on which error was swallowed. On the mode path,
+    ``get_model_for_mode`` evaluates ``operator_default_model()`` as the *argument* to
+    ``_apply_byok_model_override``, so a failure that recurs re-raises before the
+    resolver is ever entered — nothing is billed because the request fails, not because
+    a second verdict was reached — while a merely transient one (``_LLM_PROBE_ERRORS``
+    is wider than the free-mode ``ValueError``) lets the resolver judge the same string
+    this function could not resolve. On the phase path, ``get_model_for_phase`` never
+    calls ``operator_default_model`` at all: it hands the resolver a ``phase_models``
     override or an ``olympus_models.yaml`` capability model, neither of which this
-    middleware ever sees. That is the stronger guarantee, not a weaker one: the refusal
-    lands on whatever the request would actually have been billed for.
+    middleware ever sees, and the resolver refuses on *that* string. Either way the
+    refusal — or the failure — lands on whatever the request would actually have been
+    billed for.
     """
     from digigraph.llm_auth import byok_operator_model_routes_elsewhere
     from digigraph.model_config import operator_default_model

@@ -614,6 +614,8 @@ describe("POST /api/chat", () => {
           "x-byok-key": "sk-or-v1-test",
           "x-byok-provider": "openrouter",
           "x-byok-model": "openai/gpt-4o-mini",
+          "x-digichat-session": "sess-trace",
+          "x-request-id": "rid-trace",
         })
       );
       const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0];
@@ -625,8 +627,39 @@ describe("POST /api/chat", () => {
       // digigraph actually consumes (`corpus_routing.py:39`) — so assert it too.
       expect(call?.upstreamHeaders["X-Digi-Tenant"]).toBe(mockAuthCtx.tenantSlug);
       expect(call?.digigraphBaseUrl).toBe("http://127.0.0.1:8000");
+      // The conversation itself, and the headers this branch echoes back to the
+      // browser. The mock factory discards its argument and answers a bare 200, so
+      // neither is observable through the response — assert on the recorded call or
+      // the trace branch could hand the adapter an empty history and still pass.
+      expect(call?.messages).toHaveLength(1);
+      expect(call?.responseHeaders["X-Digichat-Session"]).toBe("sess-trace");
+      expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
       // No embed config on an authenticated request, so the adapter gets the default.
       expect(call?.activityDetail).toBe("full");
+    });
+
+    it("forwards a digigraph-backed embed's activityDetail to the trace adapter", async () => {
+      // The default above only exercises the `?? "full"` fallback. The one fixture
+      // that sets `activityDetail` elsewhere in this file is `foundry`-backed, and
+      // `route.ts:182` returns before the trace branch — so nothing pinned that a
+      // *configured* value reaches the adapter at all.
+      vi.mocked(resolveChatTenantContext).mockResolvedValue({
+        tenantSlug: "occ",
+        ownerUserSub: "embed:anonymous",
+        embedConfig: {
+          slug: "occ",
+          gateMode: "ungated",
+          theme: "dark",
+          attribution: false,
+          token: "tok",
+          backend: { type: "digigraph", digisearchIndex: "occ_help" },
+          activityDetail: "labels",
+        },
+      } as never);
+      await POST(chatReq({ "x-embed-host": "https://occ.example" }));
+      const call = vi.mocked(createDigigraphTraceStreamResponse).mock.calls.at(-1)?.[0];
+      expect(call?.activityDetail).toBe("labels");
+      expect(call?.upstreamHeaders["X-Digi-Corpus-Index"]).toBe("occ_help");
     });
 
     it("falls back to streamText when the caller sends x-digichat-trace: 0", async () => {
