@@ -126,9 +126,12 @@ def check_env_vars() -> bool:
 #
 # Fix: route through digillm's completion() (same self-heal every real call gets — up to
 # DIGILLM_EMPTY_RETRY_MAX retries with backoff, plus an OPENROUTER_FALLBACK_MODELS provider
-# swap on the first retry when that env is set, as it now is for this CI step) AND pin the
-# ping to a known-good open-weight model instead of the flaky bare auto-router, so this check
-# exercises the same kind of path production actually uses rather than a strictly worse one.
+# swap on the first retry when that env is set) AND pin the ping to a known-good open-weight
+# model instead of the flaky bare auto-router, so this check exercises the same kind of path
+# production actually uses rather than a strictly worse one. NOTE: as of this change,
+# OPENROUTER_FALLBACK_MODELS is still only set on the sibling "Run Olympus research pipeline"
+# workflow step, not this preflight step — see the PR description for the pending one-line
+# workflow follow-up that closes that gap.
 _CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
 
 

@@ -51,8 +51,7 @@ def _fake_response(content: str | None) -> SimpleNamespace:
 
 def test_default_model_is_pinned_not_bare_auto(vp: Any) -> None:
     """The regression: the ping must pin to a known-good model, never bare openrouter/auto."""
-    assert vp._CONNECTIVITY_PING_MODEL != "openrouter/auto"
-    assert vp._CONNECTIVITY_PING_MODEL.startswith("openrouter/")
+    assert vp._CONNECTIVITY_PING_MODEL == "openrouter/deepseek/deepseek-v4-flash"
 
 
 def test_success_routes_through_digillm_and_passes(vp: Any) -> None:
