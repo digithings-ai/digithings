@@ -1485,13 +1485,20 @@ becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`
 069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
 all, and the book may be a different date than the run date.
 
-Cutover is a property of the data, not of a flag. Production's migration tail is 065, the kill
-switch defaults *on*, and `--require-ledger` is absent from the pipeline — so today the job
-probes tables prod does not have, degrades to prose, and stays green;
-`tests/scripts/test_prices_cron_dst.py` pins the invocation carrying neither
-`--require-ledger` (a daily red cron before 069/070 are applied) nor `--no-ledger` (which
-would freeze the prose path forever). Deleting the two prose builders is a follow-up gated on
-prod reaching 070, not part of this task: they still carry the whole #1743 regression suite.
+Cutover is a deliberate edit, **not** a property of the data (#2508). It was the latter first:
+the kill switch defaults *on* and the pipeline passed no ledger flag, so the morning job would
+have started trusting the ledger the day migration 069 landed. That is unsafe at the boundary —
+order size is a weight delta against the legacy `positions` book while residuals are measured
+only from `portfolio_ledger_holding_lots`, which starts empty and has no backfill, so the first
+run would book EXIT for every trim of a held name and OPEN for every add, into rows 069 makes
+append-only. So `pipeline-digiquant-prices.yml` passes `--no-ledger`, and
+`tests/scripts/test_prices_cron_dst.py` pins it *present* while `--require-ledger` stays absent
+(it would be a daily red cron before 069/070 are applied). Removing `--no-ledger` is the
+cutover, and it must arrive with seeded lots — or with a ledger that declines when the lot table
+is empty and the prior book is not — and preferably with `--require-ledger` in the same edit, so
+a silent fallback to prose cannot hide the handover. Deleting the two prose builders is a
+further follow-up gated on prod reaching 070: they still carry the whole #1743 regression
+suite.
 
 - **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
   `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and
