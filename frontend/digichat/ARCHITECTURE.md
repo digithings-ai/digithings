@@ -438,11 +438,19 @@ policy (digithings.ai = `free_then_byok` + `showByok: true`; foundry/DataTap =
 
 On structured `free_quota_exceeded` / clear rate-limit errors, embed tenants with
 `llmAccess: free_then_byok` stop the turn and open the in-chat BYOK sequence
-(even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). After
-the visitor activates a validated key, the failed turn is retried with existing
-`X-BYOK-*` headers. BYOK providers listed in the UI: OpenAI, OpenRouter,
-Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
-Provider list is defined by `config/byok-providers.json`.
+(even when `gateMode` is `ungated` — see `shouldSuggestByokOnEmbedError`). The
+same reopen fires for digigraph's model-remediable BYOK refusals
+(`byok_model_required`, `byok_default_model_provider_mismatch` — see #2490):
+those arrive as HTTP 400 `ApiErrorEnvelope`s before SSE starts, and the default
+trace stream (`adapters/digithings/stream.ts`) must surface them as stream
+errors (same contract as in-stream `delta.digigraph_error`) rather than soft-
+masking them as a successful "unavailable" assistant turn. Soft-masking stays
+for 5xx only. A key that is already bound still reopens the sequence for those
+model-remediable codes (`isByokModelRemediableError`) — naming a model is the
+fix. After the visitor activates a validated key, the failed turn is retried
+with existing `X-BYOK-*` headers. BYOK providers listed in the UI: OpenAI,
+OpenRouter, Anthropic, Gemini, x.ai (model required for all non-OpenAI
+providers). Provider list is defined by `config/byok-providers.json`.
 
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 

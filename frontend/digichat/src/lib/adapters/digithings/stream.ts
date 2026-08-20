@@ -43,6 +43,33 @@ export function digigraphErrorToEmbedPayload(err: DigigraphErrorPayload): string
   return JSON.stringify(payload);
 }
 
+/**
+ * Parse digigraph's HTTP `ApiErrorEnvelope` (`{"error":{"code","message",...}}`).
+ *
+ * Used when chat-completions refuses before SSE starts (BYOK middleware 400s). In-stream
+ * refusals arrive as `delta.digigraph_error` and never pass through here.
+ */
+export function parseDigigraphHttpErrorBody(body: string): DigigraphErrorPayload | null {
+  const trimmed = body.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      error?: { code?: unknown; message?: unknown } | string;
+    };
+    const err = parsed?.error;
+    if (!err || typeof err !== "object") return null;
+    const code = err.code;
+    if (typeof code !== "string" || !code.length) return null;
+    const message = err.message;
+    return {
+      code,
+      message: typeof message === "string" && message.length ? message : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
 class DigigraphStreamContractError extends Error {
   constructor(payload: string) {
     super(payload);
@@ -129,14 +156,26 @@ export async function createDigigraphTraceStreamResponse(opts: {
         body: JSON.stringify(bodyPayload),
       });
       if (!res.ok) {
-        // Log the upstream detail server-side; never stream it. A 500 body can
-        // carry stack traces, internal hostnames, and prompt echoes, and this
+        // Log the upstream detail server-side; never stream a raw 5xx body. A 500
+        // can carry stack traces, internal hostnames, and prompt echoes, and this
         // response goes to anonymous embed visitors.
         const detail = (await res.text().catch(() => "")).trim();
         console.error(
           `[digigraph] upstream ${res.status} ${res.statusText}`,
           detail.length > 1500 ? `${detail.slice(0, 1500)}…` : detail
         );
+        // Client-remediable digigraph refusals (BYOK model required / default
+        // provider mismatch, free_quota_exceeded, …) are HTTP 4xx envelopes that
+        // land *before* SSE. Masking them as a soft "unavailable" assistant turn
+        // hides the code from embed-chat-error, so the BYOK sequence never
+        // reopens (#2490 / #2503). Same contract path as in-stream digigraph_error.
+        if (res.status >= 400 && res.status < 500) {
+          const parsed = parseDigigraphHttpErrorBody(detail);
+          if (parsed) {
+            writer.write({ type: "text-end", id: textId });
+            throw new DigigraphStreamContractError(digigraphErrorToEmbedPayload(parsed));
+          }
+        }
         writer.write({
           type: "text-delta",
           id: textId,

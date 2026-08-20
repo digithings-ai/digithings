@@ -320,6 +320,87 @@ it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async ()
   ).toBe(true);
 });
 
+// #2490 / #2503: BYOK middleware refuses before SSE. The default soft-mask path
+// turned that 400 into a successful "unavailable" assistant turn, so embed never
+// saw the remediable code and never reopened BYOK settings.
+it("surfaces HTTP 400 ApiErrorEnvelope as a stream error for BYOK handoff", async () => {
+  const refusal =
+    "Name a model with X-BYOK-Model so your 'openai' key is the one that pays.";
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        error: {
+          code: "byok_default_model_provider_mismatch",
+          message: refusal,
+          service: "digigraph",
+        },
+      }),
+      { status: 400, statusText: "Bad Request" },
+    ),
+  );
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).not.toMatch(/unavailable|try again/i);
+  expect(body).toContain("byok_default_model_provider_mismatch");
+  expect(body).toContain(refusal);
+  const errorChunk = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6))
+    .find((raw) => raw.includes("byok_default_model_provider_mismatch"));
+  expect(errorChunk).toBeTruthy();
+  const parsed = JSON.parse(errorChunk!) as { type?: string; errorText?: string };
+  expect(parsed.type).toBe("error");
+  const embedErr = parseEmbedChatError(new Error(parsed.errorText));
+  expect(embedErr?.code).toBe("byok_default_model_provider_mismatch");
+  expect(
+    shouldSuggestByokOnEmbedError({
+      llmAccess: "free_then_byok",
+      gateMode: "ungated",
+      errorCode: embedErr?.code,
+    }),
+  ).toBe(true);
+});
+
+it("still soft-masks a 500 body so stack traces never reach the browser", async () => {
+  const secret = "Traceback: psycopg2 connect to db.internal:5432 failed";
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        error: { code: "internal_error", message: secret },
+      }),
+      { status: 500, statusText: "Internal Server Error" },
+    ),
+  );
+  vi.spyOn(console, "error").mockImplementation(() => {});
+
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    upstreamBearer: "tok",
+    activityDetail: "off",
+  });
+  const body = await new Response(res.body).text();
+
+  expect(body).not.toContain(secret);
+  expect(body).not.toContain("db.internal");
+  expect(body).toMatch(/unavailable|try again/i);
+  expect(body).not.toContain("internal_error");
+});
+
 it("strips Open WebUI tool dumps from streamed answer text", async () => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   formatEmbedChatError,
+  isByokModelRemediableError,
   isFreeQuotaOrRateLimitError,
   parseEmbedChatError,
   shouldSuggestByokOnEmbedError,
@@ -201,6 +202,10 @@ describe("model-remediable BYOK refusals (#2490)", () => {
       ).toBe(true);
     });
 
+    it(`isByokModelRemediableError recognizes ${errorCode}`, () => {
+      expect(isByokModelRemediableError(errorCode)).toBe(true);
+    });
+
     it(`surfaces digigraph's ${errorCode} message verbatim`, () => {
       const message = "Name a model with X-BYOK-Model so your 'openai' key is the one that pays.";
       expect(formatEmbedChatError(new Error(JSON.stringify({ error: errorCode, message })))).toBe(
@@ -208,6 +213,12 @@ describe("model-remediable BYOK refusals (#2490)", () => {
       );
     });
   }
+
+  it("does not treat free_quota_exceeded as model-remediable", () => {
+    // free_quota is BYOK-suggestable, but it is not a "name a model" refusal — the
+    // embed client must keep treating a bound key as terminal for that code.
+    expect(isByokModelRemediableError("free_quota_exceeded")).toBe(false);
+  });
 
   it("does not treat every digigraph refusal as model-remediable", () => {
     // Guards the set, not the branch: `byok_provider_unsupported` is a refusal the

@@ -41,6 +41,11 @@ const BYOK_MODEL_REMEDIABLE_CODES = new Set([
   "byok_default_model_provider_mismatch",
 ]);
 
+/** True when digigraph refused a bound key that naming a model would fix (#2490). */
+export function isByokModelRemediableError(code: string | undefined): boolean {
+  return !!code && BYOK_MODEL_REMEDIABLE_CODES.has(code);
+}
+
 export type ParsedEmbedChatError = {
   code?: EmbedChatErrorCode;
   message?: string;

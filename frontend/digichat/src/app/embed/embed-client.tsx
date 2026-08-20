@@ -27,6 +27,7 @@ import {
 import { readEmbedConversationId, useEmbedDigiChat } from "@/hooks/use-embed-digi-chat";
 import {
   parseEmbedChatError,
+  isByokModelRemediableError,
   shouldSuggestByokOnEmbedError,
 } from "@/lib/embed-chat-error";
 import {
@@ -418,12 +419,17 @@ function EmbedChat({
     if (shouldChargeGateOnSettle(Boolean(chat.rawError))) gate.increment();
   }, [chat.busy, chat.rawError, gate]);
 
-  // Free-tier / rate-limit → stop turn + open in-chat BYOK (free_then_byok, even when ungated).
+  // Free-tier / rate-limit / model-remediable BYOK refusal → stop turn + open in-chat BYOK
+  // (free_then_byok, even when ungated). A bound key is not a reason to skip: digigraph
+  // can refuse a key it cannot spend until the user names a model (#2490), and that
+  // refusal is exactly when the sequence must reopen.
   useEffect(() => {
-    if (!chat.rawError || byokIsSet) return;
+    if (!chat.rawError) return;
     const errKey = chat.rawError.message;
     if (handledQuotaErrorRef.current === errKey) return;
     const parsed = parseEmbedChatError(chat.rawError);
+    const remediable = isByokModelRemediableError(parsed?.code);
+    if (byokIsSet && !remediable) return;
     if (
       !shouldSuggestByokOnEmbedError({
         llmAccess,
@@ -439,7 +445,8 @@ function EmbedChat({
     pendingByokRetryRef.current = true;
     // Defer setState out of the synchronous effect body — react-hooks/set-state-in-effect.
     queueMicrotask(() => {
-      setQuotaPrompt(true);
+      // Remediable model refusals are not free-tier exhaustion — keep the configure title.
+      setQuotaPrompt(!remediable);
       setSettingsOpen(true);
     });
   }, [chat.rawError, byokIsSet, llmAccess, showByok, tenantCfg.gateMode, chat]);
