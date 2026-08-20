@@ -4,7 +4,7 @@ Atlas provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
-  2. OpenRouter connectivity (1-token ping via digillm, pinned to a known-good model)
+  2. OpenRouter connectivity (short ping via digillm, pinned to a known-good model)
      Note: phases route on PINNED per-capability models from config/olympus_models.yaml
      (see RUNBOOK.md "OpenRouter model tiers") — bare openrouter/auto is exercised
      deliberately in checks 3/3b/4 below, not as the connectivity probe.
@@ -120,19 +120,32 @@ def check_env_vars() -> bool:
 # triggered digillm's provider.require_parameters guard (client.py: forced ON for
 # response_format/tools requests) even when routed through digillm. Every real Olympus phase
 # already routes on a PINNED model (RUNBOOK.md "OpenRouter model tiers" — never bare auto),
-# and the daily-failure pattern since 2026-08-11 (#1633, recurring #2374) was this exact bare
-# ping hard-failing preflight while the digillm-routed checks below (3/3b/4, which DO exercise
-# openrouter/auto but deliberately, with response_format/tools present) passed cleanly.
+# and the daily-failure pattern since 2026-08-11 (#1633) was this exact bare ping hard-failing
+# preflight while the digillm-routed checks below (3/3b/4, which DO exercise openrouter/auto
+# but deliberately, with response_format/tools present) passed cleanly.
 #
-# Fix: route through digillm's completion() (same self-heal every real call gets — up to
-# DIGILLM_EMPTY_RETRY_MAX retries with backoff, plus an OPENROUTER_FALLBACK_MODELS provider
-# swap on the first retry when that env is set) AND pin the ping to a known-good open-weight
-# model instead of the flaky bare auto-router, so this check exercises the same kind of path
-# production actually uses rather than a strictly worse one. NOTE: as of this change,
-# OPENROUTER_FALLBACK_MODELS is still only set on the sibling "Run Olympus research pipeline"
-# workflow step, not this preflight step — see the PR description for the pending one-line
-# workflow follow-up that closes that gap.
+# Fix: route through digillm's completion() (same self-heal every real call gets) AND pin the
+# ping to a known-good open-weight model instead of the flaky bare auto-router.
+#
+# That fix (#1633) was necessary but not sufficient — the failure recurred (#2374, then again
+# after PR #2512 added OPENROUTER_FALLBACK_MODELS to this step, #2517). Root cause, confirmed
+# by direct reproduction against the live OpenRouter API (see #2517): several of the ~5 backend
+# providers OpenRouter load-balances ``deepseek/deepseek-v4-flash`` across (observed:
+# ``StreamLake``, ``AtlasCloud``) unconditionally emit visible chain-of-thought before the
+# answer, and that reasoning text is billed against the SAME ``max_tokens`` budget as the
+# answer — it is not a separate reasoning-token allowance. At ``max_tokens=5`` those providers
+# hit ``finish_reason: "length"`` mid-thought with ``content: null`` before ever reaching the
+# answer. ``reasoning: {"exclude": true}`` does NOT fix this — it only stops OpenRouter from
+# echoing the reasoning text back, the model still spends the token budget generating it.
+# Measured need for this exact prompt on the reasoning-heavy providers: 21-24 completion
+# tokens; ``_PING_MAX_TOKENS`` below gives ~2.5x headroom. Retries and fallback-model pools
+# don't reliably fix this class of failure: OpenRouter's provider routing can (and did, 4/4
+# times in the #2517 CI run) land on the same reasoning-heavy provider across every retry —
+# the fix is giving every attempt enough budget to survive its reasoning preamble, not hoping
+# a later attempt gets routed elsewhere.
 _CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
+# Applies to every short "just say ok" probe below (checks 2 and 3b) — see root-cause note above.
+_PING_MAX_TOKENS = 64
 
 
 def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
@@ -148,7 +161,7 @@ def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
         resp = completion(
             model,
             [{"role": "user", "content": "Reply with the single word: ok"}],
-            max_tokens=5,
+            max_tokens=_PING_MAX_TOKENS,
             temperature=0,
         )
         elapsed = time.monotonic() - t0
@@ -259,7 +272,7 @@ def check_openrouter_function_tools() -> bool:
                     [{"role": "user", "content": "Reply with the single word: ok"}],
                     tools=DATA_TOOLS,
                     tool_choice="auto",
-                    max_tokens=5,
+                    max_tokens=_PING_MAX_TOKENS,
                     temperature=0,
                 )
                 elapsed = time.monotonic() - t0
