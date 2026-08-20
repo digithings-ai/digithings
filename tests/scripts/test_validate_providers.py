@@ -163,3 +163,55 @@ def test_function_tools_fail_on_truly_empty_response(vp: Any) -> None:
         patch("digillm.client.completion", return_value=response),
     ):
         assert vp.check_openrouter_function_tools() is False
+
+
+def test_function_tools_fail_on_served_model_substitution(vp: Any) -> None:
+    """OpenRouter fallback routing (#2540) attaches to the PRIMARY request, not just retries —
+    a real, non-empty response from a SUBSTITUTED model must not PASS for the requested model."""
+    response = SimpleNamespace(
+        model="a-different-model",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is False
+
+
+def test_function_tools_pass_when_served_model_matches_requested(vp: Any) -> None:
+    """The requested pool model (bare, ``openrouter/`` stripped) actually served the response."""
+    response = SimpleNamespace(
+        model="some-model",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_pass_when_response_has_no_model_field(vp: Any) -> None:
+    """Back-compat: a response object without a ``.model`` attribute has nothing to compare
+    against, so substitution can't be detected — must not be treated as a mismatch."""
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True

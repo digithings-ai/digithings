@@ -155,8 +155,11 @@ jobs:
           # Same pool as the "Run Olympus research pipeline" step below (#1622) — the preflight
           # must be tested under the same routing conditions the real run gets, not a stricter,
           # unconfigured one. Gives digillm's empty-retry self-heal a provider to swap to on the
-          # first retry for both this step's connectivity ping and its openrouter/auto checks
-          # (root cause of the #2374 daily-failure recurrence — see validate-providers.py).
+          # first retry for both this step's connectivity ping and its openrouter/auto checks.
+          # Note: this does NOT by itself fix #2374-style daily failures — the same failure
+          # recurred after this var was added (see #2517/#2520). The actual root cause was a
+          # fragile finite max_tokens cap on the connectivity ping (fixed by removing the cap
+          # entirely, not by adding more retry/fallback surface — see validate-providers.py).
           OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
         run: |
           uv run --frozen --no-sync python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
