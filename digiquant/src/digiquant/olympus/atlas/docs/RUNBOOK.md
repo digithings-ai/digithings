@@ -256,7 +256,9 @@ is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no fr
 
 `apply_olympus_openrouter_env()` (Hermes chain startup) sets **`OPENROUTER_ALLOWED_MODELS`**
 and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active tier + `openrouter_defaults`.
-No other OpenRouter env vars are required in CI (`olympus-pipeline.yml`).
+No other OpenRouter env vars are set at chain startup. The workflow
+(`.github/workflows/pipeline-olympus.yml`) additionally sets `OPENROUTER_FALLBACK_MODELS` on both
+the pipeline run step and the preflight-validation step — see the table below.
 
 #### OpenRouter routing knobs (digillm → `extra_body`)
 
@@ -265,7 +267,7 @@ No other OpenRouter env vars are required in CI (`olympus-pipeline.yml`).
 | **`cost_quality_tradeoff`** | `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**) | Auto Router plugin dial **0–10**: 0 = most capable, **10 = cheapest** |
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
-| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — set in Olympus CI for the pipeline run step since #1622; the preflight-validation step needs it set too for its digillm-routed checks to self-heal the same way (#2374) |
+| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — set in Olympus CI on the pipeline run step since #1622 and on the preflight-validation step since #2512, so the preflight's digillm-routed checks self-heal the same way (#2374) |
 | **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; uses `grounding_model` from tier config |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
