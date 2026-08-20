@@ -13,6 +13,13 @@ else
   echo "skip: tests/scripts/test_protected_path_bash_guard.sh missing"
 fi
 
+echo "== pre-push hook (#2468 deletion taxonomy + #2483 live-trading co-sign) =="
+if [[ -f tests/scripts/test_pre_push_hook.sh ]]; then
+  bash tests/scripts/test_pre_push_hook.sh
+else
+  echo "skip: tests/scripts/test_pre_push_hook.sh missing"
+fi
+
 echo "== REM-008: provider-review unit tests (no Claude) =="
 python3 -m pytest tests/provider_review/ -m unit -q --tb=line
 
