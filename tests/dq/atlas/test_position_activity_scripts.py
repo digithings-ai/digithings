@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
@@ -91,3 +92,40 @@ def test_market_open_gate_treats_naive_replay_timestamp_as_utc() -> None:
     assert module.parse_utc("2026-08-05T13:35:00") == datetime(
         2026, 8, 5, 13, 35, tzinfo=timezone.utc
     )
+
+
+def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
+    """Every `execute_at_open.py` subprocess in the backfill carries `--no-ledger` (#2508).
+
+    `pipeline-digiquant-prices.yml` passing the flag only closes the *scheduled* door onto the
+    ledger path. This script shells out to the same writer, so an operator repair run is the
+    other way in — and the failure it would cause is unrepairable: with
+    `portfolio_ledger_holding_lots` still empty, order size is a weight delta against the legacy
+    `positions` book while residuals come only from the lot table, so every trim of a held name
+    books EXIT and every add books OPEN, into rows migration 069 makes append-only.
+
+    Asserted over the AST rather than by matching source text, so a reordered argument list or a
+    third invocation added later is still covered. Deleting the flag from both call sites at once
+    is the cutover; this test is what makes that deliberate rather than incidental.
+    """
+    source = (_SCRIPT_DIR / "backfill_position_events.py").read_text()
+    tree = ast.parse(source)
+
+    invocations: list[list[str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        func = node.func
+        if not (isinstance(func, ast.Attribute) and func.attr == "run"):
+            continue
+        argv = node.args[0]
+        if not isinstance(argv, ast.List):
+            continue
+        rendered = [ast.unparse(element) for element in argv.elts]
+        if any("exe_script" in element for element in rendered):
+            invocations.append(rendered)
+
+    assert invocations, "found no subprocess.run(execute_at_open) call to check"
+    for argv in invocations:
+        assert "'--no-ledger'" in argv, f"invocation missing --no-ledger: {argv}"
+        assert "'--require-ledger'" not in argv, f"invocation must not require the ledger: {argv}"

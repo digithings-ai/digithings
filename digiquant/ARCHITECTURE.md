@@ -1487,14 +1487,18 @@ all, and the book may be a different date than the run date.
 
 Cutover is a deliberate edit, **not** a property of the data (#2508). It was the latter first:
 the kill switch defaults *on* and the pipeline passed no ledger flag, so the morning job would
-have started trusting the ledger the day migration 069 landed. That is unsafe at the boundary —
+have started trusting the ledger the day the ledger *writers* reached `main` with 069 applied.
+Two conditions, not one — 069's file is already on `main` and nothing switched, because
+`ledger_io.py` and `execution_io.py` are not there yet. That is unsafe at the boundary —
 order size is a weight delta against the legacy `positions` book while residuals are measured
 only from `portfolio_ledger_holding_lots`, which starts empty and has no backfill, so the first
 run would book EXIT for every trim of a held name and OPEN for every add, into rows 069 makes
 append-only. So `pipeline-digiquant-prices.yml` passes `--no-ledger`, and
 `tests/scripts/test_prices_cron_dst.py` pins it *present* while `--require-ledger` stays absent
-(it would be a daily red cron before 069/070 are applied). Removing `--no-ledger` is the
-cutover, and it must arrive with seeded lots — or with a ledger that declines when the lot table
+(it would be a daily red cron before 069/070 are applied). `backfill_position_events.py` passes
+it too: that script shells out to the same `execute_at_open.py`, so it is the second door onto
+the ledger path and an operator repair run would otherwise walk through it. Removing
+`--no-ledger` from **both** call sites is the cutover, and it must arrive with seeded lots — or with a ledger that declines when the lot table
 is empty and the prior book is not — and preferably with `--require-ledger` in the same edit, so
 a silent fallback to prose cannot hide the handover. Deleting the two prose builders is a
 further follow-up gated on prod reaching 070: they still carry the whole #1743 regression
