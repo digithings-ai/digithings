@@ -407,6 +407,68 @@ digiquant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One e
 
 `get_strategy()` resolves aliases, looks up the spec, merges `default_params` with caller overrides and required fields (`instrument_id`, `bar_type`), instantiates `config_cls(**params)`, and returns `(strategy_instance, config)`.
 
+### SDCA Engine (#1080)
+
+`strategies/sdca/` is the generic, asset-agnostic Strategic-DCA engine: composite
+risk score → accumulation/distribution curve → daily backtest vs. lump-sum
+buy-&-hold. Reverse-engineered from the owner's BTC SDCA artifact but with the
+BTC valuation model factored out — the module has **zero NautilusTrader
+dependency and zero BTC-specific constants in its valuation path**, unlike
+every other entry in the strategy table above (#1081 will add the Nautilus
+`Strategy`/`StrategyConfig` wrapper, following the same precompute-then-drive
+pattern as `m2_liquidity.py`). It is not yet registered in
+`strategies/registry.py`.
+
+**This module is a CI-only parity harness, not a second backtest engine.**
+`digiquant/AGENTS.md` is explicit that NautilusTrader is the sole backtest and
+live-trade engine and that PnL/Sharpe/drawdown must never be returned from
+anywhere but a completed `BacktestResult`/`OptimizeResult`. `run_backtest()`
+here does not violate that: it exists only so the allocation math (curve,
+composite-risk, valuation) can be unit-tested deterministically against known
+reference numbers in milliseconds, without a data fetch or Nautilus's actor/bar
+infrastructure — see the issue #1080 acceptance criteria (`pytest -m unit -k
+sdca`, parity fixture). Its `SdcaBacktestReport` must never be surfaced to
+users or dashboards as an actual backtest result. **#1081's Nautilus strategy
+wrapper is required to call `AccumDistCurve.value_at_risk()`,
+`compute_composite_risk()`, and `valuation_z_score()` directly rather than
+reimplement them** — that is what keeps this module and the real Nautilus
+backtest from silently diverging into two sources of truth for the same
+allocation decision.
+
+| File | Role |
+|---|---|
+| `sdca/valuation.py` | `valuation_z_score(price, low, median, high)` — log-space position of price within the `RiskModel` rails, in `[-3, 3]` (cheap = +3, rich = −3). The default/primary indicator. Validates finite, positive rails with `low < median < high` on rows where all four inputs are present; a row with any null input passes through as null. |
+| `sdca/risk_model.py` | `RiskModel` — a `runtime_checkable` `Protocol` with one method, `rails(dates) -> pl.DataFrame` (`low`/`median`/`high` columns). Any object with a matching `rails()` satisfies it structurally; the engine never imports a concrete provider. |
+| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Rejects duplicate enabled indicator names and a non-finite/zero total weight. Mirrors the equal-weighted vote pattern in `indicators/m2_signals.py`. |
+| `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. |
+| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs and a finite, positive, non-null price series and `initial_cash` before running. |
+
+**Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
+day, `composite_risk` and `risk` are null that day too — `compute_composite_risk`
+uses `pl.sum_horizontal(..., ignore_nulls=False)` so there is never a partial
+blend. `run_backtest` treats a null-risk day as a no-trade day: state (cash,
+holdings) carries forward unchanged, but the day is still marked to market.
+
+**Backtest state is a sequential Python loop, not a vectorized Polars
+expression** — `cash`/`asset_units` are running balances that each day's buy/sell
+depends on, which Polars' columnar model doesn't express cleanly. Inputs
+(`dates`, `price`, `risk`) and the per-day export frame are Polars per the
+Polars-only convention; only the intermediate accumulator is plain Python. This
+mirrors how #1081's Nautilus wrapper will also process bars one at a time.
+
+Per-day export frame columns (`asset_units` rather than the issue's literal
+`btc_units` pseudocode name, to match the module's asset-agnostic design):
+`date`, `price`, `risk`, `rate`, `daily_trade_usd` (signed: positive = bought,
+negative = sold), `cash`, `asset_units`, `net_deployed` (`initial_cash - cash`),
+`portfolio_value` (`cash + asset_units * price`), `buy_hold_value` (the
+lump-sum benchmark: all
+`initial_cash` deployed at day-0 price, marked to market thereafter).
+`SdcaBacktestReport` adds `total_pnl`, `total_return_pct`, `vs_lump_usd`,
+`vs_lump_pct`, `dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` (negative
+fractions, e.g. `-0.15` for a 15% drawdown — same convention as
+`BacktestResult.max_drawdown_pct` in `models.py`), `buy_days`/`sell_days`/
+`no_trade_days`, and `avg_risk`/`avg_rate` (means over non-null days only).
+
 ### Optimization Engine Selection
 
 The dispatch in `run_optimize()`:
