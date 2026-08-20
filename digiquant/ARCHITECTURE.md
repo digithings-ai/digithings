@@ -424,10 +424,12 @@ depend on NautilusTrader — it wraps the engine as `SdcaStrategyConfig`/
 and `valuation_z_score()` upstream, writes the resulting `date`/`risk` frame to
 a parquet, and passes its path in as `risk_path`. `on_start()` loads that
 parquet into a `date -> risk` map (validating the `date`/`risk` columns are
-present, rejecting duplicate dates, and casting a `pl.Datetime` `date` column
+present, rejecting duplicate dates, casting a `pl.Datetime` `date` column
 to `pl.Date` — `iter_rows()` otherwise yields `datetime.datetime` keys that
 never equal the `datetime.date` `on_bar()` looks up with; any other non-Date
-dtype raises); `on_bar()` looks up the day's risk, converts it to a trade rate
+dtype raises — and requiring `risk` to be numeric, since a string column loads
+without error and only fails later, as a `TypeError` inside
+`AccumDistCurve.value_at_risk()`); `on_bar()` looks up the day's risk, converts it to a trade rate
 via `AccumDistCurve.value_at_risk()`, and sizes the trade via the shared
 `sdca/backtest.py::size_trade()` helper — both `run_backtest()` and `on_bar()`
 call this one function, so live/backtest and the standalone parity harness

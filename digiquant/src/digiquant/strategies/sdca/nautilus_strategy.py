@@ -114,6 +114,12 @@ class SdcaStrategy(Strategy):
                 raise ValueError(
                     f"risk_path parquet 'date' column must be pl.Date, got {date_dtype}"
                 )
+        risk_dtype = df.schema["risk"]
+        if not risk_dtype.is_numeric():
+            # A string/object risk column loads without error and reaches
+            # AccumDistCurve.value_at_risk() as a str, which raises TypeError deep
+            # in the curve math on the first matching bar — fail fast here instead.
+            raise ValueError(f"risk_path parquet 'risk' column must be numeric, got {risk_dtype}")
         dupes = df.filter(df["date"].is_duplicated())["date"].unique().sort().to_list()
         if dupes:
             raise ValueError(f"risk_path parquet has duplicate date(s): {dupes}")

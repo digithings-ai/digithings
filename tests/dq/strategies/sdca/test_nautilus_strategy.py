@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import datetime as _dt
 from datetime import date
+from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import polars as pl
@@ -21,13 +23,20 @@ try:
 except ImportError:
     NAUTILUS_AVAILABLE = False
 
+if TYPE_CHECKING:
+    # Only for the _strategy() helper's return-type annotation below — every
+    # test imports SdcaStrategy locally instead, so collection never triggers
+    # the unconditional `nautilus_trader` import in nautilus_strategy.py before
+    # the skipif above has a chance to apply.
+    from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy
+
 pytestmark = [
     pytest.mark.unit,
     pytest.mark.skipif(not NAUTILUS_AVAILABLE, reason="nautilus_trader not installed"),
 ]
 
 
-def _write_risk_parquet(tmp_path, n: int = 60, with_null: bool = False) -> tuple[str, int]:
+def _write_risk_parquet(tmp_path: Path, n: int = 60, with_null: bool = False) -> tuple[str, int]:
     """Write a synthetic risk-index parquet (date, risk), returning (path, row_count)."""
     dates = [date(2020, 1, 1) + _dt.timedelta(days=i) for i in range(n)]
     risks: list[float | None] = [float(i % 101) for i in range(n)]
@@ -58,13 +67,13 @@ def instrument_id(instrument: Instrument) -> InstrumentId:
 
 
 @pytest.fixture()
-def bar_type(instrument_id) -> BarType:
+def bar_type(instrument_id: InstrumentId) -> BarType:
     spec = BarSpecification(1, BarAggregation.DAY, PriceType.LAST)
     return BarType(instrument_id, spec)
 
 
 class TestSdcaStrategyConfig:
-    def test_defaults(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_defaults(self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path) -> None:
         from digiquant.strategies.sdca.curve import DEFAULT_BTC_NODES
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategyConfig
 
@@ -78,7 +87,9 @@ class TestSdcaStrategyConfig:
         assert cfg.curve_nodes == DEFAULT_BTC_NODES
         assert cfg.long_only is False
 
-    def test_custom_curve_nodes_and_long_only(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_custom_curve_nodes_and_long_only(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategyConfig
 
         path, _ = _write_risk_parquet(tmp_path)
@@ -94,7 +105,9 @@ class TestSdcaStrategyConfig:
         assert cfg.curve_nodes == nodes
         assert cfg.long_only is True
 
-    def test_rejects_wrong_node_count(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_rejects_wrong_node_count(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategyConfig
 
         path, _ = _write_risk_parquet(tmp_path)
@@ -109,7 +122,9 @@ class TestSdcaStrategyConfig:
 
 
 class TestSdcaStrategyInstantiation:
-    def test_can_instantiate(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_can_instantiate(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         path, _ = _write_risk_parquet(tmp_path)
@@ -122,7 +137,9 @@ class TestSdcaStrategyInstantiation:
         strategy = SdcaStrategy(cfg)
         assert strategy is not None
 
-    def test_risk_index_loaded_matches_row_count(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_risk_index_loaded_matches_row_count(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         path, n = _write_risk_parquet(tmp_path, n=200)
@@ -136,7 +153,9 @@ class TestSdcaStrategyInstantiation:
         index = strategy._load_risk_index()
         assert len(index) == n
 
-    def test_risk_index_preserves_null(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_risk_index_preserves_null(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         path, _ = _write_risk_parquet(tmp_path, n=10, with_null=True)
@@ -150,7 +169,9 @@ class TestSdcaStrategyInstantiation:
         index = strategy._load_risk_index()
         assert index[date(2020, 1, 1)] is None
 
-    def test_risk_index_rejects_duplicate_dates(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_risk_index_rejects_duplicate_dates(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         one_date = date(2020, 1, 1)
@@ -172,7 +193,9 @@ class TestSdcaStrategyInstantiation:
         with pytest.raises(ValueError, match="duplicate"):
             strategy._load_risk_index()
 
-    def test_risk_index_rejects_missing_columns(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_risk_index_rejects_missing_columns(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         df = pl.DataFrame({"date": [date(2020, 1, 1)], "value": [1.0]})
@@ -188,7 +211,9 @@ class TestSdcaStrategyInstantiation:
         with pytest.raises(ValueError, match="missing"):
             strategy._load_risk_index()
 
-    def test_initial_state_matches_config(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_initial_state_matches_config(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         path, _ = _write_risk_parquet(tmp_path)
@@ -203,7 +228,7 @@ class TestSdcaStrategyInstantiation:
         assert strategy._asset_units == pytest.approx(0.0)
 
     def test_risk_index_normalizes_datetime_date_column(
-        self, instrument_id, bar_type, tmp_path
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
     ) -> None:
         """A `pl.Datetime` date column must be usable with on_bar()'s `datetime.date`
         lookups (#1081 CodeRabbit review) — iter_rows() otherwise yields
@@ -229,7 +254,9 @@ class TestSdcaStrategyInstantiation:
         assert index[date(2020, 1, 1)] == pytest.approx(1.0)
         assert index[date(2020, 1, 2)] == pytest.approx(2.0)
 
-    def test_risk_index_rejects_non_date_dtype(self, instrument_id, bar_type, tmp_path) -> None:
+    def test_risk_index_rejects_non_date_dtype(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         df = pl.DataFrame({"date": ["2020-01-01"], "risk": [1.0]})
@@ -245,6 +272,29 @@ class TestSdcaStrategyInstantiation:
         with pytest.raises(ValueError, match="pl.Date"):
             strategy._load_risk_index()
 
+    def test_risk_index_rejects_non_numeric_risk_dtype(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
+        """A string ``risk`` column must be rejected at load time (#1081 CodeRabbit
+        review) — otherwise it reaches ``AccumDistCurve.value_at_risk()`` as a
+        Python ``str`` and raises ``TypeError`` deep in the curve math on the
+        first matching bar instead of failing fast here.
+        """
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        df = pl.DataFrame({"date": [date(2020, 1, 1)], "risk": ["50.0"]})
+        path = tmp_path / "risk_bad_risk_dtype.parquet"
+        df.write_parquet(path)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=str(path),
+        )
+        strategy = SdcaStrategy(cfg)
+        with pytest.raises(ValueError, match="numeric"):
+            strategy._load_risk_index()
+
 
 class TestSdcaStrategyOrderPendingGuard:
     """#1081 CodeRabbit review: on_bar() must not size a new order off unreserved
@@ -255,7 +305,13 @@ class TestSdcaStrategyOrderPendingGuard:
     only wired up once a strategy is registered with a trader.
     """
 
-    def _strategy(self, instrument, instrument_id, bar_type, tmp_path):
+    def _strategy(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> SdcaStrategy:
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
 
         path, _ = _write_risk_parquet(tmp_path, n=5)
@@ -271,7 +327,11 @@ class TestSdcaStrategyOrderPendingGuard:
         return strategy
 
     def test_on_bar_skips_when_order_pending(
-        self, instrument, instrument_id, bar_type, tmp_path
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
     ) -> None:
         strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
         strategy._order_pending = True
@@ -283,7 +343,11 @@ class TestSdcaStrategyOrderPendingGuard:
         assert strategy._asset_units == pytest.approx(0.0)
 
     def test_order_filled_clears_pending_after_full_qty(
-        self, instrument, instrument_id, bar_type, tmp_path
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
     ) -> None:
         strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
         strategy._order_pending = True
@@ -297,7 +361,11 @@ class TestSdcaStrategyOrderPendingGuard:
         assert strategy._order_pending is False
 
     def test_order_filled_keeps_pending_after_partial_qty(
-        self, instrument, instrument_id, bar_type, tmp_path
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
     ) -> None:
         strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
         strategy._order_pending = True
@@ -315,7 +383,12 @@ class TestSdcaStrategyOrderPendingGuard:
         "handler_name", ["on_order_canceled", "on_order_rejected", "on_order_expired"]
     )
     def test_terminal_non_fill_event_clears_pending(
-        self, instrument, instrument_id, bar_type, tmp_path, handler_name
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+        handler_name: str,
     ) -> None:
         strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
         strategy._order_pending = True
