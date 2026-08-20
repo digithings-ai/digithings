@@ -53,11 +53,19 @@ WORKFLOWS = sorted(p for p in WORKFLOW_DIR.iterdir() if p.suffix in {".yml", ".y
 # wearing a `${{ }}`:
 #   - `github.run_attempt` is `1` for every first-attempt run, so `x-${{ github.run_attempt }}`
 #     is the single literal group `x-1` for essentially every run there has ever been.
-#   - `github.sha` identifies a commit, not a run. Both workflows in scope declare
+#   - `github.sha` identifies a commit, not a run. All three workflows in scope declare
 #     `workflow_dispatch`, and two dispatches of the same unchanged ref share the SHA.
-# A `waiting` run cannot be re-run, so a re-run can never collide with the occupant that
-# starved it — which is why run_id and run_number hold even under re-run.
+# `run_id` and `run_number` hold because no two *live* runs can share one, and a re-run
+# reuses the id of the run it re-runs — so it cannot collide with anything but itself.
 PER_RUN_TOKENS = ("github.run_id", "github.run_number")
+
+# The gated jobs as they stand. Pinned rather than derived, so that removing an
+# `environment:` cannot quietly turn an assertion into a skip — see the test below.
+ENVIRONMENT_GATED = {
+    "db-migrate.yml": {"migrate"},
+    "docs-onboard-digithings.yml": {"apply"},
+    "sync-architecture-vault.yml": {"sync"},
+}
 
 
 def _gated_jobs(workflow: dict) -> dict[str, dict]:
@@ -65,6 +73,12 @@ def _gated_jobs(workflow: dict) -> dict[str, dict]:
 
     `environment` accepts a bare string or a mapping with `name`/`url`, and both inherit the
     approval rules configured on that environment, so both count.
+
+    Blind spot worth knowing: this reads one file, so a caller's workflow-level group
+    combined with a *callee's* `environment:` is invisible. Safe today on two counts —
+    `ci.yml`'s group carries `cancel-in-progress: true`, and none of the 18 reusable
+    workflows it calls is environment-gated — but adding an `environment:` to a
+    `test-*.yml` would not be caught here.
     """
     jobs = workflow.get("jobs") or {}
     return {
@@ -93,6 +107,18 @@ def _concurrency_scopes(workflow: dict, job: dict) -> list[tuple[str, object]]:
     return scopes
 
 
+def _cancel_is_an_expression(concurrency: dict) -> bool:
+    """`cancel-in-progress` given as a `${{ }}` expression, which GitHub documents.
+
+    Whether it supersedes is then not decidable from the file, so it cannot be relied on
+    to end a starvation and is refused. It is refused *for that reason* — the message has
+    to say so rather than report the key as absent, which is the same class of misleading
+    verdict as rejecting the quoted `'true'` below.
+    """
+    value = concurrency.get("cancel-in-progress")
+    return isinstance(value, str) and "${{" in value
+
+
 def _cancels_in_progress(concurrency: dict) -> bool:
     """Whether this block supersedes rather than queues.
 
@@ -106,20 +132,32 @@ def _cancels_in_progress(concurrency: dict) -> bool:
     return value is True
 
 
-def test_at_least_one_workflow_is_environment_gated() -> None:
-    """Guard the guard: an empty sweep would make every assertion below vacuous.
+def test_known_environment_gated_jobs_are_still_gated() -> None:
+    """Guard the guard, per workflow rather than in aggregate.
 
-    The parametrised test only ever *skips* when no job is gated, so a rename of the
-    `environment:` key — or a bug in `_gated_jobs` — would read as a green suite rather than
-    as a lost invariant.
+    The parametrised test below only ever *skips* when a file has no gated job, so a lost
+    `environment:` reads as green. An earlier version of this asserted merely that *some*
+    workflow was gated, which was not enough: dropping `environment: production` from
+    db-migrate.yml's `migrate` job and restoring `cancel-in-progress: false` reproduces
+    #2541 verbatim on the one workflow this file was written for, and `any(...)` stayed
+    satisfied by its two siblings — `3 passed, 61 skipped`, exit 0.
+
+    So the known gated jobs are pinned. New ones need no edit here; removing one has to be
+    a deliberate change to this list, which is the point.
     """
     gated = {
-        path.name: sorted(_gated_jobs(yaml.safe_load(path.read_text(encoding="utf-8")) or {}))
+        path.name: set(_gated_jobs(yaml.safe_load(path.read_text(encoding="utf-8")) or {}))
         for path in WORKFLOWS
     }
-    assert any(gated.values()), (
-        "no workflow job declares an `environment:`, which contradicts db-migrate.yml, "
-        f"sync-architecture-vault.yml and docs-onboard-digithings.yml; found: {gated}"
+    lost = {
+        name: sorted(jobs - gated.get(name, set()))
+        for name, jobs in ENVIRONMENT_GATED.items()
+        if not jobs <= gated.get(name, set())
+    }
+    assert not lost, (
+        f"these jobs no longer declare an `environment:`, so the sweep below now skips them "
+        f"instead of asserting anything: {lost}. Either the gate was removed — in which case "
+        "#2541 can recur there unnoticed — or `_gated_jobs` stopped recognising the key"
     )
 
 
@@ -144,6 +182,14 @@ def test_an_environment_gated_job_does_not_queue(path: Path) -> None:
             group = str(concurrency.get("group", ""))
             if any(token in group for token in PER_RUN_TOKENS):
                 continue  # genuinely distinct per run, so nothing ever queues behind it
+
+            assert not _cancel_is_an_expression(concurrency), (
+                f"{where} is gated on environment {job['environment']!r}, shares the static "
+                f"concurrency group {group!r}, and decides cancel-in-progress with the "
+                f"expression {concurrency['cancel-in-progress']!r}. Whether it supersedes is "
+                "not decidable from this file, so it cannot be relied on to end a starvation "
+                "(#2541)"
+            )
 
             assert _cancels_in_progress(concurrency), (
                 f"{where} is gated on environment {job['environment']!r} and shares the static "
