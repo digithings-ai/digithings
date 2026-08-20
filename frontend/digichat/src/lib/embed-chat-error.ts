@@ -23,7 +23,23 @@ export type EmbedChatErrorCode =
   | "rate_limit"
   | "rate_limit_exceeded"
   | "byok_model_required"
+  | "byok_default_model_provider_mismatch"
   | string;
+
+/**
+ * digigraph refusals a user fixes by naming a model, not by waiting or signing in.
+ *
+ * `byok_model_required` is a property of the provider — digichat's own catalog knows
+ * it. `byok_default_model_provider_mismatch` is a property of the *digigraph
+ * deployment*: its default model is served by another provider, so a bound key with
+ * no model would be accepted and never spent (#2490). The frontend cannot predict
+ * that one, so it can only react to it — and the reaction is identical: open the
+ * BYOK sequence so the user can pick a model.
+ */
+const BYOK_MODEL_REMEDIABLE_CODES = new Set([
+  "byok_model_required",
+  "byok_default_model_provider_mismatch",
+]);
 
 export type ParsedEmbedChatError = {
   code?: EmbedChatErrorCode;
@@ -109,7 +125,7 @@ export function shouldSuggestByokOnEmbedError(args: {
   const quota = isFreeQuotaOrRateLimitError(errorCode);
 
   if (llmAccess === "free_then_byok") {
-    return quota || errorCode === "byok_model_required";
+    return quota || (!!errorCode && BYOK_MODEL_REMEDIABLE_CODES.has(errorCode));
   }
   if (llmAccess === "byok_only" || llmAccess === "operator") {
     return showByok === true && (quota || !!errorCode);
@@ -134,7 +150,8 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
       code === "free_quota_exceeded" ||
       code === "rate_limit" ||
       code === "rate_limit_exceeded" ||
-      (code != null && UPSTREAM_ERROR_CODES.has(code)))
+      (code != null && UPSTREAM_ERROR_CODES.has(code)) ||
+      (code != null && BYOK_MODEL_REMEDIABLE_CODES.has(code)))
   ) {
     return message;
   }

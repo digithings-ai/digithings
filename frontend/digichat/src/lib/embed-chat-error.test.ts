@@ -180,3 +180,46 @@ describe("shouldSuggestByokOnEmbedError", () => {
     ).toBe(false);
   });
 });
+
+describe("model-remediable BYOK refusals (#2490)", () => {
+  // digigraph refuses a bound key it cannot spend two ways: `byok_model_required`
+  // (a property of the provider) and `byok_default_model_provider_mismatch` (a
+  // property of the deployment, which the frontend cannot predict). Both are fixed
+  // by naming a model, so both must reopen the BYOK sequence and both must surface
+  // digigraph's own message rather than generic quota copy.
+  const REMEDIABLE = ["byok_model_required", "byok_default_model_provider_mismatch"] as const;
+
+  for (const errorCode of REMEDIABLE) {
+    it(`suggests BYOK for free_then_byok on ${errorCode}`, () => {
+      expect(
+        shouldSuggestByokOnEmbedError({
+          llmAccess: "free_then_byok",
+          showByok: true,
+          gateMode: "ungated",
+          errorCode,
+        }),
+      ).toBe(true);
+    });
+
+    it(`surfaces digigraph's ${errorCode} message verbatim`, () => {
+      const message = "Name a model with X-BYOK-Model so your 'openai' key is the one that pays.";
+      expect(formatEmbedChatError(new Error(JSON.stringify({ error: errorCode, message })))).toBe(
+        message,
+      );
+    });
+  }
+
+  it("does not treat every digigraph refusal as model-remediable", () => {
+    // Guards the set, not the branch: `byok_provider_unsupported` is a refusal the
+    // user cannot fix by picking a model, so widening the set to "any BYOK code"
+    // would wrongly reopen the sequence on a dead end.
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "ungated",
+        errorCode: "byok_provider_unsupported",
+      }),
+    ).toBe(false);
+  });
+});

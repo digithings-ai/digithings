@@ -490,18 +490,28 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
    across the whole flow for these three providers.
 5. On success, key is held in-memory for this tab session and sent as
    `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
-   requests only. Whether `X-BYOK-Model` is sent at all is driven by
-   `byokRequiresModel(provider)`, defined once in the framework-neutral
+   requests only. `X-BYOK-Model` is sent whenever the user chose a model —
+   every send path (`chat-panel.tsx`, `use-embed-digi-chat.ts`,
+   `api/chat/route.ts`'s upstream forward, and `byok-ping.ts`) forwards a
+   non-blank model unconditionally, for every provider. It used to be gated
+   on `byokRequiresModel(provider)`, which dropped the model an OpenAI user
+   had explicitly picked; digigraph then answered on its own tier default,
+   an `openrouter/…` slug billed to the operator (#2490). `byokRequiresModel`
+   governs whether a model is **mandatory**, never whether a chosen one is
+   forwarded, and it is still what `api/chat/route.ts` asks before returning
+   400 `byok_model_required`. It is defined once in the framework-neutral
    `src/lib/byok-providers.ts` (no `"use client"` directive, so both React
    client code and Next.js server Route Handlers can import it) and
-   re-exported by `use-byok-key.ts` for its own callers. Every client call
-   site defers to that one predicate (never a hand-maintained per-provider
-   list) — `chat-panel.tsx`, `embed/embed-client.tsx`,
-   `byok-settings-panel.tsx` — and so does `api/chat/route.ts`'s
-   `byokNeedsModel` gate, which now calls `byokRequiresModel(byokProvider)`
-   directly in place of its old 5-provider OR-chain, so a 6th `requiresModel`
-   provider can't silently omit its model header there the way `xai` once
-   did (#2351). `api/byok/test/route.ts` also imports this module —
+   re-exported by `use-byok-key.ts` for its own callers. Every call site that
+   asks the *mandatory* question defers to that one predicate (never a
+   hand-maintained per-provider list): `byok-cli-flow.tsx` (which offers a
+   blank "" model option and refuses a blank custom slug accordingly, and is
+   the single flow component that `chat-panel.tsx`, `embed/embed-client.tsx`
+   and `byok-settings-panel.tsx` all host), `use-byok-key.ts`'s
+   `validateBYOKModel`, and `api/chat/route.ts`'s `byokNeedsModel` gate,
+   which calls `byokRequiresModel(byokProvider)` directly in place of its old
+   5-provider OR-chain, so a 6th `requiresModel` provider can't silently skip
+   its 400 there the way `xai` once did (#2351). `api/byok/test/route.ts` also imports this module —
    `readByokProvider` replaces its old `readProvider` (which fell through to
    `"openai"` for any unrecognized value) and `byokKeyPrefixError` replaces
    its five hand-written prefix `if`-blocks. That route's own `needsModel`
@@ -509,7 +519,7 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
    all) is deliberately its own hand-written check — `provider === "xai"`
    only (#2347) — and is **not** derived from `byokRequiresModel`. The two
    guard different things: `byokRequiresModel(provider)` governs whether a
-   model header must be forwarded on the real `/api/chat` request;
+   model is required before the real `/api/chat` request is accepted;
    `needsModel` here governs only whether the *validation ping* needs a
    model before it can run at all. They diverge on purpose — none of
    `testOpenAIKey`, `testAnthropicKey`, `testGeminiKey`, or
