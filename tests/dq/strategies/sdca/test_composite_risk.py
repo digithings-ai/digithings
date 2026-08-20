@@ -74,3 +74,27 @@ class TestComputeCompositeRisk:
     def test_empty_indicator_list_raises(self) -> None:
         with pytest.raises(ValueError, match="at least one"):
             compute_composite_risk([])
+
+    def test_duplicate_enabled_indicator_names_raises(self) -> None:
+        indicators = [
+            IndicatorWeight(name="a", z=pl.Series([3.0]), weight=1.0),
+            IndicatorWeight(name="a", z=pl.Series([-3.0]), weight=1.0),
+        ]
+        with pytest.raises(ValueError, match="duplicate"):
+            compute_composite_risk(indicators)
+
+    def test_duplicate_disabled_indicator_name_is_fine(self) -> None:
+        indicators = [
+            IndicatorWeight(name="a", z=pl.Series([3.0]), weight=1.0, enabled=True),
+            IndicatorWeight(name="a", z=pl.Series([-3.0]), weight=1.0, enabled=False),
+        ]
+        result = compute_composite_risk(indicators)
+        assert result["composite_z"][0] == pytest.approx(3.0)
+
+    def test_zero_total_weight_raises(self) -> None:
+        indicators = [
+            IndicatorWeight(name="a", z=pl.Series([3.0]), weight=1.0),
+            IndicatorWeight(name="b", z=pl.Series([-3.0]), weight=-1.0),
+        ]
+        with pytest.raises(ValueError, match="total weight"):
+            compute_composite_risk(indicators)

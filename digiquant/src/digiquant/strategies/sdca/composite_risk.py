@@ -9,14 +9,16 @@ risk) is null that row too — there is no partial blend and no silent fallback.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import math
 
 import polars as pl
+from pydantic import BaseModel, ConfigDict
 
 
-@dataclass
-class IndicatorWeight:
+class IndicatorWeight(BaseModel):
     """One indicator's z-score series plus its vote weight."""
+
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
 
     name: str
     z: pl.Series
@@ -36,7 +38,16 @@ def compute_composite_risk(indicators: list[IndicatorWeight]) -> pl.DataFrame:
     if not enabled:
         raise ValueError("compute_composite_risk requires at least one enabled indicator")
 
+    names = [ind.name for ind in enabled]
+    if len(set(names)) != len(names):
+        raise ValueError(f"compute_composite_risk got duplicate enabled indicator names: {names}")
+
     total_weight = sum(ind.weight for ind in enabled)
+    if not math.isfinite(total_weight) or total_weight == 0:
+        raise ValueError(
+            f"compute_composite_risk requires a finite, nonzero total weight, got {total_weight}"
+        )
+
     df = pl.DataFrame({ind.name: ind.z for ind in enabled})
 
     weighted_sum = pl.sum_horizontal(

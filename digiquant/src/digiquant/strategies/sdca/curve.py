@@ -8,6 +8,8 @@ each holding a daily rate (%). ``value > 0`` buys that % of cash today;
 
 from __future__ import annotations
 
+import math
+
 RISK_NODES: tuple[float, ...] = tuple(float(r) for r in range(0, 101, 5))  # 21 nodes
 
 # Default (BTC reference) curve: all-positive accumulation through mid-risk,
@@ -48,10 +50,14 @@ class AccumDistCurve:
     def __init__(self, nodes: tuple[float, ...] | list[float] = DEFAULT_BTC_NODES) -> None:
         if len(nodes) != len(RISK_NODES):
             raise ValueError(f"Curve must have {len(RISK_NODES)} nodes, got {len(nodes)}")
+        if not all(math.isfinite(v) for v in nodes):
+            raise ValueError(f"Curve nodes must all be finite, got {nodes}")
         self.nodes: tuple[float, ...] = tuple(nodes)
 
     def value_at_risk(self, risk: float) -> float:
         """Piecewise-linear rate (%) for ``risk`` in [0, 100]."""
+        if not math.isfinite(risk):
+            raise ValueError(f"value_at_risk requires a finite risk, got {risk}")
         r = min(max(risk, 0.0), 100.0)
         idx = min(int(r // 5), len(RISK_NODES) - 2)
         r0, r1 = RISK_NODES[idx], RISK_NODES[idx + 1]

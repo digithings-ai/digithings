@@ -16,7 +16,7 @@ EXPORT_COLUMNS = {
     "rate",
     "daily_trade_usd",
     "cash",
-    "btc_units",
+    "asset_units",
     "net_deployed",
     "portfolio_value",
     "buy_hold_value",
@@ -40,7 +40,7 @@ class TestRunBacktestSingleDay:
         assert report.buy_days == 0
         assert report.sell_days == 0
         assert frame["cash"][0] == pytest.approx(1000.0)
-        assert frame["btc_units"][0] == pytest.approx(0.0)
+        assert frame["asset_units"][0] == pytest.approx(0.0)
 
     def test_buy_day_deploys_cash_at_curve_rate(self) -> None:
         # default curve: risk=0 -> rate=10%/day
@@ -53,7 +53,7 @@ class TestRunBacktestSingleDay:
         )
         assert frame["daily_trade_usd"][0] == pytest.approx(100.0)
         assert frame["cash"][0] == pytest.approx(900.0)
-        assert frame["btc_units"][0] == pytest.approx(1.0)
+        assert frame["asset_units"][0] == pytest.approx(1.0)
         assert frame["net_deployed"][0] == pytest.approx(100.0)
         assert report.buy_days == 1
 
@@ -67,7 +67,7 @@ class TestRunBacktestSingleDay:
             initial_cash=1000.0,
         )
         assert frame["cash"][0] == pytest.approx(0.0)
-        assert frame["btc_units"][0] == pytest.approx(10.0)
+        assert frame["asset_units"][0] == pytest.approx(10.0)
 
 
 class TestRunBacktestMultiDay:
@@ -82,7 +82,7 @@ class TestRunBacktestMultiDay:
         )
         # after day1: cash=900, btc=1.0. day2 rate=-10% -> sell 0.1 btc @100 = $10
         assert frame["daily_trade_usd"][1] == pytest.approx(-10.0)
-        assert frame["btc_units"][1] == pytest.approx(0.9)
+        assert frame["asset_units"][1] == pytest.approx(0.9)
         assert frame["cash"][1] == pytest.approx(910.0)
         assert report.sell_days == 1
 
@@ -96,7 +96,7 @@ class TestRunBacktestMultiDay:
             initial_cash=1000.0,
         )
         # day1 buys nothing (rate<0 with 0 btc held -> clamp to 0)
-        assert frame["btc_units"][0] == pytest.approx(0.0)
+        assert frame["asset_units"][0] == pytest.approx(0.0)
         assert frame["cash"][1] == pytest.approx(1000.0)
 
     def test_buy_hold_value_is_lump_sum_at_day0_price(self) -> None:
@@ -165,3 +165,75 @@ class TestRunBacktestMultiDay:
             initial_cash=1000.0,
         )
         assert set(frame.columns) == EXPORT_COLUMNS
+
+
+class TestRunBacktestInputValidation:
+    def test_empty_series_raises(self) -> None:
+        with pytest.raises(ValueError, match="at least one row"):
+            run_backtest(
+                dates=pl.Series([], dtype=pl.Date),
+                price=pl.Series([], dtype=pl.Float64),
+                risk=pl.Series([], dtype=pl.Float64),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )
+
+    def test_mismatched_lengths_raises(self) -> None:
+        with pytest.raises(ValueError, match="same length"):
+            run_backtest(
+                dates=_dates(2),
+                price=pl.Series([100.0, 100.0]),
+                risk=pl.Series([0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )
+
+    def test_non_positive_price_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            run_backtest(
+                dates=_dates(1),
+                price=pl.Series([0.0]),
+                risk=pl.Series([0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )
+
+    def test_non_finite_price_raises(self) -> None:
+        with pytest.raises(ValueError, match="finite"):
+            run_backtest(
+                dates=_dates(1),
+                price=pl.Series([float("inf")]),
+                risk=pl.Series([0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )
+
+    def test_null_price_raises(self) -> None:
+        with pytest.raises(ValueError, match="null"):
+            run_backtest(
+                dates=_dates(1),
+                price=pl.Series([None], dtype=pl.Float64),
+                risk=pl.Series([0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=1000.0,
+            )
+
+    def test_non_positive_initial_cash_raises(self) -> None:
+        with pytest.raises(ValueError, match="positive"):
+            run_backtest(
+                dates=_dates(1),
+                price=pl.Series([100.0]),
+                risk=pl.Series([0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=0.0,
+            )
+
+    def test_non_finite_initial_cash_raises(self) -> None:
+        with pytest.raises(ValueError, match="finite"):
+            run_backtest(
+                dates=_dates(1),
+                price=pl.Series([100.0]),
+                risk=pl.Series([0.0]),
+                curve=AccumDistCurve(),
+                initial_cash=float("nan"),
+            )

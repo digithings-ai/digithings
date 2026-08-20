@@ -52,7 +52,7 @@ class TestSdcaPipelineParityFixture:
         # day0: risk=0 -> curve rate=10% -> buy $100 of $1000 cash at price 50 -> +2.0 btc
         assert frame["rate"][0] == pytest.approx(10.0)
         assert frame["daily_trade_usd"][0] == pytest.approx(100.0)
-        assert frame["btc_units"][0] == pytest.approx(2.0)
+        assert frame["asset_units"][0] == pytest.approx(2.0)
         assert frame["cash"][0] == pytest.approx(900.0)
 
         # day4: risk=100 -> curve rate=-10% -> sells 10% of accumulated holdings

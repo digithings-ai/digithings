@@ -57,3 +57,44 @@ class TestValuationZScore:
         high = pl.Series("high", [200.0, 200.0, 200.0])
         z = valuation_z_score(price, low, median, high)
         assert z.to_list() == pytest.approx([0.0, 3.0, -3.0])
+
+    def test_rows_with_any_null_rail_pass_through_as_null(self) -> None:
+        price = pl.Series("price", [100.0, 100.0])
+        low = pl.Series("low", [50.0, None])
+        median = pl.Series("median", [100.0, 100.0])
+        high = pl.Series("high", [200.0, 200.0])
+        z = valuation_z_score(price, low, median, high)
+        assert z[0] == pytest.approx(0.0)
+        assert z[1] is None
+
+    def test_non_positive_price_raises(self) -> None:
+        price = pl.Series("price", [-5.0])
+        low = pl.Series("low", [50.0])
+        median = pl.Series("median", [100.0])
+        high = pl.Series("high", [200.0])
+        with pytest.raises(ValueError, match="positive"):
+            valuation_z_score(price, low, median, high)
+
+    def test_non_finite_price_raises(self) -> None:
+        price = pl.Series("price", [float("inf")])
+        low = pl.Series("low", [50.0])
+        median = pl.Series("median", [100.0])
+        high = pl.Series("high", [200.0])
+        with pytest.raises(ValueError, match="finite"):
+            valuation_z_score(price, low, median, high)
+
+    def test_low_not_less_than_median_raises(self) -> None:
+        price = pl.Series("price", [100.0])
+        low = pl.Series("low", [100.0])
+        median = pl.Series("median", [100.0])
+        high = pl.Series("high", [200.0])
+        with pytest.raises(ValueError, match="low < median < high"):
+            valuation_z_score(price, low, median, high)
+
+    def test_median_not_less_than_high_raises(self) -> None:
+        price = pl.Series("price", [100.0])
+        low = pl.Series("low", [50.0])
+        median = pl.Series("median", [200.0])
+        high = pl.Series("high", [200.0])
+        with pytest.raises(ValueError, match="low < median < high"):
+            valuation_z_score(price, low, median, high)

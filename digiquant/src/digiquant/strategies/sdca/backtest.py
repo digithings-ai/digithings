@@ -9,14 +9,28 @@ no dependency on any specific indicator or ``RiskModel``.
 
 from __future__ import annotations
 
+import math
+
 import polars as pl
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from digiquant.strategies.sdca.curve import AccumDistCurve
 
 
 class SdcaBacktestReport(BaseModel):
-    """Summary stats for one SDCA backtest run vs. its lump-sum benchmark."""
+    """Summary stats for one SDCA backtest run vs. its lump-sum benchmark.
+
+    This report is a CI-only parity harness for the allocation math in this
+    module (curve/composite-risk/valuation) — it is never the authoritative
+    backtest result. NautilusTrader remains the sole backtest/live engine
+    (digiquant/AGENTS.md); the eventual Nautilus strategy wrapper (#1081)
+    must call into this module's functions rather than reimplement them, so
+    there is exactly one source of truth for the allocation decision math,
+    and PnL/Sharpe/drawdown surfaced to users always comes from a completed
+    Nautilus ``BacktestResult``/``OptimizeResult``, never from this report.
+    """
+
+    model_config = ConfigDict(strict=True)
 
     total_pnl: float = Field(..., description="Final portfolio value minus initial cash")
     total_return_pct: float = Field(..., description="total_pnl / initial_cash * 100")
@@ -48,17 +62,35 @@ def run_backtest(
     initial_cash: float,
 ) -> tuple[SdcaBacktestReport, pl.DataFrame]:
     """Run the daily SDCA backtest and return ``(report, per_day_export_frame)``."""
+    if dates.len() == 0:
+        raise ValueError("run_backtest requires at least one row")
+    if not (price.len() == dates.len() and risk.len() == dates.len()):
+        raise ValueError(
+            f"run_backtest requires dates, price, and risk to have the same length, "
+            f"got {dates.len()}, {price.len()}, {risk.len()}"
+        )
+    if price.is_null().any():
+        raise ValueError("run_backtest requires price to have no null values")
+    if not price.is_finite().all():
+        raise ValueError("run_backtest requires price to be finite")
+    if not (price > 0).all():
+        raise ValueError("run_backtest requires price to be positive")
+    if not math.isfinite(initial_cash):
+        raise ValueError(f"run_backtest requires a finite initial_cash, got {initial_cash}")
+    if initial_cash <= 0:
+        raise ValueError(f"run_backtest requires a positive initial_cash, got {initial_cash}")
+
     prices = price.to_list()
     risks = risk.to_list()
 
     cash = initial_cash
-    btc_units = 0.0
-    btc_bought_at_start = initial_cash / prices[0]
+    asset_units = 0.0
+    asset_units_bought_at_start = initial_cash / prices[0]
 
     rates: list[float | None] = []
     daily_trade_usd: list[float] = []
     cash_col: list[float] = []
-    btc_units_col: list[float] = []
+    asset_units_col: list[float] = []
     net_deployed_col: list[float] = []
     portfolio_value_col: list[float] = []
     buy_hold_value_col: list[float] = []
@@ -82,24 +114,24 @@ def run_backtest(
             if rate > 0:
                 buy_usd = min(max(cash * rate / 100.0, 0.0), cash)
                 cash -= buy_usd
-                btc_units += buy_usd / day_price
+                asset_units += buy_usd / day_price
                 daily_trade_usd.append(buy_usd)
                 buy_days += 1
             elif rate < 0:
-                sell_btc = min(max(btc_units * (-rate) / 100.0, 0.0), btc_units)
-                cash += sell_btc * day_price
-                btc_units -= sell_btc
-                daily_trade_usd.append(-sell_btc * day_price)
+                sell_units = min(max(asset_units * (-rate) / 100.0, 0.0), asset_units)
+                cash += sell_units * day_price
+                asset_units -= sell_units
+                daily_trade_usd.append(-sell_units * day_price)
                 sell_days += 1
             else:
                 daily_trade_usd.append(0.0)
                 no_trade_days += 1
 
         cash_col.append(cash)
-        btc_units_col.append(btc_units)
+        asset_units_col.append(asset_units)
         net_deployed_col.append(initial_cash - cash)
-        portfolio_value_col.append(cash + btc_units * day_price)
-        buy_hold_value_col.append(btc_bought_at_start * day_price)
+        portfolio_value_col.append(cash + asset_units * day_price)
+        buy_hold_value_col.append(asset_units_bought_at_start * day_price)
 
     frame = pl.DataFrame(
         {
@@ -109,7 +141,7 @@ def run_backtest(
             "rate": pl.Series(rates, dtype=pl.Float64),
             "daily_trade_usd": daily_trade_usd,
             "cash": cash_col,
-            "btc_units": btc_units_col,
+            "asset_units": asset_units_col,
             "net_deployed": net_deployed_col,
             "portfolio_value": portfolio_value_col,
             "buy_hold_value": buy_hold_value_col,

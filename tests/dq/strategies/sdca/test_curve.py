@@ -51,3 +51,30 @@ class TestAccumDistCurveConfigurable:
         curve = AccumDistCurve(nodes=nodes)
         assert curve.value_at_risk(0.0) == pytest.approx(10.0)
         assert curve.value_at_risk(100.0) == pytest.approx(-10.0)
+
+    def test_rejects_nan_node(self) -> None:
+        nodes = (float("nan"),) + tuple(0.0 for _ in range(20))
+        with pytest.raises(ValueError, match="finite"):
+            AccumDistCurve(nodes=nodes)
+
+    def test_rejects_infinite_node(self) -> None:
+        nodes = (float("inf"),) + tuple(0.0 for _ in range(20))
+        with pytest.raises(ValueError, match="finite"):
+            AccumDistCurve(nodes=nodes)
+
+
+class TestAccumDistCurveNonFiniteRisk:
+    def test_rejects_nan_risk(self) -> None:
+        curve = AccumDistCurve()
+        with pytest.raises(ValueError, match="finite"):
+            curve.value_at_risk(float("nan"))
+
+    def test_rejects_positive_infinite_risk(self) -> None:
+        curve = AccumDistCurve()
+        with pytest.raises(ValueError, match="finite"):
+            curve.value_at_risk(float("inf"))
+
+    def test_rejects_negative_infinite_risk(self) -> None:
+        curve = AccumDistCurve()
+        with pytest.raises(ValueError, match="finite"):
+            curve.value_at_risk(float("-inf"))
