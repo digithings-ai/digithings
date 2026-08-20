@@ -152,6 +152,12 @@ jobs:
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Same pool as the "Run Olympus research pipeline" step below (#1622) — the preflight
+          # must be tested under the same routing conditions the real run gets, not a stricter,
+          # unconfigured one. Gives digillm's empty-retry self-heal a provider to swap to on the
+          # first retry for both this step's connectivity ping and its openrouter/auto checks
+          # (root cause of the #2374 daily-failure recurrence — see validate-providers.py).
+          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
         run: |
           uv run --frozen --no-sync python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 

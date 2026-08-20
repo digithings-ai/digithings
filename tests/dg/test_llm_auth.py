@@ -16,6 +16,7 @@ import pytest
 from digigraph.llm_auth import (
     BYOK_ROUTABLE_PROVIDERS,
     byok_model_routes_elsewhere,
+    byok_operator_model_routes_elsewhere,
     byok_provider_supported,
     byok_routable_model,
     get_byok_model_override,
@@ -285,7 +286,19 @@ class TestByokGuardOverHttp:
             ("xai", "grok-4-3"),
         ],
     )
-    def test_a_routable_key_passes_through(self, provider: str, model: str) -> None:
+    def test_a_routable_key_passes_through(
+        self, monkeypatch: pytest.MonkeyPatch, provider: str, model: str
+    ) -> None:
+        # The ("openai", "") row is a bound key with *no* model, so its verdict depends
+        # on this deployment's default model (#2490). Left to the ambient config it
+        # passes only because the repo-root YAML resolves to ``ollama/qwen3:8b``, whose
+        # prefix is unregistered — an accident that would flip to a 400 the day someone
+        # points local dev at OpenRouter. Pin a default the user's key would serve, so
+        # the row asserts "routable keys pass" rather than "the dev config is cheap".
+        monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+        monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+        monkeypatch.setenv("DIGI_LLM_MODE", "test")
+        monkeypatch.setenv("DIGI_LLM_MODEL", "gpt-4o-mini")
         headers = {"x-byok-key": "sk-ok", "x-byok-provider": provider}
         if model:
             headers["x-byok-model"] = model
@@ -791,6 +804,411 @@ class TestByokModelOverrideResolution:
         from digigraph.model_config import _apply_byok_model_override
 
         assert _apply_byok_model_override("gpt-4o-mini") == "gpt-4o-mini"
+
+
+def _pin_operator_default(monkeypatch: pytest.MonkeyPatch, model: str) -> None:
+    """Pin this deployment's default model and prove the pin took.
+
+    The repo-root ``config/model_modes.yaml`` resolves every tier to ``ollama/qwen3:8b``,
+    whose prefix is *not* in digillm's registry — so a test that inherits it answers
+    "fine" for every provider and would pass no matter what the predicate did. Pinning
+    is what makes these tests mean something.
+
+    The ``operator_default_model()`` assertion is not decoration: ``_resolve_explicit_model``
+    composes ``DIGI_LLM_PROVIDER`` with ``DIGI_LLM_MODEL``, so a stray provider in the
+    ambient environment would re-prefix the pin and quietly change which branch is under
+    test. Assert the string first, then the verdict.
+    """
+    from digigraph.model_config import operator_default_model
+
+    monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+    monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("DIGI_LLM_MODE", "test")
+    monkeypatch.setenv("DIGI_LLM_MODEL", model)
+    assert operator_default_model() == model
+
+
+@pytest.mark.unit
+class TestOperatorDefaultCannotBillTheOperator:
+    """A bound key with *no* ``X-BYOK-Model`` must be spent or refused — never idled.
+
+    ``TestByokModelCannotRedirectTheBill`` covers the model the caller *sent*. This
+    covers the model they didn't: when the header is absent, digigraph falls back to
+    the deployment's own default, and on the shipped release config that default is an
+    ``openrouter/…`` string served by the operator's ``OPENROUTER_API_KEY``. The user's
+    key is accepted, displayed as active, and never spent — the same mis-billing as a
+    foreign header, reached by omission instead of by input (#2490).
+    """
+
+    def test_the_shipped_release_config_is_exactly_this_bug(self) -> None:
+        """Encode the deployment, not just the predicate.
+
+        An env-pinned test proves the rule; this proves the rule fires on the config
+        digichat actually ships, and it keeps proving it if someone edits the dev
+        config out from under the tests above.
+        """
+        import yaml
+
+        cfg = yaml.safe_load(
+            (_REPO_ROOT / "infra" / "digichat-release" / "config" / "model_modes.yaml").read_text(
+                encoding="utf-8"
+            )
+        )
+        defaults = cfg["defaults"]
+        assert defaults, "release config must pin the tier defaults this test reasons about"
+        for tier, model in defaults.items():
+            assert byok_operator_model_routes_elsewhere("openai", model), (
+                f"release default {tier}={model!r} no longer reproduces #2490 — if the "
+                "release config moved to a bare model this assertion should be inverted, "
+                "not deleted"
+            )
+
+    def test_normalizing_the_operator_default_would_answer_the_wrong_question(self) -> None:
+        """Why this is a second entry point rather than a reuse.
+
+        ``byok_model_routes_elsewhere`` normalizes through ``byok_routable_model`` first,
+        which is right for a caller-supplied header because the resolver really does route
+        the normalized form. For a *registered* provider that normalization re-prefixes to
+        the provider itself, so the head always equals the declared provider and the answer
+        is unconditionally ``False`` — including for a default served by someone else.
+        """
+        provider, operator_default = "openrouter", "gemini/gemini-2.5-flash"
+        assert not byok_model_routes_elsewhere(provider, operator_default)
+        assert byok_operator_model_routes_elsewhere(provider, operator_default)
+
+    @pytest.mark.parametrize(
+        "provider,default_model",
+        [
+            ("openai", "openrouter/deepseek/deepseek-chat"),
+            ("openai", "openrouter/google/gemini-2.5-flash"),
+            ("openai", "gemini/gemini-2.5-flash"),
+            ("openai", "xai/grok-4-3"),
+            ("openai", "anthropic/claude-sonnet-4-20250514"),
+            ("openrouter", "gemini/gemini-2.5-flash"),
+            ("gemini", "openrouter/deepseek/deepseek-chat"),
+        ],
+    )
+    def test_a_default_served_by_another_provider_is_detected(
+        self, provider: str, default_model: str
+    ) -> None:
+        assert byok_operator_model_routes_elsewhere(provider, default_model)
+
+    @pytest.mark.parametrize(
+        "provider,default_model",
+        [
+            # Bare: no prefix to route on, so the BYOK client the override installed
+            # serves it — the user's key pays, which is the whole point.
+            ("openai", "gpt-4o-mini"),
+            ("openai", "o4-mini"),
+            # ollama/ and ollama-cloud/ are absent from digillm's registry: local dev
+            # and the repo-root config must not start 400ing every BYOK request.
+            ("openai", "ollama/qwen3:8b"),
+            ("openai", "ollama-cloud/qwen3-coder:480b"),
+            # The default already belongs to the declared provider.
+            ("openrouter", "openrouter/deepseek/deepseek-chat"),
+            ("gemini", "gemini/gemini-2.5-flash"),
+            ("xai", "xai/grok-4-3"),
+            ("anthropic", "anthropic/claude-sonnet-4-20250514"),
+        ],
+    )
+    def test_a_default_the_users_key_would_serve_is_left_alone(
+        self, provider: str, default_model: str
+    ) -> None:
+        assert not byok_operator_model_routes_elsewhere(provider, default_model)
+
+    def test_the_refusal_names_the_provider_and_nothing_else(self) -> None:
+        """The slug is the operator's configuration and the key is the caller's secret.
+
+        Naming the model buys an anonymous caller no remediation — the fix is the same
+        either way — and echoing the key is the failure every other BYOK refusal is
+        already tested against.
+        """
+        from digigraph.llm_auth import byok_default_model_refusal
+
+        msg = byok_default_model_refusal("openai")
+        assert "openai" in msg
+        assert "openrouter" not in msg
+        assert "deepseek" not in msg
+        assert "X-BYOK-Model" in msg, "a refusal the caller cannot act on is just a wall"
+
+
+@pytest.mark.unit
+class TestOperatorDefaultRefusalAtTheResolver:
+    """Door 2: ``_apply_byok_model_override``, for callers that never met the middleware."""
+
+    def _resolve(self, provider: str, model: str, resolved: str) -> str:
+        from digigraph.model_config import _apply_byok_model_override
+
+        tok = push_byok_header(_byok_request(key="sk-secret", provider=provider, model=model))
+        try:
+            return _apply_byok_model_override(resolved)
+        finally:
+            pop_byok(tok)
+
+    def test_no_header_plus_a_foreign_default_is_refused_not_billed(self) -> None:
+        with pytest.raises(ValueError) as exc:
+            self._resolve("openai", "", "openrouter/deepseek/deepseek-chat")
+        assert "openai" in str(exc.value)
+        assert "sk-secret" not in str(exc.value)
+        assert "deepseek" not in str(exc.value)
+
+    def test_a_discarded_foreign_header_lands_where_absence_lands(self) -> None:
+        """The discard path must not hand back the operator's default.
+
+        ``return resolved`` there is the same mis-billing this class exists to refuse,
+        reached by a foreign header on an in-process caller instead of by omission. So
+        the discard falls through to the no-header branch and is refused with it.
+        """
+        with pytest.raises(ValueError):
+            self._resolve("openai", "gemini/gemini-2.5-flash", "openrouter/deepseek/deepseek-chat")
+
+    def test_a_discarded_foreign_header_still_passes_a_servable_default(self) -> None:
+        """Falling through must not turn every discard into a refusal."""
+        assert self._resolve("openai", "gemini/gemini-2.5-flash", "gpt-4o-mini") == "gpt-4o-mini"
+
+    @pytest.mark.parametrize(
+        "provider,resolved",
+        [
+            ("openai", "gpt-4o-mini"),
+            ("openai", "ollama/qwen3:8b"),
+            ("openrouter", "openrouter/deepseek/deepseek-chat"),
+        ],
+    )
+    def test_a_default_the_key_would_serve_passes_through_untouched(
+        self, provider: str, resolved: str
+    ) -> None:
+        assert self._resolve(provider, "", resolved) == resolved
+
+    def test_an_explicit_model_still_beats_the_default(self) -> None:
+        """The refusal is for the *absence* of a choice, not for a foreign default."""
+        assert self._resolve("openai", "gpt-4o", "openrouter/deepseek/deepseek-chat") == "gpt-4o"
+
+    def test_the_refusal_needs_a_bound_key(self) -> None:
+        """No BYOK, no opinion: the operator's own default is the operator's business."""
+        from digigraph.model_config import _apply_byok_model_override
+
+        assert (
+            _apply_byok_model_override("openrouter/deepseek/deepseek-chat")
+            == "openrouter/deepseek/deepseek-chat"
+        )
+
+    def test_get_model_for_mode_refuses_through_the_same_door(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The wiring, not just the helper: the resolver every caller actually calls."""
+        from digigraph.model_config import get_model_for_mode
+
+        _pin_operator_default(monkeypatch, "openrouter/deepseek/deepseek-chat")
+        tok = push_byok_header(_byok_request(key="sk-secret", provider="openai"))
+        try:
+            with pytest.raises(ValueError):
+                get_model_for_mode()
+        finally:
+            pop_byok(tok)
+
+    def test_operator_default_model_ignores_a_bound_key(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The split exists so the middleware's question is structurally independent.
+
+        If ``operator_default_model`` applied the override it would raise here, and the
+        middleware's check would depend on running before ``push_byok_header`` — a
+        credential check resting on middleware ordering.
+        """
+        from digigraph.model_config import operator_default_model
+
+        _pin_operator_default(monkeypatch, "openrouter/deepseek/deepseek-chat")
+        tok = push_byok_header(_byok_request(key="sk-secret", provider="openai"))
+        try:
+            assert operator_default_model() == "openrouter/deepseek/deepseek-chat"
+        finally:
+            pop_byok(tok)
+
+
+@pytest.mark.unit
+class TestOperatorDefaultRefusalOverHttp:
+    """Door 1: the 400 a digichat user actually meets, before the key is ever bound."""
+
+    def _client(self):
+        from digigraph.server import app
+        from fastapi.testclient import TestClient
+
+        return TestClient(app)
+
+    def _get(self, provider: str = "openai", model: str = ""):
+        headers = {"x-byok-key": "sk-secret", "x-byok-provider": provider}
+        if model:
+            headers["x-byok-model"] = model
+        return self._client().get("/healthz", headers=headers)
+
+    def test_a_key_with_no_model_is_refused_when_the_default_bills_elsewhere(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _pin_operator_default(monkeypatch, "openrouter/deepseek/deepseek-chat")
+        res = self._get()
+        assert res.status_code == 400, res.text
+        assert "byok_default_model_provider_mismatch" in str(res.json())
+        assert "sk-secret" not in res.text
+        assert "deepseek" not in res.text
+
+    def test_naming_a_model_is_the_remediation_the_refusal_advertises(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A 400 whose instruction does not clear it is worse than no 400."""
+        _pin_operator_default(monkeypatch, "openrouter/deepseek/deepseek-chat")
+        assert self._get(model="gpt-4o-mini").status_code == 200
+
+    @pytest.mark.parametrize("default_model", ["gpt-4o-mini", "ollama/qwen3:8b"])
+    def test_a_default_the_key_would_serve_still_passes(
+        self, monkeypatch: pytest.MonkeyPatch, default_model: str
+    ) -> None:
+        _pin_operator_default(monkeypatch, default_model)
+        assert self._get().status_code == 200
+
+    @pytest.mark.parametrize("provider", ["gemini", "anthropic", "openrouter", "xai"])
+    def test_model_required_answers_first_for_every_registered_provider(
+        self, monkeypatch: pytest.MonkeyPatch, provider: str
+    ) -> None:
+        """The new code is openai-only by construction, and must stay that way.
+
+        Every provider in digillm's registry is ``requiresModel: true`` in the catalog,
+        so a key with no model is already refused with ``byok_model_required`` — a
+        property of the *provider*, which digichat's own catalog knows and enforces
+        client-side. Answering the new code there would tell the operator their frontend
+        is broken when it is not. Reordering the middleware breaks that silently, so it
+        is pinned here rather than left to reading order.
+        """
+        _pin_operator_default(monkeypatch, "openrouter/deepseek/deepseek-chat")
+        res = self._get(provider=provider)
+        assert res.status_code == 400, res.text
+        assert "byok_model_required" in str(res.json())
+        assert "byok_default_model_provider_mismatch" not in str(res.json())
+
+    def test_a_server_side_resolution_failure_does_not_blame_the_caller(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``llm_mode: free`` with no pin makes ``operator_default_model`` raise.
+
+        That is a server misconfiguration, and converting it into a 400 about the
+        caller's key would send every BYOK user chasing their own credentials. The
+        middleware fails open; the invariant survives because the resolver re-derives
+        the same verdict on the same string and refuses there.
+        """
+        monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+        monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+        monkeypatch.setenv("DIGI_LLM_MODE", "free")
+        from digigraph.model_config import operator_default_model
+
+        with pytest.raises(ValueError):
+            operator_default_model()
+        assert self._get().status_code == 200
+
+
+@pytest.mark.unit
+class TestOperatorDefaultLadderHasOneCopy:
+    """The middleware's verdict and ``digi llm-settings`` must name the same model.
+
+    ``operator_default_model`` and ``effective_llm_settings`` used to run the same
+    fallback ladder in two copies (default_model → defaults[mode] → defaults['test']
+    → ``gpt-4o-mini``). ``effective_llm_settings`` cannot simply call the former —
+    it also reports ``provider`` / ``api_key_env`` / ``source`` — so the shared part
+    is extracted into ``_fallback_model_for_mode``. That extraction is invisible at
+    runtime, so re-duplicating it would go unnoticed; this pins the consequence
+    instead. Drift here means the BYOK middleware refuses (or allows) a request on a
+    model the operator's own diagnostic says is not in use, on a credential path.
+    """
+
+    @staticmethod
+    def _fallback_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml: str) -> None:
+        """Reach the ladder: no explicit pin, so ``_resolve_explicit_model`` returns None."""
+        monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
+        monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
+        monkeypatch.delenv("DIGI_MODEL_MODES_FILE", raising=False)
+        (tmp_path / "model_modes.yaml").write_text(yaml)
+        monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
+
+    @pytest.mark.parametrize(
+        ("yaml", "expected", "expected_source"),
+        [
+            # default_model wins outright.
+            (
+                "default_model: openrouter/deepseek/deepseek-chat\n",
+                "openrouter/deepseek/deepseek-chat",
+                "model_modes.default_model",
+            ),
+            # default_model outranks defaults[mode] when both are present. Pinned
+            # separately because a copy that consulted ``defaults`` first would still
+            # agree with the other entry point on every single-rung fixture.
+            (
+                "default_model: gemini/gemini-2.5-pro\n"
+                "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n",
+                "gemini/gemini-2.5-pro",
+                "model_modes.default_model",
+            ),
+            # defaults[mode] — the shape the shipped release config actually has.
+            (
+                "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n",
+                "openrouter/qwen/qwen3-next-80b",
+                "model_modes",
+            ),
+            # defaults[mode] outranks defaults['test'] when both are present. Without
+            # this rung an inverted copy passes: every other fixture sets one key, so
+            # ``get(mode) or get("test")`` and ``get("test") or get(mode)`` agree.
+            (
+                "defaults:\n  medium: openrouter/qwen/qwen3-next-80b\n"
+                "  test: gemini/gemini-2.5-flash\n",
+                "openrouter/qwen/qwen3-next-80b",
+                "model_modes",
+            ),
+            # defaults['test'] as the cross-mode fallback.
+            (
+                "defaults:\n  test: gemini/gemini-2.5-flash\n",
+                "gemini/gemini-2.5-flash",
+                "model_modes",
+            ),
+            # No usable entry at all — the hard floor.
+            ("defaults: {}\n", "gpt-4o-mini", "default"),
+        ],
+    )
+    def test_both_entry_points_resolve_the_same_model(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+        yaml: str,
+        expected: str,
+        expected_source: str,
+    ) -> None:
+        from digigraph.model_config import effective_llm_settings, operator_default_model
+
+        self._fallback_env(monkeypatch, tmp_path, yaml)
+        monkeypatch.setenv("DIGI_LLM_MODE", "medium")
+        assert operator_default_model() == expected
+        settings = effective_llm_settings()
+        assert settings["model"] == expected
+        # The helper returns ``(model, source_label)`` and only ``effective_llm_settings``
+        # reports the label, so a re-duplication that got the rung right but mislabelled
+        # it would be invisible above: ``digi llm-settings`` would name the right model
+        # and lie about where it came from.
+        assert settings["source"] == expected_source
+
+    def test_both_entry_points_refuse_free_mode_without_a_pin(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """``defaults.free`` is access policy, never a slug — so neither may invent one.
+
+        Pinned on both because a copy that answered here would hand the middleware a
+        model in a mode where the deployment has deliberately declined to name one.
+        """
+        from digigraph.model_config import effective_llm_settings, operator_default_model
+
+        self._fallback_env(monkeypatch, tmp_path, "defaults:\n  free: openrouter/some/model:free\n")
+        monkeypatch.setenv("DIGI_LLM_MODE", "free")
+        with pytest.raises(ValueError):
+            operator_default_model()
+        with pytest.raises(ValueError):
+            effective_llm_settings()
 
 
 @pytest.mark.unit
