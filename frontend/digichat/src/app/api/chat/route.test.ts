@@ -632,6 +632,10 @@ describe("POST /api/chat", () => {
       // neither is observable through the response — assert on the recorded call or
       // the trace branch could hand the adapter an empty history and still pass.
       expect(call?.messages).toHaveLength(1);
+      expect(call?.messages?.[0]).toMatchObject({
+        role: "user",
+        parts: [{ type: "text", text: "hi" }],
+      });
       expect(call?.responseHeaders["X-Digichat-Session"]).toBe("sess-trace");
       expect(call?.responseHeaders["X-Request-Id"]).toBe("rid-trace");
       // No embed config on an authenticated request, so the adapter gets the default.
