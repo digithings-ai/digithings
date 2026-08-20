@@ -48,7 +48,16 @@ WORKFLOWS = sorted(p for p in WORKFLOW_DIR.iterdir() if p.suffix in {".yml", ".y
 # is the constant `refs/heads/main` for every push to main, and
 # `github.event.pull_request.number` is constant for the life of a PR — both queue exactly
 # like a literal. Only the run's own identity is genuinely distinct every time.
-PER_RUN_TOKENS = ("github.run_id", "github.run_number", "github.run_attempt", "github.sha")
+#
+# Two near-misses are deliberately *not* in this list, because each is a shared group
+# wearing a `${{ }}`:
+#   - `github.run_attempt` is `1` for every first-attempt run, so `x-${{ github.run_attempt }}`
+#     is the single literal group `x-1` for essentially every run there has ever been.
+#   - `github.sha` identifies a commit, not a run. Both workflows in scope declare
+#     `workflow_dispatch`, and two dispatches of the same unchanged ref share the SHA.
+# A `waiting` run cannot be re-run, so a re-run can never collide with the occupant that
+# starved it — which is why run_id and run_number hold even under re-run.
+PER_RUN_TOKENS = ("github.run_id", "github.run_number")
 
 
 def _gated_jobs(workflow: dict) -> dict[str, dict]:
@@ -65,15 +74,36 @@ def _gated_jobs(workflow: dict) -> dict[str, dict]:
     }
 
 
-def _concurrency(workflow: dict, job: dict) -> object | None:
-    """The `concurrency` in force for this job — its own, else the workflow-wide one.
+def _concurrency_scopes(workflow: dict, job: dict) -> list[tuple[str, object]]:
+    """Every `concurrency` block that can make this job queue, labelled by scope.
 
-    A job-level group overrides rather than merges with the workflow-level one, so reading
-    both would misreport a job that opts out of a bad workflow-wide default.
+    Both scopes are returned, not just the narrowest. #2541 is its own counterexample to
+    reading only one: the group that starved migrations 066-070 was `db-migrate.yml`'s
+    **workflow-level** `concurrency: db-migrate`, while the `environment: production` sat on
+    the `migrate` job. A job-level group overrides the workflow-level one *for the job*, but
+    the run still occupies the workflow-level group for the whole time it sits in the
+    approval gate — so treating a job-level block as a replacement would let three benign
+    lines hide the exact defect this file exists to catch.
     """
-    if "concurrency" in job:
-        return job["concurrency"]
-    return workflow.get("concurrency")
+    scopes: list[tuple[str, object]] = []
+    if workflow.get("concurrency") is not None:
+        scopes.append(("workflow-level", workflow["concurrency"]))
+    if job.get("concurrency") is not None:
+        scopes.append(("job-level", job["concurrency"]))
+    return scopes
+
+
+def _cancels_in_progress(concurrency: dict) -> bool:
+    """Whether this block supersedes rather than queues.
+
+    GitHub accepts `cancel-in-progress: 'true'` as well as the bare boolean, and YAML hands
+    back a string for the quoted form. Rejecting it would be a false positive on a workflow
+    that is in fact safe.
+    """
+    value = concurrency.get("cancel-in-progress")
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return value is True
 
 
 def test_at_least_one_workflow_is_environment_gated() -> None:
@@ -101,26 +131,24 @@ def test_an_environment_gated_job_does_not_queue(path: Path) -> None:
         pytest.skip("no environment-gated job")
 
     for name, job in gated.items():
-        where = f"{path.name}:{name}"
-        concurrency = _concurrency(workflow, job)
-        if concurrency is None:
-            continue  # nothing to queue behind
+        for scope, concurrency in _concurrency_scopes(workflow, job):
+            where = f"{path.name}:{name} ({scope})"
 
-        assert isinstance(concurrency, dict), (
-            f"{where} is gated on environment {job['environment']!r} and uses the scalar form "
-            f"`concurrency: {concurrency}`, which cannot carry cancel-in-progress. A run left "
-            "unapproved then holds the group for as long as nobody approves it and every "
-            "later run queues behind it forever (#2541)"
-        )
+            assert isinstance(concurrency, dict), (
+                f"{where} is gated on environment {job['environment']!r} and uses the scalar "
+                f"form `concurrency: {concurrency}`, which cannot carry cancel-in-progress. A "
+                "run left unapproved then holds the group for as long as nobody approves it "
+                "and every later run queues behind it forever (#2541)"
+            )
 
-        group = str(concurrency.get("group", ""))
-        if any(token in group for token in PER_RUN_TOKENS):
-            continue  # genuinely distinct per run, so nothing ever queues behind it
+            group = str(concurrency.get("group", ""))
+            if any(token in group for token in PER_RUN_TOKENS):
+                continue  # genuinely distinct per run, so nothing ever queues behind it
 
-        assert concurrency.get("cancel-in-progress") is True, (
-            f"{where} is gated on environment {job['environment']!r} and shares the static "
-            f"concurrency group {group!r} without cancel-in-progress, so an unapproved run "
-            "stops the workflow indefinitely instead of delaying it. Either supersede "
-            "(cancel-in-progress: true, only if the newest run's work is a superset of what "
-            "it displaces) or make the group unique per run (#2541)"
-        )
+            assert _cancels_in_progress(concurrency), (
+                f"{where} is gated on environment {job['environment']!r} and shares the static "
+                f"concurrency group {group!r} without cancel-in-progress, so an unapproved run "
+                "stops the workflow indefinitely instead of delaying it. Either supersede "
+                "(cancel-in-progress: true, only if the newest run's work is a superset of what "
+                "it displaces) or make the group unique per run (#2541)"
+            )
