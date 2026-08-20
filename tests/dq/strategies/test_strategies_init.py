@@ -50,14 +50,19 @@ class TestStrategiesInitOptionalNautilus:
 
         def fake_find_spec(name: str, *args: object, **kwargs: object) -> object:
             if name == "nautilus_trader":
-                # Claim the dependency is present without it actually being
-                # installed, so the real strategy import fails underneath --
-                # proving the failure is no longer silently swallowed.
+                # Claim the dependency is present so the gate takes the
+                # import branch, regardless of whether it's actually
+                # installed in the environment running this test.
                 return real_find_spec("digiquant", *args, **kwargs)  # type: ignore[arg-type]
             return real_find_spec(name, *args, **kwargs)  # type: ignore[arg-type]
 
         monkeypatch.setattr(importlib_util, "find_spec", fake_find_spec)
         _clear_strategies_modules()
+        # A `None` entry in sys.modules is CPython's own signal for "this
+        # module previously failed to import" -- it raises ImportError
+        # immediately on the next import attempt, deterministically, whether
+        # or not nautilus_trader is genuinely installed here.
+        monkeypatch.setitem(sys.modules, "digiquant.strategies.bollinger_mr", None)
         try:
             with pytest.raises(ImportError):
                 importlib.import_module("digiquant.strategies")
