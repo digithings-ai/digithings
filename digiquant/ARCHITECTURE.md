@@ -427,21 +427,28 @@ parquet into a `date -> risk` map (validating the `date`/`risk` columns are
 present, rejecting duplicate dates, casting a `pl.Datetime` `date` column
 to `pl.Date` — `iter_rows()` otherwise yields `datetime.datetime` keys that
 never equal the `datetime.date` `on_bar()` looks up with; any other non-Date
-dtype raises — and requiring `risk` to be numeric, since a string column loads
-without error and only fails later, as a `TypeError` inside
-`AccumDistCurve.value_at_risk()`); `on_bar()` looks up the day's risk, converts it to a trade rate
-via `AccumDistCurve.value_at_risk()`, and sizes the trade via the shared
-`sdca/backtest.py::size_trade()` helper — both `run_backtest()` and `on_bar()`
-call this one function, so live/backtest and the standalone parity harness
-never diverge. `long_only=True` clamps the rate to `>= 0` regardless of the
-curve's own sign, as a safety override independent of which curve is
-configured. `on_bar()` skips sizing a new order while a prior one is still
-open (`_order_pending`, cleared on fill-complete/canceled/rejected/expired),
-so two bars can never size off the same unreserved cash/asset_units. Shadow
-`_cash`/`_asset_units` are updated from real `OrderFilled` events
-(`on_order_filled()`), not the pre-submission estimate, so they track
-Nautilus's actual quantity-quantized execution state rather than drifting
-from it.
+dtype raises — rejecting any null `date` (would otherwise become an
+unreachable `None` dict key), and requiring `risk` to be numeric and, where
+non-null, finite: a string column loads without error and only fails later as
+a `TypeError` inside `AccumDistCurve.value_at_risk()`, and NaN/±inf pass
+`is_numeric()` but reach that same call as a non-finite float; a null `risk`
+is kept as an explicit no-data day. `on_bar()` looks up the day's risk,
+converts it to a trade rate via `AccumDistCurve.value_at_risk()`, and sizes
+the trade via the shared `sdca/backtest.py::size_trade()` helper — both
+`run_backtest()` and `on_bar()` call this one function, so live/backtest and
+the standalone parity harness never diverge. `long_only=True` clamps the rate
+to `>= 0` regardless of the curve's own sign, as a safety override independent
+of which curve is configured. `on_bar()` skips sizing a new order while a
+prior one is still open (`_order_pending`, cleared on
+fill-complete/canceled/rejected/expired/denied), so two bars can never size
+off the same unreserved cash/asset_units. Shadow `_cash`/`_asset_units` are
+updated from real `OrderFilled` events (`on_order_filled()`), not the
+pre-submission estimate, so they track Nautilus's actual quantity-quantized
+execution state rather than drifting from it; a fill's `commission` is also
+deducted from `_cash` when denominated in the instrument's quote currency —
+a fee paid in a different currency (e.g. the base asset) is left untouched
+rather than misapplied, since this shadow accounting has no conversion rate
+for it.
 Like `m2_liquidity`, **SDCA is not registered in `strategies/registry.py`** —
 `risk_path` has no sensible static default (it's produced by a specific
 upstream `RiskModel` run), so `SdcaStrategyConfig` must be instantiated

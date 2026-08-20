@@ -13,10 +13,12 @@ import pytest
 
 try:
     from nautilus_trader.core.datetime import dt_to_unix_nanos
+    from nautilus_trader.model.currencies import BTC, USDT
     from nautilus_trader.model.data import Bar, BarSpecification, BarType
     from nautilus_trader.model.enums import BarAggregation, PriceType
     from nautilus_trader.model.identifiers import InstrumentId
     from nautilus_trader.model.instruments import Instrument
+    from nautilus_trader.model.objects import Money
     from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
     NAUTILUS_AVAILABLE = True
@@ -295,6 +297,60 @@ class TestSdcaStrategyInstantiation:
         with pytest.raises(ValueError, match="numeric"):
             strategy._load_risk_index()
 
+    def test_risk_index_rejects_null_date(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
+        """A null ``date`` becomes a ``None`` dict key that on_bar()'s
+        ``datetime.date`` lookups can never match (#1081 CodeRabbit review) —
+        rejected at load time instead of silently becoming a dead row.
+        """
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        df = pl.DataFrame(
+            {"date": [date(2020, 1, 1), None], "risk": [1.0, 2.0]},
+            schema={"date": pl.Date, "risk": pl.Float64},
+        )
+        path = tmp_path / "risk_null_date.parquet"
+        df.write_parquet(path)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=str(path),
+        )
+        strategy = SdcaStrategy(cfg)
+        with pytest.raises(ValueError, match="null date"):
+            strategy._load_risk_index()
+
+    def test_risk_index_rejects_non_finite_risk(
+        self, instrument_id: InstrumentId, bar_type: BarType, tmp_path: Path
+    ) -> None:
+        """NaN/inf pass ``is_numeric()`` but reach
+        ``AccumDistCurve.value_at_risk()`` as a non-finite float (#1081
+        CodeRabbit review) — rejected at load time instead. A null risk value
+        (see ``test_risk_index_preserves_null``) is a distinct, valid
+        no-data day and must still be preserved.
+        """
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        df = pl.DataFrame(
+            {
+                "date": [date(2020, 1, 1), date(2020, 1, 2)],
+                "risk": pl.Series([float("nan"), 2.0], dtype=pl.Float64),
+            }
+        )
+        path = tmp_path / "risk_non_finite.parquet"
+        df.write_parquet(path)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=str(path),
+        )
+        strategy = SdcaStrategy(cfg)
+        with pytest.raises(ValueError, match="non-finite"):
+            strategy._load_risk_index()
+
 
 class TestSdcaStrategyOrderPendingGuard:
     """#1081 CodeRabbit review: on_bar() must not size a new order off unreserved
@@ -352,7 +408,7 @@ class TestSdcaStrategyOrderPendingGuard:
         strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
         strategy._order_pending = True
         strategy._pending_qty = 1.0
-        event = Mock(is_buy=True)
+        event = Mock(is_buy=True, commission=Money(0.0, USDT))
         event.last_qty.as_double.return_value = 1.0
         event.last_px.as_double.return_value = 100.0
 
@@ -370,7 +426,7 @@ class TestSdcaStrategyOrderPendingGuard:
         strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
         strategy._order_pending = True
         strategy._pending_qty = 2.0
-        event = Mock(is_buy=True)
+        event = Mock(is_buy=True, commission=Money(0.0, USDT))
         event.last_qty.as_double.return_value = 1.0
         event.last_px.as_double.return_value = 100.0
 
@@ -398,3 +454,67 @@ class TestSdcaStrategyOrderPendingGuard:
 
         assert strategy._order_pending is False
         assert strategy._pending_qty == pytest.approx(0.0)
+
+    def test_on_order_denied_clears_pending(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """A denied order never reaches the venue, so it must clear pending
+        state the same as canceled/rejected/expired (#1081 CodeRabbit review) —
+        otherwise on_bar() stays stuck skipping every subsequent bar.
+        """
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._order_pending = True
+        strategy._pending_qty = 1.0
+
+        strategy.on_order_denied(Mock())
+
+        assert strategy._order_pending is False
+        assert strategy._pending_qty == pytest.approx(0.0)
+
+    def test_order_filled_subtracts_same_currency_commission(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """Commission in the instrument's quote currency (USDT, same as
+        _cash) must be deducted, or shadow _cash drifts from real account
+        cash by the fees paid on every fill (#1081 CodeRabbit review).
+        """
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._pending_qty = 1.0
+        event = Mock(is_buy=True, commission=Money(0.5, USDT))
+        event.last_qty.as_double.return_value = 1.0
+        event.last_px.as_double.return_value = 100.0
+
+        strategy.on_order_filled(event)
+
+        assert strategy._cash == pytest.approx(100_000.0 - 100.0 - 0.5)
+
+    def test_order_filled_ignores_different_currency_commission(
+        self,
+        instrument: Instrument,
+        instrument_id: InstrumentId,
+        bar_type: BarType,
+        tmp_path: Path,
+    ) -> None:
+        """A fee paid in a currency other than the tracked quote currency
+        (e.g. the base asset) can't be folded into a single-currency _cash
+        figure without a conversion rate this strategy doesn't have, so it
+        must be left untouched rather than misapplied (#1081 CodeRabbit
+        review).
+        """
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._pending_qty = 1.0
+        event = Mock(is_buy=True, commission=Money(0.001, BTC))
+        event.last_qty.as_double.return_value = 1.0
+        event.last_px.as_double.return_value = 100.0
+
+        strategy.on_order_filled(event)
+
+        assert strategy._cash == pytest.approx(100_000.0 - 100.0)

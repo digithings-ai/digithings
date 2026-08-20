@@ -40,7 +40,13 @@ from nautilus_trader.config import PositiveFloat, StrategyConfig
 from nautilus_trader.core.datetime import unix_nanos_to_dt
 from nautilus_trader.model.data import Bar, BarType
 from nautilus_trader.model.enums import OrderSide, TimeInForce
-from nautilus_trader.model.events import OrderCanceled, OrderExpired, OrderFilled, OrderRejected
+from nautilus_trader.model.events import (
+    OrderCanceled,
+    OrderDenied,
+    OrderExpired,
+    OrderFilled,
+    OrderRejected,
+)
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
@@ -120,6 +126,16 @@ class SdcaStrategy(Strategy):
             # AccumDistCurve.value_at_risk() as a str, which raises TypeError deep
             # in the curve math on the first matching bar — fail fast here instead.
             raise ValueError(f"risk_path parquet 'risk' column must be numeric, got {risk_dtype}")
+        if df["date"].null_count() > 0:
+            # A null date becomes a None dict key, which on_bar()'s datetime.date
+            # lookups can never match — a silently dead row rather than an error.
+            raise ValueError("risk_path parquet has null date value(s)")
+        non_finite = df.filter(pl.col("risk").is_not_null() & ~pl.col("risk").is_finite())
+        if non_finite.height > 0:
+            # NaN/±inf pass is_numeric() but reach AccumDistCurve.value_at_risk()
+            # as a non-finite float; null risk is kept as an explicit no-data day.
+            bad_dates = non_finite["date"].to_list()
+            raise ValueError(f"risk_path parquet has non-finite risk value(s) on: {bad_dates}")
         dupes = df.filter(df["date"].is_duplicated())["date"].unique().sort().to_list()
         if dupes:
             raise ValueError(f"risk_path parquet has duplicate date(s): {dupes}")
@@ -203,6 +219,18 @@ class SdcaStrategy(Strategy):
             self._cash += filled_units * filled_price
             self._asset_units -= filled_units
 
+        # Commission is a real cash outflow on either side. Only subtract it
+        # when denominated in the instrument's quote currency (the currency
+        # _cash tracks) — a fee paid in a different currency (e.g. the base
+        # asset, or a separate fee token) can't be folded into a
+        # single-currency cash figure without a conversion rate this
+        # shadow-accounting strategy doesn't have.
+        if (
+            self._instrument is not None
+            and event.commission.currency == self._instrument.quote_currency
+        ):
+            self._cash -= event.commission.as_double()
+
         self._pending_qty -= filled_units
         if self._pending_qty <= 1e-9:
             self._order_pending = False
@@ -216,6 +244,10 @@ class SdcaStrategy(Strategy):
         self._pending_qty = 0.0
 
     def on_order_expired(self, event: OrderExpired) -> None:
+        self._order_pending = False
+        self._pending_qty = 0.0
+
+    def on_order_denied(self, event: OrderDenied) -> None:
         self._order_pending = False
         self._pending_qty = 0.0
 
