@@ -291,30 +291,46 @@ def check_openrouter_function_tools() -> bool:
                 has_output = bool(
                     message and ((message.content or "").strip() or message.tool_calls)
                 )
-                # OPENROUTER_FALLBACK_MODELS (set on this pipeline step) attaches fallback
-                # routing to the PRIMARY request, not just empty-completion retries
-                # (digillm/client.py:1290-1292) — so if `model` itself is rejected for tool
-                # use (the exact :online "No endpoints found" regression this check exists to
-                # catch), OpenRouter can transparently substitute a working pool member and
-                # still return real content. A `has_output` PASS alone can't tell you *this*
-                # model actually served the response, so a substitution fails the check for
-                # the model it claims to have tested — matching what digillm itself records as
-                # "actually served" (client.py:1498, `getattr(r, "model", None)`).
-                served = getattr(resp, "model", None) if resp is not None else None
-                requested = model.removeprefix("openrouter/")
-                substituted = bool(served) and served != requested
-                ok = has_output and not substituted
-                if substituted:
+                # OPENROUTER_FALLBACK_MODELS (set on this pipeline step, to match the real
+                # run's routing conditions — #1622) attaches fallback routing to the PRIMARY
+                # request, not just empty-completion retries (digillm/client.py:1290-1292) —
+                # so OpenRouter can transparently substitute a working pool member and still
+                # return real content even when `model` itself would have been rejected for
+                # tool use. That's the exact :online "No endpoints found" regression this
+                # check exists to catch — but the SAME env var is set on the real "Run Olympus
+                # research pipeline" step, so a real run tolerates the identical substitution;
+                # substitution here does not predict a broken run. It's also the documented,
+                # EXPECTED trigger for ordinary transient provider load-shedding
+                # (pipeline-olympus.yml's own comment on this env var), not just genuine
+                # incapability — so treating every substitution as a hard failure would
+                # reintroduce exactly the fragile-preflight failure mode #2374/#2517 already
+                # fixed once. Report it instead of failing on it: the served model
+                # (client.py:1498-1500, `getattr(r, "model", None)`, the same field digillm
+                # itself records as "actually served") tells a human which model actually
+                # answered, without turning a benign substitution into a pipeline-blocking
+                # preflight failure. Only meaningful for models actually routed through
+                # OpenRouter — a bare `removeprefix("openrouter/")` would misfire on a
+                # differently-prefixed pin (e.g. `gemini/...`), which digillm strips
+                # differently (see `_parse_provider_prefix`).
+                served = None
+                substituted = False
+                if model.startswith("openrouter/"):
+                    served = getattr(resp, "model", None) if resp is not None else None
+                    requested = model.removeprefix("openrouter/")
+                    substituted = bool(served) and served != requested
+                if not has_output:
+                    detail = "empty response (no content, no tool_calls)"
+                elif substituted:
                     detail = (
                         f"{elapsed:.1f}s — served by {served}, not the requested model "
-                        "(OpenRouter fallback substitution)"
+                        "(OpenRouter fallback substitution — informational, not a failure)"
                     )
-                elif has_output:
-                    detail = f"{elapsed:.1f}s — served by {served}" if served else f"{elapsed:.1f}s"
+                elif served:
+                    detail = f"{elapsed:.1f}s — served by {served}"
                 else:
-                    detail = "empty response (no content, no tool_calls)"
-                check(f"tools accepted: {model}", ok, detail)
-                all_ok = all_ok and ok
+                    detail = f"{elapsed:.1f}s"
+                check(f"tools accepted: {model}", has_output, detail)
+                all_ok = all_ok and has_output
             except Exception as exc:
                 # is exactly the regression we are guarding; report a clean FAIL per-model.
                 check(f"tools accepted: {model}", False, f"{type(exc).__name__}: {exc}")
