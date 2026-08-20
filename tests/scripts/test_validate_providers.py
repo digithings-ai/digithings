@@ -69,7 +69,7 @@ def test_success_routes_through_digillm_and_passes(vp: Any) -> None:
     assert request["model"] == vp._CONNECTIVITY_PING_MODEL
     assert request["messages"] == [{"role": "user", "content": "Reply with the single word: ok"}]
     assert request["temperature"] == 0
-    assert request["max_tokens"] == 5
+    assert "max_tokens" not in request
 
 
 def test_empty_completion_fails_after_digillm_self_heal(vp: Any) -> None:
@@ -109,3 +109,57 @@ def test_accepts_an_explicit_model_override(vp: Any) -> None:
         assert vp.check_openrouter("openrouter/some-model") is True
 
     assert calls[0]["model"] == "openrouter/some-model"
+
+
+def _fake_tier_config(models: list[str]) -> Any:
+    tier_cfg = SimpleNamespace(allowed_models={"phase": models})
+    return SimpleNamespace(tiers={"cheap": tier_cfg})
+
+
+def test_function_tools_pass_on_text_content(vp: Any) -> None:
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_pass_on_tool_calls_with_no_content(vp: Any) -> None:
+    """A tool-call-only response has no text content but isn't empty — must still PASS."""
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=[SimpleNamespace()]))
+        ]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_fail_on_truly_empty_response(vp: Any) -> None:
+    """The regression this check exists for: resp is not None but carries no content or tool_calls."""
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="", tool_calls=None))]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is False
