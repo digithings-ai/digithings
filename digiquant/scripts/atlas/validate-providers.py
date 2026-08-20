@@ -135,17 +135,31 @@ def check_env_vars() -> bool:
 # answer, and that reasoning text is billed against the SAME ``max_tokens`` budget as the
 # answer — it is not a separate reasoning-token allowance. At ``max_tokens=5`` those providers
 # hit ``finish_reason: "length"`` mid-thought with ``content: null`` before ever reaching the
-# answer. ``reasoning: {"exclude": true}`` does NOT fix this — it only stops OpenRouter from
-# echoing the reasoning text back, the model still spends the token budget generating it.
-# Measured need for this exact prompt on the reasoning-heavy providers: 21-24 completion
-# tokens; ``_PING_MAX_TOKENS`` below gives ~2.5x headroom. Retries and fallback-model pools
-# don't reliably fix this class of failure: OpenRouter's provider routing can (and did, 4/4
-# times in the #2517 CI run) land on the same reasoning-heavy provider across every retry —
-# the fix is giving every attempt enough budget to survive its reasoning preamble, not hoping
-# a later attempt gets routed elsewhere.
+# answer. Neither ``reasoning: {"exclude": true}`` nor ``reasoning: {"max_tokens": N}`` fixes
+# this — ``exclude`` only stops OpenRouter from echoing the reasoning text back (the model still
+# spends the budget generating it), and a probe of ``reasoning.max_tokens=10`` against these
+# providers still burned the *entire* ``max_tokens`` ceiling on reasoning regardless — they do
+# not honor a reasoning-specific sub-budget.
+#
+# A first fix pinned ``max_tokens=64`` (~2.5x headroom over an initial 21-24-completion-token
+# sample). That was still a guess at a "safe" finite ceiling against a fundamentally variable
+# quantity: a follow-up CI run (#2517 PR) burned all 4 of digillm's empty-completion retries on
+# this exact model before finally landing under 64 tokens on the 5th attempt — passing, but only
+# by luck of eventually getting routed to a shorter reasoning trace, which is exactly the
+# retry-dependent behavior this fix is supposed to eliminate. A wider live sample (30+ calls
+# against the same providers, temperature=0) never exceeded 24 completion tokens even when given
+# up to 2000 to work with, so the CI failure was a genuine tail event, not a typical one — but
+# guessing a bigger "safe" number just moves the tail, it doesn't remove it.
+#
+# Root-cause fix: don't cap it. Every real Olympus phase call already runs with
+# ``max_tokens=None`` (see ``research_agent.py``) and has never shown this failure mode — the
+# bug was never "these providers need N tokens," it was "an artificial ceiling exists at all" on
+# a call whose length is provider-controlled, not caller-controlled. ``completion()`` genuinely
+# omits ``max_tokens`` from the wire request when ``None`` (not sent as literal null), so the
+# provider's own stop condition governs — confirmed clean (``finish_reason: "stop"``) across 10/10
+# live samples with no cap. Retries remain as a backstop for real transience, not as the
+# mechanism this check depends on to pass.
 _CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
-# Applies to every short "just say ok" probe below (checks 2 and 3b) — see root-cause note above.
-_PING_MAX_TOKENS = 64
 
 
 def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
@@ -161,7 +175,6 @@ def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
         resp = completion(
             model,
             [{"role": "user", "content": "Reply with the single word: ok"}],
-            max_tokens=_PING_MAX_TOKENS,
             temperature=0,
         )
         elapsed = time.monotonic() - t0
@@ -272,13 +285,21 @@ def check_openrouter_function_tools() -> bool:
                     [{"role": "user", "content": "Reply with the single word: ok"}],
                     tools=DATA_TOOLS,
                     tool_choice="auto",
-                    max_tokens=_PING_MAX_TOKENS,
                     temperature=0,
                 )
                 elapsed = time.monotonic() - t0
-                ok = resp is not None
-                check(f"tools accepted: {model}", ok, f"{elapsed:.1f}s" if ok else "no response")
-                all_ok = all_ok and ok
+                message = resp.choices[0].message if resp is not None and resp.choices else None
+                has_output = bool(
+                    message and ((message.content or "").strip() or message.tool_calls)
+                )
+                check(
+                    f"tools accepted: {model}",
+                    has_output,
+                    f"{elapsed:.1f}s"
+                    if has_output
+                    else "empty response (no content, no tool_calls)",
+                )
+                all_ok = all_ok and has_output
             except Exception as exc:
                 # is exactly the regression we are guarding; report a clean FAIL per-model.
                 check(f"tools accepted: {model}", False, f"{type(exc).__name__}: {exc}")
