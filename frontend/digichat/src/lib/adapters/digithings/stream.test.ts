@@ -523,9 +523,14 @@ it("relays an allowlisted BYOK refusal code out of a 400 body", async () => {
   expect(formatEmbedChatError(new Error(errorText))).toBe(BYOK_MODEL_REMEDIABLE_MESSAGE);
   expect(
     shouldSuggestByokOnEmbedError({
-      llmAccess: "byok_only",
-      // byok_only/operator require showByok explicitly (embed-chat-error.ts:151);
-      // gateMode is irrelevant on that branch.
+      // free_then_byok deliberately, not byok_only: the byok_only/operator branch
+      // (embed-chat-error.ts:151) returns true for *any* non-empty code, so naming it
+      // here would describe a path that ignores the allowlist entirely. free_then_byok
+      // is the branch that consults it (:148) and the policy digithings.ai actually
+      // runs. Note what this line does NOT do: it expects true, so it cannot catch the
+      // allowlist being *loosened* — dropping the code is caught above, by the relay
+      // itself refusing and `body` no longer containing it.
+      llmAccess: "free_then_byok",
       showByok: true,
       errorCode: parsed?.code,
     }),
@@ -551,6 +556,7 @@ it("relays the code without any of the upstream body", async () => {
   expect(body).not.toContain("db.internal");
   expect(body).not.toContain("req-2");
   expect(body).not.toContain("requires an explicit model");
+  expect(body).not.toContain('"service"');
 });
 
 // A flat {code} body is accepted too — not every handler goes through digibase.

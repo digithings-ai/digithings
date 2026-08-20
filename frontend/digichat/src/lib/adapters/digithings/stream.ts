@@ -178,8 +178,13 @@ export async function createDigigraphTraceStreamResponse(opts: {
         const relayable = relayableUpstreamCode(detail);
         if (relayable) {
           // Actionable refusal: hand the code (never the body) to the client so
-          // it can say what to do instead of a dead end. Mirrors the
-          // `digigraph_error` SSE branch below.
+          // it can say what to do instead of a dead end. Same mechanism as the
+          // `digigraph_error` SSE branch below, but not the same disclosure
+          // surface: that branch relays digigraph's `message` verbatim, this one
+          // never does. Unreachable today (the SSE contract carries only
+          // free_quota_exceeded / rate_limit), but the two now share one
+          // allowlist — adding a BYOK code to that contract would relay an
+          // upstream message to an anonymous visitor.
           writer.write({ type: "text-end", id: textId });
           throw new DigigraphStreamContractError(
             digigraphErrorToEmbedPayload({ code: relayable })
