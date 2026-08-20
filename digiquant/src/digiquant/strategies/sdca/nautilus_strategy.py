@@ -11,7 +11,9 @@ bar, the strategy looks up that day's risk, converts it to a trade rate via
 sources of truth for the allocation decision. Shadow ``_cash``/
 ``_asset_units`` are updated from real ``OrderFilled`` events, not the
 pre-submission estimate, so they track Nautilus's actual (quantized)
-execution state.
+execution state. ``on_bar()`` skips sizing a new order while a prior one is
+still open (terminal-state guard, see ``_order_pending``), so two bars can
+never size off the same unreserved capacity.
 
 Usage:
     import polars as pl
@@ -38,7 +40,7 @@ from nautilus_trader.config import PositiveFloat, StrategyConfig
 from nautilus_trader.core.datetime import unix_nanos_to_dt
 from nautilus_trader.model.data import Bar, BarType
 from nautilus_trader.model.enums import OrderSide, TimeInForce
-from nautilus_trader.model.events import OrderFilled
+from nautilus_trader.model.events import OrderCanceled, OrderExpired, OrderFilled, OrderRejected
 from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
@@ -90,6 +92,10 @@ class SdcaStrategy(Strategy):
         self._cash: float = config.initial_cash
         self._asset_units: float = 0.0
         self._instrument: Instrument | None = None
+        # Guards on_bar() against sizing a new order off unreserved capacity
+        # while a prior order is still open — see _submit_market()/on_order_filled().
+        self._order_pending: bool = False
+        self._pending_qty: float = 0.0
 
     def _load_risk_index(self) -> dict[date, float | None]:
         """Load the pre-computed risk parquet into a date -> risk map."""
@@ -97,6 +103,17 @@ class SdcaStrategy(Strategy):
         missing = {"date", "risk"} - set(df.columns)
         if missing:
             raise ValueError(f"risk_path parquet is missing required columns: {sorted(missing)}")
+        date_dtype = df.schema["date"]
+        if date_dtype != pl.Date:
+            # iter_rows() yields datetime.datetime for pl.Datetime, which never
+            # equals the datetime.date keys on_bar() looks up with — cast rather
+            # than silently dropping every matching day's trade decision.
+            if isinstance(date_dtype, pl.Datetime):
+                df = df.with_columns(pl.col("date").cast(pl.Date))
+            else:
+                raise ValueError(
+                    f"risk_path parquet 'date' column must be pl.Date, got {date_dtype}"
+                )
         dupes = df.filter(df["date"].is_duplicated())["date"].unique().sort().to_list()
         if dupes:
             raise ValueError(f"risk_path parquet has duplicate date(s): {dupes}")
@@ -114,6 +131,12 @@ class SdcaStrategy(Strategy):
         self.subscribe_bars(self.config.bar_type)
 
     def on_bar(self, bar: Bar) -> None:
+        if self._order_pending:
+            # A prior order hasn't reached a terminal state yet — sizing off
+            # _cash/_asset_units now would double-spend capacity already
+            # committed to that order.
+            return
+
         bar_date = unix_nanos_to_dt(bar.ts_event).date()
         risk = self._risk_index.get(bar_date)
         if risk is None:
@@ -147,6 +170,8 @@ class SdcaStrategy(Strategy):
             quantity=qty,
             time_in_force=TimeInForce.GTC,
         )
+        self._order_pending = True
+        self._pending_qty = qty.as_double()
         self.submit_order(order)
 
     def on_order_filled(self, event: OrderFilled) -> None:
@@ -157,6 +182,11 @@ class SdcaStrategy(Strategy):
         instrument's ``size_precision`` before submission, so the pre-submit
         estimate can diverge from what actually fills. Using ``last_qty``/
         ``last_px`` (not cumulative) keeps this correct across partial fills.
+
+        Also decrements ``_pending_qty`` by this fill and clears
+        ``_order_pending`` once the whole requested quantity has filled —
+        tracked from our own submitted quantity rather than querying order
+        state, since ``OrderFilled`` carries no ``leaves_qty``.
         """
         filled_units = event.last_qty.as_double()
         filled_price = event.last_px.as_double()
@@ -167,6 +197,22 @@ class SdcaStrategy(Strategy):
             self._cash += filled_units * filled_price
             self._asset_units -= filled_units
 
+        self._pending_qty -= filled_units
+        if self._pending_qty <= 1e-9:
+            self._order_pending = False
+
+    def on_order_canceled(self, event: OrderCanceled) -> None:
+        self._order_pending = False
+        self._pending_qty = 0.0
+
+    def on_order_rejected(self, event: OrderRejected) -> None:
+        self._order_pending = False
+        self._pending_qty = 0.0
+
+    def on_order_expired(self, event: OrderExpired) -> None:
+        self._order_pending = False
+        self._pending_qty = 0.0
+
     def on_stop(self) -> None:
         self.cancel_all_orders(self.config.instrument_id)
         self.close_all_positions(self.config.instrument_id)
@@ -174,6 +220,8 @@ class SdcaStrategy(Strategy):
     def on_reset(self) -> None:
         self._cash = self.config.initial_cash
         self._asset_units = 0.0
+        self._order_pending = False
+        self._pending_qty = 0.0
 
 
 # ─── Registry ────────────────────────────────────────────────────────────────

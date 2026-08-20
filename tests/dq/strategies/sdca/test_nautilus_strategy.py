@@ -4,20 +4,27 @@ from __future__ import annotations
 
 import datetime as _dt
 from datetime import date
+from unittest.mock import Mock
 
 import polars as pl
 import pytest
 
 try:
-    from nautilus_trader.model.data import BarSpecification, BarType
+    from nautilus_trader.core.datetime import dt_to_unix_nanos
+    from nautilus_trader.model.data import Bar, BarSpecification, BarType
     from nautilus_trader.model.enums import BarAggregation, PriceType
+    from nautilus_trader.model.identifiers import InstrumentId
+    from nautilus_trader.model.instruments import Instrument
     from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
     NAUTILUS_AVAILABLE = True
 except ImportError:
     NAUTILUS_AVAILABLE = False
 
-pytestmark = pytest.mark.skipif(not NAUTILUS_AVAILABLE, reason="nautilus_trader not installed")
+pytestmark = [
+    pytest.mark.unit,
+    pytest.mark.skipif(not NAUTILUS_AVAILABLE, reason="nautilus_trader not installed"),
+]
 
 
 def _write_risk_parquet(tmp_path, n: int = 60, with_null: bool = False) -> tuple[str, int]:
@@ -32,18 +39,26 @@ def _write_risk_parquet(tmp_path, n: int = 60, with_null: bool = False) -> tuple
     return str(path), n
 
 
+def _make_bar(bar_type: BarType, instrument: Instrument, day: date, price: float) -> Bar:
+    """Build a single real Bar for a given day/price, for on_bar() unit tests."""
+    ts = dt_to_unix_nanos(_dt.datetime.combine(day, _dt.time.min, tzinfo=_dt.timezone.utc))
+    p = instrument.make_price(price)
+    q = instrument.make_qty(1.0)
+    return Bar(bar_type, p, p, p, p, q, ts, ts)
+
+
 @pytest.fixture()
-def instrument():
+def instrument() -> Instrument:
     return TestInstrumentProvider.btcusdt_binance()
 
 
 @pytest.fixture()
-def instrument_id(instrument):
+def instrument_id(instrument: Instrument) -> InstrumentId:
     return instrument.id
 
 
 @pytest.fixture()
-def bar_type(instrument_id):
+def bar_type(instrument_id) -> BarType:
     spec = BarSpecification(1, BarAggregation.DAY, PriceType.LAST)
     return BarType(instrument_id, spec)
 
@@ -186,3 +201,127 @@ class TestSdcaStrategyInstantiation:
         strategy = SdcaStrategy(cfg)
         assert strategy._cash == pytest.approx(77_000.0)
         assert strategy._asset_units == pytest.approx(0.0)
+
+    def test_risk_index_normalizes_datetime_date_column(
+        self, instrument_id, bar_type, tmp_path
+    ) -> None:
+        """A `pl.Datetime` date column must be usable with on_bar()'s `datetime.date`
+        lookups (#1081 CodeRabbit review) — iter_rows() otherwise yields
+        `datetime.datetime` keys, which never equal a `datetime.date` lookup key.
+        """
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        df = pl.DataFrame(
+            {"date": [date(2020, 1, 1), date(2020, 1, 2)], "risk": [1.0, 2.0]},
+            schema={"date": pl.Datetime("us"), "risk": pl.Float64},
+        )
+        path = tmp_path / "risk_datetime.parquet"
+        df.write_parquet(path)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=str(path),
+        )
+        strategy = SdcaStrategy(cfg)
+        index = strategy._load_risk_index()
+        assert all(type(k) is date for k in index)
+        assert index[date(2020, 1, 1)] == pytest.approx(1.0)
+        assert index[date(2020, 1, 2)] == pytest.approx(2.0)
+
+    def test_risk_index_rejects_non_date_dtype(self, instrument_id, bar_type, tmp_path) -> None:
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        df = pl.DataFrame({"date": ["2020-01-01"], "risk": [1.0]})
+        path = tmp_path / "risk_bad_date_dtype.parquet"
+        df.write_parquet(path)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=str(path),
+        )
+        strategy = SdcaStrategy(cfg)
+        with pytest.raises(ValueError, match="pl.Date"):
+            strategy._load_risk_index()
+
+
+class TestSdcaStrategyOrderPendingGuard:
+    """#1081 CodeRabbit review: on_bar() must not size a new order off unreserved
+    cash/asset_units while a prior order is still open. Two bars could otherwise
+    submit overlapping buys/sells beyond available capacity if a fill isn't
+    instantaneous. Verified at the flag level rather than through a live
+    engine/registration, since `_submit_market()` needs `order_factory`, which is
+    only wired up once a strategy is registered with a trader.
+    """
+
+    def _strategy(self, instrument, instrument_id, bar_type, tmp_path):
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+
+        path, _ = _write_risk_parquet(tmp_path, n=5)
+        cfg = SdcaStrategyConfig(
+            instrument_id=instrument_id,
+            bar_type=bar_type,
+            initial_cash=100_000.0,
+            risk_path=path,
+        )
+        strategy = SdcaStrategy(cfg)
+        strategy._instrument = instrument
+        strategy._risk_index = {date(2020, 1, 1): 0.0}  # risk 0 -> max buy rate
+        return strategy
+
+    def test_on_bar_skips_when_order_pending(
+        self, instrument, instrument_id, bar_type, tmp_path
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._order_pending = True
+        bar = _make_bar(bar_type, instrument, date(2020, 1, 1), 100.0)
+
+        strategy.on_bar(bar)  # would raise (order_factory is None) if the guard were missing
+
+        assert strategy._cash == pytest.approx(100_000.0)
+        assert strategy._asset_units == pytest.approx(0.0)
+
+    def test_order_filled_clears_pending_after_full_qty(
+        self, instrument, instrument_id, bar_type, tmp_path
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._order_pending = True
+        strategy._pending_qty = 1.0
+        event = Mock(is_buy=True)
+        event.last_qty.as_double.return_value = 1.0
+        event.last_px.as_double.return_value = 100.0
+
+        strategy.on_order_filled(event)
+
+        assert strategy._order_pending is False
+
+    def test_order_filled_keeps_pending_after_partial_qty(
+        self, instrument, instrument_id, bar_type, tmp_path
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._order_pending = True
+        strategy._pending_qty = 2.0
+        event = Mock(is_buy=True)
+        event.last_qty.as_double.return_value = 1.0
+        event.last_px.as_double.return_value = 100.0
+
+        strategy.on_order_filled(event)
+
+        assert strategy._order_pending is True
+        assert strategy._pending_qty == pytest.approx(1.0)
+
+    @pytest.mark.parametrize(
+        "handler_name", ["on_order_canceled", "on_order_rejected", "on_order_expired"]
+    )
+    def test_terminal_non_fill_event_clears_pending(
+        self, instrument, instrument_id, bar_type, tmp_path, handler_name
+    ) -> None:
+        strategy = self._strategy(instrument, instrument_id, bar_type, tmp_path)
+        strategy._order_pending = True
+        strategy._pending_qty = 1.0
+
+        getattr(strategy, handler_name)(Mock())
+
+        assert strategy._order_pending is False
+        assert strategy._pending_qty == pytest.approx(0.0)

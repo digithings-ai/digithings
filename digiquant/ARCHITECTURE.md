@@ -424,16 +424,22 @@ depend on NautilusTrader — it wraps the engine as `SdcaStrategyConfig`/
 and `valuation_z_score()` upstream, writes the resulting `date`/`risk` frame to
 a parquet, and passes its path in as `risk_path`. `on_start()` loads that
 parquet into a `date -> risk` map (validating the `date`/`risk` columns are
-present and rejecting duplicate dates); `on_bar()` looks up the day's risk,
-converts it to a trade rate via `AccumDistCurve.value_at_risk()`, and sizes
-the trade via the shared `sdca/backtest.py::size_trade()` helper — both
-`run_backtest()` and `on_bar()` call this one function, so live/backtest and
-the standalone parity harness never diverge. `long_only=True` clamps the rate
-to `>= 0` regardless of the curve's own sign, as a safety override independent
-of which curve is configured. Shadow `_cash`/`_asset_units` are updated from
-real `OrderFilled` events (`on_order_filled()`), not the pre-submission
-estimate, so they track Nautilus's actual quantity-quantized execution state
-rather than drifting from it.
+present, rejecting duplicate dates, and casting a `pl.Datetime` `date` column
+to `pl.Date` — `iter_rows()` otherwise yields `datetime.datetime` keys that
+never equal the `datetime.date` `on_bar()` looks up with; any other non-Date
+dtype raises); `on_bar()` looks up the day's risk, converts it to a trade rate
+via `AccumDistCurve.value_at_risk()`, and sizes the trade via the shared
+`sdca/backtest.py::size_trade()` helper — both `run_backtest()` and `on_bar()`
+call this one function, so live/backtest and the standalone parity harness
+never diverge. `long_only=True` clamps the rate to `>= 0` regardless of the
+curve's own sign, as a safety override independent of which curve is
+configured. `on_bar()` skips sizing a new order while a prior one is still
+open (`_order_pending`, cleared on fill-complete/canceled/rejected/expired),
+so two bars can never size off the same unreserved cash/asset_units. Shadow
+`_cash`/`_asset_units` are updated from real `OrderFilled` events
+(`on_order_filled()`), not the pre-submission estimate, so they track
+Nautilus's actual quantity-quantized execution state rather than drifting
+from it.
 Like `m2_liquidity`, **SDCA is not registered in `strategies/registry.py`** —
 `risk_path` has no sensible static default (it's produced by a specific
 upstream `RiskModel` run), so `SdcaStrategyConfig` must be instantiated
@@ -445,12 +451,13 @@ hand-authored `curve_nodes`/`long_only` personalities as public config —
 increasingly aggressive accumulation) and `accumulate_and_distribute` (signed
 curve, the BTC-reference `DEFAULT_BTC_NODES` shape). These are documented
 personalities, not optimized/backtested-and-selected parameters — `list_presets()`
-returns the available names and `load_preset(name)` returns its
-`curve_nodes`/`long_only`/`description`. To add a preset: append an entry to
-`presets.json` with a 21-element `curve_nodes` array (matches `RISK_NODES`),
-`long_only`, and a `description`; if `long_only` is `true` every node must be
-`>= 0` (enforced by `tests/dq/strategies/sdca/test_presets.py`, not by
-`presets.py` itself — the loader does not validate preset shape at read time).
+returns the available names and `load_preset(name)` returns an `SdcaPreset`
+(frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`). To add a
+preset: append an entry to `presets.json` with a 21-element `curve_nodes` array
+(matches `RISK_NODES`), `long_only`, and a `description`; `SdcaPreset` validates
+both the node count and, if `long_only` is `true`, that every node is `>= 0` at
+load time (`field_validator`/`model_validator`), not just in
+`tests/dq/strategies/sdca/test_presets.py`.
 
 **This module is a CI-only parity harness, not a second backtest engine.**
 `digiquant/AGENTS.md` is explicit that NautilusTrader is the sole backtest and
@@ -479,7 +486,7 @@ its `Strategy` class.
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. |
 | `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs and a finite, positive, non-null price series and `initial_cash` before running. |
 | `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). |
-| `sdca/presets.py` / `sdca/presets.json` | `list_presets() -> list[str]` and `load_preset(name) -> {curve_nodes, long_only, description}` — named public curve personalities for `SdcaStrategyConfig` (#1081). |
+| `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities for `SdcaStrategyConfig` (#1081). |
 
 **Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
 day, `composite_risk` and `risk` are null that day too — `compute_composite_risk`
