@@ -388,12 +388,13 @@ class TestByokCatalogValidation:
         with pytest.raises(ValueError, match="duplicate id"):
             _load_byok_catalog(catalog)
 
-    def test_example_is_stripped_before_it_reaches_user_facing_copy(self, tmp_path) -> None:
+    def test_example_is_stripped_before_it_reaches_user_facing_copy(self, tmp_path: Path) -> None:
         """``_id_non_empty`` stripped; this validator rejected blanks without stripping.
 
-        The asymmetry was user-visible because this is the one catalog field quoted
-        verbatim into a refusal: a padded ``"  grok-4-3  "`` rendered as
-        ``(e.g.   grok-4-3  )``.
+        The asymmetry was user-visible because this field is quoted verbatim into a
+        refusal: a padded ``"  grok-4-3  "`` rendered as ``(e.g.   grok-4-3  )``. Not
+        the *only* such field — entry ``id``s reach user copy the same way via
+        ``byok_provider_unsupported`` — but the only one whose validator did not strip.
         """
         from digigraph.llm_auth import _load_byok_catalog
 
@@ -411,7 +412,9 @@ class TestByokCatalogValidation:
         assert examples["xai"] == "grok-4-3"
 
     @pytest.mark.parametrize("bad", [None, "grok-4-3", [""], ["   "], [123], 7])
-    def test_a_malformed_example_list_does_not_crash_startup(self, tmp_path, bad) -> None:
+    def test_a_malformed_example_list_does_not_crash_startup(
+        self, tmp_path: Path, bad: object
+    ) -> None:
         """Routing survives a bad parenthetical — it did not have to before.
 
         Every other field in this entry is fail-loud because a bad value breaks
@@ -979,7 +982,9 @@ class TestOperatorDefaultCannotBillTheOperator:
     # this test is the *only* JSON-to-refusal drift guard, so a provider added to
     # ``config/byok-providers.json`` later must not silently escape it. Verified: adding
     # a sixth provider whose ``fallbackModels[0]`` is blank leaves a hardcoded list green
-    # while the refusal advertises ``[1]`` and the UI still shows ``[0]``.
+    # while the refusal advertises ``[1]`` and the UI still shows ``[0]``. What it does
+    # *not* assert is that an example exists at all: a provider may declare no
+    # ``fallbackModels``, and the branch below checks that case for consistency instead.
     @pytest.mark.parametrize("provider", list(BYOK_ROUTABLE_PROVIDERS))
     def test_the_example_is_a_model_the_named_provider_declares(self, provider: str) -> None:
         """Send back exactly what the refusal suggested and the gate must let it through.
@@ -1009,6 +1014,17 @@ class TestOperatorDefaultCannotBillTheOperator:
         served = {e["id"]: e.get("fallbackModels", []) for e in catalog}
 
         msg = byok_default_model_refusal(provider)
+        # ``fallbackModels`` is optional by design — the loader tolerates a missing or
+        # empty list (test_a_malformed_example_list_does_not_crash_startup pins that),
+        # and the refusal then just omits its parenthetical. Deriving the parametrize
+        # from the catalog made that case reachable here, so assert the *consistent*
+        # shape rather than failing on ``assert match``.
+        if not served[provider]:
+            assert "(e.g. " not in msg, (
+                f"{provider} declares no fallbackModels, yet the refusal invents an example: {msg}"
+            )
+            assert "X-BYOK-Model" in msg, "a refusal the caller cannot act on is just a wall"
+            return
         match = re.search(r"\(e\.g\. (.+?)\)", msg)
         assert match, f"no example offered to {provider}: {msg}"
         example = match.group(1)
