@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CalendarClock,
   CalendarDays,
+  ClipboardList,
   Grid3x3,
   LineChart as LineChartIcon,
   Workflow,
@@ -18,6 +19,8 @@ import {
   getConsensusDivergence,
   getConsensusTimeSeries,
   getEventOpinions,
+  getIdeaEval,
+  getConsensusEval,
   getIntelligence,
   getIntelligenceWhy,
   getLatestDigest,
@@ -34,9 +37,11 @@ import type {
   FxBriefRow,
   FxConfluenceSnapshotRow,
   FxConsensusDivergence,
+  FxConsensusEvalRow,
   FxConsensusSnapshotRow,
   FxEconomicCalendarRow,
   FxEventSnapshotRow,
+  FxIdeaEvalRow,
   FxTradeIdeaRow,
   IntelligenceWhy,
   MatrixCell,
@@ -47,6 +52,7 @@ import ConsensusTab from './ConsensusTab';
 import EventsTab from './EventsTab';
 import HowItWorksTab from './HowItWorksTab';
 import MatrixTab from './MatrixTab';
+import TrackRecordTab from './TrackRecordTab';
 import BriefPanel from './BriefPanel';
 import TwelveXHeading from './TwelveXHeading';
 import { TwelveXProvider, type TwelveXContextValue, type CrossLink, type TwelveXTab } from './context';
@@ -58,6 +64,7 @@ type DigestData = Awaited<ReturnType<typeof getLatestDigest>>;
 export const TWELVE_X_TABS: ReadonlyArray<{ id: TwelveXTab; Icon: typeof CalendarClock; label: string }> = [
   { id: 'today', Icon: CalendarClock, label: 'Today' },
   { id: 'consensus', Icon: LineChartIcon, label: 'Consensus' },
+  { id: 'track-record', Icon: ClipboardList, label: 'Track record' },
   { id: 'matrix', Icon: Grid3x3, label: 'Matrix' },
   { id: 'events', Icon: CalendarDays, label: 'Events' },
   { id: 'how-it-works', Icon: Workflow, label: 'How it works' },
@@ -135,10 +142,13 @@ interface TwelveXData {
   todayEvents: FxEconomicCalendarRow[];
   researchBriefs: FxBriefRow[];
   divergenceByCurrency: Record<string, FxConsensusDivergence>;
+  ideaEval: FxIdeaEvalRow[];
+  consensusEval: FxConsensusEvalRow[];
 }
 
 export function resolveTab(urlTab: string | null): TwelveXTab {
   if (urlTab === 'consensus') return 'consensus';
+  if (urlTab === 'track-record') return 'track-record';
   if (urlTab === 'intelligence') return 'consensus'; // Legacy redirect
   if (urlTab === 'events') return 'events';
   if (urlTab === 'matrix') return 'matrix';
@@ -248,6 +258,8 @@ export default function TwelveXClient() {
           upcomingEvents,
           matrix,
           researchBriefs,
+          ideaEval,
+          consensusEval,
         ] = await Promise.all([
           getLatestDigest(),
           getConsensusTimeSeries(),
@@ -255,6 +267,8 @@ export default function TwelveXClient() {
           getUpcomingEvents(),
           getMatrix(),
           getBriefs(14),
+          getIdeaEval(),
+          getConsensusEval(),
         ]);
         const opinionsDate = intelligence[0]?.run_date ?? digest?.run_date ?? null;
         const intelRunDate = intelligence[0]?.run_date ?? undefined;
@@ -287,6 +301,8 @@ export default function TwelveXClient() {
           todayEvents,
           researchBriefs,
           divergenceByCurrency,
+          ideaEval,
+          consensusEval,
         });
       } catch (err) {
         if (cancelled) return;
@@ -379,6 +395,14 @@ export default function TwelveXClient() {
             focusCcy={consensusFocusCcy}
             intelligenceWhy={data?.intelligenceWhy ?? { runDate: null, items: [] }}
             researchBriefs={data?.researchBriefs ?? []}
+            consensusEval={data?.consensusEval ?? []}
+          />
+        );
+      case 'track-record':
+        return (
+          <TrackRecordTab
+            ideaEval={data?.ideaEval ?? []}
+            consensusEval={data?.consensusEval ?? []}
           />
         );
       case 'events':

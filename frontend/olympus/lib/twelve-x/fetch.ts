@@ -43,6 +43,8 @@ import type {
   MatrixColumn,
   Mover,
   Timeframe,
+  FxIdeaEvalRow,
+  FxConsensusEvalRow,
 } from './types';
 
 /**
@@ -531,6 +533,38 @@ export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> 
       )
       .eq('run_date', runDate)
       .order('rank', { ascending: true })
+  );
+  return rows ?? [];
+}
+
+/** Idea lifecycle eval rows. Eval tables only — no core FX. */
+export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const rows = await querySupabase<FxIdeaEvalRow[]>((sb) =>
+    sb
+      .from('fx_idea_eval')
+      .select(
+        'run_date, rank, horizon_days, pair, direction, status, entry_date, exit_date, entry_fix, exit_fix, ret, hold_return, sigma_entry, hit, directional_win, significant_hit, n_sessions, as_of',
+      )
+      .eq('horizon_days', 0)
+      .order('run_date', { ascending: true })
+      .order('rank', { ascending: true }),
+  );
+  return rows ?? [];
+}
+
+/** Consensus jump + accuracy eval rows. Eval tables only — no core FX / raw PMT. */
+export async function getConsensusEval(timeframe: Timeframe = 'medium'): Promise<FxConsensusEvalRow[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const rows = await querySupabase<FxConsensusEvalRow[]>((sb) =>
+    sb
+      .from('fx_consensus_eval')
+      .select(
+        'run_date, currency, timeframe, weighted, score, tilt, agreement, n_brokers, n_brokers_prev, delta_score, delta_tilt, delta_agreement, delta_score_pred, clip_flag, sign_flip, abs_delta_score, accuracy_status, currency_ret_5d, sigma_entry, hit_5d, significant_hit_5d, as_of',
+      )
+      .eq('timeframe', timeframe)
+      .order('run_date', { ascending: true })
+      .order('currency', { ascending: true }),
   );
   return rows ?? [];
 }
