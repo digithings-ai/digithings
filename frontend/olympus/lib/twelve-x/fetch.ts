@@ -537,6 +537,40 @@ export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> 
   return rows ?? [];
 }
 
+/**
+ * Lightweight idea history for continuity (pair+direction streak).
+ * Caps lookback so Olympus does not pull the full archive.
+ *
+ * When `asOfBoardDate` is set (canonical board run_date), the window is
+ * `[board − lookbackDays, board]` inclusive so the displayed board is never
+ * truncated by a "today"-relative lookback that ends before the board date.
+ */
+export async function getTradeIdeaHistory(
+  lookbackDays = 45,
+  asOfBoardDate?: string | null,
+): Promise<Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[]> {
+  if (!isTwelveXConfigured() || !twelveXSupabase) return [];
+  const asOf =
+    typeof asOfBoardDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(asOfBoardDate)
+      ? asOfBoardDate.slice(0, 10)
+      : new Date().toISOString().slice(0, 10);
+  const since = new Date(`${asOf}T00:00:00.000Z`);
+  since.setUTCDate(since.getUTCDate() - Math.max(1, lookbackDays));
+  const sinceDate = since.toISOString().slice(0, 10);
+  const rows = await querySupabase<
+    Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[]
+  >((sb) =>
+    sb
+      .from('fx_trade_ideas_snapshot')
+      .select('run_date, pair, direction, as_of')
+      .gte('run_date', sinceDate)
+      .lte('run_date', asOf)
+      .order('run_date', { ascending: true })
+      .order('rank', { ascending: true }),
+  );
+  return rows ?? [];
+}
+
 /** Idea lifecycle eval rows. Eval tables only — no core FX. */
 export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
