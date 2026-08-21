@@ -20,6 +20,10 @@
 #   WORKTREE_TASK_ALLOW_STALE_MODULE=1   downgrade the stale-module-base refusal
 #                                        to a warning
 #
+# Both accept 1/true/yes/on to enable and 0/false/no/off (or unset) to disable,
+# case-insensitively. Anything else is fatal rather than guessed at — see
+# `is_enabled` below.
+#
 # Requires: git, gh CLI
 
 set -euo pipefail
@@ -110,15 +114,44 @@ PY
 OFFLINE="${WORKTREE_TASK_OFFLINE:-}"
 ALLOW_STALE_MODULE="${WORKTREE_TASK_ALLOW_STALE_MODULE:-}"
 
+# Is an opt-out switch on? Both of these disable a safety check, so both ways of
+# misreading one are worth spending a function on.
+#
+# `[[ -n "$VAR" ]]` counts `0` and `false` as set, which fails in the dangerous
+# direction: `WORKTREE_TASK_OFFLINE=0` would skip the fetch. Demanding exactly `1`
+# fixes that but then fails in the other direction, silently ignoring `true` from
+# someone who did ask for offline. So: a fixed vocabulary each way, and anything
+# outside it is fatal rather than guessed at — an unrecognised value is a typo, and
+# a typo in the name of a check must not decide whether the check runs.
+#
+# `tr` rather than `${var,,}`: macOS ships bash 3.2 and this script is run there.
+is_enabled() {
+  local name="$1"
+  local value
+  value="$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    '' | 0 | false | no | off) return 1 ;;
+    1 | true | yes | on) return 0 ;;
+    *) die "${name}=${2:-} is not a recognised value. Use 1/true/yes/on to enable it, or unset it." ;;
+  esac
+}
+
 fetch_origin() {
-  if [[ -n "$OFFLINE" ]]; then
+  if is_enabled WORKTREE_TASK_OFFLINE "$OFFLINE"; then
     warn "WARNING: WORKTREE_TASK_OFFLINE is set — skipping \`git fetch origin\`."
     warn "         The base ref below is whatever your last successful fetch left in"
     warn "         refs/remotes/origin/*, so every count that follows is measured against"
     warn "         a possibly-stale remote and can only *understate* how old the base is."
     return 0
   fi
-  git fetch --quiet origin \
+  # --prune, because `resolve_base_ref` below trusts refs/remotes/origin/* to say
+  # what exists on the remote. Without it a deleted branch leaves its last-known
+  # tip cached there indefinitely, and a component routed to that branch would be
+  # branched from a dead ref instead of falling back to origin/develop loudly.
+  # This drops remote-tracking refs repo-wide, which other worktrees share — but
+  # only ones whose branch is already gone from the remote, and local branches and
+  # worktrees are untouched.
+  git fetch --prune --quiet origin \
     || die "git fetch origin failed. Fix the network or the remote, or set WORKTREE_TASK_OFFLINE=1 to branch from the last fetch anyway (it will warn, and the base may be stale)."
 }
 
@@ -175,7 +208,7 @@ assert_module_base_is_current() {
   warn "  gh pr create --base ${base#origin/} --head develop --title 'chore(sync): ${base#origin/} <- develop'"
   warn "  # then merge it (0 approvals required), and re-run this command"
   warn ""
-  [[ -n "$ALLOW_STALE_MODULE" ]] \
+  is_enabled WORKTREE_TASK_ALLOW_STALE_MODULE "$ALLOW_STALE_MODULE" \
     || die "refusing to branch from a stale module base. Set WORKTREE_TASK_ALLOW_STALE_MODULE=1 to proceed anyway."
   warn "WORKTREE_TASK_ALLOW_STALE_MODULE is set — proceeding from the stale base anyway."
 }
