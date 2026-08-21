@@ -36,10 +36,30 @@ export type EmbedChatErrorCode =
  * that one, so it can only react to it — and the reaction is identical: open the
  * BYOK sequence so the user can pick a model.
  */
-const BYOK_MODEL_REMEDIABLE_CODES = new Set([
+export const BYOK_MODEL_REMEDIABLE_CODES: ReadonlySet<string> = new Set([
   "byok_model_required",
   "byok_default_model_provider_mismatch",
 ]);
+
+/**
+ * Copy for a model-remediable refusal that arrives as a bare code.
+ *
+ * The embed transport relays the code without digigraph's message on purpose: a
+ * digigraph 400 body is not written for anonymous embed visitors, and
+ * `byok_default_model_provider_mismatch`'s message reflects the caller's own
+ * `X-BYOK-Provider` header back at them. So the copy lives here instead.
+ *
+ * It names the reload deliberately. This refusal only occurs while a key IS
+ * bound, and every route back into the BYOK panel is gated on `!providerIsSet`
+ * (`digichat-ui/src/DigiChatSession.tsx:144`, `:227`, `:241`) — so in the embed
+ * there is no button to press. A reload is a real escape hatch because the key
+ * is in-memory React state and is never persisted (`hooks/use-byok-key.ts:191`),
+ * so `byokIsSet` returns to false and the "add your key" affordance comes back.
+ * Drop the reload clause once that gating is fixed and the panel can reopen with
+ * a key already bound.
+ */
+export const BYOK_MODEL_REMEDIABLE_MESSAGE =
+  "Your API key needs a model. Reload the page, then add your key again and choose a model.";
 
 export type ParsedEmbedChatError = {
   code?: EmbedChatErrorCode;
@@ -172,6 +192,9 @@ export function formatEmbedChatError(error: Error | undefined): string | null {
   }
   if (raw.includes("unauthorized") || code === "unauthorized") {
     return "Sign in on digithings.ai/chat or add your own API key below.";
+  }
+  if (code != null && BYOK_MODEL_REMEDIABLE_CODES.has(code)) {
+    return BYOK_MODEL_REMEDIABLE_MESSAGE;
   }
   if (code && UPSTREAM_ERROR_CODES.has(code)) {
     return (

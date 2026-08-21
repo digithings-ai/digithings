@@ -31,6 +31,8 @@ from typing import Any  # score:allow untyped any — dynamically loaded module
 import pytest
 import yaml
 
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "check_review_coverage.py"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci-review-coverage.yml"
@@ -59,6 +61,7 @@ def _state(**over: Any) -> dict[str, Any]:
         "title": "",
         "owner_review": None,
         "agent_review": None,
+        "agent_tool": [],
     }
     base.update(over)
     return base
@@ -104,7 +107,7 @@ def test_a_label_clears_the_gate_even_when_bugbot_is_unavailable() -> None:
 def test_nothing_at_all_is_not_a_review() -> None:
     reviewed, why = crc.verdict_for(_state())
     assert not reviewed
-    assert "no completed Bugbot run" in why
+    assert "no completed agent review" in why
 
 
 # ── the reviewed:owner hatch ─────────────────────────────────────────────────
@@ -172,6 +175,222 @@ def test_an_approval_outranks_a_self_applied_label() -> None:
 def test_a_bot_approval_does_not_count_as_human() -> None:
     """cursor[bot] approving its own router pass is not a human reading the diff."""
     assert "cursor[bot]" in crc.BOT_AUTHORS
+    assert "cursor[bot]" not in crc.REVIEW_BOTS
+    assert "cursor" not in crc.REVIEW_BOTS
+
+
+def test_gh_pr_view_bare_coderabbit_login_is_recognized() -> None:
+    """``gh pr view --json`` returns ``coderabbitai`` without the ``[bot]`` suffix."""
+    assert "coderabbitai" in crc.REVIEW_BOTS
+    assert "coderabbitai[bot]" in crc.REVIEW_BOTS
+    assert "coderabbitai" in crc.CODERABBIT_LOGINS
+    reviewed, why = crc.verdict_for(_state(agent_tool=[{"bot": "coderabbitai", "via": "review"}]))
+    assert reviewed
+    assert "coderabbitai" in why
+
+
+# ── agent-tool reviews (CodeRabbit, Claude, other PR-review bots) ────────────
+#
+# The gate exists to prove a review *loop* ran, not that a specific vendor ran
+# it. A completed CodeRabbit / Claude / Copilot review is the same kind of
+# artifact as Bugbot. A skip, rate-limit, or "PR is closed" failure is not.
+
+
+def test_a_coderabbit_submitted_review_is_a_review() -> None:
+    reviewed, why = crc.verdict_for(
+        _state(agent_tool=[{"bot": "coderabbitai[bot]", "via": "review"}])
+    )
+    assert reviewed
+    assert "coderabbitai[bot]" in why
+
+
+def test_a_coderabbit_status_check_success_is_a_review() -> None:
+    reviewed, why = crc.verdict_for(_state(agent_tool=[{"bot": "CodeRabbit", "via": "check"}]))
+    assert reviewed
+    assert "CodeRabbit" in why
+
+
+def test_a_claude_code_review_check_success_is_a_review() -> None:
+    reviewed, why = crc.verdict_for(
+        _state(agent_tool=[{"bot": "Claude /code-review", "via": "check"}])
+    )
+    assert reviewed
+    assert "Claude /code-review" in why
+
+
+def test_github_code_quality_review_is_a_review() -> None:
+    reviewed, why = crc.verdict_for(
+        _state(agent_tool=[{"bot": "github-code-quality[bot]", "via": "review"}])
+    )
+    assert reviewed
+    assert "github-code-quality[bot]" in why
+
+
+def test_agent_tool_review_outranks_self_applied_labels() -> None:
+    _, why = crc.verdict_for(
+        _state(
+            labels={crc.OWNER_REVIEW_LABEL},
+            agent_tool=[{"bot": "coderabbitai[bot]", "via": "review"}],
+        )
+    )
+    assert "coderabbitai[bot]" in why
+
+
+def test_human_approval_outranks_an_agent_tool_review() -> None:
+    _, why = crc.verdict_for(
+        _state(
+            approvals=["chrizefan"],
+            agent_tool=[{"bot": "coderabbitai[bot]", "via": "review"}],
+        )
+    )
+    assert "chrizefan" in why
+
+
+def test_coderabbit_walkthrough_comment_is_a_completed_review() -> None:
+    body = (
+        "<!-- This is an auto-generated comment: summarize by coderabbit.ai -->\n"
+        "<!-- walkthrough_start -->\nWalkthrough\n"
+    )
+    assert crc.coderabbit_comment_is_completed_review(body)
+
+
+def test_coderabbit_no_actionable_comments_is_a_completed_review() -> None:
+    body = (
+        "<!-- recent_review_start -->\n"
+        "No actionable comments were generated in the recent review. 🎉\n"
+    )
+    assert crc.coderabbit_comment_is_completed_review(body)
+
+
+def test_coderabbit_rate_limit_is_not_a_review() -> None:
+    body = (
+        "<!-- This is an auto-generated comment: rate limited by coderabbit.ai -->\n"
+        "> [!WARNING]\n> ## Review limit reached\n"
+        "<!-- recent_review_start -->\n"
+    )
+    assert not crc.coderabbit_comment_is_completed_review(body)
+
+
+def test_coderabbit_review_failed_because_pr_closed_is_not_a_review() -> None:
+    body = (
+        "<!-- This is an auto-generated comment: failure by coderabbit.ai -->\n"
+        "> [!CAUTION]\n> ## Review failed\n> The pull request is closed.\n"
+        "<!-- recent_review_start -->\nReviewing files that changed\n"
+    )
+    assert not crc.coderabbit_comment_is_completed_review(body)
+
+
+def test_pr_review_state_counts_a_coderabbit_comment_and_submitted_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_gh(args: list[str]) -> dict[str, Any]:
+        assert "comments" in args[-1]
+        return {
+            "title": "fix",
+            "labels": [],
+            "reviews": [
+                {
+                    "author": {"login": "coderabbitai[bot]"},
+                    "state": "COMMENTED",
+                    "body": "findings",
+                }
+            ],
+            "comments": [
+                {
+                    "author": {"login": "coderabbitai[bot]"},
+                    "body": ("<!-- walkthrough_start -->\nWalkthrough of the diff\n"),
+                }
+            ],
+            "statusCheckRollup": [],
+        }
+
+    monkeypatch.setattr(crc, "_gh_json", fake_gh)
+    state = crc._pr_review_state(2510)
+    reviewed, why = crc.verdict_for(state)
+    assert reviewed
+    assert "coderabbitai" in why
+
+
+def test_pr_review_state_counts_bare_coderabbit_login_from_gh_pr_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: #2561 merged then still failed coverage because logins lacked [bot]."""
+
+    def fake_gh(args: list[str]) -> dict[str, Any]:
+        return {
+            "title": "chore",
+            "labels": [],
+            "reviews": [
+                {
+                    "author": {"login": "coderabbitai"},
+                    "state": "COMMENTED",
+                    "body": "findings",
+                }
+            ],
+            "comments": [
+                {
+                    "author": {"login": "coderabbitai"},
+                    "body": (
+                        "<!-- recent_review_start -->\n"
+                        "No actionable comments were generated in the recent review.\n"
+                    ),
+                }
+            ],
+            "statusCheckRollup": [],
+        }
+
+    monkeypatch.setattr(crc, "_gh_json", fake_gh)
+    state = crc._pr_review_state(2557)
+    reviewed, why = crc.verdict_for(state)
+    assert reviewed
+    assert "coderabbitai" in why
+    assert state["agent_tool"], "bare login must populate agent_tool"
+
+
+def test_pr_review_state_ignores_a_coderabbit_rate_limit_comment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_gh(args: list[str]) -> dict[str, Any]:
+        return {
+            "title": "fix",
+            "labels": [],
+            "reviews": [],
+            "comments": [
+                {
+                    "author": {"login": "coderabbitai[bot]"},
+                    "body": (
+                        "<!-- This is an auto-generated comment: "
+                        "rate limited by coderabbit.ai -->\n"
+                        "## Review limit reached\n"
+                    ),
+                }
+            ],
+            "statusCheckRollup": [{"name": "CodeRabbit", "conclusion": ""}],
+        }
+
+    monkeypatch.setattr(crc, "_gh_json", fake_gh)
+    state = crc._pr_review_state(2544)
+    reviewed, _ = crc.verdict_for(state)
+    assert not reviewed
+
+
+def test_pr_review_state_counts_coderabbit_check_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_gh(args: list[str]) -> dict[str, Any]:
+        return {
+            "title": "fix",
+            "labels": [],
+            "reviews": [],
+            "comments": [],
+            "statusCheckRollup": [{"name": "CodeRabbit", "conclusion": "SUCCESS"}],
+        }
+
+    monkeypatch.setattr(crc, "_gh_json", fake_gh)
+    state = crc._pr_review_state(1)
+    reviewed, why = crc.verdict_for(state)
+    assert reviewed
+    assert "CodeRabbit" in why
 
 
 # ── the reviewed:agent hatch (in-session review) ─────────────────────────────

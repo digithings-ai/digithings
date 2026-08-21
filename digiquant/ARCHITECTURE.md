@@ -407,6 +407,128 @@ digiquant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One e
 
 `get_strategy()` resolves aliases, looks up the spec, merges `default_params` with caller overrides and required fields (`instrument_id`, `bar_type`), instantiates `config_cls(**params)`, and returns `(strategy_instance, config)`.
 
+### SDCA Engine (#1080, #1081)
+
+`strategies/sdca/` is the generic, asset-agnostic Strategic-DCA engine: composite
+risk score → accumulation/distribution curve → daily backtest vs. lump-sum
+buy-&-hold. Reverse-engineered from the owner's BTC SDCA artifact but with the
+BTC valuation model factored out — the core engine (`curve.py`,
+`composite_risk.py`, `risk_model.py`, `valuation.py`, `backtest.py`) has **zero
+NautilusTrader dependency and zero BTC-specific constants in its valuation
+path**, unlike every other entry in the strategy table above.
+`sdca/nautilus_strategy.py` (#1081) is the one file in the package that does
+depend on NautilusTrader — it wraps the engine as `SdcaStrategyConfig`/
+`SdcaStrategy`, following the same precompute-then-drive pattern as
+`m2_liquidity.py`: a Polars DataFrame and a `RiskModel` cannot live in a frozen
+`StrategyConfig` (msgspec struct), so the caller runs `compute_composite_risk()`
+and `valuation_z_score()` upstream, writes the resulting `date`/`risk` frame to
+a parquet, and passes its path in as `risk_path`. `on_start()` loads that
+parquet into a `date -> risk` map (validating the `date`/`risk` columns are
+present, rejecting duplicate dates, casting a `pl.Datetime` `date` column
+to `pl.Date` — `iter_rows()` otherwise yields `datetime.datetime` keys that
+never equal the `datetime.date` `on_bar()` looks up with; any other non-Date
+dtype raises — rejecting any null `date` (would otherwise become an
+unreachable `None` dict key), and requiring `risk` to be numeric and, where
+non-null, finite: a string column loads without error and only fails later as
+a `TypeError` inside `AccumDistCurve.value_at_risk()`, and NaN/±inf pass
+`is_numeric()` but reach that same call as a non-finite float; a null `risk`
+is kept as an explicit no-data day. `on_bar()` looks up the day's risk,
+converts it to a trade rate via `AccumDistCurve.value_at_risk()`, and sizes
+the trade via the shared `sdca/backtest.py::size_trade()` helper — both
+`run_backtest()` and `on_bar()` call this one function, so live/backtest and
+the standalone parity harness never diverge. `long_only=True` clamps the rate
+to `>= 0` regardless of the curve's own sign, as a safety override independent
+of which curve is configured. `on_bar()` skips sizing a new order while a
+prior one is still open (`_order_pending`, cleared on
+fill-complete/canceled/rejected/expired/denied), so two bars can never size
+off the same unreserved cash/asset_units. Shadow `_cash`/`_asset_units` are
+updated from real `OrderFilled` events (`on_order_filled()`), not the
+pre-submission estimate, so they track Nautilus's actual quantity-quantized
+execution state rather than drifting from it; a fill's `commission` is also
+deducted from `_cash` when denominated in the instrument's quote currency —
+a fee paid in a different currency (e.g. the base asset) is left untouched
+rather than misapplied, since this shadow accounting has no conversion rate
+for it.
+Like `m2_liquidity`, **SDCA is not registered in `strategies/registry.py`** —
+`risk_path` has no sensible static default (it's produced by a specific
+upstream `RiskModel` run), so `SdcaStrategyConfig` must be instantiated
+directly by the caller; the registry is for discovery only.
+
+`strategies/sdca/presets.py` (backed by `presets.json`) ships named,
+hand-authored `curve_nodes`/`long_only` personalities as public config —
+`conservative_hold`, `balanced`, `aggressive_accumulate` (long-only,
+increasingly aggressive accumulation) and `accumulate_and_distribute` (signed
+curve, the BTC-reference `DEFAULT_BTC_NODES` shape). These are documented
+personalities, not optimized/backtested-and-selected parameters — `list_presets()`
+returns the available names and `load_preset(name)` returns an `SdcaPreset`
+(frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`). To add a
+preset: append an entry to `presets.json` with a 21-element `curve_nodes` array
+(matches `RISK_NODES`), `long_only`, and a `description`; `SdcaPreset` validates
+both the node count and, if `long_only` is `true`, that every node is `>= 0` at
+load time (`field_validator`/`model_validator`), not just in
+`tests/dq/strategies/sdca/test_presets.py`.
+
+**This module is a CI-only parity harness, not a second backtest engine.**
+`digiquant/AGENTS.md` is explicit that NautilusTrader is the sole backtest and
+live-trade engine and that PnL/Sharpe/drawdown must never be returned from
+anywhere but a completed `BacktestResult`/`OptimizeResult`. `run_backtest()`
+here does not violate that: it exists only so the allocation math (curve,
+composite-risk, valuation) can be unit-tested deterministically against known
+reference numbers in milliseconds, without a data fetch or Nautilus's actor/bar
+infrastructure — see the issue #1080 acceptance criteria (`pytest -m unit -k
+sdca`, parity fixture). Its `SdcaBacktestReport` must never be surfaced to
+users or dashboards as an actual backtest result. **`nautilus_strategy.py`
+(#1081) calls `AccumDistCurve.value_at_risk()` and `size_trade()` directly
+rather than reimplementing them** — that is what keeps this module and the
+real Nautilus backtest from silently
+diverging into two sources of truth for the same allocation decision.
+`compute_composite_risk()`/`valuation_z_score()` are the caller's
+responsibility to invoke upstream of `SdcaStrategy` (to build the `risk_path`
+parquet), the same way `m2_liquidity`'s own signal computation happens outside
+its `Strategy` class.
+
+| File | Role |
+|---|---|
+| `sdca/valuation.py` | `valuation_z_score(price, low, median, high)` — log-space position of price within the `RiskModel` rails, in `[-3, 3]` (cheap = +3, rich = −3). The default/primary indicator. Validates finite, positive rails with `low < median < high` on rows where all four inputs are present; a row with any null input passes through as null. |
+| `sdca/risk_model.py` | `RiskModel` — a `runtime_checkable` `Protocol` with one method, `rails(dates) -> pl.DataFrame` (`low`/`median`/`high` columns). Any object with a matching `rails()` satisfies it structurally; the engine never imports a concrete provider. |
+| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Rejects duplicate enabled indicator names and a non-finite/zero total weight. Mirrors the equal-weighted vote pattern in `indicators/m2_signals.py`. |
+| `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. |
+| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. |
+| `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). |
+| `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities for `SdcaStrategyConfig` (#1081). |
+
+**Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
+day, `composite_z` and `risk` are null that day too — `compute_composite_risk`
+uses `pl.sum_horizontal(..., ignore_nulls=False)` so there is never a partial
+blend. `run_backtest` treats a null-risk day as a no-trade day: state (cash,
+holdings) carries forward unchanged, but the day is still marked to market.
+
+**Backtest state is a sequential Python loop, not a vectorized Polars
+expression** — `cash`/`asset_units` are running balances that each day's buy/sell
+depends on, which Polars' columnar model doesn't express cleanly. Inputs
+(`dates`, `price`, `risk`) and the per-day export frame are Polars per the
+Polars-only convention; only the intermediate accumulator is plain Python. This
+mirrors how `nautilus_strategy.py`'s `SdcaStrategy.on_bar()` (#1081) also
+processes bars one at a time, driven by real Nautilus bar events rather than a
+Python `for` loop.
+
+Per-day export frame columns (`asset_units` rather than the issue's literal
+`btc_units` pseudocode name, to match the module's asset-agnostic design):
+`date`, `price`, `risk`, `rate`, `daily_trade_usd` (signed: positive = bought,
+negative = sold), `cash`, `asset_units`, `net_deployed` (`initial_cash - cash`),
+`portfolio_value` (`cash + asset_units * price`), `buy_hold_value` (the
+lump-sum benchmark: all
+`initial_cash` deployed at day-0 price, marked to market thereafter).
+`SdcaBacktestReport` adds `total_pnl`, `vs_lump_usd`, and four fields whose shared
+`_pct` suffix spans **two unit systems**: `total_return_pct` and `vs_lump_pct` are
+true percents (×100 at `backtest.py:162,164`, so `-15.0` means −15%), while
+`dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` are negative *fractions*
+(`-0.15` for a 15% drawdown — `_max_drawdown_pct` applies no ×100). The drawdown
+pair is therefore **not** interchangeable with `BacktestResult.max_drawdown_pct`,
+which is a negative percent — check each field's own docstring before comparing them. Also
+`buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
+non-null days only).
+
 ### Optimization Engine Selection
 
 The dispatch in `run_optimize()`:
@@ -1485,13 +1607,24 @@ becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`
 069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
 all, and the book may be a different date than the run date.
 
-Cutover is a property of the data, not of a flag. Production's migration tail is 065, the kill
-switch defaults *on*, and `--require-ledger` is absent from the pipeline — so today the job
-probes tables prod does not have, degrades to prose, and stays green;
-`tests/scripts/test_prices_cron_dst.py` pins the invocation carrying neither
-`--require-ledger` (a daily red cron before 069/070 are applied) nor `--no-ledger` (which
-would freeze the prose path forever). Deleting the two prose builders is a follow-up gated on
-prod reaching 070, not part of this task: they still carry the whole #1743 regression suite.
+Cutover is a deliberate edit, **not** a property of the data (#2508). It was the latter first:
+the kill switch defaults *on* and the pipeline passed no ledger flag, so the morning job would
+have started trusting the ledger the day the ledger *writers* reached `main` with 069 applied.
+Two conditions, not one, and `main` meets only the first today: 069's file is there, while the
+writers described above are on `develop` and not yet promoted. That is unsafe at the boundary —
+order size is a weight delta against the legacy `positions` book while residuals are measured
+only from `portfolio_ledger_holding_lots`, which starts empty and has no backfill, so the first
+run would book EXIT for every trim of a held name and OPEN for every add, into rows 069 makes
+append-only. So `pipeline-digiquant-prices.yml` passes `--no-ledger`, and
+`tests/scripts/test_prices_cron_dst.py` pins it *present* while `--require-ledger` stays absent
+(it would be a daily red cron before 069/070 are applied). `backfill_position_events.py` passes
+it too: that script shells out to the same `execute_at_open.py`, so it is the second door onto
+the ledger path and an operator repair run would otherwise walk through it. Removing
+`--no-ledger` from **both** call sites is the cutover, and it must arrive with seeded lots — or with a ledger that declines when the lot table
+is empty and the prior book is not — and preferably with `--require-ledger` in the same edit, so
+a silent fallback to prose cannot hide the handover. Deleting the two prose builders is a
+further follow-up gated on prod reaching 070: they still carry the whole #1743 regression
+suite.
 
 - **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
   `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and

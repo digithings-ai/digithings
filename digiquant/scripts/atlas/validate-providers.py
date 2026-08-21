@@ -4,7 +4,7 @@ Atlas provider validation — run before triggering a real pipeline run.
 
 Checks (in order):
   1. Required env vars are present
-  2. OpenRouter connectivity (1-token ping via digillm, pinned to a known-good model)
+  2. OpenRouter connectivity (short ping via digillm, pinned to a known-good model)
      Note: phases route on PINNED per-capability models from config/olympus_models.yaml
      (see RUNBOOK.md "OpenRouter model tiers") — bare openrouter/auto is exercised
      deliberately in checks 3/3b/4 below, not as the connectivity probe.
@@ -120,18 +120,44 @@ def check_env_vars() -> bool:
 # triggered digillm's provider.require_parameters guard (client.py: forced ON for
 # response_format/tools requests) even when routed through digillm. Every real Olympus phase
 # already routes on a PINNED model (RUNBOOK.md "OpenRouter model tiers" — never bare auto),
-# and the daily-failure pattern since 2026-08-11 (#1633, recurring #2374) was this exact bare
-# ping hard-failing preflight while the digillm-routed checks below (3/3b/4, which DO exercise
-# openrouter/auto but deliberately, with response_format/tools present) passed cleanly.
+# and the daily-failure pattern since 2026-08-11 (#1633) was this exact bare ping hard-failing
+# preflight while check 3 below — the only other check that deliberately exercises
+# openrouter/auto, but with a structured-output request that DOES trigger require_parameters —
+# passed cleanly. (3b and 4 route to pinned models, not auto, and are unaffected either way.)
 #
-# Fix: route through digillm's completion() (same self-heal every real call gets — up to
-# DIGILLM_EMPTY_RETRY_MAX retries with backoff, plus an OPENROUTER_FALLBACK_MODELS provider
-# swap on the first retry when that env is set) AND pin the ping to a known-good open-weight
-# model instead of the flaky bare auto-router, so this check exercises the same kind of path
-# production actually uses rather than a strictly worse one. NOTE: as of this change,
-# OPENROUTER_FALLBACK_MODELS is still only set on the sibling "Run Olympus research pipeline"
-# workflow step, not this preflight step — see the PR description for the pending one-line
-# workflow follow-up that closes that gap.
+# Fix: route through digillm's completion() (same self-heal every real call gets) AND pin the
+# ping to a known-good open-weight model instead of the flaky bare auto-router.
+#
+# That fix (#1633) was necessary but not sufficient — the failure recurred (#2374, then again
+# after PR #2512 added OPENROUTER_FALLBACK_MODELS to this step, #2517). Root cause, confirmed
+# by direct reproduction against the live OpenRouter API (see #2517): several of the ~5 backend
+# providers OpenRouter load-balances ``deepseek/deepseek-v4-flash`` across (observed:
+# ``StreamLake``, ``AtlasCloud``) unconditionally emit visible chain-of-thought before the
+# answer, and that reasoning text is billed against the SAME ``max_tokens`` budget as the
+# answer — it is not a separate reasoning-token allowance. At ``max_tokens=5`` those providers
+# hit ``finish_reason: "length"`` mid-thought with ``content: null`` before ever reaching the
+# answer. Neither ``reasoning: {"exclude": true}`` nor ``reasoning: {"max_tokens": N}`` fixes
+# this — ``exclude`` only stops OpenRouter from echoing the reasoning text back (the model still
+# spends the budget generating it), and a probe of ``reasoning.max_tokens=10`` against these
+# providers still burned the *entire* ``max_tokens`` ceiling on reasoning regardless — they do
+# not honor a reasoning-specific sub-budget.
+#
+# A first fix pinned ``max_tokens=64`` (~2.5x headroom over an initial 21-24-completion-token
+# sample). That was still a guess at a "safe" finite ceiling against a fundamentally variable
+# quantity: a wider live sample (30+ calls against the same providers, temperature=0) never
+# exceeded 24 completion tokens even when given up to 2000 to work with, so 64 wasn't "not
+# enough headroom" so much as an arbitrary bet against a provider-controlled quantity — any
+# finite number just moves the tail, it doesn't remove it.
+#
+# Root-cause fix: don't cap it. Every real Olympus phase call already runs with
+# ``max_tokens=None`` (see ``digigraph/src/digigraph/graph/research_agent.py::run_research_agent``,
+# the same completion path ``check_openrouter_structured`` above calls) and has never shown this
+# failure mode — the bug was never "these providers need N tokens," it was "an artificial
+# ceiling exists at all" on a call whose length is provider-controlled, not caller-controlled.
+# ``completion()`` genuinely omits ``max_tokens`` from the wire request when ``None`` (not sent
+# as literal null), so the provider's own stop condition governs — confirmed clean
+# (``finish_reason: "stop"``) across 10/10 live samples with no cap. Retries remain as a
+# backstop for real transience, not as the mechanism this check depends on to pass.
 _CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
 
 
@@ -148,7 +174,6 @@ def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
         resp = completion(
             model,
             [{"role": "user", "content": "Reply with the single word: ok"}],
-            max_tokens=5,
             temperature=0,
         )
         elapsed = time.monotonic() - t0
@@ -259,13 +284,53 @@ def check_openrouter_function_tools() -> bool:
                     [{"role": "user", "content": "Reply with the single word: ok"}],
                     tools=DATA_TOOLS,
                     tool_choice="auto",
-                    max_tokens=5,
                     temperature=0,
                 )
                 elapsed = time.monotonic() - t0
-                ok = resp is not None
-                check(f"tools accepted: {model}", ok, f"{elapsed:.1f}s" if ok else "no response")
-                all_ok = all_ok and ok
+                message = resp.choices[0].message if resp is not None and resp.choices else None
+                has_output = bool(
+                    message and ((message.content or "").strip() or message.tool_calls)
+                )
+                # OPENROUTER_FALLBACK_MODELS (set on this pipeline step, to match the real
+                # run's routing conditions — #1622) attaches fallback routing to the PRIMARY
+                # request, not just empty-completion retries (digillm/client.py:1290-1292) —
+                # so OpenRouter can transparently substitute a working pool member and still
+                # return real content even when `model` itself would have been rejected for
+                # tool use. That's the exact :online "No endpoints found" regression this
+                # check exists to catch — but the SAME env var is set on the real "Run Olympus
+                # research pipeline" step, so a real run tolerates the identical substitution;
+                # substitution here does not predict a broken run. It's also the documented,
+                # EXPECTED trigger for ordinary transient provider load-shedding
+                # (pipeline-olympus.yml's own comment on this env var), not just genuine
+                # incapability — so treating every substitution as a hard failure would
+                # reintroduce exactly the fragile-preflight failure mode #2374/#2517 already
+                # fixed once. Report it instead of failing on it: the served model
+                # (client.py:1498-1500, `getattr(r, "model", None)`, the same field digillm
+                # itself records as "actually served") tells a human which model actually
+                # answered, without turning a benign substitution into a pipeline-blocking
+                # preflight failure. Only meaningful for models actually routed through
+                # OpenRouter — a bare `removeprefix("openrouter/")` would misfire on a
+                # differently-prefixed pin (e.g. `gemini/...`), which digillm strips
+                # differently (see `_parse_provider_prefix`).
+                served = None
+                substituted = False
+                if model.startswith("openrouter/"):
+                    served = getattr(resp, "model", None) if resp is not None else None
+                    requested = model.removeprefix("openrouter/")
+                    substituted = bool(served) and served != requested
+                if not has_output:
+                    detail = "empty response (no content, no tool_calls)"
+                elif substituted:
+                    detail = (
+                        f"{elapsed:.1f}s — served by {served}, not the requested model "
+                        "(OpenRouter fallback substitution — informational, not a failure)"
+                    )
+                elif served:
+                    detail = f"{elapsed:.1f}s — served by {served}"
+                else:
+                    detail = f"{elapsed:.1f}s"
+                check(f"tools accepted: {model}", has_output, detail)
+                all_ok = all_ok and has_output
             except Exception as exc:
                 # is exactly the regression we are guarding; report a clean FAIL per-model.
                 check(f"tools accepted: {model}", False, f"{type(exc).__name__}: {exc}")

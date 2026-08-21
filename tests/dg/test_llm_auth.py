@@ -443,9 +443,12 @@ class TestByokCatalogValidation:
         catalog = self._write_catalog(
             tmp_path, [{"id": "openai", "baseUrl": "https://a.example/v1"}]
         )
-        base_urls, model_required = _load_byok_catalog(catalog)
+        base_urls, model_required, examples = _load_byok_catalog(catalog)
         assert base_urls == {"openai": "https://a.example/v1"}
         assert model_required == frozenset()
+        # fallbackModels is optional on the same terms: an entry without one routes,
+        # and byok_default_model_refusal simply drops its example parenthetical.
+        assert examples == {}
 
     def test_http_catalog_via_digi_config_path_override_still_rejected(
         self, tmp_path, monkeypatch
@@ -502,7 +505,7 @@ class TestByokCatalogPathResolution:
         assert resolved == override_dir / "byok-providers.json"
         assert resolved != _REPO_ROOT / "config" / "byok-providers.json"
 
-        base_urls, _ = _load_byok_catalog(resolved)
+        base_urls, _, _ = _load_byok_catalog(resolved)
         assert base_urls == {"openai": "https://example-override.test/v1"}
 
     def test_missing_file_still_raises_with_override_set(self, tmp_path, monkeypatch) -> None:
@@ -920,12 +923,13 @@ class TestOperatorDefaultCannotBillTheOperator:
     ) -> None:
         assert not byok_operator_model_routes_elsewhere(provider, default_model)
 
-    def test_the_refusal_names_the_provider_and_nothing_else(self) -> None:
-        """The slug is the operator's configuration and the key is the caller's secret.
+    def test_the_refusal_names_the_provider_and_no_operator_slug(self) -> None:
+        """The *operator's* slug is their configuration and the key is the caller's secret.
 
-        Naming the model buys an anonymous caller no remediation — the fix is the same
-        either way — and echoing the key is the failure every other BYOK refusal is
-        already tested against.
+        Naming the operator's model buys an anonymous caller no remediation — the fix is
+        the same either way — and echoing the key is the failure every other BYOK refusal
+        is already tested against. The catalog example the message does name is public
+        and is asserted separately below.
         """
         from digigraph.llm_auth import byok_default_model_refusal
 
@@ -934,6 +938,68 @@ class TestOperatorDefaultCannotBillTheOperator:
         assert "openrouter" not in msg
         assert "deepseek" not in msg
         assert "X-BYOK-Model" in msg, "a refusal the caller cannot act on is just a wall"
+
+    @pytest.mark.parametrize("provider", ["openai", "anthropic", "gemini", "xai", "openrouter"])
+    def test_the_example_is_a_model_the_named_provider_actually_serves(self, provider: str) -> None:
+        """Send back exactly what the refusal suggested and the gate must let it through.
+
+        This is the assertion the message failed before: it offered ``gpt-4o-mini`` to
+        every provider, so an anthropic, gemini or xai caller who followed it verbatim
+        was told to send a model their own key does not serve. Only ``openai`` — one of
+        five — was ever given actionable advice.
+
+        Checked against the catalog rather than through ``byok_model_routes_elsewhere``,
+        which cannot see this class of error: that predicate only rejects a *prefixed*
+        foreign slug, so it answers "fine" for a bare ``gpt-4o-mini`` asked about
+        anthropic. Catalog membership is the property that actually distinguishes them
+        (verified: a hardcoded example fails this for four of the five providers).
+        """
+        import json
+        import re
+
+        from digigraph.llm_auth import (
+            _resolve_byok_catalog_path,
+            byok_default_model_refusal,
+            byok_model_routes_elsewhere,
+            byok_routable_model,
+        )
+
+        catalog = json.loads(_resolve_byok_catalog_path().read_text(encoding="utf-8"))
+        served = {e["id"]: e.get("fallbackModels", []) for e in catalog}
+
+        msg = byok_default_model_refusal(provider)
+        match = re.search(r"\(e\.g\. (.+?)\)", msg)
+        assert match, f"no example offered to {provider}: {msg}"
+        example = match.group(1)
+        assert example in served[provider], (
+            f"{provider} was told to send {example!r}, which is not in its own catalog entry"
+        )
+        # And it clears the BYOK gate, so following the refusal verbatim works.
+        assert not byok_model_routes_elsewhere(provider, example)
+        assert byok_routable_model(provider, example)
+
+    @pytest.mark.parametrize("provider", ["openai", "anthropic", "gemini", "xai", "openrouter"])
+    def test_no_indefinite_article_has_to_agree_with_a_provider_id(self, provider: str) -> None:
+        """``a anthropic model`` was the literal output for four of the five providers.
+
+        Pinning the "a model served by <provider>" phrasing rather than a vowel
+        heuristic: the ids are not English words (``xai`` reads "ex-AI", so no
+        first-letter rule gets it right) and no phrasing that needs an article can.
+        """
+        from digigraph.llm_auth import byok_default_model_refusal
+
+        assert f"a {provider}" not in byok_default_model_refusal(provider)
+
+    def test_a_provider_with_no_catalog_example_still_gets_an_actionable_refusal(
+        self, monkeypatch
+    ) -> None:
+        """fallbackModels is optional, and no example beats a wrong one."""
+        from digigraph import llm_auth
+
+        monkeypatch.setattr(llm_auth, "_BYOK_MODEL_EXAMPLES", {})
+        msg = llm_auth.byok_default_model_refusal("openai")
+        assert "e.g." not in msg
+        assert "X-BYOK-Model" in msg
 
 
 @pytest.mark.unit
@@ -1095,8 +1161,10 @@ class TestOperatorDefaultRefusalOverHttp:
 
         That is a server misconfiguration, and converting it into a 400 about the
         caller's key would send every BYOK user chasing their own credentials. The
-        middleware fails open; the invariant survives because the resolver re-derives
-        the same verdict on the same string and refuses there.
+        middleware fails open, which is all this test pins: the probe answers 200 while
+        ``operator_default_model`` itself still raises. The billing invariant is held
+        elsewhere on this path — by that same raise surfacing out of
+        ``get_model_for_mode``, not by a second verdict reached inside the resolver.
         """
         monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
         monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
@@ -1124,17 +1192,17 @@ class TestOperatorDefaultLadderHasOneCopy:
     """
 
     @staticmethod
-    def _fallback_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml: str) -> None:
+    def _fallback_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml_text: str) -> None:
         """Reach the ladder: no explicit pin, so ``_resolve_explicit_model`` returns None."""
         monkeypatch.delenv("DIGI_PROJECT_CONFIG", raising=False)
         monkeypatch.delenv("DIGI_LLM_PROVIDER", raising=False)
         monkeypatch.delenv("DIGI_LLM_MODEL", raising=False)
         monkeypatch.delenv("DIGI_MODEL_MODES_FILE", raising=False)
-        (tmp_path / "model_modes.yaml").write_text(yaml)
+        (tmp_path / "model_modes.yaml").write_text(yaml_text)
         monkeypatch.setenv("DIGI_CONFIG_PATH", str(tmp_path))
 
     @pytest.mark.parametrize(
-        ("yaml", "expected", "expected_source"),
+        ("yaml_text", "expected", "expected_source"),
         [
             # default_model wins outright.
             (
@@ -1180,13 +1248,13 @@ class TestOperatorDefaultLadderHasOneCopy:
         self,
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
-        yaml: str,
+        yaml_text: str,
         expected: str,
         expected_source: str,
     ) -> None:
         from digigraph.model_config import effective_llm_settings, operator_default_model
 
-        self._fallback_env(monkeypatch, tmp_path, yaml)
+        self._fallback_env(monkeypatch, tmp_path, yaml_text)
         monkeypatch.setenv("DIGI_LLM_MODE", "medium")
         assert operator_default_model() == expected
         settings = effective_llm_settings()

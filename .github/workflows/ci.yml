@@ -149,6 +149,7 @@ jobs:
               - 'tests/dq/test_strategies.py'
               - 'tests/dq/test_tearsheet_isolation.py'
               - 'tests/dq/test_v1_jobs.py'
+              - 'tests/dq/strategies/sdca/test_nautilus_strategy.py'
               - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'
@@ -187,6 +188,7 @@ jobs:
               - '.github/workflows/pipeline-olympus.yml'
               - '.github/workflows/deploy-digithings-cloudflare.yml'
               - '.github/workflows/deploy-digiquant-cloudflare.yml'
+              - '.github/workflows/**'
             workflows:
               - '.github/workflows/**'
               - '.github/actionlint.yaml'
