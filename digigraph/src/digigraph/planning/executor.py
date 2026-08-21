@@ -106,12 +106,23 @@ def _run_step_in_fan_out(
     # Local imports so this module stays importable without the LLM stack, as it was
     # before it had any reason to reach into digillm at all. ``digigraph.usage`` imports
     # digillm itself, so it is the same weight.
-    from digillm import detach_provider_call_context
+    #
+    # Guarded because these run *outside* ``_run_step``'s handler, which already counts
+    # ``ImportError`` as a one-step failure (see ``_PLAN_STEP_ERRORS``). An unguarded
+    # raise here escapes the worker instead, and ``run_plan``'s bare ``future.result()``
+    # would discard every *other* step in the layer -- where the serial branch would
+    # have degraded to one error string. Nothing is lost by skipping the detach: the
+    # modules that bind these handles are the ones that failed to import, so there is
+    # no bound handle left to share. A detach that *itself* raises stays loud.
+    try:
+        from digillm import detach_provider_call_context
 
-    from digigraph.usage import detach_logical_call_context
-
-    detach_provider_call_context()
-    detach_logical_call_context()
+        from digigraph.usage import detach_logical_call_context
+    except ImportError:
+        pass
+    else:
+        detach_provider_call_context()
+        detach_logical_call_context()
     return _run_step(execute_tool, agent, args)
 
 

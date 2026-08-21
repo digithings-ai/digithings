@@ -1764,6 +1764,45 @@ class TestTheFanOutDropsDigigraphsLogicalCallHandle:
         assert solo["only"]["logical"] is not None
         assert solo["only"]["logical"].handle is handle
 
+    def test_a_broken_llm_stack_does_not_discard_the_layer(self) -> None:
+        """An ImportError on the detach imports must cost one step's telemetry, not the layer.
+
+        The two imports run in the pool worker *outside* ``_run_step``'s handler, and
+        ``run_plan`` reads ``future.result()`` bare -- so an unguarded raise there escapes
+        the worker and discards every other step in the layer, while the single-step path
+        would have degraded to one error string (``ImportError`` is in
+        ``_PLAN_STEP_ERRORS``). ``digillm`` is a hard dependency, so this needs a broken
+        install; the point is that the fan-out fails no worse than the serial path.
+
+        Swallowing is safe precisely here: the module that binds the handle is the one that
+        failed to import, so there is no bound handle left to share.
+        """
+        import sys
+
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {"dg": get_byok_override()}
+
+        token = push_byok_header(_byok_request("sk-broken", "openai"))
+        try:
+            # ``None`` in sys.modules is the documented way to make an import raise.
+            with patch.dict(sys.modules, {"digillm": None}):
+                fanned = run_plan(
+                    [
+                        {"id": "a", "agent": "t", "args": {}},
+                        {"id": "b", "agent": "t", "args": {}},
+                    ],
+                    sample,
+                )
+        finally:
+            pop_byok(token)
+
+        # Both steps came back: the layer survived, credentials included.
+        assert set(fanned) == {"a", "b"}
+        for sid in ("a", "b"):
+            assert fanned[sid] == {"dg": ("sk-broken", "openai")}
+
 
 @pytest.mark.unit
 class TestByokReachesTheOpenRouterAutoRouter:
