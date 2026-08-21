@@ -7,8 +7,18 @@
 #   scripts/worktree_task.sh list                  # list all worktrees
 #   scripts/worktree_task.sh path ISSUE_NUMBER     # print worktree path (no-op if missing)
 #
-# Worktrees are created at: .worktrees/task-N-slug/
-# Branch name:              task-N-slug
+# Worktrees are created at: .worktrees/task/N-slug/
+# Branch name:              task/N-slug
+#
+# The branch is always cut from `origin/<base>`, never from the local branch of
+# the same name — see "Base ref resolution" below for why that distinction is
+# the whole point of this script.
+#
+# Environment:
+#   WORKTREE_TASK_OFFLINE=1              skip `git fetch`, branch from whatever
+#                                        the last fetch left behind (warns)
+#   WORKTREE_TASK_ALLOW_STALE_MODULE=1   downgrade the stale-module-base refusal
+#                                        to a warning
 #
 # Requires: git, gh CLI
 
@@ -22,6 +32,9 @@ COMMAND="${1:-}"
 ISSUE="${2:-}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
+# Diagnostics go to stderr: run_task.sh reads this script's last *stdout* line as the
+# worktree path, so a warning printed on stdout would be consumed as a path.
+warn() { echo "$*" >&2; }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +85,101 @@ print(branch or branches.get("default", "develop"))
 PY
 }
 
+# ── Base ref resolution ───────────────────────────────────────────────────────
+#
+# The base ref is always `refs/remotes/origin/<base>`. It has to be: a working
+# clone always has `refs/heads/develop`, so the previous shape here — fetch only
+# *if* the local branch is missing, then branch from the local branch — meant the
+# fetch never ran at all for the six components that route straight to develop,
+# and `make task ISSUE=N` handed out worktrees cut from whatever the local ref
+# happened to be at. Observed 2026-08-20: a worktree 50 commits behind
+# `origin/develop` (#2547).
+#
+# That is the failure CLAUDE.md already documents for stale module branches
+# (2026-06-17: `module/digiquant` ~400 commits behind, predating the
+# apps/digiquant-atlas → digiquant/src/digiquant/olympus move, so PRs cut from it
+# edited files that no longer existed). Its answer was a manual pre-flight check.
+# A manual check is a check that gets skipped, and this is the one place it can be
+# made unconditional for every future task branch.
+#
+# There are deliberately no silent fallbacks below. Both the fetch failure and a
+# missing `origin/<base>` used to end in `|| true` / `|| echo develop`, and the
+# second of those fell back to the *local* develop — reintroducing the exact
+# staleness this resolution exists to prevent, quietly.
+
+OFFLINE="${WORKTREE_TASK_OFFLINE:-}"
+ALLOW_STALE_MODULE="${WORKTREE_TASK_ALLOW_STALE_MODULE:-}"
+
+fetch_origin() {
+  if [[ -n "$OFFLINE" ]]; then
+    warn "WARNING: WORKTREE_TASK_OFFLINE is set — skipping \`git fetch origin\`."
+    warn "         The base ref below is whatever your last successful fetch left in"
+    warn "         refs/remotes/origin/*, so every count that follows is measured against"
+    warn "         a possibly-stale remote and can only *understate* how old the base is."
+    return 0
+  fi
+  git fetch --quiet origin \
+    || die "git fetch origin failed. Fix the network or the remote, or set WORKTREE_TASK_OFFLINE=1 to branch from the last fetch anyway (it will warn, and the base may be stale)."
+}
+
+# Commits reachable from origin/develop but not from $1.
+#
+# Guarded because this runs under `set -e` inside a command substitution: an
+# absent ref would otherwise abort the whole script with git's error as the only
+# explanation. 0 means "not behind" *or* "could not tell", and every caller
+# already knows both refs exist by the time it asks.
+behind_develop() {
+  local ref="$1"
+  git rev-list --count "${ref}..refs/remotes/origin/develop" 2>/dev/null || echo 0
+}
+
+# Print the remote-tracking ref to branch from, given a base branch name.
+resolve_base_ref() {
+  local base="$1"
+  local ref="refs/remotes/origin/${base}"
+  if git show-ref --verify --quiet "$ref"; then
+    echo "$ref"
+    return 0
+  fi
+  warn "WARNING: origin/${base} does not exist — falling back to origin/develop."
+  warn "         scripts/project_routing.json routes this component to '${base}', so either"
+  warn "         the branch was never pushed or the routing entry is wrong. The task branch"
+  warn "         will PR into develop, not into '${base}'."
+  ref="refs/remotes/origin/develop"
+  git show-ref --verify --quiet "$ref" \
+    || die "neither origin/${base} nor origin/develop exists; nothing safe to branch from."
+  echo "$ref"
+}
+
+# Refuse a module/* base that is behind origin/develop — the 2026-06-17 hazard.
+#
+# Refusing rather than warning is the point: a warning printed by a tool that then
+# proceeds is indistinguishable from no warning at all once it scrolls past. The
+# escape hatch is an env var so this stays a detour and not a dead end, and the
+# refusal carries the recipe because `module-branch-protection` forbids force-push,
+# which makes "just sync it" a non-obvious operation.
+assert_module_base_is_current() {
+  local base_ref="$1"
+  [[ "$base_ref" == refs/remotes/origin/module/* ]] || return 0
+
+  local behind
+  behind="$(behind_develop "$base_ref")"
+  [[ "$behind" -gt 0 ]] || return 0
+
+  local base="${base_ref#refs/remotes/}"
+  warn "${base} is ${behind} commit(s) behind origin/develop."
+  warn "A task branch cut from a stale module branch edits code that has already moved"
+  warn "or been deleted on develop. Sync it first — module-branch-protection blocks"
+  warn "force-push, so this is a PR, not a push:"
+  warn ""
+  warn "  gh pr create --base ${base#origin/} --head develop --title 'chore(sync): ${base#origin/} <- develop'"
+  warn "  # then merge it (0 approvals required), and re-run this command"
+  warn ""
+  [[ -n "$ALLOW_STALE_MODULE" ]] \
+    || die "refusing to branch from a stale module base. Set WORKTREE_TASK_ALLOW_STALE_MODULE=1 to proceed anyway."
+  warn "WORKTREE_TASK_ALLOW_STALE_MODULE is set — proceeding from the stale base anyway."
+}
+
 worktree_path() {
   local branch="$1"
   echo "${WORKTREES_DIR}/${branch}"
@@ -94,24 +202,27 @@ cmd_create() {
     return 0
   fi
 
+  # Refresh origin/* before anything reads a ref, so the resolution below and
+  # every staleness count that follows are measured against the real remote.
+  fetch_origin
+
   # Resolve base branch from issue component label (module/* or develop)
   local base
   base="$(base_branch_for_issue "$ISSUE")"
-
-  # Ensure base branch exists locally (fetch from origin if needed)
-  if ! git show-ref --verify --quiet "refs/heads/${base}"; then
-    git fetch origin "${base}:${base}" 2>/dev/null || true
-  fi
   local base_ref
-  base_ref="$(git show-ref --verify --quiet "refs/heads/${base}" && echo "${base}" || echo "develop")"
+  base_ref="$(resolve_base_ref "$base")"
+  assert_module_base_is_current "$base_ref"
 
-  echo "Base branch: ${base_ref}"
   mkdir -p "$WORKTREES_DIR"
 
-  # Create branch from base if it doesn't exist; otherwise reuse
+  # Create branch from base if it doesn't exist; otherwise reuse. Only the second
+  # path is cut from the base, so only it may claim one — a reused local branch is
+  # wherever its last session left it, which is the whole hazard #2547 is about.
   if git show-ref --verify --quiet "refs/heads/${branch}"; then
+    warn "Reusing existing local branch ${branch} — not cut from ${base_ref#refs/remotes/}."
     git worktree add "$wt_path" "$branch"
   else
+    echo "Base branch: ${base_ref#refs/remotes/}"
     git worktree add -b "$branch" "$wt_path" "$base_ref"
   fi
 
