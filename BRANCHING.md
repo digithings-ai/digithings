@@ -87,6 +87,7 @@ module branch being force-pushed also stops it being quietly dropped.
 | `cursor/<slug>` | Work driven by Cursor Agent. | `cursor/docs-migration` |
 | `copilot/<slug>` | Work driven by GitHub Copilot. | `copilot/fix-import-order` |
 | `bot/<slug>` | Opened by a repo workflow, not a person — `project-stub-fields.yml` pushes one per issue it fields. | `bot/stub-tsv-2459` |
+| `release-please--branches--<target>--components--<component>` | Auto-created by the `release-please-*.yml` workflows to propose a version-bump PR — one per component, against that component's own target branch (digichat → `develop`, digiskills → `module/digiskills`). Not something a human creates; the taxonomy just needs to admit what the bot already pushes, so a maintainer can `git push` a follow-up fix commit onto it (e.g. a lockfile resync) without `--no-verify`. | `release-please--branches--develop--components--digichat` |
 | `<handle>/<slug>` | Direct human commits by a named contributor (GitHub login). | `chrizefan/vision-pass` |
 | `feat/<slug>` | Feature work not bound to a single Issue. | `feat/model-picker` |
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
@@ -165,12 +166,18 @@ to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
   declares the same regex (bar the `main`/`develop` arms, which its
   `conditions.ref_name.exclude` covers instead) and reads `"enforcement":
   "active"`, but that file is desired state that was never applied — the only
-  ruleset on `origin` is `module-branch-protection`, and the live
-  `release-please--branches--*--components--*` refs, which the taxonomy does not
-  admit, are the proof. (The `bot/*` refs are **not** proof of anything: `bot/<slug>`
-  is in the taxonomy, so a server-side rule would have accepted them.) Keep the JSON
-  in sync with the table above anyway, so applying it later doesn't reject refs this
-  document calls legal.
+  ruleset on `origin` is `module-branch-protection`. Nothing currently proves this
+  the way the `release-please--branches--*--components--*` refs used to: those were
+  live on `origin` while the taxonomy still rejected them client-side, meaning the
+  hook was blocking even a maintainer's own follow-up push (e.g. a lockfile resync)
+  onto a branch the bot itself had already pushed with no server-side rule stopping
+  it — proof the JSON was never applied, found the hard way. The taxonomy now admits
+  that pattern (see the table above), which closes the gap but removes the evidence;
+  don't take the absence of a fresh example as proof the JSON ruleset got applied in
+  the meantime. (The `bot/*` refs were never proof of anything either way: `bot/<slug>`
+  is in the taxonomy, so a server-side rule would have accepted them regardless.) Keep
+  the JSON in sync with the table above anyway, so applying it later doesn't reject
+  refs this document calls legal.
 - Force-pushes to `main` or `develop` — blocked server-side.
 - Force-pushes to, or deletion of, `module/**` — blocked by the
   `module-branch-protection` ruleset.
