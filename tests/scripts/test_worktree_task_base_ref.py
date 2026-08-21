@@ -296,7 +296,13 @@ def test_missing_origin_base_falls_back_to_origin_develop_loudly(seed) -> None:
     origin = fx["origin"]
     assert isinstance(origin, Path)
     _git(origin, "branch", "-D", TWO_HOP_BRANCH)
-    _git(work, "update-ref", "-d", f"refs/remotes/origin/{TWO_HOP_BRANCH}")
+    # Deliberately *not* deleting refs/remotes/origin/<branch> by hand. Deleting the
+    # branch upstream leaves the clone's cached tip behind until something prunes it,
+    # so the cached ref is the realistic starting state and the script's own
+    # `git fetch --prune` is what has to clear it. Asserted, so that a fetch which
+    # stopped pruning would fail here rather than resolve to a dead ref.
+    cached = f"refs/remotes/origin/{TWO_HOP_BRANCH}"
+    assert _git(work, "rev-parse", "--verify", cached) == fx["old"]
     # A local branch of the routed name is exactly the trap: it exists, it is
     # stale, and the old code would have branched from it.
     _git(work, "branch", TWO_HOP_BRANCH, "refs/heads/develop")
@@ -305,3 +311,52 @@ def test_missing_origin_base_falls_back_to_origin_develop_loudly(seed) -> None:
     assert done.returncode == 0, done.stderr
     assert f"origin/{TWO_HOP_BRANCH} does not exist" in done.stderr, done.stderr
     assert _created_branch_tip(work) == fx["new"], "fell back to the local branch, not to origin"
+    assert not _git(work, "for-each-ref", "--format=%(refname)", cached), (
+        f"{cached} survived the fetch, so the fallback above was luck: the ref still "
+        "resolved and only the routing lookup happened to miss it"
+    )
+
+
+def test_a_falsy_opt_out_does_not_enable_it(seed) -> None:
+    """`=0` must not turn a safety check off, and an unrecognised value must not be guessed.
+
+    Both switches here disable a check, so `[[ -n "$VAR" ]]` — which counts `0` and
+    `false` as set — fails in the direction that hurts: `WORKTREE_TASK_OFFLINE=0`
+    reads as "yes, skip the fetch". Requiring a literal `1` instead drops `true` on
+    the floor, which fails the other way, so the accepted words are a fixed set and
+    anything else stops the run.
+    """
+    fx = seed()
+    work = fx["work"]
+    assert isinstance(work, Path)
+
+    done = _run(fx, ONE_HOP_COMPONENT, env={"WORKTREE_TASK_OFFLINE": "perhaps"})
+    assert done.returncode != 0, f"an unrecognised value was guessed at; stdout: {done.stdout}"
+    assert "WORKTREE_TASK_OFFLINE" in done.stderr, done.stderr
+    assert not list(work.glob(f".worktrees/task/{ISSUE}-*"))
+
+    # `0` reads as off, so the fetch runs and the branch lands on origin's tip —
+    # the same outcome as leaving it unset, which is the whole point.
+    done = _run(fx, ONE_HOP_COMPONENT, env={"WORKTREE_TASK_OFFLINE": "0"})
+    assert done.returncode == 0, done.stderr
+    assert "WORKTREE_TASK_OFFLINE is set" not in done.stderr, (
+        "`=0` skipped the fetch, so a falsy value is switching the safety check off"
+    )
+    assert _created_branch_tip(work) == fx["new"]
+
+
+def test_a_falsy_stale_module_override_does_not_downgrade_the_refusal(seed) -> None:
+    """The refusal is the load-bearing half of #2547's module tier, so pin it separately."""
+    fx = seed(module_at_tip=False)
+    work = fx["work"]
+    assert isinstance(work, Path)
+
+    done = _run(fx, TWO_HOP_COMPONENT, env={"WORKTREE_TASK_ALLOW_STALE_MODULE": "false"})
+    assert done.returncode != 0, f"`=false` allowed a stale module base; stdout: {done.stdout}"
+    assert "behind origin/develop" in done.stderr, done.stderr
+    assert not list(work.glob(f".worktrees/task/{ISSUE}-*"))
+
+    # And the documented word still works, spelled the other way.
+    done = _run(fx, TWO_HOP_COMPONENT, env={"WORKTREE_TASK_ALLOW_STALE_MODULE": "TRUE"})
+    assert done.returncode == 0, done.stderr
+    assert _created_branch_tip(work) == fx["module_tip"]
