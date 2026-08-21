@@ -393,6 +393,50 @@ class TestByokCatalogValidation:
         with pytest.raises(ValueError, match="duplicate id"):
             _load_byok_catalog(catalog)
 
+    def test_example_is_stripped_before_it_reaches_user_facing_copy(self, tmp_path: Path) -> None:
+        """``_id_non_empty`` stripped; this validator rejected blanks without stripping.
+
+        The asymmetry was user-visible because this field is quoted verbatim into a
+        refusal: a padded ``"  grok-4-3  "`` rendered as ``(e.g.   grok-4-3  )``. Not
+        the *only* such field — entry ``id``s reach user copy the same way via
+        ``byok_provider_unsupported`` — but the only one whose validator did not strip.
+        """
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(
+            tmp_path,
+            [
+                {
+                    "id": "xai",
+                    "baseUrl": "https://api.x.ai/v1",
+                    "fallbackModels": ["  grok-4-3  "],
+                }
+            ],
+        )
+        _, _, examples = _load_byok_catalog(catalog)
+        assert examples["xai"] == "grok-4-3"
+
+    @pytest.mark.parametrize("bad", [None, "grok-4-3", [""], ["   "], [123], 7])
+    def test_a_malformed_example_list_does_not_crash_startup(
+        self, tmp_path: Path, bad: object
+    ) -> None:
+        """Routing survives a bad parenthetical — it did not have to before.
+
+        Every other field in this entry is fail-loud because a bad value breaks
+        routing. ``fallbackModels`` cannot: the refusal just drops its ``(e.g. …)``.
+        And this key was an *ignored extra* before it was typed, so an operator
+        catalog under ``DIGI_CONFIG_PATH`` carrying ``fallbackModels: null`` imported
+        fine and would otherwise have begun crashing digigraph at import.
+        """
+        from digigraph.llm_auth import _load_byok_catalog
+
+        catalog = self._write_catalog(
+            tmp_path, [{"id": "xai", "baseUrl": "https://api.x.ai/v1", "fallbackModels": bad}]
+        )
+        base_urls, model_required, examples = _load_byok_catalog(catalog)
+        assert base_urls == {"xai": "https://api.x.ai/v1"}, "routing must be unaffected"
+        assert "xai" not in examples, "an unusable example must be dropped, not rendered"
+
     def test_http_base_url_rejected(self, tmp_path) -> None:
         """CWE-319: an http:// baseUrl would send the user's BYOK key in cleartext."""
         from digigraph.llm_auth import _load_byok_catalog
@@ -939,14 +983,22 @@ class TestOperatorDefaultCannotBillTheOperator:
         assert "deepseek" not in msg
         assert "X-BYOK-Model" in msg, "a refusal the caller cannot act on is just a wall"
 
-    @pytest.mark.parametrize("provider", ["openai", "anthropic", "gemini", "xai", "openrouter"])
-    def test_the_example_is_a_model_the_named_provider_actually_serves(self, provider: str) -> None:
+    # Derived, not hardcoded: a hardcoded list is the dominant idiom in this file, but
+    # this test is the *only* JSON-to-refusal drift guard, so a provider added to
+    # ``config/byok-providers.json`` later must not silently escape it. Verified: adding
+    # a sixth provider whose ``fallbackModels[0]`` is blank leaves a hardcoded list green
+    # while the refusal advertises ``[1]`` and the UI still shows ``[0]``. What it does
+    # *not* assert is that an example exists at all: a provider may declare no
+    # ``fallbackModels``, and the branch below checks that case for consistency instead.
+    @pytest.mark.parametrize("provider", list(BYOK_ROUTABLE_PROVIDERS))
+    def test_the_example_is_a_model_the_named_provider_declares(self, provider: str) -> None:
         """Send back exactly what the refusal suggested and the gate must let it through.
 
         This is the assertion the message failed before: it offered ``gpt-4o-mini`` to
-        every provider, so an anthropic, gemini or xai caller who followed it verbatim
+        every provider, so a caller on any of the other four who followed it verbatim
         was told to send a model their own key does not serve. Only ``openai`` — one of
-        five — was ever given actionable advice.
+        five — was ever given actionable advice; openrouter counts among the four
+        because its own entry is the prefixed ``openai/gpt-4o-mini``, not the bare slug.
 
         Checked against the catalog rather than through ``byok_model_routes_elsewhere``,
         which cannot see this class of error: that predicate only rejects a *prefixed*
@@ -954,7 +1006,6 @@ class TestOperatorDefaultCannotBillTheOperator:
         anthropic. Catalog membership is the property that actually distinguishes them
         (verified: a hardcoded example fails this for four of the five providers).
         """
-        import json
         import re
 
         from digigraph.llm_auth import (
@@ -965,14 +1016,51 @@ class TestOperatorDefaultCannotBillTheOperator:
         )
 
         catalog = json.loads(_resolve_byok_catalog_path().read_text(encoding="utf-8"))
-        served = {e["id"]: e.get("fallbackModels", []) for e in catalog}
+        # Keyed normalized, valued *raw* — deliberately asymmetric. The key mirrors
+        # ``_id_non_empty``, so a padded or upper-case catalog id gives a diagnosable
+        # assertion here instead of a bare ``KeyError`` on the normalized ``provider``
+        # (the TS side already rejects such an id: catalog-parity compares raw ids).
+        # The values stay raw because the UI is pinned to raw JSON —
+        # use-byok-key.catalog-parity.test.ts:82 asserts
+        # ``toEqual(entry.fallbackModels)`` with no trimming, and digichat offers
+        # ``byokModelPresets(provider)[0]``. Normalizing them would compare the
+        # loader's cleaned[0] against its own cleaned[0] — the loader agreeing with
+        # itself — and would pass on a catalog padded in *both* copies, the one case
+        # where the UI really does render padding the refusal has stripped off.
+        served = {e["id"].strip().lower(): e.get("fallbackModels", []) for e in catalog}
 
         msg = byok_default_model_refusal(provider)
+        # ``fallbackModels`` is optional by design — the loader tolerates a missing or
+        # empty list (test_a_malformed_example_list_does_not_crash_startup pins that),
+        # and the refusal then just omits its parenthetical. Deriving the parametrize
+        # from the catalog made that case reachable here, so assert the *consistent*
+        # shape rather than failing on ``assert match``.
+        if not served[provider]:
+            assert "(e.g. " not in msg, (
+                f"{provider} declares no fallbackModels, yet the refusal invents an example: {msg}"
+            )
+            assert "X-BYOK-Model" in msg, "a refusal the caller cannot act on is just a wall"
+            return
         match = re.search(r"\(e\.g\. (.+?)\)", msg)
-        assert match, f"no example offered to {provider}: {msg}"
+        assert match, (
+            f"no example offered to {provider}: {msg} — raw fallbackModels is "
+            f"{served[provider]!r}; the loader drops blank entries, so an all-blank list "
+            f"leaves the refusal no example while looking non-empty here"
+        )
         example = match.group(1)
         assert example in served[provider], (
             f"{provider} was told to send {example!r}, which is not in its own catalog entry"
+        )
+        # Index, not just membership: mutating the loader to ``fallbackModels[-1]``
+        # left every test here green, while llm_auth.py's own comment claims the
+        # refusal names the model the UI offers first — digichat renders
+        # ``byokModelPresets(provider)[0]`` (byok-cli-flow.tsx:594), and
+        # use-byok-key.catalog-parity.test.ts pins that array to this file with
+        # toEqual (order included). Pinning index 0 here is the last link of that
+        # chain; the membership assertion alone could not tell index 0 from any other.
+        assert example == served[provider][0], (
+            f"{provider} was offered {example!r}, but the UI offers "
+            f"{served[provider][0]!r} first — the refusal and the UI have drifted"
         )
         # And it clears the BYOK gate, so following the refusal verbatim works.
         assert not byok_model_routes_elsewhere(provider, example)
@@ -980,7 +1068,10 @@ class TestOperatorDefaultCannotBillTheOperator:
 
     @pytest.mark.parametrize("provider", ["openai", "anthropic", "gemini", "xai", "openrouter"])
     def test_no_indefinite_article_has_to_agree_with_a_provider_id(self, provider: str) -> None:
-        """``a anthropic model`` was the literal output for four of the five providers.
+        """The old ``a {provider} model`` ran for all five and read wrong for four.
+
+        ``a openai``, ``a anthropic``, ``a xai``, ``a openrouter`` — only ``a gemini``
+        scans. (``a anthropic model`` was the literal output for anthropic alone.)
 
         Pinning the "a model served by <provider>" phrasing rather than a vowel
         heuristic: the ids are not English words (``xai`` reads "ex-AI", so no
