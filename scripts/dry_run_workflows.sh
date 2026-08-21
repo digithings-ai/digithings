@@ -13,6 +13,20 @@ else
   echo "skip: tests/scripts/test_protected_path_bash_guard.sh missing"
 fi
 
+echo "== pre-push taxonomy: release-please refs (#2557) =="
+if [[ -f tests/scripts/test_branch_taxonomy_release_please.sh ]]; then
+  bash tests/scripts/test_branch_taxonomy_release_please.sh
+else
+  echo "skip: tests/scripts/test_branch_taxonomy_release_please.sh missing"
+fi
+
+echo "== install-hooks fail-closed / worktree-safe (#2502) =="
+if [[ -f tests/scripts/test_install_hooks.sh ]]; then
+  bash tests/scripts/test_install_hooks.sh
+else
+  echo "skip: tests/scripts/test_install_hooks.sh missing"
+fi
+
 echo "== REM-008: provider-review unit tests (no Claude) =="
 python3 -m pytest tests/provider_review/ -m unit -q --tb=line
 
