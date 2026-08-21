@@ -22,7 +22,7 @@ executes the unified Atlas+Hermes pipeline via
 one daily graph ([#930](https://github.com/digithings-ai/digithings/issues/930)).
 
 Non-secret tunables (OpenRouter routing, analyst cap, feature flags,
-checkpointer, tracing) live in `.github/workflows/pipeline-olympus.yml` and are loaded
+checkpointer, tracing) live in `.github/olympus-pipeline.yml` and are loaded
 into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 
 ## Olympus environment variables
@@ -32,7 +32,7 @@ into `$GITHUB_ENV` by the "Load pipeline configuration" step.
 | `OLYMPUS_MODEL_TIER` | `cheap` | Routes LLM nodes via `config/olympus_models.yaml` (`cheap` \| `balanced` \| `quality`) — cost lever, alongside edit-mode (see [Cost monitoring](#cost-monitoring)) |
 | `OLYMPUS_STALE_FULL_DAYS` | `7` | Prior gap > N calendar days → `full` rewrite instead of `edit` |
 | `OLYMPUS_BELIEFS_BACKLOG` | `20` | Auto-trigger beliefs distillation when unresolved `decision_log` rows exceed threshold |
-| `ATLAS_MAX_ANALYSTS` | `30` (`.github/workflows/pipeline-olympus.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
+| `ATLAS_MAX_ANALYSTS` | `30` (`.github/olympus-pipeline.yml`) | Caps H4/H5/H6 fan-out width — enforced for the first time by #1767. Held tickers always survive (#936) and are the only sanctioned overshoot; thesis vehicles are prioritised *within* the cap, not exempt from it. `0` = uncapped |
 
 Operator full refresh: `workflow_dispatch` with `refresh_scope=all` or CLI
 `--refresh-scope all` — not a separate graph or cron.
