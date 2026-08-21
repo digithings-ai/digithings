@@ -1016,7 +1016,18 @@ class TestOperatorDefaultCannotBillTheOperator:
         )
 
         catalog = json.loads(_resolve_byok_catalog_path().read_text(encoding="utf-8"))
-        served = {e["id"]: e.get("fallbackModels", []) for e in catalog}
+        # Keyed normalized, valued *raw* — deliberately asymmetric. The key mirrors
+        # ``_id_non_empty``, so a padded or upper-case catalog id gives a diagnosable
+        # assertion here instead of a bare ``KeyError`` on the normalized ``provider``
+        # (the TS side already rejects such an id: catalog-parity compares raw ids).
+        # The values stay raw because the UI is pinned to raw JSON —
+        # use-byok-key.catalog-parity.test.ts:82 asserts
+        # ``toEqual(entry.fallbackModels)`` with no trimming, and digichat offers
+        # ``byokModelPresets(provider)[0]``. Normalizing them would compare the
+        # loader's cleaned[0] against its own cleaned[0] — the loader agreeing with
+        # itself — and would pass on a catalog padded in *both* copies, the one case
+        # where the UI really does render padding the refusal has stripped off.
+        served = {e["id"].strip().lower(): e.get("fallbackModels", []) for e in catalog}
 
         msg = byok_default_model_refusal(provider)
         # ``fallbackModels`` is optional by design — the loader tolerates a missing or
@@ -1031,7 +1042,11 @@ class TestOperatorDefaultCannotBillTheOperator:
             assert "X-BYOK-Model" in msg, "a refusal the caller cannot act on is just a wall"
             return
         match = re.search(r"\(e\.g\. (.+?)\)", msg)
-        assert match, f"no example offered to {provider}: {msg}"
+        assert match, (
+            f"no example offered to {provider}: {msg} — raw fallbackModels is "
+            f"{served[provider]!r}; the loader drops blank entries, so an all-blank list "
+            f"leaves the refusal no example while looking non-empty here"
+        )
         example = match.group(1)
         assert example in served[provider], (
             f"{provider} was told to send {example!r}, which is not in its own catalog entry"
