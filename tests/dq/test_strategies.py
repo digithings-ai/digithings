@@ -1,9 +1,16 @@
-"""Unit tests for digiquant strategy registry and strategies."""
+# score:allow pandas, pd.
+"""Unit tests for digiquant strategy registry and strategies.
+
+pandas is used only inside TestSdcaStrategyNautilusParity, at the same
+Nautilus BarDataWrangler boundary as nautilus_runner.py::_prepare_bar_data
+(see the pandas allowlist in digiquant/AGENTS.md).
+"""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import polars as pl
 import pytest
 from digiquant.backtest import run_backtest
 from digiquant.data.loader import generate_synthetic_ohlcv
@@ -113,3 +120,112 @@ class TestStrategyBacktestSmoke:
 
     def test_macd_trend_smoke(self) -> None:
         self._run_smoke("macd_trend")
+
+
+@SKIP_NATIVE_CRASH
+@pytest.mark.unit
+class TestSdcaStrategyNautilusParity:
+    """SdcaStrategy driven through a real BacktestEngine vs. the standalone
+    sdca.backtest.run_backtest() engine (#1081). SDCA is deliberately
+    unregistered (see nautilus_strategy.py), so this builds its own
+    BacktestEngine rather than reusing run_backtest()/get_strategy().
+    """
+
+    def test_nautilus_backtest_matches_standalone_engine(self, tmp_path) -> None:
+        pytest.importorskip("nautilus_trader")
+        import datetime as _dt
+        from datetime import date
+
+        import pandas as pd
+        from digiquant.strategies.sdca.backtest import run_backtest as sdca_run_backtest
+        from digiquant.strategies.sdca.curve import DEFAULT_BTC_NODES, AccumDistCurve
+        from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
+        from nautilus_trader.backtest.engine import BacktestEngine
+        from nautilus_trader.model.currencies import USDT
+        from nautilus_trader.model.data import BarSpecification, BarType
+        from nautilus_trader.model.enums import AccountType, BarAggregation, OmsType, PriceType
+        from nautilus_trader.model.objects import Money
+        from nautilus_trader.persistence.wranglers import BarDataWrangler
+        from nautilus_trader.test_kit.providers import TestInstrumentProvider
+
+        n = 40
+        start = date(2020, 1, 1)
+        dates = [start + _dt.timedelta(days=i) for i in range(n)]
+        prices = [100.0 + i * 2.0 for i in range(n)]
+        risks = [i * 100.0 / (n - 1) for i in range(n)]
+        initial_cash = 100_000.0
+
+        # Standalone reference engine (#1080) — the source of truth for the
+        # allocation math this wrapper must reproduce.
+        standalone_report, _ = sdca_run_backtest(
+            dates=pl.Series(dates, dtype=pl.Date),
+            price=pl.Series(prices, dtype=pl.Float64),
+            risk=pl.Series(risks, dtype=pl.Float64),
+            curve=AccumDistCurve(DEFAULT_BTC_NODES),
+            initial_cash=initial_cash,
+        )
+        # Risk sweeps 0->100 over the run, so both accumulation and
+        # distribution segments of the signed curve must fire.
+        assert standalone_report.buy_days > 0
+        assert standalone_report.sell_days > 0
+
+        risk_path = tmp_path / "risk.parquet"
+        pl.DataFrame({"date": dates, "risk": pl.Series(risks, dtype=pl.Float64)}).write_parquet(
+            risk_path
+        )
+
+        instrument = TestInstrumentProvider.btcusdt_binance()
+        bar_type = BarType(instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST))
+
+        config = SdcaStrategyConfig(
+            instrument_id=instrument.id,
+            bar_type=bar_type,
+            initial_cash=initial_cash,
+            risk_path=str(risk_path),
+            curve_nodes=DEFAULT_BTC_NODES,
+        )
+        strategy = SdcaStrategy(config)
+
+        engine = BacktestEngine()
+        engine.add_venue(
+            venue=instrument.id.venue,
+            oms_type=OmsType.NETTING,
+            account_type=AccountType.CASH,
+            # Multi-currency cash account (base_currency=None): required for a
+            # CurrencyPair spot instrument, which settles in both legs (BTC/USDT).
+            base_currency=None,
+            starting_balances=[Money(initial_cash, USDT)],
+        )
+        engine.add_instrument(instrument)
+
+        # Polars -> pandas via .to_pandas() (Nautilus API boundary), matching
+        # nautilus_runner.py::_prepare_bar_data — a plain-python-list ->
+        # pd.to_datetime() index produces read-only backing arrays under this
+        # pandas version, which BarDataWrangler's Cython buffer rejects.
+        ohlcv_df = pl.DataFrame(
+            {
+                "timestamp": [_dt.datetime.combine(d, _dt.time.min) for d in dates],
+                "open": prices,
+                "high": prices,
+                "low": prices,
+                "close": prices,
+            }
+        )
+        pd_df = ohlcv_df.select(["open", "high", "low", "close"]).to_pandas()
+        pd_df.index = pd.to_datetime(ohlcv_df["timestamp"].to_pandas(), utc=True)
+        pd_df.index.name = "timestamp"
+        pd_df["volume"] = 1.0
+        wrangler = BarDataWrangler(bar_type=bar_type, instrument=instrument)
+        bars = wrangler.process(pd_df)
+        engine.add_data(bars)
+        engine.add_strategy(strategy)
+
+        engine.run()
+
+        final_price = prices[-1]
+        nautilus_portfolio_value = strategy._cash + strategy._asset_units * final_price
+        standalone_portfolio_value = initial_cash + standalone_report.total_pnl
+
+        assert nautilus_portfolio_value == pytest.approx(standalone_portfolio_value, rel=0.01)
+
+        engine.dispose()
