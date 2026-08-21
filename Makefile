@@ -202,7 +202,8 @@ agents-init:
 	python3 scripts/agents_init.py
 
 # Validate Atlas providers and graph compilation before triggering a real run.
-# Pings Groq + Gemini (1-token each), checks Supabase baseline row, and runs --dry-run.
+# Pings OpenRouter (connectivity, structured output, function tools, web search),
+# checks Supabase baseline row, and runs --dry-run.
 # Usage: make atlas-validate              (full check)
 #        make atlas-validate SKIP=--skip-llm   (env + DB + dry-run only)
 atlas-validate:

@@ -163,3 +163,93 @@ def test_function_tools_fail_on_truly_empty_response(vp: Any) -> None:
         patch("digillm.client.completion", return_value=response),
     ):
         assert vp.check_openrouter_function_tools() is False
+
+
+def test_function_tools_pass_but_reports_substitution(vp: Any) -> None:
+    """OpenRouter fallback routing (#2540) attaches to the PRIMARY request, not just retries,
+    and can substitute a working pool member for reasons unrelated to tool-use capability
+    (e.g. transient provider load-shedding — the exact scenario OPENROUTER_FALLBACK_MODELS
+    exists to survive, and which the real pipeline run tolerates via the same env var). A
+    substitution must NOT hard-fail the preflight, but must be visible in the detail text.
+
+    Uses a real three-segment pool slug (``openrouter/deepseek/deepseek-v4-flash``, matching
+    config/olympus_models.yaml) rather than a two-segment stand-in: a two-segment fixture
+    can't distinguish a correct ``removeprefix("openrouter/")`` from a broken
+    ``model.split("/")[-1]``-style implementation, since both happen to agree on two segments.
+    """
+    response = SimpleNamespace(
+        model="anthropic/claude-sonnet-5",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "served by anthropic/claude-sonnet-5" in detail
+    assert "substitution" in detail.lower()
+
+
+def test_function_tools_reports_served_model_when_matching_requested(vp: Any) -> None:
+    """The requested three-segment pool model (bare, ``openrouter/`` stripped) actually served
+    the response — no substitution, and the served model is still surfaced for visibility."""
+    response = SimpleNamespace(
+        model="deepseek/deepseek-v4-flash",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "served by deepseek/deepseek-v4-flash" in detail
+    assert "substitution" not in detail.lower()
+
+
+def test_function_tools_pass_when_response_has_no_model_field(vp: Any) -> None:
+    """Back-compat: a response object without a ``.model`` attribute has nothing to compare
+    against, so substitution can't be detected — must not be treated as a mismatch."""
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_skips_substitution_check_for_non_openrouter_models(vp: Any) -> None:
+    """A latent false positive: without gating on the ``openrouter/`` prefix, a differently-
+    prefixed pool pin (e.g. a ``gemini/`` pin) would get a spurious substitution FAIL, since
+    digillm's ``_parse_provider_prefix`` strips only registered provider prefixes — not the
+    same thing a bare ``removeprefix("openrouter/")`` computes for a non-openrouter model."""
+    response = SimpleNamespace(
+        model="gemini-3.7-flash",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["gemini/gemini-3.7-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "substitution" not in detail.lower()

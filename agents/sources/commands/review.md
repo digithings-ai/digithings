@@ -8,17 +8,19 @@ If no PR number is given, ask for it before proceeding.
 
 ## When to use this
 
-Only when a machine review is wanted and **Bugbot cannot supply one**. Check first:
+When a machine review is wanted and **no review bot has left an artifact yet**.
+Check first:
 
 ```bash
-gh pr view <N> --json statusCheckRollup -q '.statusCheckRollup[]|select((.name//"")=="Cursor Bugbot")|.conclusion'
+gh pr view <N> --json statusCheckRollup,reviews,comments \
+  -q '{bugbot:(.statusCheckRollup[]?|select((.name//"")=="Cursor Bugbot")|.conclusion), coderabbit:(.statusCheckRollup[]?|select((.name//"")=="CodeRabbit")|.conclusion)}'
 ```
 
-- `SUCCESS` → a real review already exists. Stop; the gate is already satisfied.
-- `NEUTRAL` → the usage-limit skip. Bugbot is unavailable; proceed.
-- absent / anything else → proceed.
+- Bugbot `SUCCESS`, CodeRabbit `SUCCESS`, or a submitted CodeRabbit/Claude review → a real review already exists. Stop; address those findings instead of starting a second loop.
+- Bugbot `NEUTRAL`, CodeRabbit rate-limit / skip / failure, or nothing posted → proceed.
 
-Prefer Bugbot when it works: it is the only hatch nobody can grant themselves.
+Prefer a review bot when it works. `/review` is the clean-context fallback so the
+gate still sees an artifact when the bots did not finish.
 
 ## Why an in-session review counts
 
@@ -87,7 +89,8 @@ labelled as one.
 6. **Fix what you found**, or say why not. A review that reports and walks away has
    done half a job. If a finding is real and cheap, fix it on the same branch before
    merge — that is the whole reason review belongs at the task PR rather than at the
-   promotion.
+   promotion. After the fixes land, the PR is green. If the follow-up was large,
+   run another review loop rather than treating the original pass as covering it.
 
 ## What not to do
 

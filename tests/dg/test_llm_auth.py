@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from digigraph.llm_auth import (
@@ -27,6 +30,8 @@ from digigraph.llm_auth import (
     push_lite_llm_proxy_header,
 )
 
+import digillm
+from digillm import client as client_mod
 from digillm import get_byok as digillm_get_byok
 from digillm import get_proxy_key as digillm_get_proxy_key
 
@@ -1276,3 +1281,580 @@ class TestOperatorDefaultLadderHasOneCopy:
             operator_default_model()
         with pytest.raises(ValueError):
             effective_llm_settings()
+
+
+@pytest.mark.unit
+class TestByokSurvivesIntoTheStreamingWorker:
+    """The binding has to reach the code that spends the key, not just the request.
+
+    ``/v1/chat/completions`` with ``stream=true`` runs the workflow on a worker
+    thread. A bare ``threading.Thread`` starts with an empty context, so all three
+    BYOK bindings read as their defaults inside it and the operator's key pays --
+    accepted, shown as active, never spent, which is exactly what the middleware's
+    ``byok_model_provider_mismatch`` refusal exists to prevent. The classes above
+    pin the predicate and the middleware; this pins the one hop between them.
+
+    Measured, not assumed: on the unfixed code the worker sees ``None`` for all
+    three while the spawning frame still holds them, so the fix has something live
+    to copy.
+    """
+
+    def _run(self, monkeypatch, provider: str, model: str) -> dict:
+        from fastapi.testclient import TestClient
+
+        from digigraph import server as srv
+        from tests.digi_test_jwt import auth_headers
+
+        seen: dict = {}
+
+        def recording_worker(workflow_req, event_queue, cancel_event):
+            seen["dg"] = get_byok_override()
+            seen["model"] = get_byok_model_override()
+            seen["llm"] = digillm_get_byok()
+            event_queue.put(("content", "ok"))
+            event_queue.put(("done",))
+
+        monkeypatch.setattr(srv, "run_digigraph_workflow_streaming", recording_worker)
+
+        headers = {"x-byok-key": "sk-probe", "x-byok-provider": provider}
+        if model:
+            headers["x-byok-model"] = model
+        res = TestClient(srv.app, headers=auth_headers()).post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "digigraph-rag",
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert seen, "the streaming worker never ran"
+        return seen
+
+    def test_the_worker_sees_the_users_key_not_the_operators(self, monkeypatch) -> None:
+        seen = self._run(monkeypatch, "openrouter", "openai/gpt-4o-mini")
+        assert seen["dg"] == ("sk-probe", "openrouter")
+        assert seen["llm"] == ("sk-probe", "https://openrouter.ai/api/v1")
+
+    def test_the_worker_sees_the_users_model(self, monkeypatch) -> None:
+        """Without this the user's key pays for the *operator's* default model."""
+        assert self._run(monkeypatch, "openrouter", "openai/gpt-4o-mini")["model"] == (
+            "openai/gpt-4o-mini"
+        )
+
+    def test_openai_byok_carries_over_with_no_model_header(self, monkeypatch) -> None:
+        """openai is the one provider that may omit X-BYOK-Model; the key must
+        still cross the thread boundary."""
+        seen = self._run(monkeypatch, "openai", "")
+        assert seen["dg"] == ("sk-probe", "openai")
+        assert seen["llm"] == ("sk-probe", "https://api.openai.com/v1")
+        assert seen["model"] is None
+
+    def test_no_byok_header_leaves_the_worker_unbound(self, monkeypatch) -> None:
+        """Copying the context must not invent a binding where the caller sent none."""
+        from fastapi.testclient import TestClient
+
+        from digigraph import server as srv
+        from tests.digi_test_jwt import auth_headers
+
+        seen: dict = {}
+
+        def recording_worker(workflow_req, event_queue, cancel_event):
+            seen["dg"] = get_byok_override()
+            seen["llm"] = digillm_get_byok()
+            event_queue.put(("done",))
+
+        monkeypatch.setattr(srv, "run_digigraph_workflow_streaming", recording_worker)
+        res = TestClient(srv.app, headers=auth_headers()).post(
+            "/v1/chat/completions",
+            json={
+                "model": "digigraph-rag",
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert seen == {"dg": None, "llm": None}
+
+
+@pytest.mark.unit
+class TestTheStreamingWorkerDoesNotKeepTheKey:
+    """Copying the context must not outlive the request that filled it.
+
+    The worker's copy is taken while the request is open, but the thread is neither
+    daemonic nor joined and ``byok_header_context``'s ``finally`` runs ``pop_byok``
+    as soon as the response starts streaming. A copy is a snapshot, not a view, so
+    that reset clears the parent and leaves the worker holding the user's plaintext
+    key -- twice over, digigraph's record and digillm's -- for as long as the thread
+    lives. That falsifies the middleware's own "for the duration of the request
+    only" contract, so the worker clears its own copy in its ``finally``.
+
+    Observed from inside the worker's context, which is the only place the copy is
+    readable: the parent's values prove nothing about the copy.
+    """
+
+    def _observe(self, monkeypatch, *, worker_raises: bool) -> dict:
+        import threading
+
+        from fastapi.testclient import TestClient
+
+        from digigraph import llm_auth
+        from digigraph import server as srv
+        from tests.digi_test_jwt import auth_headers
+
+        seen: dict = {}
+        cleared = threading.Event()
+        real_clear = llm_auth.clear_byok_bindings
+
+        def recording_clear() -> None:
+            """Stand in the worker's ``finally``, inside the worker's context copy."""
+            seen["before"] = (get_byok_override(), get_byok_model_override(), digillm_get_byok())
+            real_clear()
+            seen["after"] = (get_byok_override(), get_byok_model_override(), digillm_get_byok())
+            cleared.set()
+
+        monkeypatch.setattr(llm_auth, "clear_byok_bindings", recording_clear)
+
+        def worker(workflow_req, event_queue, cancel_event):
+            event_queue.put(("content", "ok"))
+            event_queue.put(("done",))
+            if worker_raises:
+                raise RuntimeError("worker blew up after streaming its last event")
+
+        monkeypatch.setattr(srv, "run_digigraph_workflow_streaming", worker)
+        res = TestClient(srv.app, headers=auth_headers()).post(
+            "/v1/chat/completions",
+            headers={
+                "x-byok-key": "sk-probe",
+                "x-byok-provider": "openrouter",
+                "x-byok-model": "openai/gpt-4o-mini",
+            },
+            json={
+                "model": "digigraph-rag",
+                "messages": [{"role": "user", "content": "hi"}],
+                "stream": True,
+            },
+        )
+        assert res.status_code == 200, res.text
+        assert cleared.wait(5), "the worker never reached its cleanup"
+        return seen
+
+    def test_the_worker_clears_its_own_copy(self, monkeypatch) -> None:
+        seen = self._observe(monkeypatch, worker_raises=False)
+        assert seen["before"] == (
+            ("sk-probe", "openrouter"),
+            "openai/gpt-4o-mini",
+            ("sk-probe", "https://openrouter.ai/api/v1"),
+        ), "the copy has to still hold the key when cleanup runs, or this proves nothing"
+        assert seen["after"] == (None, None, None)
+
+    def test_the_copy_is_cleared_even_when_the_worker_raises(self, monkeypatch) -> None:
+        """A crash mid-stream is exactly when a leaked key would go unnoticed."""
+        assert self._observe(monkeypatch, worker_raises=True)["after"] == (None, None, None)
+
+    def test_clearing_the_copy_is_token_free(self) -> None:
+        """``pop_byok`` cannot do this job: a copy inherits values, never the tokens.
+
+        Pinned because the obvious 'simplification' is to call ``pop_byok`` in the
+        worker instead, which needs a token the worker does not have.
+        """
+        from digigraph.llm_auth import clear_byok_bindings
+
+        token = push_byok_header(
+            _byok_request(key="sk-user", provider="openrouter", model="openai/gpt-4o-mini")
+        )
+        try:
+            clear_byok_bindings()
+            assert (get_byok_override(), get_byok_model_override(), digillm_get_byok()) == (
+                None,
+                None,
+                None,
+            )
+        finally:
+            pop_byok(token)
+
+
+@pytest.mark.unit
+class TestByokSurvivesTheParallelFanOut:
+    """The binding also has to reach tools that run *concurrently*.
+
+    ``TestByokSurvivesIntoTheStreamingWorker`` pins the worker's entry frame, but
+    two thread pools sit downstream of it and a pool worker starts with an empty
+    context exactly as a bare ``Thread`` does. Both dispatch tools that call an
+    LLM themselves -- the delegate agents (``visualization_agent`` et al.) are
+    tagged ``parallel_safe`` in ``orchestration/builtin.py`` and each one runs its
+    own completion -- so without a copied context they spend the *operator's* key.
+
+    Unlike the streaming worker, this hop is on the non-streaming path too: the
+    request thread holds the binding, the pool workers still would not.
+    """
+
+    def test_run_plan_layer_keeps_the_binding(self) -> None:
+        """digigraph's planning executor fans a layer out over a pool."""
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {
+                "dg": get_byok_override(),
+                "model": get_byok_model_override(),
+                "llm": digillm_get_byok(),
+            }
+
+        token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
+        try:
+            # Two steps in one layer: len(resolved) > 1 is what selects the pool
+            # branch over the inline single-step path.
+            results = run_plan(
+                [{"id": "a", "agent": "t", "args": {}}, {"id": "b", "agent": "t", "args": {}}],
+                sample,
+            )
+        finally:
+            pop_byok(token)
+
+        expected = {
+            "dg": ("sk-fan", "openrouter"),
+            "model": "openai/gpt-4o-mini",
+            "llm": ("sk-fan", "https://openrouter.ai/api/v1"),
+        }
+        assert results["a"] == expected
+        assert results["b"] == expected
+
+    def test_a_single_step_layer_still_keeps_it(self) -> None:
+        """The one-step path skips the pool entirely; it must not regress either."""
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {"dg": get_byok_override()}
+
+        token = push_byok_header(_byok_request("sk-solo", "openai"))
+        try:
+            results = run_plan([{"id": "only", "agent": "t", "args": {}}], sample)
+        finally:
+            pop_byok(token)
+        assert results["only"] == {"dg": ("sk-solo", "openai")}
+
+    def test_unbound_stays_unbound_across_the_pool(self) -> None:
+        """Copying a context must not invent a binding the caller never made."""
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {"dg": get_byok_override(), "llm": digillm_get_byok()}
+
+        results = run_plan(
+            [{"id": "a", "agent": "t", "args": {}}, {"id": "b", "agent": "t", "args": {}}],
+            sample,
+        )
+        assert results["a"] == {"dg": None, "llm": None}
+        assert results["b"] == {"dg": None, "llm": None}
+
+    def test_the_pool_does_not_share_the_telemetry_handle(self) -> None:
+        """The copy carries credentials; it must not carry the caller's telemetry handle.
+
+        ``copy_context()`` propagates references, so every step in a layer would hold the
+        one :class:`~digillm.client.ProviderCallContextHandle` the caller is holding, and
+        they would all write its ``last_call_id`` and append to the single deferred-record
+        list that ``finalize`` tuples and clears. A step that inherited an empty context
+        read ``None`` here, so ``None`` is the behaviour to keep -- nesting fan-out calls
+        under the parent's logical call needs a per-worker handle and a join-time merge.
+
+        The single-step layer is the deliberate asymmetry: it runs in the caller's own
+        context rather than a copy of it, so it keeps the handle it was given.
+        """
+        from uuid import uuid4
+
+        from digigraph.planning.executor import run_plan
+        from digillm.telemetry import CallPurpose
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {
+                "metadata": client_mod._provider_call_metadata.get(),
+                "dg": get_byok_override(),
+            }
+
+        token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
+        try:
+            with digillm.provider_call_context(
+                node_run_id=uuid4(),
+                purpose=CallPurpose.INITIAL_GENERATION,
+                no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+            ) as handle:
+                fanned = run_plan(
+                    [{"id": "a", "agent": "t", "args": {}}, {"id": "b", "agent": "t", "args": {}}],
+                    sample,
+                )
+                solo = run_plan([{"id": "only", "agent": "t", "args": {}}], sample)
+                # The workers cleared their own copies, not the caller's binding.
+                caller_metadata = client_mod._provider_call_metadata.get()
+        finally:
+            pop_byok(token)
+
+        for sid in ("a", "b"):
+            assert fanned[sid]["metadata"] is None
+            # Dropping the handle must not have dropped the credentials with it.
+            assert fanned[sid]["dg"] == ("sk-fan", "openrouter")
+        assert caller_metadata is not None and caller_metadata.handle is handle
+        assert solo["only"]["metadata"] is not None
+        assert solo["only"]["metadata"].handle is handle
+
+
+@pytest.mark.unit
+class TestTheFanOutDropsDigigraphsLogicalCallHandle:
+    """digillm clearing *its own* logical-call var is only half the boundary.
+
+    digigraph layers ``usage._LOGICAL_CALL_CONTEXT`` on top of digillm's, and its value
+    holds the very same mutable :class:`~digillm.client.ProviderCallContextHandle` --
+    ``llm_client._logical_call_scope`` passes ``metadata.handle`` straight through. So a
+    fan-out worker that inherited the credential snapshot would still be handed one
+    shared handle one layer up: every worker writing its ``last_call_id`` and appending
+    into the single deferred-record list ``finalize`` tuples and clears.
+
+    digillm is a leaf library and cannot reach into a consumer's module to clear it, so
+    digigraph registers ``usage.detach_logical_call_context`` as digillm's fan-out detach
+    hook (``llm_client``, next to the usage and telemetry observers). These pin both pools
+    that copy a context: digillm's own tool pool, and digigraph's planning executor.
+
+    ``usage._CALL_CONTEXT`` is deliberately *not* cleared -- its ``CallContext`` is frozen
+    and holds no mutable state, so inheriting the node identity is safe and gives the
+    worker's telemetry better attribution than it had.
+    """
+
+    @staticmethod
+    def _tool_round() -> tuple[Any, Any]:
+        """Two mock tool calls: >1 parallel-safe call is what selects the pool branch."""
+        fn_a = MagicMock()
+        fn_a.name = "alpha"
+        fn_a.arguments = "{}"
+        tc_a = MagicMock()
+        tc_a.id = "a"
+        tc_a.function = fn_a
+        fn_b = MagicMock()
+        fn_b.name = "beta"
+        fn_b.arguments = "{}"
+        tc_b = MagicMock()
+        tc_b.id = "b"
+        tc_b.function = fn_b
+        return tc_a, tc_b
+
+    @staticmethod
+    def _response(content: str = "", tool_calls: Any = None) -> MagicMock:
+        msg = MagicMock()
+        msg.content = content
+        msg.tool_calls = tool_calls
+        choice = MagicMock()
+        choice.message = msg
+        resp = MagicMock()
+        resp.choices = [choice]
+        return resp
+
+    def test_the_hook_is_registered_by_importing_llm_client(self) -> None:
+        """The wiring is what makes the two tests below mean anything.
+
+        ``llm_client`` is the module every digigraph LLM call imports, which is why the
+        usage and telemetry observers are registered there; this rides along with them.
+        """
+        import digigraph.llm_client  # noqa: F401  (imported for its registration)
+        from digigraph.usage import detach_logical_call_context
+
+        assert client_mod._fan_out_detach_hook is detach_logical_call_context
+
+    def test_digillms_tool_pool_clears_it(self) -> None:
+        """digillm's parallel tool branch, through the registered hook."""
+        import digigraph.llm_client  # noqa: F401  (registers the detach hook)
+        from digillm.telemetry import CallPurpose
+
+        from digigraph import usage as dg_usage
+
+        tc_a, tc_b = self._tool_round()
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.side_effect = [
+            self._response("", tool_calls=[tc_a, tc_b]),
+            self._response("done"),
+        ]
+
+        seen: dict[str, Any] = {}
+        seen_byok: dict[str, Any] = {}
+
+        def execute_tool(name: str, args: dict) -> dict:
+            seen[name] = dg_usage._LOGICAL_CALL_CONTEXT.get()
+            seen_byok[name] = get_byok_override()
+            return {"content": name}
+
+        tools = [
+            {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+            {"type": "function", "function": {"name": "beta", "parameters": {}}},
+        ]
+        token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
+        try:
+            with dg_usage.logical_call_context(
+                purpose=CallPurpose.TOOL_SELECTION,
+                no_artifact_reason=dg_usage.NoArtifactReason.TOOL_DISPATCH,
+            ) as handle:
+                with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+                    with digillm.provider_call_context(
+                        node_run_id=uuid4(),
+                        purpose=CallPurpose.TOOL_SELECTION,
+                        no_artifact_reason=digillm.NoArtifactReason.TOOL_DISPATCH,
+                    ):
+                        digillm.run_tools(
+                            "gpt-4o-mini",
+                            [{"role": "user", "content": "go"}],
+                            tools,
+                            execute_tool,
+                            parallel_safe_tools={"alpha", "beta"},
+                        )
+                # A copy is a snapshot, not a view: the caller keeps its own binding.
+                still_bound = dg_usage._LOGICAL_CALL_CONTEXT.get()
+        finally:
+            pop_byok(token)
+
+        assert seen == {"alpha": None, "beta": None}
+        # Dropping the handle must not have dropped the credentials with it -- carrying
+        # those across the boundary is the whole reason the context is copied.
+        expected = ("sk-fan", "openrouter")
+        assert seen_byok == {"alpha": expected, "beta": expected}
+        assert still_bound is not None and still_bound.handle is handle
+
+    def test_the_planning_pool_clears_it(self) -> None:
+        """digigraph's planning executor copies the context itself, so it clears directly.
+
+        The single-step layer is the deliberate asymmetry: it runs in the caller's own
+        context rather than a copy of it, so unbinding there would lose the caller's live
+        handle and its deferred records.
+        """
+        from digigraph.planning.executor import run_plan
+        from digillm.telemetry import CallPurpose
+
+        from digigraph import usage as dg_usage
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {
+                "logical": dg_usage._LOGICAL_CALL_CONTEXT.get(),
+                "node": dg_usage._CALL_CONTEXT.get().node_run_id,
+                "dg": get_byok_override(),
+            }
+
+        node_run_id = uuid4()
+        token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
+        try:
+            with dg_usage.call_context(node_run_id=node_run_id):
+                with dg_usage.logical_call_context(
+                    purpose=CallPurpose.TOOL_SELECTION,
+                    no_artifact_reason=dg_usage.NoArtifactReason.TOOL_DISPATCH,
+                ) as handle:
+                    fanned = run_plan(
+                        [
+                            {"id": "a", "agent": "t", "args": {}},
+                            {"id": "b", "agent": "t", "args": {}},
+                        ],
+                        sample,
+                    )
+                    solo = run_plan([{"id": "only", "agent": "t", "args": {}}], sample)
+                    still_bound = dg_usage._LOGICAL_CALL_CONTEXT.get()
+        finally:
+            pop_byok(token)
+
+        for sid in ("a", "b"):
+            assert fanned[sid]["logical"] is None
+            assert fanned[sid]["dg"] == ("sk-fan", "openrouter")
+            # ``_CALL_CONTEXT`` is frozen and stays inherited: node identity is safe to
+            # carry and is what lets a worker's telemetry be attributed at all.
+            assert fanned[sid]["node"] == node_run_id
+        assert still_bound is not None and still_bound.handle is handle
+        assert solo["only"]["logical"] is not None
+        assert solo["only"]["logical"].handle is handle
+
+    def test_a_broken_llm_stack_does_not_discard_the_layer(self) -> None:
+        """An ImportError on the detach imports must cost one step's telemetry, not the layer.
+
+        The two imports run in the pool worker *outside* ``_run_step``'s handler, and
+        ``run_plan`` reads ``future.result()`` bare -- so an unguarded raise there escapes
+        the worker and discards every other step in the layer, while the single-step path
+        would have degraded to one error string (``ImportError`` is in
+        ``_PLAN_STEP_ERRORS``). ``digillm`` is a hard dependency, so this needs a broken
+        install; the point is that the fan-out fails no worse than the serial path.
+
+        Swallowing is safe precisely here: the module that binds the handle is the one that
+        failed to import, so there is no bound handle left to share.
+        """
+        import sys
+
+        from digigraph.planning.executor import run_plan
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {"dg": get_byok_override()}
+
+        token = push_byok_header(_byok_request("sk-broken", "openai"))
+        try:
+            # ``None`` in sys.modules is the documented way to make an import raise.
+            with patch.dict(sys.modules, {"digillm": None}):
+                fanned = run_plan(
+                    [
+                        {"id": "a", "agent": "t", "args": {}},
+                        {"id": "b", "agent": "t", "args": {}},
+                    ],
+                    sample,
+                )
+        finally:
+            pop_byok(token)
+
+        # Both steps came back: the layer survived, credentials included.
+        assert set(fanned) == {"a", "b"}
+        for sid in ("a", "b"):
+            assert fanned[sid] == {"dg": ("sk-broken", "openai")}
+
+
+@pytest.mark.unit
+class TestByokReachesTheOpenRouterAutoRouter:
+    """The full header -> normalizer -> wire chain for OpenRouter's auto-router.
+
+    ``openrouter/auto`` is the one model id that repeats its own provider's name, so it
+    is the only id whose litellm form carries the prefix twice. Operators write that
+    doubled form by hand; BYOK cannot, because :func:`byok_routable_model` strips the
+    provider's own prefix to a **fixpoint** and re-applies exactly one — deliberately, to
+    keep the middleware and the resolver from disagreeing about a hostile header.
+
+    The two halves are pinned separately in ``digillm/tests``; what this class asserts is
+    that they compose, i.e. that no header a user can send is silently downgraded to a
+    model OpenRouter does not have. This test crosses the package boundary on purpose:
+    each side is individually correct, and the defect lived only in the seam.
+    """
+
+    @staticmethod
+    def _wire(provider: str, header: str) -> str:
+        """Walk a raw header through the production path to the string sent to the API."""
+        token = push_byok_header(_byok_request(key="sk-user", provider=provider, model=header))
+        try:
+            slug = get_byok_model_override() or ""
+        finally:
+            pop_byok(token)
+        litellm_string = byok_routable_model(provider, slug)
+        prov, model_id = client_mod._parse_provider_prefix(litellm_string)
+        return client_mod._wire_model(prov, model_id, litellm_string)
+
+    @pytest.mark.parametrize("header", ["auto", "openrouter/auto", "openrouter/openrouter/auto"])
+    def test_every_spelling_a_user_can_send_reaches_the_auto_router(self, header: str) -> None:
+        """Regression: all three used to arrive as a bare ``auto`` and fail at OpenRouter."""
+        assert self._wire("openrouter", header) == "openrouter/auto"
+
+    @pytest.mark.parametrize(
+        ("header", "expected"),
+        [
+            ("openai/gpt-4o-mini", "openai/gpt-4o-mini"),
+            ("anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4"),
+            ("openrouter/openai/gpt-4o-mini", "openai/gpt-4o-mini"),
+        ],
+    )
+    def test_ordinary_models_are_unchanged(self, header: str, expected: str) -> None:
+        """Control: the vendor sub-slug still reaches the wire with the routing prefix gone."""
+        assert self._wire("openrouter", header) == expected
+
+    def test_the_fixpoint_strip_is_still_intact(self) -> None:
+        """The fix must not have been bought by weakening the credential-path invariant.
+
+        ``byok_routable_model`` still collapses any depth of the provider's own prefix to
+        exactly one, so the middleware and the resolver cannot diverge at depth two.
+        """
+        for depth in range(4):
+            raw = "openrouter/" * depth + "openai/gpt-4o-mini"
+            assert byok_routable_model("openrouter", raw) == "openrouter/openai/gpt-4o-mini"

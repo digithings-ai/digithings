@@ -23,11 +23,11 @@ class SdcaBacktestReport(BaseModel):
     This report is a CI-only parity harness for the allocation math in this
     module (curve/composite-risk/valuation) — it is never the authoritative
     backtest result. NautilusTrader remains the sole backtest/live engine
-    (digiquant/AGENTS.md); the eventual Nautilus strategy wrapper (#1081)
-    must call into this module's functions rather than reimplement them, so
-    there is exactly one source of truth for the allocation decision math,
-    and PnL/Sharpe/drawdown surfaced to users always comes from a completed
-    Nautilus ``BacktestResult``/``OptimizeResult``, never from this report.
+    (digiquant/AGENTS.md); the Nautilus strategy wrapper (#1081) calls
+    ``size_trade()`` below rather than reimplementing it, so there is exactly
+    one source of truth for the allocation decision math, and PnL/Sharpe/
+    drawdown surfaced to users always comes from a completed Nautilus
+    ``BacktestResult``/``OptimizeResult``, never from this report.
     """
 
     model_config = ConfigDict(strict=True)
@@ -52,6 +52,22 @@ def _max_drawdown_pct(values: list[float]) -> float:
         peak = max(peak, v)
         worst = min(worst, (v - peak) / peak)
     return worst
+
+
+def size_trade(rate: float, cash: float, asset_units: float) -> tuple[float, float]:
+    """Size a buy (USD) or sell (asset units) from the curve rate, cash, and holdings.
+
+    Returns ``(buy_usd, sell_units)`` — exactly one is non-zero (both zero at
+    ``rate == 0``). This is the single source of truth for the allocation
+    sizing math: both ``run_backtest()`` below and
+    ``nautilus_strategy.py::SdcaStrategy.on_bar()`` call this instead of
+    reimplementing the clamping.
+    """
+    if rate > 0:
+        return min(max(cash * rate / 100.0, 0.0), cash), 0.0
+    if rate < 0:
+        return 0.0, min(max(asset_units * (-rate) / 100.0, 0.0), asset_units)
+    return 0.0, 0.0
 
 
 def run_backtest(
@@ -116,14 +132,13 @@ def run_backtest(
             rate_sum += rate
             non_null_days += 1
 
+            buy_usd, sell_units = size_trade(rate, cash, asset_units)
             if rate > 0:
-                buy_usd = min(max(cash * rate / 100.0, 0.0), cash)
                 cash -= buy_usd
                 asset_units += buy_usd / day_price
                 daily_trade_usd.append(buy_usd)
                 buy_days += 1
             elif rate < 0:
-                sell_units = min(max(asset_units * (-rate) / 100.0, 0.0), asset_units)
                 cash += sell_units * day_price
                 asset_units -= sell_units
                 daily_trade_usd.append(-sell_units * day_price)
@@ -173,4 +188,4 @@ def run_backtest(
     return report, frame
 
 
-__all__ = ["SdcaBacktestReport", "run_backtest"]
+__all__ = ["SdcaBacktestReport", "run_backtest", "size_trade"]

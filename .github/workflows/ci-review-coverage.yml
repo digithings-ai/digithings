@@ -7,7 +7,9 @@ name: "CI: review coverage"
 # promotion.
 #
 # It asserts the cheaper invariant: every commit reaching main was reviewed at its
-# own task PR, where a finding costs an amend.
+# own task PR, where a finding costs an amend. "Reviewed" means an agent review
+# loop ran there (Bugbot, CodeRabbit, Claude, in-session `/review`, …) — not that
+# a particular vendor's check is green on the promotion.
 #
 # Deliberately not a required "Cursor Bugbot" status check on main. That check
 # reports `neutral` when the Cursor account hits its usage limit, and a required
