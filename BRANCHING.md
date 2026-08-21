@@ -29,9 +29,10 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 
 **Session start:** `make module-switch MODULE=<component>` then `make task ISSUE=N`.
 **Sprint end:** `make module-pr MODULE=<component>` → PR review → merge to develop.
-**Sync:** `make module-sync` fast-forwards your **local** `module/*` refs to `develop`. It does not push, so `origin/module/*` is unchanged — and it cannot, because `module-branch-protection` requires a PR and blocks force-push. Refreshing a *remote* module branch means opening a PR into `base=module/<component>`. Check staleness before you branch off one:
+**Sync:** `make module-sync` fast-forwards your **local** `module/*` refs to `develop`. It does not push, so `origin/module/*` is unchanged — and it cannot, because `module-branch-protection` requires a PR and blocks force-push. Refreshing a *remote* module branch means opening a PR into `base=module/<component>`. You do not have to check staleness by hand before branching off one — since #2547 `make task ISSUE=N` fetches `origin` and refuses to cut a task branch from a `module/*` base that is behind `origin/develop`, printing the behind-count and the sync recipe. To check a module branch on its own:
 
 ```bash
+git fetch origin
 git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale
 ```
 
