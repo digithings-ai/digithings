@@ -82,7 +82,14 @@ function LadderRow({ row }: { row: IdeaDetailLevelRow }) {
   );
 }
 
-function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
+/** Dual column only when both levels and evidence exist — never an empty placeholder col. */
+export function ideaDetailBlocksClass(hasLevels: boolean, hasEvidence: boolean): string {
+  return hasLevels && hasEvidence
+    ? 'grid grid-cols-1 gap-3 sm:grid-cols-2'
+    : 'grid grid-cols-1 gap-3';
+}
+
+export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   const { status, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
   const desks = contributingDesks(idea.citations);
   const showLevels = levelRows.length > 0;
@@ -96,7 +103,7 @@ function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
         <p className="text-[11px] text-ink-mute">Catalyst: {idea.catalyst}</p>
       ) : null}
       {showGrid ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className={ideaDetailBlocksClass(showLevels, showEvidence)}>
           {showLevels ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -114,9 +121,7 @@ function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
                 <p className="font-mono text-[10px] text-ink-mute">R:R {riskRewardLabel}</p>
               ) : null}
             </div>
-          ) : (
-            <div />
-          )}
+          ) : null}
           {showEvidence ? (
             <div className="space-y-1">
               <p className="text-[11px] text-ink-soft">Market evidence</p>
@@ -169,16 +174,28 @@ export default function TradeIdeasPanel({
 
   const boardDate = ideas[0]?.run_date ?? '';
   const continuity = useMemo(() => {
-    const hist =
-      ideaHistory.length > 0
-        ? ideaHistory
-        : ideas.map((i) => ({
-            run_date: i.run_date,
-            pair: i.pair,
-            direction: i.direction,
-            as_of: i.as_of,
-          }));
-    return continuityForBoard(boardDate, hist);
+    const fromIdeas = ideas.map((i) => ({
+      run_date: i.run_date,
+      pair: i.pair,
+      direction: i.direction,
+      as_of: i.as_of,
+    }));
+    let hist =
+      ideaHistory.length > 0 ? [...ideaHistory] : fromIdeas;
+    // Prefer including the displayed board: if history omits boardDate, merge ideas in.
+    if (
+      boardDate &&
+      ideas.length > 0 &&
+      !hist.some((h) => h.run_date === boardDate)
+    ) {
+      hist = [...hist, ...fromIdeas];
+    }
+    let map = continuityForBoard(boardDate, hist);
+    // Harden: empty continuity with live ideas → merge board rows and recompute.
+    if (map.size === 0 && ideas.length > 0 && boardDate) {
+      map = continuityForBoard(boardDate, [...hist, ...fromIdeas]);
+    }
+    return map;
   }, [boardDate, ideaHistory, ideas]);
 
   const metaFor = (idea: FxTradeIdeaRow) =>

@@ -282,7 +282,7 @@ export default function TwelveXClient() {
         const [tradeIdeas, tradeIdeaHistory, todayBriefs, todayEvents, divergenceByCurrency] = canonical
           ? await Promise.all([
               getTradeIdeas(canonical),
-              getTradeIdeaHistory(45),
+              getTradeIdeaHistory(45, canonical),
               getTodayBriefs(canonical),
               getTodayEvents(),
               getConsensusDivergence(canonical),

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { FxTradeIdeaRow } from '@/lib/twelve-x/types';
-import TradeIdeasPanel from './TradeIdeasPanel';
+import TradeIdeasPanel, { IdeaDetail, ideaDetailBlocksClass } from './TradeIdeasPanel';
 import { TwelveXProvider } from './context';
 
 const IDEAS: FxTradeIdeaRow[] = [
@@ -137,5 +137,33 @@ describe('TradeIdeasPanel', () => {
     expect(html).toContain('First suggested 20 Jul');
     expect(html).toContain('Updated 22 Jul 10:00 UTC');
     expect(html).toContain('Suggested 22 Jul');
+  });
+
+  it('merges current ideas into history when board date is missing from lookback', () => {
+    // History ends before the displayed board — without merge, continuity would be empty.
+    const history = [
+      { run_date: '2026-07-20', pair: 'USD/JPY', direction: 'short', as_of: '2026-07-20T09:00:00Z' },
+      { run_date: '2026-07-21', pair: 'USD/JPY', direction: 'short', as_of: '2026-07-21T09:00:00Z' },
+    ];
+    const html = render(IDEAS, history);
+    expect(html).toContain('First suggested 20 Jul');
+    expect(html).toContain('Updated 22 Jul 10:00 UTC');
+    expect(html).toContain('Suggested 22 Jul');
+  });
+
+  it('uses single-column layout when only evidence or only levels are present', () => {
+    expect(ideaDetailBlocksClass(true, true)).toContain('sm:grid-cols-2');
+    expect(ideaDetailBlocksClass(false, true)).not.toContain('sm:grid-cols-2');
+    expect(ideaDetailBlocksClass(true, false)).not.toContain('sm:grid-cols-2');
+
+    const evidenceOnly: FxTradeIdeaRow = {
+      ...IDEAS[0],
+      trade_levels: undefined,
+      evidence: LEVELS_IDEA.evidence,
+    };
+    const html = renderToStaticMarkup(createElement(IdeaDetail, { idea: evidenceOnly }));
+    expect(html).toContain('Market evidence');
+    expect(html).not.toContain('Levels');
+    expect(html).not.toContain('sm:grid-cols-2');
   });
 });

@@ -36,6 +36,8 @@ const calendarDb = vi.hoisted(() => ({
 
 const tradeIdeasDb = vi.hoisted(() => ({
   selectColumns: '',
+  gte: [] as [string, string][],
+  lte: [] as [string, string][],
 }));
 
 vi.mock('./supabase', () => {
@@ -44,6 +46,7 @@ vi.mock('./supabase', () => {
     select: (columns: string) => TradeIdeasBuilder;
     eq: (column: string, value: string) => TradeIdeasBuilder;
     gte: (column: string, value: string) => TradeIdeasBuilder;
+    lte: (column: string, value: string) => TradeIdeasBuilder;
     order: (column: string, options?: unknown) => TradeIdeasBuilder;
     then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
   }
@@ -54,7 +57,14 @@ vi.mock('./supabase', () => {
         return builder;
       },
       eq: () => builder,
-      gte: () => builder,
+      gte: (column, value) => {
+        tradeIdeasDb.gte.push([column, value]);
+        return builder;
+      },
+      lte: (column, value) => {
+        tradeIdeasDb.lte.push([column, value]);
+        return builder;
+      },
       order: () => builder,
       then: (onFulfilled) => Promise.resolve(onFulfilled({ data: [], error: null })),
     };
@@ -138,10 +148,25 @@ describe('getTradeIdeas', () => {
 });
 
 describe('getTradeIdeaHistory', () => {
-  it('selects continuity columns with a run_date lower bound', async () => {
+  beforeEach(() => {
     tradeIdeasDb.selectColumns = '';
+    tradeIdeasDb.gte = [];
+    tradeIdeasDb.lte = [];
+  });
+
+  it('selects continuity columns with a run_date lower bound', async () => {
     await getTradeIdeaHistory(45);
     expect(tradeIdeasDb.selectColumns).toBe('run_date, pair, direction, as_of');
+    expect(tradeIdeasDb.gte).toHaveLength(1);
+    expect(tradeIdeasDb.gte[0][0]).toBe('run_date');
+    expect(tradeIdeasDb.lte).toHaveLength(1);
+    expect(tradeIdeasDb.lte[0][0]).toBe('run_date');
+  });
+
+  it('windows lookback relative to asOfBoardDate (inclusive)', async () => {
+    await getTradeIdeaHistory(10, '2026-08-20');
+    expect(tradeIdeasDb.gte).toEqual([['run_date', '2026-08-10']]);
+    expect(tradeIdeasDb.lte).toEqual([['run_date', '2026-08-20']]);
   });
 });
 

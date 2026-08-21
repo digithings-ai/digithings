@@ -191,6 +191,25 @@ describe('buildIdeaDetailModel', () => {
     expect(model.levelRows.map((r) => r.role)).toEqual(['target', 'entry', 'stop']);
   });
 
+  it('sorts multi-target rows price-descending for display', () => {
+    const model = buildIdeaDetailModel({
+      ...LEVELS_IDEA,
+      pair: 'EUR/USD',
+      direction: 'long',
+      trade_levels: {
+        ...LEVELS_IDEA.trade_levels!,
+        targets: [
+          { value: '1.17', provenance: 'broker_quoted', source_ref: 'low.pdf' },
+          { value: '1.20', provenance: 'broker_quoted', source_ref: 'high.pdf' },
+          { value: '1.18', provenance: 'broker_quoted', source_ref: 'mid.pdf' },
+        ],
+      },
+    });
+    const targets = model.levelRows.filter((r) => r.role === 'target');
+    expect(targets.map((r) => r.value)).toEqual(['1.2', '1.18', '1.17']);
+    expect(targets.map((r) => r.label)).toEqual(['Target', 'Target 2', 'Target 3']);
+  });
+
   it('returns empty blocks when trade_levels and evidence are absent', () => {
     const model = buildIdeaDetailModel({
       run_date: '2026-07-22',

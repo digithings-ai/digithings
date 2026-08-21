@@ -310,7 +310,14 @@ function buildLadderRows(
       }
     : null;
 
-  const targetRows: IdeaDetailLevelRow[] = tradeLevels.targets.map((target, index) => ({
+  // Multi-target ladder: price-descending for display (labels follow display order).
+  const targetsByPriceDesc = [...tradeLevels.targets].sort((a, b) => {
+    const na = Number(a.value);
+    const nb = Number(b.value);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na;
+    return 0;
+  });
+  const targetRows: IdeaDetailLevelRow[] = targetsByPriceDesc.map((target, index) => ({
     label: index === 0 ? 'Target' : `Target ${index + 1}`,
     value: formatLevelValue(target.value, pair, target.provenance),
     chip: provenanceChipLabel(target),
