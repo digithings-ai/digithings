@@ -35,9 +35,11 @@ oldest from 2026-04-19, and 1 closed in the last 30 days. Retargeting stops new 
 being stranded on a tier with no consumer at all; it does not by itself mean the work
 gets done. Whether the Cursor Automation is actually running is a separate question.
 
-**PR code review:** Cursor Bugbot, invoked by hand with a `bugbot run` comment once a
+**PR code review:** default is in-session (see [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)).
+Cursor Bugbot, when available, is invoked by hand with a `bugbot run` comment once a
 diff is final. Never at PR open and never per push — Bugbot went usage-based in June
-2026 at roughly $1.00–$1.50 a run. `ci.yml`'s `request-copilot-review` job was removed
+2026 at roughly $1.00–$1.50 a run. CodeRabbit is optional/sunset — do not re-request
+it for small follow-up commits. `ci.yml`'s `request-copilot-review` job was removed
 in #1894; it had been reporting success while attaching no reviewer. Claude review
 remains a secondary opt-in (see below). Every commit reaching `main` must clear
 `ci-review-coverage.yml`, which is a required status check.

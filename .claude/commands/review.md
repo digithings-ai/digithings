@@ -38,15 +38,15 @@ labelled as one.
 
 1. **Get the diff.** `gh pr diff <N>`. Note the base: task PRs target `develop`.
 
-2. **Fan out over independent lenses**, each in its own subagent with no knowledge
-   of how the code came to be written. These lenses have no subagent file to pin a
-   model — dispatch each explicitly with `model: opus` (per CLAUDE.md's Model &
-   subagent policy: review/security/architecture judgment is the opus tier).
-   Leaving `model` unset means each lens silently inherits whatever the orchestrating
-   session is running, which is the exact risk this repo already documents and
-   guards against for fixed subagents — it just isn't fixed here because this
-   command dispatches ad hoc rather than through a pinned `agents/sources/subagents/`
-   file. Use the lenses that fit the diff:
+2. **Tiered fan-out** (cost-efficient; see `docs/agents/CODE_REVIEW_POLICY.md`).
+   Do **not** leave `model` unset (inheritance tax under an expensive orchestrator).
+   Do **not** call `@coderabbitai review` for this path — this *is* the review.
+
+   **Pass A — scope (cheap/fast):** one subagent with `model: sonnet` (or haiku if
+   the diff is tiny). Output: risk map, which lenses need a deep pass, files to skip.
+
+   **Pass B — deep (strong only where needed):** for each flagged lens, a fresh
+   subagent with `model: opus` and no knowledge of how the code was written:
    - **correctness** — wrong output, unhandled state, off-by-one, async ordering
    - **claim accuracy** — every factual assertion about this repo checked against
      the source. This lens has caught more real defects here than any other: a
@@ -56,6 +56,9 @@ labelled as one.
    - **security** — auth, keys, scopes, injection, anything under `digikey/`
    - **CI/deploy** — will it build; does a named workflow actually do what a
      comment says
+
+   Skip Pass B lenses the scope pass marked clean. Tiny docs/CI-only diffs may
+   stop after Pass A if nothing material is flagged.
 
 3. **Verify before reporting.** Every finding needs a command that was actually
    run and its output. Put each surviving finding through a refuter told to
