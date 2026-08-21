@@ -577,9 +577,10 @@ rate-limited on both the embed-IP path and the authenticated/session path
 the provider using digichat's own egress, so the authenticated path needs a
 ceiling too, not just the anonymous-embed one.
 
-`config/byok-providers.json`'s `keyPrefix`/`fallbackModels` fields are read by
-no runtime code (only `id`/`baseUrl`/`requiresModel` feed
-`digigraph/src/digigraph/llm_auth.py`'s loader) but are checked for parity
+`config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
+`fallbackModels` is read only by `digigraph/src/digigraph/llm_auth.py` (whose loader
+takes `id`/`baseUrl`/`requiresModel` plus the first `fallbackModels` entry, used as
+the remediation example in `byok_default_model_refusal`). Both are checked for parity
 against `src/lib/byok-providers.ts`'s own catalog (`BYOK_PROVIDER_LIST`,
 `byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`) by two test
 files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,

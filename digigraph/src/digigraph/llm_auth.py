@@ -89,6 +89,13 @@ class _ByokCatalogEntry(BaseModel):
     id: str
     baseUrl: str
     requiresModel: bool = False
+    # Read for one purpose: the remediation example in byok_default_model_refusal.
+    # Optional because an entry without examples still routes fine — the refusal
+    # just drops its parenthetical. digichat does not read this field at runtime; it
+    # hand-copies the same list into `byokModelPresets`, pinned to this catalog by
+    # use-byok-key.catalog-parity.test.ts. So the model the refusal names is the same
+    # one the UI offers — that parity test is load-bearing for this message.
+    fallbackModels: list[str] = []
 
     @field_validator("id")
     @classmethod
@@ -97,6 +104,13 @@ class _ByokCatalogEntry(BaseModel):
         if not normalized:
             raise ValueError("id must be a non-empty string")
         return normalized
+
+    @field_validator("fallbackModels")
+    @classmethod
+    def _examples_non_empty(cls, v: list[str]) -> list[str]:
+        if any(not m.strip() for m in v):
+            raise ValueError("fallbackModels entries must be non-empty strings")
+        return v
 
     @field_validator("baseUrl")
     @classmethod
@@ -107,7 +121,7 @@ class _ByokCatalogEntry(BaseModel):
         return v
 
 
-def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
+def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str], dict[str, str]]:
     if not path.exists():
         raise FileNotFoundError(f"BYOK provider catalog not found at {path}")
     try:
@@ -118,6 +132,7 @@ def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
         raise ValueError(f"BYOK provider catalog at {path} must be a non-empty JSON array")
     base_urls: dict[str, str] = {}
     model_required: set[str] = set()
+    examples: dict[str, str] = {}
     seen_ids: set[str] = set()
     for entry in raw:
         try:
@@ -130,11 +145,15 @@ def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
         base_urls[parsed_entry.id] = parsed_entry.baseUrl
         if parsed_entry.requiresModel:
             model_required.add(parsed_entry.id)
-    return base_urls, frozenset(model_required)
+        if parsed_entry.fallbackModels:
+            examples[parsed_entry.id] = parsed_entry.fallbackModels[0]
+    return base_urls, frozenset(model_required), examples
 
 
 # The one table: a provider here is routed to its own endpoint with the user's key.
-_BYOK_BASE_URLS, BYOK_MODEL_REQUIRED_PROVIDERS = _load_byok_catalog(_BYOK_CATALOG_PATH)
+_BYOK_BASE_URLS, BYOK_MODEL_REQUIRED_PROVIDERS, _BYOK_MODEL_EXAMPLES = _load_byok_catalog(
+    _BYOK_CATALOG_PATH
+)
 BYOK_ROUTABLE_PROVIDERS = tuple(_BYOK_BASE_URLS)
 
 
@@ -224,9 +243,16 @@ def byok_operator_model_routes_elsewhere(provider: str, model: str) -> bool:
     """True when the *operator-resolved* *model* would be billed to an operator key.
 
     Same billing rule as :func:`byok_model_routes_elsewhere`, asked about a model the
-    caller never sent: the deployment's own tier default, which reaches digillm
+    caller never sent but the operator's own configuration produced — the tier default
+    on the mode path, a ``phase_models`` override or an ``olympus_models.yaml``
+    capability model on the phase path. Whichever one it is reaches digillm
     **verbatim**. That difference is the whole reason this is a second entry point
     rather than a reuse, and it is not a latent distinction — it changes the answer.
+
+    Both callers pass such a string: ``server.py`` passes ``operator_default_model()``
+    (the tier default, the only one it can see), and ``_apply_byok_model_override``
+    passes its own *resolved* — which on the phase path is the override or capability
+    model the middleware never saw.
 
     ``byok_model_routes_elsewhere`` first normalizes through
     :func:`byok_routable_model`, which is correct for an ``X-BYOK-Model`` header
@@ -260,14 +286,25 @@ def byok_default_model_refusal(provider: str) -> str:
     code says something the frontend cannot know: *this deployment's* default is
     served by someone else.
 
-    Names neither the model slug nor the key. The slug is the operator's
-    configuration, not the caller's input, and disclosing it to an anonymous caller
-    buys no remediation — the fix is the same either way.
+    Names neither the *operator's* model slug nor the key. That slug is the
+    operator's configuration, not the caller's input, and disclosing it to an
+    anonymous caller buys no remediation — the fix is the same either way. The
+    example it does name is the provider's own first ``fallbackModels`` entry from
+    the public catalog, so it discloses nothing and is always a slug this provider
+    actually serves. A hardcoded example cannot be: the previous ``gpt-4o-mini``
+    was told to anthropic, gemini and xai callers too, none of which serve it.
+
+    Phrased as "a model served by <provider>" rather than "a <provider> model" so
+    no indefinite article has to agree with a provider id — ``a anthropic`` was the
+    literal output for four of the five.
     """
+    normalized = provider.strip().lower()
+    example = _BYOK_MODEL_EXAMPLES.get(normalized)
+    hint = f" (e.g. {example})" if example else ""
     return (
         f"This deployment's default model is served by a provider other than {provider!r}, "
-        f"so your {provider} key would not be the one billed. Send X-BYOK-Model naming a "
-        f"{provider} model (e.g. gpt-4o-mini) to spend your own key."
+        f"so your {provider} key would not be the one billed. Send X-BYOK-Model with a model "
+        f"served by {provider}{hint} to spend your own key."
     )
 
 

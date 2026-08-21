@@ -283,7 +283,6 @@ export async function POST(req: Request) {
       digigraphBaseUrl: eco.digigraphUrl ?? "",
       upstreamHeaders,
       responseHeaders,
-      upstreamBearer,
       activityDetail: embedConfig?.activityDetail ?? "full",
     });
   }

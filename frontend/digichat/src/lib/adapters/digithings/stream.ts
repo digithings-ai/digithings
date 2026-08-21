@@ -123,9 +123,9 @@ async function* iterateOpenAiSse(
 export async function createDigigraphTraceStreamResponse(opts: {
   messages: UIMessage[];
   digigraphBaseUrl: string;
+  /** Includes the upstream `Authorization`; route.ts always builds it. */
   upstreamHeaders: Record<string, string>;
   responseHeaders: Record<string, string>;
-  upstreamBearer: string;
   activityDetail: ActivityDetail;
 }) {
   const stripped = opts.messages.map((m) => {
@@ -136,7 +136,6 @@ export async function createDigigraphTraceStreamResponse(opts: {
   const coreMessages = await convertToModelMessages(stripped);
   const url = digigraphChatCompletionsUrl(opts.digigraphBaseUrl);
   const model = digigraphModelName();
-  const apiKey = opts.upstreamBearer;
 
   const stream = createUIMessageStream({
     onError: (error) => (error instanceof Error ? error.message : "digigraph stream error"),
@@ -154,7 +153,9 @@ export async function createDigigraphTraceStreamResponse(opts: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+          // Authorization comes from upstreamHeaders and nowhere else. An
+          // `Authorization` set here would be overridden by the spread below
+          // anyway, so a second source could only ever be dead code (#2537).
           ...opts.upstreamHeaders,
           // After upstreamHeaders so dogfood never inherits Open WebUI format.
           // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only
