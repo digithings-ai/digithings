@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from digigraph.llm_auth import (
@@ -27,6 +30,7 @@ from digigraph.llm_auth import (
     push_lite_llm_proxy_header,
 )
 
+import digillm
 from digillm import client as client_mod
 from digillm import get_byok as digillm_get_byok
 from digillm import get_proxy_key as digillm_get_proxy_key
@@ -1494,8 +1498,6 @@ class TestByokSurvivesTheParallelFanOut:
         from digigraph.planning.executor import run_plan
         from digillm.telemetry import CallPurpose
 
-        import digillm
-
         def sample(_agent: str, _args: dict) -> dict:
             return {
                 "metadata": client_mod._provider_call_metadata.get(),
@@ -1526,6 +1528,173 @@ class TestByokSurvivesTheParallelFanOut:
         assert caller_metadata is not None and caller_metadata.handle is handle
         assert solo["only"]["metadata"] is not None
         assert solo["only"]["metadata"].handle is handle
+
+
+@pytest.mark.unit
+class TestTheFanOutDropsDigigraphsLogicalCallHandle:
+    """digillm clearing *its own* logical-call var is only half the boundary.
+
+    digigraph layers ``usage._LOGICAL_CALL_CONTEXT`` on top of digillm's, and its value
+    holds the very same mutable :class:`~digillm.client.ProviderCallContextHandle` --
+    ``llm_client._logical_call_scope`` passes ``metadata.handle`` straight through. So a
+    fan-out worker that inherited the credential snapshot would still be handed one
+    shared handle one layer up: every worker writing its ``last_call_id`` and appending
+    into the single deferred-record list ``finalize`` tuples and clears.
+
+    digillm is a leaf library and cannot reach into a consumer's module to clear it, so
+    digigraph registers ``usage.detach_logical_call_context`` as digillm's fan-out detach
+    hook (``llm_client``, next to the usage and telemetry observers). These pin both pools
+    that copy a context: digillm's own tool pool, and digigraph's planning executor.
+
+    ``usage._CALL_CONTEXT`` is deliberately *not* cleared -- its ``CallContext`` is frozen
+    and holds no mutable state, so inheriting the node identity is safe and gives the
+    worker's telemetry better attribution than it had.
+    """
+
+    @staticmethod
+    def _tool_round() -> tuple[Any, Any]:
+        """Two mock tool calls: >1 parallel-safe call is what selects the pool branch."""
+        fn_a = MagicMock()
+        fn_a.name = "alpha"
+        fn_a.arguments = "{}"
+        tc_a = MagicMock()
+        tc_a.id = "a"
+        tc_a.function = fn_a
+        fn_b = MagicMock()
+        fn_b.name = "beta"
+        fn_b.arguments = "{}"
+        tc_b = MagicMock()
+        tc_b.id = "b"
+        tc_b.function = fn_b
+        return tc_a, tc_b
+
+    @staticmethod
+    def _response(content: str = "", tool_calls: Any = None) -> MagicMock:
+        msg = MagicMock()
+        msg.content = content
+        msg.tool_calls = tool_calls
+        choice = MagicMock()
+        choice.message = msg
+        resp = MagicMock()
+        resp.choices = [choice]
+        return resp
+
+    def test_the_hook_is_registered_by_importing_llm_client(self) -> None:
+        """The wiring is what makes the two tests below mean anything.
+
+        ``llm_client`` is the module every digigraph LLM call imports, which is why the
+        usage and telemetry observers are registered there; this rides along with them.
+        """
+        import digigraph.llm_client  # noqa: F401  (imported for its registration)
+        from digigraph.usage import detach_logical_call_context
+
+        assert client_mod._fan_out_detach_hook is detach_logical_call_context
+
+    def test_digillms_tool_pool_clears_it(self) -> None:
+        """digillm's parallel tool branch, through the registered hook."""
+        import digigraph.llm_client  # noqa: F401  (registers the detach hook)
+        from digillm.telemetry import CallPurpose
+
+        from digigraph import usage as dg_usage
+
+        tc_a, tc_b = self._tool_round()
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.side_effect = [
+            self._response("", tool_calls=[tc_a, tc_b]),
+            self._response("done"),
+        ]
+
+        seen: dict[str, Any] = {}
+        seen_byok: dict[str, Any] = {}
+
+        def execute_tool(name: str, args: dict) -> dict:
+            seen[name] = dg_usage._LOGICAL_CALL_CONTEXT.get()
+            seen_byok[name] = get_byok_override()
+            return {"content": name}
+
+        tools = [
+            {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+            {"type": "function", "function": {"name": "beta", "parameters": {}}},
+        ]
+        token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
+        try:
+            with dg_usage.logical_call_context(
+                purpose=CallPurpose.TOOL_SELECTION,
+                no_artifact_reason=dg_usage.NoArtifactReason.TOOL_DISPATCH,
+            ) as handle:
+                with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+                    with digillm.provider_call_context(
+                        node_run_id=uuid4(),
+                        purpose=CallPurpose.TOOL_SELECTION,
+                        no_artifact_reason=digillm.NoArtifactReason.TOOL_DISPATCH,
+                    ):
+                        digillm.run_tools(
+                            "gpt-4o-mini",
+                            [{"role": "user", "content": "go"}],
+                            tools,
+                            execute_tool,
+                            parallel_safe_tools={"alpha", "beta"},
+                        )
+                # A copy is a snapshot, not a view: the caller keeps its own binding.
+                still_bound = dg_usage._LOGICAL_CALL_CONTEXT.get()
+        finally:
+            pop_byok(token)
+
+        assert seen == {"alpha": None, "beta": None}
+        # Dropping the handle must not have dropped the credentials with it -- carrying
+        # those across the boundary is the whole reason the context is copied.
+        expected = ("sk-fan", "openrouter")
+        assert seen_byok == {"alpha": expected, "beta": expected}
+        assert still_bound is not None and still_bound.handle is handle
+
+    def test_the_planning_pool_clears_it(self) -> None:
+        """digigraph's planning executor copies the context itself, so it clears directly.
+
+        The single-step layer is the deliberate asymmetry: it runs in the caller's own
+        context rather than a copy of it, so unbinding there would lose the caller's live
+        handle and its deferred records.
+        """
+        from digigraph.planning.executor import run_plan
+        from digillm.telemetry import CallPurpose
+
+        from digigraph import usage as dg_usage
+
+        def sample(_agent: str, _args: dict) -> dict:
+            return {
+                "logical": dg_usage._LOGICAL_CALL_CONTEXT.get(),
+                "node": dg_usage._CALL_CONTEXT.get().node_run_id,
+                "dg": get_byok_override(),
+            }
+
+        node_run_id = uuid4()
+        token = push_byok_header(_byok_request("sk-fan", "openrouter", "openai/gpt-4o-mini"))
+        try:
+            with dg_usage.call_context(node_run_id=node_run_id):
+                with dg_usage.logical_call_context(
+                    purpose=CallPurpose.TOOL_SELECTION,
+                    no_artifact_reason=dg_usage.NoArtifactReason.TOOL_DISPATCH,
+                ) as handle:
+                    fanned = run_plan(
+                        [
+                            {"id": "a", "agent": "t", "args": {}},
+                            {"id": "b", "agent": "t", "args": {}},
+                        ],
+                        sample,
+                    )
+                    solo = run_plan([{"id": "only", "agent": "t", "args": {}}], sample)
+                    still_bound = dg_usage._LOGICAL_CALL_CONTEXT.get()
+        finally:
+            pop_byok(token)
+
+        for sid in ("a", "b"):
+            assert fanned[sid]["logical"] is None
+            assert fanned[sid]["dg"] == ("sk-fan", "openrouter")
+            # ``_CALL_CONTEXT`` is frozen and stays inherited: node identity is safe to
+            # carry and is what lets a worker's telemetry be attributed at all.
+            assert fanned[sid]["node"] == node_run_id
+        assert still_bound is not None and still_bound.handle is handle
+        assert solo["only"]["logical"] is not None
+        assert solo["only"]["logical"].handle is handle
 
 
 @pytest.mark.unit

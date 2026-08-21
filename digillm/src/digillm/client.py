@@ -643,7 +643,10 @@ def detach_provider_call_context() -> None:
     :class:`ProviderCallContextHandle`: they all write its ``last_call_id`` (leaving a
     follow-up call parented on whichever sibling happened to finish last) and all append
     to the one deferred-record list that ``finalize`` tuples and clears. A worker that
-    inherited an empty context read ``None`` here, so this restores exactly that.
+    inherited an empty context read ``None`` here, so this restores that *for this
+    module's var*. It says nothing about a consumer's own logical-call vars, which the
+    same snapshot carries and which can hold the same handle one layer up --
+    :func:`set_fan_out_detach_hook` is how a consumer clears those alongside this one.
 
     Nesting fan-out calls under their parent's logical call is a separate feature, and a
     real one -- it needs a per-worker handle plus a merge at the join, not a shared
@@ -2033,13 +2036,50 @@ def _stream_completion_one_turn(
     return content, tc_list
 
 
+# ── Fan-out detach hook ─────────────────────────────────────────────────────────
+# :func:`detach_provider_call_context` clears *this* module's logical-call var, but a
+# consumer that layers its own logical-call ContextVar on top of it -- digigraph's
+# ``usage._LOGICAL_CALL_CONTEXT`` does, and its value holds the very same mutable
+# :class:`ProviderCallContextHandle` -- would still hand every parallel worker one
+# shared handle through the credential snapshot. digillm is a leaf library and cannot
+# reach into a consumer's module to clear it, exactly as it cannot write into a
+# consumer's usage accumulator, so the consumer registers a callback here on the same
+# terms: process-wide, no-op until registered, errors never break the tool call.
+
+_fan_out_detach_hook: Callable[[], None] | None = None
+
+
+def set_fan_out_detach_hook(hook: Callable[[], None] | None) -> None:
+    """Register a callback run at the top of every parallel tool worker.
+
+    Called inside the worker's own copied context, so it must clear caller-side
+    logical-call state token-free (a copy carries values, never reset tokens) and must
+    not touch credentials -- carrying those across the boundary is the whole point of
+    the copy. Pass ``None`` to disable.
+    """
+    global _fan_out_detach_hook
+    _fan_out_detach_hook = hook
+
+
+def _detach_consumer_call_context() -> None:
+    """Run the consumer's detach hook, if one is registered."""
+    hook = _fan_out_detach_hook
+    if hook is None:
+        return
+    try:
+        hook()
+    except Exception as exc:  # a broken hook must not fail the tool call
+        logger.warning("fan-out detach hook raised, telemetry may be shared: %s", exc)
+
+
 def _execute_tool_in_fan_out(
     execute_tool: Callable[[str, ToolArguments], str | dict[str, Any]],
     name: str,
     args: ToolArguments,
 ) -> str | dict[str, Any]:
-    """Run one parallel tool call: credentials inherited, telemetry handle dropped."""
+    """Run one parallel tool call: credentials inherited, telemetry handles dropped."""
     detach_provider_call_context()
+    _detach_consumer_call_context()
     return execute_tool(name, args)
 
 
@@ -2271,7 +2311,9 @@ def run_tools(
             # What the copy must NOT carry is the logical-call telemetry handle: a copy
             # propagates references, so all N workers would share one mutable handle and
             # race its ``last_call_id`` and deferred-record list. Hence the wrapper --
-            # propagate credentials, not the mutable telemetry handle.
+            # propagate credentials, not the mutable telemetry handle. It clears two
+            # vars, not one: this module's, and (via the consumer's registered hook) any
+            # logical-call var a consumer layers on top holding the same handle.
             with ThreadPoolExecutor(max_workers=len(parsed)) as executor:
                 future_to_idx = {
                     executor.submit(

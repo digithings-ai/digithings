@@ -794,8 +794,13 @@ def _stream_completions_progressive(
     # starts streaming -- which resets the *parent's* vars only, a copy being a
     # snapshot rather than a view. So the worker clears its own copy when it finishes,
     # keeping the middleware's "for the duration of the request only" contract true of
-    # the process and not just of the request task. The residual window is the
-    # worker's own runtime, bounded by its ``cancel_event`` poll between nodes.
+    # the process and not just of the request task. The residual window is the worker's
+    # own runtime, and that runtime is what has to stay bounded: every event the worker
+    # emits goes through ``workflow._emit_event``, which drops rather than blocks once
+    # ``cancel_event`` is set. A plain blocking ``put`` would not -- the queue above is
+    # bounded and this generator stops draining it on disconnect, so the worker would
+    # wedge inside a node, never reach the ``finally``, and strand the key for the
+    # lifetime of the process rather than for one more node.
     ctx = contextvars.copy_context()
 
     def _run_worker() -> None:

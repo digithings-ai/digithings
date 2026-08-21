@@ -36,6 +36,7 @@ from digillm import (
     get_client_for_model, get_client, register_provider, resolve_model,
     set_proxy_key, reset_proxy_key, get_proxy_key, proxy_key,   # proxy override
     set_byok, reset_byok, get_byok, byok, clear_byok,           # BYOK override
+    set_fan_out_detach_hook,                                    # consumer detach hook
     clear_caches,
 )
 ```
@@ -225,11 +226,23 @@ references, not values, so a bare submit would hand all N workers the one mutabl
 `ProviderCallContextHandle` the caller holds: each writes its `last_call_id` (leaving a
 later follow-up call parented on whichever sibling finished last) and each appends to
 the single deferred-record list that `finalize()` tuples and clears. So the wrapper
-calls `detach_provider_call_context()` first — **propagate credentials, not the mutable
-telemetry handle** — which is exactly what a worker inheriting an empty context saw, and
-what keeps the "context-local" half of the telemetry contract above true. Nesting
-fan-out calls under their parent's logical call is a separate feature needing a
-per-worker handle and a join-time merge.
+clears it first — **propagate credentials, not the mutable telemetry handle** — which is
+what a worker inheriting an empty context saw for this module's var, and what keeps the
+"context-local" half of the telemetry contract above true. Nesting fan-out calls under
+their parent's logical call is a separate feature needing a per-worker handle and a
+join-time merge.
+
+That means clearing **two** vars per worker, not one. `detach_provider_call_context()`
+reaches only this module's `_provider_call_metadata`, and a consumer may layer its own
+logical-call var *holding the very same handle* — digigraph's
+`usage._LOGICAL_CALL_CONTEXT` does. digillm is a leaf library and cannot import into a
+consumer to clear it, exactly as it cannot write into a consumer's usage accumulator, so
+the consumer registers a callback on the same terms: `set_fan_out_detach_hook(fn)`,
+process-wide, no-op until registered, and a raising hook is logged rather than allowed to
+fail the tool call. Leave it unregistered and the second var stays shared — the defect
+moves one layer up rather than being fixed. The **serial** branch of a tool round runs in
+the caller's own context, not a copy of it, so it deliberately clears neither: unbinding
+the caller's live handle there would lose its deferred records.
 
 ### `structured_completion`
 
@@ -324,7 +337,8 @@ plain contextvar setters and reads them when building clients.
 | `set_proxy_key(token)` / `reset_proxy_key(tok)` (or `with proxy_key(token):`) | `get_client()` default path | Per-request LiteLLM proxy / bearer key. Priority: proxy override → `LITELLM_PROXY_API_KEY` → `OPENAI_API_KEY`. |
 | `set_byok(api_key, base_url=...)` / `reset_byok(tok)` (or `with byok(api_key, base_url):`) | `get_client()` default path | Bring-your-own-key. Returns an **uncached** client (user creds must not accumulate in process memory) and **bypasses the response cache**. |
 | `clear_byok()` | same var, no token | Drops the override token-free — for a thread running inside a `copy_context()` snapshot, which inherits the binding but not the reset token. Use `reset_byok` in the frame that bound it; clearing there would strand that frame's token. |
-| `detach_provider_call_context()` | `_provider_call_metadata`, no token | Drops the inherited logical-call metadata — for a fan-out worker running inside a `copy_context()` snapshot, which would otherwise share the caller's *mutable* `ProviderCallContextHandle` with every sibling. Restores what a worker with an empty context saw. |
+| `detach_provider_call_context()` | `_provider_call_metadata`, no token | Drops the inherited logical-call metadata — for a fan-out worker running inside a `copy_context()` snapshot, which would otherwise share the caller's *mutable* `ProviderCallContextHandle` with every sibling. Restores what a worker with an empty context saw **for this var only**. |
+| `set_fan_out_detach_hook(fn)` | run at the top of every *parallel* tool worker | Lets a consumer clear a logical-call var it layers on top of digillm's — necessarily holding the same mutable handle, so the copy would share it. Process-global, `None` disables, a raising hook is logged and the tool call proceeds. The hook runs inside the worker's copied context, so it must clear token-free and must not touch credentials — carrying those across is the point of the copy. |
 
 digigraph's middleware will translate (today's code shown for reference):
 

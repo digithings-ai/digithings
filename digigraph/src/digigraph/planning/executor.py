@@ -95,12 +95,23 @@ def _run_step_in_fan_out(
     agent: str,
     args: dict[str, Any],
 ) -> str | dict[str, Any]:
-    """Run one layer step in a pool worker: credentials inherited, telemetry handle dropped."""
-    # Local import so this module stays importable without the LLM stack, as it was
-    # before it had any reason to reach into digillm at all.
+    """Run one layer step in a pool worker: credentials inherited, telemetry handles dropped.
+
+    Both logical-call layers have to be dropped, not just digillm's: digigraph's
+    ``usage._LOGICAL_CALL_CONTEXT`` holds the same mutable handle one layer up, so leaving
+    it bound would put every step in the layer back on one shared handle. digillm's own
+    fan-out runs the second clear through a registered hook; this pool copies the context
+    itself, so it calls both directly.
+    """
+    # Local imports so this module stays importable without the LLM stack, as it was
+    # before it had any reason to reach into digillm at all. ``digigraph.usage`` imports
+    # digillm itself, so it is the same weight.
     from digillm import detach_provider_call_context
 
+    from digigraph.usage import detach_logical_call_context
+
     detach_provider_call_context()
+    detach_logical_call_context()
     return _run_step(execute_tool, agent, args)
 
 
@@ -127,9 +138,11 @@ def run_plan(
         # copy per submit -- one shared Context cannot be entered by two threads at once.
         #
         # A copy propagates references, so it would also hand every step in the layer the
-        # same mutable logical-call telemetry handle to race. Propagate credentials, not
-        # the handle -- hence ``_run_step_in_fan_out``, which the serial branch above
-        # deliberately does not use: it runs in this context, not a copy of it.
+        # same mutable logical-call telemetry handle to race -- in *both* the digillm and
+        # the digigraph logical-call var, which carry the same handle. Propagate
+        # credentials, not the handle -- hence ``_run_step_in_fan_out``, which the serial
+        # branch above deliberately does not use: it runs in this context, not a copy of
+        # it, and unbinding the caller's own handle would lose its deferred records.
         with ThreadPoolExecutor(max_workers=len(resolved)) as executor:
             future_to_sid = {
                 executor.submit(

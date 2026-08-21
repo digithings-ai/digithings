@@ -1242,6 +1242,129 @@ def test_parallel_branch_does_not_share_the_telemetry_handle() -> None:
     assert still_bound is not None and still_bound.handle is handle
 
 
+def _two_tool_calls() -> tuple[Any, Any]:
+    """Two mock tool calls, which is what selects ``run_tools``' parallel branch."""
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+    return tc_a, tc_b
+
+
+def test_the_fan_out_runs_the_consumer_detach_hook() -> None:
+    """A consumer's own logical-call var has to be cleared per worker too.
+
+    :func:`detach_provider_call_context` clears *this* module's var, but a consumer that
+    layers its own logical-call ContextVar on top -- digigraph's
+    ``usage._LOGICAL_CALL_CONTEXT``, whose value holds the same mutable
+    :class:`ProviderCallContextHandle` -- would still hand every worker one shared handle
+    through the credential snapshot. digillm is a leaf library and cannot reach into a
+    consumer's module, so it calls back. Pinned here: the callback fires once per parallel
+    worker, and *not* on the serial path, which runs in the caller's own context and must
+    keep the binding it was given.
+    """
+    tc_a, tc_b = _two_tool_calls()
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+        _mock_response("", tool_calls=[tc_a]),
+        _mock_response("done"),
+    ]
+
+    lock = threading.Lock()
+    calls: list[str] = []
+
+    def hook() -> None:
+        with lock:
+            calls.append(threading.current_thread().name)
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    previous = client_mod._fan_out_detach_hook
+    digillm.set_fan_out_detach_hook(hook)
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                lambda name, args: {"content": name},
+                parallel_safe_tools={"alpha", "beta"},
+            )
+            parallel_calls = list(calls)
+            calls.clear()
+            # One tool call in the round: ``run_parallel`` is False, so the serial
+            # ``else`` branch runs ``execute_tool`` in this very context.
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                lambda name, args: {"content": name},
+                parallel_safe_tools={"alpha", "beta"},
+            )
+            serial_calls = list(calls)
+    finally:
+        digillm.set_fan_out_detach_hook(previous)
+
+    assert len(parallel_calls) == 2, "the hook must run once per parallel worker"
+    assert serial_calls == [], "the serial branch owns the caller's context; do not unbind it"
+
+
+def test_a_broken_detach_hook_does_not_fail_the_tool_call() -> None:
+    """A consumer's callback is not allowed to break the fan-out.
+
+    Same terms as the usage and telemetry observers: registered process-wide, and a
+    raising hook degrades telemetry rather than the tool call itself.
+    """
+    tc_a, tc_b = _two_tool_calls()
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    def hook() -> None:
+        raise RuntimeError("consumer hook is broken")
+
+    executed: set[str] = set()
+
+    def execute_tool(name: str, args: dict) -> dict:
+        executed.add(name)
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    previous = client_mod._fan_out_detach_hook
+    digillm.set_fan_out_detach_hook(hook)
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            out = digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool,
+                parallel_safe_tools={"alpha", "beta"},
+            )
+    finally:
+        digillm.set_fan_out_detach_hook(previous)
+
+    assert out == "done"
+    assert executed == {"alpha", "beta"}
+
+
 # ── Streaming tool-calling loop (stream_deltas=True) ──────────────────────────
 
 
