@@ -52,6 +52,7 @@ Beyond root `AGENTS.md`:
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
+| `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` builds bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081) | None — documented boundary |
 
 - **No perf claims without results**: Never return Sharpe, PnL, or drawdown values from anywhere except a completed `BacktestResult` or `OptimizeResult`.
 - **Pipeline ordering is sacrosanct**: validate → backtest → optimize → export. Never skip validation. Never run optimize before backtest.
@@ -107,6 +108,60 @@ When touching `digiquant/src/digiquant/olympus/`:
    sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.
 6. Tests: `pytest tests/dq/olympus/ tests/dq/atlas/ tests/dq/hermes/ -m unit -v`
+
+---
+
+## SDCA Engine (#1080, #1081)
+
+`strategies/sdca/` is the asset-agnostic Strategic-DCA engine (composite risk →
+accumulation/distribution curve → daily backtest). See
+[`ARCHITECTURE.md` § SDCA Engine](ARCHITECTURE.md#sdca-engine-1080-1081) for
+the full module map.
+
+- **The core engine (`curve.py`, `composite_risk.py`, `risk_model.py`,
+  `valuation.py`, `backtest.py`) has zero NautilusTrader dependency.** Only
+  `nautilus_strategy.py` imports `nautilus_trader` — don't add a `nautilus_trader`
+  import to any other file in this package, or `strategies.sdca` stops being
+  importable without the `nautilus` extra.
+- **`SdcaStrategy` is not in `strategies/registry.py`**, the same as
+  `m2_liquidity`. Instantiate `SdcaStrategyConfig` directly — do not add a
+  `register()` call for it. Its `risk_path` (a parquet of precomputed
+  `date`/`risk`, built by calling `compute_composite_risk()` +
+  `valuation_z_score()` upstream) has no sensible static default, so
+  `get_strategy()`'s param-merge model doesn't fit.
+- **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
+  mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
+  reimplement it.** This is what keeps the Nautilus-run result and the
+  standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
+  silently diverging.
+
+### Adding a preset
+
+Presets are public, hand-authored `curve_nodes`/`long_only` personalities in
+`strategies/sdca/presets.json`, loaded via `strategies/sdca/presets.py`
+(`list_presets()`, `load_preset(name)`). To add one:
+
+1. Append an entry to `presets.json`: a 21-element `curve_nodes` array (one
+   value per risk node `0, 5, …, 100` — matches `curve.RISK_NODES`), a
+   `long_only` bool, and a `description` explaining the personality in plain
+   language (not tuned parameters — this is public, documented config, not an
+   optimizer output).
+2. If `long_only: true`, every `curve_nodes` value must be `>= 0` — a negative
+   node in a long-only preset is a contradiction the loader does not catch at
+   read time; `tests/dq/strategies/sdca/test_presets.py::test_long_only_preset_never_sells`
+   is what catches it.
+3. Run `pytest tests/dq/strategies/sdca/test_presets.py -v` — no code changes
+   needed for a well-formed entry, `presets.py` reads the file directly.
+
+### SDCA test commands
+
+```bash
+# Core engine + presets + Nautilus wrapper config/instantiation tests
+pytest -m unit -k "sdca" -v
+
+# Full Nautilus BacktestEngine parity test (gated: needs nautilus_trader installed)
+pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
+```
 
 ---
 
