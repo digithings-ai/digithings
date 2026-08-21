@@ -419,7 +419,7 @@ export interface FxTradeIdeaRow {
 }
 
 /**
- * `fx_idea_eval` — path-dependent idea lifecycle vs D-1 closes.
+ * `fx_idea_eval` — successor-clock idea direction vs D-1 closes.
  * Lifecycle rows use horizon_days=0; legacy horizon rows are not fetched.
  */
 export interface FxIdeaEvalRow {
@@ -428,7 +428,7 @@ export interface FxIdeaEvalRow {
   horizon_days: number;
   pair: string;
   direction: string;
-  status: 'open' | 'hit_target' | 'hit_stop' | 'replaced' | 'missing_rates' | string;
+  status: 'open' | 'resolved' | 'missing_rates' | string;
   entry_date: string | null;
   exit_date: string | null;
   entry_fix: number | null;

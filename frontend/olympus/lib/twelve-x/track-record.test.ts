@@ -32,13 +32,13 @@ function idea(
     horizon_days: 0,
     pair: 'EUR/USD',
     direction: 'long',
-    status: 'hit_target',
+    status: 'resolved',
     entry_date: null,
     exit_date: null,
     entry_fix: null,
     exit_fix: null,
     ret: null,
-    hold_return: null,
+    hold_return: 0.01,
     sigma_entry: null,
     hit: true,
     directional_win: true,
@@ -50,24 +50,34 @@ function idea(
 }
 
 describe('summarizeIdeaOutcomes', () => {
-  it('counts target and positive replacement as resolved wins', () => {
+  it('counts successor-resolved directional wins; open excluded from n', () => {
     const rows = [
-      idea({ run_date: '2026-06-12', rank: 1 }),
+      idea({
+        run_date: '2026-06-12',
+        rank: 1,
+        status: 'resolved',
+        hold_return: 0.02,
+        directional_win: true,
+        hit: true,
+      }),
       idea({
         run_date: '2026-06-12',
         rank: 2,
         direction: 'short',
-        status: 'hit_stop',
+        status: 'resolved',
+        hold_return: -0.01,
         hit: false,
         directional_win: false,
+        significant_hit: false,
       }),
       idea({
         run_date: '2026-06-19',
         rank: 1,
-        status: 'replaced',
-        hold_return: 0.01,
-        hit: true,
-        directional_win: true,
+        status: 'resolved',
+        hold_return: 0,
+        hit: false,
+        directional_win: false,
+        significant_hit: false,
       }),
       idea({
         run_date: '2026-06-26',
@@ -77,15 +87,23 @@ describe('summarizeIdeaOutcomes', () => {
         directional_win: null,
         significant_hit: false,
       }),
+      idea({
+        run_date: '2026-06-27',
+        rank: 1,
+        status: 'missing_rates',
+        hit: null,
+        directional_win: null,
+        significant_hit: null,
+      }),
     ];
     const summary = summarizeIdeaOutcomes(rows);
     expect(summary.interval.n).toBe(3);
-    expect(summary.interval.k).toBe(2);
-    expect(summary.targetCount).toBe(1);
-    expect(summary.stopCount).toBe(1);
-    expect(summary.replacedCount).toBe(1);
-    expect(summary.replacedWinCount).toBe(1);
+    expect(summary.interval.k).toBe(1);
+    expect(summary.resolvedCount).toBe(3);
+    expect(summary.winCount).toBe(1);
+    expect(summary.lossCount).toBe(2);
     expect(summary.openCount).toBe(1);
+    expect(summary.missingCount).toBe(1);
     expect(openIdeas(rows)).toHaveLength(1);
   });
 });

@@ -8,23 +8,34 @@ export interface IdeaOutcomeSummary {
   interval: WilsonInterval;
   longInterval: WilsonInterval;
   shortInterval: WilsonInterval;
-  targetCount: number;
-  stopCount: number;
-  replacedCount: number;
-  replacedWinCount: number;
+  resolvedCount: number;
+  winCount: number;
+  lossCount: number;
   openCount: number;
   missingCount: number;
   significantCount: number;
 }
 
+/** Resolved = successor-exited. Legacy hit_stop / hit_target / replaced count until re-backfill. */
+function isResolvedStatus(status: string): boolean {
+  return (
+    status === 'resolved' ||
+    status === 'replaced' ||
+    status === 'hit_target' ||
+    status === 'hit_stop'
+  );
+}
+
 function resolvedWin(row: FxIdeaEvalRow): boolean | null {
-  if (row.status === 'hit_target') return true;
-  if (row.status === 'hit_stop') return false;
-  if (row.status !== 'replaced') return null;
+  if (!isResolvedStatus(row.status)) return null;
   if (row.directional_win !== null && row.directional_win !== undefined) {
     return row.directional_win;
   }
-  return row.hold_return != null ? row.hold_return > 0 : null;
+  if (row.hit !== null && row.hit !== undefined) return row.hit;
+  // Zero hold return is a loss (spec: hold_return ≤ 0).
+  if (row.hold_return != null) return row.hold_return > 0;
+  if (row.ret != null) return row.ret > 0;
+  return null;
 }
 
 function countResolved(
@@ -47,18 +58,18 @@ export function summarizeIdeaOutcomes(rows: FxIdeaEvalRow[]): IdeaOutcomeSummary
   const all = countResolved(rows);
   const longs = countResolved(rows, 'long');
   const shorts = countResolved(rows, 'short');
-  const replaced = rows.filter((r) => r.status === 'replaced');
   return {
     interval: wilsonInterval(all.k, all.n),
     longInterval: wilsonInterval(longs.k, longs.n),
     shortInterval: wilsonInterval(shorts.k, shorts.n),
-    targetCount: rows.filter((r) => r.status === 'hit_target').length,
-    stopCount: rows.filter((r) => r.status === 'hit_stop').length,
-    replacedCount: replaced.length,
-    replacedWinCount: replaced.filter((r) => resolvedWin(r) === true).length,
+    resolvedCount: all.n,
+    winCount: all.k,
+    lossCount: all.n - all.k,
     openCount: rows.filter((r) => r.status === 'open').length,
     missingCount: rows.filter((r) => r.status === 'missing_rates').length,
-    significantCount: rows.filter((r) => r.significant_hit === true).length,
+    significantCount: rows.filter(
+      (r) => isResolvedStatus(r.status) && r.significant_hit === true,
+    ).length,
   };
 }
 

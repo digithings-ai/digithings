@@ -62,8 +62,9 @@ export default function TrackRecordTab({
         <h2 className="font-display text-2xl tracking-tight text-ink">Track record</h2>
       </div>
       <p className="max-w-2xl text-xs text-ink-mute">
-        Research call scorecard — each idea stays live until its stop, first target, or
-        a later same-pair idea. Outcomes use daily closes, not intraday prices or a PnL book.
+        Research call scorecard — each idea holds until the next board that posts the
+        same pair (successor clock). Directional outcomes use daily closes only; stop /
+        target levels are experimental and not scored.
       </p>
 
       <section className="space-y-3">
@@ -74,7 +75,7 @@ export default function TrackRecordTab({
           {ideaEval.length > 0 ? (
             <RateCard
               title="Resolved directional win rate"
-              subtitle="Target hits plus replaced ideas with positive hold return; stops and non-positive replacements are losses"
+              subtitle="Among successor-exited ideas; win = signed hold return > 0 (zero counts as loss)"
               primary={formatWilsonPct(ideaSummary.interval)}
               longLabel={formatWilsonPct(ideaSummary.longInterval)}
               shortLabel={formatWilsonPct(ideaSummary.shortInterval)}
@@ -83,15 +84,15 @@ export default function TrackRecordTab({
           {ideaEval.length > 0 ? (
             <RateCard
               title="Outcome split"
-              subtitle={`Replaced wins ${ideaSummary.replacedWinCount}/${ideaSummary.replacedCount} · significant moves ${ideaSummary.significantCount}`}
-              primary={`Target ${ideaSummary.targetCount} · Stop ${ideaSummary.stopCount} · Replaced ${ideaSummary.replacedCount} · Open ${ideaSummary.openCount}`}
+              subtitle={`Wins ${ideaSummary.winCount} · Losses ${ideaSummary.lossCount} · significant moves ${ideaSummary.significantCount}`}
+              primary={`Resolved ${ideaSummary.resolvedCount} · Open ${ideaSummary.openCount} · Missing ${ideaSummary.missingCount}`}
             />
           ) : null}
         </div>
         {ideaEval.length > 0 ? (
           <p className="text-[11px] text-ink-mute">
-            Significant move means |hold return| ≥ 0.5 × entry 20d σ. Missing rates:{' '}
-            {ideaSummary.missingCount}.
+            Significant move means |hold return| ≥ 0.5 × entry 20d σ (optional overlay on
+            the same hold). Missing rates: {ideaSummary.missingCount}.
           </p>
         ) : (
           <p className="text-sm text-ink-mute">No idea eval rows yet.</p>
