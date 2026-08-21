@@ -5,7 +5,7 @@ import {
   openIdeas,
   summarizeConsensusAccuracy,
   summarizeConsensusStability,
-  summarizeIdeaHits,
+  summarizeIdeaOutcomes,
 } from './track-record';
 import type { FxConsensusEvalRow, FxIdeaEvalRow } from './types';
 
@@ -26,44 +26,66 @@ describe('wilsonInterval', () => {
 });
 
 function idea(
-  partial: Partial<FxIdeaEvalRow> & Pick<FxIdeaEvalRow, 'run_date' | 'rank' | 'horizon_days'>,
+  partial: Partial<FxIdeaEvalRow> & Pick<FxIdeaEvalRow, 'run_date' | 'rank'>,
 ): FxIdeaEvalRow {
   return {
+    horizon_days: 0,
     pair: 'EUR/USD',
     direction: 'long',
-    status: 'scored',
+    status: 'hit_target',
     entry_date: null,
     exit_date: null,
     entry_fix: null,
     exit_fix: null,
     ret: null,
+    hold_return: null,
     sigma_entry: null,
     hit: true,
+    directional_win: true,
     significant_hit: true,
+    n_sessions: 3,
     as_of: '2026-06-26T00:00:00Z',
     ...partial,
   };
 }
 
-describe('summarizeIdeaHits', () => {
-  it('builds primary 5d headline with Wilson n', () => {
+describe('summarizeIdeaOutcomes', () => {
+  it('counts target and positive replacement as resolved wins', () => {
     const rows = [
-      idea({ run_date: '2026-06-12', rank: 1, horizon_days: 5, hit: true, significant_hit: true }),
+      idea({ run_date: '2026-06-12', rank: 1 }),
       idea({
         run_date: '2026-06-12',
         rank: 2,
-        horizon_days: 5,
         direction: 'short',
+        status: 'hit_stop',
         hit: false,
+        directional_win: false,
+      }),
+      idea({
+        run_date: '2026-06-19',
+        rank: 1,
+        status: 'replaced',
+        hold_return: 0.01,
+        hit: true,
+        directional_win: true,
+      }),
+      idea({
+        run_date: '2026-06-26',
+        rank: 1,
+        status: 'open',
+        hit: null,
+        directional_win: null,
         significant_hit: false,
       }),
-      idea({ run_date: '2026-06-26', rank: 1, horizon_days: 5, status: 'open', hit: null, significant_hit: null }),
     ];
-    const summaries = summarizeIdeaHits(rows);
-    const primary = summaries.find((s) => s.horizonDays === 5 && !s.significant)!;
-    expect(primary.interval.n).toBe(2);
-    expect(primary.interval.k).toBe(1);
-    expect(primary.openCount).toBe(1);
+    const summary = summarizeIdeaOutcomes(rows);
+    expect(summary.interval.n).toBe(3);
+    expect(summary.interval.k).toBe(2);
+    expect(summary.targetCount).toBe(1);
+    expect(summary.stopCount).toBe(1);
+    expect(summary.replacedCount).toBe(1);
+    expect(summary.replacedWinCount).toBe(1);
+    expect(summary.openCount).toBe(1);
     expect(openIdeas(rows)).toHaveLength(1);
   });
 });

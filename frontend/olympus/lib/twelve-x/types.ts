@@ -419,8 +419,8 @@ export interface FxTradeIdeaRow {
 }
 
 /**
- * `fx_idea_eval` — scored trade ideas vs later D-1 fixes.
- * PRIMARY KEY (run_date, rank, horizon_days). anon-readable.
+ * `fx_idea_eval` — path-dependent idea lifecycle vs D-1 closes.
+ * Lifecycle rows use horizon_days=0; legacy horizon rows are not fetched.
  */
 export interface FxIdeaEvalRow {
   run_date: string;
@@ -428,15 +428,20 @@ export interface FxIdeaEvalRow {
   horizon_days: number;
   pair: string;
   direction: string;
-  status: 'open' | 'scored' | 'missing_rates' | string;
+  status: 'open' | 'hit_target' | 'hit_stop' | 'replaced' | 'missing_rates' | string;
   entry_date: string | null;
   exit_date: string | null;
   entry_fix: number | null;
   exit_fix: number | null;
+  /** Legacy alias of hold_return on lifecycle rows. */
   ret: number | null;
+  hold_return: number | null;
   sigma_entry: number | null;
+  /** Legacy alias of directional_win on lifecycle rows. */
   hit: boolean | null;
+  directional_win: boolean | null;
   significant_hit: boolean | null;
+  n_sessions: number;
   as_of: string;
 }
 

@@ -7,7 +7,7 @@ import {
   openIdeas,
   summarizeConsensusAccuracy,
   summarizeConsensusStability,
-  summarizeIdeaHits,
+  summarizeIdeaOutcomes,
 } from '@/lib/twelve-x/track-record';
 import { formatWilsonPct } from '@/lib/twelve-x/wilson';
 
@@ -47,14 +47,11 @@ export default function TrackRecordTab({
   ideaEval: FxIdeaEvalRow[];
   consensusEval: FxConsensusEvalRow[];
 }) {
-  const ideaSummaries = useMemo(() => summarizeIdeaHits(ideaEval), [ideaEval]);
+  const ideaSummary = useMemo(() => summarizeIdeaOutcomes(ideaEval), [ideaEval]);
   const open = useMemo(() => openIdeas(ideaEval), [ideaEval]);
   const stability = useMemo(() => summarizeConsensusStability(consensusEval), [consensusEval]);
   const accuracy = useMemo(() => summarizeConsensusAccuracy(consensusEval), [consensusEval]);
 
-  const primary = ideaSummaries.find((s) => s.horizonDays === 5 && !s.significant);
-  const primarySig = ideaSummaries.find((s) => s.horizonDays === 5 && s.significant);
-  const noisy = ideaSummaries.find((s) => s.horizonDays === 1 && !s.significant);
   const weightedStab = stability.find((s) => s.weighted);
   const unweightedStab = stability.find((s) => !s.weighted);
 
@@ -65,8 +62,8 @@ export default function TrackRecordTab({
         <h2 className="font-display text-2xl tracking-tight text-ink">Track record</h2>
       </div>
       <p className="max-w-2xl text-xs text-ink-mute">
-        Research call scorecard — directional hits vs later D-1 fixes, not a PnL book.
-        Headlines always show sample size and a 95% Wilson interval.
+        Research call scorecard — each idea stays live until its stop, first target, or
+        a later same-pair idea. Outcomes use daily closes, not intraday prices or a PnL book.
       </p>
 
       <section className="space-y-3">
@@ -74,36 +71,27 @@ export default function TrackRecordTab({
           Trade ideas
         </h3>
         <div className="grid gap-3 sm:grid-cols-2">
-          {primary ? (
+          {ideaEval.length > 0 ? (
             <RateCard
-              title="5d directional hit (primary)"
-              primary={formatWilsonPct(primary.interval)}
-              longLabel={formatWilsonPct(primary.longInterval)}
-              shortLabel={formatWilsonPct(primary.shortInterval)}
+              title="Resolved directional win rate"
+              subtitle="Target hits plus replaced ideas with positive hold return; stops and non-positive replacements are losses"
+              primary={formatWilsonPct(ideaSummary.interval)}
+              longLabel={formatWilsonPct(ideaSummary.longInterval)}
+              shortLabel={formatWilsonPct(ideaSummary.shortInterval)}
             />
           ) : null}
-          {primarySig ? (
+          {ideaEval.length > 0 ? (
             <RateCard
-              title="5d significant hit"
-              subtitle="Correct sign and |return| ≥ 0.5σ"
-              primary={formatWilsonPct(primarySig.interval)}
-            />
-          ) : null}
-          {noisy ? (
-            <RateCard
-              title="1d directional hit"
-              subtitle="Noisy / near spread — robustness only"
-              primary={formatWilsonPct(noisy.interval)}
+              title="Outcome split"
+              subtitle={`Replaced wins ${ideaSummary.replacedWinCount}/${ideaSummary.replacedCount} · significant moves ${ideaSummary.significantCount}`}
+              primary={`Target ${ideaSummary.targetCount} · Stop ${ideaSummary.stopCount} · Replaced ${ideaSummary.replacedCount} · Open ${ideaSummary.openCount}`}
             />
           ) : null}
         </div>
-        {primary ? (
+        {ideaEval.length > 0 ? (
           <p className="text-[11px] text-ink-mute">
-            Open (horizon not elapsed): {primary.openCount} · Missing rates:{' '}
-            {primary.missingCount}
-            {primary.unscoredNeither > 0
-              ? ` · Zero-return (neither): ${primary.unscoredNeither}`
-              : ''}
+            Significant move means |hold return| ≥ 0.5 × entry 20d σ. Missing rates:{' '}
+            {ideaSummary.missingCount}.
           </p>
         ) : (
           <p className="text-sm text-ink-mute">No idea eval rows yet.</p>
@@ -112,7 +100,7 @@ export default function TrackRecordTab({
         <div className="space-y-2">
           <h4 className="text-[11px] font-medium text-ink-soft">Open ideas</h4>
           {open.length === 0 ? (
-            <p className="text-[11px] text-ink-mute">None waiting on a 5d exit fix.</p>
+            <p className="text-[11px] text-ink-mute">No live ideas.</p>
           ) : (
             <ul className="divide-y divide-hair border border-hair">
               {open.map((row) => (

@@ -4,77 +4,62 @@
 import { wilsonInterval, type WilsonInterval } from './wilson';
 import type { FxConsensusEvalRow, FxIdeaEvalRow } from './types';
 
-export interface HitRateSummary {
-  label: string;
-  horizonDays: number;
-  significant: boolean;
+export interface IdeaOutcomeSummary {
   interval: WilsonInterval;
   longInterval: WilsonInterval;
   shortInterval: WilsonInterval;
+  targetCount: number;
+  stopCount: number;
+  replacedCount: number;
+  replacedWinCount: number;
   openCount: number;
   missingCount: number;
-  unscoredNeither: number;
+  significantCount: number;
 }
 
-function countHits(
+function resolvedWin(row: FxIdeaEvalRow): boolean | null {
+  if (row.status === 'hit_target') return true;
+  if (row.status === 'hit_stop') return false;
+  if (row.status !== 'replaced') return null;
+  if (row.directional_win !== null && row.directional_win !== undefined) {
+    return row.directional_win;
+  }
+  return row.hold_return != null ? row.hold_return > 0 : null;
+}
+
+function countResolved(
   rows: FxIdeaEvalRow[],
-  opts: { significant: boolean; direction?: string },
-): { k: number; n: number; neither: number } {
+  direction?: string,
+): { k: number; n: number } {
   let k = 0;
   let n = 0;
-  let neither = 0;
   for (const r of rows) {
-    if (opts.direction && r.direction.toLowerCase() !== opts.direction) continue;
-    if (r.status !== 'scored') continue;
-    const flag = opts.significant ? r.significant_hit : r.hit;
-    if (flag === null || flag === undefined) {
-      neither += 1;
-      continue;
-    }
+    if (direction && r.direction.toLowerCase() !== direction) continue;
+    const flag = resolvedWin(r);
+    if (flag === null) continue;
     n += 1;
     if (flag) k += 1;
   }
-  return { k, n, neither };
+  return { k, n };
 }
 
-export function summarizeIdeaHits(rows: FxIdeaEvalRow[]): HitRateSummary[] {
-  const out: HitRateSummary[] = [];
-  for (const horizonDays of [5, 1] as const) {
-    const subset = rows.filter((r) => r.horizon_days === horizonDays);
-    const openCount = new Set(
-      subset.filter((r) => r.status === 'open').map((r) => `${r.run_date}:${r.rank}`),
-    ).size;
-    const missingCount = new Set(
-      subset
-        .filter((r) => r.status === 'missing_rates')
-        .map((r) => `${r.run_date}:${r.rank}`),
-    ).size;
-
-    for (const significant of [false, true]) {
-      const all = countHits(subset, { significant });
-      const longs = countHits(subset, { significant, direction: 'long' });
-      const shorts = countHits(subset, { significant, direction: 'short' });
-      out.push({
-        label:
-          horizonDays === 5
-            ? significant
-              ? '5d significant hit'
-              : '5d directional hit'
-            : significant
-              ? '1d significant hit (noisy)'
-              : '1d directional hit (noisy)',
-        horizonDays,
-        significant,
-        interval: wilsonInterval(all.k, all.n),
-        longInterval: wilsonInterval(longs.k, longs.n),
-        shortInterval: wilsonInterval(shorts.k, shorts.n),
-        openCount,
-        missingCount,
-        unscoredNeither: all.neither,
-      });
-    }
-  }
-  return out;
+export function summarizeIdeaOutcomes(rows: FxIdeaEvalRow[]): IdeaOutcomeSummary {
+  const all = countResolved(rows);
+  const longs = countResolved(rows, 'long');
+  const shorts = countResolved(rows, 'short');
+  const replaced = rows.filter((r) => r.status === 'replaced');
+  return {
+    interval: wilsonInterval(all.k, all.n),
+    longInterval: wilsonInterval(longs.k, longs.n),
+    shortInterval: wilsonInterval(shorts.k, shorts.n),
+    targetCount: rows.filter((r) => r.status === 'hit_target').length,
+    stopCount: rows.filter((r) => r.status === 'hit_stop').length,
+    replacedCount: replaced.length,
+    replacedWinCount: replaced.filter((r) => resolvedWin(r) === true).length,
+    openCount: rows.filter((r) => r.status === 'open').length,
+    missingCount: rows.filter((r) => r.status === 'missing_rates').length,
+    significantCount: rows.filter((r) => r.significant_hit === true).length,
+  };
 }
 
 export interface ConsensusStabilitySummary {
@@ -182,6 +167,6 @@ export function buildJumpStripSeries(
 
 export function openIdeas(rows: FxIdeaEvalRow[]): FxIdeaEvalRow[] {
   return rows
-    .filter((r) => r.horizon_days === 5 && r.status === 'open')
+    .filter((r) => r.status === 'open')
     .sort((a, b) => b.run_date.localeCompare(a.run_date) || a.rank - b.rank);
 }

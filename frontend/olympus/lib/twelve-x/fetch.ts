@@ -537,18 +537,18 @@ export async function getTradeIdeas(runDate: string): Promise<FxTradeIdeaRow[]> 
   return rows ?? [];
 }
 
-/** Idea performance eval rows (all horizons). Eval tables only — no core FX. */
+/** Idea lifecycle eval rows. Eval tables only — no core FX. */
 export async function getIdeaEval(): Promise<FxIdeaEvalRow[]> {
   if (!isTwelveXConfigured() || !twelveXSupabase) return [];
   const rows = await querySupabase<FxIdeaEvalRow[]>((sb) =>
     sb
       .from('fx_idea_eval')
       .select(
-        'run_date, rank, horizon_days, pair, direction, status, entry_date, exit_date, entry_fix, exit_fix, ret, sigma_entry, hit, significant_hit, as_of',
+        'run_date, rank, horizon_days, pair, direction, status, entry_date, exit_date, entry_fix, exit_fix, ret, hold_return, sigma_entry, hit, directional_win, significant_hit, n_sessions, as_of',
       )
+      .eq('horizon_days', 0)
       .order('run_date', { ascending: true })
-      .order('rank', { ascending: true })
-      .order('horizon_days', { ascending: true }),
+      .order('rank', { ascending: true }),
   );
   return rows ?? [];
 }
