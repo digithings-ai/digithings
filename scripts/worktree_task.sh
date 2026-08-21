@@ -20,6 +20,10 @@
 #   WORKTREE_TASK_ALLOW_STALE_MODULE=1   downgrade the stale-module-base refusal
 #                                        to a warning
 #
+# Both accept 1/true/yes/on to enable and 0/false/no/off (or unset) to disable,
+# case-insensitively. Anything else is fatal rather than guessed at — see
+# `is_enabled` below.
+#
 # Requires: git, gh CLI
 
 set -euo pipefail
@@ -90,7 +94,7 @@ PY
 # The base ref is always `refs/remotes/origin/<base>`. It has to be: a working
 # clone always has `refs/heads/develop`, so the previous shape here — fetch only
 # *if* the local branch is missing, then branch from the local branch — meant the
-# fetch never ran at all for the six components that route straight to develop,
+# fetch never ran at all for the five components that route straight to develop,
 # and `make task ISSUE=N` handed out worktrees cut from whatever the local ref
 # happened to be at. Observed 2026-08-20: a worktree 50 commits behind
 # `origin/develop` (#2547).
@@ -110,24 +114,54 @@ PY
 OFFLINE="${WORKTREE_TASK_OFFLINE:-}"
 ALLOW_STALE_MODULE="${WORKTREE_TASK_ALLOW_STALE_MODULE:-}"
 
+# Is an opt-out switch on? Both of these disable a safety check, so both ways of
+# misreading one are worth spending a function on.
+#
+# `[[ -n "$VAR" ]]` counts `0` and `false` as set, which fails in the dangerous
+# direction: `WORKTREE_TASK_OFFLINE=0` would skip the fetch. Demanding exactly `1`
+# fixes that but then fails in the other direction, silently ignoring `true` from
+# someone who did ask for offline. So: a fixed vocabulary each way, and anything
+# outside it is fatal rather than guessed at — an unrecognised value is a typo, and
+# a typo in the name of a check must not decide whether the check runs.
+#
+# `tr` rather than `${var,,}`: macOS ships bash 3.2 and this script is run there.
+is_enabled() {
+  local name="$1"
+  local value
+  value="$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$value" in
+    '' | 0 | false | no | off) return 1 ;;
+    1 | true | yes | on) return 0 ;;
+    *) die "${name}=${2:-} is not a recognised value. Use 1/true/yes/on to turn it on, 0/false/no/off or unset to turn it off." ;;
+  esac
+}
+
 fetch_origin() {
-  if [[ -n "$OFFLINE" ]]; then
+  if is_enabled WORKTREE_TASK_OFFLINE "$OFFLINE"; then
     warn "WARNING: WORKTREE_TASK_OFFLINE is set — skipping \`git fetch origin\`."
     warn "         The base ref below is whatever your last successful fetch left in"
     warn "         refs/remotes/origin/*, so every count that follows is measured against"
     warn "         a possibly-stale remote and can only *understate* how old the base is."
     return 0
   fi
-  git fetch --quiet origin \
+  # --prune, because `resolve_base_ref` below trusts refs/remotes/origin/* to say
+  # what exists on the remote. Without it a deleted branch leaves its last-known
+  # tip cached there indefinitely, and a component routed to that branch would be
+  # branched from a dead ref instead of falling back to origin/develop loudly.
+  # This drops remote-tracking refs repo-wide, which other worktrees share — but
+  # only ones whose branch is already gone from the remote, and local branches and
+  # worktrees are untouched.
+  git fetch --prune --quiet origin \
     || die "git fetch origin failed. Fix the network or the remote, or set WORKTREE_TASK_OFFLINE=1 to branch from the last fetch anyway (it will warn, and the base may be stale)."
 }
 
 # Commits reachable from origin/develop but not from $1.
 #
-# Guarded because this runs under `set -e` inside a command substitution: an
-# absent ref would otherwise abort the whole script with git's error as the only
-# explanation. 0 means "not behind" *or* "could not tell", and every caller
-# already knows both refs exist by the time it asks.
+# `2>/dev/null || echo 0` is there because this runs under `set -e` inside a
+# command substitution: an absent ref would otherwise abort the whole script with
+# git's error as the only explanation. The cost is that 0 conflates "not behind"
+# with "could not tell", and "could not tell" would read as *pass* and skip a
+# refusal — so the caller verifies both refs itself rather than trusting this.
 behind_develop() {
   local ref="$1"
   git rev-list --count "${ref}..refs/remotes/origin/develop" 2>/dev/null || echo 0
@@ -141,10 +175,18 @@ resolve_base_ref() {
     echo "$ref"
     return 0
   fi
-  warn "WARNING: origin/${base} does not exist — falling back to origin/develop."
+  # develop *is* the fallback, so there is nothing to fall back to — say that once
+  # instead of announcing a fallback to the ref that is missing and then failing to
+  # find it.
+  [[ "$base" != develop ]] \
+    || die "origin/develop does not exist. Run \`git fetch origin develop\` — or, in a single-branch clone, \`git remote set-branches --add origin develop\` first. Nothing safe to branch from."
+  warn "WARNING: origin/${base} does not exist — branching from origin/develop instead."
   warn "         scripts/project_routing.json routes this component to '${base}', so either"
-  warn "         the branch was never pushed or the routing entry is wrong. The task branch"
-  warn "         will PR into develop, not into '${base}'."
+  warn "         the branch was never pushed or the routing entry is wrong."
+  warn "         This changes only where the branch *starts*: scripts/create_pr.sh re-derives"
+  warn "         the PR base from the same routing map, so \`make pr\` will still pass"
+  warn "         --base '${base}' and gh will reject it. Fix the routing entry, or push the"
+  warn "         branch, before you open the PR."
   ref="refs/remotes/origin/develop"
   git show-ref --verify --quiet "$ref" \
     || die "neither origin/${base} nor origin/develop exists; nothing safe to branch from."
@@ -162,6 +204,15 @@ assert_module_base_is_current() {
   local base_ref="$1"
   [[ "$base_ref" == refs/remotes/origin/module/* ]] || return 0
 
+  # `behind_develop` reports 0 both for "current" and for "could not measure", and
+  # the second must not be read as the first. It is reachable: a single-branch
+  # clone (`git clone --single-branch`, also what `actions/checkout` produces)
+  # pins remote.origin.fetch to one branch, so even the fetch above does not
+  # create refs/remotes/origin/develop — and this check would then pass by
+  # default on the one base type it exists to guard.
+  git show-ref --verify --quiet refs/remotes/origin/develop \
+    || die "cannot measure ${base_ref#refs/remotes/} against origin/develop — refs/remotes/origin/develop does not exist. In a single-branch clone: git remote set-branches --add origin develop && git fetch origin develop"
+
   local behind
   behind="$(behind_develop "$base_ref")"
   [[ "$behind" -gt 0 ]] || return 0
@@ -173,9 +224,11 @@ assert_module_base_is_current() {
   warn "force-push, so this is a PR, not a push:"
   warn ""
   warn "  gh pr create --base ${base#origin/} --head develop --title 'chore(sync): ${base#origin/} <- develop'"
-  warn "  # then merge it (0 approvals required), and re-run this command"
+  warn "  # Merge it with a MERGE COMMIT (0 approvals required), then re-run this command."
+  warn "  # Not a squash: squashing moves the tree but not the ancestry, so the count"
+  warn "  # above is unchanged and this refusal fires again, every time, forever."
   warn ""
-  [[ -n "$ALLOW_STALE_MODULE" ]] \
+  is_enabled WORKTREE_TASK_ALLOW_STALE_MODULE "$ALLOW_STALE_MODULE" \
     || die "refusing to branch from a stale module base. Set WORKTREE_TASK_ALLOW_STALE_MODULE=1 to proceed anyway."
   warn "WORKTREE_TASK_ALLOW_STALE_MODULE is set — proceeding from the stale base anyway."
 }
@@ -223,7 +276,13 @@ cmd_create() {
     git worktree add "$wt_path" "$branch"
   else
     echo "Base branch: ${base_ref#refs/remotes/}"
-    git worktree add -b "$branch" "$wt_path" "$base_ref"
+    # --no-track: the start point is a remote-tracking ref, so `git worktree add -b`
+    # would set origin/<base> as the new branch's upstream (branch.autoSetupMerge
+    # defaults to true). Under push.default=simple a bare `git push` in the worktree
+    # then fails, and git's own remedy text suggests `git push origin HEAD:develop` —
+    # which puts task work straight onto the base branch and skips the task PR
+    # entirely. The old local-ref start point set no upstream; keep it that way.
+    git worktree add -b "$branch" --no-track "$wt_path" "$base_ref"
   fi
 
   echo "Worktree created: $wt_path"
