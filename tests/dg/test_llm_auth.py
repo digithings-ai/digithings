@@ -975,7 +975,12 @@ class TestOperatorDefaultCannotBillTheOperator:
         assert "deepseek" not in msg
         assert "X-BYOK-Model" in msg, "a refusal the caller cannot act on is just a wall"
 
-    @pytest.mark.parametrize("provider", ["openai", "anthropic", "gemini", "xai", "openrouter"])
+    # Derived, not hardcoded: a hardcoded list is the dominant idiom in this file, but
+    # this test is the *only* JSON-to-refusal drift guard, so a provider added to
+    # ``config/byok-providers.json`` later must not silently escape it. Verified: adding
+    # a sixth provider whose ``fallbackModels[0]`` is blank leaves a hardcoded list green
+    # while the refusal advertises ``[1]`` and the UI still shows ``[0]``.
+    @pytest.mark.parametrize("provider", list(BYOK_ROUTABLE_PROVIDERS))
     def test_the_example_is_a_model_the_named_provider_declares(self, provider: str) -> None:
         """Send back exactly what the refusal suggested and the gate must let it through.
 
@@ -1016,7 +1021,7 @@ class TestOperatorDefaultCannotBillTheOperator:
         # ``byokModelPresets(provider)[0]`` (byok-cli-flow.tsx:594), and
         # use-byok-key.catalog-parity.test.ts pins that array to this file with
         # toEqual (order included). Pinning index 0 here is the last link of that
-        # chain; without it the claim was true only by luck of a single-element list.
+        # chain; the membership assertion alone could not tell index 0 from any other.
         assert example == served[provider][0], (
             f"{provider} was offered {example!r}, but the UI offers "
             f"{served[provider][0]!r} first — the refusal and the UI have drifted"

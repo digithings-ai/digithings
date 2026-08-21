@@ -115,10 +115,12 @@ class _ByokCatalogEntry(BaseModel):
 
         Two departures from every other field here, both deliberate.
 
-        It **strips**, because unlike the others this value reaches user-facing copy
-        verbatim: ``"  gpt-4o  "`` rendered as ``(e.g.   gpt-4o  )``. ``_id_non_empty``
-        strips already; this validator rejected blanks *without* stripping the
-        survivors, which is the asymmetry that let padding through.
+        It **strips**, because this value reaches user-facing copy verbatim:
+        ``"  gpt-4o  "`` rendered as ``(e.g.   gpt-4o  )``. It is not the only such
+        field — ``server.py``'s ``byok_provider_unsupported`` joins the catalog ``id``
+        values into its message — but that one is stripped already by ``_id_non_empty``, and
+        this validator rejected blanks *without* stripping the survivors. That
+        asymmetry is what let padding through.
 
         It does **not raise**, because a bad value here cannot break routing — an
         entry without examples still routes fine, the refusal just drops its

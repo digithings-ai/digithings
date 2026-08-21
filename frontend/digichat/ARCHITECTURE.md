@@ -591,7 +591,14 @@ plus its own `byokModelPresets`) and its sibling
 catalog fails a test instead of drifting silently. `fallbackModels` has no
 counterpart in `byok-providers.ts`, which carries no model list; its in-app copy is
 `use-byok-key.ts`'s `byokModelPresets`, pinned by the first of those two files. That
-is what keeps digigraph's refusal naming a model this UI actually offers. `api/byok/test/route.ts`
+is what keeps digigraph's refusal naming a model this UI actually offers. **One
+surface of that drift class is still unguarded:** the same file's
+`byokModelPlaceholder` is a second hardcoded switch that reproduces every
+provider's `fallbackModels[0]` and renders it in its own `(e.g. …)` sentence
+(`use-byok-key.ts:237`) — the same shape digigraph's refusal produces. All five
+values agree with the catalog today, but nothing pins them: its only assertion is
+`expect(byokModelPlaceholder("xai")).toBeTruthy()`. Pin it to the catalog the way
+`byokModelPresets` is pinned rather than adding a third copy. `api/byok/test/route.ts`
 also calls `readByokProvider` from that same module: an `X-BYOK-Provider`
 value naming no known provider gets an explicit
 `400 Unknown BYOK provider: "…"` response instead of being silently treated

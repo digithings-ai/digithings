@@ -628,7 +628,7 @@ describe("POST /api/chat", () => {
       expect(call?.upstreamHeaders["X-Digi-Tenant"]).toBe(mockAuthCtx.tenantSlug);
       // The adapter carries no Authorization of its own (#2537 removed the dead
       // second source), so this header is the *only* thing authenticating the
-      // upstream call. Unpinned, deleting `route.ts:244` outright left all 537
+      // upstream call. Unpinned, deleting `route.ts:244` outright left all 622
       // digichat tests green — a future conditional Authorization would ship a
       // silently unauthenticated request to digigraph.
       expect(call?.upstreamHeaders.Authorization).toMatch(/^Bearer .+/);
