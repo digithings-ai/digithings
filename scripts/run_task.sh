@@ -8,7 +8,7 @@
 #
 # Pipeline:
 #   1. Fetch task spec from GitHub Issue
-#   2. Create git worktree (.worktrees/task-N-slug/)
+#   2. Create git worktree (.worktrees/task/N-slug/)
 #   3. Print spec + pause for agent to implement
 #   4. Run component unit tests
 #   5. Self-score staged changes (4 dimensions)
@@ -65,7 +65,7 @@ if $DRY_RUN; then
   echo "  Step 4  pytest -m unit -k {component} -v --tb=short"
   echo "  Step 5  make score (in worktree)"
   echo "  Step 6  make commit MSG='feat({component}): {title} (#{issue})'"
-  echo "  Step 7  git push origin task-${ISSUE}-{slug}"
+  echo "  Step 7  git push origin task/${ISSUE}-{slug}"
   echo "  Step 8  make pr"
   echo "  Step 9  scripts/worktree_task.sh remove ${ISSUE}"
   echo ""
