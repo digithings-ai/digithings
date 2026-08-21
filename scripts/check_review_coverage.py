@@ -105,15 +105,24 @@ BOT_AUTHORS = frozenset({"github-actions[bot]", "dependabot[bot]", "cursor[bot]"
 
 # Bots that *review* PRs. cursor[bot] is the author, not a reviewer — a router
 # pass approving its own work is not a review loop. github-actions is CI.
+#
+# ``gh pr view --json`` returns the bare login (``coderabbitai``); the REST
+# timeline/reviews API often returns the ``[bot]`` suffix. Match both.
 REVIEW_BOTS = frozenset(
     {
+        "coderabbitai",
         "coderabbitai[bot]",
+        "github-code-quality",
         "github-code-quality[bot]",
+        "copilot-pull-request-reviewer",
         "copilot-pull-request-reviewer[bot]",
+        "claude",
         "claude[bot]",
+        "chatgpt-codex-connector",
         "chatgpt-codex-connector[bot]",
     }
 )
+CODERABBIT_LOGINS = frozenset({"coderabbitai", "coderabbitai[bot]"})
 REVIEW_BOT_CHECK_NAMES = frozenset({"CodeRabbit", "Claude /code-review"})
 REVIEW_STATES = frozenset({"COMMENTED", "APPROVED", "CHANGES_REQUESTED"})
 
@@ -291,8 +300,8 @@ def _pr_review_state(number: int) -> dict:
     for comment in data.get("comments") or []:
         login = (comment.get("author") or {}).get("login") or ""
         body = comment.get("body") or ""
-        if login == "coderabbitai[bot]" and coderabbit_comment_is_completed_review(body):
-            agent_tool.append({"bot": login, "via": "comment"})
+        if login in CODERABBIT_LOGINS and coderabbit_comment_is_completed_review(body):
+            agent_tool.append({"bot": "coderabbitai", "via": "comment"})
     state = {
         "labels": labels,
         "approvals": approvals,
