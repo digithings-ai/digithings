@@ -444,6 +444,16 @@ the visitor activates a validated key, the failed turn is retried with existing
 Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
 Provider list is defined by `config/byok-providers.json`.
 
+A non-2xx digigraph reply is **not** relayed to an embed visitor: the body is
+logged server-side and the stream carries a generic "unavailable right now",
+because a 500 body can hold stack traces, internal hostnames and prompt echoes.
+The one exception is a refusal the visitor can act on — `relayableUpstreamCode`
+in `lib/adapters/digithings/stream.ts` passes through the *code* alone, and only
+for codes in `BYOK_MODEL_REMEDIABLE_CODES`, so the BYOK sequence opens instead
+of the turn dead-ending. The upstream `message` is never relayed on that path:
+digigraph's text for `byok_default_model_provider_mismatch` reflects the
+caller's own `X-BYOK-Provider` header back at them.
+
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 
 Visitor API keys are **session memory only** (`useBYOKKey` React state). The
@@ -567,9 +577,10 @@ rate-limited on both the embed-IP path and the authenticated/session path
 the provider using digichat's own egress, so the authenticated path needs a
 ceiling too, not just the anonymous-embed one.
 
-`config/byok-providers.json`'s `keyPrefix`/`fallbackModels` fields are read by
-no runtime code (only `id`/`baseUrl`/`requiresModel` feed
-`digigraph/src/digigraph/llm_auth.py`'s loader) but are checked for parity
+`config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
+`fallbackModels` is read only by `digigraph/src/digigraph/llm_auth.py` (whose loader
+takes `id`/`baseUrl`/`requiresModel` plus the first `fallbackModels` entry, used as
+the remediation example in `byok_default_model_refusal`). Both are checked for parity
 against `src/lib/byok-providers.ts`'s own catalog (`BYOK_PROVIDER_LIST`,
 `byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`) by two test
 files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,

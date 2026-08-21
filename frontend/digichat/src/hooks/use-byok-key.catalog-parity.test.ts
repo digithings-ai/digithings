@@ -39,13 +39,15 @@ describe("use-byok-key <-> config/byok-providers.json parity", () => {
     }
   });
 
-  // Nothing has drifted yet, but nothing asserted it either: keyPrefix and
-  // fallbackModels are read from this catalog by no runtime code (only
-  // id/baseUrl/requiresModel feed digigraph/src/digigraph/llm_auth.py's
-  // loader) — they exist purely to stay in parity with the hand-written
-  // copies in use-byok-key.ts (validateBYOKKey, byokModelPresets) and
-  // api/byok/test/route.ts's inline prefix checks. Without this test, either
-  // copy could silently drift from the catalog with nothing to catch it.
+  // Nothing has drifted yet, but nothing asserted it either: keyPrefix is read
+  // from this catalog by no runtime code, and fallbackModels only by
+  // digigraph/src/digigraph/llm_auth.py, which names its first entry as the
+  // remediation example in byok_default_model_refusal. Both exist to stay in
+  // parity with the hand-written copies in use-byok-key.ts (validateBYOKKey,
+  // byokModelPresets) and api/byok/test/route.ts's inline prefix checks.
+  // Without this test, either copy could silently drift from the catalog with
+  // nothing to catch it — and for fallbackModels the drift is now user-visible:
+  // digigraph would tell a caller to send a model the UI never offers.
   it("validateBYOKKey rejects a key that doesn't start with the catalog's keyPrefix for that provider", () => {
     const catalog = loadCatalog();
     for (const entry of catalog) {
