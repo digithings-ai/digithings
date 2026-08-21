@@ -113,7 +113,9 @@ layer supplied each setting — use it rather than guessing, since an organizati
 Global Override outranks the repo file. A **passing CodeRabbit status check is
 not the same as an approving review**: it can sit alongside a blocking
 `CHANGES_REQUESTED`, so check `gh pr view --json reviewDecision`, not just checks,
-before merging.
+before merging. A completed CodeRabbit review *does* satisfy the promotion
+coverage gate — the loop is "an agent reviewed the task PR", not "Bugbot
+specifically ran".
 
 Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
 of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
@@ -121,19 +123,24 @@ review Cursor will quote and the least actionable, since a finding needs a fresh
 task PR plus another promotion. So `ci-review-coverage.yml` asserts the cheaper
 invariant on every PR into `main` — **each commit in the range was reviewed at its
 own task PR** — via `scripts/check_review_coverage.py`. Merge commits and bot-authored
-commits are exempt by nature; every other commit clears it five ways, strongest
-first:
+commits are exempt by nature; every other commit clears it, strongest first:
 
 | hatch | claim | self-grantable? |
 |-------|-------|-----------------|
 | `Cursor Bugbot` concluded **success** | a machine reviewed it | **no** |
 | an **APPROVED** review | someone else read it | no |
-| label **`reviewed:agent`** + a findings comment | an in-session review ran | yes, but it costs a real review — the label without the comment is refused |
+| a completed **agent-tool review** (CodeRabbit, Claude `/code-review`, Copilot, …) | a PR-review bot finished a pass, not a skip/rate-limit/failure notice | no |
+| label **`reviewed:agent`** + a findings comment | an in-session review ran in a **fresh-context** subagent or new session | yes, but it costs a real review — the label without the comment is refused |
 | label **`reviewed:owner`** | "I read this myself" | yes — so the verdict names who applied it and when |
 | label **`risk:low`** | "this did not warrant a review" | yes |
 
-**When Bugbot is unavailable, review in-session — do not skip.** Bugbot reports
-`neutral` on a usage-limit skip, and that is not a review. Run `/review <N>`
+The intended loop at the task PR: agent review → findings posted on the PR →
+address them → green. If the fixes were large, run another loop. Do not re-review
+at the promotion.
+
+**When no review bot left an artifact, review in-session — do not skip.** Bugbot
+reports `neutral` on a usage-limit skip, and that is not a review. CodeRabbit
+rate-limits and "Review failed" notices are not reviews either. Run `/review <N>`
 instead: it fans out over independent lenses in **fresh-context subagents** (the
 session that wrote the code must not review its own work), verifies each finding
 with a command, puts it through a refuter, then posts the surviving findings as a PR
@@ -147,15 +154,15 @@ label, and **refuses `reviewed:agent` when the findings are missing**. Fix what 
 review finds on the same branch before merge; that is the whole reason review
 belongs at the task PR and not at the promotion.
 
-`reviewed:owner` exists because the gate's own first run had no honest hatch: a
+`reviewed:owner` exists because of a hole the gate's own first run exposed: a
 solo maintainer cannot self-approve, Bugbot was out of quota, and the only
 remaining option was to label a blocking CI change `risk:low`. **Never use
 `risk:low` to mean `reviewed:owner`** — "I read it" and "it needed no reading" are
 different claims, and collapsing them destroys the only signal worth having. With
-one account holding write access, the three label hatches are accountability records
+one account holding write access, the label hatches are accountability records
 rather than enforcement — though `reviewed:agent` at least cannot be claimed without
-posting a review. A completed Bugbot run is the only hatch nobody can grant
-themselves.
+posting a review. Bugbot, CodeRabbit, and Claude reviews are the hatches nobody
+can grant themselves.
 
 Note what is deliberately *not* done: `Cursor Bugbot` is **not** a required status
 check on `main`. It reports `neutral` on a usage-limit skip and a required check
