@@ -176,6 +176,17 @@ def test_a_bot_approval_does_not_count_as_human() -> None:
     """cursor[bot] approving its own router pass is not a human reading the diff."""
     assert "cursor[bot]" in crc.BOT_AUTHORS
     assert "cursor[bot]" not in crc.REVIEW_BOTS
+    assert "cursor" not in crc.REVIEW_BOTS
+
+
+def test_gh_pr_view_bare_coderabbit_login_is_recognized() -> None:
+    """``gh pr view --json`` returns ``coderabbitai`` without the ``[bot]`` suffix."""
+    assert "coderabbitai" in crc.REVIEW_BOTS
+    assert "coderabbitai[bot]" in crc.REVIEW_BOTS
+    assert "coderabbitai" in crc.CODERABBIT_LOGINS
+    reviewed, why = crc.verdict_for(_state(agent_tool=[{"bot": "coderabbitai", "via": "review"}]))
+    assert reviewed
+    assert "coderabbitai" in why
 
 
 # ── agent-tool reviews (CodeRabbit, Claude, other PR-review bots) ────────────
@@ -297,7 +308,43 @@ def test_pr_review_state_counts_a_coderabbit_comment_and_submitted_review(
     state = crc._pr_review_state(2510)
     reviewed, why = crc.verdict_for(state)
     assert reviewed
-    assert "coderabbitai[bot]" in why
+    assert "coderabbitai" in why
+
+
+def test_pr_review_state_counts_bare_coderabbit_login_from_gh_pr_view(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: #2561 merged then still failed coverage because logins lacked [bot]."""
+
+    def fake_gh(args: list[str]) -> dict[str, Any]:
+        return {
+            "title": "chore",
+            "labels": [],
+            "reviews": [
+                {
+                    "author": {"login": "coderabbitai"},
+                    "state": "COMMENTED",
+                    "body": "findings",
+                }
+            ],
+            "comments": [
+                {
+                    "author": {"login": "coderabbitai"},
+                    "body": (
+                        "<!-- recent_review_start -->\n"
+                        "No actionable comments were generated in the recent review.\n"
+                    ),
+                }
+            ],
+            "statusCheckRollup": [],
+        }
+
+    monkeypatch.setattr(crc, "_gh_json", fake_gh)
+    state = crc._pr_review_state(2557)
+    reviewed, why = crc.verdict_for(state)
+    assert reviewed
+    assert "coderabbitai" in why
+    assert state["agent_tool"], "bare login must populate agent_tool"
 
 
 def test_pr_review_state_ignores_a_coderabbit_rate_limit_comment(
