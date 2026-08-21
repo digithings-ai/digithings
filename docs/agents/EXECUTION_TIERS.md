@@ -67,7 +67,7 @@ Interactive, local, human-in-the-loop. The top tier; takes everything above and 
 
 **Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; targeted `@claude` help.
 
-**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Bugbot is the primary reviewer; enable Claude review only for projects that need deeper analysis. When Bugbot is unavailable, `/review <N>` in-session is the honest fallback — see `CLAUDE.md`.
+**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Default review is in-session (`/review <N>`, fresh-context subagent — see `CODE_REVIEW_POLICY.md`); Bugbot is the on-demand external option, invoked by hand once a diff is final. Enable this Claude plugin only for projects that need a standing automated pass on top of that.
 
 **Weekly continuous-improvement digest:** `.github/workflows/pipeline-continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
 

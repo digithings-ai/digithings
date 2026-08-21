@@ -13,11 +13,16 @@ Check first:
 
 ```bash
 gh pr view <N> --json statusCheckRollup,reviews,comments \
-  -q '{bugbot:(.statusCheckRollup[]?|select((.name//"")=="Cursor Bugbot")|.conclusion), coderabbit:(.statusCheckRollup[]?|select((.name//"")=="CodeRabbit")|.conclusion)}'
+  -q '{
+    bugbot: (.statusCheckRollup[]? | select((.name//"")=="Cursor Bugbot") | .conclusion),
+    coderabbit_check: (.statusCheckRollup[]? | select((.name//"")=="CodeRabbit") | .conclusion),
+    submitted_reviews: [.reviews[]? | select((.author.login|ascii_downcase) as $a | ($a|contains("coderabbit")) or $a=="claude") | {author: .author.login, state}],
+    coderabbit_comment_count: [.comments[]? | select((.author.login//""|ascii_downcase)|contains("coderabbit"))] | length
+  }'
 ```
 
-- Bugbot `SUCCESS`, CodeRabbit `SUCCESS`, or a submitted CodeRabbit/Claude review → a real review already exists. Stop; address those findings instead of starting a second loop.
-- Bugbot `NEUTRAL`, CodeRabbit rate-limit / skip / failure, or nothing posted → proceed.
+- Bugbot `SUCCESS`, CodeRabbit `SUCCESS`, `submitted_reviews` non-empty, or `coderabbit_comment_count` > 0 → a real review already exists. Stop; address those findings instead of starting a second loop.
+- Bugbot `NEUTRAL`, CodeRabbit rate-limit / skip / failure, empty `submitted_reviews`, and zero `coderabbit_comment_count` → proceed.
 
 Prefer a review bot when it works. `/review` is the clean-context fallback so the
 gate still sees an artifact when the bots did not finish.
@@ -57,7 +62,9 @@ labelled as one.
      comment says
 
    Skip Pass B lenses the scope pass marked clean. Tiny docs/CI-only diffs may
-   stop after Pass A if nothing material is flagged.
+   stop after Pass A if nothing material is flagged — but a Markdown-only diff
+   still needs `make doc-check` run before stopping (internal link validation
+   isn't something Pass A's risk map covers).
 
 3. **Verify before reporting.** Every finding needs a command that was actually
    run and its output. Put each surviving finding through a refuter told to
