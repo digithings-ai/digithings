@@ -25,6 +25,7 @@ accepts ``Request`` objects.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from contextvars import ContextVar
 from pathlib import Path
@@ -39,6 +40,8 @@ from digillm import (
     set_proxy_key,
 )
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 # Single source of truth for the BYOK provider allowlist — see
@@ -105,12 +108,37 @@ class _ByokCatalogEntry(BaseModel):
             raise ValueError("id must be a non-empty string")
         return normalized
 
-    @field_validator("fallbackModels")
+    @field_validator("fallbackModels", mode="before")
     @classmethod
-    def _examples_non_empty(cls, v: list[str]) -> list[str]:
-        if any(not m.strip() for m in v):
-            raise ValueError("fallbackModels entries must be non-empty strings")
-        return v
+    def _clean_examples(cls, v: object) -> list[str]:
+        """Salvage what is usable and warn; never fail the load over a parenthetical.
+
+        Two departures from every other field here, both deliberate.
+
+        It **strips**, because unlike the others this value reaches user-facing copy
+        verbatim: ``"  gpt-4o  "`` rendered as ``(e.g.   gpt-4o  )``. ``_id_non_empty``
+        strips already; this validator rejected blanks *without* stripping the
+        survivors, which is the asymmetry that let padding through.
+
+        It does **not raise**, because a bad value here cannot break routing — an
+        entry without examples still routes fine, the refusal just drops its
+        parenthetical. Fail-loud exists so a broken catalog cannot silently 400 every
+        BYOK request; that reasoning does not reach a cosmetic field. It matters
+        concretely: this key was an *ignored extra* until it was typed, so an
+        operator catalog under ``DIGI_CONFIG_PATH`` carrying ``fallbackModels: null``
+        imported fine before and would otherwise now crash digigraph at startup over
+        a parenthetical. Warn instead, so a typo still leaves a trace.
+        """
+        if not isinstance(v, list):
+            logger.warning("BYOK catalog: fallbackModels is not a list, ignoring: %r", v)
+            return []
+        cleaned = [m.strip() for m in v if isinstance(m, str) and m.strip()]
+        if len(cleaned) != len(v):
+            logger.warning(
+                "BYOK catalog: dropped %d unusable fallbackModels entry/entries",
+                len(v) - len(cleaned),
+            )
+        return cleaned
 
     @field_validator("baseUrl")
     @classmethod
@@ -290,13 +318,15 @@ def byok_default_model_refusal(provider: str) -> str:
     operator's configuration, not the caller's input, and disclosing it to an
     anonymous caller buys no remediation — the fix is the same either way. The
     example it does name is the provider's own first ``fallbackModels`` entry from
-    the public catalog, so it discloses nothing and is always a slug this provider
-    actually serves. A hardcoded example cannot be: the previous ``gpt-4o-mini``
-    was told to anthropic, gemini and xai callers too, none of which serve it.
+    the public catalog, so it discloses nothing and is always a slug that provider
+    declares. A hardcoded example cannot be: the previous ``gpt-4o-mini`` was told
+    to four of the five providers that do not serve it — anthropic, gemini, xai,
+    and openrouter, whose own slug is the prefixed ``openai/gpt-4o-mini``.
 
     Phrased as "a model served by <provider>" rather than "a <provider> model" so
-    no indefinite article has to agree with a provider id — ``a anthropic`` was the
-    literal output for four of the five.
+    no indefinite article has to agree with a provider id. The old construction ran
+    for all five and read wrong for four of them (``a openai``, ``a anthropic``,
+    ``a xai``, ``a openrouter``; only ``a gemini`` scans).
     """
     normalized = provider.strip().lower()
     example = _BYOK_MODEL_EXAMPLES.get(normalized)

@@ -626,6 +626,12 @@ describe("POST /api/chat", () => {
       // `route.ts:241-242` emits both spellings, and the short one is the only one
       // digigraph actually consumes (`corpus_routing.py:39`) — so assert it too.
       expect(call?.upstreamHeaders["X-Digi-Tenant"]).toBe(mockAuthCtx.tenantSlug);
+      // The adapter carries no Authorization of its own (#2537 removed the dead
+      // second source), so this header is the *only* thing authenticating the
+      // upstream call. Unpinned, deleting `route.ts:244` outright left all 537
+      // digichat tests green — a future conditional Authorization would ship a
+      // silently unauthenticated request to digigraph.
+      expect(call?.upstreamHeaders.Authorization).toMatch(/^Bearer .+/);
       expect(call?.digigraphBaseUrl).toBe("http://127.0.0.1:8000");
       // The conversation itself, and the headers this branch echoes back to the
       // browser. The mock factory discards its argument and answers a bare 200, so

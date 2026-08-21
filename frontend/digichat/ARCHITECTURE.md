@@ -580,15 +580,18 @@ ceiling too, not just the anonymous-embed one.
 `config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
 `fallbackModels` is read only by `digigraph/src/digigraph/llm_auth.py` (whose loader
 takes `id`/`baseUrl`/`requiresModel` plus the first `fallbackModels` entry, used as
-the remediation example in `byok_default_model_refusal`). Both are checked for parity
-against `src/lib/byok-providers.ts`'s own catalog (`BYOK_PROVIDER_LIST`,
-`byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`) by two test
-files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,
+the remediation example in `byok_default_model_refusal`). Each is pinned to a
+different in-app copy: `keyPrefix` against `src/lib/byok-providers.ts`'s own catalog
+(`BYOK_PROVIDER_LIST`, `byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`)
+by two test files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,
 plus its own `byokModelPresets`) and its sibling
 `hooks/byok-providers.catalog-parity.test.ts`
 (the shared module itself, which is what `api/chat/route.ts` and
 `api/byok/test/route.ts` import directly) — so either copy drifting from the
-catalog fails a test instead of drifting silently. `api/byok/test/route.ts`
+catalog fails a test instead of drifting silently. `fallbackModels` has no
+counterpart in `byok-providers.ts`, which carries no model list; its in-app copy is
+`use-byok-key.ts`'s `byokModelPresets`, pinned by the first of those two files. That
+is what keeps digigraph's refusal naming a model this UI actually offers. `api/byok/test/route.ts`
 also calls `readByokProvider` from that same module: an `X-BYOK-Provider`
 value naming no known provider gets an explicit
 `400 Unknown BYOK provider: "…"` response instead of being silently treated
