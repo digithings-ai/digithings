@@ -153,9 +153,14 @@ export async function createDigigraphTraceStreamResponse(opts: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Authorization comes from upstreamHeaders and nowhere else. An
-          // `Authorization` set here would be overridden by the spread below
-          // anyway, so a second source could only ever be dead code (#2537).
+          // Authorization comes from upstreamHeaders and nowhere else, because
+          // route.ts sets it unconditionally (`route.ts:244`, one const literal;
+          // later lines only add X-* keys). NOT because the spread would override
+          // it — a spread overrides only keys it actually contains, so an
+          // `Authorization` set here WOULD survive a caller that omitted one. That
+          // is why route.ts's unconditional set is pinned by a test rather than
+          // left to inspection: if it ever becomes conditional, this adapter must
+          // regain a fallback or digigraph gets an unauthenticated request (#2537).
           ...opts.upstreamHeaders,
           // After upstreamHeaders so dogfood never inherits Open WebUI format.
           // Belt-and-suspenders: digigraph's Open WebUI chrome is opt-in only

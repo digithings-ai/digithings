@@ -115,7 +115,12 @@ export async function POST(req: Request): Promise<Response> {
     return jsonResponse(
       {
         ok: false,
-        error: `Model is required for ${provider} (e.g. openai/gpt-4o-mini).`,
+        // The example must be a slug this provider serves. Correct by
+        // construction only because the gate above is x.ai-only; if it ever
+        // widens, derive the example per provider rather than hardcoding one
+        // (#2537 fixed exactly this in digigraph, where a hardcoded
+        // openai/… example was offered to four providers serving no such slug).
+        error: `Model is required for ${provider} (e.g. grok-4-3).`,
       },
       400
     );
