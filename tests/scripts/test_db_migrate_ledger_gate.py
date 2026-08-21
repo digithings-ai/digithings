@@ -316,8 +316,10 @@ def test_an_unapproved_run_cannot_starve_every_later_one(workflow: dict) -> None
     Superseding is safe *because* of the ledger gate above: the loop iterates every `.sql`
     with no bound on count and no contiguity requirement, so the newest run's work is
     always a superset of what it displaces. Note the wrong fix, hence the last assertion:
-    a per-run group (``db-migrate-${{ github.sha }}``) also ends the starvation, by
-    letting two applies race — the exact thing the group exists to prevent.
+    a `${{ }}` group such as ``db-migrate-${{ github.sha }}`` lets two applies race — the
+    exact thing the group exists to prevent — and it does not even reliably end the
+    starvation it was reached for, because two `workflow_dispatch` runs of an unchanged
+    ref share the SHA and so share the group.
     """
     concurrency = _concurrency(workflow)
     assert concurrency.get("cancel-in-progress") is True, (
