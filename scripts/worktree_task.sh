@@ -132,7 +132,7 @@ is_enabled() {
   case "$value" in
     '' | 0 | false | no | off) return 1 ;;
     1 | true | yes | on) return 0 ;;
-    *) die "${name}=${2:-} is not a recognised value. Use 1/true/yes/on to enable it, or unset it." ;;
+    *) die "${name}=${2:-} is not a recognised value. Use 1/true/yes/on to turn it on, 0/false/no/off or unset to turn it off." ;;
   esac
 }
 
