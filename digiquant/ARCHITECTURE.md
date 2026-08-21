@@ -441,10 +441,10 @@ allocation decision.
 | `sdca/risk_model.py` | `RiskModel` — a `runtime_checkable` `Protocol` with one method, `rails(dates) -> pl.DataFrame` (`low`/`median`/`high` columns). Any object with a matching `rails()` satisfies it structurally; the engine never imports a concrete provider. |
 | `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Rejects duplicate enabled indicator names and a non-finite/zero total weight. Mirrors the equal-weighted vote pattern in `indicators/m2_signals.py`. |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. |
-| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs and a finite, positive, non-null price series and `initial_cash` before running. |
+| `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. |
 
 **Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
-day, `composite_risk` and `risk` are null that day too — `compute_composite_risk`
+day, `composite_z` and `risk` are null that day too — `compute_composite_risk`
 uses `pl.sum_horizontal(..., ignore_nulls=False)` so there is never a partial
 blend. `run_backtest` treats a null-risk day as a no-trade day: state (cash,
 holdings) carries forward unchanged, but the day is still marked to market.
@@ -463,11 +463,15 @@ negative = sold), `cash`, `asset_units`, `net_deployed` (`initial_cash - cash`),
 `portfolio_value` (`cash + asset_units * price`), `buy_hold_value` (the
 lump-sum benchmark: all
 `initial_cash` deployed at day-0 price, marked to market thereafter).
-`SdcaBacktestReport` adds `total_pnl`, `total_return_pct`, `vs_lump_usd`,
-`vs_lump_pct`, `dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` (negative
-fractions, e.g. `-0.15` for a 15% drawdown — same convention as
-`BacktestResult.max_drawdown_pct` in `models.py`), `buy_days`/`sell_days`/
-`no_trade_days`, and `avg_risk`/`avg_rate` (means over non-null days only).
+`SdcaBacktestReport` adds `total_pnl`, `vs_lump_usd`, and four fields whose shared
+`_pct` suffix spans **two unit systems**: `total_return_pct` and `vs_lump_pct` are
+true percents (×100 at `backtest.py:162,164`, so `-15.0` means −15%), while
+`dca_max_drawdown_pct` / `buy_hold_max_drawdown_pct` are negative *fractions*
+(`-0.15` for a 15% drawdown — `_max_drawdown_pct` applies no ×100). The drawdown
+pair is therefore **not** interchangeable with `BacktestResult.max_drawdown_pct`,
+which is a negative percent — check each field's own docstring before comparing them. Also
+`buy_days`/`sell_days`/`no_trade_days`, and `avg_risk`/`avg_rate` (means over
+non-null days only).
 
 ### Optimization Engine Selection
 

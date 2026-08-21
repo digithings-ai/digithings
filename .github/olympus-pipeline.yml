@@ -1,4 +1,5 @@
-# Non-secret Olympus pipeline tunables. Loaded into $GITHUB_ENV by olympus.yml
+# Non-secret Olympus pipeline tunables. Loaded into $GITHUB_ENV by
+# workflows/pipeline-olympus.yml
 # ("Load pipeline configuration"). Secrets stay in workflow step env blocks.
 
 env:
