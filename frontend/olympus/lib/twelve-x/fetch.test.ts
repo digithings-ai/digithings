@@ -11,6 +11,7 @@ import {
   sortTodayBriefs,
   filterEventsToDay,
   getTradeIdeas,
+  getTradeIdeaHistory,
 } from './fetch';
 import type {
   FxBriefRow,
@@ -42,6 +43,7 @@ vi.mock('./supabase', () => {
   interface TradeIdeasBuilder {
     select: (columns: string) => TradeIdeasBuilder;
     eq: (column: string, value: string) => TradeIdeasBuilder;
+    gte: (column: string, value: string) => TradeIdeasBuilder;
     order: (column: string, options?: unknown) => TradeIdeasBuilder;
     then: <T>(onFulfilled: (payload: Payload) => T) => Promise<T>;
   }
@@ -52,6 +54,7 @@ vi.mock('./supabase', () => {
         return builder;
       },
       eq: () => builder,
+      gte: () => builder,
       order: () => builder,
       then: (onFulfilled) => Promise.resolve(onFulfilled({ data: [], error: null })),
     };
@@ -131,6 +134,14 @@ describe('getTradeIdeas', () => {
     expect(tradeIdeasDb.selectColumns).toContain('evidence');
     expect(tradeIdeasDb.selectColumns).toContain('citations');
     expect(tradeIdeasDb.selectColumns).toContain('as_of');
+  });
+});
+
+describe('getTradeIdeaHistory', () => {
+  it('selects continuity columns with a run_date lower bound', async () => {
+    tradeIdeasDb.selectColumns = '';
+    await getTradeIdeaHistory(45);
+    expect(tradeIdeasDb.selectColumns).toBe('run_date, pair, direction, as_of');
   });
 });
 

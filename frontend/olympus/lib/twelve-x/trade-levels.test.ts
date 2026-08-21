@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   buildIdeaDetailModel,
   formatLevelValue,
+  formatRiskReward,
   hasTradeLevels,
+  pairPriceDecimals,
   parseEvidence,
   parseTradeLevels,
   provenanceChipLabel,
@@ -84,9 +86,23 @@ describe('parseEvidence + stance class', () => {
   });
 });
 
-describe('formatLevelValue', () => {
-  it('keeps significant decimals', () => {
-    expect(formatLevelValue('1.1500')).toMatch(/^1\.15/);
+describe('formatLevelValue + pair decimals', () => {
+  it('trims broker trailing zeros without changing significant digits', () => {
+    expect(formatLevelValue('1.1500', 'EUR/USD', 'broker_quoted')).toBe('1.15');
+    expect(formatLevelValue('1.3560', 'GBP/USD', 'broker_quoted')).toBe('1.356');
+    expect(formatLevelValue('148.50', 'USD/JPY', 'broker_quoted')).toBe('148.5');
+  });
+
+  it('rounds computed levels to pair-reasonable decimals', () => {
+    expect(pairPriceDecimals('USD/JPY')).toBe(3);
+    expect(pairPriceDecimals('EUR/USD')).toBe(5);
+    expect(formatLevelValue('148.501234', 'USD/JPY', 'computed')).toBe('148.501');
+    expect(formatLevelValue('1.08501234', 'EUR/USD', 'computed')).toBe('1.08501');
+  });
+
+  it('formats R:R to one decimal', () => {
+    expect(formatRiskReward(1.5)).toBe('1.5');
+    expect(formatRiskReward(1.666)).toBe('1.7');
   });
 });
 
@@ -134,31 +150,45 @@ const LEVELS_IDEA: FxTradeIdeaRow = {
 };
 
 describe('buildIdeaDetailModel', () => {
-  it('builds level rows with provenance chips and evidence tone classes', () => {
+  it('orders short ladder Stop → Entry → Target with roles', () => {
     const model = buildIdeaDetailModel(LEVELS_IDEA);
     expect(model.status).toBe('partial');
     expect(model.riskReward).toBe(1.5);
+    expect(model.riskRewardLabel).toBe('1.5');
+    expect(model.levelRows.map((r) => r.role)).toEqual(['stop', 'entry', 'target']);
     expect(model.levelRows).toEqual([
-      {
-        label: 'Entry',
-        value: '1.15–1.16',
-        chip: 'computed, 1.5×20d vol off 31 Jul fix',
-      },
       {
         label: 'Stop',
         value: '1.14',
         chip: 'computed, 1.5×20d vol off 31 Jul fix',
+        role: 'stop',
+      },
+      {
+        label: 'Entry',
+        value: '1.15–1.16',
+        chip: 'computed, 1.5×20d vol off 31 Jul fix',
+        role: 'entry',
       },
       {
         label: 'Target',
         value: '1.18',
         chip: 'ING target',
+        role: 'target',
       },
     ]);
     expect(model.evidenceRows).toHaveLength(1);
     expect(model.evidenceRows[0].statement).toBe('Retail 78% long USD/JPY');
     expect(model.evidenceRows[0].stance).toBe('contradicts');
     expect(model.evidenceRows[0].className).toContain('warn');
+  });
+
+  it('orders long ladder Target → Entry → Stop', () => {
+    const model = buildIdeaDetailModel({
+      ...LEVELS_IDEA,
+      pair: 'EUR/USD',
+      direction: 'long',
+    });
+    expect(model.levelRows.map((r) => r.role)).toEqual(['target', 'entry', 'stop']);
   });
 
   it('returns empty blocks when trade_levels and evidence are absent', () => {
@@ -176,6 +206,7 @@ describe('buildIdeaDetailModel', () => {
     });
     expect(model.status).toBeNull();
     expect(model.riskReward).toBeNull();
+    expect(model.riskRewardLabel).toBeNull();
     expect(model.levelRows).toEqual([]);
     expect(model.evidenceRows).toEqual([]);
   });

@@ -1,9 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/types';
-import { buildIdeaDetailModel } from '@/lib/twelve-x/trade-levels';
+import {
+  continuityForBoard,
+  continuityKey,
+  formatContinuityLine,
+  type IdeaContinuityMeta,
+} from '@/lib/twelve-x/idea-continuity';
+import { buildIdeaDetailModel, type IdeaDetailLevelRow } from '@/lib/twelve-x/trade-levels';
 import { useTwelveX } from './context';
 import { TwelveXSectionHeading } from './TwelveXSectionHeading';
 
@@ -44,11 +50,44 @@ function ProvenanceChip({ label }: { label: string }) {
   );
 }
 
+function levelValueClass(role: IdeaDetailLevelRow['role']): string {
+  switch (role) {
+    case 'target':
+      return 'font-mono tabular-nums text-accent';
+    case 'stop':
+      return 'font-mono tabular-nums text-warn';
+    case 'entry':
+      return 'font-mono tabular-nums text-ink';
+    default: {
+      const _exhaustive: never = role;
+      return _exhaustive;
+    }
+  }
+}
+
+function LadderRow({ row }: { row: IdeaDetailLevelRow }) {
+  const boxed = row.role === 'entry';
+  return (
+    <div
+      className={
+        boxed
+          ? 'flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded border border-hair bg-surface/40 px-1.5 py-1 text-[11px]'
+          : 'flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1.5 text-[11px]'
+      }
+    >
+      <span className="w-12 shrink-0 text-ink-mute">{row.label}</span>
+      <span className={levelValueClass(row.role)}>{row.value}</span>
+      <ProvenanceChip label={row.chip} />
+    </div>
+  );
+}
+
 function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
-  const { status, riskReward, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
+  const { status, riskRewardLabel, levelRows, evidenceRows } = buildIdeaDetailModel(idea);
   const desks = contributingDesks(idea.citations);
   const showLevels = levelRows.length > 0;
   const showEvidence = evidenceRows.length > 0;
+  const showGrid = showLevels || showEvidence;
 
   return (
     <div className="mt-2 space-y-2 border-t border-hair pt-2 text-left">
@@ -56,38 +95,42 @@ function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
       {idea.catalyst ? (
         <p className="text-[11px] text-ink-mute">Catalyst: {idea.catalyst}</p>
       ) : null}
-      {showLevels ? (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-ink-soft">Levels</span>
-            {status && status !== 'complete' ? (
-              <span className="font-mono text-[10px] text-ink-mute">{status}</span>
-            ) : null}
-          </div>
-          {levelRows.map((row) => (
-            <div key={`${row.label}-${row.value}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
-              <span className="text-ink-mute">{row.label}</span>
-              <span className="font-mono tabular-nums text-ink">{row.value}</span>
-              <ProvenanceChip label={row.chip} />
+      {showGrid ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {showLevels ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-ink-soft">Levels</span>
+                {status && status !== 'complete' ? (
+                  <span className="font-mono text-[10px] text-ink-mute">{status}</span>
+                ) : null}
+              </div>
+              <div className="space-y-0.5">
+                {levelRows.map((row) => (
+                  <LadderRow key={`${row.role}-${row.label}-${row.value}`} row={row} />
+                ))}
+              </div>
+              {riskRewardLabel != null ? (
+                <p className="font-mono text-[10px] text-ink-mute">R:R {riskRewardLabel}</p>
+              ) : null}
             </div>
-          ))}
-          {riskReward != null ? (
-            <p className="font-mono text-[10px] text-ink-mute">R:R {riskReward}</p>
+          ) : (
+            <div />
+          )}
+          {showEvidence ? (
+            <div className="space-y-1">
+              <p className="text-[11px] text-ink-soft">Market evidence</p>
+              {evidenceRows.map((row) => (
+                <div
+                  key={row.statement}
+                  className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]"
+                >
+                  <span className={row.className}>{row.statement}</span>
+                  <span className="font-mono text-[10px] text-ink-mute">{row.stance}</span>
+                </div>
+              ))}
+            </div>
           ) : null}
-        </div>
-      ) : null}
-      {showEvidence ? (
-        <div className="space-y-1">
-          <p className="text-[11px] text-ink-soft">Market evidence</p>
-          {evidenceRows.map((row) => (
-            <div
-              key={row.statement}
-              className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]"
-            >
-              <span className={row.className}>{row.statement}</span>
-              <span className="font-mono text-[10px] text-ink-mute">{row.stance}</span>
-            </div>
-          ))}
         </div>
       ) : null}
       {desks.length > 0 ? (
@@ -99,19 +142,47 @@ function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   );
 }
 
+function ContinuityStamp({ meta }: { meta: IdeaContinuityMeta | undefined }) {
+  if (!meta) return null;
+  return (
+    <span className="ml-auto shrink-0 text-right font-mono text-[10px] leading-tight text-ink-mute">
+      {formatContinuityLine(meta)}
+    </span>
+  );
+}
+
 export default function TradeIdeasPanel({
   ideas,
   confluence,
   highlightRanks,
+  ideaHistory = [],
 }: {
   ideas: FxTradeIdeaRow[];
   confluence: FxConfluenceSnapshotRow[];
   highlightRanks?: ReadonlySet<number>;
+  ideaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
 }) {
   const { crossLink } = useTwelveX();
   const [expanded, setExpanded] = useState(false);
   const [openRank, setOpenRank] = useState<number | null>(null);
   const toggleIdea = (rank: number) => setOpenRank((v) => (v === rank ? null : rank));
+
+  const boardDate = ideas[0]?.run_date ?? '';
+  const continuity = useMemo(() => {
+    const hist =
+      ideaHistory.length > 0
+        ? ideaHistory
+        : ideas.map((i) => ({
+            run_date: i.run_date,
+            pair: i.pair,
+            direction: i.direction,
+            as_of: i.as_of,
+          }));
+    return continuityForBoard(boardDate, hist);
+  }, [boardDate, ideaHistory, ideas]);
+
+  const metaFor = (idea: FxTradeIdeaRow) =>
+    continuity.get(continuityKey(idea.pair, idea.direction));
 
   const highlightClass = (rank: number, base: string) =>
     highlightRanks?.has(rank)
@@ -157,10 +228,13 @@ export default function TradeIdeasPanel({
         onClick={() => toggleIdea(top.rank)}
         aria-expanded={openRank === top.rank}
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-2">
           <span className="font-mono text-[11px] text-ink-mute">#1</span>
           <span className="font-semibold text-ink">{top.pair}</span>
-          <span className={`text-xs font-semibold uppercase ${dirClass(top.direction)}`}>{top.direction}</span>
+          <span className={`text-xs font-semibold uppercase ${dirClass(top.direction)}`}>
+            {top.direction}
+          </span>
+          <ContinuityStamp meta={metaFor(top)} />
         </div>
         <p className="mt-1 text-sm text-ink">{top.title}</p>
         {openRank === top.rank ? (
@@ -185,11 +259,14 @@ export default function TradeIdeasPanel({
           onClick={() => toggleIdea(idea.rank)}
           aria-expanded={openRank === idea.rank}
         >
-          <span className="flex items-center gap-2">
+          <span className="flex items-start gap-2">
             <span className="font-mono text-[10px] text-ink-mute">#{idea.rank}</span>
             <span className="font-semibold text-ink">{idea.pair}</span>
-            <span className={`font-semibold uppercase ${dirClass(idea.direction)}`}>{idea.direction}</span>
-            <span className="ml-auto truncate text-ink-mute">{idea.title}</span>
+            <span className={`font-semibold uppercase ${dirClass(idea.direction)}`}>
+              {idea.direction}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-ink-mute">{idea.title}</span>
+            <ContinuityStamp meta={metaFor(idea)} />
           </span>
           {openRank === idea.rank ? <IdeaDetail idea={idea} /> : null}
         </button>
@@ -210,7 +287,10 @@ export default function TradeIdeasPanel({
           {expanded ? (
             <ul className="mt-2 grid gap-1">
               {confluence.map((c) => (
-                <li key={`${c.run_date}-${c.rank}`} className="flex items-center gap-2 rounded-md border border-hair px-3 py-1.5 text-xs">
+                <li
+                  key={`${c.run_date}-${c.rank}`}
+                  className="flex items-center gap-2 rounded-md border border-hair px-3 py-1.5 text-xs"
+                >
                   <span className="font-mono text-[10px] text-ink-mute">#{c.rank}</span>
                   <span className="font-semibold text-ink">{c.currency}</span>
                   <span className={`uppercase ${dirClass(c.direction)}`}>{c.direction}</span>

@@ -26,6 +26,7 @@ import {
   getLatestDigest,
   getMatrix,
   getTradeIdeas,
+  getTradeIdeaHistory,
   getTodayBriefs,
   getTodayEvents,
   getUpcomingEvents,
@@ -138,6 +139,7 @@ interface TwelveXData {
   eventOpinions: FxEventSnapshotRow[];
   matrix: MatrixCell[];
   tradeIdeas: FxTradeIdeaRow[];
+  tradeIdeaHistory: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
   todayBriefs: FxBriefRow[];
   todayEvents: FxEconomicCalendarRow[];
   researchBriefs: FxBriefRow[];
@@ -277,14 +279,15 @@ export default function TwelveXClient() {
           getIntelligenceWhy(intelRunDate),
         ]);
         const canonical = intelligence[0]?.run_date ?? digest?.run_date ?? null;
-        const [tradeIdeas, todayBriefs, todayEvents, divergenceByCurrency] = canonical
+        const [tradeIdeas, tradeIdeaHistory, todayBriefs, todayEvents, divergenceByCurrency] = canonical
           ? await Promise.all([
               getTradeIdeas(canonical),
+              getTradeIdeaHistory(45),
               getTodayBriefs(canonical),
               getTodayEvents(),
               getConsensusDivergence(canonical),
             ])
-          : [[], [], await getTodayEvents(), {}];
+          : [[], [], [], await getTodayEvents(), {}];
         if (cancelled) return;
         const latestConsensus = selectLatestCompleteConsensus(consensusSeries);
         setData({
@@ -297,6 +300,7 @@ export default function TwelveXClient() {
           eventOpinions,
           matrix,
           tradeIdeas,
+          tradeIdeaHistory,
           todayBriefs,
           todayEvents,
           researchBriefs,
@@ -424,6 +428,7 @@ export default function TwelveXClient() {
           <TodayTab
             digest={data?.digest ?? null}
             tradeIdeas={data?.tradeIdeas ?? []}
+            tradeIdeaHistory={data?.tradeIdeaHistory ?? []}
             confluence={data?.intelligence ?? []}
             briefs={data?.todayBriefs ?? []}
             events={data?.todayEvents ?? []}
