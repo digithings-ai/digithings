@@ -40,6 +40,7 @@ from digillm import (
     provider_call_context as _digillm_provider_call_context,
 )
 from digillm import run_tools as _digillm_run_tools
+from digillm import set_fan_out_detach_hook as _set_fan_out_detach_hook
 from digillm import set_telemetry_observer as _set_telemetry_observer
 from digillm import set_usage_observer as _set_usage_observer
 from digillm import web_search as _digillm_web_search
@@ -67,6 +68,15 @@ __all__ = [
 # module every digigraph LLM call imports.
 _set_usage_observer(_usage.record)
 _set_telemetry_observer(_usage.DETAILED_USAGE_OBSERVER)
+
+# Drop digigraph's own logical-call description inside every digillm parallel tool worker.
+# digillm's fan-out copies the caller's context so the request's BYOK credentials reach the
+# pool, and ``detach_provider_call_context`` clears digillm's own logical-call var in each
+# worker -- but digigraph layers ``usage._LOGICAL_CALL_CONTEXT`` on top, holding the very
+# same mutable ProviderCallContextHandle. Without this, parallel workers would share one
+# handle and interleave their telemetry. Registered alongside the observers above, and for
+# the same reason: llm_client is the module every digigraph LLM call imports.
+_set_fan_out_detach_hook(_usage.detach_logical_call_context)
 
 
 @contextmanager

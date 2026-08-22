@@ -1,0 +1,22 @@
+{
+  "plugins": {
+    "github": {
+      "enabled": true
+    },
+    "coderabbit": {
+      "enabled": true
+    },
+    "cursor-sdk": {
+      "enabled": true
+    },
+    "agent-compatibility": {
+      "enabled": true
+    },
+    "continual-learning": {
+      "enabled": true
+    },
+    "react-doctor": {
+      "enabled": true
+    }
+  }
+}

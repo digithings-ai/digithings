@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -117,9 +118,21 @@ def _byok_default_routes_elsewhere(provider: str) -> bool:
     Resolution failures answer ``False`` rather than refusing. ``operator_default_model``
     raises in ``llm_mode: free`` without an explicit pin, and this middleware is not the
     place to convert a *server* misconfiguration into a 400 blaming the caller's key —
-    the request proceeds and fails where it actually breaks. The billing invariant is
-    not weakened by that: ``_apply_byok_model_override`` re-derives the same verdict at
-    the resolver, on the same string, and refuses there.
+    the request proceeds and fails where it actually breaks.
+
+    The billing invariant survives that open failure two ways, and which one applies
+    turns on the *path*, not on which error was swallowed. On the mode path,
+    ``get_model_for_mode`` evaluates ``operator_default_model()`` as the *argument* to
+    ``_apply_byok_model_override``, so a failure that recurs re-raises before the
+    resolver is ever entered — nothing is billed because the request fails, not because
+    a second verdict was reached — while a merely transient one (``_LLM_PROBE_ERRORS``
+    is wider than the free-mode ``ValueError``) lets the resolver judge the same string
+    this function could not resolve. On the phase path, ``get_model_for_phase`` never
+    calls ``operator_default_model`` at all: it hands the resolver a ``phase_models``
+    override or an ``olympus_models.yaml`` capability model, neither of which this
+    middleware ever sees, and the resolver refuses on *that* string. Either way the
+    refusal — or the failure — lands on whatever the request would actually have been
+    billed for.
     """
     from digigraph.llm_auth import byok_operator_model_routes_elsewhere
     from digigraph.model_config import operator_default_model
@@ -138,6 +151,11 @@ async def byok_header_context(request: Request, call_next):
     The key is bound to a ContextVar for the duration of the request only.
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
+
+    "Duration of the request" is bounded by ``pop_byok`` below for everything that
+    runs in the request task. A streaming response outlives that: its worker thread
+    holds a *copy* of this context, which ``pop_byok`` cannot reach, and clears its
+    own copy in its ``finally`` instead (see ``_stream_completions_progressive``).
     """
     from digigraph.llm_auth import (
         BYOK_DEFAULT_MODEL_MISMATCH_CODE,
@@ -770,10 +788,40 @@ def _stream_completions_progressive(
     if workflow_extras:
         wf_kw.update(workflow_extras)
     workflow_req = WorkflowRequest(**wf_kw)
-    worker = Thread(
-        target=run_digigraph_workflow_streaming,
-        args=(workflow_req, event_queue, cancel_event),
-    )
+
+    from digigraph.llm_auth import clear_byok_bindings
+
+    # Run the worker inside a copy of *this* frame's context. A bare Thread starts
+    # with an empty context, so every ContextVar bound per-request -- above all the
+    # three BYOK bindings pushed by ``push_byok_header`` (digigraph's key/provider and
+    # model overrides, plus digillm's own) -- reads as its default inside the worker.
+    # Streaming BYOK requests were therefore answered on the *operator's* key while
+    # the user's was shown as active: the same billing invariant the X-BYOK-Model
+    # guard in ``byok_header_context`` refuses a whole request to protect. Copy at
+    # spawn rather than re-binding inside the worker: this frame still holds the
+    # bindings (measured), and the worker has no request to re-read them from.
+    #
+    # The copy outlives the request: this thread is neither daemonic nor joined, and
+    # ``byok_header_context``'s ``finally`` runs ``pop_byok`` as soon as the response
+    # starts streaming -- which resets the *parent's* vars only, a copy being a
+    # snapshot rather than a view. So the worker clears its own copy when it finishes,
+    # keeping the middleware's "for the duration of the request only" contract true of
+    # the process and not just of the request task. The residual window is the worker's
+    # own runtime, and that runtime is what has to stay bounded: every event the worker
+    # emits goes through ``workflow._emit_event``, which drops rather than blocks once
+    # ``cancel_event`` is set. A plain blocking ``put`` would not -- the queue above is
+    # bounded and this generator stops draining it on disconnect, so the worker would
+    # wedge inside a node, never reach the ``finally``, and strand the key for the
+    # lifetime of the process rather than for one more node.
+    ctx = contextvars.copy_context()
+
+    def _run_worker() -> None:
+        try:
+            run_digigraph_workflow_streaming(workflow_req, event_queue, cancel_event)
+        finally:
+            clear_byok_bindings()
+
+    worker = Thread(target=ctx.run, args=(_run_worker,))
     worker.start()
 
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"

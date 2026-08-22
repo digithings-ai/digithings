@@ -9,14 +9,15 @@ import type { TwelveXTab } from './context';
 /* ----------------------------------------------------------------------- */
 
 describe('TwelveXClient tab set', () => {
-  it('exposes exactly five tabs', () => {
-    expect(TWELVE_X_TABS).toHaveLength(5);
+  it('exposes exactly six tabs', () => {
+    expect(TWELVE_X_TABS).toHaveLength(6);
   });
 
-  it('is the canonical Today / Consensus / Matrix / Events / How-it-works set', () => {
+  it('is the canonical Today / Consensus / Track record / Matrix / Events / How-it-works set', () => {
     expect(TWELVE_X_TABS.map((t) => t.id)).toEqual([
       'today',
       'consensus',
+      'track-record',
       'matrix',
       'events',
       'how-it-works',
@@ -33,6 +34,7 @@ describe('TwelveXClient tab set', () => {
     expect(labels).toMatchObject({
       today: 'Today',
       consensus: 'Consensus',
+      'track-record': 'Track record',
       matrix: 'Matrix',
       events: 'Events',
       'how-it-works': 'How it works',
@@ -45,9 +47,10 @@ describe('TwelveXClient tab set', () => {
 /* ----------------------------------------------------------------------- */
 
 describe('resolveTab', () => {
-  it('routes each of the five tab params to its tab', () => {
+  it('routes each of the six tab params to its tab', () => {
     expect(resolveTab('today')).toBe('today');
     expect(resolveTab('consensus')).toBe('consensus');
+    expect(resolveTab('track-record')).toBe('track-record');
     expect(resolveTab('matrix')).toBe('matrix');
     expect(resolveTab('events')).toBe('events');
     expect(resolveTab('how-it-works')).toBe('how-it-works');

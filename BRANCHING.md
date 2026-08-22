@@ -29,9 +29,10 @@ main  ←  develop  ←  module/<component>  ←  task/<N>-<slug>
 
 **Session start:** `make module-switch MODULE=<component>` then `make task ISSUE=N`.
 **Sprint end:** `make module-pr MODULE=<component>` → PR review → merge to develop.
-**Sync:** `make module-sync` fast-forwards your **local** `module/*` refs to `develop`. It does not push, so `origin/module/*` is unchanged — and it cannot, because `module-branch-protection` requires a PR and blocks force-push. Refreshing a *remote* module branch means opening a PR into `base=module/<component>`. Check staleness before you branch off one:
+**Sync:** `make module-sync` fast-forwards your **local** `module/*` refs to `develop`. It does not push, so `origin/module/*` is unchanged — and it cannot, because `module-branch-protection` requires a PR and blocks force-push. Refreshing a *remote* module branch means opening a PR into `base=module/<component>`. You do not have to check staleness by hand before branching off one — since #2547 `make task ISSUE=N` fetches `origin` and refuses to cut a task branch from a `module/*` base that is behind `origin/develop`, printing the behind-count and the sync recipe. To check a module branch on its own:
 
 ```bash
+git fetch origin
 git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale
 ```
 
@@ -86,6 +87,7 @@ module branch being force-pushed also stops it being quietly dropped.
 | `cursor/<slug>` | Work driven by Cursor Agent. | `cursor/docs-migration` |
 | `copilot/<slug>` | Work driven by GitHub Copilot. | `copilot/fix-import-order` |
 | `bot/<slug>` | Opened by a repo workflow, not a person — `project-stub-fields.yml` pushes one per issue it fields. | `bot/stub-tsv-2459` |
+| `release-please--branches--<target>--components--<component>` | Auto-created by the `release-please-*.yml` workflows to propose a version-bump PR — one per component, against that component's own target branch (digichat → `develop`, digiskills → `module/digiskills`). Not something a human creates; the taxonomy just needs to admit what the bot already pushes, so a maintainer can `git push` a follow-up fix commit onto it (e.g. a lockfile resync) without `--no-verify`. | `release-please--branches--develop--components--digichat` |
 | `<handle>/<slug>` | Direct human commits by a named contributor (GitHub login). | `chrizefan/vision-pass` |
 | `feat/<slug>` | Feature work not bound to a single Issue. | `feat/model-picker` |
 | `fix/<slug>` | Bug fix not bound to a single Issue. | `fix/auth-retry` |
@@ -101,7 +103,14 @@ new contributor:
 
 1. Edit `scripts/hooks/pre-push.sh` and add the handle to `CONTRIBUTOR_HANDLES`
    (pipe-separated: `chrizefan|alice|bob`).
-2. Re-run `make hooks-install` in every developer's clone so the new regex lands.
+2. Install your *uncommitted* edit to test it: `HOOKS_REF=WORKTREE make hooks-install`.
+   A plain `make hooks-install` installs the copy committed on `origin/develop`,
+   so on its own it would not pick your edit up. The override is not durable:
+   every worktree shares this one hook file, so the next plain `make
+   hooks-install` — or any `make agents-init`, in any worktree — puts
+   `origin/develop`'s copy back. Re-run the `HOOKS_REF=WORKTREE` command if so.
+3. Merge to `develop`. Other clones pick the new regex up on their next
+   `git fetch` followed by `make hooks-install` (or any `make agents-init`).
 
 There is no server-side counterpart to update. `scripts/github-ruleset.json`,
 which this section used to point at, does not exist in the repo, and `origin`
@@ -157,12 +166,18 @@ to it, so it needs the same `ALLOW_MAIN_PUSH=1`.
   declares the same regex (bar the `main`/`develop` arms, which its
   `conditions.ref_name.exclude` covers instead) and reads `"enforcement":
   "active"`, but that file is desired state that was never applied — the only
-  ruleset on `origin` is `module-branch-protection`, and the live
-  `release-please--branches--*--components--*` refs, which the taxonomy does not
-  admit, are the proof. (The `bot/*` refs are **not** proof of anything: `bot/<slug>`
-  is in the taxonomy, so a server-side rule would have accepted them.) Keep the JSON
-  in sync with the table above anyway, so applying it later doesn't reject refs this
-  document calls legal.
+  ruleset on `origin` is `module-branch-protection`. Nothing currently proves this
+  the way the `release-please--branches--*--components--*` refs used to: those were
+  live on `origin` while the taxonomy still rejected them client-side, meaning the
+  hook was blocking even a maintainer's own follow-up push (e.g. a lockfile resync)
+  onto a branch the bot itself had already pushed with no server-side rule stopping
+  it — proof the JSON was never applied, found the hard way. The taxonomy now admits
+  that pattern (see the table above), which closes the gap but removes the evidence;
+  don't take the absence of a fresh example as proof the JSON ruleset got applied in
+  the meantime. (The `bot/*` refs were never proof of anything either way: `bot/<slug>`
+  is in the taxonomy, so a server-side rule would have accepted them regardless.) Keep
+  the JSON in sync with the table above anyway, so applying it later doesn't reject
+  refs this document calls legal.
 - Force-pushes to `main` or `develop` — blocked server-side.
 - Force-pushes to, or deletion of, `module/**` — blocked by the
   `module-branch-protection` ruleset.
