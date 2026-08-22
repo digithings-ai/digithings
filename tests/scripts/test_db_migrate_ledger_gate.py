@@ -92,6 +92,21 @@ def arms(loop: list[str]) -> dict[str, list[str]]:
     }
 
 
+def _concurrency(workflow: dict) -> dict:
+    """The workflow-level `concurrency:` mapping.
+
+    Asserting the type here rather than indexing directly is what makes a revert to the
+    scalar form (``concurrency: db-migrate``) fail with the reason instead of a TypeError.
+    """
+    concurrency = workflow["concurrency"]
+    assert isinstance(concurrency, dict), (
+        f"`concurrency: {concurrency}` is the scalar form, which cannot carry "
+        "cancel-in-progress; a run left unapproved in `waiting` then holds the group "
+        "indefinitely and starves every later run (#2541)"
+    )
+    return concurrency
+
+
 def _uncommented(lines: list[str]) -> str:
     return "\n".join(ln for ln in lines if not ln.strip().startswith("#"))
 
@@ -277,7 +292,43 @@ def test_every_psql_call_that_writes_stops_on_error(script: str) -> None:
 def test_the_run_is_still_serialised_and_human_gated(workflow: dict) -> None:
     """Prod-mutating: the `production` environment carries the required-reviewer rule."""
     assert workflow["jobs"]["migrate"]["environment"] == "production"
-    assert workflow["concurrency"] == "db-migrate", "concurrent runs would race on the ledger"
+    assert _concurrency(workflow)["group"] == "db-migrate", (
+        "concurrent runs would race on the ledger"
+    )
     # `on` is parsed as the boolean True by YAML 1.1.
     assert workflow[True]["push"]["branches"] == ["main"]
     assert workflow[True]["push"]["paths"] == ["digiquant/supabase/migrations/**"]
+
+
+def test_an_unapproved_run_cannot_starve_every_later_one(workflow: dict) -> None:
+    """#2541: this job holds the concurrency group while it waits for approval.
+
+    The group has to stay — it is what keeps two applies off the ledger at once — but with
+    `cancel-in-progress` absent (i.e. false) the run *occupying* the group is the one the
+    setting protects, and this job occupies it for the whole time it sits in `production`'s
+    required-reviewer gate. Run 31003345711 sat unapproved from 2026-08-05 to 08-20 and
+    migrations 066-070 never reached prod. Each push in between was evicted from the
+    group's single pending slot by its successor, so they report `cancelled` with zero
+    jobs — which reads like somebody cancelled a deploy rather than like a deploy that
+    never ran. That is why the failure went unnoticed for 15 days and why it is pinned
+    here rather than left to a comment.
+
+    Superseding is safe *because* of the ledger gate above: the loop iterates every `.sql`
+    with no bound on count and no contiguity requirement, so the newest run's work is
+    always a superset of what it displaces. Note the wrong fix, hence the last assertion:
+    a `${{ }}` group such as ``db-migrate-${{ github.sha }}`` lets two applies race — the
+    exact thing the group exists to prevent — and it does not even reliably end the
+    starvation it was reached for, because two `workflow_dispatch` runs of an unchanged
+    ref share the SHA and so share the group.
+    """
+    concurrency = _concurrency(workflow)
+    assert concurrency.get("cancel-in-progress") is True, (
+        "cancel-in-progress must be true, or a run left unapproved in `waiting` holds the "
+        "group forever and every later push queues behind it — a silent outage of the only "
+        "path to the prod schema, not a delay"
+    )
+    group = str(concurrency["group"])
+    assert "${{" not in group, (
+        f"group {group!r} varies per run, so applies no longer serialise at all; the fix "
+        "for starvation is superseding within one group, never abandoning the group"
+    )

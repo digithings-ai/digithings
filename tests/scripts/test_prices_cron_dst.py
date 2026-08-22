@@ -133,6 +133,7 @@ def test_every_scheduled_job_is_still_named_as_expected(crons: dict[str, list[st
     """The three job names the assertions below key on, and their cron counts."""
     assert {name: len(found) for name, found in crons.items()} == {
         "intraday": 1,
+        "fx-refresh": 2,
         "eod-macro": 1,
         "at-open-clock": 2,
     }
@@ -350,3 +351,72 @@ def test_at_open_cannot_run_without_the_gate(workflow: dict) -> None:
     assert writer_checkout["with"]["ref"] == "main"
     run = next(step["run"] for step in clock["steps"] if step.get("id") == "clock")
     assert '>> "$GITHUB_OUTPUT"' in run, "the gate's decision never reaches the job output"
+
+
+# --------------------------------------------------------------------------- #
+# What the at-open job actually invokes (#2420, Task 2.4)
+# --------------------------------------------------------------------------- #
+
+
+def _at_open_command(workflow: dict) -> str:
+    """The shell line that runs the at-open writer, wherever in the job it sits.
+
+    Found by the script's own name rather than by step index or step name, so reordering
+    the job or renaming the step keeps the flag assertions below pointed at the right line.
+
+    Narrowed to the invoking line with shell comments stripped, so the flag assertions read
+    the command and nothing else. Today the prose above this step is a YAML comment, which
+    the parser drops before `step["run"]` ever exists — but a `run: |` block that grew a
+    second line and an inline `# ... --require-ledger ...` note would otherwise turn a
+    comment into a passing or failing assertion about behaviour.
+    """
+    steps = workflow["jobs"]["at-open"]["steps"]
+    runs = [str(step["run"]) for step in steps if "execute_at_open.py" in str(step.get("run", ""))]
+    assert len(runs) == 1, f"expected exactly one at-open invocation, found {len(runs)}"
+    lines = [
+        line.split("#", 1)[0].strip()
+        for line in runs[0].splitlines()
+        if "execute_at_open.py" in line.split("#", 1)[0]
+    ]
+    assert len(lines) == 1, f"expected one at-open command line, found {len(lines)}: {lines}"
+    return lines[0]
+
+
+def test_at_open_fills_the_prior_days_rebalance(workflow: dict) -> None:
+    """The decision is made after one close and filled at the next open.
+
+    Without ``--prior-trading-day-rebalance`` the script looks for a rebalance dated today,
+    finds none at 09:35, and books nothing — a silent no-op, not an error. The flag is the
+    only thing that points it at yesterday's approved targets.
+    """
+    assert "--prior-trading-day-rebalance" in _at_open_command(workflow)
+
+
+def test_at_open_defers_the_ledger_cutover(workflow: dict) -> None:
+    """The cutover is held off deliberately, because data alone gets it wrong (#2508).
+
+    This job used to carry neither ledger flag, on the theory that cutover should be a
+    property of the data: the kill switch defaults *on*, so the morning run would start
+    using the ledger the day migration 069 landed and no edit here would be needed.
+
+    That theory is unsafe at the boundary, because the two books disagree exactly once.
+    Order size is a weight delta against the legacy ``positions`` book
+    (``ledger_io.py`` ``_shares(delta_pct=target_pct - prior_pct, ...)``, with ``prior_pct``
+    reaching it via Atlas preflight's ``load_prior_book``), while event naming measures
+    residuals only from ``portfolio_ledger_holding_lots`` — a table whose sole writer is
+    ``execution_io`` itself and which nothing backfills. On the first post-069 run the
+    ledger would therefore size real sells against shares it cannot see, booking EXIT for
+    every trim of a held name and OPEN for every add: the #1743 mislabelling class, reached
+    through cold start instead of the weight-diff ladder. 069 makes those rows append-only,
+    so it would not be repairable in place.
+
+    So ``--no-ledger`` is pinned *present*. Removing it is the deliberate cutover edit, and
+    it must come with seeded lots (or a ledger that declines when the lot table is empty
+    while the prior book is not). ``--require-ledger`` stays absent until then — it turns a
+    decline into exit 3, which is correct after the cutover and a daily red cron before it —
+    and at cutover it is the better flag to adopt, so a silent fall back to prose cannot
+    hide the handover.
+    """
+    command = _at_open_command(workflow)
+    assert "--no-ledger" in command
+    assert "--require-ledger" not in command

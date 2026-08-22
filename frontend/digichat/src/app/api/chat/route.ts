@@ -264,7 +264,11 @@ export async function POST(req: Request) {
     if (byokProvider) {
       upstreamHeaders["X-BYOK-Provider"] = byokProvider;
     }
-    if (byokNeedsModel && byokModel) {
+    // Forward any model the caller sent. `byokNeedsModel` gates the 400 above —
+    // whether a model is *mandatory* — and must not also gate whether an optional
+    // one is passed on: that dropped an openai user's chosen model at the BFF even
+    // when the browser sent it, leaving digigraph on its own default (#2490).
+    if (byokModel) {
       upstreamHeaders["X-BYOK-Model"] = byokModel;
     }
   }
@@ -279,7 +283,6 @@ export async function POST(req: Request) {
       digigraphBaseUrl: eco.digigraphUrl ?? "",
       upstreamHeaders,
       responseHeaders,
-      upstreamBearer,
       activityDetail: embedConfig?.activityDetail ?? "full",
     });
   }

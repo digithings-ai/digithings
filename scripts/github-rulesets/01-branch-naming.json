@@ -13,7 +13,7 @@
       "type": "branch_name_pattern",
       "parameters": {
         "operator": "regex",
-        "pattern": "^(release/v[0-9]+\\.[0-9]+\\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|chrizefan/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+)$",
+        "pattern": "^(module/[a-z0-9-]+|release/v[0-9]+\\.[0-9]+\\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|chrizefan/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+)$",
         "negate": false,
         "name": "Must match branch taxonomy (see BRANCHING.md)"
       }

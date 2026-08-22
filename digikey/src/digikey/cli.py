@@ -30,6 +30,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.cmd != "issue-key":
         parser.error("unknown command")
+    if not args.tenant.strip():
+        parser.error("--tenant must not be empty")
 
     os.environ.setdefault("DIGIKEY_DATABASE_URL", "")
     if not os.environ.get("DIGIKEY_DATABASE_URL"):

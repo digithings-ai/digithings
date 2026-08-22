@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BYOK_MODEL_REMEDIABLE_MESSAGE,
   formatEmbedChatError,
   isFreeQuotaOrRateLimitError,
   parseEmbedChatError,
@@ -178,5 +179,83 @@ describe("shouldSuggestByokOnEmbedError", () => {
         errorMessage: "digikey token exchange failed",
       }),
     ).toBe(false);
+  });
+});
+
+describe("model-remediable BYOK refusals (#2490)", () => {
+  // digigraph refuses a bound key it cannot spend two ways: `byok_model_required`
+  // (a property of the provider) and `byok_default_model_provider_mismatch` (a
+  // property of the deployment, which the frontend cannot predict). Both are fixed
+  // by naming a model, so both must reopen the BYOK sequence and both must surface
+  // digigraph's own message rather than generic quota copy.
+  const REMEDIABLE = ["byok_model_required", "byok_default_model_provider_mismatch"] as const;
+
+  for (const errorCode of REMEDIABLE) {
+    it(`suggests BYOK for free_then_byok on ${errorCode}`, () => {
+      expect(
+        shouldSuggestByokOnEmbedError({
+          llmAccess: "free_then_byok",
+          showByok: true,
+          gateMode: "ungated",
+          errorCode,
+        }),
+      ).toBe(true);
+    });
+
+    it(`surfaces digigraph's ${errorCode} message verbatim`, () => {
+      const message = "Name a model with X-BYOK-Model so your 'openai' key is the one that pays.";
+      expect(formatEmbedChatError(new Error(JSON.stringify({ error: errorCode, message })))).toBe(
+        message,
+      );
+    });
+  }
+
+  it("does not treat every digigraph refusal as model-remediable", () => {
+    // Guards the set, not the branch: `byok_provider_unsupported` is a refusal the
+    // user cannot fix by picking a model, so widening the set to "any BYOK code"
+    // would wrongly reopen the sequence on a dead end.
+    expect(
+      shouldSuggestByokOnEmbedError({
+        llmAccess: "free_then_byok",
+        showByok: true,
+        gateMode: "ungated",
+        errorCode: "byok_provider_unsupported",
+      }),
+    ).toBe(false);
+  });
+});
+
+// The embed transport relays a model-remediable refusal as a bare code — no
+// upstream message, because digigraph's reflects the caller's own
+// X-BYOK-Provider header. Without copy of our own, a code-only payload fell
+// through to the raw-JSON tail and the visitor saw a dead end (#2515).
+describe("model-remediable refusals with no upstream message", () => {
+  for (const code of ["byok_model_required", "byok_default_model_provider_mismatch"]) {
+    it(`gives actionable copy for a bare ${code}`, () => {
+      const formatted = formatEmbedChatError(new Error(JSON.stringify({ error: code })));
+      expect(formatted).toBe(BYOK_MODEL_REMEDIABLE_MESSAGE);
+      expect(formatted).not.toContain("{");
+      expect(formatted).not.toContain(code);
+    });
+
+    it(`still opens the BYOK sequence for a bare ${code}`, () => {
+      const parsed = parseEmbedChatError(new Error(JSON.stringify({ error: code })));
+      expect(parsed?.code).toBe(code);
+      expect(
+        shouldSuggestByokOnEmbedError({
+          llmAccess: "free_then_byok",
+          gateMode: "ungated",
+          errorCode: parsed?.code,
+        }),
+      ).toBe(true);
+    });
+  }
+
+  // An upstream message, when there is one, still wins — the SSE path carries it.
+  it("prefers the upstream message when one is present", () => {
+    const formatted = formatEmbedChatError(
+      new Error(JSON.stringify({ error: "byok_model_required", message: "Name a model." })),
+    );
+    expect(formatted).toBe("Name a model.");
   });
 });

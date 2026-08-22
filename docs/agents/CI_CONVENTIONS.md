@@ -230,6 +230,19 @@ concurrency:
 
 For production pipelines where mid-run cancellation would corrupt state (Atlas baseline, monthly synthesis), set `cancel-in-progress: false` and use a named group without `${{ github.ref }}`.
 
+**Exception — a job gated on an `environment` approval must not queue.** The rule above
+assumes the run holding the group is *doing work*, so protecting it is worth a delay. A job
+behind a required-reviewer rule holds the group while it does nothing, for as long as nobody
+approves it, and `cancel-in-progress: false` protects that too — so a single unapproved run
+stops the workflow indefinitely and every later run reports `cancelled` with zero jobs, which
+looks like a cancelled deploy rather than a deploy that never happened. `db-migrate.yml` lost
+15 days and migrations 066-070 to this (#2541). Such a workflow needs
+`cancel-in-progress: true` in a **named** group: named, so applies still serialise; true, so
+an unapproved run is superseded instead of blocking. That is only safe when the newest run's
+work is a superset of what it displaces — db-migrate qualifies because its apply is purely
+ledger-gated. If yours does not, keep the queue and add a scheduled staleness check instead;
+what is never acceptable is a queue that can stall silently and forever.
+
 ### 8. workflow_run triggers and workflow names
 
 `agent-ci-failure-triage.yml` uses `workflow_run` and lists workflow names explicitly. If a watched workflow is renamed, update this list to match. The names in `workflows:` must exactly match the `name:` field of the target workflow.
