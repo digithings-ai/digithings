@@ -160,7 +160,7 @@ export function DatePager({
   const canNextMonth =
     !maxParsed || view.y < maxParsed.y || (view.y === maxParsed.y && view.m < maxParsed.m);
 
-  const cells = useMemo(() => {
+  const weeks = useMemo(() => {
     const dim = daysInMonth(view.y, view.m);
     const start = monthStartWeekday(view.y, view.m);
     const out: Array<{ iso: string; day: number } | null> = [];
@@ -169,7 +169,9 @@ export function DatePager({
       out.push({ iso: toIso(view.y, view.m, day), day });
     }
     while (out.length % 7 !== 0) out.push(null);
-    return out;
+    const rows: Array<Array<{ iso: string; day: number } | null>> = [];
+    for (let i = 0; i < out.length; i += 7) rows.push(out.slice(i, i + 7));
+    return rows;
   }, [view.y, view.m]);
 
   const onOpenChange = (next: boolean) => {
@@ -243,27 +245,36 @@ export function DatePager({
                 ))}
               </div>
               <div className="nb-cal-grid" role="grid" aria-label={monthLabel(view.y, view.m)}>
-                {cells.map((cell, i) =>
-                  cell ? (
-                    <button
-                      key={cell.iso}
-                      type="button"
-                      role="gridcell"
-                      className={cx(
-                        "nb-cal-day",
-                        cell.iso === value && "nb-cal-day--selected",
-                        !isEnabled(cell.iso) && "nb-cal-day--muted",
-                      )}
-                      aria-selected={cell.iso === value}
-                      disabled={!isEnabled(cell.iso)}
-                      onClick={() => pick(cell.iso)}
-                    >
-                      {cell.day}
-                    </button>
-                  ) : (
-                    <span key={`e-${i}`} className="nb-cal-day nb-cal-day--empty" aria-hidden />
-                  ),
-                )}
+                {weeks.map((week, w) => (
+                  <div key={`w-${w}`} role="row" className="nb-cal-row">
+                    {week.map((cell, i) =>
+                      cell ? (
+                        <button
+                          key={cell.iso}
+                          type="button"
+                          role="gridcell"
+                          className={cx(
+                            "nb-cal-day",
+                            cell.iso === value && "nb-cal-day--selected",
+                            !isEnabled(cell.iso) && "nb-cal-day--muted",
+                          )}
+                          aria-selected={cell.iso === value}
+                          disabled={!isEnabled(cell.iso)}
+                          onClick={() => pick(cell.iso)}
+                        >
+                          {cell.day}
+                        </button>
+                      ) : (
+                        <span
+                          key={`e-${w}-${i}`}
+                          role="gridcell"
+                          className="nb-cal-day nb-cal-day--empty"
+                          aria-hidden
+                        />
+                      ),
+                    )}
+                  </div>
+                ))}
               </div>
             </Popover.Popup>
           </Popover.Positioner>

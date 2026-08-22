@@ -473,9 +473,15 @@
   }
 
   .nb-cal-weekdays,
-  .nb-cal-grid {
+  .nb-cal-row {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
+    gap: 0.15rem;
+  }
+
+  .nb-cal-grid {
+    display: flex;
+    flex-direction: column;
     gap: 0.15rem;
   }
 
