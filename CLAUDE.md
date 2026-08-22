@@ -82,40 +82,23 @@ app builds, the digithings deploy build-check. (See #1310.)
 
 ## Review coverage (the gate before production)
 
-PR review runs on **Cursor Bugbot, invoked by hand** — comment `bugbot run` (or
-`cursor review`) once a diff is final, and again only if scope changes mid-PR.
-Never at PR open, and never per push: Bugbot went usage-based in June 2026 at
-roughly $1.00–$1.50 a run, so a review on every push is a real monthly cost. The
-Copilot request job was removed from `ci.yml` when that subscription lapsed
-(#1894) — it had been reporting success while attaching no reviewer.
+**Org policy (all digithings-ai repos):** [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md).
+Default is **in-session** review on a fresh-context subagent (`/review <N>`). Metered
+bots are optional; do not burn their quota on small follow-up commits.
 
-**CodeRabbit reviews automatically, but only on branches it is told about.** It
-auto-reviews the default branch (`develop`) plus whatever `base_branches` lists
-in [`.coderabbit.yaml`](.coderabbit.yaml) — currently `main`, `module/*` and
-`release/*`. Before that file existed it reviewed **only** `develop`, and said so
-only in a small "Review skipped" comment, so two classes of PR were silently
-unreviewed: every two-hop task PR (`task/<N>-slug` → `module/<component>`), which
-is precisely where this section argues review belongs, and every promotion PR
-into `main` (verified on #2231, #2232, #2242 — skip notice, zero reviews).
+**Cursor Bugbot** (when available) is the primary *external* option — comment
+`bugbot run` (or `cursor review`) once a diff is final, and again only if scope
+changes mid-PR. Never at PR open, and never per push: Bugbot went usage-based in
+June 2026 at roughly $1.00–$1.50 a run ([Cursor Bugbot](https://cursor.com/docs/bugbot)).
+The Copilot request job was removed from `ci.yml` when that subscription lapsed
+(#1894). Usage-limit `neutral` is not a review — run `/review` instead.
 
-So, in practice:
-
-| PR | automatic CodeRabbit review? |
-|----|------------------------------|
-| anything → `develop` | yes (default branch) |
-| `task/<N>-slug` → `module/<component>` | yes, via `.coderabbit.yaml` |
-| `develop` → `main` (promotion) | yes, via `.coderabbit.yaml` |
-| anything → an unlisted base | **no** — force it with `@coderabbitai review` |
-
-`@coderabbitai review` forces a review on any PR regardless, and
-`@coderabbitai configuration` prints the resolved config annotated with which
-layer supplied each setting — use it rather than guessing, since an organization
-Global Override outranks the repo file. A **passing CodeRabbit status check is
-not the same as an approving review**: it can sit alongside a blocking
-`CHANGES_REQUESTED`, so check `gh pr view --json reviewDecision`, not just checks,
-before merging. A completed CodeRabbit review *does* satisfy the promotion
-coverage gate — the loop is "an agent reviewed the task PR", not "Bugbot
-specifically ran".
+**CodeRabbit is optional / sunset.** While it still runs, it auto-reviews only
+bases listed in [`.coderabbit.yaml`](.coderabbit.yaml) (`develop` default plus
+`main`, `module/*`, `release/*`). Do **not** `@coderabbitai review` for CI nits,
+docs, or one-line fixes. Re-request **only** when a prior **major** finding was
+fixed and needs verification. A green CodeRabbit status check is not an approving
+review — check `gh pr view --json reviewDecision` / open threads before merge.
 
 Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
 of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
@@ -134,17 +117,13 @@ commits are exempt by nature; every other commit clears it, strongest first:
 | label **`reviewed:owner`** | "I read this myself" | yes — so the verdict names who applied it and when |
 | label **`risk:low`** | "this did not warrant a review" | yes |
 
-The intended loop at the task PR: agent review → findings posted on the PR →
-address them → green. If the fixes were large, run another loop. Do not re-review
-at the promotion.
-
-**When no review bot left an artifact, review in-session — do not skip.** Bugbot
-reports `neutral` on a usage-limit skip, and that is not a review. CodeRabbit
-rate-limits and "Review failed" notices are not reviews either. Run `/review <N>`
-instead: it fans out over independent lenses in **fresh-context subagents** (the
-session that wrote the code must not review its own work), verifies each finding
-with a command, puts it through a refuter, then posts the surviving findings as a PR
-comment opening with `<!-- in-session-review -->` and applies `reviewed:agent`.
+**When Bugbot / CodeRabbit are unavailable or out of quota, review in-session —
+do not skip.** Bugbot `neutral` is not a review. Run `/review <N>`: tiered
+fresh-context subagents (cheap scope pass, then strong model only on flagged
+areas — see CODE_REVIEW_POLICY.md and `agents/sources/commands/review.md`).
+Author session must not review its own work. Verify each finding with a command,
+refute, then post survivors as a PR comment opening with
+`<!-- in-session-review -->` and apply `reviewed:agent`.
 
 Every line here is written by a coding agent, so an agent reviewing it is not weaker
 in kind than Bugbot — which is also an agent. What matters is that the reviewer did
@@ -186,7 +165,8 @@ under `agents/sources/subagents/` already pins one; keep doing it:
 |------|-------|----------|
 | Routing, dispatch, dictation cleanup, small/mechanical verification | haiku, or sonnet when the check has any real complexity — pick by task, not by habit | `component-router`, `dictation-normalizer`, a lint/type-check triage pass |
 | Implementation, spec-writing (the heavy lifting) | sonnet | `spec-writer`, `test-first-implementer` |
-| Review, security audit, architecture judgment — reasoning, big-picture opinion, reflection | opus | the `/review` in-session lenses, `pr-review-toolkit` plugin agents |
+| Review **scope** pass — map diff, list risk areas, skip clean files | haiku or sonnet (Claude); fast/cheap Cursor model | `/review` first pass |
+| Review **deep** pass / security / architecture — only on flagged areas | opus (Claude); stronger Cursor model or dedicated review agent | `/review` deep lenses, security paths |
 | Ad-hoc design/architecture consult ("advisor" role — a second opinion outside a formal review, a judge-panel comparison of approaches) | opus for anything hard-to-reverse or architecturally significant; sonnet default otherwise | a `Plan`/`Explore` agent, an `AskUserQuestion` decision point with real trade-offs, a "which approach is better" comparison |
 
 There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in
@@ -203,9 +183,9 @@ the table above.** `pr-review-toolkit`'s six agents split: `code-reviewer` and
 silently ride whatever the session is on, same as an unpinned custom subagent
 would. The `/review` command's lens fan-out has no subagent file to pin at all
 (it dispatches ad hoc via the `Agent` tool at runtime), so its instructions
-explicitly say to pass `model: opus` on each dispatch rather than leaving it
-implicit — check `agents/sources/commands/review.md` before assuming that still
-holds if the command changes. Don't assume a plugin or ad-hoc dispatch is
+explicitly tier models: sonnet/haiku for the scope pass, `model: opus` only on
+flagged deep lenses — check `agents/sources/commands/review.md` before assuming
+every lens still runs at opus. Don't assume a plugin or ad-hoc dispatch is
 pinned just because a custom subagent would be; verify the specific agent file.
 
 **Advisors get the same treatment as review, not the implementation default.**
