@@ -206,12 +206,23 @@ describe('TodayTab layout (Task 2.2)', () => {
   });
 
 
-  it('height-matches the desktop consensus and broker-brief panels', () => {
+  it('stacks digest → trade ideas → consensus on the left with a wider briefs rail', () => {
     const html = render();
-    expect(html).toContain('items-start');
-    expect(html).not.toContain('lg:h-[36.5rem]');
+    expect(html).toContain('today-main');
+    expect(html).toContain('lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]');
+    // Digest precedes trade ideas heading in markup (left stack order).
+    const digestIdx = html.indexOf('Digest brief');
+    const ideasIdx = html.indexOf('Today’s trade ideas');
+    const consensusIdx = html.indexOf('Consensus');
+    expect(digestIdx).toBeGreaterThan(0);
+    expect(ideasIdx).toBeGreaterThan(digestIdx);
+    expect(consensusIdx).toBeGreaterThan(ideasIdx);
+    // Briefs rail still height-matches the left stack on desktop.
     expect(html).toContain('lg:relative lg:self-stretch');
     expect(html).toContain('lg:absolute lg:inset-0');
+    // Single gap source on the card list — date groups use space-y, not nested gap-2 wrappers.
+    expect(html).toContain('space-y-3');
+    expect(html).not.toContain('flex flex-col gap-2"><h3');
   });
 
   it('groups broker briefs by effective date (report_date ?? run_date) newest-first', () => {

@@ -422,7 +422,11 @@ export default function TwelveXClient() {
         return <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />;
       default:
         return view === 'briefs' ? (
-          <BriefsIndex briefs={data?.todayBriefs ?? []} onBack={closeBriefsIndex} />
+          <BriefsIndex
+            briefs={data?.researchBriefs ?? []}
+            defaultDate={canonicalRunDate}
+            onBack={closeBriefsIndex}
+          />
         ) : (
           <TodayTab
             digest={data?.digest ?? null}
