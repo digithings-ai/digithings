@@ -582,6 +582,8 @@ Three sources merged in `tool_policy.py`:
 When an allowlist is active, `execute()` in `registry.py:106` rejects denied tools with an audit log entry (`tool_denied` event). The schema-level filter in `get_tools()` also removes denied tools from the LLM context, preventing the model from attempting to call them.
 
 An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. `None` means unrestricted.
+`research_node` deserializes via `tool_policy.frozen_from_state_list` so an empty list is never
+coerced to unrestricted by a falsy check.
 
 #### 6.2.1 Tool Choice Requirement
 
