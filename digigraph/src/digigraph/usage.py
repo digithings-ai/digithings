@@ -203,6 +203,31 @@ def logical_call_context(
         _LOGICAL_CALL_CONTEXT.reset(token)
 
 
+def detach_logical_call_context() -> None:
+    """Drop the inherited logical-call description in a fan-out worker.
+
+    :func:`logical_call_context` hands its :class:`ProviderCallContextHandle` to the
+    context var, and that handle is *mutable* — it carries ``last_call_id`` and a list of
+    deferred records. A parallel worker started from a ``contextvars.copy_context()``
+    snapshot (which is how digillm carries the request's BYOK credentials into its tool
+    pool) inherits the value by reference, so several workers would write ``last_call_id``
+    onto one shared handle and append into one shared deferred list — interleaving each
+    other's telemetry. digillm clears its own equivalent var in
+    ``detach_provider_call_context``; this is the same move one layer up, and
+    ``llm_client`` registers it as digillm's fan-out detach hook.
+
+    Token-free by necessity: a copied context carries values but no reset tokens, so there
+    is nothing to ``reset`` and nothing to restore — the worker's context dies with the
+    worker. Never call this on a caller's own context; it would silently unbind a live
+    :func:`logical_call_context` block.
+
+    ``_CALL_CONTEXT`` is deliberately left alone: its :class:`CallContext` is frozen and
+    holds no mutable state, so inheriting the node identity is safe and improves
+    attribution.
+    """
+    _LOGICAL_CALL_CONTEXT.set(None)
+
+
 def provider_call_metadata() -> tuple[UUID | None, LogicalCallContext | None]:
     """Return the current real node identity and optional logical-call description."""
     return _CALL_CONTEXT.get().node_run_id, _LOGICAL_CALL_CONTEXT.get()

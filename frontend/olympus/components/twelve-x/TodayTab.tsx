@@ -24,6 +24,7 @@ type DigestData = { run_date: string; summary: string; key_themes: string[]; doc
 export default function TodayTab({
   digest,
   tradeIdeas,
+  tradeIdeaHistory = [],
   confluence,
   briefs,
   events,
@@ -33,6 +34,7 @@ export default function TodayTab({
 }: {
   digest: DigestData;
   tradeIdeas: FxTradeIdeaRow[];
+  tradeIdeaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
   confluence: FxConfluenceSnapshotRow[];
   briefs: FxBriefRow[];
   events: FxEconomicCalendarRow[];
@@ -87,6 +89,7 @@ export default function TodayTab({
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
         <TradeIdeasPanel
           ideas={tradeIdeas}
+          ideaHistory={tradeIdeaHistory}
           confluence={confluence}
           highlightRanks={highlightRanks}
         />
