@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Pager } from '@digithings/web';
+import { ArrowLeft } from 'lucide-react';
+import { DatePager } from '@digithings/web';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 import { sortTodayBriefs } from '@/lib/twelve-x/fetch';
 import { adjacentDates } from '@/components/pipeline/PipelineDaySelector';
@@ -65,22 +65,6 @@ export function adjacentBriefBoardDates(
   return { prev, next };
 }
 
-function formatBoardDateLabel(iso: string): string {
-  if (!iso) return '—';
-  try {
-    const d = new Date(`${iso}T12:00:00Z`);
-    return d.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: 'UTC',
-    });
-  } catch {
-    return iso;
-  }
-}
-
 export default function BriefsIndex({
   briefs,
   defaultDate = null,
@@ -119,33 +103,20 @@ export default function BriefsIndex({
 
         <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
           <span className="font-mono text-xs font-medium uppercase text-ink-mute">Board date</span>
-          <Pager
-            dress="capsule"
-            prevLabel={<ChevronLeft size={14} aria-hidden />}
-            nextLabel={<ChevronRight size={14} aria-hidden />}
+          <DatePager
+            value={activeDate}
+            onChange={setSelectedDate}
+            min={minDate}
+            max={maxDate}
             prevAriaLabel="Previous board date"
             nextAriaLabel="Next board date"
+            labelAriaLabel="Filter briefs by board date"
             prevDisabled={!prev}
             nextDisabled={!next}
             onPrev={() => prev && setSelectedDate(prev)}
             onNext={() => next && setSelectedDate(next)}
-          >
-            <label className="relative inline-flex min-w-0 cursor-pointer items-center justify-center px-1">
-              <span className="pointer-events-none whitespace-nowrap font-mono text-xs text-ink">
-                {formatBoardDateLabel(activeDate)}
-              </span>
-              <input
-                type="date"
-                value={activeDate}
-                min={minDate}
-                max={maxDate}
-                disabled={dates.length === 0}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="absolute inset-0 cursor-pointer opacity-0"
-                aria-label="Filter briefs by board date"
-              />
-            </label>
-          </Pager>
+            disabled={dates.length === 0}
+          />
         </div>
       </header>
 

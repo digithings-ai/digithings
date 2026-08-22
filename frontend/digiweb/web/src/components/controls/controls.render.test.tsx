@@ -14,6 +14,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "./Card";
 import { EmptyState } from "./EmptyState";
 import { Input } from "./Input";
 import { Label } from "./Label";
+import { DatePager, formatDatePagerLabel } from "./DatePager";
 import { IconButton, Pager, PagerPage, SegmentedControl } from "./NavButtons";
 import { SearchBar } from "./SearchBar";
 import { Skeleton, SkeletonGroup } from "./Skeleton";
@@ -230,6 +231,7 @@ describe("NavButtons", () => {
       </Pager>
     );
     expect(html).toContain("nb-pager");
+    expect(html).toContain("nb-pager-middle");
     expect(html).toContain("nb-page-edge");
     expect(html).toContain("disabled");
     expect(html).toContain('aria-label="Next day"');
@@ -243,6 +245,27 @@ describe("NavButtons", () => {
   });
 });
 
+
+describe("DatePager", () => {
+  it("renders a fixed middle date label and calendar trigger", () => {
+    const html = renderToStaticMarkup(
+      <DatePager
+        value="2026-09-30"
+        onChange={() => {}}
+        labelAriaLabel="Pick date"
+        prevAriaLabel="Previous day"
+        nextAriaLabel="Next day"
+      />,
+    );
+    expect(html).toContain("nb-pager--capsule");
+    expect(html).toContain("nb-pager--date");
+    expect(html).toContain("nb-pager-middle");
+    expect(html).toContain("nb-pager-date");
+    expect(html).toContain('aria-label="Pick date"');
+    expect(html).toContain(formatDatePagerLabel("2026-09-30"));
+    expect(formatDatePagerLabel("2026-09-30")).toBe("Wed, Sep 30, 2026");
+  });
+});
 describe("TagsInput", () => {
   it("renders chips with remove controls and filtered suggestions", () => {
     const html = renderToStaticMarkup(

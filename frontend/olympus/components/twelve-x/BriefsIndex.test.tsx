@@ -116,7 +116,8 @@ describe('BriefsIndex', () => {
     expect(html).toContain('Broker briefs');
     expect(html).toContain('Board date');
     expect(html).toContain('aria-label="Filter briefs by board date"');
-    expect(html).toContain('value="2026-06-22"');
+    expect(html).toContain('nb-pager--date');
+    expect(html).toContain('nb-pager-middle');
     expect(html).toContain('Previous board date');
     expect(html).toContain('Next board date');
     expect(html).toContain('Mon, Jun 22, 2026');
@@ -124,6 +125,7 @@ describe('BriefsIndex', () => {
     expect(html).toContain('Board 22 A');
     expect(html).toContain('Board 22 B');
     expect(html).not.toContain('Board 20 only');
+    expect(html).not.toContain('type="date"');
     expect(html).not.toContain('aria-label="Available board dates"');
   });
 });
