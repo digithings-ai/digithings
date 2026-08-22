@@ -20,6 +20,13 @@ else
   echo "skip: tests/scripts/test_pre_push_hook.sh missing"
 fi
 
+echo "== worktree conflict advisory: nested layout + pipefail drain (#2485/#2569) =="
+if [[ -f tests/scripts/test_check_worktree_conflicts.sh ]]; then
+  bash tests/scripts/test_check_worktree_conflicts.sh
+else
+  echo "skip: tests/scripts/test_check_worktree_conflicts.sh missing"
+fi
+
 echo "== REM-008: provider-review unit tests (no Claude) =="
 python3 -m pytest tests/provider_review/ -m unit -q --tb=line
 

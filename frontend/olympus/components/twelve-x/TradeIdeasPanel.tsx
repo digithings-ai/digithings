@@ -6,7 +6,9 @@ import type { FxTradeIdeaRow, FxConfluenceSnapshotRow } from '@/lib/twelve-x/typ
 import {
   continuityForBoard,
   continuityKey,
+  formatBoardDate,
   formatContinuityLine,
+  formatPublishAsOf,
   type IdeaContinuityMeta,
 } from '@/lib/twelve-x/idea-continuity';
 import { buildIdeaDetailModel, type IdeaDetailLevelRow } from '@/lib/twelve-x/trade-levels';
@@ -147,11 +149,19 @@ export function IdeaDetail({ idea }: { idea: FxTradeIdeaRow }) {
   );
 }
 
+/** Card-header stamp: stack Suggested / Updated so narrow cards wrap cleanly. */
 function ContinuityStamp({ meta }: { meta: IdeaContinuityMeta | undefined }) {
   if (!meta) return null;
+  const suggestedLabel = meta.boardsOnThread <= 1 ? 'Suggested' : 'First suggested';
+  const suggested = `${suggestedLabel} ${formatBoardDate(meta.firstSuggested)}`;
+  const updated = `Updated ${formatPublishAsOf(meta.lastUpdated)}`;
   return (
-    <span className="ml-auto shrink-0 text-right font-mono text-[10px] leading-tight text-ink-mute">
-      {formatContinuityLine(meta)}
+    <span
+      className="ml-auto min-w-0 max-w-[min(100%,14rem)] text-right font-mono text-[10px] leading-snug text-ink-mute"
+      title={formatContinuityLine(meta)}
+    >
+      <span className="block break-words">{suggested}</span>
+      <span className="block break-words">{updated}</span>
     </span>
   );
 }
@@ -245,12 +255,14 @@ export default function TradeIdeasPanel({
         onClick={() => toggleIdea(top.rank)}
         aria-expanded={openRank === top.rank}
       >
-        <div className="flex items-start gap-2">
-          <span className="font-mono text-[11px] text-ink-mute">#1</span>
-          <span className="font-semibold text-ink">{top.pair}</span>
-          <span className={`text-xs font-semibold uppercase ${dirClass(top.direction)}`}>
-            {top.direction}
-          </span>
+        <div className="flex min-w-0 items-start gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="font-mono text-[11px] text-ink-mute">#1</span>
+            <span className="font-semibold text-ink">{top.pair}</span>
+            <span className={`text-xs font-semibold uppercase ${dirClass(top.direction)}`}>
+              {top.direction}
+            </span>
+          </div>
           <ContinuityStamp meta={metaFor(top)} />
         </div>
         <p className="mt-1 text-sm text-ink">{top.title}</p>
@@ -276,13 +288,15 @@ export default function TradeIdeasPanel({
           onClick={() => toggleIdea(idea.rank)}
           aria-expanded={openRank === idea.rank}
         >
-          <span className="flex items-start gap-2">
-            <span className="font-mono text-[10px] text-ink-mute">#{idea.rank}</span>
-            <span className="font-semibold text-ink">{idea.pair}</span>
-            <span className={`font-semibold uppercase ${dirClass(idea.direction)}`}>
-              {idea.direction}
+          <span className="flex min-w-0 items-start gap-2">
+            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5">
+              <span className="font-mono text-[10px] text-ink-mute">#{idea.rank}</span>
+              <span className="font-semibold text-ink">{idea.pair}</span>
+              <span className={`font-semibold uppercase ${dirClass(idea.direction)}`}>
+                {idea.direction}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-ink-mute">{idea.title}</span>
             </span>
-            <span className="min-w-0 flex-1 truncate text-ink-mute">{idea.title}</span>
             <ContinuityStamp meta={metaFor(idea)} />
           </span>
           {openRank === idea.rank ? <IdeaDetail idea={idea} /> : null}

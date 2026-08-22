@@ -268,7 +268,7 @@ export default function TwelveXClient() {
           getIntelligence(),
           getUpcomingEvents(),
           getMatrix(),
-          getBriefs(14),
+          getBriefs(30),
           getIdeaEval(),
           getConsensusEval(),
         ]);
@@ -399,7 +399,6 @@ export default function TwelveXClient() {
             focusCcy={consensusFocusCcy}
             intelligenceWhy={data?.intelligenceWhy ?? { runDate: null, items: [] }}
             researchBriefs={data?.researchBriefs ?? []}
-            consensusEval={data?.consensusEval ?? []}
           />
         );
       case 'track-record':
@@ -423,7 +422,11 @@ export default function TwelveXClient() {
         return <MatrixTab cells={data?.matrix ?? []} onOpenBrief={openBrief} />;
       default:
         return view === 'briefs' ? (
-          <BriefsIndex briefs={data?.todayBriefs ?? []} onBack={closeBriefsIndex} />
+          <BriefsIndex
+            briefs={data?.researchBriefs ?? []}
+            defaultDate={canonicalRunDate}
+            onBack={closeBriefsIndex}
+          />
         ) : (
           <TodayTab
             digest={data?.digest ?? null}
