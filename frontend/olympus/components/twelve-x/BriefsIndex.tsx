@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Pager } from '@digithings/web';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 import { sortTodayBriefs } from '@/lib/twelve-x/fetch';
+import { adjacentDates } from '@/components/pipeline/PipelineDaySelector';
 import { useTwelveX } from './context';
 
 /** Distinct board run_dates present in a briefs window, newest first. */
@@ -43,6 +45,42 @@ export function resolveActiveBoardDate(
   return resolveInitialDate(dates, defaultDate);
 }
 
+/**
+ * Chevron targets for board dates (newest-first), including gap days: when the
+ * calendar lands on a day with no briefs, jump to the nearest older/newer board.
+ */
+export function adjacentBriefBoardDates(
+  dates: string[],
+  value: string,
+): { prev: string | null; next: string | null } {
+  if (!value || dates.length === 0) return { prev: null, next: null };
+  if (dates.includes(value)) return adjacentDates(dates, value);
+
+  let prev: string | null = null;
+  let next: string | null = null;
+  for (const d of dates) {
+    if (d < value && (prev === null || d > prev)) prev = d;
+    if (d > value && (next === null || d < next)) next = d;
+  }
+  return { prev, next };
+}
+
+function formatBoardDateLabel(iso: string): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(`${iso}T12:00:00Z`);
+    return d.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export default function BriefsIndex({
   briefs,
   defaultDate = null,
@@ -66,53 +104,50 @@ export default function BriefsIndex({
 
   const minDate = dates.length ? dates[dates.length - 1] : undefined;
   const maxDate = dates.length ? dates[0] : undefined;
+  const { prev, next } = adjacentBriefBoardDates(dates, activeDate);
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center gap-3">
+      <header className="flex min-w-0 flex-wrap items-center gap-3">
         <button type="button" className="flex items-center gap-1 text-xs text-accent hover:underline" onClick={onBack}>
           <ArrowLeft size={14} /> Today
         </button>
         <h2 className="text-base font-semibold text-ink">Broker briefs</h2>
-        <label className="ml-auto flex items-center gap-2">
-          <span className="font-mono text-[10px] uppercase tracking-wider text-ink-mute">Board date</span>
-          <input
-            type="date"
-            value={activeDate}
-            min={minDate}
-            max={maxDate}
-            disabled={dates.length === 0}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="rounded-md border border-hair bg-term-bg px-2 py-1.5 font-mono text-xs text-ink focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
-            aria-label="Filter briefs by board date"
-          />
-        </label>
-        <span className="font-mono text-[10px] text-ink-mute">{dayBriefs.length}</span>
-      </header>
+        <span className="font-mono text-[10px] text-ink-mute">
+          {dayBriefs.length} {dayBriefs.length === 1 ? 'brief' : 'briefs'}
+        </span>
 
-      {dates.length > 1 ? (
-        <div className="flex flex-wrap gap-1.5" role="list" aria-label="Available board dates">
-          {dates.map((d) => {
-            const selected = d === activeDate;
-            return (
-              <button
-                key={d}
-                type="button"
-                role="listitem"
-                onClick={() => setSelectedDate(d)}
-                className={
-                  selected
-                    ? 'rounded border border-accent/60 bg-accent/10 px-2 py-1 font-mono text-[11px] text-accent'
-                    : 'rounded border border-hair bg-term-bg px-2 py-1 font-mono text-[11px] text-ink-mute hover:border-accent/40 hover:text-ink-soft'
-                }
-                aria-pressed={selected}
-              >
-                {d}
-              </button>
-            );
-          })}
+        <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
+          <span className="font-mono text-xs font-medium uppercase text-ink-mute">Board date</span>
+          <Pager
+            dress="capsule"
+            prevLabel={<ChevronLeft size={14} aria-hidden />}
+            nextLabel={<ChevronRight size={14} aria-hidden />}
+            prevAriaLabel="Previous board date"
+            nextAriaLabel="Next board date"
+            prevDisabled={!prev}
+            nextDisabled={!next}
+            onPrev={() => prev && setSelectedDate(prev)}
+            onNext={() => next && setSelectedDate(next)}
+          >
+            <label className="relative inline-flex min-w-0 cursor-pointer items-center justify-center px-1">
+              <span className="pointer-events-none whitespace-nowrap font-mono text-xs text-ink">
+                {formatBoardDateLabel(activeDate)}
+              </span>
+              <input
+                type="date"
+                value={activeDate}
+                min={minDate}
+                max={maxDate}
+                disabled={dates.length === 0}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="absolute inset-0 cursor-pointer opacity-0"
+                aria-label="Filter briefs by board date"
+              />
+            </label>
+          </Pager>
         </div>
-      ) : null}
+      </header>
 
       {dayBriefs.length === 0 ? (
         <div className="glass-card p-10 text-center text-sm text-ink-mute">
@@ -129,11 +164,17 @@ export default function BriefsIndex({
               className="glass-card p-4 text-left transition-colors hover:border-accent/50"
               onClick={() => openBrief(b.source_file, b.run_date)}
             >
-              <div className="flex items-center gap-2 text-[11px] text-ink-mute">
-                <span className="font-semibold text-ink-soft">{b.broker_name ?? 'Unknown desk'}</span>
-                {b.trader_relevance ? <span className="uppercase">· {b.trader_relevance}</span> : null}
+              <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
+                <span className="min-w-0 truncate font-semibold text-ink-soft">
+                  {b.broker_name ?? 'Unknown desk'}
+                </span>
+                {b.trader_relevance ? (
+                  <span className="shrink-0 uppercase">· {b.trader_relevance}</span>
+                ) : null}
               </div>
-              <p className="mt-1 text-sm font-medium text-ink">{b.document_title ?? b.source_file}</p>
+              <p className="mt-1 truncate text-sm font-medium text-ink">
+                {b.document_title ?? b.source_file}
+              </p>
               {b.central_thesis ? <p className="mt-1 line-clamp-3 text-xs text-ink-soft">{b.central_thesis}</p> : null}
             </button>
           ))}

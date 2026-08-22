@@ -151,12 +151,12 @@ export default function TodayTab({
                             className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
                             onClick={() => openBrief(b.source_file, b.run_date)}
                           >
-                            <div className="flex items-center gap-2 text-[11px] text-ink-mute">
-                              <span className="font-semibold text-ink-soft">
+                            <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
+                              <span className="min-w-0 truncate font-semibold text-ink-soft">
                                 {b.broker_name ?? 'Unknown desk'}
                               </span>
                               {b.trader_relevance ? (
-                                <span className="uppercase">· {b.trader_relevance}</span>
+                                <span className="shrink-0 uppercase">· {b.trader_relevance}</span>
                               ) : null}
                             </div>
                             <p className="mt-1 truncate text-sm font-medium text-ink">

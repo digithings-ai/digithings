@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 import { TwelveXProvider, type TwelveXContextValue } from './context';
 import BriefsIndex, {
+  adjacentBriefBoardDates,
   availableBriefRunDates,
   briefsForRunDate,
   resolveActiveBoardDate,
@@ -85,10 +86,22 @@ describe('BriefsIndex helpers', () => {
     expect(resolveActiveBoardDate('2026-06-19', dates, '2026-06-22')).toBe('2026-06-22');
     expect(resolveActiveBoardDate('2026-06-23', dates, null)).toBe('2026-06-22');
   });
+
+  it('chevron targets skip to nearest board dates from a gap day', () => {
+    const dates = ['2026-06-22', '2026-06-20'];
+    expect(adjacentBriefBoardDates(dates, '2026-06-21')).toEqual({
+      prev: '2026-06-20',
+      next: '2026-06-22',
+    });
+    expect(adjacentBriefBoardDates(dates, '2026-06-22')).toEqual({
+      prev: '2026-06-20',
+      next: null,
+    });
+  });
 });
 
 describe('BriefsIndex', () => {
-  it('defaults to the canonical board date and exposes a date filter', () => {
+  it('defaults to the canonical board date and exposes a pipeline-style date pager', () => {
     const html = renderToStaticMarkup(
       createElement(
         TwelveXProvider,
@@ -101,11 +114,16 @@ describe('BriefsIndex', () => {
       ),
     );
     expect(html).toContain('Broker briefs');
+    expect(html).toContain('Board date');
     expect(html).toContain('aria-label="Filter briefs by board date"');
     expect(html).toContain('value="2026-06-22"');
+    expect(html).toContain('Previous board date');
+    expect(html).toContain('Next board date');
+    expect(html).toContain('Mon, Jun 22, 2026');
+    expect(html).toContain('2 briefs');
     expect(html).toContain('Board 22 A');
     expect(html).toContain('Board 22 B');
     expect(html).not.toContain('Board 20 only');
-    expect(html).toContain('aria-label="Available board dates"');
+    expect(html).not.toContain('aria-label="Available board dates"');
   });
 });
