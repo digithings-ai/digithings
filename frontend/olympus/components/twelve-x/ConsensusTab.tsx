@@ -3,10 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LineChart as LineChartIcon } from 'lucide-react';
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
   ReferenceArea,
@@ -27,7 +24,6 @@ import type {
   ConsensusDeltaSet,
   FxBriefRow,
   FxConsensusDivergence,
-  FxConsensusEvalRow,
   FxConsensusSnapshotRow,
   IntelligenceWhy,
 } from '@/lib/twelve-x/types';
@@ -36,7 +32,6 @@ import { ConsensusDataTable } from './ConsensusDataTable';
 import CurrencyDrilldownPanel from './CurrencyDrilldownPanel';
 import DivergencePanel from './DivergencePanel';
 import { augmentWithStaleSeries } from '@/lib/twelve-x/consensus-chart';
-import { buildJumpStripSeries } from '@/lib/twelve-x/track-record';
 import { useTwelveX } from './context';
 
 const SCORE_MIN = -SCORE_MAX;
@@ -75,7 +70,6 @@ export default function ConsensusTab({
   focusCcy,
   intelligenceWhy,
   researchBriefs,
-  consensusEval = [],
   initialView = 'table',
 }: {
   series: FxConsensusSnapshotRow[];
@@ -86,7 +80,6 @@ export default function ConsensusTab({
   focusCcy?: string | null;
   intelligenceWhy: IntelligenceWhy;
   researchBriefs: FxBriefRow[];
-  consensusEval?: FxConsensusEvalRow[];
   initialView?: ConsensusView;
 }) {
   const chart = useChartColors();
@@ -127,11 +120,6 @@ export default function ConsensusTab({
   const scoreSeries = useMemo<ScoreSeriesRow[]>(
     () => augmentWithStaleSeries(rawScoreSeries, currencies),
     [rawScoreSeries, currencies],
-  );
-
-  const jumpStrip = useMemo(
-    () => buildJumpStripSeries(consensusEval),
-    [consensusEval],
   );
 
   const hasSeries = scoreSeries.length > 0 && currencies.length > 0;
@@ -344,58 +332,6 @@ export default function ConsensusTab({
               </div>
             )}
           </div>
-
-          {jumpStrip.length > 0 ? (
-            <div className="glass-card p-4 md:p-5 space-y-2" data-chart="jump-strip">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">
-                  Day-to-day |Δscore|
-                </h3>
-                <span className="text-[10px] text-ink-mute">
-                  Max abs move across G10 · bars ≥ 1.0 highlighted
-                </span>
-              </div>
-              <div className="h-[120px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={jumpStrip} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-                    <CartesianGrid stroke={chart.hair} vertical={false} />
-                    <XAxis
-                      dataKey="run_date"
-                      tick={{ fill: chart.axis, fontSize: 10 }}
-                      tickFormatter={(d: string) => d?.slice(5)}
-                    />
-                    <YAxis
-                      domain={[0, 'auto']}
-                      tick={{ fill: chart.axis, fontSize: 10 }}
-                      width={36}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'var(--term-bg)',
-                        border: '1px solid var(--hair)',
-                        color: 'var(--ink)',
-                        borderRadius: '8px',
-                        fontSize: '0.8rem',
-                      }}
-                      formatter={(val) => {
-                        const n = val == null ? NaN : typeof val === 'number' ? val : Number(val);
-                        return [Number.isNaN(n) ? '—' : n.toFixed(2), '|Δscore|'];
-                      }}
-                    />
-                    <ReferenceLine y={1} stroke={chart.warn} strokeOpacity={0.5} strokeDasharray="3 3" />
-                    <Bar dataKey="abs_delta" name="|Δscore|" maxBarSize={10}>
-                      {jumpStrip.map((row) => (
-                        <Cell
-                          key={row.run_date}
-                          fill={row.large ? chart.warn : withAlpha(chart.accent, 0.55)}
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          ) : null}
         </div>
       ) : null}
 

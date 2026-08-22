@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatWilsonPct, wilsonInterval } from './wilson';
 import {
-  buildJumpStripSeries,
   openIdeas,
   summarizeConsensusAccuracy,
   summarizeConsensusStability,
@@ -166,11 +165,6 @@ describe('consensus stability + jump strip', () => {
     expect(weighted.signFlipPct.k).toBe(1);
     expect(weighted.largeJumpPct.k).toBe(1);
     expect(weighted.medianAbsDelta).toBeCloseTo(0.65);
-  });
-
-  it('builds max-|Δ| jump strip per day', () => {
-    const strip = buildJumpStripSeries(evalRows);
-    expect(strip).toEqual([{ run_date: '2026-06-13', abs_delta: 1.1, large: true }]);
   });
 
   it('summarizes 5d accuracy', () => {
