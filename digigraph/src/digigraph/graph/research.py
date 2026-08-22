@@ -19,6 +19,7 @@ from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
+from digigraph.tool_policy import frozen_from_state_list
 from digigraph.tools.digisearch import digisearch
 from digigraph.trace_events import merge_rag_sources_accumulator
 
@@ -339,8 +340,10 @@ def _run_document_rag_path(
 
     skill_ids = cfg.get_enabled_skills() if cfg else ["search", "project_rag"]
 
-    _raw_allowed = state.get("allowed_tool_names")
-    _allowed_names = frozenset(_raw_allowed) if _raw_allowed else None
+    # Distinguish None (unrestricted) from [] (deny-all). A falsy check coerces
+    # empty allowlist → None and silently opens every tool — the documented
+    # contract is the opposite (ARCHITECTURE § tool allowlist; tool_policy).
+    _allowed_names = frozen_from_state_list(state.get("allowed_tool_names"))
     _ctx_rid = state.get("request_id")
     _ctx_wid = state.get("workflow_id")
     # Normalize before constructing ToolContext (#2295 review): an empty or
