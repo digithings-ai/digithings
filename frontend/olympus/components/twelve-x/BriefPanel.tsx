@@ -1,9 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, FileText, Users, X } from 'lucide-react';
-import { Sheet, SheetClose, SheetContent, SheetTitle } from '@digithings/web';
+import { ExternalLink, FileText, Users } from 'lucide-react';
+import { Sheet, SheetContent, SheetTitle } from '@digithings/web';
 
+import DetailPanelHeaderActions, {
+  detailPanelSheetSizeClass,
+  type DetailPanelSize,
+} from '@/components/DetailPanelHeaderActions';
 import { SafeMarkdown } from '@/components/SafeMarkdown';
 import { getBrief } from '@/lib/twelve-x/fetch';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
@@ -104,6 +108,10 @@ export function BriefPanelBody({
  * animation); the Sheet's entrance slide honors prefers-reduced-motion via
  * controls-overlay.css.
  *
+ * Reader sizes match pipeline artifacts via DetailPanelHeaderActions: default /
+ * wide / full-screen (desktop). Deep links stay on `?brief=` / `?briefDate=`
+ * (TwelveXClient) — there is no separate brief route, same as pipeline nodes.
+ *
  * `runDate` pins the right brief when two runs share a `source_file`; `getBrief`
  * falls back to the latest run carrying that file when it's null.
  */
@@ -121,13 +129,15 @@ export default function BriefPanel({
   const [brief, setBrief] = useState<FxBriefRow | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [size, setSize] = useState<DetailPanelSize>('default');
 
   // Reset the resolved brief whenever the panel closes / key clears. Adjusting
   // state during render (rather than in an effect) avoids the cascading-render
   // lint — see https://react.dev/learn/you-might-not-need-an-effect.
-  if (!open && (brief !== null || error !== null)) {
+  if (!open && (brief !== null || error !== null || size !== 'default')) {
     setBrief(null);
     setError(null);
+    setSize('default');
   }
 
   // Lazily resolve the brief whenever the key changes. All state writes live in
@@ -167,7 +177,7 @@ export default function BriefPanel({
       <SheetContent
         side="right"
         showCloseButton={false}
-        className="w-full! max-w-xl! gap-0! bg-term-bg! shadow-2xl!"
+        className={`${detailPanelSheetSizeClass(size)} gap-0! bg-term-bg! shadow-2xl!`}
       >
         {/* Grab bar — phone-only affordance hinting the sheet is dismissable. */}
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
@@ -181,15 +191,15 @@ export default function BriefPanel({
             </SheetTitle>
             <p className="truncate font-mono text-[11px] text-ink-mute">{sourceFile}</p>
           </div>
-          <SheetClose
-            aria-label="Close"
-            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
-          >
-            <X size={18} aria-hidden />
-          </SheetClose>
+          <DetailPanelHeaderActions size={size} onSizeChange={setSize} onClose={onClose} />
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div
+          className={[
+            'min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]',
+            size === 'full' ? 'md:mx-auto md:w-full md:max-w-3xl' : '',
+          ].join(' ')}
+        >
           <BriefPanelBody brief={brief} loading={loading} error={error} />
         </div>
       </SheetContent>
