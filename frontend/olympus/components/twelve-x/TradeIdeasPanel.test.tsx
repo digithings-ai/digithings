@@ -137,6 +137,10 @@ describe('TradeIdeasPanel', () => {
     expect(html).toContain('First suggested 20 Jul');
     expect(html).toContain('Updated 22 Jul 10:00 UTC');
     expect(html).toContain('Suggested 22 Jul');
+    // Two-line wrap-friendly stamp (no shrink-0 forcing overflow past the card).
+    expect(html).toContain('min-w-0 max-w-[min(100%,14rem)]');
+    expect(html).toContain('block break-words');
+    expect(html).not.toMatch(/ml-auto shrink-0 text-right font-mono/);
   });
 
   it('merges current ideas into history when board date is missing from lookback', () => {
