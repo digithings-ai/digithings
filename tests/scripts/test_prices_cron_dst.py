@@ -133,6 +133,7 @@ def test_every_scheduled_job_is_still_named_as_expected(crons: dict[str, list[st
     """The three job names the assertions below key on, and their cron counts."""
     assert {name: len(found) for name, found in crons.items()} == {
         "intraday": 1,
+        "fx-refresh": 2,
         "eod-macro": 1,
         "at-open-clock": 2,
     }

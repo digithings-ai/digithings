@@ -298,6 +298,46 @@ def test_fetch_fx_yahoo_returns_correct_schema(monkeypatch) -> None:
 
 
 @pytest.mark.unit
+def test_fetch_fx_yahoo_latest_only_keeps_newest_daily_candle_per_leg(monkeypatch) -> None:
+    import digiquant.data.prices.macro_ingest as mi
+
+    monkeypatch.setattr(
+        mi,
+        "_yahoo_fx_download",
+        lambda symbols, *, start, end: _fake_yahoo_long_frame(),
+    )
+    rows = fetch_fx_yahoo(latest_only=True)
+
+    assert len(rows) == 7
+    assert {row["series_id"] for row in rows} == {
+        "FX/EUR",
+        "FX/GBP",
+        "FX/JPY",
+        "FX/CAD",
+        "FX/AUD",
+        "FX/CHF",
+        "FX/NZD",
+    }
+    assert {row["obs_date"] for row in rows} == {"2025-04-02"}
+    eur = next(row for row in rows if row["series_id"] == "FX/EUR")
+    assert eur["value"] == pytest.approx(1.0835)
+
+
+@pytest.mark.unit
+def test_today_fx_refresh_is_last_wins_on_existing_daily_key() -> None:
+    earlier = {
+        "source": "yahoo",
+        "series_id": "FX/EUR",
+        "obs_date": "2026-08-21",
+        "value": 1.10,
+        "unit": "fx",
+    }
+    refreshed = {**earlier, "value": 1.11}
+
+    assert dedupe_observation_rows([earlier, refreshed]) == [refreshed]
+
+
+@pytest.mark.unit
 def test_fetch_fx_yahoo_handles_empty_payload(monkeypatch) -> None:
     """Upstream returns an empty frame (e.g. weekend / blackout) → empty rows,
     not a crash."""
