@@ -20,6 +20,20 @@ else
   echo "skip: tests/scripts/test_pre_push_hook.sh missing"
 fi
 
+echo "== pre-push taxonomy: release-please refs (#2557) =="
+if [[ -f tests/scripts/test_branch_taxonomy_release_please.sh ]]; then
+  bash tests/scripts/test_branch_taxonomy_release_please.sh
+else
+  echo "skip: tests/scripts/test_branch_taxonomy_release_please.sh missing"
+fi
+
+echo "== install-hooks fail-closed / worktree-safe (#2502) =="
+if [[ -f tests/scripts/test_install_hooks.sh ]]; then
+  bash tests/scripts/test_install_hooks.sh
+else
+  echo "skip: tests/scripts/test_install_hooks.sh missing"
+fi
+
 echo "== worktree conflict advisory: nested layout + pipefail drain (#2485/#2569) =="
 if [[ -f tests/scripts/test_check_worktree_conflicts.sh ]]; then
   bash tests/scripts/test_check_worktree_conflicts.sh
