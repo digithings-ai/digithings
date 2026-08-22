@@ -9,11 +9,12 @@ If no PR number is given, ask for it before proceeding.
 ## When to use this
 
 Default path when a machine review is wanted and **no review bot has left an
-artifact on the current PR head** (see [CODE_REVIEW_POLICY.md](../../../docs/agents/CODE_REVIEW_POLICY.md)).
+artifact on the current PR head** (see
+[CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md)).
 Check first:
 
 ```bash
-gh pr view <N> --json headRefOid,statusCheckRollup,reviews,comments \
+gh pr view <N> --json headRefOid,statusCheckRollup,reviews \
   -q '{
     head: .headRefOid,
     bugbot: (.statusCheckRollup[]? | select((.name//"")=="Cursor Bugbot") | .conclusion),
@@ -22,21 +23,24 @@ gh pr view <N> --json headRefOid,statusCheckRollup,reviews,comments \
       . as $pr
       | .reviews[]?
       | select(.commit.oid == $pr.headRefOid)
-      | select((.author.login|ascii_downcase) as $a | $a=="coderabbitai" or $a=="claude")
+      | select(
+          ((.author.login // "")|ascii_downcase) as $a
+          | $a=="coderabbitai" or $a=="claude"
+        )
       | {author: .author.login, state}
-    ],
-    coderabbit_comment_count: [
-      .comments[]?
-      | select((.author.login//""|ascii_downcase) == "coderabbitai")
-    ] | length
+    ]
   }'
 ```
 
-- Bugbot `SUCCESS`, CodeRabbit `SUCCESS`, `submitted_reviews` non-empty (on
-  **this** `headRefOid` only), or `coderabbit_comment_count` > 0 → a real review
-  already exists. Stop; address those findings instead of starting a second loop.
-- Bugbot `NEUTRAL`, CodeRabbit rate-limit / skip / failure, empty
-  `submitted_reviews` on this head, and zero `coderabbit_comment_count` → proceed.
+- Bugbot `SUCCESS`, CodeRabbit `SUCCESS`, or `submitted_reviews` non-empty on
+  **this** `headRefOid` → a real review already exists for the current head.
+  Stop; address those findings instead of starting a second loop.
+- Bugbot `NEUTRAL`, CodeRabbit rate-limit / skip / failure, and empty
+  `submitted_reviews` on this head → proceed.
+
+Do **not** treat bare PR issue comments as a head-scoped review artifact —
+`gh pr view --json comments` has no commit association, so an old CodeRabbit
+comment must not suppress `/review` after a new push.
 
 Do **not** `@coderabbitai review` just to avoid `/review`. Metered bots are
 optional; in-session review is the org default when they have not left an
