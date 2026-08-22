@@ -26,6 +26,23 @@ function resolveInitialDate(dates: string[], defaultDate: string | null): string
   return dates[0] ?? '';
 }
 
+/**
+ * Keep the user's date (including gap days with no briefs) when it falls inside
+ * the board window. Only snap when empty or outside min/max after data changes.
+ */
+export function resolveActiveBoardDate(
+  selectedDate: string,
+  dates: string[],
+  defaultDate: string | null,
+): string {
+  if (!selectedDate) return resolveInitialDate(dates, defaultDate);
+  if (dates.length === 0) return selectedDate;
+  const minDate = dates[dates.length - 1]!;
+  const maxDate = dates[0]!;
+  if (selectedDate >= minDate && selectedDate <= maxDate) return selectedDate;
+  return resolveInitialDate(dates, defaultDate);
+}
+
 export default function BriefsIndex({
   briefs,
   defaultDate = null,
@@ -40,10 +57,7 @@ export default function BriefsIndex({
   const dates = useMemo(() => availableBriefRunDates(briefs), [briefs]);
   const [selectedDate, setSelectedDate] = useState(() => resolveInitialDate(dates, defaultDate));
 
-  // If the window loads/changes and the selection is empty or stale, snap to default/latest.
-  const activeDate = dates.includes(selectedDate)
-    ? selectedDate
-    : resolveInitialDate(dates, defaultDate);
+  const activeDate = resolveActiveBoardDate(selectedDate, dates, defaultDate);
 
   const dayBriefs = useMemo(
     () => briefsForRunDate(briefs, activeDate),

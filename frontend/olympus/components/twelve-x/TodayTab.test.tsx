@@ -217,9 +217,12 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(digestIdx).toBeGreaterThan(0);
     expect(ideasIdx).toBeGreaterThan(digestIdx);
     expect(consensusIdx).toBeGreaterThan(ideasIdx);
-    // Briefs rail still height-matches the left stack on desktop.
+    // Briefs rail still height-matches the left stack on desktop;
+    // mobile keeps a nested-scroll max-height.
     expect(html).toContain('lg:relative lg:self-stretch');
     expect(html).toContain('lg:absolute lg:inset-0');
+    expect(html).toContain('max-h-[32rem]');
+    expect(html).toContain('lg:max-h-none');
     // Single gap source on the card list — date groups use space-y, not nested gap-2 wrappers.
     expect(html).toContain('space-y-3');
     expect(html).not.toContain('flex flex-col gap-2"><h3');

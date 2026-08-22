@@ -107,7 +107,7 @@ describe('summarizeIdeaOutcomes', () => {
   });
 });
 
-describe('consensus stability + jump strip', () => {
+describe('consensus stability', () => {
   const evalRows: FxConsensusEvalRow[] = [
     {
       run_date: '2026-06-13',

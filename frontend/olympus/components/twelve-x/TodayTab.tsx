@@ -113,7 +113,7 @@ export default function TodayTab({
         </div>
 
         <div className="min-w-0 lg:relative lg:self-stretch">
-          <section className="glass-card flex min-h-[28rem] min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0 lg:min-h-0">
+          <section className="glass-card flex max-h-[32rem] min-h-[28rem] min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0">
             <header className="mb-3 flex shrink-0 items-baseline gap-2">
               <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
               <span className="ml-auto font-mono text-[10px] text-ink-mute">

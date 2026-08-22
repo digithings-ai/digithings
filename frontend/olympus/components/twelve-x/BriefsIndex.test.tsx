@@ -3,7 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { FxBriefRow } from '@/lib/twelve-x/types';
 import { TwelveXProvider, type TwelveXContextValue } from './context';
-import BriefsIndex, { availableBriefRunDates, briefsForRunDate } from './BriefsIndex';
+import BriefsIndex, {
+  availableBriefRunDates,
+  briefsForRunDate,
+  resolveActiveBoardDate,
+} from './BriefsIndex';
 
 const ctx: TwelveXContextValue = {
   runDate: '2026-06-22',
@@ -66,6 +70,20 @@ describe('BriefsIndex helpers', () => {
     const day = briefsForRunDate(windowBriefs, '2026-06-22');
     expect(day.map((b) => b.document_title)).toEqual(['Board 22 A', 'Board 22 B']);
     expect(briefsForRunDate(windowBriefs, '2026-06-21')).toEqual([]);
+  });
+
+  it('keeps gap days inside the board window (empty-state path)', () => {
+    const dates = ['2026-06-22', '2026-06-20'];
+    // User picked a day with no briefs — keep it so UI can show empty state.
+    expect(resolveActiveBoardDate('2026-06-21', dates, '2026-06-22')).toBe('2026-06-21');
+    expect(briefsForRunDate(windowBriefs, '2026-06-21')).toEqual([]);
+  });
+
+  it('snaps only when selection is empty or outside the window', () => {
+    const dates = ['2026-06-22', '2026-06-20'];
+    expect(resolveActiveBoardDate('', dates, '2026-06-22')).toBe('2026-06-22');
+    expect(resolveActiveBoardDate('2026-06-19', dates, '2026-06-22')).toBe('2026-06-22');
+    expect(resolveActiveBoardDate('2026-06-23', dates, null)).toBe('2026-06-22');
   });
 });
 
