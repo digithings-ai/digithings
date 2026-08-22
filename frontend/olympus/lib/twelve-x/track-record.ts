@@ -152,30 +152,6 @@ export function summarizeConsensusAccuracy(
   };
 }
 
-/** Per-day max |Δscore| for the consensus chart jump strip (weighted medium). */
-export function buildJumpStripSeries(
-  rows: FxConsensusEvalRow[],
-  opts: { timeframe?: string; weighted?: boolean } = {},
-): Array<{ run_date: string; abs_delta: number | null; large: boolean }> {
-  const timeframe = opts.timeframe ?? 'medium';
-  const weighted = opts.weighted ?? true;
-  const byDate = new Map<string, number>();
-  for (const r of rows) {
-    if (r.timeframe !== timeframe || r.weighted !== weighted) continue;
-    if (r.abs_delta_score == null) continue;
-    const v = Math.abs(Number(r.abs_delta_score));
-    const prev = byDate.get(r.run_date);
-    if (prev == null || v > prev) byDate.set(r.run_date, v);
-  }
-  return [...byDate.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([run_date, abs_delta]) => ({
-      run_date,
-      abs_delta,
-      large: abs_delta >= 1,
-    }));
-}
-
 export function openIdeas(rows: FxIdeaEvalRow[]): FxIdeaEvalRow[] {
   return rows
     .filter((r) => r.status === 'open')
