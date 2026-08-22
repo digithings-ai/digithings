@@ -13,6 +13,13 @@ else
   echo "skip: tests/scripts/test_protected_path_bash_guard.sh missing"
 fi
 
+echo "== pre-push hook (#2468 deletion taxonomy + #2483 live-trading co-sign) =="
+if [[ -f tests/scripts/test_pre_push_hook.sh ]]; then
+  bash tests/scripts/test_pre_push_hook.sh
+else
+  echo "skip: tests/scripts/test_pre_push_hook.sh missing"
+fi
+
 echo "== pre-push taxonomy: release-please refs (#2557) =="
 if [[ -f tests/scripts/test_branch_taxonomy_release_please.sh ]]; then
   bash tests/scripts/test_branch_taxonomy_release_please.sh
