@@ -38,7 +38,8 @@ gets done. Whether the Cursor Automation is actually running is a separate quest
 **PR code review:** default is in-session (see [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)).
 Cursor Bugbot, when available, is invoked by hand with a `bugbot run` comment once a
 diff is final. Never at PR open and never per push — Bugbot went usage-based in June
-2026 at roughly $1.00–$1.50 a run. CodeRabbit is optional/sunset — do not re-request
+2026 at roughly $1.00–$1.50 a run ([Cursor Bugbot](https://cursor.com/docs/bugbot);
+usage-based pricing as of that month). CodeRabbit is optional/sunset — do not re-request
 it for small follow-up commits. `ci.yml`'s `request-copilot-review` job was removed
 in #1894; it had been reporting success while attaching no reviewer. Claude review
 remains a secondary opt-in (see below). Every commit reaching `main` must clear

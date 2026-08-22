@@ -83,14 +83,15 @@ app builds, the digithings deploy build-check. (See #1310.)
 ## Review coverage (the gate before production)
 
 **Org policy (all digithings-ai repos):** [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md).
-Default is **in-session** review on a fresh-context subagent. Metered bots are
-optional; do not burn their quota on small follow-up commits.
+Default is **in-session** review on a fresh-context subagent (`/review <N>`). Metered
+bots are optional; do not burn their quota on small follow-up commits.
 
-PR review primary path when a machine review is wanted: **Cursor Bugbot, by hand**
-— comment `bugbot run` (or `cursor review`) once a diff is final, and again only
-if scope changes mid-PR. Never at PR open, and never per push: Bugbot went
-usage-based in June 2026 at roughly $1.00–$1.50 a run. The Copilot request job
-was removed from `ci.yml` when that subscription lapsed (#1894).
+**Cursor Bugbot** (when available) is the primary *external* option — comment
+`bugbot run` (or `cursor review`) once a diff is final, and again only if scope
+changes mid-PR. Never at PR open, and never per push: Bugbot went usage-based in
+June 2026 at roughly $1.00–$1.50 a run ([Cursor Bugbot](https://cursor.com/docs/bugbot)).
+The Copilot request job was removed from `ci.yml` when that subscription lapsed
+(#1894). Usage-limit `neutral` is not a review — run `/review` instead.
 
 **CodeRabbit is optional / sunset.** While it still runs, it auto-reviews only
 bases listed in [`.coderabbit.yaml`](.coderabbit.yaml) (`develop` default plus

@@ -1,5 +1,5 @@
 ---
-description: Review a PR in-session when Cursor Bugbot is unavailable — post findings as a comment and clear the review-coverage gate honestly.
+description: Default in-session PR review on a fresh-context subagent — post findings and clear the review-coverage gate honestly when no bot artifact exists on this head.
 ---
 
 Invoke as: `/review <pr-number>`
@@ -8,24 +8,39 @@ If no PR number is given, ask for it before proceeding.
 
 ## When to use this
 
-When a machine review is wanted and **no review bot has left an artifact yet**.
+Default path when a machine review is wanted and **no review bot has left an
+artifact on the current PR head** (see [CODE_REVIEW_POLICY.md](../../../docs/agents/CODE_REVIEW_POLICY.md)).
 Check first:
 
 ```bash
-gh pr view <N> --json statusCheckRollup,reviews,comments \
+gh pr view <N> --json headRefOid,statusCheckRollup,reviews,comments \
   -q '{
+    head: .headRefOid,
     bugbot: (.statusCheckRollup[]? | select((.name//"")=="Cursor Bugbot") | .conclusion),
     coderabbit_check: (.statusCheckRollup[]? | select((.name//"")=="CodeRabbit") | .conclusion),
-    submitted_reviews: [.reviews[]? | select((.author.login|ascii_downcase) as $a | ($a|contains("coderabbit")) or $a=="claude") | {author: .author.login, state}],
-    coderabbit_comment_count: [.comments[]? | select((.author.login//""|ascii_downcase)|contains("coderabbit"))] | length
+    submitted_reviews: [
+      . as $pr
+      | .reviews[]?
+      | select(.commit.oid == $pr.headRefOid)
+      | select((.author.login|ascii_downcase) as $a | $a=="coderabbitai" or $a=="claude")
+      | {author: .author.login, state}
+    ],
+    coderabbit_comment_count: [
+      .comments[]?
+      | select((.author.login//""|ascii_downcase) == "coderabbitai")
+    ] | length
   }'
 ```
 
-- Bugbot `SUCCESS`, CodeRabbit `SUCCESS`, `submitted_reviews` non-empty, or `coderabbit_comment_count` > 0 → a real review already exists. Stop; address those findings instead of starting a second loop.
-- Bugbot `NEUTRAL`, CodeRabbit rate-limit / skip / failure, empty `submitted_reviews`, and zero `coderabbit_comment_count` → proceed.
+- Bugbot `SUCCESS`, CodeRabbit `SUCCESS`, `submitted_reviews` non-empty (on
+  **this** `headRefOid` only), or `coderabbit_comment_count` > 0 → a real review
+  already exists. Stop; address those findings instead of starting a second loop.
+- Bugbot `NEUTRAL`, CodeRabbit rate-limit / skip / failure, empty
+  `submitted_reviews` on this head, and zero `coderabbit_comment_count` → proceed.
 
-Prefer a review bot when it works. `/review` is the clean-context fallback so the
-gate still sees an artifact when the bots did not finish.
+Do **not** `@coderabbitai review` just to avoid `/review`. Metered bots are
+optional; in-session review is the org default when they have not left an
+artifact on this head.
 
 ## Why an in-session review counts
 

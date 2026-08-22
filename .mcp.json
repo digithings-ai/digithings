@@ -24,7 +24,7 @@
       "command": "/bin/bash",
       "args": [
         "-c",
-        "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; exec npx -y @playwright/mcp@latest"
+        "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; exec npx -y @playwright/mcp@0.0.79"
       ],
       "type": "stdio"
     },
@@ -32,7 +32,7 @@
       "command": "/bin/bash",
       "args": [
         "-c",
-        "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; exec npx -y chrome-devtools-mcp@latest"
+        "export PATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"; exec npx -y chrome-devtools-mcp@1.7.0"
       ],
       "type": "stdio"
     },
