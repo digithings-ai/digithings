@@ -871,10 +871,16 @@ def resolve_request_model(request_model: str) -> str:
       API key is set → returned unchanged; digillm routes it to that provider.
     - same prefix but the key is **missing** → fall back to the Ollama mode model
       (``resolve_effective_model(get_model_for_mode())``), mirroring the legacy
-      silent Ollama fallback rather than digillm's hard error.
+      silent Ollama fallback rather than digillm's hard error — **except** when a
+      BYOK override is bound for that same provider (user key pays; keep the slug).
     - ``ollama-cloud/<model>`` → strip the prefix (Ollama Cloud expects bare
       names); ``resolve_effective_model`` is intentionally NOT applied so a mode
       default can't override an explicit cloud model.
+    - bare / non-prefixed slug with an active BYOK override → returned unchanged.
+      ``openai`` is not a digillm-registered prefix, so OpenAI BYOK models are bare
+      (``gpt-4o-mini``). ``resolve_effective_model`` prefers ``OLLAMA_MODEL`` over
+      the request string; applying it under BYOK would send a local Ollama slug to
+      the user's OpenAI (or other) endpoint while digillm still holds their key.
     - anything else → ``resolve_effective_model(request_model)``.
     """
     provider, _model_id = _parse_provider_prefix(request_model)
@@ -894,4 +900,8 @@ def resolve_request_model(request_model: str) -> str:
         return resolve_effective_model(get_model_for_mode())
     if request_model.startswith("ollama-cloud/"):
         return request_model[len("ollama-cloud/") :]
+    # BYOK already chose the spendable model via ``_apply_byok_model_override``.
+    # Do not let ``OLLAMA_MODEL`` / mode defaults clobber a bare OpenAI (etc.) slug.
+    if get_byok_override() is not None:
+        return request_model
     return resolve_effective_model(request_model)

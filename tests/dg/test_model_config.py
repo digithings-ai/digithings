@@ -191,7 +191,10 @@ class TestResolveRequestModel:
     def test_provider_model_passthrough_when_key_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """A provider/ model with its key set is handed to digillm unchanged (digillm routes)."""
         monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
-        assert resolve_request_model("openrouter/mistral/mistral-7b") == "openrouter/mistral/mistral-7b"
+        assert (
+            resolve_request_model("openrouter/mistral/mistral-7b")
+            == "openrouter/mistral/mistral-7b"
+        )
 
     def test_provider_falls_back_to_ollama_when_key_missing(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -251,6 +254,50 @@ class TestResolveRequestModel:
             )
         finally:
             pop_byok(tok)
+
+    def test_openai_byok_bare_model_not_clobbered_by_ollama_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """OpenAI BYOK keeps a bare slug even when OLLAMA_MODEL is set.
+
+        openai is not a digillm-registered prefix, so BYOK models are bare
+        (``gpt-4o-mini``). ``resolve_effective_model`` prefers ``OLLAMA_MODEL``;
+        applying it under BYOK sent ``ollama/…`` to api.openai.com with the
+        user's key (model_not_found) while digichat still showed BYOK as active.
+        """
+        from digigraph.llm_auth import pop_byok, push_byok_header
+        from digigraph.model_config import _apply_byok_model_override
+
+        monkeypatch.setenv("OLLAMA_MODEL", "ollama/qwen3:8b")
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-openai-test",
+                        "x-byok-provider": "openai",
+                        "x-byok-model": "gpt-4o-mini",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            # Mirror llm_client: override first, then resolve_request_model.
+            chosen = _apply_byok_model_override("operator-default-ignored")
+            assert chosen == "gpt-4o-mini"
+            assert resolve_request_model(chosen) == "gpt-4o-mini"
+            # Operator path without BYOK still lets OLLAMA_MODEL win (sibling test).
+        finally:
+            pop_byok(tok)
+        assert resolve_request_model("gpt-4o-mini") == "ollama/qwen3:8b"
 
     def test_provider_registry_is_digillm_not_a_local_copy(
         self, monkeypatch: pytest.MonkeyPatch
