@@ -309,6 +309,10 @@ reasoning workflow without replacing their domain interactions:
   Atlas / Hermes / Learning bands gate active chrome — research artifacts never paint Hermes
   or Learning as run. Snapshot presence establishes that a run was recorded even when it
   published no documents (degraded reach across bands).
+- Screenshot matrix (#2645): every topology stage × desktop/mobile plus representative
+  artifact families are listed in [`docs/screenshot-matrix.md`](docs/screenshot-matrix.md).
+  Vitest (`lib/screenshot-manifest.test.ts`) fails if a required path is missing from
+  `fixtures/screenshots/` (1×1 PNG placeholders are allowed until operator capture).
 - **Why** owns one reasoning command band above the shared responsive tab bar.
   `?why=read` presents the latest synthesis as a divided reading workspace;
   `?why=deliberations` presents rebalance actions, risk and ticker debates,
