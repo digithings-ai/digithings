@@ -237,6 +237,54 @@ def ledger_is_authoritative(*, client: SupabaseClient, run_date: date) -> bool:
     return bool(_rows_for_date(client=client, table=COMMITS, run_date=run_date))
 
 
+COLD_START_DECLINE = (
+    "holding_lots empty while prior positions book is non-empty "
+    "(cold start — seed legacy_opening_snapshot before trusting the ledger path; #2589)"
+)
+
+
+def cold_start_blocks_ledger(
+    *,
+    client: SupabaseClient,
+    prior_book_date: date | None,
+) -> str | None:
+    """Return a decline reason when lots are empty but the legacy book is not.
+
+    Empty ``portfolio_ledger_holding_lots`` with a non-empty ``positions`` book is the
+    #2508 cold-start hazard: residuals read as zero, so every first sell of a held name
+    books EXIT and every first buy OPEN into append-only rows. Decline so the caller can
+    fall back to prose (or exit under ``--require-ledger``) until
+    :func:`seed_legacy_opening_lots` (or equivalent) has run.
+    """
+    if prior_book_date is None:
+        return None
+    book = (
+        client.table("positions")
+        .select("ticker,weight_pct")
+        .eq("date", prior_book_date.isoformat())
+        .execute()
+    )
+    held = [
+        row
+        for row in (getattr(book, "data", None) or [])
+        if isinstance(row, dict)
+        and str(row.get("ticker") or "").upper() not in ("", "CASH")
+        and (_decimal(row.get("weight_pct")) or Decimal(0)) > 0
+    ]
+    if not held:
+        return None
+    lots = (
+        client.table(HOLDING_LOTS)
+        .select("id")
+        .eq("status", HoldingLotStatus.OPEN)
+        .limit(1)
+        .execute()
+    )
+    if getattr(lots, "data", None):
+        return None
+    return COLD_START_DECLINE
+
+
 def _pending_order_heads(
     *, client: SupabaseClient, run_date: date
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -924,14 +972,18 @@ def _parse_date(raw: Any) -> date | None:
 
 
 __all__ = [
+    "COLD_START_DECLINE",
     "ExecutionResult",
     "Fill",
     "FillCosts",
     "HOLDING_LOTS",
     "Rejection",
+    "approved_weights",
     "close_lot_id",
+    "cold_start_blocks_ledger",
     "executed_intent_id",
     "execute_pending_orders",
     "ledger_is_authoritative",
     "open_lot_id",
+    "pending_symbols",
 ]

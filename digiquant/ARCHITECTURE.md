@@ -1607,24 +1607,15 @@ becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`
 069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
 all, and the book may be a different date than the run date.
 
-Cutover is a deliberate edit, **not** a property of the data (#2508). It was the latter first:
-the kill switch defaults *on* and the pipeline passed no ledger flag, so the morning job would
-have started trusting the ledger the day the ledger *writers* reached `main` with 069 applied.
-Two conditions, not one, and `main` meets only the first today: 069's file is there, while the
-writers described above are on `develop` and not yet promoted. That is unsafe at the boundary —
-order size is a weight delta against the legacy `positions` book while residuals are measured
-only from `portfolio_ledger_holding_lots`, which starts empty and has no backfill, so the first
-run would book EXIT for every trim of a held name and OPEN for every add, into rows 069 makes
-append-only. So `pipeline-digiquant-prices.yml` passes `--no-ledger`, and
-`tests/scripts/test_prices_cron_dst.py` pins it *present* while `--require-ledger` stays absent
-(it would be a daily red cron before 069/070 are applied). `backfill_position_events.py` passes
-it too: that script shells out to the same `execute_at_open.py`, so it is the second door onto
-the ledger path and an operator repair run would otherwise walk through it. Removing
-`--no-ledger` from **both** call sites is the cutover, and it must arrive with seeded lots — or with a ledger that declines when the lot table
-is empty and the prior book is not — and preferably with `--require-ledger` in the same edit, so
-a silent fallback to prose cannot hide the handover. Deleting the two prose builders is a
-further follow-up gated on prod reaching 070: they still carry the whole #1743 regression
-suite.
+Cutover is a deliberate edit, **not** a property of the data alone (#2508 → #2589). The kill
+switch defaults *on*. After #2589 the morning job and backfill **attempt the ledger path**
+(no `--no-ledger`). Safety is the cold-start decline: if `portfolio_ledger_holding_lots` has
+no open lots while the prior `positions` book is non-empty,
+`cold_start_blocks_ledger` / `build_events_from_paper_fills` returns `(None, reason)` and the
+caller falls back to prose — it will not book OPEN/EXIT mislabels into append-only 069 rows.
+`--require-ledger` stays off until ops seeds a labeled `legacy_opening_snapshot` (NAV × weight
+÷ price → open lots); then prefer adding `--require-ledger` so prose cannot hide the handover.
+Deleting the two prose builders remains a further follow-up gated on prod reaching 070.
 
 #### Compatibility projection labeling (#2422 / Task 2.5)
 

@@ -410,13 +410,13 @@ def test_at_open_defers_the_ledger_cutover(workflow: dict) -> None:
     through cold start instead of the weight-diff ladder. 069 makes those rows append-only,
     so it would not be repairable in place.
 
-    So ``--no-ledger`` is pinned *present*. Removing it is the deliberate cutover edit, and
-    it must come with seeded lots (or a ledger that declines when the lot table is empty
-    while the prior book is not). ``--require-ledger`` stays absent until then — it turns a
-    decline into exit 3, which is correct after the cutover and a daily red cron before it —
-    and at cutover it is the better flag to adopt, so a silent fall back to prose cannot
-    hide the handover.
+    So ``--no-ledger`` is pinned *absent* after #2589: the cold-start decline in
+    ``execution_io.cold_start_blocks_ledger`` refuses empty lots when the prior book is
+    non-empty, so the job may attempt the ledger without inventing OPEN/EXIT into
+    append-only rows. ``--require-ledger`` stays absent until ops seeds
+    ``legacy_opening_snapshot`` lots — it turns a decline into exit 3, which is correct
+    after seed and a daily red cron before it.
     """
     command = _at_open_command(workflow)
-    assert "--no-ledger" in command
+    assert "--no-ledger" not in command
     assert "--require-ledger" not in command

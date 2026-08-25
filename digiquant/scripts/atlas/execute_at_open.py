@@ -449,6 +449,7 @@ def build_events_from_paper_fills(
     try:
         from digiquant.olympus.hermes.writers.execution_io import (
             approved_weights,
+            cold_start_blocks_ledger,
             execute_pending_orders,
             ledger_is_authoritative,
             pending_symbols,
@@ -483,6 +484,22 @@ def build_events_from_paper_fills(
     if not authoritative:
         return None, f"no portfolio_ledger_commits row for run_date={run_d}"
 
+    # Cold-start guard (#2589 / #2508): empty lots + non-empty prior book must decline
+    # before any fill write, or residuals invent OPEN/EXIT into append-only rows.
+    prior_book_d = _prior_book_date(sb, execution_d)
+    prior_book_date = None
+    if prior_book_d:
+        try:
+            prior_book_date = dt_date.fromisoformat(prior_book_d)
+        except ValueError:
+            prior_book_date = None
+    try:
+        cold = cold_start_blocks_ledger(client=sb, prior_book_date=prior_book_date)
+    except Exception as exc:
+        return None, f"a portfolio-ledger cold-start probe failed ({exc})"
+    if cold:
+        return None, cold
+
     result = execute_pending_orders(
         client=sb,
         run_date=run_date,
@@ -514,7 +531,6 @@ def build_events_from_paper_fills(
             f"{len(result.rejections)} order(s) — this was not a quiet day."
         )
 
-    prior_book_d = _prior_book_date(sb, execution_d)
     prior_weights = _book_weights(sb, prior_book_d)
 
     events: List[Dict[str, Any]] = []
