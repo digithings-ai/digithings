@@ -10,6 +10,8 @@ from typing import (
 
 from pydantic import BaseModel, Field
 
+from digiquant.olympus.hermes.models.forecast import EffectiveForecast, ForecastTerms
+
 
 class DeliberationTurn(BaseModel):
     """One PM↔analyst exchange in the deliberation transcript."""
@@ -39,6 +41,22 @@ class DeliberationPmTurn(BaseModel):
         description="Your explicit directional call after the debate — choose, don't default.",
     )
     conviction_delta: int = Field(default=0, ge=-2, le=2)
+    # Optional complete ForecastTerms replacement (#2655 / WP4.4). Never a partial
+    # patch and never derived from conviction prose — omit to leave the H5 base intact.
+    forecast_amendment: ForecastTerms | None = Field(
+        default=None,
+        description=(
+            "Optional complete ForecastTerms replacement when evidence warrants amending "
+            "the H5 base. Omit (null) to leave the immutable base effective. Never a "
+            "partial term patch."
+        ),
+    )
+    amendment_reason: str = Field(
+        default="",
+        description="Required non-empty reason when forecast_amendment is provided.",
+    )
+    amendment_evidence_ids: list[str] = Field(default_factory=list)
+    amendment_counter_evidence_ids: list[str] = Field(default_factory=list)
 
 
 class DeliberationAnalystTurn(BaseModel):
@@ -79,6 +97,15 @@ class DeliberationSummary(BaseModel):
     )
     escalated: bool = False
     cap_reason: str | None = None
+    # WP4.4: reconstructable base + optional amendment lineage for H7/H9.
+    effective_forecast: EffectiveForecast | None = Field(
+        default=None,
+        description=(
+            "Selected EffectiveForecast (base or accepted amendment). Fingerprint skips "
+            "carry the prior effective identity/time/hash; LLM failure preserves the "
+            "H5 base with degradation=llm_failure."
+        ),
+    )
 
 
 def is_unchallenged_carry(summary: Mapping[str, Any]) -> bool:

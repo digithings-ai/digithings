@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Collection
+from datetime import datetime
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
@@ -12,6 +13,7 @@ from typing import (
 from digigraph.graph.pipeline_builder import FanOutPhase, NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from pydantic import ValidationError
 
 from digiquant.olympus.atlas.phases._node_factory import (
     _shared_context,
@@ -33,11 +35,19 @@ from digiquant.olympus.hermes.models.deliberation import (
     DeliberationSummary,
     DeliberationTurn,
 )
+from digiquant.olympus.hermes.models.forecast import (
+    EffectiveForecast,
+    ForecastAssessment,
+    ForecastLineageDegradation,
+    materialize_forecast_amendment,
+    try_resolve_effective_forecast,
+)
 from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import deliberation_skip_signal
+from digiquant.olympus.temporal import KnowledgeCutoffError, require_knowledge_cutoff_at
 
 logger = logging.getLogger(__name__)
 
@@ -76,23 +86,155 @@ def deliberation_min_rounds() -> int:
         return DEFAULT_DELIBERATION_MIN_ROUNDS
 
 
+def _parse_utc_datetime(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else None
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else None
+    return None
+
+
+def _prior_known_at(prior: dict[str, Any]) -> datetime | None:
+    raw_ef = prior.get("effective_forecast")
+    if isinstance(raw_ef, dict):
+        known = _parse_utc_datetime(raw_ef.get("known_at"))
+        if known is not None:
+            return known
+    return _parse_utc_datetime(prior.get("known_at"))
+
+
+def _prior_eligible_at_cutoff(prior: dict[str, Any], cutoff: datetime) -> bool:
+    """Exclude priors whose typed ``known_at`` is after the run knowledge cutoff."""
+    known = _prior_known_at(prior)
+    if known is None:
+        return True
+    return known <= cutoff
+
+
 def _prior_deliberation_summary(state: HermesState, ticker: str) -> dict[str, Any] | None:
     # Preferred: slim carry hydrated in preflight (#925). ``deliberation/*`` is excluded
     # from ``latest_segments`` so the full transcript never bloats every node — the slim
     # summary lives in ``prior_deliberation_by_ticker`` instead.
+    cutoff: datetime | None = None
+    try:
+        cutoff = require_knowledge_cutoff_at(state)
+    except KnowledgeCutoffError:
+        cutoff = None
+
     slim = state.prior_context.prior_deliberation_by_ticker.get(ticker)
     if isinstance(slim, dict) and slim:
-        return dict(slim)
+        if cutoff is None or _prior_eligible_at_cutoff(slim, cutoff):
+            return dict(slim)
+        return None
     # Fallback for callers that still stash a full payload in latest_segments.
     row = state.prior_context.latest_segments.get(f"deliberation/{ticker}")
     if not isinstance(row, dict):
         return None
     payload = row.get("payload")
-    return dict(payload) if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        return None
+    if cutoff is not None and not _prior_eligible_at_cutoff(payload, cutoff):
+        return None
+    return dict(payload)
 
 
 def _analyst_payload(state: HermesState, ticker: str) -> dict[str, Any]:
     return dict(state.phase_hermes.asset_analysts.get(ticker, {}))
+
+
+def _base_assessment_from_analyst(analyst: dict[str, Any]) -> ForecastAssessment | None:
+    raw = analyst.get("forecast_assessment")
+    if raw is None:
+        return None
+    try:
+        return ForecastAssessment.model_validate(raw)
+    except ValidationError:
+        return None
+
+
+def _effective_from_prior(prior: dict[str, Any]) -> EffectiveForecast | None:
+    raw = prior.get("effective_forecast")
+    if raw is None:
+        return None
+    try:
+        return EffectiveForecast.model_validate(raw)
+    except ValidationError:
+        return None
+
+
+def _run_id(state: HermesState) -> str:
+    run_id = getattr(state, "run_id", None)
+    if isinstance(run_id, str) and run_id.strip():
+        return run_id.strip()
+    return f"hermes-{state.run_date.isoformat()}"
+
+
+def _cutoff_or_run_day(state: HermesState) -> datetime:
+    try:
+        return require_knowledge_cutoff_at(state)
+    except KnowledgeCutoffError:
+        from datetime import UTC
+
+        return datetime(
+            state.run_date.year,
+            state.run_date.month,
+            state.run_date.day,
+            tzinfo=UTC,
+        )
+
+
+def attach_h6_forecast_lineage(
+    *,
+    state: HermesState,
+    ticker: str,
+    analyst: dict[str, Any],
+    summary: DeliberationSummary,
+    pm_turn: DeliberationPmTurn | None = None,
+    degradation: ForecastLineageDegradation = ForecastLineageDegradation.NONE,
+) -> DeliberationSummary:
+    """Attach reconstructable EffectiveForecast; never invent terms from prose."""
+    base = _base_assessment_from_analyst(analyst)
+    if base is None:
+        return summary.model_copy(update={"effective_forecast": None})
+
+    amendment = None
+    resolved_degradation = degradation
+    if (
+        pm_turn is not None
+        and pm_turn.forecast_amendment is not None
+        and degradation is ForecastLineageDegradation.NONE
+    ):
+        reason = (pm_turn.amendment_reason or "").strip()
+        if not reason:
+            resolved_degradation = ForecastLineageDegradation.AMENDMENT_REJECTED
+        else:
+            try:
+                stamp = _cutoff_or_run_day(state)
+                amendment = materialize_forecast_amendment(
+                    base=base,
+                    terms=pm_turn.forecast_amendment,
+                    reason=reason,
+                    source_run_id=_run_id(state),
+                    provider_invocation_id=f"h6-{ticker}",
+                    effective_at=stamp,
+                    known_at=stamp,
+                    evidence_ids=tuple(pm_turn.amendment_evidence_ids),
+                    counter_evidence_ids=tuple(pm_turn.amendment_counter_evidence_ids),
+                )
+            except (ValueError, ValidationError):
+                amendment = None
+                resolved_degradation = ForecastLineageDegradation.AMENDMENT_REJECTED
+
+    effective = try_resolve_effective_forecast(
+        base,
+        amendment,
+        degradation=resolved_degradation,
+    )
+    return summary.model_copy(update={"effective_forecast": effective})
 
 
 def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
@@ -129,8 +271,13 @@ def _deliberation_summary(
     )
 
 
-def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummary:
-    """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap."""
+def run_deliberation_loop(
+    state: HermesState, ticker: str
+) -> tuple[DeliberationSummary, DeliberationPmTurn | None]:
+    """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap.
+
+    Returns the summary plus the last PM turn (amendment proposals live on the PM turn).
+    """
     pm_skill = load_skill_full("deliberation")
     analyst_skill = load_skill_full("asset-analyst")
     tools, execute_tool, web_grounding = _portfolio_grounding(
@@ -142,6 +289,7 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
     eff_model = get_model_for_phase(f"{NODE_ID}-{ticker}") or get_model_for_mode()
     max_rounds = deliberation_max_rounds()
     min_rounds = min(deliberation_min_rounds(), max_rounds)
+    last_pm_turn: DeliberationPmTurn | None = None
 
     while True:
         round_number += 1
@@ -178,6 +326,7 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             if isinstance(pm_result, DeliberationPmTurn)
             else DeliberationPmTurn.model_validate(pm_result)
         )
+        last_pm_turn = pm_turn
         converged_signal = pm_turn.converged or (
             pm_turn.accepts_analyst_position and not pm_turn.open_questions
         )
@@ -191,12 +340,15 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
                         role="pm", round_number=round_number, message=pm_turn.challenge
                     )
                 )
-            return _deliberation_summary(
-                ticker=ticker,
-                transcript=transcript,
-                conclusion=pm_turn.conclusion or pm_turn.challenge,
-                net_stance=pm_turn.net_stance,
-                conviction_delta=pm_turn.conviction_delta,
+            return (
+                _deliberation_summary(
+                    ticker=ticker,
+                    transcript=transcript,
+                    conclusion=pm_turn.conclusion or pm_turn.challenge,
+                    net_stance=pm_turn.net_stance,
+                    conviction_delta=pm_turn.conviction_delta,
+                ),
+                last_pm_turn,
             )
 
         # Not converged, or held below the min-rounds floor: record the PM's challenge (with a
@@ -252,22 +404,28 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             )
         )
         if analyst_turn.converged:
-            return _deliberation_summary(
-                ticker=ticker,
-                transcript=transcript,
-                conclusion=analyst_turn.conclusion or analyst_turn.response,
-                net_stance=analyst_turn.net_stance,
-                conviction_delta=analyst_turn.conviction_delta,
+            return (
+                _deliberation_summary(
+                    ticker=ticker,
+                    transcript=transcript,
+                    conclusion=analyst_turn.conclusion or analyst_turn.response,
+                    net_stance=analyst_turn.net_stance,
+                    conviction_delta=analyst_turn.conviction_delta,
+                ),
+                last_pm_turn,
             )
         if round_number >= max_rounds:
-            return _deliberation_summary(
-                ticker=ticker,
-                transcript=transcript,
-                conclusion=analyst_turn.conclusion or analyst_turn.response,
-                net_stance=analyst_turn.net_stance,
-                conviction_delta=analyst_turn.conviction_delta,
-                escalated=True,
-                cap_reason="max_rounds",
+            return (
+                _deliberation_summary(
+                    ticker=ticker,
+                    transcript=transcript,
+                    conclusion=analyst_turn.conclusion or analyst_turn.response,
+                    net_stance=analyst_turn.net_stance,
+                    conviction_delta=analyst_turn.conviction_delta,
+                    escalated=True,
+                    cap_reason="max_rounds",
+                ),
+                last_pm_turn,
             )
 
 
@@ -282,6 +440,7 @@ def _h6_node_factory(ticker: str):
         if deliberation_skip_signal(state, ticker, analyst_stance=stance):
             prior = _prior_deliberation_summary(state, ticker)
             if prior:
+                prior_ef = _effective_from_prior(prior)
                 carried = DeliberationSummary(
                     ticker=ticker,
                     converged=True,
@@ -299,6 +458,8 @@ def _h6_node_factory(ticker: str):
                     carried=True,
                     # Benign: nothing moved, so the prior debate still stands (#925).
                     carry_reason=CARRY_FINGERPRINT_SKIP,
+                    # Quiet-carry preserves prior effective identity/time/hash (#2655).
+                    effective_forecast=prior_ef,
                 )
                 return {
                     "phase_hermes": PhaseHermesState(
@@ -307,7 +468,14 @@ def _h6_node_factory(ticker: str):
                 }
 
         try:
-            summary = run_deliberation_loop(state, ticker)
+            summary, pm_turn = run_deliberation_loop(state, ticker)
+            summary = attach_h6_forecast_lineage(
+                state=state,
+                ticker=ticker,
+                analyst=analyst,
+                summary=summary,
+                pm_turn=pm_turn,
+            )
         except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             logger.warning(
@@ -328,6 +496,13 @@ def _h6_node_factory(ticker: str):
                 transcript=[],
                 carried=True,
                 carry_reason=CARRY_LLM_FAILURE,
+            )
+            fallback = attach_h6_forecast_lineage(
+                state=state,
+                ticker=ticker,
+                analyst=analyst,
+                summary=fallback,
+                degradation=ForecastLineageDegradation.LLM_FAILURE,
             )
             return {
                 "phase_hermes": PhaseHermesState(

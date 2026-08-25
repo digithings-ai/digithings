@@ -75,5 +75,7 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
             "carry_reason": summary.get("carry_reason"),
             "escalated": summary.get("escalated", False),
             "cap_reason": summary.get("cap_reason"),
+            # WP4.4 (#2655): persist reconstructable forecast lineage with the debate doc.
+            "effective_forecast": summary.get("effective_forecast"),
         }
     return out

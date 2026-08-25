@@ -874,16 +874,23 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
   fallback). Checkpoint resume preserves the pinned value; naive / non-UTC
   stamps are rejected at capture and on the state field validator.
-  **Typed forecast contracts (#2637 / WP4.2, #2649 / WP4.3).** Frozen Pydantic
-  models in `hermes/models/forecast.py` (`ForecastTerms`, `ForecastAssessment`,
-  `PriceAnchor`) separate scenario economics from UUID5 identity / content
-  hash. Optional `AnalystPayload.forecast` may carry terms; legacy
-  `conviction_score` / `price_targets` never synthesize them. H5 full/edit
-  materializes an immutable `ForecastAssessment` via
-  `hermes/phases/portfolio_common.py` (`materialize_forecast_assessment`,
-  serializer includes assessment; legacy priors without typed forecast force
-  full; skip preserves identity; partial nested forecast edits are rejected).
-  H6 amendments / H7 binding / H9 registry are later WP4 tasks.
+  **Typed forecast contracts (#2637 / WP4.2, #2649 / WP4.3, #2655 / WP4.4).** Frozen
+  Pydantic models in `hermes/models/forecast.py` (`ForecastTerms`,
+  `ForecastAssessment`, `ForecastAmendment`, `EffectiveForecast`, `PriceAnchor`)
+  separate scenario economics from UUID5 identity / content hash. Optional
+  `AnalystPayload.forecast` may carry terms; legacy `conviction_score` /
+  `price_targets` never synthesize them. H5 full/edit materializes an immutable
+  `ForecastAssessment` via `hermes/phases/portfolio_common.py`
+  (`materialize_forecast_assessment`; serializer includes assessment; legacy
+  priors without typed forecast force full; skip preserves identity; partial
+  nested forecast edits are rejected). H6 may append a complete
+  `ForecastAmendment` (never a partial patch / never from prose); invalid or
+  failed amendments preserve the H5 base with typed degradation
+  (`amendment_rejected` / `llm_failure`). Quiet fingerprint skips carry prior
+  `EffectiveForecast` IDs/times/hashes via slim deliberation summaries
+  (`supabase_io.load_prior_deliberation_summaries` + `payloads.deliberation_summaries`);
+  knowledge cutoff excludes future-known priors. H7 binding / H9 registry are
+  later WP4 tasks.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
@@ -1071,7 +1078,7 @@ flowchart LR
 | `latest_segments` | `documents` | `load_prior_context` | own segment + declared extras only (#696) | full segment body by `document_key` |
 | `prior_book` / `current_weights` | `positions` | `load_prior_book` | PM + risk: weights + held names | entry prices via `positions` tool |
 | `prior_analyst_by_ticker` | `documents` (`analyst/*`) | `load_prior_analyst_summaries` | slim excerpt for **held** tickers | full analyst payload by key |
-| `prior_deliberation_by_ticker` | `documents` (`deliberation/*`) | `load_prior_deliberation_summaries` | slim carry (net_stance, conviction_delta, conclusion excerpt) for **held** tickers; injected as H6 `prior_deliberation` (#925) | full transcript by `document_key` |
+| `prior_deliberation_by_ticker` | `documents` (`deliberation/*`) | `load_prior_deliberation_summaries` | slim carry (net_stance, conviction_delta, conclusion excerpt, optional `effective_forecast` lineage) for **held** tickers; injected as H6 `prior_deliberation` (#925 / #2655); optional `knowledge_cutoff_at` excludes future-known priors | full transcript by `document_key` |
 | `active_theses` | `theses` | `load_active_theses_rows` | H1–H3 + H7 PM | thesis history via `theses` tool |
 | `portfolio_performance` | `nav_history` + `portfolio_metrics` | `load_portfolio_performance_snapshot` | latest NAV + metrics pointer | full NAV series via `nav_history` tool |
 | `decision_lessons` | `decision_log` | `fetch_recent_lessons` | PM `past_context` (bounded) | older lessons via `decision_log` query |

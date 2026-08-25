@@ -410,16 +410,42 @@ def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
     """Extract PM-relevant fields from a published ``deliberation/{ticker}`` payload.
 
     Drops the full ``transcript`` (the bulk of the doc) — the carry is a slim
-    excerpt, not the full debate dump.
+    excerpt, not the full debate dump. Preserves ``effective_forecast`` lineage
+    (IDs / times / hash / terms) so quiet-carry can reconstruct EffectiveForecast (#2655).
     """
     body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
-    conclusion = str(body.get("conclusion") or "").strip()
-    return {
+    conclusion = str(body.get("conclusion") or body.get("bull_thesis") or "").strip()
+    slim: dict[str, Any] = {
         "net_stance": body.get("net_stance"),
         "conviction_delta": body.get("conviction_delta"),
         "converged": body.get("converged"),
         "conclusion_excerpt": conclusion[:400],
     }
+    effective = body.get("effective_forecast")
+    if isinstance(effective, dict) and effective:
+        slim["effective_forecast"] = effective
+        if effective.get("known_at") is not None:
+            slim["known_at"] = effective.get("known_at")
+    elif body.get("known_at") is not None:
+        slim["known_at"] = body.get("known_at")
+    return slim
+
+
+def _prior_known_at_utc(slim: dict[str, Any]) -> datetime | None:
+    raw = slim.get("known_at")
+    if raw is None:
+        ef = slim.get("effective_forecast")
+        if isinstance(ef, dict):
+            raw = ef.get("known_at")
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo is not None else None
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo is not None else None
+    return None
 
 
 def load_prior_analyst_summaries(
@@ -472,11 +498,16 @@ def load_prior_deliberation_summaries(
     tickers: list[str] | tuple[str, ...],
     *,
     lookback_days: int = 30,
+    knowledge_cutoff_at: datetime | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Latest prior ``deliberation/{ticker}`` slim summary per held ticker.
 
     Mirrors :func:`load_prior_analyst_summaries`. Returns ``{ticker: {date,
-    document_key, net_stance, conviction_delta, converged, conclusion_excerpt}}``.
+    document_key, net_stance, conviction_delta, converged, conclusion_excerpt,
+    effective_forecast?}}``.
+
+    When ``knowledge_cutoff_at`` is set, rows whose typed ``known_at`` is strictly
+    after the cutoff are skipped so a later-known prior cannot enter the cohort.
     Empty when ``tickers`` is empty or no prior deliberation docs exist.
     """
     from datetime import timedelta
@@ -503,6 +534,10 @@ def load_prior_deliberation_summaries(
         if ticker in out:
             continue
         slim = _slim_deliberation_summary(row.get("payload") or {})
+        if knowledge_cutoff_at is not None:
+            known = _prior_known_at_utc(slim)
+            if known is not None and known > knowledge_cutoff_at:
+                continue
         out[ticker] = {
             "date": row.get("date"),
             "document_key": key,

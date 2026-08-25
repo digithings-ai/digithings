@@ -15,13 +15,21 @@ from uuid import UUID, uuid4
 import pytest
 from digiquant.olympus.hermes.models.analyst import AnalystPayload, EvidenceAssessment
 from digiquant.olympus.hermes.models.forecast import (
+    EffectiveForecastSource,
+    ForecastAmendment,
     ForecastAssessment,
+    ForecastLineageDegradation,
     ForecastTerms,
     PriceAnchor,
     PriceAnchorStatus,
     RawUncertainty,
+    effective_forecast_id,
+    forecast_amendment_id,
     forecast_assessment_id,
     forecast_terms_content_hash,
+    materialize_forecast_amendment,
+    resolve_effective_forecast,
+    try_resolve_effective_forecast,
 )
 from pydantic import ValidationError
 
@@ -245,3 +253,99 @@ class TestLegacyAnalystDoesNotDeriveForecast:
         assert payload.forecast is terms
         assert payload.forecast.base_return == Decimal("0.04")
         assert payload.price_targets == {"base": 999}
+
+
+class TestForecastAmendmentAndEffective:
+    def test_accepted_complete_amendment_selects_new_terms(self) -> None:
+        base = _assessment()
+        new_terms = _terms(base_return=Decimal("0.06"), bull_return=Decimal("0.20"))
+        amendment = materialize_forecast_amendment(
+            base=base,
+            terms=new_terms,
+            reason="new catalyst within horizon",
+            source_run_id="run-h6",
+            provider_invocation_id="inv-h6",
+            effective_at=_TS,
+            known_at=_TS,
+            evidence_ids=("ev-new",),
+        )
+        effective = resolve_effective_forecast(base, amendment)
+        assert effective.source is EffectiveForecastSource.AMENDMENT
+        assert effective.amendment_id == amendment.amendment_id
+        assert effective.base_forecast_id == base.forecast_id
+        assert effective.terms.base_return == Decimal("0.06")
+        assert effective.degradation is ForecastLineageDegradation.NONE
+
+    def test_unchanged_base_when_no_amendment(self) -> None:
+        base = _assessment()
+        effective = resolve_effective_forecast(base)
+        assert effective.source is EffectiveForecastSource.BASE
+        assert effective.amendment_id is None
+        assert effective.content_hash == base.content_hash
+        assert effective.effective_forecast_id == effective_forecast_id(
+            base_forecast_id=base.forecast_id,
+            amendment_id=None,
+            content_hash=base.content_hash,
+        )
+
+    def test_invalid_amendment_preserves_base_via_try_resolve(self) -> None:
+        base = _assessment()
+        other_terms = _terms(base_return=Decimal("0.07"))
+        other_hash = forecast_terms_content_hash(other_terms)
+        other = _assessment(
+            ticker="MSFT",
+            source_run_id="run-other",
+            terms=other_terms,
+            content_hash=other_hash,
+            forecast_id=forecast_assessment_id(
+                ticker="MSFT",
+                source_run_id="run-other",
+                content_hash=other_hash,
+            ),
+        )
+        bad_terms = _terms(base_return=Decimal("0.07"))
+        content_hash = forecast_terms_content_hash(bad_terms)
+        mismatched = ForecastAmendment(
+            amendment_id=forecast_amendment_id(
+                base_forecast_id=other.forecast_id,
+                source_run_id="run-h6",
+                content_hash=content_hash,
+            ),
+            base_forecast_id=other.forecast_id,
+            ticker="MSFT",
+            terms=bad_terms,
+            reason="wrong base",
+            source_run_id="run-h6",
+            provider_invocation_id="inv",
+            effective_at=_TS,
+            known_at=_TS,
+            content_hash=content_hash,
+        )
+        effective = try_resolve_effective_forecast(base, mismatched)
+        assert effective is not None
+        assert effective.source is EffectiveForecastSource.BASE
+        assert effective.degradation is ForecastLineageDegradation.AMENDMENT_REJECTED
+        assert effective.content_hash == base.content_hash
+
+    def test_amendment_identity_is_deterministic(self) -> None:
+        base = _assessment()
+        terms = _terms(base_return=Decimal("0.055"))
+        a = materialize_forecast_amendment(
+            base=base,
+            terms=terms,
+            reason="evidence update",
+            source_run_id="run-h6",
+            provider_invocation_id="inv",
+            effective_at=_TS,
+            known_at=_TS,
+        )
+        b = materialize_forecast_amendment(
+            base=base,
+            terms=terms,
+            reason="evidence update",
+            source_run_id="run-h6",
+            provider_invocation_id="inv",
+            effective_at=_TS,
+            known_at=_TS,
+        )
+        assert a.amendment_id == b.amendment_id

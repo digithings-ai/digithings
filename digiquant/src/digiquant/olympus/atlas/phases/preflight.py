@@ -435,7 +435,10 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             prior_analyst = {}
         try:
             prior_deliberation = load_prior_deliberation_summaries(
-                deps.client, state.run_date, held_tickers
+                deps.client,
+                state.run_date,
+                held_tickers,
+                knowledge_cutoff_at=state.knowledge_cutoff_at,
             )
         except _SUPABASE_READ_ERRORS:
             prior_deliberation = {}
