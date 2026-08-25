@@ -1459,3 +1459,51 @@ class TestForecastRegistryInH9:
         out2 = _run(client, state)
         assert out2["phase_hermes"].commit_manifest["status"] == "noop"
         assert len(client.store.get("positions", [])) == len(positions_after)
+
+
+class TestRiskPolicyRegistryH9:
+    def test_books_once_and_persists_h8_risk_snapshots(self) -> None:
+        from datetime import UTC, datetime
+
+        import polars as pl
+        from digiquant.olympus.hermes.h8_risk_snapshots import resolve_h8_risk_artifacts
+
+        from tests.dq.atlas.test_risk_policy_registry import RiskRegistryFake
+
+        client = RiskRegistryFake()
+        state = _state()
+        bundle = resolve_h8_risk_artifacts(
+            state=state,
+            pm_tickers=["SPY"],
+            corr=pl.DataFrame({"a": ["SPY"], "b": ["SPY"], "corr": [1.0]}),
+        )
+        state.phase_hermes = state.phase_hermes.model_copy(
+            update={
+                "risk_policy": bundle.policy.model_dump(mode="json"),
+                "covariance_snapshot": bundle.covariance_snapshot.model_dump(mode="json"),
+            }
+        )
+        state.knowledge_cutoff_at = datetime(2026, 6, 12, 21, 0, tzinfo=UTC)
+        out = _run(client, state)
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["schema_version"] == "1.4"
+        assert manifest["risk_policy_registry_status"] == "ok"
+        assert manifest["risk_policy_registry_run_refs_written"] == 1
+        assert len(client.store.get("olympus_h8_risk_run_refs", [])) == 1
+
+    def test_risk_registry_failure_keeps_book(self, monkeypatch) -> None:
+        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+
+        client = FakeSupabaseClient()
+        state = _state()
+
+        def boom(**_k):
+            raise RuntimeError("risk registry down")
+
+        monkeypatch.setattr(h9, "persist_h8_risk_snapshots_from_state", boom)
+        out = _run(client, state)
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["risk_policy_registry_status"] == "degraded"
+        assert client.store.get("positions", [])

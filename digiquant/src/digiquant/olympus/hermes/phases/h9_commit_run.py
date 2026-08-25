@@ -11,6 +11,7 @@ from typing import (
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
 from digiquant.olympus.atlas.forecast_registry import persist_forecast_lineage_from_state
+from digiquant.olympus.atlas.risk_policy_registry import persist_h8_risk_snapshots_from_state
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.payloads import sized_book
@@ -53,6 +54,37 @@ def _phase_error(message: str) -> dict[str, Any]:
                 retryable=False,
             )
         ]
+    }
+
+
+def _persist_risk_policy_registry(*, client: SupabaseClient, state: HermesState) -> dict[str, Any]:
+    """Fail-soft H8 risk snapshot registry (#2698). Never raises into booking."""
+    try:
+        result = persist_h8_risk_snapshots_from_state(client=client, state=state)
+    except Exception as exc:
+        logger.warning(
+            "h9 risk policy registry degraded (%s: %s); book retained",
+            type(exc).__name__,
+            exc,
+        )
+        return {
+            "risk_policy_registry_status": "degraded",
+            "risk_policy_registry_reason": f"{type(exc).__name__}: {exc}"[:300],
+            "risk_policy_registry_policies_written": 0,
+            "risk_policy_registry_snapshots_written": 0,
+            "risk_policy_registry_run_refs_written": 0,
+        }
+    status = "ok" if result.ok else "degraded"
+    return {
+        "risk_policy_registry_status": status,
+        "risk_policy_registry_reason": result.degraded_reason,
+        "risk_policy_registry_policies_written": result.policies_written,
+        "risk_policy_registry_policies_skipped": result.policies_skipped,
+        "risk_policy_registry_snapshots_written": result.snapshots_written,
+        "risk_policy_registry_snapshots_skipped": result.snapshots_skipped,
+        "risk_policy_registry_run_refs_written": result.run_refs_written,
+        "risk_policy_registry_run_refs_skipped": result.run_refs_skipped,
+        "risk_policy_registry_conflicts": list(result.conflicts),
     }
 
 
@@ -102,6 +134,7 @@ def _manifest_payload(
     pruned_tickers: list[str] | None = None,
     ledger: LedgerAppend | None = None,
     forecast_registry: dict[str, Any] | None = None,
+    risk_policy_registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Commit manifest body.
 
@@ -122,9 +155,12 @@ def _manifest_payload(
     ``schema_version`` 1.3 adds optional forecast-registry artifact fields (#2663):
     status/counts only — never forecast math or prompt bodies. WP5.4 extends the
     same block with shadow calibration write counts (#2684).
+
+    ``schema_version`` 1.4 adds optional H8 risk-policy snapshot registry fields
+    (#2698 / WP6.3): status/counts only — never matrix math or sizing inputs.
     """
     payload: dict[str, Any] = {
-        "schema_version": "1.3",
+        "schema_version": "1.4",
         "source_run_id": source_run_id,
         "status": status,
         "weights_fingerprint": weights_fingerprint(weights),
@@ -140,6 +176,8 @@ def _manifest_payload(
     }
     if forecast_registry:
         payload.update(forecast_registry)
+    if risk_policy_registry:
+        payload.update(risk_policy_registry)
     return payload
 
 
@@ -168,6 +206,7 @@ def build_commit_run_node(deps: CommitRunDeps):
             # Still attempt forecast registry (fail-soft): a prior commit may have
             # booked while registry was degraded (#2663).
             registry = _persist_forecast_registry(client=deps.client, state=state)
+            risk_registry = _persist_risk_policy_registry(client=deps.client, state=state)
             manifest = _manifest_payload(
                 source_run_id=source_run_id,
                 status="noop",
@@ -177,6 +216,7 @@ def build_commit_run_node(deps: CommitRunDeps):
                 commit_seq=manifest_commit_seq(latest),
                 supersedes=[],
                 forecast_registry=registry,
+                risk_policy_registry=risk_registry,
             )
             return {"phase_hermes": PhaseHermesState(commit_manifest=manifest)}
 
@@ -207,6 +247,7 @@ def build_commit_run_node(deps: CommitRunDeps):
         # Forecast registry is AFTER booking and fail-soft: a registry outage keeps
         # the one committed book and must not trigger a rebook (#2663).
         registry = _persist_forecast_registry(client=deps.client, state=state)
+        risk_registry = _persist_risk_policy_registry(client=deps.client, state=state)
         brief = publish_portfolio_brief(client=deps.client, state=state, book=book)
         hermes_docs = publish_hermes_documents(client=deps.client, state=state)
         n_decisions = persist_decision_log(client=deps.client, state=state)
@@ -234,6 +275,7 @@ def build_commit_run_node(deps: CommitRunDeps):
             pruned_tickers=booked.pruned_tickers,
             ledger=ledger,
             forecast_registry=registry,
+            risk_policy_registry=risk_registry,
         )
         save_commit_manifest(client=deps.client, state=state, manifest=manifest)
 
