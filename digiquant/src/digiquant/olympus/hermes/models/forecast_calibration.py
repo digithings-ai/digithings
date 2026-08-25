@@ -1,8 +1,9 @@
 """Forecast outcome and calibration contracts (#2672 / WP5.1).
 
 Defines immutable prospective labels and versioned calibration artifacts for
-Olympus Phase 1. Schema + strict Pydantic only — no outcome resolver, no
-calibrator writer, and no H8 consumption (Tasks 5.2–5.4 / Phase 2).
+Olympus Phase 1. Schema + strict Pydantic only — the deterministic calibrator
+lives in :mod:`digiquant.olympus.hermes.forecast_calibration` (WP5.3); shadow
+persistence is Task 5.4. No H8 consumption.
 
 Style mirrors :mod:`digiquant.olympus.hermes.models.forecast`: frozen,
 ``extra="forbid"``, UTC-only aware datetimes, Decimal economics, UUID5
