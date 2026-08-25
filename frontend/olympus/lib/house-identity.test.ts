@@ -33,7 +33,10 @@ describe('house-identity', () => {
     expect(isSharedCorpusKey('digest')).toBe(false);
   });
 
-  it('states period accounting as a typed private gap for anon UI', () => {
-    expect(periodInspectabilityState()).toBe('typed-gap-private-accounting');
+  it('distinguishes public tip view from private base-table gap', () => {
+    expect(periodInspectabilityState()).toBe('typed-gap-private-base-tables');
+    expect(periodInspectabilityState('ok')).toBe('public_period_status_view');
+    expect(periodInspectabilityState('empty')).toBe('empty_public_period_status');
+    expect(periodInspectabilityState('query_failed')).toBe('query_failed');
   });
 });

@@ -44,15 +44,27 @@ export const HOUSE_PROFILE_PINS = {
 export const CORPUS_KEY_PREFIXES = ['theme:', 'asset:', 'segment:'] as const;
 
 export type PeriodInspectabilityState =
-  | 'typed-gap-private-accounting'
-  | 'public-metrics-only';
+  | 'public_period_status_view'
+  | 'empty_public_period_status'
+  | 'query_failed'
+  | 'unconfigured'
+  | 'typed-gap-private-base-tables';
 
 /**
- * Period rows live on `olympus_accounting_*` (service_role SELECT only — Track A
- * privacy). The anon olympus UI must not claim to read them.
+ * Anon olympus must not SELECT private `olympus_accounting_*` base tables.
+ * Curated tip status is available via `public_accounting_period_status` (#2599 / #2652).
+ * Callers should load that view and map the result; this helper labels the contract.
  */
-export function periodInspectabilityState(): PeriodInspectabilityState {
-  return 'typed-gap-private-accounting';
+export function periodInspectabilityState(
+  loadKind?: 'ok' | 'empty' | 'query_failed' | 'unconfigured'
+): PeriodInspectabilityState {
+  if (loadKind === 'ok') return 'public_period_status_view';
+  if (loadKind === 'empty') return 'empty_public_period_status';
+  if (loadKind === 'query_failed') return 'query_failed';
+  if (loadKind === 'unconfigured') return 'unconfigured';
+  // Default contract note when no load has run yet: private bases stay closed;
+  // public tip view is the intended read path.
+  return 'typed-gap-private-base-tables';
 }
 
 export function mapHouseTabFromUrl(raw: string | null): HouseChromeTabId {
