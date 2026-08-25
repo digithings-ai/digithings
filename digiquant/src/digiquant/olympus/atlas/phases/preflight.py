@@ -309,9 +309,7 @@ def _business_days_between(earlier: date, later: date) -> int:
     return count
 
 
-def _profile_config_store_for_pin(
-    client: SupabaseClient, version_id: str
-) -> dict[str, Any]:
+def _profile_config_store_for_pin(client: SupabaseClient, version_id: str) -> dict[str, Any]:
     """Load one olympus_profile_config payload by exact id (fail closed if absent)."""
     try:
         response = (
@@ -370,11 +368,7 @@ def _hydrate_config(
     # Track B (#2609): pin ProfileConfig. None → house default; overlay missing pin fails closed.
     requested_raw = config.profile_config_version_id
     requested_version = UUID(requested_raw) if requested_raw else None
-    store = (
-        _profile_config_store_for_pin(client, requested_raw)
-        if requested_raw
-        else None
-    )
+    store = _profile_config_store_for_pin(client, requested_raw) if requested_raw else None
     pinned = pin_profile_config_for_preflight(
         requested_version_id=requested_version,
         store=store,
