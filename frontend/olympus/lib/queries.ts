@@ -37,6 +37,11 @@ import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tic
 import { buildRebalanceActions } from './rebalance-actions';
 import { holdingWeightChange } from './holding-weight-change';
 import {
+  ACCOUNTING_NAV_VIEW,
+  accountingNavToHistoryShape,
+  type AccountingNavRow,
+} from './accounting-views';
+import {
   digestItemsToStrings,
   extractDigestContextBullets,
   parseActionableItems,
@@ -709,7 +714,11 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     supabase.from('positions').select('*').order('date', { ascending: false }).limit(1000),
     supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
-    supabase.from('nav_history').select('*').order('date', { ascending: true }),
+    // Curated NAV (#2599): finalized tips + labeled legacy. Rollback → nav_history / public_nav_history.
+    supabase
+      .from(ACCOUNTING_NAV_VIEW)
+      .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
+      .order('date', { ascending: true }),
     supabase
       .from('price_history')
       .select('date, ticker, close')
@@ -808,7 +817,17 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const allInstruments: TableRow<'instruments'>[] = instrumentsRes.data ?? [];
   const instrumentByTicker = buildInstrumentLookup(allInstruments);
   const allTheses: TableRow<'theses'>[] = thesesRes.data ?? [];
-  const navHistory: TableRow<'nav_history'>[] = navRes.data ?? [];
+  const navHistory: TableRow<'nav_history'>[] = (
+    (navRes.data ?? []) as AccountingNavRow[]
+  ).map((row) => {
+    const shaped = accountingNavToHistoryShape(row);
+    return {
+      date: shaped.date,
+      nav: shaped.nav,
+      cash_pct: shaped.cash_pct,
+      invested_pct: shaped.invested_pct,
+    };
+  });
   const benchRows: Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[] =
     benchRes.data ?? [];
   const metricsRow = metricsRes.data as TableRow<'portfolio_metrics'> | null;

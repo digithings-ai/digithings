@@ -223,13 +223,15 @@ export function positionRowToLive(row: PositionRow, quotes: LivePriceMap): LiveP
   };
 }
 
-/** `public_nav_history` row → {@link NavPoint} | null (drops rows with no date/nav). */
+/** `public_accounting_nav_history` / `public_nav_history` row → {@link NavPoint} | null. */
 export function navRowToPoint(row: {
   date?: unknown;
   nav?: unknown;
   cash_pct?: unknown;
   invested_pct?: unknown;
   day_return_pct?: unknown;
+  source?: unknown;
+  contract?: unknown;
 }): NavPoint | null {
   const date = asStr(row.date);
   const nav = num(row.nav);
@@ -240,6 +242,8 @@ export function navRowToPoint(row: {
     cashPct: num(row.cash_pct),
     investedPct: num(row.invested_pct),
     dayReturnPct: num(row.day_return_pct),
+    source: asStr(row.source),
+    contract: asStr(row.contract),
   };
 }
 
