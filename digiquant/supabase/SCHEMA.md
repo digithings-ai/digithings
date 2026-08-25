@@ -172,15 +172,17 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/readers:
 `digiquant.olympus.atlas.forecast_registry`.
 
-### Forecast calibration registry — migration 080 (#2672 / WP5.1, writers #2676+#2680)
+### Forecast calibration registry — migration 080 (#2672 / WP5.1, writers #2676+#2680+#2684)
 
 Private append-only prospective outcome labels and shadow calibration versions.
 No historical backfill, no portfolio-contribution columns, no public base view.
 WP5.1 shipped schema + Pydantic contracts; WP5.2 adds the trading-session outcome
 resolver (`digiquant.olympus.atlas.forecast_outcomes`) writing
 `olympus_forecast_outcomes` only. WP5.3 adds the pure deterministic shrinkage
-calibrator (`digiquant.olympus.hermes.forecast_calibration`) — no table writers yet.
-Shadow persistence (5.4) and H8 cutover remain later.
+calibrator (`digiquant.olympus.hermes.forecast_calibration`). WP5.4 attaches at the
+H6→H7 boundary and persists via `forecast_registry.persist_shadow_calibrations`
+into `olympus_forecast_calibrations` + `olympus_calibrated_forecasts` (H9 fail-soft).
+H8 cutover remains later.
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -192,8 +194,9 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_calibration_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
 `digiquant.olympus.hermes.models.forecast_calibration`. Outcome writer:
-`digiquant.olympus.atlas.forecast_outcomes` (WP5.2). Shadow calibrator (no I/O):
-`digiquant.olympus.hermes.forecast_calibration` (WP5.3).
+`digiquant.olympus.atlas.forecast_outcomes` (WP5.2). Shadow calibrator + attach:
+`digiquant.olympus.hermes.forecast_calibration` (WP5.3/5.4). Calibration table writers:
+`digiquant.olympus.atlas.forecast_registry.persist_shadow_calibrations` (WP5.4 / H9).
 
 ### Live quote transport — new in migration 063 (#1807)
 
