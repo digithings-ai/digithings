@@ -129,9 +129,7 @@ def _sample_bundle(**overrides: object) -> AllocationInputBundle:
         bundle_content_hash="",
     )
     bundle_hash = allocation_bundle_content_hash(payload=draft._hash_payload())
-    return AllocationInputBundle.model_validate(
-        {**payload, "bundle_content_hash": bundle_hash}
-    )
+    return AllocationInputBundle.model_validate({**payload, "bundle_content_hash": bundle_hash})
 
 
 def test_weights_fingerprint_matches_commit_io_delegate() -> None:
@@ -229,7 +227,9 @@ def test_bundle_hash_stable_and_order_independent_in_payload() -> None:
             "cost_hashes": [["AAPL", _COST_HASH_A]],
         },
     )
-    assert allocation_bundle_content_hash(payload=reversed_order_payload) == bundle.bundle_content_hash
+    assert (
+        allocation_bundle_content_hash(payload=reversed_order_payload) == bundle.bundle_content_hash
+    )
 
 
 def test_source_change_changes_bundle_hash() -> None:

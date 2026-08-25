@@ -109,7 +109,9 @@ class CalibratedReturnSlice(AllocationContractModel):
             if self.unavailable_reason is not None:
                 raise ValueError("available calibrated slice cannot carry unavailable_reason")
             if self.calibrated_forecast_content_hash is None:
-                raise ValueError("available calibrated slice requires calibrated_forecast_content_hash")
+                raise ValueError(
+                    "available calibrated slice requires calibrated_forecast_content_hash"
+                )
             if self.expected_gross_return is None or self.forecast_error_std is None:
                 raise ValueError(
                     "available calibrated slice requires expected_gross_return and forecast_error_std"
@@ -120,10 +122,11 @@ class CalibratedReturnSlice(AllocationContractModel):
             if self.unavailable_reason is None or not self.unavailable_reason.strip():
                 raise ValueError("non-available calibrated slice requires unavailable_reason")
             if self.calibrated_forecast_content_hash is not None:
-                raise ValueError("non-available calibrated slice cannot carry calibrated_forecast_content_hash")
+                raise ValueError(
+                    "non-available calibrated slice cannot carry calibrated_forecast_content_hash"
+                )
             if any(
-                value is not None
-                for value in (self.expected_gross_return, self.forecast_error_std)
+                value is not None for value in (self.expected_gross_return, self.forecast_error_std)
             ):
                 raise ValueError("non-available calibrated slice cannot carry return metrics")
         return self
@@ -332,7 +335,8 @@ class AllocationInputBundle(AllocationContractModel):
             "cutoff_at": self.run.cutoff_at.isoformat(),
             "cadence": self.run.cadence.value,
             "profile_config_version_id": (
-                None if self.run.profile_config_version_id is None
+                None
+                if self.run.profile_config_version_id is None
                 else str(self.run.profile_config_version_id)
             ),
         }
@@ -342,8 +346,7 @@ class AllocationInputBundle(AllocationContractModel):
                 "direction": item.direction,
                 "conviction_rank": item.conviction_rank,
                 "effective_forecast_id": (
-                    None if item.effective_forecast_id is None
-                    else str(item.effective_forecast_id)
+                    None if item.effective_forecast_id is None else str(item.effective_forecast_id)
                 ),
                 "forecast_reference_hash": item.forecast_reference_hash,
                 "degradation_reason": item.degradation_reason,
@@ -397,7 +400,9 @@ class AllocationInputBundle(AllocationContractModel):
             "risk_policy_hash": self.source_hashes.risk_policy_hash,
             "prior_weights_fingerprint": self.source_hashes.prior_weights_fingerprint,
             "covariance_hash": self.source_hashes.covariance_hash,
-            "calibrated_hashes": sorted([list(pair) for pair in self.source_hashes.calibrated_hashes]),
+            "calibrated_hashes": sorted(
+                [list(pair) for pair in self.source_hashes.calibrated_hashes]
+            ),
             "cost_hashes": sorted([list(pair) for pair in self.source_hashes.cost_hashes]),
         }
         return allocation_bundle_hash_payload(
