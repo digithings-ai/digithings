@@ -183,7 +183,7 @@ def test_bind_forecast_references_overwrites_model_supplied_ids() -> None:
     assert bound.roster[0].conviction_rank == 1
 
 
-def test_bind_forecast_references_missing_lineage_clears_ref() -> None:
+def test_bind_forecast_references_missing_lineage_is_explicit_degraded() -> None:
     memo = PMDirectionMemo(
         date=date(2026, 8, 25),
         roster=[
@@ -200,6 +200,10 @@ def test_bind_forecast_references_missing_lineage_clears_ref() -> None:
         ],
     )
     bound = bind_forecast_references(memo, deliberation_by_ticker={})
-    assert bound.roster[0].forecast_reference is None
+    ref = bound.roster[0].forecast_reference
+    assert ref is not None
+    assert ref.effective_forecast_id is None
+    assert ref.base_forecast_id is None
+    assert ref.degradation_reason == "forecast_unavailable"
     assert bound.roster[0].direction == "flat"
     assert bound.roster[0].conviction_rank == 1

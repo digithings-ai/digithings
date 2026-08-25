@@ -82,7 +82,9 @@ class TestH7FailSoft:
         assert memo.date == RUN_DATE, "carried memo must be re-dated to today"
         assert [e.ticker for e in memo.roster] == ["SPY", "TLT"]
         spy = next(e for e in memo.roster if e.ticker == "SPY")
-        assert spy.forecast_reference is None, "prior forecast IDs must not survive empty map"
+        assert spy.forecast_reference is not None
+        assert spy.forecast_reference.effective_forecast_id is None
+        assert spy.forecast_reference.degradation_reason == "forecast_unavailable"
         errors = out.get("errors") or []
         assert len(errors) == 1
         assert errors[0].phase != "chain"
@@ -120,7 +122,9 @@ class TestH7FailSoft:
         assert spy.forecast_reference.effective_forecast_id != PRIOR_EFF
 
         tlt = next(e for e in memo.roster if e.ticker == "TLT")
-        assert tlt.forecast_reference is None, "missing current forecast cannot be fabricated"
+        assert tlt.forecast_reference is not None
+        assert tlt.forecast_reference.effective_forecast_id is None
+        assert tlt.forecast_reference.degradation_reason == "forecast_unavailable"
 
 
 class TestH7BindOnSuccess:
