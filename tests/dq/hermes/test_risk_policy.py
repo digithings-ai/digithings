@@ -154,13 +154,15 @@ def test_phase1_advanced_capabilities_explicitly_unavailable() -> None:
         policy.factor_limits,
         policy.stress_limits,
         policy.tail_limits,
-        policy.liquidity_limits,
-        policy.cost_policy,
     ):
         assert cap.available is False
         assert cap.enforced is False
         assert cap.limit is None
         assert cap.reason == "phase1_not_implemented"
+    assert policy.liquidity_limits.available is True
+    assert policy.liquidity_limits.enforced is False
+    assert policy.cost_policy.available is True
+    assert policy.cost_policy.enforced is False
 
 
 def test_contradictory_policy_is_typed_degraded() -> None:
