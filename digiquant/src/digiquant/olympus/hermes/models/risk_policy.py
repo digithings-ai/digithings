@@ -157,7 +157,9 @@ class RiskPolicy(RiskPolicyModel):
         expected_hash = risk_policy_content_hash(payload=policy_hash_payload(self))
         if self.content_hash != expected_hash:
             raise ValueError("content_hash must match canonical policy digest")
-        expected_id = risk_policy_id(method_version=self.method_version, content_hash=self.content_hash)
+        expected_id = risk_policy_id(
+            method_version=self.method_version, content_hash=self.content_hash
+        )
         if self.policy_id != expected_id:
             raise ValueError("policy_id must be UUID5 of method_version+content_hash")
         return self
@@ -184,7 +186,9 @@ class CovarianceSnapshot(RiskPolicyModel):
 
     @field_validator("matrix")
     @classmethod
-    def _validate_matrix_shape(cls, value: tuple[tuple[float, ...], ...]) -> tuple[tuple[float, ...], ...]:
+    def _validate_matrix_shape(
+        cls, value: tuple[tuple[float, ...], ...]
+    ) -> tuple[tuple[float, ...], ...]:
         n = len(value)
         for row in value:
             if len(row) != n:
