@@ -148,6 +148,35 @@ describe('layoutPipeline', () => {
     expect(beliefs?.runStatus).toBe('not-run');
   });
 
+  it('attention-plan is conditional until published (#1945)', () => {
+    const day: PipelineDayData = {
+      runRecorded: true,
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['macro']),
+      artifacts: [],
+    };
+    const missing = layoutPipeline(day, {
+      expandedStages: new Set(['inputs']),
+      expandedFanouts: new Set(),
+    });
+    expect(missing.nodes.find((n) => n.id === 'inputs:attention-plan')?.runStatus).toBe('not-run');
+
+    const present = layoutPipeline(
+      {
+        ...day,
+        presentKeys: new Set(['macro', 'attention-plan']),
+      },
+      {
+        expandedStages: new Set(['inputs']),
+        expandedFanouts: new Set(),
+      },
+    );
+    const node = present.nodes.find((n) => n.id === 'inputs:attention-plan');
+    expect(node?.documentKey).toBe('attention-plan');
+    expect(node?.runStatus).toBe('persisted-artifact');
+  });
+
   it('#1259: digest node resolves via digest-delta on a delta day (no plain `digest` key)', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},

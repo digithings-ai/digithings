@@ -283,7 +283,10 @@ reasoning workflow without replacing their domain interactions:
   page-level card primitives.
 - Pipeline has three separate inspection surfaces: the topology explains process and
   run status, All artifacts lists every persisted `document_key`, and Call trace lists
-  ordered model/search/tool operations from `olympus_run_event_trace`. The trace pages
+  ordered model/search/tool operations from `olympus_run_event_trace`. Every known
+  representative-run key is classified as a topology leaf, fan-out branch, or
+  ledger-only discovery path (`lib/pipeline-document-discoverability.ts`) so deep
+  links can still resolve a stage. The trace pages
   100 rows at a time, groups by run attempt and phase, and opens retries/errors by default.
   Historical runs without ingestion-time events say "Call details were not recorded for
   this run"; they are never reconstructed from aggregate diagnostics.
