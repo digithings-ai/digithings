@@ -299,6 +299,97 @@ class TestResolveRequestModel:
             pop_byok(tok)
         assert resolve_request_model("gpt-4o-mini") == "ollama/qwen3:8b"
 
+    def test_bare_slug_unroutable_byok_provider_does_not_bypass_ollama_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A BYOK override for an unroutable provider must not bypass OLLAMA_MODEL.
+
+        push_byok_header binds digigraph's ``(key, provider)`` contextvar whenever a
+        key is present, independent of whether the provider has a catalog base_url —
+        only a *routable* provider also gets digillm's own BYOK override
+        (``set_byok``). Gating the bare-slug passthrough on "BYOK bound at all"
+        rather than "BYOK bound for a routable provider" would let an unroutable
+        provider's override reach here and skip the operator's OLLAMA_MODEL
+        fallback even though digillm was never told to route to that provider's
+        key. ``server.py``'s 400 on unroutable providers (#1873) means this never
+        happens over HTTP today, but ``resolve_request_model`` must not depend on
+        that caller for its own correctness.
+        """
+        from digigraph.llm_auth import pop_byok, push_byok_header
+
+        monkeypatch.setenv("OLLAMA_MODEL", "ollama/qwen3:8b")
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "co-test-key",
+                        "x-byok-provider": "cohere",
+                        "x-byok-model": "command-r-plus",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            assert resolve_request_model("gpt-4-turbo") == "ollama/qwen3:8b"
+        finally:
+            pop_byok(tok)
+
+    def test_free_mode_byok_paid_model_not_clamped_by_ollama_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``llm_mode: free`` + BYOK + a paid ``X-BYOK-Model`` now reaches digillm unchanged.
+
+        Documents an intentional behavior change, not a regression: before this fix,
+        ``resolve_request_model`` ignored any BYOK override on the bare-slug path and
+        always preferred ``OLLAMA_MODEL``, so a paid BYOK model was clamped to the
+        local Ollama default as a *side effect* of the OLLAMA_MODEL-clobber bug, not
+        by any deliberate free-mode policy check. That accidental clamp is gone now
+        that the bare-slug path respects BYOK — the user's own key pays, matching
+        the documented free_quota_exceeded → BYOK handoff design. Pinned so a future
+        change to free-mode policy doesn't silently assume the old accidental clamp
+        is still in effect.
+        """
+        from digigraph.llm_auth import pop_byok, push_byok_header
+        from digigraph.model_config import _apply_byok_model_override
+
+        monkeypatch.setenv("DIGI_LLM_MODE", "free")
+        monkeypatch.setenv("OLLAMA_MODEL", "ollama/qwen3:8b")
+        monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+
+        class _Headers:
+            def __init__(self, d: dict[str, str]) -> None:
+                self._d = {k.lower(): v for k, v in d.items()}
+
+            def get(self, name: str) -> str | None:
+                return self._d.get(name.lower())
+
+        class _Req:
+            def __init__(self) -> None:
+                self.headers = _Headers(
+                    {
+                        "x-byok-key": "sk-openai-test",
+                        "x-byok-provider": "openai",
+                        "x-byok-model": "gpt-4o",
+                    }
+                )
+
+        tok = push_byok_header(_Req())
+        try:
+            chosen = _apply_byok_model_override("ollama/qwen3:8b")
+            assert chosen == "gpt-4o"
+            assert resolve_request_model(chosen) == "gpt-4o"
+        finally:
+            pop_byok(tok)
+
     def test_provider_registry_is_digillm_not_a_local_copy(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

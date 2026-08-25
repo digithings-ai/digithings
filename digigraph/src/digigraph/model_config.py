@@ -35,6 +35,7 @@ from digigraph.llm_auth import (
     byok_default_model_refusal,
     byok_model_routes_elsewhere,
     byok_operator_model_routes_elsewhere,
+    byok_provider_supported,
     byok_routable_model,
     get_byok_model_override,
     get_byok_override,
@@ -876,11 +877,18 @@ def resolve_request_model(request_model: str) -> str:
     - ``ollama-cloud/<model>`` → strip the prefix (Ollama Cloud expects bare
       names); ``resolve_effective_model`` is intentionally NOT applied so a mode
       default can't override an explicit cloud model.
-    - bare / non-prefixed slug with an active BYOK override → returned unchanged.
-      ``openai`` is not a digillm-registered prefix, so OpenAI BYOK models are bare
-      (``gpt-4o-mini``). ``resolve_effective_model`` prefers ``OLLAMA_MODEL`` over
-      the request string; applying it under BYOK would send a local Ollama slug to
-      the user's OpenAI (or other) endpoint while digillm still holds their key.
+    - bare / non-prefixed slug with an active BYOK override **for a routable
+      provider** → returned unchanged. ``openai`` is not a digillm-registered
+      prefix, so OpenAI BYOK models are bare (``gpt-4o-mini``).
+      ``resolve_effective_model`` prefers ``OLLAMA_MODEL`` over the request
+      string; applying it under BYOK would send a local Ollama slug to the
+      user's OpenAI (or other) endpoint while digillm still holds their key.
+      Gated on :func:`byok_provider_supported` rather than "BYOK is bound at
+      all": ``push_byok_header`` sets digigraph's override whenever a key is
+      present, independent of whether the provider has a catalog base URL, so
+      checking presence alone would let an unroutable-provider override this
+      branch too — harmless only by the coincidence that server.py's 400 on
+      unroutable providers (#1873) never lets one reach here today.
     - anything else → ``resolve_effective_model(request_model)``.
     """
     provider, _model_id = _parse_provider_prefix(request_model)
@@ -902,6 +910,9 @@ def resolve_request_model(request_model: str) -> str:
         return request_model[len("ollama-cloud/") :]
     # BYOK already chose the spendable model via ``_apply_byok_model_override``.
     # Do not let ``OLLAMA_MODEL`` / mode defaults clobber a bare OpenAI (etc.) slug.
-    if get_byok_override() is not None:
+    # Gated on the provider actually being BYOK-routable, not just "a BYOK override
+    # is bound" -- see the docstring note on ``push_byok_header`` vs ``set_byok``.
+    byok = get_byok_override()
+    if byok is not None and byok_provider_supported(byok[1]):
         return request_model
     return resolve_effective_model(request_model)
