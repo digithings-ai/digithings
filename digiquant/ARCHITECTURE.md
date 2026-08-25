@@ -862,6 +862,12 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user
   research trees. Models/store: `digiquant.olympus.research_corpus`.
+  AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
+  decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
+  (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
+  `off` \| `shadow` only (no enforce); `actuated` is always false. House
+  ProfileConfig is the default pin; overlay pins fail closed when missing. The
+  planner cannot expand H4 roster/cap or carry H7/H8 authority fields.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
