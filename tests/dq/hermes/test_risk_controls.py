@@ -136,6 +136,20 @@ def test_reader_look_ahead_guard_excludes_future_nav() -> None:
     assert state.scale == 1.0
 
 
+def test_incumbent_breaker_defaults_and_ramp_match_golden_fixture() -> None:
+    """WP6.1 (#2687): freeze drawdown breaker thresholds and ramp curve."""
+    from tests.dq.hermes.incumbent_risk_fixtures import (
+        dataclass_matches_fixture,
+        load_incumbent_risk_fixture,
+    )
+
+    golden = load_incumbent_risk_fixture()
+    assert dataclass_matches_fixture(BreakerConfig(), golden["policy_defaults"]["breaker_config"])
+    mid = compute_breaker_scale([100.0, 86.0], config=_CFG)
+    assert mid.scale == golden["breaker_scales"]["mid_ramp"]["scale"]
+    assert mid.drawdown_pct == golden["breaker_scales"]["mid_ramp"]["drawdown_pct"]
+
+
 def test_reader_is_fail_soft_on_error() -> None:
     class _Raising:
         def table(self, _name: str):

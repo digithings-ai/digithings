@@ -731,6 +731,19 @@ _LINEAGE_SCENARIOS: dict[str, dict] = {
 }
 
 
+# --------------------------------------------------------------------------- WP6.1 incumbent golden leaves (#2687)
+
+
+def test_incumbent_default_caps_match_golden_fixture() -> None:
+    from tests.dq.hermes.incumbent_risk_fixtures import (
+        dataclass_matches_fixture,
+        load_incumbent_risk_fixture,
+    )
+
+    golden = load_incumbent_risk_fixture()["policy_defaults"]["sizing_caps"]
+    assert dataclass_matches_fixture(SizingCaps(), golden)
+
+
 @pytest.mark.parametrize("scenario", _LINEAGE_SCENARIOS.values(), ids=list(_LINEAGE_SCENARIOS))
 def test_zero_unexplained_deltas_across_scenario_battery(scenario: dict) -> None:
     """Deterministic battery covering every control combination the pipeline can hit in a
