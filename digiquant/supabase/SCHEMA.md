@@ -122,6 +122,24 @@ adapters to `public_nav_history` / `nav_history` without deleting accounting row
 
 **Cutover gate:** point public readers only after an approved shadow interval (including one
 rebalance session) has zero unexplained reconciliation failures.
+
+### ProfileConfig — migration 075 (#2609 / Track B)
+
+Private append-only versioned investment overlay pins for Olympus preflight. The
+digithings-owned **house** row (`profile_key='house'`, `is_house_default=true`) is the
+immutable always-on default run. Overlay rows may request different universe / risk /
+themes / budgets; they must not claim the house key or cancel/replace the house run.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_profile_config` | `(id UUID)` | Exact pin id (= `ProfileConfig.version_id`). Columns: `profile_key`, `schema_version`, `is_house_default`, `label`, `payload` (jsonb full ProfileConfig), optional `supersedes_id`, `recorded_at`. CHECK enforces house key ↔ house flag. Partial unique index: one current house root. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_profile_config_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/loader:
+`digiquant.olympus.profile_config`. Preflight pins via
+`pin_profile_config_for_preflight` into `AtlasConfigBundle.profile_config*`.
+
 ### Live quote transport — new in migration 063 (#1807)
 
 The only **table** in the digiquant.io public read surface (the 050 trio are views), and the
