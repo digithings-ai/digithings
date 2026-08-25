@@ -48,6 +48,8 @@ export const DB_EXEMPT_PREFIXES = [
   '/research',
   '/strategy',
   '/portfolio/theses',
+  // House chrome declares corpus/profile contracts; corpus sample keys fail soft.
+  '/house',
 ] as const;
 
 /** True when `pathname` should stay live even while the backend is unreachable. */

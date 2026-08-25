@@ -69,6 +69,17 @@ at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
 `process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
 
+**House identity (#2643 / #1945 Track C):** Brief and Portfolio surfaces show a
+compact digithings house ETF paper book banner linking to `/house` —
+**Corpus | Book | Profile** (read-only). Profile pins are declared chrome until
+Track B ProfileConfig DB lands; they are not editable Settings.
+
+**Portfolio sections:** Holdings · Theses · **Tearsheet** (`/portfolio/performance`) ·
+**Ledger** (position-event activity) · **Period** (`public_accounting_period_status`
+tip rows; empty / query-failure gaps stay honest; raw `olympus_accounting_*` bases
+remain service_role-only) · Attribution. Period chrome does not invent private
+accounting rows (#2652).
+
 Shared workspace gutters use `SUBPAGE_MAX` from
 `components/layout-constants.ts`. The constant intentionally lives outside
 client components so server-rendered pages and Suspense fallbacks receive a
@@ -299,6 +310,10 @@ reasoning workflow without replacing their domain interactions:
   Atlas / Hermes / Learning bands gate active chrome — research artifacts never paint Hermes
   or Learning as run. Snapshot presence establishes that a run was recorded even when it
   published no documents (degraded reach across bands).
+- Screenshot matrix (#2645): every topology stage × desktop/mobile plus representative
+  artifact families are listed in [`docs/screenshot-matrix.md`](docs/screenshot-matrix.md).
+  Vitest (`lib/screenshot-manifest.test.ts`) fails if a required path is missing from
+  `fixtures/screenshots/` (1×1 PNG placeholders are allowed until operator capture).
 - **Why** owns one reasoning command band above the shared responsive tab bar.
   `?why=read` presents the latest synthesis as a divided reading workspace;
   `?why=deliberations` presents rebalance actions, risk and ticker debates,
