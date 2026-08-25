@@ -893,8 +893,12 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
   terms/weights; missing lineage is an explicit degraded reference (null IDs +
   `degradation_reason`, no fabricated UUIDs); fail-soft rebinds from the current
-  map and cannot retain prior refs. H8 still reads direction/rank only. H9
-  forecast registry is WP4.6.
+  map and cannot retain prior refs. H8 still reads direction/rank only.
+  **H9 forecast registry (#2663 / WP4.6):** after portfolio booking, H9 fail-soft
+  appends prospective `olympus_forecast_assessments` / `olympus_forecast_amendments`
+  via `atlas/forecast_registry.py` (exact retry / content conflict; exact-ID cutoff
+  reads). Registry failure keeps the one committed book and cannot rebook; status
+  lands on the commit manifest (`schema_version` 1.3). No calibration writers.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
@@ -1201,8 +1205,9 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   forecast H7 saw (`hermes/models/pm_direction.py`); economics and identifiers are
   never LLM-authored. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
   ignores forecast refs (direction/rank unchanged). **H9** (`commit_run`) is the
-  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append, and
-  the portfolio lineage ledger commit chain (see below).
+  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append,
+  the portfolio lineage ledger commit chain (see below), and fail-soft prospective
+  forecast-registry persistence (#2663).
 
 #### Risk-sizing layer (Pillar 2)
 

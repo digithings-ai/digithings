@@ -1348,3 +1348,114 @@ class TestPriceReadRowCap:
         assert worst_case <= self.CAP, (
             f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
         )
+
+
+class TestForecastRegistryInH9:
+    """WP4.6 (#2663): H9 persists forecast lineage after booking; failure cannot rebook."""
+
+    def _assessment_payload(self) -> dict:
+        from datetime import UTC, datetime
+        from decimal import Decimal
+
+        from digiquant.olympus.hermes.models.forecast import (
+            ForecastAssessment,
+            ForecastTerms,
+            PriceAnchor,
+            PriceAnchorStatus,
+            RawUncertainty,
+            forecast_assessment_id,
+            forecast_terms_content_hash,
+        )
+
+        ts = datetime(2026, 6, 12, 15, 0, tzinfo=UTC)
+        terms = ForecastTerms(
+            horizon_sessions=21,
+            half_life_sessions=10,
+            bear_return=Decimal("-0.10"),
+            base_return=Decimal("0.04"),
+            bull_return=Decimal("0.15"),
+            bear_probability=Decimal("0.25"),
+            base_probability=Decimal("0.50"),
+            bull_probability=Decimal("0.25"),
+            thesis_valid_probability=Decimal("0.60"),
+            raw_uncertainty=RawUncertainty.MEDIUM,
+        )
+        ch = forecast_terms_content_hash(terms)
+        run = str(_SOURCE_RUN_ID)
+        assessment = ForecastAssessment(
+            forecast_id=forecast_assessment_id(ticker="SPY", source_run_id=run, content_hash=ch),
+            ticker="SPY",
+            terms=terms,
+            source_run_id=run,
+            provider_invocation_id="inv-h9",
+            prompt_version="pv-1",
+            artifact_version="av-1",
+            price_anchor=PriceAnchor(
+                status=PriceAnchorStatus.OBSERVED,
+                price=Decimal("100"),
+                observed_at=ts,
+            ),
+            effective_at=ts,
+            known_at=ts,
+            content_hash=ch,
+        )
+        return assessment.model_dump(mode="json")
+
+    def test_books_once_and_persists_assessment(self) -> None:
+        from tests.dq.atlas.test_forecast_registry import RegistryFake
+
+        client = RegistryFake()
+        state = _state(
+            analysts={
+                "SPY": {
+                    "ticker": "SPY",
+                    "stance": "buy",
+                    "conviction_score": 4,
+                    "thesis": "risk-on",
+                    "risks": "",
+                    "sources": [],
+                    "forecast_assessment": self._assessment_payload(),
+                }
+            }
+        )
+        out = _run(client, state)
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["forecast_registry_status"] == "ok"
+        assert manifest["forecast_registry_assessments_written"] == 1
+        assert len(client.store.get("olympus_forecast_assessments", [])) == 1
+        assert len(client.store.get("positions", [])) >= 1
+
+    def test_registry_failure_keeps_book_and_does_not_rebook(self, monkeypatch) -> None:
+        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+
+        client = FakeSupabaseClient()
+        state = _state(
+            analysts={
+                "SPY": {
+                    "ticker": "SPY",
+                    "stance": "buy",
+                    "conviction_score": 4,
+                    "thesis": "risk-on",
+                    "risks": "",
+                    "sources": [],
+                    "forecast_assessment": self._assessment_payload(),
+                }
+            }
+        )
+
+        def boom(**_k):
+            raise RuntimeError("registry down")
+
+        monkeypatch.setattr(h9, "persist_forecast_lineage_from_state", boom)
+        out = _run(client, state)
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["forecast_registry_status"] == "degraded"
+        positions_after = list(client.store.get("positions", []))
+        assert positions_after, "book must remain after registry failure"
+
+        # Re-run same book: noop path — must not create a second book.
+        out2 = _run(client, state)
+        assert out2["phase_hermes"].commit_manifest["status"] == "noop"
+        assert len(client.store.get("positions", [])) == len(positions_after)
