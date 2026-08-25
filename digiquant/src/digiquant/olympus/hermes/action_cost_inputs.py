@@ -103,6 +103,8 @@ class RealizedCostInput(ActionCostModel):
                 raise ValueError(f"{label} must be timezone-aware UTC")
         return self
 
+
+def _money(value: Decimal) -> Decimal:
     return value.quantize(_MONEY_QUANTUM, rounding=ROUND_HALF_UP)
 
 
