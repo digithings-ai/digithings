@@ -114,12 +114,8 @@ def _load_commit_orders(
     if not decisions:
         return []
 
-    approved_resp = (
-        client.table(APPROVED_TARGETS).select("*").eq("run_date", run_date).execute()
-    )
-    requested_resp = (
-        client.table(REQUESTED_TARGETS).select("*").eq("run_date", run_date).execute()
-    )
+    approved_resp = client.table(APPROVED_TARGETS).select("*").eq("run_date", run_date).execute()
+    requested_resp = client.table(REQUESTED_TARGETS).select("*").eq("run_date", run_date).execute()
     order_resp = client.table(ORDER_INTENTS).select("*").eq("run_date", run_date).execute()
 
     decision_by_requested: dict[str, DecisionIntent] = {}
