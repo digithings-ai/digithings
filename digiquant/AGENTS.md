@@ -103,6 +103,9 @@ When touching `digiquant/src/digiquant/olympus/`:
      `DocumentPatch`, merge via `merge_document_patch`; `full` → `*-full.md` skill, full body.
    - Prior = `prior_published(run_date, document_key)` (latest `date < run_date`), not calendar
      yesterday only. Stale gap > `OLYMPUS_STALE_FULL_DAYS` (default 7) → `full`.
+   - Track B WP13-class shadow (#2616): `digiquant.olympus.attention_plan.plan_attention_shadow`
+     records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
+     never actuates; cannot expand H4 or rewrite H7/H8).
 5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
    sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
