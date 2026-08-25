@@ -260,6 +260,24 @@ def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Option
     return _parse_pct(rows[0].get("weight_pct"))
 
 
+# Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay
+# ``legacy`` permanently; ledger paper-fill projections stamp ``authoritative``.
+BOOK_SOURCE_LEGACY = "legacy"
+BOOK_SOURCE_AUTHORITATIVE = "authoritative"
+
+
+def _with_book_source(
+    events: List[Dict[str, Any]], book_source: str
+) -> List[Dict[str, Any]]:
+    """Return shallow copies stamped with ``book_source`` (never mutates inputs)."""
+    out: List[Dict[str, Any]] = []
+    for event in events:
+        row = dict(event)
+        row["book_source"] = book_source
+        out.append(row)
+    return out
+
+
 def _hold_events_for_positions_not_in_rebalance(
     sb, execution_date: str, skip_tickers: Set[str]
 ) -> List[Dict[str, Any]]:
@@ -536,6 +554,7 @@ def build_events_from_paper_fills(
                     f"from the {prior_book_d or 'unavailable'} positions book, for display only."
                 ),
                 "thesis_id": None,
+                "book_source": BOOK_SOURCE_AUTHORITATIVE,
             }
         )
     return events, ""
@@ -693,7 +712,9 @@ def _record_ledger_events(
     holds = _hold_events_for_positions_not_in_rebalance(
         sb, d, filled | _event_tickers_for_date(sb, d)
     )
-    events = ledger_events + holds
+    # Ledger path owns the day: fills already carry authoritative; HOLD continuity under
+    # ledger authority is stamped the same so Activity cannot mix unlabeled rows (#2422).
+    events = _with_book_source(ledger_events + holds, BOOK_SOURCE_AUTHORITATIVE)
     if not events:
         print(
             f"✅ portfolio ledger is authoritative for run_date={rebalance_d} and booked no "
@@ -833,6 +854,7 @@ def main() -> int:
             if not digest_events:
                 digest_events = build_events_from_positions_book(sb, d)
             if digest_events:
+                digest_events = _with_book_source(digest_events, BOOK_SOURCE_LEGACY)
                 for e in digest_events:
                     sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
                 null_px = sum(1 for e in digest_events if e.get("price") is None)
@@ -849,7 +871,10 @@ def main() -> int:
                 )
                 return 0
         print(f"No rebalance_decision payload for documents.date={rebalance_d}; filling from positions only.")
-        extra = _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d))
+        extra = _with_book_source(
+            _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d)),
+            BOOK_SOURCE_LEGACY,
+        )
         if not extra:
             print("No positions rows for this date — nothing to record.")
             return 0
@@ -871,7 +896,10 @@ def main() -> int:
     table = body.get("rebalance_table") if isinstance(body, dict) else None
     if not isinstance(table, list) or not table:
         print("rebalance_decision has no rebalance_table; filling from positions only.")
-        extra = _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d))
+        extra = _with_book_source(
+            _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d)),
+            BOOK_SOURCE_LEGACY,
+        )
         if not extra:
             print("No positions rows for this date — nothing to record.")
             return 0
@@ -970,7 +998,8 @@ def main() -> int:
             f"({', '.join(e['ticker'] for e in gap_holds)})"
         )
 
-    # Upsert by date,ticker (current schema)
+    # Upsert by date,ticker (current schema). Prose path is permanently legacy (#2422).
+    events = _with_book_source(events, BOOK_SOURCE_LEGACY)
     for e in events:
         sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
 

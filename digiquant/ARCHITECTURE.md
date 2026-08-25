@@ -1626,6 +1626,27 @@ a silent fallback to prose cannot hide the handover. Deleting the two prose buil
 further follow-up gated on prod reaching 070: they still carry the whole #1743 regression
 suite.
 
+#### Compatibility projection labeling (#2422 / Task 2.5)
+
+`position_events` remains the Activity compatibility table existing readers use unmodified.
+Migration `071_olympus_position_events_book_source.sql` adds `book_source text NOT NULL
+DEFAULT 'legacy'` with `CHECK (book_source IN ('legacy', 'authoritative'))`. Historical rows
+keep the `legacy` label permanently (column default; no content rewrite). The morning
+executor stamps:
+
+- `authoritative` — ledger paper-fill projections (`build_events_from_paper_fills` +
+  `_record_ledger_events`, including HOLD continuity written under ledger authority)
+- `legacy` — every prose / digest / positions-book reconstruction path
+
+Curated views (security_invoker; no SELECT from private `portfolio_ledger_*`):
+
+- `olympus_position_events` — all rows with `book_source` explicit
+- `olympus_position_events_authoritative` — `WHERE book_source = 'authoritative'` only
+
+New consumers that require lineage must use the authoritative view (or filter). Legacy
+projection writers are retired only after holding_lots seed + `--no-ledger` removal + named
+readers pass retention checks — not as part of #2422.
+
 - **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
   `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and
   `tests/dq/atlas/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,

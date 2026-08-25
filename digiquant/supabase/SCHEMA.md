@@ -223,6 +223,21 @@ writer — H9 `commit_run` stays the sole authoritative booking path.
 | `portfolio_ledger_paper_executions` | `(id UUID)` | Immutable fill: `quantity`/`price` both `NOT NULL CHECK (> 0)`, `id` a deterministic `uuid5(order_intent_id, executed_date)` backed by `UNIQUE (order_intent_id, executed_date)` so an exact-same-date retry reproduces the identical row instead of duplicating; FK to `portfolio_ledger_order_intents`. |
 | `portfolio_ledger_holding_lots` | `(id UUID)` | Lot `quantity`/`open_price` (`NOT NULL CHECK (> 0)`), `status` (open/closed) tying `closed_at`/`closed_by_execution_id` nullability to status, opening and closing executions forced distinct; FKs to `portfolio_ledger_paper_executions`. |
 
+### position_events book_source labeling - new in migration 071 (#2422)
+
+Compatibility Activity projection labeling (Task 2.5). Does **not** expose private ledger
+tables.
+
+| Object | Purpose |
+|--------|---------|
+| `position_events.book_source` | `NOT NULL DEFAULT 'legacy'` with `CHECK IN ('legacy','authoritative')`. Existing history stays `legacy` permanently. |
+| `olympus_position_events` | security_invoker view of all events including `book_source`. |
+| `olympus_position_events_authoritative` | Same columns, `WHERE book_source = 'authoritative'` only — never includes legacy rows. |
+
+Writers: `execute_at_open.py` stamps `authoritative` on the ledger path and `legacy` on every
+prose path. Cutover/retirement of prose writers is gated on seeded `holding_lots` and removal
+of `--no-ledger` (see ARCHITECTURE.md cutover section), not on this migration alone.
+
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL
 DEFAULT now()` database write clock, matching the migration-067 telemetry idiom. RLS is

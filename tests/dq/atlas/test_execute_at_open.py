@@ -739,6 +739,16 @@ class TestBuildEventsFromPaperFills:
             "DBO": "EXIT",  # sell all 30
         }
 
+    def test_ledger_projection_stamps_authoritative_book_source(self) -> None:
+        """#2422: ledger fills must never land unlabeled or as legacy."""
+        events, declined = _mod.build_events_from_paper_fills(
+            _day().client(), _RUN_D, _EXEC_D, now=_NOW
+        )
+        assert declined == ""
+        assert events is not None
+        assert events
+        assert all(e.get("book_source") == _mod.BOOK_SOURCE_AUTHORITATIVE for e in events)
+
     def test_a_rejected_order_produces_no_event(self) -> None:
         """No declared open means no fill, and no fill means no invented event row.
 
