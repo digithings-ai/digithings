@@ -205,6 +205,12 @@ describe('ConsensusTab Charts view', () => {
     expect(html).not.toContain('Position split over time');
   });
 
+  it('does NOT render the removed day-to-day jump-strip chart', () => {
+    const html = render({ initialView: 'charts' });
+    expect(html).not.toContain('data-chart="jump-strip"');
+    expect(html).not.toContain('Day-to-day |Δscore|');
+  });
+
   it('does NOT render the removed Raw | Average toggle', () => {
     const html = render({ initialView: 'charts' });
     expect(html).not.toContain('data-smooth="raw"');

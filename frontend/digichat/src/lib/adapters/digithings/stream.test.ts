@@ -31,7 +31,6 @@ it("does not stream the upstream error body to the browser", async () => {
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -72,7 +71,6 @@ it("never emits data-digigraphTrace on the authenticated path", async () => {
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -102,7 +100,6 @@ it("posts the full multi-turn history to digigraph chat completions", async () =
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
 
@@ -148,7 +145,6 @@ it("suppresses both parts on the embed path with activityDetail off", async () =
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "off",
   });
   const body = await new Response(res.body).text();
@@ -195,7 +191,6 @@ it("emits the activity span but not the legacy part on the embed path with activ
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -244,7 +239,6 @@ it("emits rich retrieve activity for rag_sources on the gated path", async () =>
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -295,7 +289,6 @@ it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async ()
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "off",
   });
   const body = await new Response(res.body).text();
@@ -347,7 +340,6 @@ it("strips Open WebUI tool dumps from streamed answer text", async () => {
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -381,7 +373,6 @@ it("splits narration from the final answer into separate text parts on round_bou
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -430,7 +421,6 @@ it("keeps a single unbroken text part when no round_boundary ever fires", async 
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -458,7 +448,6 @@ it("opts digigraph out of Open WebUI format on the dogfood stream path", async (
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
 
@@ -467,6 +456,31 @@ it("opts digigraph out of Open WebUI format on the dogfood stream path", async (
   const headers = new Headers(init.headers);
   expect(headers.get("X-Suppress-Tool-Stream")).toBe("1");
   expect(headers.get("X-Response-Format")).toBe("plain");
+});
+
+// `upstreamHeaders` is the only thing that decides which key digigraph bills, so
+// pin it. Every other fixture here passes `upstreamHeaders: {}`, which is not what
+// route.ts sends: it always builds the Authorization entry itself. This asserts the
+// production shape -- and it is why the adapter carries no Authorization line of its
+// own to be overridden.
+it("sends the Authorization supplied in upstreamHeaders", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })
+  );
+
+  await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: { Authorization: "Bearer from-upstream-headers" },
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+
+  const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+  expect(new Headers(init.headers).get("Authorization")).toBe("Bearer from-upstream-headers");
 });
 
 const errorTextFrom = (body: string): string | undefined =>
@@ -494,7 +508,6 @@ const streamFor400 = async (upstreamBody: string) => {
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "off",
   });
   return { body: await new Response(res.body).text(), errorLog };

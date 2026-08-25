@@ -20,10 +20,10 @@ export default function DigestBrief({
   }
   return (
     <section className="glass-card flex flex-col gap-2 p-5">
-      <header className="flex items-baseline gap-2">
+      <header className="flex min-w-0 items-baseline gap-2">
         <FileText size={15} className="shrink-0 text-accent" aria-hidden />
         <TwelveXSectionHeading>Digest brief</TwelveXSectionHeading>
-        <span className="ml-auto font-mono text-[10px] text-ink-mute">
+        <span className="ml-auto min-w-0 shrink text-right font-mono text-[10px] leading-snug text-ink-mute">
           {digest.doc_count} docs · {digest.broker_count} brokers
         </span>
       </header>

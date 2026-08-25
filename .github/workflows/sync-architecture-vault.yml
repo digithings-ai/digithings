@@ -23,7 +23,16 @@ on:
 permissions:
   contents: read
 
-concurrency: sync-architecture-vault
+concurrency:
+  # Named group so two syncs never write architecture_notes at once, but
+  # `cancel-in-progress: true` because this job holds the group for as long as it waits on
+  # the `production` approval below — and an unapproved run that holds a queueing group
+  # stops the workflow indefinitely rather than delaying it (#2541, which cost db-migrate
+  # 15 days and migrations 066-070). Superseding loses nothing here: the sync republishes
+  # the whole vault and upserts on vault_path, so the newest run's work strictly contains
+  # any run it displaces. See CI_CONVENTIONS.md #7.
+  group: sync-architecture-vault
+  cancel-in-progress: true
 
 jobs:
   sync:

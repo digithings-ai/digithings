@@ -18,31 +18,39 @@ would have been unmergeable, including the one carrying a fix for false copy
 already live. A metered third-party service must never hold a veto over deploys.
 This gate depends on nothing outside the repository's own history and labels.
 
+The intent is an **agent review loop** on every task PR, not a specific vendor:
+
+  1. An agent reviews the diff with clean context (Bugbot, CodeRabbit, Claude,
+     Copilot, any other PR-review bot, or an in-session / subagent review).
+  2. Findings are posted on the PR.
+  3. The author addresses them. After that the PR is green.
+  4. If the fixes were large, run another loop. Repeat until the remaining
+     comments are nits or none.
+
+This script only checks that step 1 left an artifact. Addressing comments is
+required before merging the task PR; it is not re-checked at promotion time
+(unresolved CodeRabbit threads stay open even after a follow-up commit, and
+encoding that here is how the gate started blocking already-reviewed work).
+
 "Reviewed" means any one of, on the source pull request, strongest first:
 
   1. a completed Cursor Bugbot run — check run "Cursor Bugbot" concluded
      ``success``. A ``neutral`` conclusion is the usage-limit skip and does NOT
-     count, which is the whole reason this script exists. This is the only hatch
-     that cannot be self-granted;
+     count. This is the only hatch that cannot be self-granted;
   2. an APPROVED review from a human other than a bot;
-  3. the label ``reviewed:agent`` PLUS a comment carrying ``AGENT_REVIEW_MARKER`` —
-     an in-session review ran against the diff and posted its findings. Every line
-     in this repo is written by a coding agent, so an agent reviewing it is not
-     weaker in kind than Bugbot, which is also an agent; what matters is that the
-     reviewer did not write the code, and that its output is on the record. The
-     label without the comment is REFUSED, which is what makes this one cost
-     something to claim. It does not outrank a human reading the diff — it is
-     simply the one self-served hatch that leaves a verifiable artifact;
-  4. the label ``reviewed:owner`` — "I read this myself." For a solo maintainer,
-     who cannot approve their own PR, this is the only honest way to record having
-     read something that did warrant reading. The verdict names who applied it and
-     when, so the claim is attributed rather than silent;
-  5. the label ``risk:low`` — "this did not warrant a review." Reusing the label
-     the repo already has rather than minting a ``review:skip`` synonym.
+  3. a completed agent-tool review — CodeRabbit (submitted review, completed
+     findings comment, or check ``success``), Claude ``/code-review`` check
+     ``success``, or a submitted review from another bot in ``REVIEW_BOTS``.
+     A skip, rate-limit, failure, or "PR is closed" notice is NOT a review;
+  4. the label ``reviewed:agent`` PLUS a comment carrying ``AGENT_REVIEW_MARKER`` —
+     an in-session review ran against the diff and posted its findings. The
+     label without the comment is REFUSED;
+  5. the label ``reviewed:owner`` — "I read this myself." The verdict names who
+     applied it and when;
+  6. the label ``risk:low`` — "this did not warrant a review."
 
-Do not use (5) to mean (4): the whole point of splitting them is that
-"I read it" and "it needed no reading" are different claims, and collapsing them
-loses the only signal worth having.
+Do not use (6) to mean (5): "I read it" and "it needed no reading" are
+different claims, and collapsing them loses the only signal worth having.
 
 Commits that are exempt by nature, not by decision:
 
@@ -94,6 +102,46 @@ _SQUASH_PR = re.compile(r"\(#(\d+)\)\s*$")
 _MERGE_PR = re.compile(r"^Merge pull request #(\d+)\b")
 
 BOT_AUTHORS = frozenset({"github-actions[bot]", "dependabot[bot]", "cursor[bot]"})
+
+# Bots that *review* PRs. cursor[bot] is the author, not a reviewer — a router
+# pass approving its own work is not a review loop. github-actions is CI.
+#
+# ``gh pr view --json`` returns the bare login (``coderabbitai``); the REST
+# timeline/reviews API often returns the ``[bot]`` suffix. Match both.
+REVIEW_BOTS = frozenset(
+    {
+        "coderabbitai",
+        "coderabbitai[bot]",
+        "github-code-quality",
+        "github-code-quality[bot]",
+        "copilot-pull-request-reviewer",
+        "copilot-pull-request-reviewer[bot]",
+        "claude",
+        "claude[bot]",
+        "chatgpt-codex-connector",
+        "chatgpt-codex-connector[bot]",
+    }
+)
+CODERABBIT_LOGINS = frozenset({"coderabbitai", "coderabbitai[bot]"})
+REVIEW_BOT_CHECK_NAMES = frozenset({"CodeRabbit", "Claude /code-review"})
+REVIEW_STATES = frozenset({"COMMENTED", "APPROVED", "CHANGES_REQUESTED"})
+
+# CodeRabbit posts skip/quota notices in the same summarize comment as a real
+# walkthrough would use. Skip wins: a rate-limit or "PR is closed" failure is
+# not a completed review even if the comment also contains a review-stack header.
+CODERABBIT_SKIP_MARKERS = (
+    "Review skipped",
+    "Review failed",
+    "Review limit reached",
+    "rate limited by coderabbit.ai",
+    "Auto reviews are disabled",
+)
+CODERABBIT_COMPLETED_MARKERS = (
+    "No actionable comments were generated",
+    "<!-- walkthrough_start -->",
+    "<!-- final_review_risk_start -->",
+    "<!-- recent_review_start -->",
+)
 
 SKIP_LABEL = "risk:low"
 OWNER_REVIEW_LABEL = "reviewed:owner"
@@ -206,6 +254,17 @@ def commits_in_range(base: str, head: str) -> list[dict]:
     return out
 
 
+def coderabbit_comment_is_completed_review(body: str) -> bool:
+    """True when a CodeRabbit issue comment is a finished review, not a skip.
+
+    Skip/quota/failure notices share the summarize comment with a real
+    walkthrough, so skip markers win.
+    """
+    if any(marker in body for marker in CODERABBIT_SKIP_MARKERS):
+        return False
+    return any(marker in body for marker in CODERABBIT_COMPLETED_MARKERS)
+
+
 def _pr_review_state(number: int) -> dict:
     """How a PR was reviewed. Network-bound; one call per distinct PR."""
     data = _gh_json(
@@ -214,7 +273,7 @@ def _pr_review_state(number: int) -> dict:
             "view",
             str(number),
             "--json",
-            "labels,reviews,statusCheckRollup,title",
+            "labels,reviews,comments,statusCheckRollup,title",
         ]
     )
     labels = {label["name"] for label in data.get("labels") or []}
@@ -223,20 +282,35 @@ def _pr_review_state(number: int) -> dict:
         for review in data.get("reviews") or []
         if review.get("state") == "APPROVED"
         and (review.get("author") or {}).get("login") not in BOT_AUTHORS
+        and (review.get("author") or {}).get("login")
     ]
     bugbot = None
+    agent_tool: list[dict] = []
     for check in data.get("statusCheckRollup") or []:
-        if (check.get("name") or check.get("context")) == BUGBOT_CHECK:
-            bugbot = (check.get("conclusion") or check.get("status") or "").upper()
-            break
+        name = check.get("name") or check.get("context") or ""
+        conclusion = (check.get("conclusion") or check.get("status") or "").upper()
+        if name == BUGBOT_CHECK:
+            bugbot = conclusion
+        elif name in REVIEW_BOT_CHECK_NAMES and conclusion == "SUCCESS":
+            agent_tool.append({"bot": name, "via": "check"})
+    for review in data.get("reviews") or []:
+        login = (review.get("author") or {}).get("login") or ""
+        if login in REVIEW_BOTS and review.get("state") in REVIEW_STATES:
+            agent_tool.append({"bot": login, "via": "review"})
+    for comment in data.get("comments") or []:
+        login = (comment.get("author") or {}).get("login") or ""
+        body = comment.get("body") or ""
+        if login in CODERABBIT_LOGINS and coderabbit_comment_is_completed_review(body):
+            agent_tool.append({"bot": "coderabbitai", "via": "comment"})
     state = {
         "labels": labels,
         "approvals": approvals,
         "bugbot": bugbot,
         "title": data.get("title") or "",
         "owner_review": None,
+        "agent_tool": agent_tool,
+        "agent_review": None,
     }
-    state["agent_review"] = None
     # Only pay for the extra calls when the claim is actually being made.
     if OWNER_REVIEW_LABEL in labels:
         state["owner_review"] = label_provenance(number, OWNER_REVIEW_LABEL)
@@ -310,6 +384,10 @@ def verdict_for(state: dict) -> tuple[bool, str]:
         return True, "Cursor Bugbot completed"
     if state["approvals"]:
         return True, f"approved by {', '.join(state['approvals'])}"
+    agent_tool = state.get("agent_tool") or []
+    if agent_tool:
+        bots = list(dict.fromkeys(item["bot"] for item in agent_tool))
+        return True, f"agent review by {', '.join(bots)}"
     agent = state.get("agent_review")
     if AGENT_REVIEW_LABEL in state["labels"]:
         if agent:
@@ -336,7 +414,8 @@ def verdict_for(state: dict) -> tuple[bool, str]:
     if state["bugbot"]:
         return False, f"{BUGBOT_CHECK} reported {state['bugbot'].lower()}"
     return False, (
-        f"no completed Bugbot run, no approval, and neither {OWNER_REVIEW_LABEL} nor {SKIP_LABEL}"
+        "no completed agent review (Bugbot, CodeRabbit, Claude, in-session), "
+        f"no approval, and neither {OWNER_REVIEW_LABEL} nor {SKIP_LABEL}"
     )
 
 
@@ -417,14 +496,19 @@ def main() -> int:
             print(f"❌  {pr}: {row['why']}", file=sys.stderr)
         print(
             "\nFix, per commit, whichever is true:\n"
-            f"  • it needs a machine review → comment `bugbot run` on its PR and wait "
-            f"for the {BUGBOT_CHECK} check to conclude success\n"
+            "  • a review bot already ran  → CodeRabbit / Claude / Bugbot with a "
+            "completed review (not a skip, rate-limit, or failure notice) clears it\n"
+            f"  • it needs a machine review → comment `bugbot run` or `@coderabbitai "
+            f"review` on its PR, or wait for the {BUGBOT_CHECK} check to conclude "
+            "success\n"
             f"  • an agent can review it    → run `/review <N>`; it posts findings and "
             f"applies `{AGENT_REVIEW_LABEL}`\n"
             f"  • you read it yourself      → label the PR `{OWNER_REVIEW_LABEL}`; the "
             "actor and timestamp are recorded in the verdict\n"
             f"  • it did not warrant one    → label the PR `{SKIP_LABEL}`\n"
             "  • someone else read it      → approve the PR\n"
+            "Address the findings on the same branch before merge. A large follow-up "
+            "fix is a new review loop, not a reason to skip this one.\n"
             "\nThe label hatches claim different things: "
             f"`{OWNER_REVIEW_LABEL}` means you read it, `{SKIP_LABEL}` means it did "
             "not need reading. Do not use the second to mean the first.\n"

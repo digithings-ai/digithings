@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { FxTradeIdeaRow } from '@/lib/twelve-x/types';
-import TradeIdeasPanel from './TradeIdeasPanel';
+import TradeIdeasPanel, { IdeaDetail, ideaDetailBlocksClass } from './TradeIdeasPanel';
 import { TwelveXProvider } from './context';
 
 const IDEAS: FxTradeIdeaRow[] = [
@@ -67,7 +67,10 @@ const LEVELS_IDEA: FxTradeIdeaRow = {
   ],
 };
 
-function render(ideas: FxTradeIdeaRow[]): string {
+function render(
+  ideas: FxTradeIdeaRow[],
+  ideaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[],
+): string {
   return renderToStaticMarkup(
     createElement(
       TwelveXProvider,
@@ -78,7 +81,11 @@ function render(ideas: FxTradeIdeaRow[]): string {
           openBrief: vi.fn(),
           watchlist: { tickers: [], has: () => false, toggle: vi.fn() } as never,
         },
-        children: createElement(TradeIdeasPanel, { ideas, confluence: [] }),
+        children: createElement(TradeIdeasPanel, {
+          ideas,
+          confluence: [],
+          ideaHistory,
+        }),
       } as never,
     ),
   );
@@ -117,5 +124,50 @@ describe('TradeIdeasPanel', () => {
     const html = render(IDEAS);
     expect(html).not.toContain('Levels');
     expect(html).not.toContain('Market evidence');
+  });
+
+  it('stamps continuity in the card header from idea history', () => {
+    const history = [
+      { run_date: '2026-07-20', pair: 'USD/JPY', direction: 'short', as_of: '2026-07-20T09:00:00Z' },
+      { run_date: '2026-07-21', pair: 'USD/JPY', direction: 'short', as_of: '2026-07-21T09:00:00Z' },
+      { run_date: '2026-07-22', pair: 'USD/JPY', direction: 'short', as_of: '2026-07-22T10:00:00Z' },
+      { run_date: '2026-07-22', pair: 'EUR/USD', direction: 'long', as_of: '2026-07-22T10:00:00Z' },
+    ];
+    const html = render(IDEAS, history);
+    expect(html).toContain('First suggested 20 Jul');
+    expect(html).toContain('Updated 22 Jul 10:00 UTC');
+    expect(html).toContain('Suggested 22 Jul');
+    // Two-line wrap-friendly stamp (no shrink-0 forcing overflow past the card).
+    expect(html).toContain('min-w-0 max-w-[min(100%,14rem)]');
+    expect(html).toContain('block break-words');
+    expect(html).not.toMatch(/ml-auto shrink-0 text-right font-mono/);
+  });
+
+  it('merges current ideas into history when board date is missing from lookback', () => {
+    // History ends before the displayed board — without merge, continuity would be empty.
+    const history = [
+      { run_date: '2026-07-20', pair: 'USD/JPY', direction: 'short', as_of: '2026-07-20T09:00:00Z' },
+      { run_date: '2026-07-21', pair: 'USD/JPY', direction: 'short', as_of: '2026-07-21T09:00:00Z' },
+    ];
+    const html = render(IDEAS, history);
+    expect(html).toContain('First suggested 20 Jul');
+    expect(html).toContain('Updated 22 Jul 10:00 UTC');
+    expect(html).toContain('Suggested 22 Jul');
+  });
+
+  it('uses single-column layout when only evidence or only levels are present', () => {
+    expect(ideaDetailBlocksClass(true, true)).toContain('sm:grid-cols-2');
+    expect(ideaDetailBlocksClass(false, true)).not.toContain('sm:grid-cols-2');
+    expect(ideaDetailBlocksClass(true, false)).not.toContain('sm:grid-cols-2');
+
+    const evidenceOnly: FxTradeIdeaRow = {
+      ...IDEAS[0],
+      trade_levels: undefined,
+      evidence: LEVELS_IDEA.evidence,
+    };
+    const html = renderToStaticMarkup(createElement(IdeaDetail, { idea: evidenceOnly }));
+    expect(html).toContain('Market evidence');
+    expect(html).not.toContain('Levels');
+    expect(html).not.toContain('sm:grid-cols-2');
   });
 });

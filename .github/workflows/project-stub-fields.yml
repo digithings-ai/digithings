@@ -1,5 +1,14 @@
 # Auto-stub scripts/project_fields.tsv when relevant labels are applied to an issue.
 #
+# PAUSED (2026-08-21): stub-tsv + stub-tsv-phase require vars.STUB_TSV_ENABLED == 'true'
+# (unset/empty → jobs skip). Avoid bare `if: false` — actionlint rejects constant if-conds.
+# They opened one bot/stub-tsv-<N> PR per labeled issue and cluttered the queue.
+# TSV rows for CLI-created issues still come from create_issue.sh; Project #1
+# field sync still runs via set_project_fields.sh / board workflows. Reap job
+# stays on so closing leftover stub PRs still deletes their branches.
+# Follow-up: replace PR stubs with direct board writes (see backlog-reshape
+# workflow audit § TSV-based project-field stubbing).
+#
 # Job 1 (stub-tsv): fires on `issues.labeled` when `agent-task` is applied.
 #   Infers phase/area/kind/priority/model from existing labels and opens a PR
 #   that appends a row to project_fields.tsv.
@@ -34,7 +43,9 @@ permissions:
 jobs:
   stub-tsv:
     name: Append inferred row to project_fields.tsv
-    if: github.event.label.name == 'agent-task'
+    # Paused: do not open bot/stub-tsv-* PRs unless repo var STUB_TSV_ENABLED=true.
+    # Original: github.event.label.name == 'agent-task'
+    if: vars.STUB_TSV_ENABLED == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -136,9 +147,11 @@ jobs:
 
   stub-tsv-phase:
     name: Append inferred row for non-agent-task phase-labeled issues
+    # Paused: require STUB_TSV_ENABLED=true. Original condition kept below for restore.
     # Fire when a phase-N or client-pilot label is applied, but NOT for agent-task (job 1 covers that)
     # and NOT for housekeeping issues (those are exempt from project-field requirements).
     if: |
+      vars.STUB_TSV_ENABLED == 'true' &&
       github.event.label.name != 'agent-task' &&
       github.event.label.name != 'housekeeping' &&
       (

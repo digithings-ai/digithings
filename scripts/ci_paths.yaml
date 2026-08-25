@@ -272,6 +272,16 @@ ruff_and_scripts:
   # coverage, and the failure is silent by construction — the check simply stops firing.
   - .github/workflows/deploy-digithings-cloudflare.yml
   - .github/workflows/deploy-digiquant-cloudflare.yml
+  # tests/scripts/test_workflow_environment_concurrency.py is different in kind from the
+  # entries above: it asserts an invariant over EVERY workflow (an `environment`-gated job may
+  # not sit in a queueing concurrency group — #2541), so naming files one at a time cannot
+  # cover it. The next workflow to grow an `environment:` would be born outside the filter, and
+  # reverting `cancel-in-progress: true` on sync-architecture-vault.yml alone would skip this
+  # lane entirely and reintroduce the defect fully green. A repo-wide invariant needs a
+  # repo-wide trigger. This subsumes the seven named workflow globs above; those are kept
+  # because each records which test consumes that file and why `tests/**` is not enough —
+  # rationale worth keeping next to the path it explains.
+  - .github/workflows/**
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
 # only actionlint in CI was a job inside test-atlas-graph.yml pinned to

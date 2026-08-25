@@ -25,6 +25,7 @@ accepts ``Request`` objects.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from contextvars import ContextVar
 from pathlib import Path
@@ -32,6 +33,7 @@ from typing import Any, NamedTuple  # score:allow untyped any — Starlette Requ
 from urllib.parse import urlsplit
 
 from digillm import (
+    clear_byok,
     is_registered_provider,
     reset_byok,
     reset_proxy_key,
@@ -39,6 +41,8 @@ from digillm import (
     set_proxy_key,
 )
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 # Single source of truth for the BYOK provider allowlist — see
@@ -89,6 +93,13 @@ class _ByokCatalogEntry(BaseModel):
     id: str
     baseUrl: str
     requiresModel: bool = False
+    # Read for one purpose: the remediation example in byok_default_model_refusal.
+    # Optional because an entry without examples still routes fine — the refusal
+    # just drops its parenthetical. digichat does not read this field at runtime; it
+    # hand-copies the same list into `byokModelPresets`, pinned to this catalog by
+    # use-byok-key.catalog-parity.test.ts. So the model the refusal names is the same
+    # one the UI offers — that parity test is load-bearing for this message.
+    fallbackModels: list[str] = []
 
     @field_validator("id")
     @classmethod
@@ -97,6 +108,40 @@ class _ByokCatalogEntry(BaseModel):
         if not normalized:
             raise ValueError("id must be a non-empty string")
         return normalized
+
+    @field_validator("fallbackModels", mode="before")
+    @classmethod
+    def _clean_examples(cls, v: object) -> list[str]:
+        """Salvage what is usable and warn; never fail the load over a parenthetical.
+
+        Two departures from every other field here, both deliberate.
+
+        It **strips**, because this value reaches user-facing copy verbatim:
+        ``"  gpt-4o  "`` rendered as ``(e.g.   gpt-4o  )``. It is not the only such
+        field — ``server.py``'s ``byok_provider_unsupported`` joins the catalog ``id``
+        values into its message — but that one is stripped already by ``_id_non_empty``, and
+        this validator rejected blanks *without* stripping the survivors. That
+        asymmetry is what let padding through.
+
+        It does **not raise**, because a bad value here cannot break routing — an
+        entry without examples still routes fine, the refusal just drops its
+        parenthetical. Fail-loud exists so a broken catalog cannot silently 400 every
+        BYOK request; that reasoning does not reach a cosmetic field. It matters
+        concretely: this key was an *ignored extra* until it was typed, so an
+        operator catalog under ``DIGI_CONFIG_PATH`` carrying ``fallbackModels: null``
+        imported fine before and would otherwise now crash digigraph at startup over
+        a parenthetical. Warn instead, so a typo still leaves a trace.
+        """
+        if not isinstance(v, list):
+            logger.warning("BYOK catalog: fallbackModels is not a list, ignoring: %r", v)
+            return []
+        cleaned = [m.strip() for m in v if isinstance(m, str) and m.strip()]
+        if len(cleaned) != len(v):
+            logger.warning(
+                "BYOK catalog: dropped %d unusable fallbackModels entry/entries",
+                len(v) - len(cleaned),
+            )
+        return cleaned
 
     @field_validator("baseUrl")
     @classmethod
@@ -107,7 +152,7 @@ class _ByokCatalogEntry(BaseModel):
         return v
 
 
-def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
+def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str], dict[str, str]]:
     if not path.exists():
         raise FileNotFoundError(f"BYOK provider catalog not found at {path}")
     try:
@@ -118,6 +163,7 @@ def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
         raise ValueError(f"BYOK provider catalog at {path} must be a non-empty JSON array")
     base_urls: dict[str, str] = {}
     model_required: set[str] = set()
+    examples: dict[str, str] = {}
     seen_ids: set[str] = set()
     for entry in raw:
         try:
@@ -130,11 +176,15 @@ def _load_byok_catalog(path: Path) -> tuple[dict[str, str], frozenset[str]]:
         base_urls[parsed_entry.id] = parsed_entry.baseUrl
         if parsed_entry.requiresModel:
             model_required.add(parsed_entry.id)
-    return base_urls, frozenset(model_required)
+        if parsed_entry.fallbackModels:
+            examples[parsed_entry.id] = parsed_entry.fallbackModels[0]
+    return base_urls, frozenset(model_required), examples
 
 
 # The one table: a provider here is routed to its own endpoint with the user's key.
-_BYOK_BASE_URLS, BYOK_MODEL_REQUIRED_PROVIDERS = _load_byok_catalog(_BYOK_CATALOG_PATH)
+_BYOK_BASE_URLS, BYOK_MODEL_REQUIRED_PROVIDERS, _BYOK_MODEL_EXAMPLES = _load_byok_catalog(
+    _BYOK_CATALOG_PATH
+)
 BYOK_ROUTABLE_PROVIDERS = tuple(_BYOK_BASE_URLS)
 
 
@@ -224,9 +274,16 @@ def byok_operator_model_routes_elsewhere(provider: str, model: str) -> bool:
     """True when the *operator-resolved* *model* would be billed to an operator key.
 
     Same billing rule as :func:`byok_model_routes_elsewhere`, asked about a model the
-    caller never sent: the deployment's own tier default, which reaches digillm
+    caller never sent but the operator's own configuration produced — the tier default
+    on the mode path, a ``phase_models`` override or an ``olympus_models.yaml``
+    capability model on the phase path. Whichever one it is reaches digillm
     **verbatim**. That difference is the whole reason this is a second entry point
     rather than a reuse, and it is not a latent distinction — it changes the answer.
+
+    Both callers pass such a string: ``server.py`` passes ``operator_default_model()``
+    (the tier default, the only one it can see), and ``_apply_byok_model_override``
+    passes its own *resolved* — which on the phase path is the override or capability
+    model the middleware never saw.
 
     ``byok_model_routes_elsewhere`` first normalizes through
     :func:`byok_routable_model`, which is correct for an ``X-BYOK-Model`` header
@@ -260,14 +317,27 @@ def byok_default_model_refusal(provider: str) -> str:
     code says something the frontend cannot know: *this deployment's* default is
     served by someone else.
 
-    Names neither the model slug nor the key. The slug is the operator's
-    configuration, not the caller's input, and disclosing it to an anonymous caller
-    buys no remediation — the fix is the same either way.
+    Names neither the *operator's* model slug nor the key. That slug is the
+    operator's configuration, not the caller's input, and disclosing it to an
+    anonymous caller buys no remediation — the fix is the same either way. The
+    example it does name is the provider's own first ``fallbackModels`` entry from
+    the public catalog, so it discloses nothing and is always a slug that provider
+    declares. A hardcoded example cannot be: the previous ``gpt-4o-mini`` was told
+    to four of the five providers that do not serve it — anthropic, gemini, xai,
+    and openrouter, whose own slug is the prefixed ``openai/gpt-4o-mini``.
+
+    Phrased as "a model served by <provider>" rather than "a <provider> model" so
+    no indefinite article has to agree with a provider id. The old construction ran
+    for all five and read wrong for four of them (``a openai``, ``a anthropic``,
+    ``a xai``, ``a openrouter``; only ``a gemini`` scans).
     """
+    normalized = provider.strip().lower()
+    example = _BYOK_MODEL_EXAMPLES.get(normalized)
+    hint = f" (e.g. {example})" if example else ""
     return (
         f"This deployment's default model is served by a provider other than {provider!r}, "
-        f"so your {provider} key would not be the one billed. Send X-BYOK-Model naming a "
-        f"{provider} model (e.g. gpt-4o-mini) to spend your own key."
+        f"so your {provider} key would not be the one billed. Send X-BYOK-Model with a model "
+        f"served by {provider}{hint} to spend your own key."
     )
 
 
@@ -356,6 +426,25 @@ def pop_byok(token: _ByokToken) -> None:
         reset_byok(token.llm)
     _byok_model_override.reset(token.model)
     _byok_override.reset(token.dg)
+
+
+def clear_byok_bindings() -> None:
+    """Drop every BYOK binding in the *current* context, token-free.
+
+    For code that inherited the bindings through :func:`contextvars.copy_context`
+    rather than binding them itself: a copy carries the values but none of the reset
+    tokens, so :func:`pop_byok` cannot be used. The streaming worker in ``server.py``
+    calls this from its own ``finally`` -- its copy is taken while the request is
+    still open, and outlives the request's ``pop_byok``, so without this the user's
+    key stays resident in the worker's context until the thread ends. Clearing the
+    copy cannot disturb the request that spawned it; a copy is a snapshot, not a view.
+
+    Do not call this in the frame that ran :func:`push_byok_header`: it would blank
+    the values while stranding that frame's tokens. Use :func:`pop_byok` there.
+    """
+    clear_byok()
+    _byok_model_override.set(None)
+    _byok_override.set(None)
 
 
 def get_byok_override() -> tuple[str, str] | None:

@@ -188,6 +188,7 @@ jobs:
               - '.github/workflows/pipeline-olympus.yml'
               - '.github/workflows/deploy-digithings-cloudflare.yml'
               - '.github/workflows/deploy-digiquant-cloudflare.yml'
+              - '.github/workflows/**'
             workflows:
               - '.github/workflows/**'
               - '.github/actionlint.yaml'
