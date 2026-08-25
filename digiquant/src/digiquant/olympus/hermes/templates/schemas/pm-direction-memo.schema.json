@@ -19,7 +19,20 @@
           "ticker": { "type": "string", "maxLength": 12 },
           "direction": { "type": "string", "enum": ["long", "flat"] },
           "conviction_rank": { "type": "integer", "minimum": 1 },
-          "narrative": { "type": ["string", "null"], "maxLength": 2000 }
+          "narrative": { "type": ["string", "null"], "maxLength": 2000 },
+          "forecast_reference": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "description": "Deterministic H7→effective-forecast audit link (WP4.5); never LLM-authored.",
+            "required": ["ticker", "effective_forecast_id", "base_forecast_id"],
+            "properties": {
+              "ticker": { "type": "string", "minLength": 1 },
+              "effective_forecast_id": { "type": "string", "format": "uuid" },
+              "base_forecast_id": { "type": "string", "format": "uuid" },
+              "amendment_id": { "type": ["string", "null"], "format": "uuid" },
+              "degradation_reason": { "type": ["string", "null"] }
+            }
+          }
         }
       }
     }

@@ -146,7 +146,10 @@ the pipeline's whole observed lifetime.
 
 H7 emits direction + ordinal conviction rank + narrative only — never `target_pct`,
 `weight`, or `recommended_portfolio`. Schema: `PMDirectionMemo` / `TickerDirection`
-(see spec §11.2). H8 maps memo + feasibility constraints → sized weights.
+(see spec §11.2). WP4.5 (#2660) adds optional `ForecastReference` per roster row,
+bound after the LLM (and after fail-soft prior carry) from the current effective
+forecast map — never from model-supplied IDs. H8 maps memo + feasibility constraints
+→ sized weights; direction/rank semantics are unchanged.
 
 ---
 

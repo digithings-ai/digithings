@@ -1,11 +1,20 @@
-"""H7 PMDirectionMemo must not accept weight-bearing fields (PR 4c / §11.2)."""
+"""H7 PMDirectionMemo must not accept weight-bearing fields (PR 4c / §11.2).
+
+WP4.5 (#2660): also reject forecast/weight mutation fields and model-supplied
+forecast authority — H7 binds ForecastReference deterministically post-LLM.
+"""
 
 from __future__ import annotations
 
 from datetime import date
+from uuid import uuid4
 
 import pytest
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+from digiquant.olympus.hermes.models.pm_direction import (
+    ForecastReference,
+    PMDirectionMemo,
+    TickerDirection,
+)
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -23,6 +32,7 @@ def test_pm_no_weights_valid_memo_accepts_direction_only() -> None:
         memo="Risk-on tilt; no sizing.",
     )
     assert memo.roster[0].direction == "long"
+    assert memo.roster[0].forecast_reference is None
     assert "target_pct" not in memo.model_dump()
 
 
@@ -60,3 +70,76 @@ def test_pm_no_weights_rejects_weight_on_ticker_row() -> None:
                 "weight": 30.0,
             }
         )
+
+
+def test_pm_rejects_expected_return_on_ticker_row() -> None:
+    with pytest.raises(ValidationError, match="expected_return"):
+        TickerDirection.model_validate(
+            {
+                "ticker": "SPY",
+                "direction": "long",
+                "conviction_rank": 1,
+                "expected_return": 0.12,
+            }
+        )
+
+
+def test_pm_rejects_target_weight_on_ticker_row() -> None:
+    with pytest.raises(ValidationError, match="target_weight"):
+        TickerDirection.model_validate(
+            {
+                "ticker": "SPY",
+                "direction": "long",
+                "conviction_rank": 1,
+                "target_weight": 0.25,
+            }
+        )
+
+
+def test_pm_rejects_forecast_mutation_fields_on_ticker_row() -> None:
+    for forbidden in ("forecast_id", "base_return", "effective_forecast_id", "terms"):
+        with pytest.raises(ValidationError, match=forbidden):
+            TickerDirection.model_validate(
+                {
+                    "ticker": "SPY",
+                    "direction": "long",
+                    "conviction_rank": 1,
+                    forbidden: "model-supplied",
+                }
+            )
+
+
+def test_forecast_reference_ticker_must_match_decision() -> None:
+    ref = ForecastReference(
+        effective_forecast_id=uuid4(),
+        base_forecast_id=uuid4(),
+        amendment_id=None,
+        ticker="TLT",
+    )
+    with pytest.raises(ValidationError, match="forecast_reference.ticker"):
+        TickerDirection(
+            ticker="SPY",
+            direction="long",
+            conviction_rank=1,
+            forecast_reference=ref,
+        )
+
+
+def test_forecast_reference_accepts_matching_ticker() -> None:
+    eff_id = uuid4()
+    base_id = uuid4()
+    row = TickerDirection(
+        ticker="SPY",
+        direction="long",
+        conviction_rank=1,
+        forecast_reference=ForecastReference(
+            effective_forecast_id=eff_id,
+            base_forecast_id=base_id,
+            amendment_id=None,
+            ticker="SPY",
+            degradation_reason=None,
+        ),
+    )
+    assert row.forecast_reference is not None
+    assert row.forecast_reference.effective_forecast_id == eff_id
+    assert row.forecast_reference.base_forecast_id == base_id
