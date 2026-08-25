@@ -7,13 +7,20 @@ from dataclasses import dataclass
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
+from uuid import UUID
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.cost_liquidity_registry import (
+    collect_cost_artifacts_from_bundles,
+    collect_risk_policy_from_state,
+    persist_cost_liquidity_bundles,
+)
 from digiquant.olympus.atlas.forecast_registry import persist_forecast_lineage_from_state
 from digiquant.olympus.atlas.risk_policy_registry import persist_h8_risk_snapshots_from_state
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.h9_cost_evidence import build_cost_bundles_for_commit
 from digiquant.olympus.hermes.payloads import sized_book
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.commit_io import (
@@ -88,6 +95,79 @@ def _persist_risk_policy_registry(*, client: SupabaseClient, state: HermesState)
     }
 
 
+def _persist_cost_liquidity_registry(
+    *,
+    client: SupabaseClient,
+    state: HermesState,
+    ledger: LedgerAppend | None,
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Fail-soft action cost registry (#2709). Never raises into booking."""
+    empty_snapshots: dict[str, dict[str, Any]] = {}
+    empty_estimates: dict[str, dict[str, Any]] = {}
+    if ledger is None:
+        return (
+            {
+                "cost_liquidity_registry_status": "skipped",
+                "cost_liquidity_registry_reason": "ledger_disabled",
+                "cost_liquidity_registry_snapshots_written": 0,
+                "cost_liquidity_registry_estimates_written": 0,
+            },
+            empty_snapshots,
+            empty_estimates,
+        )
+    policy = collect_risk_policy_from_state(state)
+    if policy is None:
+        return (
+            {
+                "cost_liquidity_registry_status": "degraded",
+                "cost_liquidity_registry_reason": "missing_risk_policy",
+                "cost_liquidity_registry_snapshots_written": 0,
+                "cost_liquidity_registry_estimates_written": 0,
+            },
+            empty_snapshots,
+            empty_estimates,
+        )
+    try:
+        bundles = build_cost_bundles_for_commit(
+            client=client,
+            state=state,
+            commit_id=UUID(ledger.commit_id),
+            policy=policy,
+        )
+        result = persist_cost_liquidity_bundles(client=client, bundles=bundles)
+        snapshots, estimates = collect_cost_artifacts_from_bundles(bundles)
+    except Exception as exc:
+        logger.warning(
+            "h9 cost liquidity registry degraded (%s: %s); book retained",
+            type(exc).__name__,
+            exc,
+        )
+        return (
+            {
+                "cost_liquidity_registry_status": "degraded",
+                "cost_liquidity_registry_reason": f"{type(exc).__name__}: {exc}"[:300],
+                "cost_liquidity_registry_snapshots_written": 0,
+                "cost_liquidity_registry_estimates_written": 0,
+            },
+            empty_snapshots,
+            empty_estimates,
+        )
+    status = "ok" if result.ok else "degraded"
+    return (
+        {
+            "cost_liquidity_registry_status": status,
+            "cost_liquidity_registry_reason": result.degraded_reason,
+            "cost_liquidity_registry_snapshots_written": result.snapshots_written,
+            "cost_liquidity_registry_snapshots_skipped": result.snapshots_skipped,
+            "cost_liquidity_registry_estimates_written": result.estimates_written,
+            "cost_liquidity_registry_estimates_skipped": result.estimates_skipped,
+            "cost_liquidity_registry_conflicts": list(result.conflicts),
+        },
+        snapshots,
+        estimates,
+    )
+
+
 def _persist_forecast_registry(*, client: SupabaseClient, state: HermesState) -> dict[str, Any]:
     """Fail-soft prospective forecast lineage (#2663). Never raises into booking."""
     try:
@@ -135,6 +215,7 @@ def _manifest_payload(
     ledger: LedgerAppend | None = None,
     forecast_registry: dict[str, Any] | None = None,
     risk_policy_registry: dict[str, Any] | None = None,
+    cost_liquidity_registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Commit manifest body.
 
@@ -158,9 +239,12 @@ def _manifest_payload(
 
     ``schema_version`` 1.4 adds optional H8 risk-policy snapshot registry fields
     (#2698 / WP6.3): status/counts only — never matrix math or sizing inputs.
+
+    ``schema_version`` 1.5 adds optional cost/liquidity registry fields (#2709 / WP7.3):
+    status/counts only — never cost math or turnover inputs.
     """
     payload: dict[str, Any] = {
-        "schema_version": "1.4",
+        "schema_version": "1.5",
         "source_run_id": source_run_id,
         "status": status,
         "weights_fingerprint": weights_fingerprint(weights),
@@ -178,6 +262,8 @@ def _manifest_payload(
         payload.update(forecast_registry)
     if risk_policy_registry:
         payload.update(risk_policy_registry)
+    if cost_liquidity_registry:
+        payload.update(cost_liquidity_registry)
     return payload
 
 
@@ -207,6 +293,11 @@ def build_commit_run_node(deps: CommitRunDeps):
             # booked while registry was degraded (#2663).
             registry = _persist_forecast_registry(client=deps.client, state=state)
             risk_registry = _persist_risk_policy_registry(client=deps.client, state=state)
+            cost_registry, _, _ = _persist_cost_liquidity_registry(
+                client=deps.client,
+                state=state,
+                ledger=None,
+            )
             manifest = _manifest_payload(
                 source_run_id=source_run_id,
                 status="noop",
@@ -217,6 +308,7 @@ def build_commit_run_node(deps: CommitRunDeps):
                 supersedes=[],
                 forecast_registry=registry,
                 risk_policy_registry=risk_registry,
+                cost_liquidity_registry=cost_registry,
             )
             return {"phase_hermes": PhaseHermesState(commit_manifest=manifest)}
 
@@ -263,6 +355,11 @@ def build_commit_run_node(deps: CommitRunDeps):
             cash_pct=booked.cash_pct,
             nav=booked.nav,
         )
+        cost_registry, cost_snapshots, cost_estimates = _persist_cost_liquidity_registry(
+            client=deps.client,
+            state=state,
+            ledger=ledger,
+        )
 
         manifest = _manifest_payload(
             source_run_id=source_run_id,
@@ -276,12 +373,14 @@ def build_commit_run_node(deps: CommitRunDeps):
             ledger=ledger,
             forecast_registry=registry,
             risk_policy_registry=risk_registry,
+            cost_liquidity_registry=cost_registry,
         )
         save_commit_manifest(client=deps.client, state=state, manifest=manifest)
 
         logger.info(
             "h9 commit_run: booked %d positions, nav=%.4f, %d decision_log rows, "
-            "%d pruned (run_id=%s, commit_seq=%d, forecast_registry=%s)",
+            "%d pruned (run_id=%s, commit_seq=%d, forecast_registry=%s, "
+            "cost_liquidity_registry=%s)",
             len(booked.position_rows),
             booked.nav,
             n_decisions,
@@ -289,9 +388,15 @@ def build_commit_run_node(deps: CommitRunDeps):
             source_run_id,
             commit_seq,
             registry.get("forecast_registry_status"),
+            cost_registry.get("cost_liquidity_registry_status"),
+        )
+        phase_hermes = PhaseHermesState(
+            commit_manifest=manifest,
+            liquidity_snapshots=cost_snapshots,
+            action_cost_estimates=cost_estimates,
         )
         return {
-            "phase_hermes": PhaseHermesState(commit_manifest=manifest),
+            "phase_hermes": phase_hermes,
             "published": [brief, *hermes_docs],
         }
 

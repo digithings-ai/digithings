@@ -945,7 +945,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `RiskPolicy.cost_coefficients` to emit `LiquiditySnapshot`, `ActionCostEstimate`,
   and `ActionCostOutcome`. Spread uses labeled high-low range fractions (not quotes);
   missing economics map to `unpriceable`/`degraded` with explicit reasons — never
-  zero-by-omission. Phase 1 observational only; no H9 persistence yet (WP7.3).
+  zero-by-omission. Phase 1 observational only — estimates do not feed turnover.
+  **Cost/liquidity persistence (#2709 / WP7.3):** after H9 mints `order_intent_id`,
+  `hermes/h9_cost_evidence.py` builds bundles and
+  `atlas/cost_liquidity_registry.py` append-writes to migration `082` tables
+  (fail-soft after booking). `preflight_reflect` resolves `ActionCostOutcome` when
+  paper executions arrive; typed state slots `liquidity_snapshots` and
+  `action_cost_estimates` on `PhaseHermesState`.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
