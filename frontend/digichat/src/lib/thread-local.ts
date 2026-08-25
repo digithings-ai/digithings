@@ -10,11 +10,38 @@ export type ChatThreadState = {
   messages: UIMessage[];
   /** Row exists on server (Postgres). */
   remote: boolean;
-  /** Server-backed thread: messages fetched at least once. */
+  /**
+   * Authoritative message list is safe to PUT to the server.
+   * Remote threads start false until a successful GET (or local cache had messages).
+   * PUT is a full replace — flushing while false would wipe Postgres history.
+   */
   hydrated: boolean;
   /** Bump to remount `useChat` after async load of server messages. */
   hydrateVersion: number;
 };
+
+/**
+ * `PUT /api/conversations/[id]` deletes then re-inserts every message.
+ * Never flush a remote thread whose body has not been loaded yet — an empty
+ * (or newly typed) client array would permanently erase the server history.
+ */
+export function canFlushServerMessages(t: Pick<ChatThreadState, "remote" | "hydrated">): boolean {
+  return !t.remote || t.hydrated;
+}
+
+/** Apply a successful GET /api/conversations/[id] payload onto thread state. */
+export function withHydratedConversation(
+  t: ChatThreadState,
+  payload: { title: string; messages: UIMessage[] }
+): ChatThreadState {
+  return {
+    ...t,
+    title: payload.title,
+    messages: payload.messages,
+    hydrated: true,
+    hydrateVersion: t.hydrateVersion + 1,
+  };
+}
 
 type LocalPersistedThread = {
   id: string;

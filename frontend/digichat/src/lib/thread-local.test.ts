@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { UIMessage } from "ai";
-import { mergeRemoteAndLocal } from "@/lib/thread-local";
+import {
+  canFlushServerMessages,
+  mergeRemoteAndLocal,
+  withHydratedConversation,
+  type ChatThreadState,
+} from "@/lib/thread-local";
 
 const userMsg = (text: string): UIMessage =>
   ({
@@ -86,5 +91,41 @@ describe("mergeRemoteAndLocal", () => {
       []
     );
     expect(merged.map((m) => m.id)).toEqual(["newer", "older"]);
+  });
+});
+
+describe("canFlushServerMessages", () => {
+  it("refuses remote threads that have not been hydrated", () => {
+    expect(canFlushServerMessages({ remote: true, hydrated: false })).toBe(false);
+  });
+
+  it("allows remote hydrated and local-only threads", () => {
+    expect(canFlushServerMessages({ remote: true, hydrated: true })).toBe(true);
+    expect(canFlushServerMessages({ remote: false, hydrated: false })).toBe(true);
+    expect(canFlushServerMessages({ remote: false, hydrated: true })).toBe(true);
+  });
+});
+
+describe("withHydratedConversation", () => {
+  it("marks the thread hydrated and bumps hydrateVersion", () => {
+    const base: ChatThreadState = {
+      id: "t1",
+      title: "Old",
+      updatedAt: "2025-01-01T00:00:00.000Z",
+      messages: [],
+      remote: true,
+      hydrated: false,
+      hydrateVersion: 0,
+    };
+    const next = withHydratedConversation(base, {
+      title: "Server title",
+      messages: [userMsg("kept")],
+    });
+    expect(next.hydrated).toBe(true);
+    expect(next.hydrateVersion).toBe(1);
+    expect(next.title).toBe("Server title");
+    expect(next.messages).toHaveLength(1);
+    // Unhydrated merge left messages empty — flushing then would wipe; hydration restores them.
+    expect(canFlushServerMessages(next)).toBe(true);
   });
 });

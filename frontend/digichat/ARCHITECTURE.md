@@ -52,8 +52,13 @@ and [ADR-0018](../../docs/adr/0018-digichat-path-routing.md).
 
 **React chat shell** (`src/components/chat-shell.tsx`): Client component that owns
 thread state. On mount it merges `localStorage` threads with a server `GET
-/api/conversations` call, then renders a shadcn Sidebar with conversation list, New
-chat button, rename/delete overflow menus, and the main `ChatPanel`.
+/api/conversations` call, **hydrates the auto-selected remote thread** via
+`GET /api/conversations/[id]` before mounting the composer, then renders a shadcn
+Sidebar with conversation list, New chat button, rename/delete overflow menus, and
+the main `ChatPanel`. Sidebar clicks reuse the same hydrate-before-activate path
+(`openThread`). Server PUT is a full message replace — `canFlushServerMessages`
+refuses to flush a remote thread that is still `hydrated: false`, so an empty
+client array cannot wipe Postgres history.
 
 **AI SDK `useChat`** (`src/components/chat-panel.tsx`): Uses `@ai-sdk/react` with a
 `DefaultChatTransport` pointed at `POST /api/chat`. Sends `X-Digichat-Session` header
