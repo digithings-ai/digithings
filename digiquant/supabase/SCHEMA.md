@@ -103,9 +103,25 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 | View | Backed by | Purpose |
 |------|-----------|---------|
 | `public_portfolio_positions` | `positions` | Latest-date position book, performance columns only. **Excludes** `rationale`, `pm_notes`, `thesis_id`, `conviction`, `stop_loss_pct`, `target_pct_gain`, `horizon_days`. |
-| `public_nav_history` | `nav_history` | NAV series + cash/invested % + derived `day_return_pct`. |
+| `public_nav_history` | `nav_history` | Legacy NAV series + cash/invested % + derived `day_return_pct` (rollback target). |
 | `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
+### Public accounting surface — migration 074 (#2599 / Task 3.4)
+
+Curated security-definer views over private `olympus_accounting_*` tips. Prefer these
+for digiquant.io / Olympus performance readers after the shadow reconciliation gate.
+**Never GRANT** base accounting tables to `anon`/`authenticated`. Rollback = repoint
+adapters to `public_nav_history` / `nav_history` without deleting accounting rows.
+
+| View | Purpose |
+|------|---------|
+| `public_accounting_period_status` | Tip periods (final **and** incomplete/estimated/failed) with `status` + `quality_reasons` — incomplete stays explicit. |
+| `public_finalized_nav` | Final tip closing equity only (`source`/`contract` = `finalized_accounting`). |
+| `public_accounting_nav_history` | Finalized preferred; dates without a final tip use labeled legacy (`source=legacy_nav_history`, `contract=legacy_estimate`). Same date never mixes sources. |
+| `public_daily_realized_attribution` | Final-tip per-ticker contribution pct; empty when no final tip (no lookback substitution). |
+
+**Cutover gate:** point public readers only after an approved shadow interval (including one
+rebalance session) has zero unexplained reconciliation failures.
 ### Live quote transport — new in migration 063 (#1807)
 
 The only **table** in the digiquant.io public read surface (the 050 trio are views), and the
@@ -242,7 +258,7 @@ of `--no-ledger` (see ARCHITECTURE.md cutover section), not on this migration al
 
 Private event-boundary EOD accounting schema (Phase 0 Tasks 3.1–3.2). User-private
 portfolio/accounting — never grant base tables to `anon`/`authenticated`; curated public
-views are Task 3.4 only.
+views land in migration `074_olympus_accounting_views.sql` (#2599).
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -278,7 +294,7 @@ Separates the 21-day current-book diagnostic from realized period contribution
 |--------|------|---------|
 | `current_book_lookback` | table (renamed from `position_attribution`) | Diagnostic only: today's book weights × trailing return window (default 21 calendar days). Columns include `window_start_date`, `window_end_date`, `lookback_days`, `contract='current_book_lookback'`. Anon SELECT (dashboard). |
 | `position_attribution` | compatibility VIEW | Deprecated alias over `current_book_lookback`. Same columns; delete after all readers migrate (Task 3.4 follow-up). |
-| `daily_realized_attribution` | VIEW (`security_invoker`) | Authoritative per-ticker daily contribution from the current finalized `olympus_accounting_*` tip only. Empty when no final period exists — never substitutes lookback. `service_role` SELECT only until Task 3.4 curated public views. |
+| `daily_realized_attribution` | VIEW (`security_invoker`) | Authoritative per-ticker daily contribution from the current finalized `olympus_accounting_*` tip only. Empty when no final period exists — never substitutes lookback. `service_role` SELECT; public curated twin is `public_daily_realized_attribution` (074). |
 
 Writer: `scripts/atlas/refresh_attribution.py` upserts `current_book_lookback` only.
 Realized rows come from the accounting finalizer (#2597), not the lookback job.

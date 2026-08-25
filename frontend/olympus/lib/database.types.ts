@@ -441,6 +441,57 @@ export interface Database {
           created_at: string;
         };
       };
+      // Curated accounting public surface (migration 074 / #2599). Prefer these over
+      // raw nav_history for public/performance readers; rollback = LEGACY public_nav_history.
+      public_accounting_nav_history: {
+        Row: {
+          date: string;
+          nav: number;
+          cash_pct: number | null;
+          invested_pct: number | null;
+          day_return_pct: number | null;
+          /** finalized_accounting | legacy_nav_history — never unlabeled. */
+          source: string;
+          /** finalized_accounting | legacy_estimate */
+          contract: string;
+        };
+      };
+      public_finalized_nav: {
+        Row: {
+          date: string;
+          nav: number;
+          cash_pct: number | null;
+          invested_pct: number | null;
+          day_return_pct: number | null;
+          source: string;
+          contract: string;
+        };
+      };
+      public_accounting_period_status: {
+        Row: {
+          date: string;
+          status: string;
+          quality_reasons: string[];
+          opening_equity: number;
+          closing_equity: number;
+          day_return_pct: number | null;
+          benchmark_symbol: string | null;
+          benchmark_return_pct: number | null;
+          contract: string;
+        };
+      };
+      public_daily_realized_attribution: {
+        Row: {
+          date: string;
+          ticker: string;
+          contribution_pct: number | null;
+          benchmark_return_pct: number | null;
+          opening_equity: number;
+          closing_equity: number;
+          contract: string;
+          period_status: string;
+        };
+      };
     };
     Functions: Record<string, never>;
     Enums: Record<string, never>;

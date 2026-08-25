@@ -1693,19 +1693,27 @@ that metrics/attribution job order cannot alter meaning.
   accounting period for `pnl_pct` and indexed `nav_history` compounding when one exists;
   otherwise falls through to provisional H9 nav only. Never sums
   `current_book_lookback` / legacy `position_attribution` into daily `pnl_pct` (#2598).
-  H9 keeps writing provisional continuity; public curated views remain Task 3.4.
+  H9 keeps writing provisional continuity; public curated views are migration
+  `074_olympus_accounting_views.sql` (#2599): `public_accounting_nav_history`
+  (finalized preferred + labeled legacy), `public_finalized_nav`,
+  `public_accounting_period_status`, `public_daily_realized_attribution`.
+  Adapters: Olympus `observability-queries` / `queries` and digiquant.io
+  `useLivePortfolio`. Rollback = repoint to `public_nav_history` / `nav_history`.
+  Cutover only after approved shadow interval (incl. one rebalance) with zero
+  unexplained reconciliation failures.
 - **Lookback vs realized (#2598 / Task 3.3)**: migration `073_olympus_lookback_vs_realized.sql`
   renames the physical diagnostic table to `current_book_lookback` (explicit
   `window_*` / `lookback_days` / `contract` columns). `position_attribution` remains a
   deprecated compatibility VIEW over that table (delete after readers migrate).
   `daily_realized_attribution` is a `security_invoker` VIEW over the finalized accounting
-  tip only (`service_role` SELECT; no lookback substitution). Writers:
+  tip only (`service_role` SELECT; public twin `public_daily_realized_attribution`). Writers:
   `refresh_attribution.py` → `current_book_lookback`; accounting finalizer → periods/
   contributions. Pure core: `compute_current_book_lookback` in `atlas/attribution.py`.
 - **Schema**: migration `072_olympus_period_accounting.sql` —
   `olympus_accounting_{periods,contributions,holdings}`. **User-private** (vision brief):
   RLS with zero policies; `PUBLIC`/`anon`/`authenticated` revoked; `service_role`
-  `SELECT, INSERT` only; append-only mutation triggers. No public curated views (Task 3.4).
+  `SELECT, INSERT` only; append-only mutation triggers. Public curated projections are
+  Task 3.4 / migration 074 (never grant base tables).
 - **Identities** (when `status == final`):
   `E1 = E0 + Σ NetPnL_i + CashPnL`;
   `E1 = ClosingCash + Σ q_i,1 P_i,1`;
@@ -1714,10 +1722,12 @@ that metrics/attribution job order cannot alter meaning.
   `tests/dq/atlas/test_migration_072.py`,
   `tests/dq/atlas/test_finalize_period_accounting.py`,
   `tests/dq/atlas/test_migration_073.py`,
-  `tests/dq/atlas/test_lookback_vs_realized.py`.
+  `tests/dq/atlas/test_lookback_vs_realized.py`,
+  `tests/dq/atlas/test_migration_074.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
   current-book lookback as realized attribution, public base-table grants on accounting,
-  selecting provisional rows as final, in-place period correction.
+  selecting provisional rows as final, in-place period correction,
+  combining finalized + legacy into one unlabeled value.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
