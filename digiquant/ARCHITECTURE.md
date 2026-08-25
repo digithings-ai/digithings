@@ -919,6 +919,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `phase_hermes.forecast_calibrations` / `calibrated_forecasts`; H9 fail-soft appends
   via `forecast_registry.persist_shadow_calibrations` after booking. H8 remains
   untouched.
+  **Risk policy contracts (#2692 / WP6.2):** frozen models in
+  `hermes/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
+  leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure
+  resolver in `hermes/risk_policy.py`. Resolves incumbent defaults from
+  config/preferences into one fully provenanced policy and one canonical correlation
+  snapshot (63-day Pearson, asset-class bucket fallback metadata). Bridge helpers
+  derive `SizingCaps` / `BreakerConfig` for parity tests only — production H8 still
+  calls `size_portfolio` directly in Phase 1.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
