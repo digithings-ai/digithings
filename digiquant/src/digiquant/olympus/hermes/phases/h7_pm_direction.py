@@ -173,9 +173,7 @@ def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dic
         "focus_roster": _focus_roster_tickers(state),
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
-    tools, execute_tool, web_grounding = _portfolio_grounding(
-        state, phase="h7_pm", segment=NODE_ID
-    )
+    tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="h7_pm", segment=NODE_ID)
     phase_inputs = apply_web_grounding_to_inputs(
         phase_inputs,
         web_grounding=web_grounding,
