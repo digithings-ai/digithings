@@ -20,6 +20,9 @@ from typing import (  # score:allow untyped any — used for heterogeneous node-
 import yaml
 
 from digiquant.data.onchain.hyperdash import get_onchain_cohort_positioning
+from digiquant.olympus.atlas.cost_liquidity_registry import (
+    resolve_realized_action_cost_outcomes_from_state,
+)
 from digiquant.olympus.atlas.data.queries import get_fed_rate_probabilities, get_market_context
 from digiquant.olympus.atlas.decision_log import (
     ReflectorOutput,
@@ -502,6 +505,10 @@ def build_preflight_reflect_node(
                 run_date=state.run_date,
                 knowledge_cutoff_at=cutoff,
                 current_run_id=str(state.run_id) if state.run_id is not None else None,
+            )
+            resolve_realized_action_cost_outcomes_from_state(
+                client=deps.client,
+                state=state,
             )
         return {}
 

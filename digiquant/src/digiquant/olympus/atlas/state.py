@@ -499,6 +499,15 @@ class PhaseHermesState(BaseModel):
         default=None,
         description="Resolved CovarianceSnapshot dump (H8 attach)",
     )
+    # WP7.3 observational cost/liquidity evidence (never feeds turnover in Phase 1).
+    liquidity_snapshots: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="snapshot_id → LiquiditySnapshot dump (H9 attach)",
+    )
+    action_cost_estimates: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="order_intent_id → ActionCostEstimate dump (H9 attach)",
+    )
     pm_direction_memo: Any | None = (
         None  # PMDirectionMemo JSON; typed in hermes.models.pm_direction
     )
@@ -532,6 +541,16 @@ def _merge_phase_hermes(
         merged.calibrated_forecasts = {
             **merged.calibrated_forecasts,
             **right.calibrated_forecasts,
+        }
+    if right.liquidity_snapshots:
+        merged.liquidity_snapshots = {
+            **merged.liquidity_snapshots,
+            **right.liquidity_snapshots,
+        }
+    if right.action_cost_estimates:
+        merged.action_cost_estimates = {
+            **merged.action_cost_estimates,
+            **right.action_cost_estimates,
         }
     for field in ("risk_policy", "covariance_snapshot"):
         val = getattr(right, field)
