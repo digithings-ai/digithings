@@ -286,10 +286,14 @@ reasoning workflow without replacing their domain interactions:
   ordered model/search/tool operations from `olympus_run_event_trace`. Every known
   representative-run key is classified as a topology leaf, fan-out branch, or
   ledger-only discovery path (`lib/pipeline-document-discoverability.ts`) so deep
-  links can still resolve a stage. The trace pages
-  100 rows at a time, groups by run attempt and phase, and opens retries/errors by default.
-  Historical runs without ingestion-time events say "Call details were not recorded for
-  this run"; they are never reconstructed from aggregate diagnostics.
+  links can still resolve a stage. Call trace pages 100 rows at a time (searchable and
+  stage-filterable via `lib/pipeline-trace-stage.ts`), groups by run attempt and phase,
+  and opens retries/errors by default. Vitest pins a ~300-call fixture for filter +
+  paginate. Stage filter prefers `document_key` (Pipeline deep-link grammar) with
+  phase-slug fallback. **Inputs** is a typed call-persistence gap (preflight /
+  attention-plan do not emit model/search/tool rows) — the UI says so and does not
+  invent calls. Historical runs without ingestion-time events say "Call details were
+  not recorded for this run"; they are never reconstructed from aggregate diagnostics.
 - Graph status is explicit: not run, state-only operation, persisted artifact, expected
   artifact missing, parallel dispatch, and stage overview (`lib/pipeline-topology-status.ts`).
   Atlas / Hermes / Learning bands gate active chrome — research artifacts never paint Hermes
