@@ -103,9 +103,25 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 | View | Backed by | Purpose |
 |------|-----------|---------|
 | `public_portfolio_positions` | `positions` | Latest-date position book, performance columns only. **Excludes** `rationale`, `pm_notes`, `thesis_id`, `conviction`, `stop_loss_pct`, `target_pct_gain`, `horizon_days`. |
-| `public_nav_history` | `nav_history` | NAV series + cash/invested % + derived `day_return_pct`. |
+| `public_nav_history` | `nav_history` | Legacy NAV series + cash/invested % + derived `day_return_pct` (rollback target). |
 | `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
+### Public accounting surface — migration 074 (#2599 / Task 3.4)
+
+Curated security-definer views over private `olympus_accounting_*` tips. Prefer these
+for digiquant.io / Olympus performance readers after the shadow reconciliation gate.
+**Never GRANT** base accounting tables to `anon`/`authenticated`. Rollback = repoint
+adapters to `public_nav_history` / `nav_history` without deleting accounting rows.
+
+| View | Purpose |
+|------|---------|
+| `public_accounting_period_status` | Tip periods (final **and** incomplete/estimated/failed) with `status` + `quality_reasons` — incomplete stays explicit. |
+| `public_finalized_nav` | Final tip closing equity only (`source`/`contract` = `finalized_accounting`). |
+| `public_accounting_nav_history` | Finalized preferred; dates without a final tip use labeled legacy (`source=legacy_nav_history`, `contract=legacy_estimate`). Same date never mixes sources. |
+| `public_daily_realized_attribution` | Final-tip per-ticker contribution pct; empty when no final tip (no lookback substitution). |
+
+**Cutover gate:** point public readers only after an approved shadow interval (including one
+rebalance session) has zero unexplained reconciliation failures.
 ### Live quote transport — new in migration 063 (#1807)
 
 The only **table** in the digiquant.io public read surface (the 050 trio are views), and the
@@ -221,7 +237,67 @@ writer — H9 `commit_run` stays the sole authoritative booking path.
 | `portfolio_ledger_approved_targets` | `(id UUID)` | Post-adjustment approved weight/quantity, nullable with no DEFAULT (missing stays `NULL`, never fabricated to `0`) but *not* mutually exclusive — at least one of weight/quantity must be set (OR), both allowed, and an explicit `0` remains legal — with self-FK `supersedes_id` (backward-only), scoped by a composite `FOREIGN KEY (supersedes_id, run_date, symbol) REFERENCES ... (id, run_date, symbol)` so a row can only supersede one from its own run_date and symbol — a changed same-date target is a new row, never a rewrite; FK to `portfolio_ledger_requested_targets`. |
 | `portfolio_ledger_order_intents` | `(id UUID)` | `quantity NOT NULL CHECK (> 0)`, terminal `status` (pending/executed/rejected — no `superseded` value; supersession is orthogonal to status), self-FK `supersedes_id` (backward-only), likewise scoped by a composite `FOREIGN KEY (supersedes_id, run_date, symbol) REFERENCES ... (id, run_date, symbol)`, `rejection_reason` required exactly when rejected; FK to `portfolio_ledger_approved_targets`. |
 | `portfolio_ledger_paper_executions` | `(id UUID)` | Immutable fill: `quantity`/`price` both `NOT NULL CHECK (> 0)`, `id` a deterministic `uuid5(order_intent_id, executed_date)` backed by `UNIQUE (order_intent_id, executed_date)` so an exact-same-date retry reproduces the identical row instead of duplicating; FK to `portfolio_ledger_order_intents`. |
-| `portfolio_ledger_holding_lots` | `(id UUID)` | Lot `quantity`/`open_price` (`NOT NULL CHECK (> 0)`), `status` (open/closed) tying `closed_at`/`closed_by_execution_id` nullability to status, opening and closing executions forced distinct; FKs to `portfolio_ledger_paper_executions`. |
+| `portfolio_ledger_holding_lots` | `(id UUID)` | Lot `quantity`/`open_price` (`NOT NULL CHECK (> 0)`), `status` (open/closed) tying `closed_at`/`closed_by_execution_id` nullability to status, opening and closing executions forced distinct; FKs to `portfolio_ledger_paper_executions`. Cutover may seed open lots via one labeled `portfolio_ledger_commits.policy_version_id = legacy_opening_snapshot` chain (#2589) — not invented pre-cutover P&L. |
+
+### position_events book_source labeling - new in migration 071 (#2422)
+
+Compatibility Activity projection labeling (Task 2.5). Does **not** expose private ledger
+tables.
+
+| Object | Purpose |
+|--------|---------|
+| `position_events.book_source` | `NOT NULL DEFAULT 'legacy'` with `CHECK IN ('legacy','authoritative')`. Existing history stays `legacy` permanently. |
+| `olympus_position_events` | security_invoker view of all events including `book_source`. |
+| `olympus_position_events_authoritative` | Same columns, `WHERE book_source = 'authoritative'` only — never includes legacy rows. |
+
+Writers: `execute_at_open.py` stamps `authoritative` on the ledger path and `legacy` on every
+prose path. Cutover/retirement of prose writers is gated on seeded `holding_lots` and removal
+of `--no-ledger` (see ARCHITECTURE.md cutover section), not on this migration alone.
+
+### Period accounting - migration 072 (#2596) + finalizer (#2597)
+
+Private event-boundary EOD accounting schema (Phase 0 Tasks 3.1–3.2). User-private
+portfolio/accounting — never grant base tables to `anon`/`authenticated`; curated public
+views land in migration `074_olympus_accounting_views.sql` (#2599).
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_accounting_periods` | `(id UUID)` | One reconciled (or explicitly non-final) period: opening/closing equity & cash, gross/net PnL, fees/slippage, residual, Decimal tolerances, optional benchmark, `status` (`final`/`estimated`/`incomplete`/`failed`), `quality_reasons[]`, backward-only `supersedes_id`. `status=final` requires empty `quality_reasons`. Deterministic `id` from the pure engine. |
+| `olympus_accounting_contributions` | `(id UUID)` | Per-ticker gross/net PnL, fees, slippage, contribution fraction; FK `(period_id, period_date)` → periods. Deterministic ids from `(period_id, symbol)`. |
+| `olympus_accounting_holdings` | `(id UUID)` | EOD holdings (`quantity`, nullable `mark`/`market_value`); FK to periods. Deterministic ids from `(period_id, symbol)`. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_accounting_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial unique indexes enforce one current root period
+per `period_date` and at most one superseder per prior id. Models/engine/io:
+`digiquant.olympus.accounting`.
+
+**Finalizer semantics (`accounting/io.py` + `scripts/atlas/finalize_period_accounting.py`):**
+
+- Append-only INSERT; exact same-input retry is idempotent (same PKs; no-op or child repair).
+- Restatement appends a new period that `supersedes_id`-points at the prior tip — never mutates.
+- `select_final_period` returns only a **complete** head with `status=final`. Incomplete marks,
+  estimated/failed status, or a period row missing its children are **not** authoritative.
+- Provisional H9 `nav_history` / `positions` remain continuity data and are **never** selected
+  as final accounting. Shadow mode (`--shadow` / default) reconciles period return vs legacy
+  nav day return without deleting either path; `--dry-run` reports without INSERT. Cold
+  ledger (open lots empty while a positions book exists) declines with exit 3.
+- Metrics (`refresh_performance_metrics.py`) prefer a finalized period for `pnl_pct` / indexed
+  NAV when present; never feed `current_book_lookback` into daily `pnl_pct` (#2598).
+
+### Lookback vs realized attribution — migration 073 (#2598)
+
+Separates the 21-day current-book diagnostic from realized period contribution
+(OLY-REV-007 / Phase 0 Task 3.3).
+
+| Object | Kind | Purpose |
+|--------|------|---------|
+| `current_book_lookback` | table (renamed from `position_attribution`) | Diagnostic only: today's book weights × trailing return window (default 21 calendar days). Columns include `window_start_date`, `window_end_date`, `lookback_days`, `contract='current_book_lookback'`. Anon SELECT (dashboard). |
+| `position_attribution` | compatibility VIEW | Deprecated alias over `current_book_lookback`. Same columns; delete after all readers migrate (Task 3.4 follow-up). |
+| `daily_realized_attribution` | VIEW (`security_invoker`) | Authoritative per-ticker daily contribution from the current finalized `olympus_accounting_*` tip only. Empty when no final period exists — never substitutes lookback. `service_role` SELECT; public curated twin is `public_daily_realized_attribution` (074). |
+
+Writer: `scripts/atlas/refresh_attribution.py` upserts `current_book_lookback` only.
+Realized rows come from the accounting finalizer (#2597), not the lookback job.
 
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL

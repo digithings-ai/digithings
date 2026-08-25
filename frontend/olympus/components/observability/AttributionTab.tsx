@@ -52,9 +52,9 @@ export default function AttributionTab({
   if (!summary) {
     return (
       <EmptyState
-        title="No attribution rows yet"
-        message="Per-position attribution is computed daily by refresh_attribution.py after EOD prices land, once the paper book holds positions. It will appear here after the next attribution run."
-        note="Populates after the daily attribution job runs (refresh_attribution)."
+        title="No current-book lookback rows yet"
+        message="The 21-day current-book lookback diagnostic is computed daily by refresh_attribution.py after EOD prices land, once the paper book holds positions. It is not realized period P&L."
+        note="Diagnostic only — realized daily contribution comes from accounting periods."
         flat={embedded}
       />
     );
@@ -82,24 +82,30 @@ export default function AttributionTab({
         <StatTile
           label="Portfolio return"
           value={fmtPct(summary.portfolioReturn)}
-          sub="window total"
+          sub="lookback window"
           color={signColorClass(summary.portfolioReturn)}
           flat={embedded}
         />
         <StatTile
           label="Benchmark (SPY)"
           value={fmtPct(summary.benchmarkReturn)}
+          sub="same lookback window"
           color={signColorClass(summary.benchmarkReturn)}
           flat={embedded}
         />
         <StatTile
           label="Active return"
           value={fmtPct(summary.activeReturn)}
-          sub={summary.unpriced > 0 ? `partial · ${summary.unpriced} unpriced` : 'Σ attribution'}
+          sub={summary.unpriced > 0 ? `partial · ${summary.unpriced} unpriced` : 'lookback diagnostic'}
           color={signColorClass(summary.activeReturn)}
           flat={embedded}
         />
       </div>
+
+      <p className={`text-xs text-ink-mute ${embedded ? 'border-b border-hair px-4 py-3' : ''}`}>
+        Current-book lookback: today&apos;s weights over a trailing return window — not realized
+        daily contribution. Realized period attribution comes from finalized accounting.
+      </p>
 
       {summary.unpriced > 0 ? (
         <p className={`text-xs text-warn ${embedded ? 'border-b border-hair px-4 py-3' : ''}`}>
@@ -109,8 +115,8 @@ export default function AttributionTab({
       ) : null}
 
       <SectionCard
-        title="Contribution by position"
-        subtitle="Each holding's share of the portfolio's window return (weight × return). Top contributors and detractors."
+        title="Lookback contribution by position"
+        subtitle="Each holding's share of the lookback-window portfolio return (weight × return). Diagnostic only — not daily realized P&L."
         flat={embedded}
       >
         {chartData.length ? (
@@ -144,8 +150,8 @@ export default function AttributionTab({
       </SectionCard>
 
       <SectionCard
-        title="Decomposition"
-        subtitle="Single-benchmark attribution: contribution (weight × return), selection (weight × excess vs SPY), and total active. Sums reconcile to active return when every holding is priced."
+        title="Lookback decomposition"
+        subtitle="Single-benchmark lookback diagnostic: contribution (weight × return), selection (weight × excess vs SPY), and total active over the same window. Sums reconcile to active return when every holding is priced. Not realized period attribution."
         flat={embedded}
       >
         <div className="overflow-x-auto">

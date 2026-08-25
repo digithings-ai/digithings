@@ -1,7 +1,8 @@
-"""Unit tests for refresh_performance_metrics.py (#814).
+"""Unit tests for refresh_performance_metrics.py (#814 / #2598).
 
 Tests the fixes for:
-- Fix 3: pnl_pct derived from position_attribution SUM (not hard-coded 0.0);
+- Fix 3: pnl_pct from finalized accounting, else nav day return — never
+          current_book_lookback / legacy position_attribution SUM (#2598);
           sharpe/vol/max_dd/alpha written as NULL when insufficient history (< 20 rows).
 - Fix 4: current_price always written from latest price_history close;
           sanity check warning for implausible entry_price (> 10% deviation).
@@ -69,48 +70,30 @@ def _fake_with(tables: dict[str, list[dict[str, Any]]]) -> FakeSupabaseClient:
 
 
 # ---------------------------------------------------------------------------
-# Fix 3: pnl_pct from attribution
+# Fix 3 / #2598: lookback must never feed daily pnl_pct
 # ---------------------------------------------------------------------------
 
 
 class TestSumAttributionPnl:
-    def test_sums_non_cash_contributions(self) -> None:
+    """``_sum_attribution_pnl`` is a closed stub — always None (#2598)."""
+
+    def test_lookback_poison_never_sums(self) -> None:
         sb = _fake_with(
             {
                 "position_attribution": [
                     {"date": "2026-06-12", "ticker": "SPY", "contribution_pct": 0.40},
                     {"date": "2026-06-12", "ticker": "IJR", "contribution_pct": 0.15},
                     {"date": "2026-06-12", "ticker": "XLP", "contribution_pct": 0.05},
-                ]
+                ],
+                "current_book_lookback": [
+                    {"date": "2026-06-12", "ticker": "SPY", "contribution_pct": 9.99},
+                ],
             }
         )
-        result = _sum_attribution_pnl(sb, "2026-06-12")
-        assert result == pytest.approx(0.60, abs=1e-6)
-
-    def test_excludes_cash_rows(self) -> None:
-        sb = _fake_with(
-            {
-                "position_attribution": [
-                    {"date": "2026-06-12", "ticker": "SPY", "contribution_pct": 0.50},
-                    {"date": "2026-06-12", "ticker": "CASH", "contribution_pct": 0.0},
-                ]
-            }
-        )
-        result = _sum_attribution_pnl(sb, "2026-06-12")
-        assert result == pytest.approx(0.50, abs=1e-6)
+        assert _sum_attribution_pnl(sb, "2026-06-12") is None
 
     def test_returns_none_when_no_rows(self) -> None:
         sb = _fake_with({"position_attribution": []})
-        assert _sum_attribution_pnl(sb, "2026-06-12") is None
-
-    def test_returns_none_when_all_cash(self) -> None:
-        sb = _fake_with(
-            {
-                "position_attribution": [
-                    {"date": "2026-06-12", "ticker": "CASH", "contribution_pct": 0.0}
-                ]
-            }
-        )
         assert _sum_attribution_pnl(sb, "2026-06-12") is None
 
 
@@ -157,12 +140,46 @@ class TestUpsertPortfolioMetricsDaily:
             }
         )
 
-    def test_pnl_pct_from_attribution_sum(self) -> None:
-        # The real return is +0.60 from position_attribution (#814).
+    def test_pnl_pct_ignores_lookback_attribution_sum(self) -> None:
+        # Poison lookback with +0.60; without final accounting, pnl must come from
+        # nav day return (last two nav rows: 100.0 → ~102.3 over 24 seeded days is
+        # not used — _make_sb_with_attribution builds 24 nav rows ending before
+        # 2026-06-12). Force an explicit prior + as_of nav so the fallback is clear.
         sb = self._make_sb_with_attribution([0.40, 0.15, 0.05])
+        sb.canned_reads["nav_history"] = [
+            {"date": f"2026-05-{i + 1:02d}", "nav": 100.0} for i in range(24)
+        ] + [
+            {"date": "2026-06-11", "nav": 100.0},
+            {"date": "2026-06-12", "nav": 100.6},
+        ]
         upsert_portfolio_metrics_daily(sb, "2026-06-12")
         row = sb.store["portfolio_metrics"][0]
-        assert row["pnl_pct"] == pytest.approx(0.60, abs=1e-4)
+        # Must NOT be 0.60 from lookback; nav day return = +0.6% happens to match
+        # the poison magnitude but comes from nav — prove lookback is ignored by
+        # also poisoning a divergent sum below.
+        assert row["pnl_pct"] == pytest.approx(0.6, abs=1e-4)
+
+    def test_pnl_pct_lookback_cannot_override_nav(self) -> None:
+        # Divergent lookback (+9.99) must not win over nav day return (+1.0%).
+        nav_rows = [{"date": f"2026-05-{i + 1:02d}", "nav": 100.0} for i in range(24)]
+        nav_rows.append({"date": "2026-06-11", "nav": 102.0})
+        nav_rows.append({"date": "2026-06-12", "nav": 103.02})
+        sb = _fake_with(
+            {
+                "portfolio_metrics": [],
+                "position_attribution": [
+                    {"date": "2026-06-12", "ticker": "POISON", "contribution_pct": 9.99},
+                ],
+                "current_book_lookback": [
+                    {"date": "2026-06-12", "ticker": "POISON", "contribution_pct": 9.99},
+                ],
+                "nav_history": nav_rows,
+                "positions": [],
+            }
+        )
+        upsert_portfolio_metrics_daily(sb, "2026-06-12")
+        row = sb.store["portfolio_metrics"][0]
+        assert row["pnl_pct"] == pytest.approx(1.0, abs=1e-3)
 
     def test_persists_cumulative_portfolio_and_benchmark_returns(self) -> None:
         sb = _fake_with(
@@ -734,16 +751,12 @@ class TestResolveScheduledMetricsDate:
 
 
 class TestMetricsWorkflowStepOrder:
-    """Pins metrics BEFORE attribution in ``pipeline-atlas-metrics.yml``.
+    """Pins finalizer → metrics → lookback in ``pipeline-atlas-metrics.yml``.
 
-    ``upsert_portfolio_metrics_daily`` prefers ``SUM(position_attribution.
-    contribution_pct)`` for ``pnl_pct`` and falls back to the one-day ``nav_history``
-    return, but ``refresh_attribution.py`` computes a **21-day trailing window**
-    (``_DEFAULT_WINDOW_DAYS = 21``). The two are different quantities — prod 2026-07-29
-    has an attribution sum of +0.98% against a nav day return of -0.42%, opposite signs.
-    Metrics-first means today's attribution rows do not exist yet and ``pnl_pct`` takes
-    the correct one-day path, so this order is load-bearing until the horizon mismatch
-    itself is fixed.
+    After #2598, ``pnl_pct`` never reads ``current_book_lookback`` / legacy
+    ``position_attribution``, so lookback job order cannot alter daily semantics.
+    Still keep metrics before the lookback step for operational clarity, and the
+    accounting finalizer before metrics so finalized periods are available.
     """
 
     @staticmethod
@@ -759,11 +772,16 @@ class TestMetricsWorkflowStepOrder:
         spec = yaml.safe_load(workflow.read_text(encoding="utf-8"))
         return [str(step.get("name", "")) for step in spec["jobs"]["refresh"]["steps"]]
 
-    def test_metrics_step_precedes_attribution_step(self) -> None:
+    def test_finalizer_precedes_metrics_precedes_lookback(self) -> None:
         names = self._step_names()
+        finalizer = next(i for i, n in enumerate(names) if "period accounting" in n.lower())
         metrics = next(i for i, n in enumerate(names) if "portfolio_metrics" in n)
-        attribution = next(i for i, n in enumerate(names) if "position_attribution" in n)
-        assert metrics < attribution, (
-            "metrics must run before attribution — reordering puts a 21-day window "
-            "contribution into the daily pnl_pct column on every row (#1746)"
+        lookback = next(
+            i
+            for i, n in enumerate(names)
+            if "lookback" in n.lower() or "position_attribution" in n or "attribution" in n.lower()
+        )
+        assert finalizer < metrics < lookback, (
+            "finalizer → metrics → lookback: daily pnl must not depend on lookback "
+            "order (#2598 / OLY-REV-007)"
         )

@@ -1047,10 +1047,12 @@ must read these fields when present. The Olympus Performance view fills only mis
 fields with the same deterministic first/latest calculation over live `nav_history` and
 the benchmark closes inside that exact NAV window, and labels the result as a live-history
 or mixed fallback. Rows in
-`position_attribution` retain their own stored calculation window and are not presented
-as inception-to-date contribution. Its cumulative contribution chart instead applies each
-position snapshot's prior weight to the next interval's price return and overlays the exact
-NAV-rebased portfolio return.
+`current_book_lookback` (legacy alias view `position_attribution`) are a trailing-window
+diagnostic with an explicit lookback interval — not inception-to-date contribution and
+not realized daily P&L (#2598). The Performance cumulative contribution chart instead
+applies each position snapshot's prior weight to the next interval's price return and
+overlays the exact NAV-rebased portfolio return. Realized daily contribution is
+`daily_realized_attribution` (finalized `olympus_accounting_*` tip only).
 
 ##### Risk-metric scale contract (#1748, migration 058)
 
@@ -1607,32 +1609,125 @@ becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`
 069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
 all, and the book may be a different date than the run date.
 
-Cutover is a deliberate edit, **not** a property of the data (#2508). It was the latter first:
-the kill switch defaults *on* and the pipeline passed no ledger flag, so the morning job would
-have started trusting the ledger the day the ledger *writers* reached `main` with 069 applied.
-Two conditions, not one, and `main` meets only the first today: 069's file is there, while the
-writers described above are on `develop` and not yet promoted. That is unsafe at the boundary —
-order size is a weight delta against the legacy `positions` book while residuals are measured
-only from `portfolio_ledger_holding_lots`, which starts empty and has no backfill, so the first
-run would book EXIT for every trim of a held name and OPEN for every add, into rows 069 makes
-append-only. So `pipeline-digiquant-prices.yml` passes `--no-ledger`, and
-`tests/scripts/test_prices_cron_dst.py` pins it *present* while `--require-ledger` stays absent
-(it would be a daily red cron before 069/070 are applied). `backfill_position_events.py` passes
-it too: that script shells out to the same `execute_at_open.py`, so it is the second door onto
-the ledger path and an operator repair run would otherwise walk through it. Removing
-`--no-ledger` from **both** call sites is the cutover, and it must arrive with seeded lots — or with a ledger that declines when the lot table
-is empty and the prior book is not — and preferably with `--require-ledger` in the same edit, so
-a silent fallback to prose cannot hide the handover. Deleting the two prose builders is a
-further follow-up gated on prod reaching 070: they still carry the whole #1743 regression
-suite.
+Cutover is a deliberate edit, **not** a property of the data alone (#2508 → #2589). The kill
+switch defaults *on*. After #2589 the morning job and backfill run the ledger path with
+`--require-ledger`. Safety is the opening snapshot + cold-start decline:
+
+1. `ensure_legacy_opening_snapshot` (in `hermes/writers/opening_snapshot.py`, called from
+   `build_events_from_paper_fills` before `execute_pending_orders`) idempotently seeds open
+   lots from the prior `positions` book × `nav_history.nav` ÷ mark as one labeled
+   `policy_version_id=legacy_opening_snapshot` chain — commit → ADD/new_conviction →
+   quantity targets → executed order → paper fill (fee=0, slippage=0) → open lot. It does
+   not invent pre-cutover fill history beyond that single snapshot.
+2. If lots are still empty while the prior book has holdings,
+   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason)` and
+   `--require-ledger` exits 3 — it will not book OPEN/EXIT mislabels into append-only 069
+   rows, and prose cannot hide the handover.
+
+Ops can also run `digiquant/scripts/atlas/seed_ledger_opening_snapshot.py` (`--date` optional,
+`--dry-run` supported). Deleting the two prose builders remains a further follow-up gated on
+prod reaching 070.
+
+#### Compatibility projection labeling (#2422 / Task 2.5)
+
+`position_events` remains the Activity compatibility table existing readers use unmodified.
+Migration `071_olympus_position_events_book_source.sql` adds `book_source text NOT NULL
+DEFAULT 'legacy'` with `CHECK (book_source IN ('legacy', 'authoritative'))`. Historical rows
+keep the `legacy` label permanently (column default; no content rewrite). The morning
+executor stamps:
+
+- `authoritative` — ledger paper-fill projections (`build_events_from_paper_fills` +
+  `_record_ledger_events`, including HOLD continuity written under ledger authority)
+- `legacy` — every prose / digest / positions-book reconstruction path
+
+Curated views (security_invoker; no SELECT from private `portfolio_ledger_*`):
+
+- `olympus_position_events` — all rows with `book_source` explicit
+- `olympus_position_events_authoritative` — `WHERE book_source = 'authoritative'` only
+
+New consumers that require lineage must use the authoritative view (or filter). Legacy
+projection writers are retired only after holding_lots seed + `--no-ledger` removal + named
+readers pass retention checks — not as part of #2422.
 
 - **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
-  `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and
+  `TestSoleAuthority`, plus rejection/idempotency/lot coverage),
+  `tests/dq/hermes/test_opening_snapshot.py` (seed idempotency / cold-start), and
   `tests/dq/atlas/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,
   `TestBuildEventsFromPaperFillsDeclines`, `TestMainPrefersTheLedger` — the last proves the
   prose builders are never called when the ledger speaks, that HOLD continuity survives, and
   that both new exit codes are reachable). The atlas module imports the table names from the
   writers rather than restating them, so a rename breaks the test instead of drifting past it.
+
+#### Period accounting contracts, engine, and EOD finalizer (#2596/#2597)
+
+Closes OLY-REV-007 / OLY-REV-008 for the calculation and persistence boundary: exact-date
+target weights must not be applied across a full return interval. One event-boundary engine
+owns NAV, P&L, and daily contribution math from authoritative opening holdings/cash,
+fills/costs, and closing marks. Task 3.2 persists one coherent EOD period atomically enough
+that metrics/attribution job order cannot alter meaning.
+
+- **Models**: `digiquant/src/digiquant/olympus/accounting/models.py` — frozen/strict Pydantic
+  v2 contracts (`AccountingPolicy`, `PeriodAccountingInput`, `AccountingPeriod`, ticker
+  results, marks, fills, corporate actions). Every money field is `Decimal` with
+  `allow_inf_nan=False`.
+- **Engine**: `digiquant/src/digiquant/olympus/accounting/engine.py` — pure Decimal/Polars
+  `compute_period(...)` (no I/O, no pandas, no broker paths). Status is `final` only when
+  marks are complete and fresh and residual is inside the versioned tolerance; missing marks
+  → `incomplete`, stale marks / ignored corporate actions → `estimated`, residual /
+  negative quantity / benchmark boundary mismatch → `failed`. Exact same inputs reproduce
+  the same period `id` (`uuid5` over a canonical digest).
+- **Persistence**: `digiquant/src/digiquant/olympus/accounting/io.py` — service-role
+  `INSERT` only into `olympus_accounting_{periods,contributions,holdings}`. Deterministic
+  child PKs; exact retry is a no-op (or child repair). Restatement appends a superseding
+  period (`supersedes_id`); never in-place correction. `select_final_period` returns only a
+  complete head with `status=final` — provisional H9 `nav_history`/`positions` rows are
+  continuity data and are never selected as final. A crash after the period INSERT leaves
+  an incomplete child set that is not selectable as final until retry repairs it.
+- **Finalizer**: `digiquant/scripts/atlas/finalize_period_accounting.py` — assembles ledger
+  fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
+  day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
+  reconcile). Mode also via `OLYMPUS_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
+  ledger declines with exit 3 (no partial final). Wired ahead of metrics in
+  `pipeline-atlas-metrics.yml` (`continue-on-error` while shadowing).
+- **Metrics cutover (dual-write)**: `refresh_performance_metrics.py` prefers a finalized
+  accounting period for `pnl_pct` and indexed `nav_history` compounding when one exists;
+  otherwise falls through to provisional H9 nav only. Never sums
+  `current_book_lookback` / legacy `position_attribution` into daily `pnl_pct` (#2598).
+  H9 keeps writing provisional continuity; public curated views are migration
+  `074_olympus_accounting_views.sql` (#2599): `public_accounting_nav_history`
+  (finalized preferred + labeled legacy), `public_finalized_nav`,
+  `public_accounting_period_status`, `public_daily_realized_attribution`.
+  Adapters: Olympus `observability-queries` / `queries` and digiquant.io
+  `useLivePortfolio`. Rollback = repoint to `public_nav_history` / `nav_history`.
+  Cutover only after approved shadow interval (incl. one rebalance) with zero
+  unexplained reconciliation failures.
+- **Lookback vs realized (#2598 / Task 3.3)**: migration `073_olympus_lookback_vs_realized.sql`
+  renames the physical diagnostic table to `current_book_lookback` (explicit
+  `window_*` / `lookback_days` / `contract` columns). `position_attribution` remains a
+  deprecated compatibility VIEW over that table (delete after readers migrate).
+  `daily_realized_attribution` is a `security_invoker` VIEW over the finalized accounting
+  tip only (`service_role` SELECT; public twin `public_daily_realized_attribution`). Writers:
+  `refresh_attribution.py` → `current_book_lookback`; accounting finalizer → periods/
+  contributions. Pure core: `compute_current_book_lookback` in `atlas/attribution.py`.
+- **Schema**: migration `072_olympus_period_accounting.sql` —
+  `olympus_accounting_{periods,contributions,holdings}`. **User-private** (vision brief):
+  RLS with zero policies; `PUBLIC`/`anon`/`authenticated` revoked; `service_role`
+  `SELECT, INSERT` only; append-only mutation triggers. Public curated projections are
+  Task 3.4 / migration 074 (never grant base tables).
+- **Identities** (when `status == final`):
+  `E1 = E0 + Σ NetPnL_i + CashPnL`;
+  `E1 = ClosingCash + Σ q_i,1 P_i,1`;
+  `Σ Contribution_i + CashContribution = (E1 − E0) / E0`.
+- **Tests**: `tests/dq/atlas/test_period_accounting.py`,
+  `tests/dq/atlas/test_migration_072.py`,
+  `tests/dq/atlas/test_finalize_period_accounting.py`,
+  `tests/dq/atlas/test_migration_073.py`,
+  `tests/dq/atlas/test_lookback_vs_realized.py`,
+  `tests/dq/atlas/test_migration_074.py`.
+- **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
+  current-book lookback as realized attribution, public base-table grants on accounting,
+  selecting provisional rows as final, in-place period correction,
+  combining finalized + legacy into one unlabeled value.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
