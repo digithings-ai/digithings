@@ -338,6 +338,93 @@ def test_memo_conviction_rank_orders_weights() -> None:
     assert w["AAA"] > w["BBB"]
 
 
+def _memo_state(
+    roster: list[TickerDirection],
+    *,
+    analysts: dict[str, dict[str, object]] | None = None,
+    preferences: dict | None = None,
+) -> AtlasResearchState:
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=RUN_DATE,
+        config=AtlasConfigBundle(preferences=preferences or _RELAXED),
+    )
+    state.phase_hermes = PhaseHermesState(
+        pm_direction_memo=PMDirectionMemo(date=RUN_DATE, roster=roster, memo="PM notes."),
+        asset_analysts=analysts or {},
+    )
+    return state
+
+
+def test_gapful_h7_ranks_match_dense_fallback() -> None:
+    """Gapful ranks [2,7,11] must size like dense [1,2,3] (WP8.1)."""
+    tickers = ["AAA", "BBB", "CCC"]
+    vols = _tech_rows({t: 20 for t in tickers})
+    dense_roster = [
+        TickerDirection(ticker=t, direction="long", conviction_rank=idx + 1)
+        for idx, t in enumerate(tickers)
+    ]
+    gapful_roster = [
+        TickerDirection(ticker="AAA", direction="long", conviction_rank=2),
+        TickerDirection(ticker="BBB", direction="long", conviction_rank=7),
+        TickerDirection(ticker="CCC", direction="long", conviction_rank=11),
+    ]
+    dense = _weights(
+        _run(_memo_state(dense_roster), FakeSupabaseClient(canned_reads={"price_technicals": vols}))
+    )
+    gapful = _weights(
+        _run(_memo_state(gapful_roster), FakeSupabaseClient(canned_reads={"price_technicals": vols}))
+    )
+    assert set(dense) == set(gapful) == set(tickers)
+    for ticker in tickers:
+        assert dense[ticker] == pytest.approx(gapful[ticker])
+
+
+def test_duplicate_h7_ranks_tie_by_symbol() -> None:
+    """Duplicate ranks resolve deterministically by ticker symbol (WP8.1)."""
+    roster = [
+        TickerDirection(ticker="BBB", direction="long", conviction_rank=1),
+        TickerDirection(ticker="AAA", direction="long", conviction_rank=1),
+    ]
+    vols = _tech_rows({"AAA": 20, "BBB": 20})
+    w = _weights(_run(_memo_state(roster), FakeSupabaseClient(canned_reads={"price_technicals": vols})))
+    assert w["AAA"] > w["BBB"]
+
+
+def test_h5_sell_cannot_drop_h7_long() -> None:
+    """H5 sell/watch must not remove an H7-authorized long (WP8.1)."""
+    roster = [TickerDirection(ticker="AAA", direction="long", conviction_rank=1)]
+    analysts = {"AAA": {"conviction_score": 5, "stance": "sell"}}
+    w = _weights(
+        _run(
+            _memo_state(roster, analysts=analysts),
+            FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"AAA": 15})}),
+        )
+    )
+    assert "AAA" in w
+    assert w["AAA"] > 0
+
+
+def test_h7_flat_not_admitted_via_h5_buy() -> None:
+    """H7 flat roster entry cannot enter sizing through H5 buy alone (WP8.1)."""
+    roster = [
+        TickerDirection(ticker="SPY", direction="long", conviction_rank=1),
+        TickerDirection(ticker="DBO", direction="flat", conviction_rank=2),
+    ]
+    analysts = {
+        "SPY": {"conviction_score": 5, "stance": "buy"},
+        "DBO": {"conviction_score": 5, "stance": "buy"},
+    }
+    w = _weights(
+        _run(
+            _memo_state(roster, analysts=analysts),
+            FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15, "DBO": 15})}),
+        )
+    )
+    assert "SPY" in w
+    assert "DBO" not in w
+
+
 def test_sector_cap_enforced_via_real_buckets() -> None:
     # Three Technology single-names (sector_map → sector-technology) → the 40% sector cap
     # trims the bucket from 100% to 40%, the rest to cash.
@@ -1124,7 +1211,10 @@ class TestValidateH8LineageCallSite:
 
 
 def test_incumbent_memo_and_effective_inputs_match_golden_fixture() -> None:
-    """Freeze ``_memo_effective_inputs`` and ``_effective_inputs`` before WP6.2."""
+    """Freeze ``_memo_effective_inputs`` and ``_effective_inputs`` before WP6.2.
+
+    WP8.1: memo-path stances are always ``buy`` — H7 owns eligibility, not H5.
+    """
     from datetime import date
 
     from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection

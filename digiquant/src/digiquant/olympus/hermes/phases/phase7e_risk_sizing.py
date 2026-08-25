@@ -24,7 +24,7 @@ from digiquant.olympus.atlas.data.queries import get_return_correlations
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo
+from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
@@ -97,24 +97,34 @@ def _rank_to_conviction(rank: int, n_long: int, *, floor: float) -> float:
     return 5.0 - (rank - 1) * span / (n_long - 1)
 
 
+def _densify_memo_ranks(long_entries: list[TickerDirection]) -> dict[str, int]:
+    """Map H7 long roster to dense ranks 1..N (best first).
+
+    Gapful raw ranks (e.g. ``[2, 7, 11]``) and duplicate ranks tie-break by ticker
+    so conviction mapping depends on ordering only, not rank gaps.
+    """
+    ordered = sorted(long_entries, key=lambda entry: (entry.conviction_rank, entry.ticker))
+    return {entry.ticker: idx + 1 for idx, entry in enumerate(ordered)}
+
+
 def _memo_effective_inputs(
     memo: PMDirectionMemo,
-    analysts: dict[str, dict[str, Any]],
+    _analysts: dict[str, dict[str, Any]],
     default_conviction: float,
 ) -> tuple[dict[str, float], dict[str, str]]:
-    """Per long ticker: conviction from H7 rank + stance from analyst payload."""
+    """Per H7-authorized long: conviction from dense rank; stance is not H5-gated."""
     long_entries = [entry for entry in memo.roster if entry.direction == "long"]
     n_long = len(long_entries)
     floor = max(default_conviction, 2.0)
+    dense_ranks = _densify_memo_ranks(long_entries)
     convictions: dict[str, float] = {}
     stances: dict[str, str] = {}
     for entry in long_entries:
         convictions[entry.ticker] = _clamp_conviction(
-            _rank_to_conviction(entry.conviction_rank, n_long, floor=floor)
+            _rank_to_conviction(dense_ranks[entry.ticker], n_long, floor=floor)
         )
-        analyst = analysts.get(entry.ticker) or {}
-        stance = str(analyst.get("stance") or "buy")
-        stances[entry.ticker] = stance if stance in ("buy", "hold") else "hold"
+        # H7 owns eligibility on the memo path; H5 stance must not drop a long.
+        stances[entry.ticker] = "buy"
     return convictions, stances
 
 
