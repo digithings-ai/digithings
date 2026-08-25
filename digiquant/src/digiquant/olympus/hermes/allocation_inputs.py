@@ -41,6 +41,9 @@ from digiquant.olympus.hermes.models.risk_policy import CovarianceSnapshot, Risk
 from digiquant.olympus.temporal import require_utc_datetime
 
 _CASH = "CASH"
+# Common Hermes forecast horizon (trading sessions). Used as shadow fill when H6
+# did not attach an effective forecast for every H7 roster ticker.
+DEFAULT_FORECAST_HORIZON_SESSIONS = 21
 
 
 class AllocationInputAssemblyError(ValueError):
@@ -212,15 +215,15 @@ def _cost_binding(
 ) -> CostLiquidityBinding | None:
     if not cost_hashes_by_ticker:
         return None
-    order_set = set(order)
-    pairs = tuple(
-        (ticker, digest)
-        for ticker, digest in sorted(cost_hashes_by_ticker.items())
-        if ticker in order_set
-    )
+    order_by_upper = {ticker.upper(): ticker for ticker in order}
+    pairs: list[tuple[str, str]] = []
+    for ticker, digest in sorted(cost_hashes_by_ticker.items(), key=lambda item: item[0].upper()):
+        canonical = order_by_upper.get(ticker.upper())
+        if canonical is not None:
+            pairs.append((canonical, digest))
     if not pairs:
         return None
-    return CostLiquidityBinding(entries=pairs)
+    return CostLiquidityBinding(entries=tuple(sorted(pairs, key=lambda item: item[0])))
 
 
 def assemble_allocation_input_bundle(
@@ -432,13 +435,16 @@ def assemble_allocation_input_bundle_from_state(
         return None
     prior, cash = _prior_weights_from_state(state)
     horizons = _horizons_from_state(state)
-    # When H6 did not attach effectives, fall back to expected horizon for degraded slices.
     order = _canonical_asset_order(memo)
-    if expected_horizon_sessions is not None:
-        for ticker in order:
-            horizons.setdefault(ticker, expected_horizon_sessions)
-    if not all(ticker in horizons for ticker in order):
-        return None
+    fill_horizon = expected_horizon_sessions
+    if fill_horizon is None:
+        observed = {horizons[ticker] for ticker in order if ticker in horizons}
+        if len(observed) == 1:
+            fill_horizon = next(iter(observed))
+        else:
+            fill_horizon = DEFAULT_FORECAST_HORIZON_SESSIONS
+    for ticker in order:
+        horizons.setdefault(ticker, fill_horizon)
 
     try:
         return assemble_allocation_input_bundle(
@@ -453,7 +459,7 @@ def assemble_allocation_input_bundle_from_state(
             prior_risky_weights=prior,
             cash_weight_pct=cash,
             cost_hashes_by_ticker=_cost_hashes_from_state(state) or None,
-            expected_horizon_sessions=expected_horizon_sessions,
+            expected_horizon_sessions=fill_horizon,
         )
     except (AllocationInputAssemblyError, ValueError, TypeError):
         return None
@@ -461,6 +467,7 @@ def assemble_allocation_input_bundle_from_state(
 
 __all__ = [
     "AllocationInputAssemblyError",
+    "DEFAULT_FORECAST_HORIZON_SESSIONS",
     "assemble_allocation_input_bundle",
     "assemble_allocation_input_bundle_from_state",
 ]

@@ -611,17 +611,36 @@ def _build_sized_book(
 
     # WP8.3 (#2730): assemble canonical AllocationInputBundle at H8 entry (shadow).
     # Never feeds ``size_portfolio`` — cutover is Task 8.4.
+    # Covariance for the bundle must match the full H7 roster (long+flat), which may
+    # differ from the longs-only ``pm_tickers`` snapshot used for incumbent sizing audit.
     allocation_bundle = None
     if memo is not None and risk_artifacts is not None:
         try:
             from digiquant.olympus.hermes.allocation_inputs import (
+                DEFAULT_FORECAST_HORIZON_SESSIONS,
                 assemble_allocation_input_bundle_from_state,
             )
+
+            memo_obj = (
+                memo if isinstance(memo, PMDirectionMemo) else PMDirectionMemo.model_validate(memo)
+            )
+            bundle_tickers = sorted(
+                entry.ticker for entry in memo_obj.roster if not _is_cash(entry.ticker)
+            )
+            if bundle_tickers == sorted(pm_tickers):
+                bundle_covariance = risk_artifacts.covariance_snapshot
+            else:
+                bundle_covariance = resolve_h8_risk_artifacts(
+                    state=state,
+                    pm_tickers=bundle_tickers,
+                    corr=corr_frame,
+                ).covariance_snapshot
 
             allocation_bundle = assemble_allocation_input_bundle_from_state(
                 state,
                 risk_policy=risk_artifacts.policy,
-                covariance=risk_artifacts.covariance_snapshot,
+                covariance=bundle_covariance,
+                expected_horizon_sessions=DEFAULT_FORECAST_HORIZON_SESSIONS,
             )
         except Exception as exc:
             logger.warning("phase7e: allocation input bundle failed (%s); continuing", exc)
