@@ -82,13 +82,14 @@ class DeliberationSummary(BaseModel):
     )
     escalated: bool = False
     cap_reason: str | None = None
-    # WP4.4 forecast lineage — IDs only on the summary; full artifacts stay on analyst docs.
+    # WP4.4 forecast lineage — IDs + optional full amendment dump for H9 registry (#2663).
     base_forecast_id: str | None = None
     amendment_id: str | None = None
     effective_forecast_id: str | None = None
     amendment_outcome: str | None = None
     forecast_degradation: str | None = None
     effective_forecast: dict[str, Any] | None = None
+    forecast_amendment: dict[str, Any] | None = None
 
 
 def is_unchallenged_carry(summary: Mapping[str, Any]) -> bool:
