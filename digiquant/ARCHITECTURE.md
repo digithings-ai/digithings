@@ -899,6 +899,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   via `atlas/forecast_registry.py` (exact retry / content conflict; exact-ID cutoff
   reads). Registry failure keeps the one committed book and cannot rebook; status
   lands on the commit manifest (`schema_version` 1.3). No calibration writers.
+  **Forecast calibration contracts (#2672 / WP5.1):** frozen models in
+  `hermes/models/forecast_calibration.py` (`ForecastOutcome`, `ForecastCalibration`,
+  `CalibratedForecast`, `SessionPriceSnapshot`) plus private append-only tables in
+  migration `080_olympus_forecast_calibration.sql`. Prospective labels only (no
+  portfolio contribution); trading-session maturity; UUID5 + content-hash identity.
+  Schema/models only — outcome resolver (5.2), calibrator (5.3), and shadow
+  persistence (5.4) are later; H8 remains untouched.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
