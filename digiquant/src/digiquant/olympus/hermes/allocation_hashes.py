@@ -1,0 +1,159 @@
+"""Stable SHA-256 identities for H8 allocation inputs (#2727 / WP8.2).
+
+Canonical JSON uses sorted keys, compact separators, UTF-8, normalized UTC
+timestamps in payloads, ``allow_nan=False``, and SHA-256 digests. Never use
+Python ``hash()`` for cross-run identity.
+
+``weights_fingerprint`` is the sole authoritative implementation —
+:mod:`digiquant.olympus.hermes.writers.commit_io` delegates here so H9
+idempotency bytes stay stable.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from typing import Any
+
+_HASH_HEX_LEN = 64
+
+
+def canonical_json(payload: object) -> str:
+    """Serialize ``payload`` for deterministic SHA-256 input."""
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+        allow_nan=False,
+    )
+
+
+def sha256_hex(payload: object) -> str:
+    """SHA-256 hex digest of canonical JSON for ``payload``."""
+    digest = hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+    if len(digest) != _HASH_HEX_LEN:
+        raise ValueError("sha256 hex digest must be 64 characters")
+    return digest
+
+
+def weights_fingerprint(weights: dict[str, float]) -> str:
+    """Stable hash for idempotency comparisons on risky weight maps."""
+    canonical = {k: round(v, 4) for k, v in sorted(weights.items())}
+    blob = json.dumps(canonical, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def prior_weights_from_entries(entries: tuple[tuple[str, float], ...]) -> dict[str, float]:
+    """Build the risky-weight map used by ``weights_fingerprint``."""
+    return {ticker: weight for ticker, weight in entries}
+
+
+def allocation_bundle_content_hash(*, payload: dict[str, Any]) -> str:
+    """SHA-256 over canonical allocation bundle identity fields."""
+    return sha256_hex(payload)
+
+
+def h7_memo_hash_payload(
+    *,
+    session_date: str,
+    roster: list[dict[str, object]],
+) -> dict[str, object]:
+    """Ticker-keyed mandate identity for bundle hashing (order-independent)."""
+    keyed: dict[str, object] = {}
+    for row in roster:
+        ticker = str(row["ticker"])
+        keyed[ticker] = {
+            "direction": row["direction"],
+            "conviction_rank": row["conviction_rank"],
+            "effective_forecast_id": row.get("effective_forecast_id"),
+            "forecast_reference_hash": row.get("forecast_reference_hash"),
+            "degradation_reason": row.get("degradation_reason"),
+        }
+    return {"session_date": session_date, "mandates": keyed}
+
+
+def calibrated_slice_hash_payload(slice_payload: dict[str, object]) -> dict[str, object]:
+    """Per-asset calibrated return identity for bundle hashing."""
+    return {
+        "horizon_sessions": slice_payload["horizon_sessions"],
+        "expected_gross_return": slice_payload.get("expected_gross_return"),
+        "forecast_error_std": slice_payload.get("forecast_error_std"),
+        "reliability_weight": slice_payload["reliability_weight"],
+        "calibrated_forecast_content_hash": slice_payload.get("calibrated_forecast_content_hash"),
+        "status": slice_payload["status"],
+        "unavailable_reason": slice_payload.get("unavailable_reason"),
+    }
+
+
+def allocation_bundle_hash_payload(
+    *,
+    schema_version: str,
+    run: dict[str, object],
+    canonical_asset_order: tuple[str, ...],
+    mandates: tuple[dict[str, object], ...],
+    calibrated_returns: tuple[dict[str, object], ...],
+    prior_book: dict[str, object],
+    control_settings: dict[str, object],
+    covariance: dict[str, object] | None,
+    cost_liquidity: dict[str, object] | None,
+    source_hashes: dict[str, object],
+) -> dict[str, object]:
+    """Build order-independent bundle hash input keyed by ticker."""
+    mandate_by_ticker = {str(m["ticker"]): m for m in mandates}
+    calibrated_by_ticker = {str(c["ticker"]): c for c in calibrated_returns}
+    assets: dict[str, object] = {}
+    for ticker in sorted(canonical_asset_order):
+        mandate = mandate_by_ticker[ticker]
+        calibrated = calibrated_by_ticker[ticker]
+        assets[ticker] = {
+            "mandate": {
+                "direction": mandate["direction"],
+                "conviction_rank": mandate["conviction_rank"],
+                "effective_forecast_id": mandate.get("effective_forecast_id"),
+                "forecast_reference_hash": mandate.get("forecast_reference_hash"),
+                "degradation_reason": mandate.get("degradation_reason"),
+            },
+            "calibrated": calibrated_slice_hash_payload(calibrated),
+        }
+    covariance_payload = covariance
+    if covariance is not None and "tickers" in covariance:
+        covariance_payload = {
+            **covariance,
+            "tickers": sorted(covariance["tickers"]),
+        }
+    source_payload = source_hashes
+    if source_hashes:
+        source_payload = dict(source_hashes)
+        if "calibrated_hashes" in source_payload:
+            source_payload["calibrated_hashes"] = sorted(source_payload["calibrated_hashes"])
+        if "cost_hashes" in source_payload:
+            source_payload["cost_hashes"] = sorted(source_payload["cost_hashes"])
+    cost_payload = cost_liquidity
+    if cost_liquidity is not None and "entries" in cost_liquidity:
+        cost_payload = {
+            **cost_liquidity,
+            "entries": sorted(cost_liquidity["entries"]),
+        }
+    return {
+        "schema_version": schema_version,
+        "run": run,
+        "assets": assets,
+        "prior_book": prior_book,
+        "control_settings": control_settings,
+        "covariance": covariance_payload,
+        "cost_liquidity": cost_payload,
+        "source_hashes": source_payload,
+    }
+
+
+__all__ = [
+    "allocation_bundle_content_hash",
+    "allocation_bundle_hash_payload",
+    "calibrated_slice_hash_payload",
+    "canonical_json",
+    "h7_memo_hash_payload",
+    "prior_weights_from_entries",
+    "sha256_hex",
+    "weights_fingerprint",
+]
