@@ -54,6 +54,7 @@ export function parsePipelineParams(sp: URLSearchParams): { date?: string; stage
 /** Map a sub-step id (+ optional branch qualifier) to its document_key. Returns null for unknown sub-steps. */
 export function leafDocumentKey(subStepId: string, branch?: string): string | null {
   switch (subStepId) {
+    case 'attention-plan': return 'attention-plan';
     case 'macro': return 'macro';
     case 'scorecard': return 'sector-scorecard';
     case 'digest': return 'digest';
@@ -70,6 +71,7 @@ export function leafDocumentKey(subStepId: string, branch?: string): string | nu
 /** Map a `document_key` to the stage that owns it (per the spec topology table). */
 export function stageForDocumentKey(documentKey: string): PipelineStage | null {
   const k = documentKey.toLowerCase();
+  if (k === 'attention-plan') return 'inputs';
   if ((DIGEST_DOCUMENT_KEYS as readonly string[]).includes(k)) return 'synthesis';
   if (k.startsWith('analyst/') || k.startsWith('deliberation/')) return 'selection';
   if (k === 'pm-direction-memo' || k === 'pm-rebalance') return 'selection';
