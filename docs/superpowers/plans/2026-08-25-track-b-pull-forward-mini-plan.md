@@ -1,6 +1,6 @@
 # Mini-plan: Track B pull-forward (ProfileConfig / corpus / planner shadow)
 
-**Status:** planning only — no implementation until Track A (#2422 + seed lots) is in flight.  
+**Status:** unblocked — Track A (#2422 + seed lots #2589/#2595) complete; WP3 on develop via #2603. First package filed as #2609.  
 **Parent:** #1950 · metaplan Progress 2026-08-25 · vision brief
 
 ## Packages (file issues when starting)

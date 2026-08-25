@@ -309,14 +309,41 @@ def _business_days_between(earlier: date, later: date) -> int:
     return count
 
 
+def _profile_config_store_for_pin(
+    client: SupabaseClient, version_id: str
+) -> dict[str, Any]:
+    """Load one olympus_profile_config payload by exact id (fail closed if absent)."""
+    try:
+        response = (
+            client.table("olympus_profile_config")
+            .select("id,payload")
+            .eq("id", version_id)
+            .limit(1)
+            .execute()
+        )
+    except _SUPABASE_READ_ERRORS:
+        return {}
+    rows = getattr(response, "data", None) or []
+    if not rows:
+        return {}
+    row = rows[0]
+    payload = row.get("payload")
+    if not isinstance(payload, dict):
+        return {}
+    return {str(row.get("id") or version_id): payload}
+
+
 def _hydrate_config(
     client: SupabaseClient,
     config: AtlasConfigBundle,
     run_date: date,
 ) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
     """Merge portfolio constraints + materialized prior book into config preferences."""
+    from uuid import UUID
+
     from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
     from digiquant.olympus.atlas.graph import _atlas_config_root
+    from digiquant.olympus.profile_config import pin_profile_config_for_preflight
 
     try:
         prior_book = load_prior_book(client, run_date)
@@ -340,12 +367,40 @@ def _hydrate_config(
             deltas = {}
         preferences["current_weights"] = mark_to_market_weights(current_weights, deltas)
 
+    # Track B (#2609): pin ProfileConfig. None → house default; overlay missing pin fails closed.
+    requested_raw = config.profile_config_version_id
+    requested_version = UUID(requested_raw) if requested_raw else None
+    store = (
+        _profile_config_store_for_pin(client, requested_raw)
+        if requested_raw
+        else None
+    )
+    pinned = pin_profile_config_for_preflight(
+        requested_version_id=requested_version,
+        store=store,
+    )
+    watchlist = list(pinned.watchlist) if pinned.watchlist else list(config.watchlist)
+    investment_profile = (
+        pinned.investment.model_dump(mode="json")
+        if pinned.investment is not None
+        else dict(config.investment_profile)
+    )
+    if pinned.themes:
+        preferences = {**preferences, "profile_themes": list(pinned.themes)}
+    if pinned.research_budget_usd is not None:
+        preferences = {
+            **preferences,
+            "research_budget_usd": str(pinned.research_budget_usd),
+        }
+
     hydrated = AtlasConfigBundle(
-        watchlist=list(config.watchlist),
-        investment_profile=dict(config.investment_profile),
+        watchlist=watchlist,
+        investment_profile=investment_profile,
         hedge_funds=list(config.hedge_funds),
         preferences=preferences,
         macro_series=list(config.macro_series),
+        profile_config_version_id=str(pinned.version_id),
+        profile_config=pinned.model_dump(mode="json"),
     )
     return hydrated, prior_book
 

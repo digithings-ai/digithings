@@ -9,6 +9,14 @@ They are deliberately split: posture changes rarely (months/years), asset choice
 
 The schemas are intentionally coarse. Per-portfolio limits (CVaR, factor caps, position-size rules) live on a policy object, not here. Tax detail (state, ISA, RRSP, PEA, etc.) is deferred to a future `TaxProfile`.
 
+## DB-backed ProfileConfig (Track B / #2609)
+
+Runtime pins live in `digiquant.olympus.profile_config.ProfileConfig` and the private
+`olympus_profile_config` table (migration `075`). Preflight resolves an exact
+`version_id` (or the house default). `InvestmentProfile` / `AssetPreferences` remain
+the nested posture/asset schemas inside a ProfileConfig payload — they are not a
+second graph or a replacement for the digithings house run.
+
 ## Why versioned
 
 Every model carries `schema_version: int = 1` independently. Storage layers (Supabase, Atlas runner state) persist these long-term, so adding or reshaping fields without a version field would silently corrupt older rows. The version field gives migrations a hook: on read, dispatch on `schema_version` and upgrade in place. The two models version independently — bumping `InvestmentProfile` to v2 does not require bumping `AssetPreferences`.

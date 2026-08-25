@@ -852,6 +852,12 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
 
 - **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. **A0–A4:**
   preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.
+  Preflight (#2609 Track B) pins a versioned `ProfileConfig` onto
+  `AtlasConfigBundle.profile_config_version_id` / `.profile_config`: omitting the pin
+  selects the digithings **house** default (always-on, immutable); an overlay pin
+  fails closed when the exact `olympus_profile_config.id` is missing. Overlays must
+  not fork the graph or cancel the house run. Models:
+  `digiquant.olympus.profile_config`.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
