@@ -75,9 +75,10 @@ compact digithings house ETF paper book banner linking to `/house` —
 Track B ProfileConfig DB lands; they are not editable Settings.
 
 **Portfolio sections:** Holdings · Theses · **Tearsheet** (`/portfolio/performance`) ·
-**Ledger** (position-event activity) · **Period** (typed gap when
-`olympus_accounting_*` is service_role-only) · Attribution. Period chrome does
-not invent private accounting rows.
+**Ledger** (position-event activity) · **Period** (`public_accounting_period_status`
+tip rows; empty / query-failure gaps stay honest; raw `olympus_accounting_*` bases
+remain service_role-only) · Attribution. Period chrome does not invent private
+accounting rows (#2652).
 
 Shared workspace gutters use `SUBPAGE_MAX` from
 `components/layout-constants.ts`. The constant intentionally lives outside
