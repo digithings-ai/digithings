@@ -160,8 +160,7 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/store:
 
 Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio
 booking only; registry failure is fail-soft and cannot rebook. No historical
-backfill, no prompt/reasoning bodies, no public base view. Outcome/calibration
-tables are WP5.
+backfill, no prompt/reasoning bodies, no public base view.
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -172,6 +171,24 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_registry_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/readers:
 `digiquant.olympus.atlas.forecast_registry`.
+
+### Forecast calibration registry — migration 080 (#2672 / WP5.1)
+
+Private append-only prospective outcome labels and shadow calibration versions.
+Schema + Pydantic contracts only in this migration — no resolver/writer and no
+H8 cutover (Tasks 5.2–5.4). No historical backfill, no portfolio-contribution
+columns, no public base view.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_forecast_outcomes` | `(outcome_id UUID)` | Immutable `ForecastOutcome`: base/effective IDs, reference/maturity sessions + snapshots, forecast_mean/realized/signed_residual, positive_label, status, event/known times, content_hash. FK → assessments. |
+| `olympus_forecast_calibrations` | `(calibration_id UUID)` | Immutable `ForecastCalibration`: cohort/prior/method, sample + equivalent size, bias/dispersion/Brier/log/reliability, outcome_ids[], status, times, content_hash. |
+| `olympus_calibrated_forecasts` | `(calibrated_forecast_id UUID)` | Shadow `CalibratedForecast`: base/effective IDs, optional calibration FK, expected return / error std / downside quantiles / positive probability / reliability weight, status, times, content_hash. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_calibration_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
+`digiquant.olympus.hermes.models.forecast_calibration`.
 
 ### Live quote transport — new in migration 063 (#1807)
 
