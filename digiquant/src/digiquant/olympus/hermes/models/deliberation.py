@@ -50,6 +50,9 @@ class DeliberationAnalystTurn(BaseModel):
     conclusion: str = Field(default="")
     net_stance: Literal["bullish", "neutral", "bearish"] = "neutral"
     conviction_delta: int = Field(default=0, ge=-2, le=2)
+    # Optional complete replacement ForecastTerms for WP4.4 amendment materialization.
+    # Partial nested patches are rejected by materialize/resolve — omit when unchanged.
+    forecast_amendment: dict[str, Any] | None = None
 
 
 CARRY_FINGERPRINT_SKIP = "fingerprint_skip"
@@ -79,6 +82,13 @@ class DeliberationSummary(BaseModel):
     )
     escalated: bool = False
     cap_reason: str | None = None
+    # WP4.4 forecast lineage — IDs only on the summary; full artifacts stay on analyst docs.
+    base_forecast_id: str | None = None
+    amendment_id: str | None = None
+    effective_forecast_id: str | None = None
+    amendment_outcome: str | None = None
+    forecast_degradation: str | None = None
+    effective_forecast: dict[str, Any] | None = None
 
 
 def is_unchallenged_carry(summary: Mapping[str, Any]) -> bool:

@@ -33,6 +33,14 @@ from digiquant.olympus.hermes.models.deliberation import (
     DeliberationSummary,
     DeliberationTurn,
 )
+from digiquant.olympus.hermes.models.forecast import (
+    AmendmentOutcome,
+    EffectiveForecast,
+    ForecastAssessment,
+    ForecastTerms,
+    materialize_forecast_amendment,
+    resolve_effective_forecast,
+)
 from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.skills import load_skill_full
@@ -95,6 +103,118 @@ def _analyst_payload(state: HermesState, ticker: str) -> dict[str, Any]:
     return dict(state.phase_hermes.asset_analysts.get(ticker, {}))
 
 
+def _base_forecast_from_analyst(analyst: dict[str, Any]) -> ForecastAssessment | None:
+    raw = analyst.get("forecast_assessment")
+    if raw is None:
+        return None
+    try:
+        return ForecastAssessment.model_validate(raw)
+    except Exception:
+        return None
+
+
+def _attach_forecast_lineage(
+    summary: DeliberationSummary,
+    *,
+    effective: EffectiveForecast | None,
+) -> DeliberationSummary:
+    if effective is None:
+        return summary
+    return summary.model_copy(
+        update={
+            "base_forecast_id": str(effective.base_forecast_id),
+            "amendment_id": str(effective.amendment_id) if effective.amendment_id else None,
+            "effective_forecast_id": str(effective.effective_id),
+            "amendment_outcome": effective.amendment_outcome.value,
+            "forecast_degradation": effective.degradation_reason,
+            "effective_forecast": effective.model_dump(mode="json"),
+        }
+    )
+
+
+def _carry_prior_effective(
+    *,
+    prior: dict[str, Any],
+    base: ForecastAssessment | None,
+    state: HermesState,
+) -> EffectiveForecast | None:
+    """Fingerprint skip: preserve prior effective identity/time/hash when present."""
+    raw_eff = prior.get("effective_forecast")
+    if isinstance(raw_eff, dict) and raw_eff:
+        try:
+            prior_eff = EffectiveForecast.model_validate(raw_eff)
+        except Exception:
+            prior_eff = None
+        else:
+            cutoff = state.knowledge_cutoff_at
+            if cutoff is not None and prior_eff.known_at > cutoff:
+                if base is None:
+                    return None
+                return resolve_effective_forecast(
+                    base=base,
+                    amendment=None,
+                    amendment_outcome=AmendmentOutcome.REJECTED,
+                    degradation_reason="prior_amendment_after_knowledge_cutoff",
+                    known_at=cutoff,
+                )
+            return prior_eff
+    if base is None:
+        return None
+    return resolve_effective_forecast(base=base, amendment_outcome=AmendmentOutcome.NONE)
+
+
+def _resolve_from_debate(
+    *,
+    state: HermesState,
+    ticker: str,
+    analyst: dict[str, Any],
+    amendment_terms_raw: dict[str, Any] | None,
+    amendment_reason: str,
+) -> EffectiveForecast | None:
+    base = _base_forecast_from_analyst(analyst)
+    if base is None:
+        return None
+    cutoff = state.knowledge_cutoff_at or base.known_at
+    if not amendment_terms_raw:
+        return resolve_effective_forecast(
+            base=base,
+            amendment=None,
+            amendment_outcome=AmendmentOutcome.NONE,
+            known_at=cutoff,
+        )
+    try:
+        terms = ForecastTerms.model_validate(amendment_terms_raw)
+        amendment = materialize_forecast_amendment(
+            base=base,
+            terms=terms,
+            reason=amendment_reason or "h6_challenge_revision",
+            source_run_id=str(state.run_id),
+            provider_invocation_id=f"h6:{ticker}:{state.run_id}",
+            effective_at=cutoff,
+            known_at=cutoff,
+        )
+        return resolve_effective_forecast(
+            base=base,
+            amendment=amendment,
+            amendment_outcome=AmendmentOutcome.ACCEPTED,
+            known_at=cutoff,
+        )
+    except Exception as exc:
+        logger.warning(
+            "H6 amendment for %s rejected (%s: %s); preserving base forecast",
+            ticker,
+            type(exc).__name__,
+            exc,
+        )
+        return resolve_effective_forecast(
+            base=base,
+            amendment=None,
+            amendment_outcome=AmendmentOutcome.REJECTED,
+            degradation_reason="amendment_rejected",
+            known_at=cutoff,
+        )
+
+
 def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
     return {
         "ticker": ticker,
@@ -129,8 +249,14 @@ def _deliberation_summary(
     )
 
 
-def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummary:
-    """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap."""
+def run_deliberation_loop(
+    state: HermesState, ticker: str
+) -> tuple[DeliberationSummary, dict[str, Any] | None]:
+    """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap.
+
+    Returns the summary plus the last analyst-proposed complete ``forecast_amendment``
+    terms dict (or ``None`` when the debate did not propose a replacement).
+    """
     pm_skill = load_skill_full("deliberation")
     analyst_skill = load_skill_full("asset-analyst")
     tools, execute_tool, web_grounding = _portfolio_grounding(
@@ -142,6 +268,7 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
     eff_model = get_model_for_phase(f"{NODE_ID}-{ticker}") or get_model_for_mode()
     max_rounds = deliberation_max_rounds()
     min_rounds = min(deliberation_min_rounds(), max_rounds)
+    last_amendment_terms: dict[str, Any] | None = None
 
     while True:
         round_number += 1
@@ -191,12 +318,15 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
                         role="pm", round_number=round_number, message=pm_turn.challenge
                     )
                 )
-            return _deliberation_summary(
-                ticker=ticker,
-                transcript=transcript,
-                conclusion=pm_turn.conclusion or pm_turn.challenge,
-                net_stance=pm_turn.net_stance,
-                conviction_delta=pm_turn.conviction_delta,
+            return (
+                _deliberation_summary(
+                    ticker=ticker,
+                    transcript=transcript,
+                    conclusion=pm_turn.conclusion or pm_turn.challenge,
+                    net_stance=pm_turn.net_stance,
+                    conviction_delta=pm_turn.conviction_delta,
+                ),
+                last_amendment_terms,
             )
 
         # Not converged, or held below the min-rounds floor: record the PM's challenge (with a
@@ -246,28 +376,36 @@ def run_deliberation_loop(state: HermesState, ticker: str) -> DeliberationSummar
             if isinstance(analyst_result, DeliberationAnalystTurn)
             else DeliberationAnalystTurn.model_validate(analyst_result)
         )
+        if isinstance(analyst_turn.forecast_amendment, dict):
+            last_amendment_terms = dict(analyst_turn.forecast_amendment)
         transcript.append(
             DeliberationTurn(
                 role="analyst", round_number=round_number, message=analyst_turn.response
             )
         )
         if analyst_turn.converged:
-            return _deliberation_summary(
-                ticker=ticker,
-                transcript=transcript,
-                conclusion=analyst_turn.conclusion or analyst_turn.response,
-                net_stance=analyst_turn.net_stance,
-                conviction_delta=analyst_turn.conviction_delta,
+            return (
+                _deliberation_summary(
+                    ticker=ticker,
+                    transcript=transcript,
+                    conclusion=analyst_turn.conclusion or analyst_turn.response,
+                    net_stance=analyst_turn.net_stance,
+                    conviction_delta=analyst_turn.conviction_delta,
+                ),
+                last_amendment_terms,
             )
         if round_number >= max_rounds:
-            return _deliberation_summary(
-                ticker=ticker,
-                transcript=transcript,
-                conclusion=analyst_turn.conclusion or analyst_turn.response,
-                net_stance=analyst_turn.net_stance,
-                conviction_delta=analyst_turn.conviction_delta,
-                escalated=True,
-                cap_reason="max_rounds",
+            return (
+                _deliberation_summary(
+                    ticker=ticker,
+                    transcript=transcript,
+                    conclusion=analyst_turn.conclusion or analyst_turn.response,
+                    net_stance=analyst_turn.net_stance,
+                    conviction_delta=analyst_turn.conviction_delta,
+                    escalated=True,
+                    cap_reason="max_rounds",
+                ),
+                last_amendment_terms,
             )
 
 
@@ -279,6 +417,7 @@ def _h6_node_factory(ticker: str):
         if not analyst:
             return {}
         stance = str(analyst.get("stance") or "hold")
+        base = _base_forecast_from_analyst(analyst)
         if deliberation_skip_signal(state, ticker, analyst_stance=stance):
             prior = _prior_deliberation_summary(state, ticker)
             if prior:
@@ -300,6 +439,10 @@ def _h6_node_factory(ticker: str):
                     # Benign: nothing moved, so the prior debate still stands (#925).
                     carry_reason=CARRY_FINGERPRINT_SKIP,
                 )
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=_carry_prior_effective(prior=prior, base=base, state=state),
+                )
                 return {
                     "phase_hermes": PhaseHermesState(
                         deliberation_summaries={ticker: carried.model_dump(mode="json")}
@@ -307,7 +450,7 @@ def _h6_node_factory(ticker: str):
                 }
 
         try:
-            summary = run_deliberation_loop(state, ticker)
+            summary, amendment_terms = run_deliberation_loop(state, ticker)
         except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
             logger.warning(
@@ -329,6 +472,17 @@ def _h6_node_factory(ticker: str):
                 carried=True,
                 carry_reason=CARRY_LLM_FAILURE,
             )
+            if base is not None:
+                fallback = _attach_forecast_lineage(
+                    fallback,
+                    effective=resolve_effective_forecast(
+                        base=base,
+                        amendment=None,
+                        amendment_outcome=AmendmentOutcome.LLM_FAILURE,
+                        degradation_reason="llm_failure",
+                        known_at=state.knowledge_cutoff_at or base.known_at,
+                    ),
+                )
             return {
                 "phase_hermes": PhaseHermesState(
                     deliberation_summaries={ticker: fallback.model_dump(mode="json")}
@@ -342,6 +496,16 @@ def _h6_node_factory(ticker: str):
                     )
                 ],
             }
+        summary = _attach_forecast_lineage(
+            summary,
+            effective=_resolve_from_debate(
+                state=state,
+                ticker=ticker,
+                analyst=analyst,
+                amendment_terms_raw=amendment_terms,
+                amendment_reason=summary.conclusion or "h6_challenge_revision",
+            ),
+        )
         result: dict[str, Any] = {
             "phase_hermes": PhaseHermesState(
                 deliberation_summaries={ticker: summary.model_dump(mode="json")}

@@ -32,6 +32,8 @@ from pydantic import (
 # Stable namespace for ForecastAssessment UUID5 identity. Do not change — existing
 # prospective IDs would diverge if this literal moves.
 _FORECAST_ASSESSMENT_ID_NAMESPACE = UUID("a4c8e91b-2d7f-5e3a-9b06-1f8c4d7e2a90")
+# Stable namespace for ForecastAmendment UUID5 identity (WP4.4).
+_FORECAST_AMENDMENT_ID_NAMESPACE = UUID("b5d9f02c-3e80-6f4b-ac17-2a9d5e8f3b01")
 
 Probability: TypeAlias = Annotated[
     Decimal, Field(ge=0, le=1, allow_inf_nan=False, max_digits=16, decimal_places=8)
@@ -220,13 +222,250 @@ class ForecastAssessment(ForecastModel):
         return self
 
 
+class AmendmentOutcome(StrEnum):
+    """How an H6 amendment attempt resolved relative to the immutable base."""
+
+    ACCEPTED = "accepted"
+    REJECTED = "amendment_rejected"
+    LLM_FAILURE = "llm_failure"
+    NONE = "none"
+
+
+class EffectiveSource(StrEnum):
+    """Which artifact supplies the effective numerical terms."""
+
+    BASE = "base"
+    AMENDMENT = "amendment"
+
+
+def forecast_amendment_id(
+    *,
+    base_forecast_id: UUID,
+    source_run_id: str,
+    content_hash: str,
+) -> UUID:
+    """Deterministic UUID5 for an H6 amendment of a base assessment."""
+    if not source_run_id.strip() or not content_hash.strip():
+        raise ValueError("source_run_id and content_hash are required for amendment_id")
+    return uuid5(
+        _FORECAST_AMENDMENT_ID_NAMESPACE,
+        f"{base_forecast_id}:{source_run_id.strip()}:{content_hash.strip()}",
+    )
+
+
+class ForecastAmendment(ForecastModel):
+    """Immutable H6 replacement terms that supersede a base without rewriting it.
+
+    ``terms`` is a complete replacement set (never a partial patch). Lineage points
+    at the immutable base ``forecast_id`` and optionally a prior amendment that this
+    one supersedes.
+    """
+
+    amendment_id: UUID
+    base_forecast_id: UUID
+    supersedes_amendment_id: UUID | None = None
+    ticker: NonEmptyId
+    terms: ForecastTerms
+    reason: NonEmptyId
+    new_evidence_ids: tuple[NonEmptyId, ...] = Field(default_factory=tuple)
+    contradiction_ids: tuple[NonEmptyId, ...] = Field(default_factory=tuple)
+    source_run_id: NonEmptyId
+    provider_invocation_id: NonEmptyId
+    effective_at: AwareDatetime
+    known_at: AwareDatetime
+    content_hash: NonEmptyId
+
+    @field_validator("new_evidence_ids", "contradiction_ids", mode="before")
+    @classmethod
+    def _coerce_amendment_id_sequence(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @field_validator("new_evidence_ids", "contradiction_ids")
+    @classmethod
+    def _reject_blank_amendment_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for item in value:
+            if not item.strip():
+                raise ValueError("evidence IDs must be non-empty strings")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_amendment_identity(self) -> ForecastAmendment:
+        for field_name, value in (
+            ("effective_at", self.effective_at),
+            ("known_at", self.known_at),
+        ):
+            if value.utcoffset() != timedelta(0):
+                raise ValueError(f"{field_name} must be timezone-aware UTC")
+
+        expected_hash = forecast_terms_content_hash(self.terms)
+        if self.content_hash != expected_hash:
+            raise ValueError("content_hash must match canonical ForecastTerms digest")
+
+        expected_id = forecast_amendment_id(
+            base_forecast_id=self.base_forecast_id,
+            source_run_id=self.source_run_id,
+            content_hash=self.content_hash,
+        )
+        if self.amendment_id != expected_id:
+            raise ValueError(
+                "amendment_id must be the UUID5 of base_forecast_id+source_run_id+content_hash"
+            )
+        if not self.reason.strip():
+            raise ValueError("amendment reason is required")
+        return self
+
+
+class EffectiveForecast(ForecastModel):
+    """Resolved forecast H7/H9 may reference: immutable base ± one accepted amendment."""
+
+    effective_id: UUID
+    ticker: NonEmptyId
+    base_forecast_id: UUID
+    amendment_id: UUID | None = None
+    source: EffectiveSource
+    terms: ForecastTerms
+    content_hash: NonEmptyId
+    amendment_outcome: AmendmentOutcome = AmendmentOutcome.NONE
+    degradation_reason: NonEmptyId | None = None
+    effective_at: AwareDatetime
+    known_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def _validate_effective(self) -> EffectiveForecast:
+        for field_name, value in (
+            ("effective_at", self.effective_at),
+            ("known_at", self.known_at),
+        ):
+            if value.utcoffset() != timedelta(0):
+                raise ValueError(f"{field_name} must be timezone-aware UTC")
+        if self.source is EffectiveSource.AMENDMENT and self.amendment_id is None:
+            raise ValueError("amendment source requires amendment_id")
+        if self.source is EffectiveSource.BASE and self.amendment_id is not None:
+            raise ValueError("base source cannot carry amendment_id")
+        if self.content_hash != forecast_terms_content_hash(self.terms):
+            raise ValueError("content_hash must match canonical ForecastTerms digest")
+        return self
+
+
+def materialize_forecast_amendment(
+    *,
+    base: ForecastAssessment,
+    terms: ForecastTerms,
+    reason: str,
+    source_run_id: str,
+    provider_invocation_id: str,
+    effective_at: AwareDatetime,
+    known_at: AwareDatetime,
+    new_evidence_ids: tuple[str, ...] = (),
+    contradiction_ids: tuple[str, ...] = (),
+    supersedes_amendment_id: UUID | None = None,
+) -> ForecastAmendment:
+    """Build an immutable amendment of ``base`` with complete replacement terms."""
+    content_hash = forecast_terms_content_hash(terms)
+    return ForecastAmendment(
+        amendment_id=forecast_amendment_id(
+            base_forecast_id=base.forecast_id,
+            source_run_id=source_run_id,
+            content_hash=content_hash,
+        ),
+        base_forecast_id=base.forecast_id,
+        supersedes_amendment_id=supersedes_amendment_id,
+        ticker=base.ticker,
+        terms=terms,
+        reason=reason,
+        new_evidence_ids=new_evidence_ids,
+        contradiction_ids=contradiction_ids,
+        source_run_id=source_run_id,
+        provider_invocation_id=provider_invocation_id,
+        effective_at=effective_at,
+        known_at=known_at,
+        content_hash=content_hash,
+    )
+
+
+def resolve_effective_forecast(
+    *,
+    base: ForecastAssessment,
+    amendment: ForecastAmendment | None = None,
+    amendment_outcome: AmendmentOutcome = AmendmentOutcome.NONE,
+    degradation_reason: str | None = None,
+    known_at: AwareDatetime | None = None,
+) -> EffectiveForecast:
+    """Select base or accepted amendment; never mutate the base assessment.
+
+    Invalid/failed amendments keep the base as effective and record the outcome.
+    """
+    cutoff_known = known_at if known_at is not None else base.known_at
+    if amendment is not None and amendment.base_forecast_id != base.forecast_id:
+        return EffectiveForecast(
+            effective_id=base.forecast_id,
+            ticker=base.ticker,
+            base_forecast_id=base.forecast_id,
+            amendment_id=None,
+            source=EffectiveSource.BASE,
+            terms=base.terms,
+            content_hash=base.content_hash,
+            amendment_outcome=AmendmentOutcome.REJECTED,
+            degradation_reason=degradation_reason or "amendment_base_mismatch",
+            effective_at=base.effective_at,
+            known_at=cutoff_known,
+        )
+    if (
+        amendment is not None
+        and amendment_outcome is AmendmentOutcome.ACCEPTED
+        and amendment.known_at <= cutoff_known
+    ):
+        return EffectiveForecast(
+            effective_id=amendment.amendment_id,
+            ticker=base.ticker,
+            base_forecast_id=base.forecast_id,
+            amendment_id=amendment.amendment_id,
+            source=EffectiveSource.AMENDMENT,
+            terms=amendment.terms,
+            content_hash=amendment.content_hash,
+            amendment_outcome=AmendmentOutcome.ACCEPTED,
+            degradation_reason=None,
+            effective_at=amendment.effective_at,
+            known_at=amendment.known_at,
+        )
+    outcome = amendment_outcome
+    if amendment is not None and amendment.known_at > cutoff_known:
+        outcome = AmendmentOutcome.REJECTED
+        degradation_reason = degradation_reason or "amendment_after_knowledge_cutoff"
+    elif amendment is not None and outcome is AmendmentOutcome.NONE:
+        outcome = AmendmentOutcome.REJECTED
+        degradation_reason = degradation_reason or "amendment_not_accepted"
+    return EffectiveForecast(
+        effective_id=base.forecast_id,
+        ticker=base.ticker,
+        base_forecast_id=base.forecast_id,
+        amendment_id=None,
+        source=EffectiveSource.BASE,
+        terms=base.terms,
+        content_hash=base.content_hash,
+        amendment_outcome=outcome,
+        degradation_reason=degradation_reason,
+        effective_at=base.effective_at,
+        known_at=cutoff_known,
+    )
+
+
 __all__ = [
+    "AmendmentOutcome",
+    "EffectiveForecast",
+    "EffectiveSource",
+    "ForecastAmendment",
     "ForecastAssessment",
     "ForecastModel",
     "ForecastTerms",
     "PriceAnchor",
     "PriceAnchorStatus",
     "RawUncertainty",
+    "forecast_amendment_id",
     "forecast_assessment_id",
     "forecast_terms_content_hash",
+    "materialize_forecast_amendment",
+    "resolve_effective_forecast",
 ]
