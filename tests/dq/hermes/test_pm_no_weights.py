@@ -1,7 +1,7 @@
 """H7 PMDirectionMemo must not accept weight-bearing fields (PR 4c / §11.2).
 
-WP4.5 (#2660): also reject forecast/weight mutation fields and model-supplied
-forecast authority — H7 binds ForecastReference deterministically post-LLM.
+WP4.5 (#2660): also reject forecast/weight mutation fields; ForecastReference is
+bound deterministically after the LLM — never fabricated for missing lineage.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from digiquant.olympus.hermes.models.pm_direction import (
     ForecastReference,
     PMDirectionMemo,
     TickerDirection,
+    bind_forecast_references,
 )
 from pydantic import ValidationError
 
@@ -143,3 +144,62 @@ def test_forecast_reference_accepts_matching_ticker() -> None:
     assert row.forecast_reference is not None
     assert row.forecast_reference.effective_forecast_id == eff_id
     assert row.forecast_reference.base_forecast_id == base_id
+
+
+def test_bind_forecast_references_overwrites_model_supplied_ids() -> None:
+    stale_eff = uuid4()
+    current_eff = uuid4()
+    current_base = uuid4()
+    memo = PMDirectionMemo(
+        date=date(2026, 8, 25),
+        roster=[
+            TickerDirection(
+                ticker="SPY",
+                direction="long",
+                conviction_rank=1,
+                forecast_reference=ForecastReference(
+                    ticker="SPY",
+                    effective_forecast_id=stale_eff,
+                    base_forecast_id=uuid4(),
+                ),
+            )
+        ],
+    )
+    bound = bind_forecast_references(
+        memo,
+        deliberation_by_ticker={
+            "SPY": {
+                "effective_forecast_id": str(current_eff),
+                "base_forecast_id": str(current_base),
+                "amendment_id": None,
+            }
+        },
+    )
+    ref = bound.roster[0].forecast_reference
+    assert ref is not None
+    assert ref.effective_forecast_id == current_eff
+    assert ref.base_forecast_id == current_base
+    assert bound.roster[0].direction == "long"
+    assert bound.roster[0].conviction_rank == 1
+
+
+def test_bind_forecast_references_missing_lineage_clears_ref() -> None:
+    memo = PMDirectionMemo(
+        date=date(2026, 8, 25),
+        roster=[
+            TickerDirection(
+                ticker="SPY",
+                direction="flat",
+                conviction_rank=1,
+                forecast_reference=ForecastReference(
+                    ticker="SPY",
+                    effective_forecast_id=uuid4(),
+                    base_forecast_id=uuid4(),
+                ),
+            )
+        ],
+    )
+    bound = bind_forecast_references(memo, deliberation_by_ticker={})
+    assert bound.roster[0].forecast_reference is None
+    assert bound.roster[0].direction == "flat"
+    assert bound.roster[0].conviction_rank == 1

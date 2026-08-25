@@ -19,9 +19,8 @@ class ForecastReference(BaseModel):
     """Audit pointer from an H7 ticker decision to one effective forecast.
 
     Identity fields are filled by H7 post-processing from the run's effective
-    forecast map. Models must not invent these UUIDs. When the current run has
-    no lineage for a ticker, both IDs are None and ``degradation_reason`` is set
-    — never fabricate identifiers.
+    forecast map. Models must not invent these UUIDs. Missing lineage yields
+    null IDs plus ``degradation_reason`` — never fabricated identifiers.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -37,7 +36,9 @@ class ForecastReference(BaseModel):
         has_eff = self.effective_forecast_id is not None
         has_base = self.base_forecast_id is not None
         if has_eff != has_base:
-            raise ValueError("effective_forecast_id and base_forecast_id must both be set or both None")
+            raise ValueError(
+                "effective_forecast_id and base_forecast_id must both be set or both None"
+            )
         if not has_eff and not self.degradation_reason:
             raise ValueError("missing forecast lineage requires degradation_reason")
         return self
@@ -92,12 +93,36 @@ def _parse_uuid(raw: object) -> UUID | None:
     return None
 
 
-def _lineage_from_summary(summary: Mapping[str, Any]) -> tuple[UUID | None, UUID | None, UUID | None, str | None]:
-    """Extract effective/base/amendment IDs from a deliberation summary blob.
+def forecast_reference_from_lineage(
+    *,
+    ticker: str,
+    effective_forecast_id: UUID | None,
+    base_forecast_id: UUID | None,
+    amendment_id: UUID | None = None,
+    degradation_reason: str | None = None,
+) -> ForecastReference:
+    """Build a ForecastReference; incomplete IDs become explicit degraded (never invent UUIDs)."""
+    if effective_forecast_id is not None and base_forecast_id is not None:
+        return ForecastReference(
+            effective_forecast_id=effective_forecast_id,
+            base_forecast_id=base_forecast_id,
+            amendment_id=amendment_id,
+            ticker=ticker,
+            degradation_reason=degradation_reason,
+        )
+    return ForecastReference(
+        effective_forecast_id=None,
+        base_forecast_id=None,
+        amendment_id=None,
+        ticker=ticker,
+        degradation_reason=degradation_reason or _FORECAST_UNAVAILABLE,
+    )
 
-    Prefers flat lineage fields exposed by H6 payloads; falls back to nested
-    ``effective_forecast`` dict. Never invents UUIDs.
-    """
+
+def _lineage_from_summary(
+    summary: Mapping[str, Any],
+) -> tuple[UUID | None, UUID | None, UUID | None, str | None]:
+    """Extract IDs from flat H6 fields or nested ``effective_forecast``; never invent UUIDs."""
     eff = _parse_uuid(summary.get("effective_forecast_id"))
     base = _parse_uuid(summary.get("base_forecast_id"))
     amend = _parse_uuid(summary.get("amendment_id"))
@@ -139,22 +164,13 @@ def bind_forecast_references(
     for row in memo.roster:
         summary = deliberation_by_ticker.get(row.ticker) or {}
         eff, base, amend, degradation = _lineage_from_summary(summary)
-        if eff is not None and base is not None:
-            ref = ForecastReference(
-                effective_forecast_id=eff,
-                base_forecast_id=base,
-                amendment_id=amend,
-                ticker=row.ticker,
-                degradation_reason=degradation,
-            )
-        else:
-            ref = ForecastReference(
-                effective_forecast_id=None,
-                base_forecast_id=None,
-                amendment_id=None,
-                ticker=row.ticker,
-                degradation_reason=degradation or _FORECAST_UNAVAILABLE,
-            )
+        ref = forecast_reference_from_lineage(
+            ticker=row.ticker,
+            effective_forecast_id=eff,
+            base_forecast_id=base,
+            amendment_id=amend,
+            degradation_reason=degradation,
+        )
         roster.append(row.model_copy(update={"forecast_reference": ref}))
     return memo.model_copy(update={"roster": roster})
 
@@ -164,4 +180,5 @@ __all__ = [
     "PMDirectionMemo",
     "TickerDirection",
     "bind_forecast_references",
+    "forecast_reference_from_lineage",
 ]

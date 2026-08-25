@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "PM Direction Memo",
-  "description": "H7 portfolio direction artifact — direction and conviction rank only; weights are set by H8.",
+  "description": "H7 portfolio direction artifact — direction and conviction rank only; weights are set by H8. ForecastReference is attached post-LLM (WP4.5); do not invent forecast IDs.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "date", "roster"],
@@ -24,11 +24,11 @@
             "type": ["object", "null"],
             "additionalProperties": false,
             "description": "Deterministic H7→effective-forecast audit link (WP4.5); never LLM-authored.",
-            "required": ["ticker", "effective_forecast_id", "base_forecast_id"],
+            "required": ["ticker"],
             "properties": {
               "ticker": { "type": "string", "minLength": 1 },
-              "effective_forecast_id": { "type": "string", "format": "uuid" },
-              "base_forecast_id": { "type": "string", "format": "uuid" },
+              "effective_forecast_id": { "type": ["string", "null"], "format": "uuid" },
+              "base_forecast_id": { "type": ["string", "null"], "format": "uuid" },
               "amendment_id": { "type": ["string", "null"], "format": "uuid" },
               "degradation_reason": { "type": ["string", "null"] }
             }

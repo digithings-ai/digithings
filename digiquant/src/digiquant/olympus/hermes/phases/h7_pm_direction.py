@@ -21,15 +21,9 @@ from digiquant.olympus.atlas.phases._node_factory import (
 )
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.models.forecast import (
-    AmendmentOutcome,
-    EffectiveForecast,
-    ForecastAssessment,
-    resolve_effective_forecast,
-)
 from digiquant.olympus.hermes.models.pm_direction import (
-    ForecastReference,
     PMDirectionMemo,
+    bind_forecast_references,
 )
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
@@ -88,73 +82,12 @@ def _prior_memo_fallback(state: HermesState) -> PMDirectionMemo | None:
     return prior.model_copy(update={"date": state.run_date})
 
 
-def _effective_forecast_map(state: HermesState) -> dict[str, EffectiveForecast]:
-    """Ticker → EffectiveForecast from the current run (H6 map, else H5 assessment).
-
-    Never fabricates identity. Invalid blobs are skipped.
-    """
-    out: dict[str, EffectiveForecast] = {}
-    for ticker, summary in deliberation_summaries(state).items():
-        raw = summary.get("effective_forecast")
-        if not isinstance(raw, dict) or not raw:
-            continue
-        try:
-            out[ticker] = EffectiveForecast.model_validate(raw)
-        except Exception:
-            logger.debug("H7: skip invalid effective_forecast for %s", ticker)
-            continue
-
-    for ticker, payload in analyst_payloads(state).items():
-        if ticker in out:
-            continue
-        raw_assessment = payload.get("forecast_assessment")
-        if not isinstance(raw_assessment, dict) or not raw_assessment:
-            continue
-        try:
-            base = ForecastAssessment.model_validate(raw_assessment)
-        except Exception:
-            continue
-        cutoff = state.knowledge_cutoff_at or base.known_at
-        out[ticker] = resolve_effective_forecast(
-            base=base,
-            amendment=None,
-            amendment_outcome=AmendmentOutcome.NONE,
-            known_at=cutoff,
-        )
-    return out
-
-
-def _reference_for(
-    *,
-    ticker: str,
-    effective: EffectiveForecast | None,
-) -> ForecastReference | None:
-    if effective is None:
-        return None
-    return ForecastReference(
-        effective_forecast_id=effective.effective_id,
-        base_forecast_id=effective.base_forecast_id,
-        amendment_id=effective.amendment_id,
-        ticker=ticker,
-        degradation_reason=effective.degradation_reason,
-    )
-
-
 def _bind_forecast_references(memo: PMDirectionMemo, state: HermesState) -> PMDirectionMemo:
-    """Attach authoritative ForecastReference per roster row; clear stale/prior IDs."""
-    eff_map = _effective_forecast_map(state)
-    roster = [
-        row.model_copy(
-            update={
-                "forecast_reference": _reference_for(
-                    ticker=row.ticker,
-                    effective=eff_map.get(row.ticker),
-                )
-            }
-        )
-        for row in memo.roster
-    ]
-    return memo.model_copy(update={"roster": roster})
+    """Attach authoritative ForecastReference per roster row from *this* run's map."""
+    return bind_forecast_references(
+        memo,
+        deliberation_by_ticker=deliberation_summaries(state),
+    )
 
 
 def _h7_node(state: HermesState) -> dict[str, Any]:
@@ -233,10 +166,4 @@ def build_h7_pm_direction() -> PipelinePhase:
     )
 
 
-__all__ = [
-    "NODE_ID",
-    "PHASE_NAME",
-    "build_h7_pm_direction",
-    "_bind_forecast_references",
-    "_effective_forecast_map",
-]
+__all__ = ["NODE_ID", "PHASE_NAME", "build_h7_pm_direction", "_bind_forecast_references"]

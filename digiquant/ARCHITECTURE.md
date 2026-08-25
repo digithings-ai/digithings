@@ -888,12 +888,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash (`supabase_io._slim_deliberation_summary`,
   deliberation payloads). **H7 forecast-reference-only (#2660 / WP4.5):** after the
-  PM LLM (or fail-soft prior-memo carry), `_bind_forecast_references` attaches one
-  typed `ForecastReference` per `TickerDirection` from the current run's effective
-  map (H6 `effective_forecast`, else H5 `forecast_assessment`) — identity only,
-  never terms/weights; missing lineage stays `forecast_reference=None` (no
-  fabricated IDs); fail-soft cannot retain prior refs. H8 still reads
-  direction/rank only. H9 forecast registry is WP4.6.
+  PM LLM (or fail-soft prior-memo carry), `bind_forecast_references` attaches one
+  typed `ForecastReference` per `TickerDirection` from current H6 lineage IDs
+  (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
+  terms/weights; missing lineage is an explicit degraded reference (null IDs +
+  `degradation_reason`, no fabricated UUIDs); fail-soft rebinds from the current
+  map and cannot retain prior refs. H8 still reads direction/rank only. H9
+  forecast registry is WP4.6.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:

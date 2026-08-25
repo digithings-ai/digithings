@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from uuid import UUID
 
 import pytest
@@ -13,20 +13,17 @@ from digiquant.olympus.hermes.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
     EffectiveSource,
-    ForecastAssessment,
     ForecastTerms,
-    PriceAnchor,
-    PriceAnchorStatus,
     RawUncertainty,
-    forecast_assessment_id,
     forecast_terms_content_hash,
 )
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
-from digiquant.olympus.hermes.phases.h7_pm_direction import (
-    _bind_forecast_references,
-    _effective_forecast_map,
-    _h7_node,
+from digiquant.olympus.hermes.models.pm_direction import (
+    ForecastReference,
+    PMDirectionMemo,
+    TickerDirection,
+    bind_forecast_references,
 )
+from digiquant.olympus.hermes.phases.h7_pm_direction import _bind_forecast_references, _h7_node
 
 pytestmark = pytest.mark.unit
 
@@ -59,7 +56,6 @@ def _effective(
     effective_id: UUID = EFF_ID,
     base_id: UUID = BASE_ID,
     amendment_id: UUID | None = AMEND_ID,
-    degradation_reason: str | None = None,
 ) -> EffectiveForecast:
     terms = _terms()
     source = EffectiveSource.AMENDMENT if amendment_id is not None else EffectiveSource.BASE
@@ -74,91 +70,25 @@ def _effective(
         amendment_outcome=(
             AmendmentOutcome.ACCEPTED if amendment_id is not None else AmendmentOutcome.NONE
         ),
-        degradation_reason=degradation_reason,
+        degradation_reason=None,
         effective_at=_TS,
         known_at=_TS,
     )
 
 
-def _state(*, deliberation: dict | None = None, analysts: dict | None = None) -> AtlasResearchState:
+def _state(*, deliberation: dict | None = None) -> AtlasResearchState:
     return AtlasResearchState(
         run_type="delta",
         run_date=RUN_DATE,
         baseline_date=date(2026, 8, 24),
         prior_context=PriorContext(),
-        phase_hermes=PhaseHermesState(
-            deliberation_summaries=deliberation or {},
-            asset_analysts=analysts or {},
-        ),
+        phase_hermes=PhaseHermesState(deliberation_summaries=deliberation or {}),
     )
-
-
-class TestEffectiveForecastMap:
-    def test_map_from_deliberation_effective_forecast(self) -> None:
-        eff = _effective()
-        state = _state(
-            deliberation={
-                "AAPL": {
-                    "ticker": "AAPL",
-                    "effective_forecast": eff.model_dump(mode="json"),
-                }
-            }
-        )
-        m = _effective_forecast_map(state)
-        assert set(m) == {"AAPL"}
-        assert m["AAPL"].effective_id == EFF_ID
-        assert m["AAPL"].amendment_id == AMEND_ID
-
-    def test_map_falls_back_to_analyst_assessment(self) -> None:
-        terms = _terms()
-        content_hash = forecast_terms_content_hash(terms)
-        fid = forecast_assessment_id(
-            ticker="MSFT", source_run_id="run-1", content_hash=content_hash
-        )
-        assessment = ForecastAssessment(
-            forecast_id=fid,
-            ticker="MSFT",
-            terms=terms,
-            source_run_id="run-1",
-            provider_invocation_id="inv-1",
-            prompt_version="v1",
-            artifact_version="h5@1",
-            price_anchor=PriceAnchor(
-                status=PriceAnchorStatus.UNAVAILABLE,
-                unavailable_reason="fixture",
-            ),
-            effective_at=_TS,
-            known_at=_TS,
-            content_hash=content_hash,
-        )
-        state = _state(
-            analysts={
-                "MSFT": {
-                    "ticker": "MSFT",
-                    "forecast_assessment": assessment.model_dump(mode="json"),
-                }
-            }
-        )
-        m = _effective_forecast_map(state)
-        assert m["MSFT"].effective_id == fid
-        assert m["MSFT"].base_forecast_id == fid
-        assert m["MSFT"].amendment_id is None
-
-    def test_map_ignores_invalid_effective_blob(self) -> None:
-        state = _state(
-            deliberation={"ZZZ": {"ticker": "ZZZ", "effective_forecast": {"broken": True}}}
-        )
-        assert _effective_forecast_map(state) == {}
 
 
 class TestBindForecastReferences:
     def test_bind_attaches_authoritative_ids(self) -> None:
         eff = _effective()
-        state = _state(
-            deliberation={
-                "AAPL": {"ticker": "AAPL", "effective_forecast": eff.model_dump(mode="json")}
-            }
-        )
         memo = PMDirectionMemo(
             date=RUN_DATE,
             roster=[
@@ -166,25 +96,25 @@ class TestBindForecastReferences:
                 TickerDirection(ticker="CASH", direction="flat", conviction_rank=2),
             ],
         )
-        bound = _bind_forecast_references(memo, state)
+        bound = bind_forecast_references(
+            memo,
+            deliberation_by_ticker={
+                "AAPL": {"ticker": "AAPL", "effective_forecast": eff.model_dump(mode="json")}
+            },
+        )
         aapl = bound.roster[0]
         assert aapl.direction == "long" and aapl.conviction_rank == 1
         assert aapl.forecast_reference is not None
         assert aapl.forecast_reference.effective_forecast_id == EFF_ID
         assert aapl.forecast_reference.base_forecast_id == BASE_ID
         assert aapl.forecast_reference.amendment_id == AMEND_ID
-        assert aapl.forecast_reference.ticker == "AAPL"
-        assert bound.roster[1].forecast_reference is None
+        cash = bound.roster[1].forecast_reference
+        assert cash is not None
+        assert cash.effective_forecast_id is None
+        assert cash.degradation_reason == "forecast_unavailable"
 
     def test_bind_overwrites_model_supplied_ids(self) -> None:
         eff = _effective()
-        state = _state(
-            deliberation={
-                "AAPL": {"ticker": "AAPL", "effective_forecast": eff.model_dump(mode="json")}
-            }
-        )
-        from digiquant.olympus.hermes.models.pm_direction import ForecastReference
-
         memo = PMDirectionMemo(
             date=RUN_DATE,
             roster=[
@@ -201,7 +131,12 @@ class TestBindForecastReferences:
                 )
             ],
         )
-        bound = _bind_forecast_references(memo, state)
+        bound = bind_forecast_references(
+            memo,
+            deliberation_by_ticker={
+                "AAPL": {"ticker": "AAPL", "effective_forecast": eff.model_dump(mode="json")}
+            },
+        )
         ref = bound.roster[0].forecast_reference
         assert ref is not None
         assert ref.effective_forecast_id == EFF_ID
@@ -209,14 +144,17 @@ class TestBindForecastReferences:
         assert bound.roster[0].direction == "flat"
         assert bound.roster[0].conviction_rank == 3
 
-    def test_missing_forecast_cannot_be_fabricated(self) -> None:
-        state = _state(deliberation={})
+    def test_missing_forecast_is_explicit_degraded(self) -> None:
         memo = PMDirectionMemo(
             date=RUN_DATE,
             roster=[TickerDirection(ticker="AAPL", direction="long", conviction_rank=1)],
         )
-        bound = _bind_forecast_references(memo, state)
-        assert bound.roster[0].forecast_reference is None
+        bound = bind_forecast_references(memo, deliberation_by_ticker={})
+        ref = bound.roster[0].forecast_reference
+        assert ref is not None
+        assert ref.effective_forecast_id is None
+        assert ref.base_forecast_id is None
+        assert ref.degradation_reason == "forecast_unavailable"
 
 
 class TestH7SuccessPathBinding:
@@ -239,8 +177,6 @@ class TestH7SuccessPathBinding:
             ],
             memo="ok",
         )
-        mock_result = MagicMock()
-        mock_result.model_copy = llm_memo.model_copy
         with patch(
             "digiquant.olympus.hermes.phases.h7_pm_direction.run_research_agent",
             return_value=llm_memo,
@@ -256,3 +192,18 @@ class TestH7SuccessPathBinding:
         assert row.narrative == "buy the dip"
         assert row.forecast_reference is not None
         assert row.forecast_reference.effective_forecast_id == EFF_ID
+
+    def test_phase_bind_wrapper_matches_model_helper(self) -> None:
+        eff = _effective()
+        state = _state(
+            deliberation={
+                "AAPL": {"ticker": "AAPL", "effective_forecast": eff.model_dump(mode="json")}
+            }
+        )
+        memo = PMDirectionMemo(
+            date=RUN_DATE,
+            roster=[TickerDirection(ticker="AAPL", direction="long", conviction_rank=1)],
+        )
+        bound = _bind_forecast_references(memo, state)
+        assert bound.roster[0].forecast_reference is not None
+        assert bound.roster[0].forecast_reference.effective_forecast_id == EFF_ID
