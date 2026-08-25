@@ -73,6 +73,18 @@ def _resolve_risk_sizing_client(deps: HermesGraphDeps) -> SupabaseClient | None:
     return None
 
 
+def _resolve_shared_client(deps: HermesGraphDeps) -> SupabaseClient | None:
+    """Prefer thesis, then risk sizing, then H9 commit client."""
+    if deps.thesis is not None and deps.thesis.client is not None:
+        return deps.thesis.client
+    client = _resolve_risk_sizing_client(deps)
+    if client is not None:
+        return client
+    if deps.commit_run is not None:
+        return deps.commit_run.client
+    return None
+
+
 def _build_h8_risk_sizing(deps: HermesGraphDeps) -> PipelinePhase:
     client = _resolve_risk_sizing_client(deps)
     if client is None:
@@ -97,6 +109,7 @@ def build_hermes_phases_thesis(
     """Thesis-first Hermes phases H1–H9 (PR 4d)."""
     deps = deps or HermesGraphDeps()
     thesis_client = deps.thesis.client if deps.thesis else None
+    shared_client = _resolve_shared_client(deps)
     phases: list[PipelinePhase] = []
     phases.append(build_h1_thesis_review(client=thesis_client))
     phases.append(build_h2_market_thesis_exploration(client=thesis_client))
@@ -104,7 +117,7 @@ def build_hermes_phases_thesis(
     phases.append(build_h4_opportunity_screener(client=thesis_client))
     phases.append(build_h5_from_state(client=thesis_client))
     phases.append(build_h6_from_state())
-    phases.append(build_h7_pm_direction())
+    phases.append(build_h7_pm_direction(client=shared_client))
     phases.append(_build_h8_risk_sizing(deps))
     phases.append(build_h9_commit_run(deps.commit_run))
     return phases
