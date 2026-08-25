@@ -1,7 +1,9 @@
 """Pre-flight: config load, prior context, data-layer probe (no LLM).
 
 See ``atlas/docs/agentic/ARCHITECTURE.md`` Pre-Flight Protocol.
-``preflight_reflect`` resolves due ``decision_log`` rows (Phase B #432).
+``preflight_reflect`` resolves due ``decision_log`` rows (Phase B #432) and,
+beside that path, matured typed forecast outcomes (#2676 / WP5.2) — never by
+converting legacy conviction scores inside ``decision_log``.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from digiquant.olympus.atlas.decision_log import (
     fetch_recent_lessons,
     resolve_pending,
 )
+from digiquant.olympus.atlas.forecast_outcomes import resolve_matured_forecast_outcomes
 from digiquant.olympus.atlas.sectors_config import load_sectors
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
@@ -48,6 +51,7 @@ from digiquant.olympus.atlas.supabase_io import (
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
+from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
@@ -487,6 +491,18 @@ def build_preflight_reflect_node(
             run_date=state.run_date,
             reflector=deps.reflector,
         )
+        # WP5.2 — typed forecast outcomes beside decision_log reflection.
+        try:
+            cutoff = require_knowledge_cutoff_at(state)
+        except ValueError:
+            logger.info("forecast outcomes: skip resolve — knowledge_cutoff_at missing on state")
+        else:
+            resolve_matured_forecast_outcomes(
+                client=deps.client,
+                run_date=state.run_date,
+                knowledge_cutoff_at=cutoff,
+                current_run_id=str(state.run_id) if state.run_id is not None else None,
+            )
         return {}
 
     return reflect

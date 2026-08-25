@@ -172,12 +172,13 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/readers:
 `digiquant.olympus.atlas.forecast_registry`.
 
-### Forecast calibration registry — migration 080 (#2672 / WP5.1)
+### Forecast calibration registry — migration 080 (#2672 / WP5.1, writer #2676 / WP5.2)
 
 Private append-only prospective outcome labels and shadow calibration versions.
-Schema + Pydantic contracts only in this migration — no resolver/writer and no
-H8 cutover (Tasks 5.2–5.4). No historical backfill, no portfolio-contribution
-columns, no public base view.
+No historical backfill, no portfolio-contribution columns, no public base view.
+WP5.1 shipped schema + Pydantic contracts; WP5.2 adds the trading-session outcome
+resolver (`digiquant.olympus.atlas.forecast_outcomes`) writing
+`olympus_forecast_outcomes` only. Calibrator writers (5.3–5.4) and H8 cutover remain later.
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -188,7 +189,8 @@ columns, no public base view.
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_calibration_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
-`digiquant.olympus.hermes.models.forecast_calibration`.
+`digiquant.olympus.hermes.models.forecast_calibration`. Outcome writer:
+`digiquant.olympus.atlas.forecast_outcomes` (WP5.2).
 
 ### Live quote transport — new in migration 063 (#1807)
 
