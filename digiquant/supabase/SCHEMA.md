@@ -267,7 +267,21 @@ per `period_date` and at most one superseder per prior id. Models/engine/io:
   nav day return without deleting either path; `--dry-run` reports without INSERT. Cold
   ledger (open lots empty while a positions book exists) declines with exit 3.
 - Metrics (`refresh_performance_metrics.py`) prefer a finalized period for `pnl_pct` / indexed
-  NAV when present so attribution job order cannot alter daily semantics.
+  NAV when present; never feed `current_book_lookback` into daily `pnl_pct` (#2598).
+
+### Lookback vs realized attribution — migration 073 (#2598)
+
+Separates the 21-day current-book diagnostic from realized period contribution
+(OLY-REV-007 / Phase 0 Task 3.3).
+
+| Object | Kind | Purpose |
+|--------|------|---------|
+| `current_book_lookback` | table (renamed from `position_attribution`) | Diagnostic only: today's book weights × trailing return window (default 21 calendar days). Columns include `window_start_date`, `window_end_date`, `lookback_days`, `contract='current_book_lookback'`. Anon SELECT (dashboard). |
+| `position_attribution` | compatibility VIEW | Deprecated alias over `current_book_lookback`. Same columns; delete after all readers migrate (Task 3.4 follow-up). |
+| `daily_realized_attribution` | VIEW (`security_invoker`) | Authoritative per-ticker daily contribution from the current finalized `olympus_accounting_*` tip only. Empty when no final period exists — never substitutes lookback. `service_role` SELECT only until Task 3.4 curated public views. |
+
+Writer: `scripts/atlas/refresh_attribution.py` upserts `current_book_lookback` only.
+Realized rows come from the accounting finalizer (#2597), not the lookback job.
 
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL
