@@ -1656,12 +1656,13 @@ readers pass retention checks — not as part of #2422.
   that both new exit codes are reachable). The atlas module imports the table names from the
   writers rather than restating them, so a rename breaks the test instead of drifting past it.
 
-#### Period accounting contracts and pure engine (#2596, Task 3.1)
+#### Period accounting contracts, engine, and EOD finalizer (#2596/#2597)
 
-Closes OLY-REV-007 / OLY-REV-008 for the calculation boundary: exact-date target weights must
-not be applied across a full return interval. One event-boundary engine owns NAV, P&L, and
-daily contribution math from authoritative opening holdings/cash, fills/costs, and closing
-marks.
+Closes OLY-REV-007 / OLY-REV-008 for the calculation and persistence boundary: exact-date
+target weights must not be applied across a full return interval. One event-boundary engine
+owns NAV, P&L, and daily contribution math from authoritative opening holdings/cash,
+fills/costs, and closing marks. Task 3.2 persists one coherent EOD period atomically enough
+that metrics/attribution job order cannot alter meaning.
 
 - **Models**: `digiquant/src/digiquant/olympus/accounting/models.py` — frozen/strict Pydantic
   v2 contracts (`AccountingPolicy`, `PeriodAccountingInput`, `AccountingPeriod`, ticker
@@ -1673,19 +1674,37 @@ marks.
   → `incomplete`, stale marks / ignored corporate actions → `estimated`, residual /
   negative quantity / benchmark boundary mismatch → `failed`. Exact same inputs reproduce
   the same period `id` (`uuid5` over a canonical digest).
+- **Persistence**: `digiquant/src/digiquant/olympus/accounting/io.py` — service-role
+  `INSERT` only into `olympus_accounting_{periods,contributions,holdings}`. Deterministic
+  child PKs; exact retry is a no-op (or child repair). Restatement appends a superseding
+  period (`supersedes_id`); never in-place correction. `select_final_period` returns only a
+  complete head with `status=final` — provisional H9 `nav_history`/`positions` rows are
+  continuity data and are never selected as final. A crash after the period INSERT leaves
+  an incomplete child set that is not selectable as final until retry repairs it.
+- **Finalizer**: `digiquant/scripts/atlas/finalize_period_accounting.py` — assembles ledger
+  fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
+  day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
+  reconcile). Mode also via `OLYMPUS_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
+  ledger declines with exit 3 (no partial final). Wired ahead of metrics in
+  `pipeline-atlas-metrics.yml` (`continue-on-error` while shadowing).
+- **Metrics cutover (dual-write)**: `refresh_performance_metrics.py` prefers a finalized
+  accounting period for `pnl_pct` and indexed `nav_history` compounding when one exists;
+  otherwise falls through to attribution sum then provisional H9 nav. H9 keeps writing
+  provisional continuity; public curated views remain Task 3.4.
 - **Schema**: migration `072_olympus_period_accounting.sql` —
   `olympus_accounting_{periods,contributions,holdings}`. **User-private** (vision brief):
   RLS with zero policies; `PUBLIC`/`anon`/`authenticated` revoked; `service_role`
-  `SELECT, INSERT` only; append-only mutation triggers. No public views in this migration
-  (Task 3.4). No finalizer writer yet (Task 3.2).
+  `SELECT, INSERT` only; append-only mutation triggers. No public views (Task 3.4).
 - **Identities** (when `status == final`):
   `E1 = E0 + Σ NetPnL_i + CashPnL`;
   `E1 = ClosingCash + Σ q_i,1 P_i,1`;
   `Σ Contribution_i + CashContribution = (E1 − E0) / E0`.
 - **Tests**: `tests/dq/atlas/test_period_accounting.py`,
-  `tests/dq/atlas/test_migration_072.py`.
+  `tests/dq/atlas/test_migration_072.py`,
+  `tests/dq/atlas/test_finalize_period_accounting.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
-  current-book lookback as realized attribution, public base-table grants on accounting.
+  current-book lookback as realized attribution, public base-table grants on accounting,
+  selecting provisional rows as final, in-place period correction.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 

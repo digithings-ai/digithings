@@ -238,23 +238,36 @@ Writers: `execute_at_open.py` stamps `authoritative` on the ledger path and `leg
 prose path. Cutover/retirement of prose writers is gated on seeded `holding_lots` and removal
 of `--no-ledger` (see ARCHITECTURE.md cutover section), not on this migration alone.
 
-### Period accounting - new in migration 072 (#2596)
+### Period accounting - migration 072 (#2596) + finalizer (#2597)
 
-Private event-boundary EOD accounting schema (Phase 0 Task 3.1). User-private
+Private event-boundary EOD accounting schema (Phase 0 Tasks 3.1–3.2). User-private
 portfolio/accounting — never grant base tables to `anon`/`authenticated`; curated public
-views are Task 3.4 only. Schema only here; Task 3.2 owns the finalizer writer.
+views are Task 3.4 only.
 
 | Table | PK | Purpose |
 |-------|----|---------|
 | `olympus_accounting_periods` | `(id UUID)` | One reconciled (or explicitly non-final) period: opening/closing equity & cash, gross/net PnL, fees/slippage, residual, Decimal tolerances, optional benchmark, `status` (`final`/`estimated`/`incomplete`/`failed`), `quality_reasons[]`, backward-only `supersedes_id`. `status=final` requires empty `quality_reasons`. Deterministic `id` from the pure engine. |
-| `olympus_accounting_contributions` | `(id UUID)` | Per-ticker gross/net PnL, fees, slippage, contribution fraction; FK `(period_id, period_date)` → periods. |
-| `olympus_accounting_holdings` | `(id UUID)` | EOD holdings (`quantity`, nullable `mark`/`market_value`); FK to periods. |
+| `olympus_accounting_contributions` | `(id UUID)` | Per-ticker gross/net PnL, fees, slippage, contribution fraction; FK `(period_id, period_date)` → periods. Deterministic ids from `(period_id, symbol)`. |
+| `olympus_accounting_holdings` | `(id UUID)` | EOD holdings (`quantity`, nullable `mark`/`market_value`); FK to periods. Deterministic ids from `(period_id, symbol)`. |
 
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_accounting_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial unique indexes enforce one current root period
-per `period_date` and at most one superseder per prior id. Models/engine:
+per `period_date` and at most one superseder per prior id. Models/engine/io:
 `digiquant.olympus.accounting`.
+
+**Finalizer semantics (`accounting/io.py` + `scripts/atlas/finalize_period_accounting.py`):**
+
+- Append-only INSERT; exact same-input retry is idempotent (same PKs; no-op or child repair).
+- Restatement appends a new period that `supersedes_id`-points at the prior tip — never mutates.
+- `select_final_period` returns only a **complete** head with `status=final`. Incomplete marks,
+  estimated/failed status, or a period row missing its children are **not** authoritative.
+- Provisional H9 `nav_history` / `positions` remain continuity data and are **never** selected
+  as final accounting. Shadow mode (`--shadow` / default) reconciles period return vs legacy
+  nav day return without deleting either path; `--dry-run` reports without INSERT. Cold
+  ledger (open lots empty while a positions book exists) declines with exit 3.
+- Metrics (`refresh_performance_metrics.py`) prefer a finalized period for `pnl_pct` / indexed
+  NAV when present so attribution job order cannot alter daily semantics.
 
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL

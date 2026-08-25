@@ -74,21 +74,30 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra atlas
 
-      # STEP ORDER IS LOAD-BEARING — metrics BEFORE attribution. Do not reorder (#1746).
-      # upsert_portfolio_metrics_daily prefers SUM(position_attribution.contribution_pct)
-      # for pnl_pct and falls back to the nav day-over-day return. Those two are NOT the
-      # same quantity: refresh_attribution computes a 21-day trailing window return
-      # (_DEFAULT_WINDOW_DAYS = 21), so the sum is a 21-day contribution, ~5-10x the daily
-      # move and often the opposite sign (prod 2026-07-29: attribution sum +0.98% vs nav day
-      # return -0.42%; XLE position_return_pct +5.49%, DBO +14.94% on a single "day").
-      # Running metrics first means the attribution rows for today do not exist yet, so
-      # pnl_pct takes the correct one-day nav path. Reordering would put a 21-day number in
-      # a daily column on every row. Tracked separately; do not "fix" it by reordering here.
+      # STEP ORDER (#2597): accounting finalizer BEFORE metrics. Once a complete
+      # status=final period exists, metrics consume it directly for pnl_pct / indexed
+      # NAV — attribution job order can no longer alter daily semantics. Metrics still
+      # runs before attribution so the legacy 21-day lookback cannot pollute pnl_pct
+      # on days without a finalized period (#1746).
       #
-      # Exit 3 from this step = no positions book for today UTC (stale-book guard, #1746;
-      # 22 of 33 green runs 2026-06-22..07-31 silently re-stamped an older row instead).
-      # That red run is the intended signal, not a flake: it means the upstream Olympus
-      # book never materialized, so there is no new date to compute.
+      # Exit 3 from the metrics step = no positions book for today UTC (stale-book
+      # guard, #1746). That red run is the intended signal, not a flake.
+      - name: Finalize period accounting (shadow; private tables)
+        env:
+          CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          OLYMPUS_ACCOUNTING_FINALIZER: shadow
+          RUN_DATE: ${{ inputs.date }}
+        run: |
+          if [ -n "$RUN_DATE" ]; then
+            uv run --frozen --no-sync python digiquant/scripts/atlas/finalize_period_accounting.py --supabase --date "$RUN_DATE"
+          else
+            uv run --frozen --no-sync python digiquant/scripts/atlas/finalize_period_accounting.py --supabase
+          fi
+        continue-on-error: true
+
       - name: Refresh portfolio_metrics (Sharpe / vol / drawdown / NAV continuity)
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
