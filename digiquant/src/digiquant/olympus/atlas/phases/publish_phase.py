@@ -23,6 +23,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document,
     publish_document_delta,
 )
+from digiquant.olympus.attention_plan_graph import maybe_publish_attention_plan_shadow
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +228,19 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
         date_str = state.run_date.isoformat()
         run_type = state.run_type
         artifacts: list[PublishedArtifact] = []
+
+        # Track C glass-box (#2622): shadow AttentionPlan for Pipeline Inputs.
+        # Fail-soft — a planner/publish miss must not block segment/digest writes.
+        try:
+            attention = maybe_publish_attention_plan_shadow(client=deps.client, state=state)
+        except Exception:
+            logger.exception(
+                "publish: attention-plan shadow failed for %s; continuing",
+                date_str,
+            )
+            attention = None
+        if attention is not None:
+            artifacts.append(attention)
 
         for bag in (
             state.phase1_outputs,

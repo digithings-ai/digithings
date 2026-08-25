@@ -868,11 +868,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `off` \| `shadow` only (no enforce); `actuated` is always false. House
   ProfileConfig is the default pin; overlay pins fail closed when missing. The
   planner cannot expand H4 roster/cap or carry H7/H8 authority fields.
-  Glass-box persistence (#1945): `digiquant.olympus.attention_plan_io` publishes
-  `document_key='attention-plan'` / `doc_type='Attention Plan'` with refresh-reason
-  labels + read-only profile pin for Pipeline; graph wiring that *calls* the
-  publisher is a follow-up (UI must not invent rows). Migration `077` registers
-  the column allow-list value.
+  Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
+  publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
+  refresh-reason labels + read-only profile pin. Daily wiring:
+  `attention_plan_graph.maybe_publish_attention_plan_shadow` runs inside Atlas
+  `publish_phase` (fail-soft) when triage decisions exist and
+  `OLYMPUS_PLANNER_MODE=shadow` (default; `off` skips). Migrations `077` (doc_type)
+  and `078` (category `planner`) register allow-list values. UI must not invent
+  rows without a published document.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
