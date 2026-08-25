@@ -858,6 +858,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   fails closed when the exact `olympus_profile_config.id` is missing. Overlays must
   not fork the graph or cancel the house run. Models:
   `digiquant.olympus.profile_config`.
+  Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
+  `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
+  publish-if-missing only — house writes defaults; overlays never fork per-user
+  research trees. Models/store: `digiquant.olympus.research_corpus`.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
