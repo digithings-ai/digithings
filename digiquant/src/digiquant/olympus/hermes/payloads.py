@@ -75,5 +75,11 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
             "carry_reason": summary.get("carry_reason"),
             "escalated": summary.get("escalated", False),
             "cap_reason": summary.get("cap_reason"),
+            "base_forecast_id": summary.get("base_forecast_id"),
+            "amendment_id": summary.get("amendment_id"),
+            "effective_forecast_id": summary.get("effective_forecast_id"),
+            "amendment_outcome": summary.get("amendment_outcome"),
+            "forecast_degradation": summary.get("forecast_degradation"),
+            "effective_forecast": summary.get("effective_forecast"),
         }
     return out

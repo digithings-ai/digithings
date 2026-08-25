@@ -874,16 +874,20 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
   fallback). Checkpoint resume preserves the pinned value; naive / non-UTC
   stamps are rejected at capture and on the state field validator.
-  **Typed forecast contracts (#2637 / WP4.2, #2649 / WP4.3).** Frozen Pydantic
+  **Typed forecast contracts (#2637 / WP4.2, #2649 / WP4.3, #2656 / WP4.4).** Frozen Pydantic
   models in `hermes/models/forecast.py` (`ForecastTerms`, `ForecastAssessment`,
-  `PriceAnchor`) separate scenario economics from UUID5 identity / content
-  hash. Optional `AnalystPayload.forecast` may carry terms; legacy
-  `conviction_score` / `price_targets` never synthesize them. H5 full/edit
+  `ForecastAmendment`, `EffectiveForecast`, `PriceAnchor`) separate scenario economics
+  from UUID5 identity / content hash. Optional `AnalystPayload.forecast` may carry terms;
+  legacy `conviction_score` / `price_targets` never synthesize them. H5 full/edit
   materializes an immutable `ForecastAssessment` via
   `hermes/phases/portfolio_common.py` (`materialize_forecast_assessment`,
   serializer includes assessment; legacy priors without typed forecast force
   full; skip preserves identity; partial nested forecast edits are rejected).
-  H6 amendments / H7 binding / H9 registry are later WP4 tasks.
+  H6 appends optional evidence-linked `ForecastAmendment` without rewriting the base;
+  `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
+  amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
+  carry retain effective identity/time/hash (`supabase_io._slim_deliberation_summary`,
+  deliberation payloads). H7 binding / H9 registry are later WP4 tasks.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:

@@ -245,3 +245,99 @@ class TestLegacyAnalystDoesNotDeriveForecast:
         assert payload.forecast is terms
         assert payload.forecast.base_return == Decimal("0.04")
         assert payload.price_targets == {"base": 999}
+
+
+class TestForecastAmendmentAndEffective:
+    def test_accepted_amendment_preserves_immutable_base(self) -> None:
+        from digiquant.olympus.hermes.models.forecast import (
+            AmendmentOutcome,
+            EffectiveSource,
+            materialize_forecast_amendment,
+            resolve_effective_forecast,
+        )
+
+        base = _assessment()
+        new_terms = _terms(base_return=Decimal("0.01"), bull_return=Decimal("0.10"))
+        amendment = materialize_forecast_amendment(
+            base=base,
+            terms=new_terms,
+            reason="pm_challenge_cut_base",
+            source_run_id="run-h6",
+            provider_invocation_id="inv-h6",
+            effective_at=_TS,
+            known_at=_TS,
+            new_evidence_ids=("ev-h6",),
+        )
+        assert amendment.base_forecast_id == base.forecast_id
+        assert amendment.terms.base_return == Decimal("0.01")
+        assert base.terms.base_return == Decimal("0.04")
+
+        effective = resolve_effective_forecast(
+            base=base,
+            amendment=amendment,
+            amendment_outcome=AmendmentOutcome.ACCEPTED,
+        )
+        assert effective.source is EffectiveSource.AMENDMENT
+        assert effective.amendment_id == amendment.amendment_id
+        assert effective.effective_id == amendment.amendment_id
+        assert effective.terms.base_return == Decimal("0.01")
+        assert base.terms.base_return == Decimal("0.04")
+
+    def test_rejected_amendment_keeps_base_effective(self) -> None:
+        from digiquant.olympus.hermes.models.forecast import (
+            AmendmentOutcome,
+            EffectiveSource,
+            materialize_forecast_amendment,
+            resolve_effective_forecast,
+        )
+
+        base = _assessment()
+        amendment = materialize_forecast_amendment(
+            base=base,
+            terms=_terms(base_return=Decimal("-0.01"), bear_return=Decimal("-0.20")),
+            reason="bad_partial",
+            source_run_id="run-h6",
+            provider_invocation_id="inv-h6",
+            effective_at=_TS,
+            known_at=_TS,
+        )
+        effective = resolve_effective_forecast(
+            base=base,
+            amendment=amendment,
+            amendment_outcome=AmendmentOutcome.REJECTED,
+            degradation_reason="amendment_rejected",
+        )
+        assert effective.source is EffectiveSource.BASE
+        assert effective.effective_id == base.forecast_id
+        assert effective.amendment_id is None
+        assert effective.amendment_outcome is AmendmentOutcome.REJECTED
+        assert effective.degradation_reason == "amendment_rejected"
+
+    def test_knowledge_cutoff_excludes_future_known_amendment(self) -> None:
+        from digiquant.olympus.hermes.models.forecast import (
+            AmendmentOutcome,
+            EffectiveSource,
+            materialize_forecast_amendment,
+            resolve_effective_forecast,
+        )
+
+        base = _assessment()
+        future = _TS + timedelta(hours=2)
+        amendment = materialize_forecast_amendment(
+            base=base,
+            terms=_terms(base_return=Decimal("0.02")),
+            reason="late_amendment",
+            source_run_id="run-h6",
+            provider_invocation_id="inv-h6",
+            effective_at=future,
+            known_at=future,
+        )
+        effective = resolve_effective_forecast(
+            base=base,
+            amendment=amendment,
+            amendment_outcome=AmendmentOutcome.ACCEPTED,
+            known_at=_TS,
+        )
+        assert effective.source is EffectiveSource.BASE
+        assert effective.amendment_outcome is AmendmentOutcome.REJECTED
+        assert effective.degradation_reason == "amendment_after_knowledge_cutoff"
