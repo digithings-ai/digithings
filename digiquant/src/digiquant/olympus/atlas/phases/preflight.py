@@ -48,6 +48,7 @@ from digiquant.olympus.atlas.supabase_io import (
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
+from digiquant.profiles.pipeline_loader import pin_pipeline_profile_at_preflight
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
 _SUPABASE_READ_ERRORS = (OSError, RuntimeError, ValueError, TypeError, KeyError)
@@ -410,10 +411,18 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             portfolio_performance=portfolio_performance,
         )
 
+        # Track B / #2607: pin PipelineProfile into state (house always-on).
+        # Mode defaults to off — no H4/H7/H8 authority change; not a graph fork.
+        pipeline_profile = pin_pipeline_profile_at_preflight(
+            deps.client,
+            overlay_profile_id=state.overlay_profile_id,
+        )
+
         return {
             "config": config,
             "prior_context": prior_context,
             "data_layer": data_layer,
+            "pipeline_profile": pipeline_profile,
         }
 
     return preflight

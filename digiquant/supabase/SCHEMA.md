@@ -299,6 +299,27 @@ Separates the 21-day current-book diagnostic from realized period contribution
 Writer: `scripts/atlas/refresh_attribution.py` upserts `current_book_lookback` only.
 Realized rows come from the accounting finalizer (#2597), not the lookback job.
 
+### Pipeline profiles — migration 075 (#2607)
+
+DB-backed `ProfileConfig` / `PipelineProfile` seam (Track B). **Not** DigiChat
+`InvestmentProfile` UI prefs. digithings house row is always-on and immutable.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_pipeline_profiles` | `(profile_id text)` | Versioned run policy JSONB (`config`: universe, risk, research_themes, planner_budgets). `kind` `house`\|`overlay`. House CHECK: `profile_id=digithings-house`, `house_run_id=digithings-house-run`, `always_on`. Overlays must keep the same `house_run_id` and cannot be `always_on`. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT, UPDATE`. Trigger
+`reject_olympus_pipeline_profile_house_mutation` blocks UPDATE/DELETE on the house row
+and promotion of overlays to house / replacement of `house_run_id`. Unique partial index
+enforces exactly one `kind='house'` row. Seed inserts the digithings house baseline
+(`ON CONFLICT DO NOTHING`).
+
+Loader/pin: `digiquant.profiles.pipeline_loader` → `AtlasResearchState.pipeline_profile`
+at preflight. Mode default `off` (`OLYMPUS_PIPELINE_PROFILE_MODE`); shadow does not
+apply overlay to H4/H7/H8 authority. Shared-corpus WP12 / planner WP13 enforcement are
+follow-ons (hooks only in `research_themes` / `planner_budgets`).
+
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL
 DEFAULT now()` database write clock, matching the migration-067 telemetry idiom. RLS is

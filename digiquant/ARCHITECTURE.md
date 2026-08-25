@@ -1729,6 +1729,32 @@ that metrics/attribution job order cannot alter meaning.
   selecting provisional rows as final, in-place period correction,
   combining finalized + legacy into one unlabeled value.
 
+### PipelineProfile / ProfileConfig seam — migration 075 (#2607)
+
+Track B pull-forward: DB-backed **run policy** (universe, risk prefs, research themes,
+planner budgets) for the **same** Atlas→Hermes topology — not a graph fork, not DigiChat
+`InvestmentProfile` UI prefs.
+
+- **Models**: `digiquant.profiles.pipeline_profile` — `ProfileConfig`, `PipelineProfile`,
+  `PinnedPipelineProfile`. House constants: `HOUSE_PROFILE_ID=digithings-house`,
+  `HOUSE_RUN_ID=digithings-house-run`.
+- **Loader**: `digiquant.profiles.pipeline_loader.pin_pipeline_profile_at_preflight` —
+  fail-soft; missing/invalid config → in-code house baseline. Mode via
+  `OLYMPUS_PIPELINE_PROFILE_MODE` (`off` default | `shadow` | `active`). Overlay id via
+  state `overlay_profile_id` or `OLYMPUS_PIPELINE_PROFILE_OVERLAY_ID`.
+- **Preflight pin**: `AtlasResearchState.pipeline_profile` set in
+  `atlas.phases.preflight` without forking topology. `off`/`shadow` keep
+  `applies_overlay=False` and `effective_config` = house. Even `active` keeps
+  `h4_roster_cap_unchanged` / `h7_h8_authority_unchanged` True — this seam does not
+  expand H4 or rewrite H7/H8 (WP13 enforcement is a follow-on).
+- **Schema**: `075_olympus_pipeline_profiles.sql` — `olympus_pipeline_profiles` with house
+  identity CHECK, unique one-house index, immutable house trigger, house seed row.
+  RLS + revoke anon; `service_role` SELECT+INSERT+UPDATE. No public views.
+- **Tests**: `tests/dq/profiles/test_pipeline_profile.py`,
+  `tests/dq/profiles/test_pipeline_loader.py`, `tests/dq/atlas/test_migration_075.py`.
+- **Anti-goals**: per-user graph forks; canceling/replacing the house run; private research
+  trees; treating DigiChat intake profiles as this seam; live-trading / digikey changes.
+
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
 The digiquant shared backend is the **`core`** Supabase project — the project historically

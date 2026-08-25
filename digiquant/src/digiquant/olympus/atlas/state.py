@@ -17,6 +17,8 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.profiles.pipeline_profile import PinnedPipelineProfile
+
 
 class SegmentSlotCollisionError(RuntimeError):
     """Two nodes wrote the same segment slug in one run — a wiring bug."""
@@ -529,6 +531,16 @@ class AtlasResearchState(BaseModel):
     config: AtlasConfigBundle = Field(default_factory=AtlasConfigBundle)
     prior_context: PriorContext = Field(default_factory=PriorContext)
     data_layer: DataLayerSnapshot = Field(default_factory=DataLayerSnapshot)
+    # Track B / #2607 — PipelineProfile pin (house always present). Not a graph fork.
+    # Default None until preflight; overlay_profile_id selects an optional overlay.
+    pipeline_profile: PinnedPipelineProfile | None = None
+    overlay_profile_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional overlay profile_id for Track B pin. Never cancels the "
+            "digithings house run; mode via OLYMPUS_PIPELINE_PROFILE_MODE (off/shadow)."
+        ),
+    )
 
     # Parallel fan-out fields: Annotated with the segment-dict reducer so
     # LangGraph merges concurrent writes from per-segment phase nodes instead
