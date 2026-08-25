@@ -140,6 +140,22 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/loader:
 `digiquant.olympus.profile_config`. Preflight pins via
 `pin_profile_config_for_preflight` into `AtlasConfigBundle.profile_config*`.
 
+### Shared research corpus — migration 076 (#2613 / Track B WP12-class)
+
+Private append-only **tenant-agnostic** research corpus pins. Keys are
+`theme:` / `asset:` / `segment:` only — no profile/user id in the key. House
+writers publish defaults; overlays may only publish-if-missing (application
+layer). Portfolio/book data does not belong here.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_research_corpus` | `(id UUID)` | Exact pin id (= `ResearchCorpusPin.version_id`). Columns: `corpus_key`, `schema_version`, `writer_role` (`house` \| `overlay_request`), `label`, `summary`, `payload` (jsonb; CHECK forbids tenant keys), `recorded_at`. Unique on `corpus_key`. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_research_corpus_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/store:
+`digiquant.olympus.research_corpus` (`ResearchCorpusStore.publish_if_missing`).
+
 ### Live quote transport — new in migration 063 (#1807)
 
 The only **table** in the digiquant.io public read surface (the 050 trio are views), and the
