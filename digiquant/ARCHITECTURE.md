@@ -939,6 +939,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   without inferring notional from NAV/weights. Currency is caller-supplied (Phase 0
   rows carry no currency column); missing fee/slippage on pre-070 executions raises
   `ActionCostBindingError` rather than defaulting to zero.
+  **Observational cost/liquidity (#2703 / WP7.2):** pure contracts in
+  `hermes/models/cost_liquidity.py` and estimator in `hermes/cost_liquidity.py`
+  consume `ActionCostInput`, prospective OHLCV/technicals, and resolved
+  `RiskPolicy.cost_coefficients` to emit `LiquiditySnapshot`, `ActionCostEstimate`,
+  and `ActionCostOutcome`. Spread uses labeled high-low range fractions (not quotes);
+  missing economics map to `unpriceable`/`degraded` with explicit reasons — never
+  zero-by-omission. Phase 1 observational only; no H9 persistence yet (WP7.3).
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
