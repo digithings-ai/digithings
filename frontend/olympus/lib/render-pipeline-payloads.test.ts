@@ -8,12 +8,14 @@ import {
 import {
   cleanMemoProse,
   isAnalystSpecialistPayload,
+  isAttentionPlanPayload,
   isDebateSummaryPayload,
   isMasterDigestPayload,
   isRebalancePayload,
   isRiskDebatePayload,
   isSegmentReportPayload,
   renderAnalystSpecialistMarkdown,
+  renderAttentionPlanMarkdown,
   renderDebateSummaryMarkdown,
   renderMasterDigestMarkdown,
   renderRebalanceMarkdown,
@@ -435,5 +437,56 @@ describe('snapshot-context digest helpers', () => {
     const bullets = extractDigestContextBullets(fixtureDigest());
     expect(bullets.length).toBeGreaterThan(0);
     expect(bullets[0]).toMatch(/^US equities: /);
+  });
+});
+
+describe('AttentionPlan glass-box renderer (#1945)', () => {
+  const planPayload = {
+    doc_type: 'attention_plan',
+    date: '2026-08-25',
+    planner_mode: 'shadow',
+    actuated: false,
+    shadow: true,
+    profile_pin: {
+      profile_key: 'house',
+      profile_config_version_id: '00000000-0000-0000-0000-000000000001',
+      is_house_default: true,
+      label: 'digithings house',
+    },
+    plan: {
+      plan_id: '00000000-0000-0000-0000-000000000002',
+      schema_version: 1,
+      run_date: '2026-08-25',
+      h4_roster: ['SPY', 'QQQ'],
+      h4_roster_fingerprint: 'a'.repeat(64),
+      decisions: [
+        {
+          artifact_key: 'segment:macro',
+          action: 'carry',
+          proposed_edit_mode: 'skip',
+          refresh_reasons: ['triage_quiet', 'incumbent_skip'],
+          refresh_reason_labels: ['Triage marked the artifact quiet', 'Incumbent skip / carry'],
+        },
+      ],
+    },
+    incumbent_edit_modes: { 'segment:macro': 'skip' },
+  };
+
+  it('sniffs attention-plan payloads by doc_type and document key', () => {
+    expect(isAttentionPlanPayload(planPayload)).toBe(true);
+    expect(isAttentionPlanPayload(BONDS_PAYLOAD, 'attention-plan')).toBe(true);
+    expect(isAttentionPlanPayload(BONDS_PAYLOAD)).toBe(false);
+  });
+
+  it('renders profile pin and refresh reasons without raw JSON', () => {
+    const md = renderAttentionPlanMarkdown(planPayload);
+    expect(md).toContain('# Attention plan — 2026-08-25');
+    expect(md).toContain('digithings house');
+    expect(md).toContain('segment:macro');
+    expect(md).toContain('Triage marked the artifact quiet');
+    expect(md).not.toContain('```json');
+    expect(renderDocumentMarkdownFromPayload(planPayload, 'attention-plan')).toContain(
+      'Refresh decisions',
+    );
   });
 });

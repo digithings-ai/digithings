@@ -106,7 +106,9 @@ When touching `digiquant/src/digiquant/olympus/`:
    - Track B WP13-class shadow (#2616): `digiquant.olympus.attention_plan.plan_attention_shadow`
      records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
      never actuates; cannot expand H4 or rewrite H7/H8).
-5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
+   - Track C glass-box (#1945): `digiquant.olympus.attention_plan_io` publishes
+     `attention-plan` documents for Pipeline (refresh reasons + profile pin). Graph
+     call-site wiring is a follow-up — do not fabricate UI rows.5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
    sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.
