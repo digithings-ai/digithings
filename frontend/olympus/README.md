@@ -291,8 +291,10 @@ reasoning workflow without replacing their domain interactions:
   Historical runs without ingestion-time events say "Call details were not recorded for
   this run"; they are never reconstructed from aggregate diagnostics.
 - Graph status is explicit: not run, state-only operation, persisted artifact, expected
-  artifact missing, and parallel dispatch. Snapshot presence establishes that a run was
-  recorded even when it published no documents.
+  artifact missing, parallel dispatch, and stage overview (`lib/pipeline-topology-status.ts`).
+  Atlas / Hermes / Learning bands gate active chrome — research artifacts never paint Hermes
+  or Learning as run. Snapshot presence establishes that a run was recorded even when it
+  published no documents (degraded reach across bands).
 - **Why** owns one reasoning command band above the shared responsive tab bar.
   `?why=read` presents the latest synthesis as a divided reading workspace;
   `?why=deliberations` presents rebalance actions, risk and ticker debates,

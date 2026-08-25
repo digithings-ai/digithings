@@ -177,6 +177,22 @@ describe('layoutPipeline', () => {
     expect(node?.runStatus).toBe('persisted-artifact');
   });
 
+  it('collapsed day does not paint Hermes/Learning stages as stage-overview', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['macro']),
+      artifacts: [],
+    };
+    const l = layoutPipeline(day, collapsed);
+    const byId = (id: string) => l.nodes.find((n) => n.id === id);
+    expect(byId('inputs')?.runStatus).toBe('stage-overview');
+    expect(byId('research')?.runStatus).toBe('stage-overview');
+    expect(byId('selection')?.runStatus).toBe('not-run');
+    expect(byId('decision')?.runStatus).toBe('not-run');
+    expect(byId('learning')?.runStatus).toBe('not-run');
+  });
+
   it('#1259: digest node resolves via digest-delta on a delta day (no plain `digest` key)', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},
