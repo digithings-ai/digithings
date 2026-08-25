@@ -1,10 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { Layers, BookMarked, Scale, TrendingUp } from 'lucide-react';
+import {
+  Layers,
+  BookMarked,
+  Scale,
+  TrendingUp,
+  ScrollText,
+  CalendarRange,
+} from 'lucide-react';
 import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 
-export type PortfolioSectionId = 'holdings' | 'theses' | 'performance' | 'attribution';
+export type PortfolioSectionId =
+  | 'holdings'
+  | 'theses'
+  | 'tearsheet'
+  | 'ledger'
+  | 'period'
+  | 'attribution';
 
 const SECTIONS: {
   id: PortfolioSectionId;
@@ -14,7 +27,9 @@ const SECTIONS: {
 }[] = [
   { id: 'holdings', label: 'Holdings', href: '/portfolio', icon: Layers },
   { id: 'theses', label: 'Theses', href: '/portfolio?tab=theses', icon: BookMarked },
-  { id: 'performance', label: 'Performance', href: '/portfolio/performance', icon: TrendingUp },
+  { id: 'tearsheet', label: 'Tearsheet', href: '/portfolio/performance', icon: TrendingUp },
+  { id: 'ledger', label: 'Ledger', href: '/portfolio/ledger', icon: ScrollText },
+  { id: 'period', label: 'Period', href: '/portfolio/period', icon: CalendarRange },
   { id: 'attribution', label: 'Attribution', href: '/portfolio/attribution', icon: Scale },
 ];
 
