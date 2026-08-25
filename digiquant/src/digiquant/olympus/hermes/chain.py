@@ -156,6 +156,10 @@ def _invoke_resumable(
     Distinct thread per graph (``{thread_base}::{suffix}``) so Atlas/Hermes never
     share a thread (their state schemas differ). If the thread already has a
     checkpoint, invoke(None) to continue from where it died; otherwise invoke(state).
+
+    On resume the checkpointed ``knowledge_cutoff_at`` is authoritative — the
+    freshly built *state* argument is discarded so the run does not re-pin
+    wall-clock time mid-replay (#2628).
     """
     if checkpointer is None or not thread_base:
         return _coerce_atlas_state(graph.invoke(state))
@@ -324,6 +328,10 @@ def run_atlas_then_hermes(
     ``None`` defers to ``state.config.preferences["debate_rounds"]`` after the Atlas
     pass (preflight loads config; clamped via ``clamp_debate_rounds``). Explicit
     non-None overrides preferences.
+
+    ``initial_state`` pins one UTC ``knowledge_cutoff_at`` before graph invoke
+    (#2628 / WP4.1). Checkpoint resume keeps that pinned value from the saved
+    thread — it does not re-call ``now()``.
     """
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
