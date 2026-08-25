@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
+from digiquant.olympus.atlas.graph import AtlasInput, initial_state
 from digiquant.olympus.atlas.state import (
     AtlasConfigBundle,
     AtlasResearchState,
@@ -24,6 +25,12 @@ from digiquant.olympus.atlas.state import (
     _merge_phase_hermes,
     _merge_right_wins_dict,
     _merge_segment_dict,
+)
+from digiquant.olympus.temporal import (
+    KnowledgeCutoffError,
+    capture_knowledge_cutoff_at,
+    require_knowledge_cutoff_at,
+    require_utc_datetime,
 )
 from pydantic import ValidationError
 
@@ -225,3 +232,66 @@ class TestMergeRightWinsDictReducer:
         right = {"AAPL": {"stance": "buy"}}
         out = _merge_right_wins_dict(left, right)
         assert out["AAPL"]["stance"] == "buy"
+
+
+@pytest.mark.unit
+class TestKnowledgeCutoff:
+    """WP4.1 (#2628): one UTC knowledge boundary per run."""
+
+    def test_require_utc_rejects_naive(self) -> None:
+        with pytest.raises(ValueError, match="naive"):
+            require_utc_datetime(
+                datetime(2026, 4, 26, 12, 0, 0),  # noqa: DTZ001 — intentional naive
+                field_name="knowledge_cutoff_at",
+            )
+
+    def test_require_utc_rejects_non_utc_offset(self) -> None:
+        eastern = timezone(timedelta(hours=-4))
+        with pytest.raises(ValueError, match="non-UTC"):
+            require_utc_datetime(
+                datetime(2026, 4, 26, 12, 0, 0, tzinfo=eastern),
+                field_name="knowledge_cutoff_at",
+            )
+
+    def test_state_rejects_naive_cutoff(self) -> None:
+        with pytest.raises(ValidationError):
+            AtlasResearchState(
+                run_type="baseline",
+                run_date=date(2026, 4, 26),
+                knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, 0),  # noqa: DTZ001  # type: ignore[arg-type]
+            )
+
+    def test_state_rejects_non_utc_cutoff(self) -> None:
+        eastern = timezone(timedelta(hours=-4))
+        with pytest.raises(ValidationError, match="UTC"):
+            AtlasResearchState(
+                run_type="baseline",
+                run_date=date(2026, 4, 26),
+                knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, 0, tzinfo=eastern),
+            )
+
+    def test_initial_state_captures_cutoff_before_construction(self) -> None:
+        pinned = datetime(2026, 4, 26, 14, 30, 0, tzinfo=UTC)
+        calls: list[str] = []
+
+        def _clock() -> datetime:
+            calls.append("clock")
+            return pinned
+
+        state = initial_state(
+            AtlasInput(run_date=date(2026, 4, 26), watchlist=("AAPL",)),
+            clock=_clock,
+        )
+        assert calls == ["clock"], "cutoff must be captured before AtlasResearchState is built"
+        assert state.knowledge_cutoff_at == pinned
+        assert require_knowledge_cutoff_at(state) == pinned
+
+    def test_capture_uses_injected_clock(self) -> None:
+        pinned = datetime(2026, 8, 25, 16, 0, 0, tzinfo=UTC)
+        assert capture_knowledge_cutoff_at(now=lambda: pinned) == pinned
+
+    def test_missing_cutoff_fails_closed_without_now_fallback(self) -> None:
+        state = AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
+        assert state.knowledge_cutoff_at is None
+        with pytest.raises(KnowledgeCutoffError, match="no now\\(\\) fallback"):
+            require_knowledge_cutoff_at(state)

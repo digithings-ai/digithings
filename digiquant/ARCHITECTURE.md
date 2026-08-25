@@ -868,6 +868,12 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `off` \| `shadow` only (no enforce); `actuated` is always false. House
   ProfileConfig is the default pin; overlay pins fail closed when missing. The
   planner cannot expand H4 roster/cap or carry H7/H8 authority fields.
+  **Knowledge cutoff (#2628 / WP4.1).** `initial_state` / `run_atlas_then_hermes`
+  pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
+  graph construction (`digiquant.olympus.temporal`). Registry readers must call
+  `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
+  fallback). Checkpoint resume preserves the pinned value; naive / non-UTC
+  stamps are rejected at capture and on the state field validator.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:

@@ -305,3 +305,66 @@ class TestChainHeldInvariant:
         assert set(captured["held"]) == held, (
             f"prior-book holdings not threaded into Hermes cap: {held - set(captured['held'])}"
         )
+
+
+@pytest.mark.unit
+class TestChainKnowledgeCutoff:
+    """WP4.1 (#2628): chain pins one UTC cutoff for the whole Atlas→Hermes run."""
+
+    def test_baseline_chain_pins_utc_knowledge_cutoff(self) -> None:
+        with simulated_pipeline(watchlist=("AAPL",), phase9=True) as run:
+            final = run.invoke(
+                AtlasInput(
+                    run_date=date(2026, 4, 26),
+                    watchlist=("AAPL",),
+                )
+            )
+
+        assert final.knowledge_cutoff_at is not None
+        assert final.knowledge_cutoff_at.tzinfo is not None
+        assert final.knowledge_cutoff_at.utcoffset().total_seconds() == 0
+
+    def test_run_atlas_then_hermes_preserves_initial_cutoff(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from datetime import UTC, datetime
+
+        from digiquant.olympus.hermes import chain as chain_mod
+        from digiquant.olympus.temporal import require_knowledge_cutoff_at
+
+        pinned = datetime(2026, 4, 26, 9, 15, 0, tzinfo=UTC)
+
+        def _atlas_then_hermes(graph: Any, state: Any, *_a: Any, **_k: Any) -> Any:
+            label = _a[-1] if _a else _k.get("label")
+            if label == "atlas":
+                from digiquant.olympus.atlas.state import SegmentPayload, SegmentSlot
+
+                state.phase3_output = SegmentSlot(
+                    payload=SegmentPayload(segment="macro", body={}, as_of=state.run_date)
+                )
+            # Mid-run wall clock must not re-pin the cutoff.
+            assert state.knowledge_cutoff_at == pinned
+            return state
+
+        monkeypatch.setattr(chain_mod, "_safe_invoke_graph", _atlas_then_hermes)
+        monkeypatch.setattr(chain_mod, "_run_terminal_phase", lambda *_a, **_k: _a[2])
+        monkeypatch.setattr(chain_mod, "build_atlas_graph", lambda *_a, **_k: object())
+        monkeypatch.setattr(chain_mod, "build_hermes_graph", lambda *_a, **_k: object())
+
+        with patch(
+            "digiquant.olympus.atlas.graph.capture_knowledge_cutoff_at",
+            return_value=pinned,
+        ):
+            with simulated_pipeline(watchlist=("AAPL",)) as run:
+                final = chain_mod.run_atlas_then_hermes(
+                    atlas_input=AtlasInput(
+                        run_date=date(2026, 4, 26),
+                        watchlist=("AAPL",),
+                    ),
+                    deps=chain_mod.ChainDeps(
+                        atlas=run.deps,
+                        hermes=run.hermes_deps,
+                    ),
+                )
+
+        assert require_knowledge_cutoff_at(final) == pinned

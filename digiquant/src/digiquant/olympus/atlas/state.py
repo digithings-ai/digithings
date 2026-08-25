@@ -6,7 +6,7 @@ Per-phase segment outputs live in phase modules and slot into
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import (  # score:allow untyped any — dict shape typing below
     Annotated,
     Any,
@@ -15,7 +15,7 @@ from typing import (  # score:allow untyped any — dict shape typing below
 )
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 
 class SegmentSlotCollisionError(RuntimeError):
@@ -540,6 +540,30 @@ class AtlasResearchState(BaseModel):
     refresh_scope: RefreshScope = "none"
     run_date: date
     baseline_date: date | None = None
+    # WP4.1 (#2628): one UTC knowledge boundary per run. Optional only so legacy
+    # checkpoints deserialize; new readers must call
+    # ``digiquant.olympus.temporal.require_knowledge_cutoff_at`` (no ``now()`` fallback).
+    knowledge_cutoff_at: AwareDatetime | None = Field(
+        default=None,
+        description=(
+            "Timezone-aware UTC instant pinned before initial Atlas/Hermes state. "
+            "Registry reads require known_at <= this cutoff. Optional for legacy "
+            "checkpoints only — new readers fail closed when missing."
+        ),
+    )
+
+    @field_validator("knowledge_cutoff_at")
+    @classmethod
+    def _knowledge_cutoff_must_be_utc(cls, value: AwareDatetime | None) -> AwareDatetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("knowledge_cutoff_at must be timezone-aware UTC (naive rejected)")
+        if value.utcoffset() != timedelta(0):
+            raise ValueError(
+                "knowledge_cutoff_at must be timezone-aware UTC (non-UTC offset rejected)"
+            )
+        return value
 
     config: AtlasConfigBundle = Field(default_factory=AtlasConfigBundle)
     prior_context: PriorContext = Field(default_factory=PriorContext)
