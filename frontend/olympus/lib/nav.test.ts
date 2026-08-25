@@ -28,6 +28,8 @@ describe('isDbExempt', () => {
     expect(isDbExempt('/research')).toBe(true);
     expect(isDbExempt('/strategy')).toBe(true);
     expect(isDbExempt('/portfolio/theses')).toBe(true);
+    // House chrome declares corpus/profile contracts; sample keys fail soft (#2643)
+    expect(isDbExempt('/house')).toBe(true);
     // twelve-x gates itself on its own research feed, not the main backend (#1664)
     expect(isDbExempt('/twelve-x')).toBe(true);
   });

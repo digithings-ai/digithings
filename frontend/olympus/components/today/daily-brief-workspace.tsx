@@ -21,6 +21,7 @@ import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
+import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
 import type { TodayThesis } from './today-summaries';
 
 export interface BriefRunHealth {
@@ -269,6 +270,8 @@ export function DailyBriefWorkspace({
   }, [held.length]);
 
   return (
+    <div className="space-y-0">
+      <HouseIdentityBanner />
     <section
       data-testid="daily-brief-workspace"
       aria-label="Daily investment brief"
@@ -572,5 +575,6 @@ export function DailyBriefWorkspace({
         ))}
       </nav>
     </section>
+    </div>
   );
 }
