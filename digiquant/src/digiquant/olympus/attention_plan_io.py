@@ -1,8 +1,9 @@
 """AttentionPlan document persistence for Pipeline glass-box (#1945).
 
 Typed contract for publishing WP13-class shadow plans under
-``document_key='attention-plan'``. Graph wiring that *calls* this helper is a
-follow-up — the UI must not invent plan rows.
+``document_key='attention-plan'``. Daily graph call-site:
+``digiquant.olympus.attention_plan_graph.maybe_publish_attention_plan_shadow``
+(invoked from Atlas ``publish_phase``).
 """
 
 from __future__ import annotations
@@ -100,10 +101,18 @@ def publish_attention_plan_shadow(
     *,
     client: SupabaseClient,
     result: AttentionPlanShadowResult,
-    run_type: str = "shadow",
+    run_type: str = "baseline",
     run_date: date | None = None,
 ) -> PublishedArtifact:
-    """Upsert the AttentionPlan shadow document for Pipeline inspection."""
+    """Upsert the AttentionPlan shadow document for Pipeline inspection.
+
+    ``run_type`` must satisfy ``chk_documents_run_type`` (``baseline``|``delta``).
+    ``category='planner'`` requires migration ``078``.
+    """
+    if run_type not in ("baseline", "delta"):
+        raise AttentionPlanPublishError(
+            f"documents.run_type must be baseline|delta, got {run_type!r}"
+        )
     payload = attention_plan_document_payload(result, run_date=run_date)
     date_str = str(payload["date"])
     return publish_document(

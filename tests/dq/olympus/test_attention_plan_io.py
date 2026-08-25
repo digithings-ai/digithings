@@ -122,3 +122,4 @@ def test_publish_attention_plan_shadow_upserts_document_key() -> None:
     assert row["doc_type"] == ATTENTION_PLAN_DOC_TYPE_COLUMN
     assert row["payload"]["doc_type"] == ATTENTION_PLAN_PAYLOAD_DOC_TYPE
     assert row["category"] == "planner"
+    assert row["run_type"] == "baseline"
