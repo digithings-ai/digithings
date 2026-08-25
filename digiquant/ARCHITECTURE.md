@@ -899,7 +899,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   via `atlas/forecast_registry.py` (exact retry / content conflict; exact-ID cutoff
   reads). Registry failure keeps the one committed book and cannot rebook; status
   lands on the commit manifest (`schema_version` 1.3). No calibration writers.
-  **Forecast calibration contracts (#2672 / WP5.1 + #2676 / WP5.2):** frozen models in
+  **Forecast calibration contracts (#2672 / WP5.1 + #2676 / WP5.2 + #2680 / WP5.3):** frozen models in
   `hermes/models/forecast_calibration.py` (`ForecastOutcome`, `ForecastCalibration`,
   `CalibratedForecast`, `SessionPriceSnapshot`) plus private append-only tables in
   migration `080_olympus_forecast_calibration.sql`. Prospective labels only (no
@@ -908,8 +908,12 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `preflight_reflect` (not inside `decision_log`), snapshots due typed forecasts into
   `olympus_forecast_outcomes` using the trading calendar + first observed closes,
   cutoff eligibility, same-run exclusion, and append-only idempotency. Missing
-  calendar/close stays pending (never zero-return). Calibrator (5.3) and shadow
-  persistence (5.4) are later; H8 remains untouched.
+  calendar/close stays pending (never zero-return). **Shadow calibrator (#2680 / WP5.3):**
+  `hermes/forecast_calibration.py` shrinks cohort residual bias toward a declared
+  zero-mean prior (`PRIOR_DEFINITION` / `METHOD_VERSION`), reports Brier/log scores via
+  Polars aggregation, and emits observational `CalibratedForecast` subjects with
+  non-zero uncertainty and sample-bounded reliability — pure functions only (no
+  persistence, no H8). Shadow persistence (5.4) is later; H8 remains untouched.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
