@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
     TypeVar,
@@ -11,6 +12,7 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
 
 from digigraph.graph.research_agent import run_research_agent
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from digigraph.usage import provider_calls_snapshot
 from pydantic import BaseModel, ValidationError
 
 from digiquant.olympus.atlas.data.queries import MARKET_DATA_TABLES
@@ -31,14 +33,27 @@ from digiquant.olympus.edit_mode import (
 from digiquant.olympus.edit_mode.merge import MergeError, coerce_document_patch
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.models.analyst import AnalystPayload
+from digiquant.olympus.hermes.models.forecast import (
+    ForecastAssessment,
+    ForecastTerms,
+    PriceAnchor,
+    PriceAnchorStatus,
+    forecast_assessment_id,
+    forecast_terms_content_hash,
+)
 from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
+from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+
+_FORECAST_WHOLE_PATHS = frozenset({"/body/forecast", "/forecast"})
+_FORECAST_ASSESSMENT_PATHS = frozenset({"/body/forecast_assessment", "/forecast_assessment"})
+_FORECAST_NESTED_PREFIXES = ("/body/forecast/", "/forecast/")
 
 
 def _resolve_linked_thesis(
@@ -86,6 +101,32 @@ def analyst_artifact_key(ticker: str) -> tuple[str, str]:
     return ("analyst", ticker.strip().upper())
 
 
+def _body_from_prior_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    body = payload.get("body", payload)
+    return body if isinstance(body, dict) else {}
+
+
+def prior_has_typed_forecast(body: dict[str, Any] | None) -> bool:
+    """True when prior analyst body carries valid typed forecast terms or assessment."""
+    if not isinstance(body, dict):
+        return False
+    raw_assessment = body.get("forecast_assessment")
+    if raw_assessment is not None:
+        try:
+            ForecastAssessment.model_validate(raw_assessment)
+            return True
+        except ValidationError:
+            return False
+    raw_terms = body.get("forecast")
+    if raw_terms is not None:
+        try:
+            ForecastTerms.model_validate(raw_terms)
+            return True
+        except ValidationError:
+            return False
+    return False
+
+
 def resolve_analyst_edit_mode(state: HermesState, ticker: str) -> EditMode:
     artifact_key = analyst_artifact_key(ticker)
     prior = state.prior_context.prior_analyst_by_ticker.get(ticker)
@@ -97,7 +138,7 @@ def resolve_analyst_edit_mode(state: HermesState, ticker: str) -> EditMode:
         prior_stance=prior_stance,
         prior_news_hash=str((prior or {}).get("fingerprint_news_hash") or "") or None,
     )
-    return resolve_edit_mode(
+    mode = resolve_edit_mode(
         artifact_key=artifact_key,
         run_date=state.run_date,
         prior_loader=_TickerPriorLoader(state, artifact_key),
@@ -105,6 +146,15 @@ def resolve_analyst_edit_mode(state: HermesState, ticker: str) -> EditMode:
         force_full_rewrite=refresh_scope_forces_full(state.refresh_scope, artifact="segment")
         or state.refresh_scope == "hermes",
     )
+    if mode == "full":
+        return mode
+    # Legacy docs without typed forecast terms must not skip/edit — force full
+    # analysis rather than synthesizing economics from conviction/price_targets.
+    prior_pub = _TickerPriorLoader(state, artifact_key).load(artifact_key, state.run_date)
+    prior_body = _body_from_prior_payload(prior_pub.payload) if prior_pub is not None else None
+    if not prior_has_typed_forecast(prior_body):
+        return "full"
+    return mode
 
 
 def build_analyst_document(
@@ -131,7 +181,7 @@ def build_analyst_document(
 def analyst_body_from_payload(payload: AnalystPayload) -> dict[str, Any]:
     data = payload.model_dump(mode="json")
     ticker = data.pop("ticker")
-    return {
+    body: dict[str, Any] = {
         "ticker": ticker,
         "conviction_score": data["conviction_score"],
         "stance": data["stance"],
@@ -159,6 +209,13 @@ def analyst_body_from_payload(payload: AnalystPayload) -> dict[str, Any]:
             "rationale": data["thesis"][:2000],
         },
     }
+    if data.get("evidence") is not None:
+        body["evidence"] = data["evidence"]
+    if data.get("forecast") is not None:
+        body["forecast"] = data["forecast"]
+    if data.get("forecast_assessment") is not None:
+        body["forecast_assessment"] = data["forecast_assessment"]
+    return body
 
 
 def _stance_to_bias(stance: str) -> str:
@@ -168,6 +225,187 @@ def _stance_to_bias(stance: str) -> str:
         "watch": "neutral",
         "hold": "neutral",
     }.get(stance, "neutral")
+
+
+def reject_partial_forecast_edits(patch: DocumentPatch) -> None:
+    """Forbid nested forecast patches and any forecast_assessment mutation.
+
+    Edit mode may replace the entire ``forecast`` object or leave it untouched.
+    Partial field writes would silently diverge from immutable assessment lineage.
+    """
+    for op in patch.ops:
+        path = op.path
+        if path in _FORECAST_ASSESSMENT_PATHS or any(
+            path.startswith(f"{p}/") for p in _FORECAST_ASSESSMENT_PATHS
+        ):
+            raise MergeError("forecast_assessment is immutable; cannot patch assessment identity")
+        if path in _FORECAST_WHOLE_PATHS:
+            continue
+        if any(path.startswith(prefix) for prefix in _FORECAST_NESTED_PREFIXES):
+            raise MergeError("partial nested forecast edit rejected; replace entire /body/forecast")
+
+
+def materialize_forecast_assessment(
+    *,
+    ticker: str,
+    terms: ForecastTerms,
+    source_run_id: str,
+    provider_invocation_id: str,
+    prompt_version: str,
+    artifact_version: str,
+    price_anchor: PriceAnchor,
+    effective_at: datetime,
+    known_at: datetime,
+) -> ForecastAssessment:
+    """Build an immutable base :class:`ForecastAssessment` from validated terms."""
+    content_hash = forecast_terms_content_hash(terms)
+    return ForecastAssessment(
+        forecast_id=forecast_assessment_id(
+            ticker=ticker,
+            source_run_id=source_run_id,
+            content_hash=content_hash,
+        ),
+        ticker=ticker.strip().upper(),
+        terms=terms,
+        source_run_id=source_run_id,
+        provider_invocation_id=provider_invocation_id,
+        prompt_version=prompt_version,
+        artifact_version=artifact_version,
+        price_anchor=price_anchor,
+        effective_at=effective_at,
+        known_at=known_at,
+        content_hash=content_hash,
+    )
+
+
+def _h5_price_anchor(_state: HermesState, _ticker: str) -> PriceAnchor:
+    """H5 state carries pct deltas, not absolute marks — typed unavailability."""
+    return PriceAnchor(
+        status=PriceAnchorStatus.UNAVAILABLE,
+        unavailable_reason="mark_price_not_available_in_h5_state",
+    )
+
+
+def _provider_invocation_id(*, phase_slug: str, run_id: str, ticker: str) -> str:
+    calls = provider_calls_snapshot()
+    if calls:
+        return str(calls[-1].call_id)
+    return f"provider_invocation_unavailable:{run_id}:{ticker.upper()}:{phase_slug}"
+
+
+def _skill_versions(mode: EditMode) -> tuple[str, str]:
+    skill_text = (
+        load_skill_edit("asset-analyst") if mode == "edit" else load_skill_full("asset-analyst")
+    )
+    digest = hashlib.sha256(skill_text.encode("utf-8")).hexdigest()[:16]
+    prompt_version = f"asset-analyst-{mode}@{digest}"
+    artifact_version = f"h5-{mode}@1"
+    return prompt_version, artifact_version
+
+
+def _cutoff_or_run_date(state: HermesState) -> datetime:
+    try:
+        return require_knowledge_cutoff_at(state)
+    except ValueError:
+        return datetime(
+            state.run_date.year,
+            state.run_date.month,
+            state.run_date.day,
+            tzinfo=UTC,
+        )
+
+
+def _assessment_from_body(body: dict[str, Any]) -> ForecastAssessment | None:
+    raw = body.get("forecast_assessment")
+    if raw is None:
+        return None
+    try:
+        return ForecastAssessment.model_validate(raw)
+    except ValidationError:
+        return None
+
+
+def _terms_from_body(body: dict[str, Any]) -> ForecastTerms | None:
+    raw = body.get("forecast")
+    if raw is None:
+        return None
+    try:
+        return ForecastTerms.model_validate(raw)
+    except ValidationError:
+        return None
+
+
+def _attach_forecast_lineage(
+    *,
+    payload: AnalystPayload,
+    state: HermesState,
+    ticker: str,
+    mode: EditMode,
+    phase_slug: str,
+    prior_body: dict[str, Any] | None,
+    errors: list[PhaseError],
+) -> AnalystPayload:
+    """Materialize or carry :class:`ForecastAssessment`; never invent terms.
+
+    Full mode without ``ForecastTerms`` retains analyst prose (shadow rollout) and
+    records ``forecast_unavailable`` rather than dropping the ticker.
+    """
+    terms = payload.forecast
+    prior_assessment = _assessment_from_body(prior_body) if prior_body else None
+    prior_terms = _terms_from_body(prior_body) if prior_body else None
+
+    if terms is None:
+        # Edit/skip without terms change: carry prior typed lineage when present.
+        if prior_assessment is not None:
+            return payload.model_copy(
+                update={
+                    "forecast": prior_terms,
+                    "forecast_assessment": prior_assessment,
+                }
+            )
+        if prior_terms is not None:
+            terms = prior_terms
+        else:
+            if mode == "full":
+                logger.warning(
+                    "H5 full analysis for %s missing ForecastTerms; "
+                    "forecast_unavailable (analyst payload retained)",
+                    ticker,
+                )
+                errors.append(
+                    PhaseError(
+                        phase="phase_hermes",
+                        node=phase_slug,
+                        message="forecast_unavailable: full H5 missing ForecastTerms",
+                    )
+                )
+            return payload
+
+    assert terms is not None
+    if (
+        prior_assessment is not None
+        and prior_assessment.content_hash == forecast_terms_content_hash(terms)
+    ):
+        return payload.model_copy(
+            update={"forecast": terms, "forecast_assessment": prior_assessment}
+        )
+
+    cutoff = _cutoff_or_run_date(state)
+    prompt_version, artifact_version = _skill_versions(mode)
+    assessment = materialize_forecast_assessment(
+        ticker=ticker,
+        terms=terms,
+        source_run_id=str(state.run_id),
+        provider_invocation_id=_provider_invocation_id(
+            phase_slug=phase_slug, run_id=str(state.run_id), ticker=ticker
+        ),
+        prompt_version=prompt_version,
+        artifact_version=artifact_version,
+        price_anchor=_h5_price_anchor(state, ticker),
+        effective_at=cutoff,
+        known_at=cutoff,
+    )
+    return payload.model_copy(update={"forecast": terms, "forecast_assessment": assessment})
 
 
 def _portfolio_grounding(state: HermesState, *, phase: RetrievalPhase, segment: str = ""):
@@ -195,19 +433,27 @@ def run_asset_analyst_llm(
     mode = resolve_analyst_edit_mode(state, ticker)
     prior_loader = _TickerPriorLoader(state, artifact_key)
     prior = prior_loader.load(artifact_key, state.run_date)
+    prior_body = _body_from_prior_payload(prior.payload) if prior is not None else None
 
-    if mode == "skip" and prior is not None:
-        body = prior.payload.get("body", prior.payload)
-        if isinstance(body, dict):
-            carried = build_analyst_document(
-                ticker=ticker,
-                run_date=state.run_date,
-                body=body,
-                linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
-            )
-            payload = AnalystPayload.model_validate({**body, "ticker": ticker})
-            return payload, carried, errors
-        return None, None, errors
+    if mode == "skip" and prior is not None and prior_body:
+        payload = AnalystPayload.model_validate({**prior_body, "ticker": ticker})
+        enriched = _attach_forecast_lineage(
+            payload=payload,
+            state=state,
+            ticker=ticker,
+            mode=mode,
+            phase_slug=phase_slug,
+            prior_body=prior_body,
+            errors=errors,
+        )
+        body = analyst_body_from_payload(enriched)
+        carried = build_analyst_document(
+            ticker=ticker,
+            run_date=state.run_date,
+            body=body,
+            linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
+        )
+        return enriched, carried, errors
 
     skill_text = (
         load_skill_edit("asset-analyst") if mode == "edit" else load_skill_full("asset-analyst")
@@ -264,6 +510,7 @@ def run_asset_analyst_llm(
         )
         patch = coerce_document_patch(result)
         try:
+            reject_partial_forecast_edits(patch)
             merge_result = merge_document_patch(
                 prior.payload,
                 patch,
@@ -274,21 +521,39 @@ def run_asset_analyst_llm(
         except (MergeError, ValidationError) as exc:
             logger.warning("H5 analyst edit merge failed for %s (%s)", ticker, exc)
             errors.append(PhaseError(phase="phase_hermes", node=phase_slug, message=str(exc)[:500]))
-            body = prior.payload.get("body", prior.payload)
-            payload = AnalystPayload.model_validate(
-                {**(body if isinstance(body, dict) else {}), "ticker": ticker}
+            body_raw = prior_body or {}
+            payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
+            enriched = _attach_forecast_lineage(
+                payload=payload,
+                state=state,
+                ticker=ticker,
+                mode="skip",
+                phase_slug=phase_slug,
+                prior_body=body_raw,
+                errors=errors,
             )
-            return payload, dict(prior.payload), errors
+            return enriched, dict(prior.payload), errors
         materialized = dict(merge_result.materialized)
         body_raw = materialized.get("body", materialized)
+        if not isinstance(body_raw, dict):
+            body_raw = {}
         payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
+        enriched = _attach_forecast_lineage(
+            payload=payload,
+            state=state,
+            ticker=ticker,
+            mode=mode,
+            phase_slug=phase_slug,
+            prior_body=prior_body,
+            errors=errors,
+        )
         doc = build_analyst_document(
             ticker=ticker,
             run_date=state.run_date,
-            body=body_raw if isinstance(body_raw, dict) else payload.model_dump(mode="json"),
+            body=analyst_body_from_payload(enriched),
             linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
         )
-        return payload, doc, errors
+        return enriched, doc, errors
 
     try:
         result = run_research_agent(
@@ -319,11 +584,20 @@ def run_asset_analyst_llm(
     payload = result.model_copy(
         update={"fingerprint_news_hash": news_hash_for_ticker(state, ticker)}
     )
-    body = analyst_body_from_payload(payload)
+    enriched = _attach_forecast_lineage(
+        payload=payload,
+        state=state,
+        ticker=ticker,
+        mode=mode,
+        phase_slug=phase_slug,
+        prior_body=prior_body,
+        errors=errors,
+    )
+    body = analyst_body_from_payload(enriched)
     doc = build_analyst_document(
         ticker=ticker,
         run_date=state.run_date,
         body=body,
         linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
     )
-    return payload, doc, errors
+    return enriched, doc, errors
