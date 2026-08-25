@@ -169,9 +169,7 @@ def test_phase1_registry_modules_export_cutoff_reads() -> None:
     )
     assert rpr.get_risk_policy(client=client, policy_id=missing, knowledge_cutoff_at=cutoff) is None
     assert (
-        clr.get_action_cost_estimate(
-            client=client, estimate_id=missing, knowledge_cutoff_at=cutoff
-        )
+        clr.get_action_cost_estimate(client=client, estimate_id=missing, knowledge_cutoff_at=cutoff)
         is None
     )
 
