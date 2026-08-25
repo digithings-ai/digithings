@@ -887,7 +887,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash (`supabase_io._slim_deliberation_summary`,
-  deliberation payloads). H7 binding / H9 registry are later WP4 tasks.
+  deliberation payloads). **H7 forecast-reference-only (#2660 / WP4.5):** after the
+  PM LLM (or fail-soft prior-memo carry), `bind_forecast_references` attaches one
+  typed `ForecastReference` per `TickerDirection` from current H6 lineage IDs
+  (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
+  terms/weights; missing lineage is an explicit degraded reference (null IDs +
+  `degradation_reason`, no fabricated UUIDs); fail-soft rebinds from the current
+  map and cannot retain prior refs. H8 still reads direction/rank only. H9
+  forecast registry is WP4.6.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
@@ -1190,7 +1197,10 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
 - **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
-  **H8** (`phase7e_risk_sizing`) is the sole weight owner. **H9** (`commit_run`) is the
+  Each roster row may carry a deterministic `ForecastReference` to the effective
+  forecast H7 saw (`hermes/models/pm_direction.py`); economics and identifiers are
+  never LLM-authored. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
+  ignores forecast refs (direction/rank unchanged). **H9** (`commit_run`) is the
   Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append, and
   the portfolio lineage ledger commit chain (see below).
 
