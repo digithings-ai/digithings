@@ -39,7 +39,10 @@ prices, positions, macro series, plus `get_market_breadth` and `get_vix_term_str
 3. **`direction=long`** means you want exposure (including inverse ETFs for bearish views).
 4. **`direction=flat`** means no position — residual becomes cash after H8 sizing.
 5. **Evolution:** when `evolution_mode` is true, do not flat held names solely for missing fresh analyst work; use `prior_analyst_gaps` as context.
-6. **Prohibited fields:** never emit `target_pct`, `weight`, `shares`, `recommended_portfolio`, `actions`, or any sizing magnitude.
+6. **Prohibited fields:** never emit `target_pct`, `weight`, `shares`, `recommended_portfolio`,
+   `actions`, sizing magnitudes, forecast economics (`base_return`, `expected_return`, `terms`),
+   or forecast identifiers (`forecast_id`, `effective_forecast_id`, `forecast_reference`).
+   The system attaches `forecast_reference` deterministically after you return.
 
 ## Output — PMDirectionMemo
 

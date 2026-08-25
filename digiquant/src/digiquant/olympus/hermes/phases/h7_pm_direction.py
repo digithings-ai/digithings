@@ -1,4 +1,8 @@
-"""H7 — PM direction memo (direction + conviction rank only; no weights)."""
+"""H7 — PM direction memo (direction + conviction rank only; no weights).
+
+WP4.5 (#2660): after LLM success or prior-memo fail-soft, deterministically bind
+each roster row to the current run's effective forecast (never model-supplied IDs).
+"""
 
 from __future__ import annotations
 
@@ -17,7 +21,10 @@ from digiquant.olympus.atlas.phases._node_factory import (
 )
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
-from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo
+from digiquant.olympus.hermes.models.pm_direction import (
+    PMDirectionMemo,
+    bind_forecast_references,
+)
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
 from digiquant.olympus.hermes.skills import load_skill_full
@@ -75,6 +82,14 @@ def _prior_memo_fallback(state: HermesState) -> PMDirectionMemo | None:
     return prior.model_copy(update={"date": state.run_date})
 
 
+def _bind_forecast_references(memo: PMDirectionMemo, state: HermesState) -> PMDirectionMemo:
+    """Attach authoritative ForecastReference per roster row from *this* run's map."""
+    return bind_forecast_references(
+        memo,
+        deliberation_by_ticker=deliberation_summaries(state),
+    )
+
+
 def _h7_node(state: HermesState) -> dict[str, Any]:
     current_weights = _current_weights_from_config(state)
     phase_inputs: dict[str, Any] = {
@@ -125,7 +140,11 @@ def _h7_node(state: HermesState) -> dict[str, Any]:
         # #1649 memo-unaddressed held-carry, so the book still coheres and COMMITS —
         # which keeps retry_worthy False and the run single-attempt. No parseable
         # prior → memo None (H8's legacy sizing path).
+        # WP4.5: re-bind forecast references from *this* run's effective map —
+        # prior memo IDs must not masquerade as today's authoritative forecasts.
         memo = _prior_memo_fallback(state)
+        if memo is not None:
+            memo = _bind_forecast_references(memo, state)
         mode = "prior memo carried" if memo is not None else "no prior memo; legacy sizing"
         logger.warning("H7 pm-direction LLM failed (%s: %s); %s", type(exc).__name__, exc, mode)
         err = PhaseError(
@@ -136,6 +155,7 @@ def _h7_node(state: HermesState) -> dict[str, Any]:
         )
         return {"phase_hermes": PhaseHermesState(pm_direction_memo=memo), "errors": [err]}
     memo = result.model_copy(update={"date": state.run_date})
+    memo = _bind_forecast_references(memo, state)
     return {"phase_hermes": PhaseHermesState(pm_direction_memo=memo)}
 
 
@@ -146,4 +166,4 @@ def build_h7_pm_direction() -> PipelinePhase:
     )
 
 
-__all__ = ["NODE_ID", "PHASE_NAME", "build_h7_pm_direction"]
+__all__ = ["NODE_ID", "PHASE_NAME", "build_h7_pm_direction", "_bind_forecast_references"]
