@@ -481,6 +481,15 @@ class PhaseHermesState(BaseModel):
     deliberation_summaries: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
+    # WP5.4 shadow calibration (observational; never feeds H8).
+    forecast_calibrations: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="calibration_id → ForecastCalibration dump (H6→H7 attach)",
+    )
+    calibrated_forecasts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="ticker → CalibratedForecast dump (H6→H7 attach)",
+    )
     pm_direction_memo: Any | None = (
         None  # PMDirectionMemo JSON; typed in hermes.models.pm_direction
     )
@@ -504,6 +513,16 @@ def _merge_phase_hermes(
         merged.deliberation_summaries = {
             **merged.deliberation_summaries,
             **right.deliberation_summaries,
+        }
+    if right.forecast_calibrations:
+        merged.forecast_calibrations = {
+            **merged.forecast_calibrations,
+            **right.forecast_calibrations,
+        }
+    if right.calibrated_forecasts:
+        merged.calibrated_forecasts = {
+            **merged.calibrated_forecasts,
+            **right.calibrated_forecasts,
         }
     for field in (
         "thesis_review",

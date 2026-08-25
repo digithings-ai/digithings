@@ -2,6 +2,10 @@
 
 WP4.5 (#2660): after LLM success or prior-memo fail-soft, deterministically bind
 each roster row to the current run's effective forecast (never model-supplied IDs).
+
+WP5.4 (#2684): at this existing H6→H7 boundary, attach cutoff-safe shadow
+calibration artifacts into typed state for H9 persistence. Observational only —
+never feeds incumbent H8 and does not add a graph node.
 """
 
 from __future__ import annotations
@@ -15,12 +19,19 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
 from pydantic import ValidationError
 
+from digiquant.olympus.atlas.forecast_outcomes import list_resolved_outcomes_as_of
 from digiquant.olympus.atlas.phases._node_factory import (
     _shared_context,
     apply_web_grounding_to_inputs,
 )
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
+from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
+from digiquant.olympus.hermes.forecast_calibration import (
+    ShadowCalibrationAttachment,
+    attach_shadow_calibrations_from_state,
+)
+from digiquant.olympus.hermes.models.forecast_calibration import ForecastOutcome
 from digiquant.olympus.hermes.models.pm_direction import (
     PMDirectionMemo,
     bind_forecast_references,
@@ -90,7 +101,60 @@ def _bind_forecast_references(memo: PMDirectionMemo, state: HermesState) -> PMDi
     )
 
 
-def _h7_node(state: HermesState) -> dict[str, Any]:
+def _load_cutoff_outcomes(
+    *,
+    client: SupabaseClient | None,
+    state: HermesState,
+) -> list[ForecastOutcome]:
+    cutoff = state.knowledge_cutoff_at
+    if client is None or cutoff is None:
+        return []
+    try:
+        return list_resolved_outcomes_as_of(client=client, knowledge_cutoff_at=cutoff)
+    except Exception as exc:
+        logger.warning(
+            "H7 shadow calibration: outcome load failed (%s: %s); empty cohort",
+            type(exc).__name__,
+            exc,
+        )
+        return []
+
+
+def _attach_shadow_calibration(
+    state: HermesState,
+    *,
+    client: SupabaseClient | None,
+) -> ShadowCalibrationAttachment:
+    """Observational attach at H6→H7 boundary — never raises into H7 direction."""
+    try:
+        outcomes = _load_cutoff_outcomes(client=client, state=state)
+        return attach_shadow_calibrations_from_state(state, outcomes=outcomes)
+    except Exception as exc:
+        logger.warning(
+            "H7 shadow calibration attach failed (%s: %s); empty attachment",
+            type(exc).__name__,
+            exc,
+        )
+        return ShadowCalibrationAttachment(calibrations=(), calibrated_forecasts=())
+
+
+def _phase_hermes_with_shadow(
+    *,
+    memo: PMDirectionMemo | None,
+    shadow: ShadowCalibrationAttachment,
+) -> PhaseHermesState:
+    return PhaseHermesState(
+        pm_direction_memo=memo,
+        forecast_calibrations=shadow.calibration_dumps(),
+        calibrated_forecasts=shadow.calibrated_forecast_dumps(),
+    )
+
+
+def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dict[str, Any]:
+    """H7 node body; ``client`` optional for cutoff-safe outcome load (WP5.4)."""
+    # WP5.4: attach before LLM so fail-soft memo path still carries shadows.
+    shadow = _attach_shadow_calibration(state, client=client)
+
     current_weights = _current_weights_from_config(state)
     phase_inputs: dict[str, Any] = {
         "segment": NODE_ID,
@@ -109,7 +173,9 @@ def _h7_node(state: HermesState) -> dict[str, Any]:
         "focus_roster": _focus_roster_tickers(state),
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
-    tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="h7_pm", segment=NODE_ID)
+    tools, execute_tool, web_grounding = _portfolio_grounding(
+        state, phase="h7_pm", segment=NODE_ID
+    )
     phase_inputs = apply_web_grounding_to_inputs(
         phase_inputs,
         web_grounding=web_grounding,
@@ -153,17 +219,31 @@ def _h7_node(state: HermesState) -> dict[str, Any]:
             message=f"pm-direction LLM failed ({mode}): {exc}"[:500],
             retryable=False,
         )
-        return {"phase_hermes": PhaseHermesState(pm_direction_memo=memo), "errors": [err]}
+        return {
+            "phase_hermes": _phase_hermes_with_shadow(memo=memo, shadow=shadow),
+            "errors": [err],
+        }
     memo = result.model_copy(update={"date": state.run_date})
     memo = _bind_forecast_references(memo, state)
-    return {"phase_hermes": PhaseHermesState(pm_direction_memo=memo)}
+    return {"phase_hermes": _phase_hermes_with_shadow(memo=memo, shadow=shadow)}
 
 
-def build_h7_pm_direction() -> PipelinePhase:
+def build_h7_pm_direction(*, client: SupabaseClient | None = None) -> PipelinePhase:
+    """Build H7; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
+
+    def _bound(state: HermesState) -> dict[str, Any]:
+        return _h7_node(state, client=client)
+
     return PipelinePhase(
         name=PHASE_NAME,
-        nodes=[NodeSpec(name=NODE_ID, run=_h7_node)],
+        nodes=[NodeSpec(name=NODE_ID, run=_bound)],
     )
 
 
-__all__ = ["NODE_ID", "PHASE_NAME", "build_h7_pm_direction", "_bind_forecast_references"]
+__all__ = [
+    "NODE_ID",
+    "PHASE_NAME",
+    "build_h7_pm_direction",
+    "_bind_forecast_references",
+    "_h7_node",
+]

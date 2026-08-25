@@ -38,13 +38,23 @@ class _MergingQuery(_FakeQuery):
             self.store.setdefault(self.table_name, []).extend(self._insert_rows)
             return _FakeResponse(data=[dict(row) for row in self._insert_rows])
         if self._upsert_row is not None:
-            if self.table_name in (fr.ASSESSMENTS, fr.AMENDMENTS):
+            if self.table_name in (
+                fr.ASSESSMENTS,
+                fr.AMENDMENTS,
+                fr.CALIBRATIONS,
+                fr.CALIBRATED_FORECASTS,
+            ):
                 raise AssertionError("upsert is forbidden on the forecast registry")
             rows = self._upsert_row if isinstance(self._upsert_row, list) else [self._upsert_row]
             self.store.setdefault(self.table_name, []).extend(rows)
             return _FakeResponse(data=[dict(row) for row in rows])
         if self._update_row is not None:
-            if self.table_name in (fr.ASSESSMENTS, fr.AMENDMENTS):
+            if self.table_name in (
+                fr.ASSESSMENTS,
+                fr.AMENDMENTS,
+                fr.CALIBRATIONS,
+                fr.CALIBRATED_FORECASTS,
+            ):
                 raise AssertionError("update is forbidden on the forecast registry")
             updated: list[dict[str, Any]] = []
             for row in self.store.get(self.table_name, []):
@@ -53,7 +63,12 @@ class _MergingQuery(_FakeQuery):
                     updated.append(row)
             return _FakeResponse(data=updated)
         if self._delete:
-            if self.table_name in (fr.ASSESSMENTS, fr.AMENDMENTS):
+            if self.table_name in (
+                fr.ASSESSMENTS,
+                fr.AMENDMENTS,
+                fr.CALIBRATIONS,
+                fr.CALIBRATED_FORECASTS,
+            ):
                 raise AssertionError("delete is forbidden on the forecast registry")
             rows = self.store.get(self.table_name, [])
             removed = [r for r in rows if self._matches(r)]
@@ -63,7 +78,14 @@ class _MergingQuery(_FakeQuery):
         seen: set[str] = set()
         rows: list[dict[str, Any]] = []
         for row in merged:
-            key = str(row.get("forecast_id") or row.get("amendment_id") or row.get("id") or id(row))
+            key = str(
+                row.get("forecast_id")
+                or row.get("amendment_id")
+                or row.get("calibration_id")
+                or row.get("calibrated_forecast_id")
+                or row.get("id")
+                or id(row)
+            )
             if key in seen:
                 continue
             seen.add(key)

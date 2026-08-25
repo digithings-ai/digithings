@@ -1,9 +1,12 @@
-"""Deterministic shadow forecast calibrator (#2680 / WP5.3).
+"""Deterministic shadow forecast calibrator (#2680 / WP5.3, #2684 / WP5.4).
 
-Pure functions only — no Supabase writes, no H8 consumption, and no graph
-wiring (Task 5.4). Shrinks cohort residual bias toward a declared zero-mean
-prior, reports Brier/log scores, and emits shadow ``CalibratedForecast``
-subjects with non-zero uncertainty and sample-bounded reliability.
+Core calibrator is pure (no Supabase). WP5.4 adds cutoff-safe attach helpers
+invoked at the existing H6→H7 boundary; H9 persists observational artifacts.
+Never feeds incumbent H8.
+
+Shrinks cohort residual bias toward a declared zero-mean prior, reports
+Brier/log scores, and emits shadow ``CalibratedForecast`` subjects with
+non-zero uncertainty and sample-bounded reliability.
 
 Polars aggregates the eligible cohort; repeated identical inputs yield
 identical UUID5 / content-hash identities.
@@ -20,7 +23,7 @@ from uuid import UUID
 
 import polars as pl
 
-from digiquant.olympus.hermes.models.forecast import ForecastTerms
+from digiquant.olympus.hermes.models.forecast import EffectiveForecast, ForecastTerms
 from digiquant.olympus.hermes.models.forecast_calibration import (
     CalibratedForecast,
     CalibrationArtifactStatus,
@@ -96,6 +99,26 @@ class CalibrationBundle:
 
     calibration: ForecastCalibration
     calibrated_forecast: CalibratedForecast
+
+
+@dataclass(frozen=True)
+class ShadowCalibrationAttachment:
+    """Cohort calibrations + per-subject shadows for one H6→H7 attach pass."""
+
+    calibrations: tuple[ForecastCalibration, ...]
+    calibrated_forecasts: tuple[CalibratedForecast, ...]
+
+    def calibration_dumps(self) -> dict[str, dict[str, object]]:
+        return {
+            str(item.calibration_id): item.model_dump(mode="json") for item in self.calibrations
+        }
+
+    def calibrated_forecast_dumps(self) -> dict[str, dict[str, object]]:
+        """Keyed by ticker (upper) for typed state; last write wins on collision."""
+        return {
+            item.ticker.strip().upper(): item.model_dump(mode="json")
+            for item in self.calibrated_forecasts
+        }
 
 
 def cohort_key_for_horizon(horizon_sessions: int, *, regime: str = "default") -> str:
@@ -596,6 +619,118 @@ def calibrate_forecast(
     return CalibrationBundle(calibration=calibration, calibrated_forecast=subject)
 
 
+def collect_effective_forecasts_from_state(state: object) -> list[EffectiveForecast]:
+    """Extract typed effective forecasts from H6 deliberation summaries.
+
+    Missing or invalid dumps are skipped — never invented. Order is ticker-sorted
+    for deterministic attach/persist.
+    """
+    hermes = getattr(state, "phase_hermes", None)
+    summaries = getattr(hermes, "deliberation_summaries", None) or {}
+    found: list[EffectiveForecast] = []
+    for ticker in sorted(summaries.keys()):
+        summary = summaries[ticker]
+        if not isinstance(summary, dict):
+            continue
+        raw = summary.get("effective_forecast")
+        if not isinstance(raw, dict):
+            continue
+        try:
+            found.append(EffectiveForecast.model_validate(raw))
+        except Exception:
+            continue
+    return found
+
+
+def attach_shadow_calibrations(
+    *,
+    subjects: Sequence[EffectiveForecast],
+    outcomes: Sequence[ForecastOutcome],
+    as_of: datetime,
+    regime: str = "default",
+) -> ShadowCalibrationAttachment:
+    """Build cohort calibrations + shadow subjects for current effective forecasts.
+
+    One ``ForecastCalibration`` per distinct cohort key; one ``CalibratedForecast``
+    per subject. Empty subjects → empty attachment. Outcomes must already be
+    cutoff-bounded by the caller (``known_at > as_of`` are ignored again inside
+    the calibrator). Does not write to Supabase and does not feed H8.
+    """
+    known_at = require_utc_datetime(as_of, field_name="as_of")
+    if not subjects:
+        return ShadowCalibrationAttachment(calibrations=(), calibrated_forecasts=())
+
+    by_cohort: dict[str, list[EffectiveForecast]] = {}
+    for subject in subjects:
+        key = cohort_key_for_horizon(subject.terms.horizon_sessions, regime=regime)
+        by_cohort.setdefault(key, []).append(subject)
+
+    calibrations_by_id: dict[UUID, ForecastCalibration] = {}
+    calibrated: list[CalibratedForecast] = []
+
+    for cohort_key in sorted(by_cohort.keys()):
+        cohort_subjects = sorted(
+            by_cohort[cohort_key],
+            key=lambda s: (s.ticker.upper(), str(s.effective_id)),
+        )
+        # Horizon-match outcomes when they carry a matching cohort via residual cohort
+        # convention: caller supplies the union; calibrator re-filters by as_of only.
+        # Subjects sharing a cohort_key share one calibration estimate.
+        calibration = calibrate_cohort(
+            outcomes,
+            cohort_key=cohort_key,
+            as_of=known_at,
+            effective_at=known_at,
+        )
+        calibrations_by_id[calibration.calibration_id] = calibration
+        residuals: list[Decimal] = []
+        if calibration.status is CalibrationArtifactStatus.AVAILABLE:
+            eligible = _eligible_outcomes(outcomes, as_of=known_at)
+            residuals = [o.signed_residual for o in eligible if o.signed_residual is not None]
+        for subject in cohort_subjects:
+            calibrated.append(
+                calibrate_subject(
+                    base_forecast_id=subject.base_forecast_id,
+                    effective_forecast_id=subject.effective_id,
+                    ticker=subject.ticker,
+                    terms=subject.terms,
+                    calibration=calibration,
+                    as_of=known_at,
+                    effective_at=known_at,
+                    cohort_residuals=residuals,
+                )
+            )
+
+    return ShadowCalibrationAttachment(
+        calibrations=tuple(
+            calibrations_by_id[cid] for cid in sorted(calibrations_by_id.keys(), key=str)
+        ),
+        calibrated_forecasts=tuple(calibrated),
+    )
+
+
+def attach_shadow_calibrations_from_state(
+    state: object,
+    *,
+    outcomes: Sequence[ForecastOutcome],
+    as_of: datetime | None = None,
+    regime: str = "default",
+) -> ShadowCalibrationAttachment:
+    """Attach shadows for H6 effectives on ``state`` using cutoff-bounded outcomes."""
+    cutoff = as_of
+    if cutoff is None:
+        cutoff = getattr(state, "knowledge_cutoff_at", None)
+    if cutoff is None:
+        cutoff = datetime.now(tz=UTC)
+    subjects = collect_effective_forecasts_from_state(state)
+    return attach_shadow_calibrations(
+        subjects=subjects,
+        outcomes=outcomes,
+        as_of=cutoff,
+        regime=regime,
+    )
+
+
 __all__ = [
     "DISPERSION_FLOOR",
     "DOWNSIDE_LEVELS",
@@ -606,9 +741,13 @@ __all__ = [
     "PRIOR_EQUIVALENT_SAMPLE_SIZE",
     "SHRINKAGE_FORMULA",
     "CalibrationBundle",
+    "ShadowCalibrationAttachment",
+    "attach_shadow_calibrations",
+    "attach_shadow_calibrations_from_state",
     "calibrate_cohort",
     "calibrate_forecast",
     "calibrate_subject",
     "cohort_key_for_horizon",
+    "collect_effective_forecasts_from_state",
     "scenario_positive_probability",
 ]

@@ -71,6 +71,8 @@ def _persist_forecast_registry(*, client: SupabaseClient, state: HermesState) ->
             "forecast_registry_reason": f"{type(exc).__name__}: {exc}"[:300],
             "forecast_registry_assessments_written": 0,
             "forecast_registry_amendments_written": 0,
+            "forecast_registry_calibrations_written": 0,
+            "forecast_registry_calibrated_forecasts_written": 0,
         }
     status = "ok" if result.ok else "degraded"
     return {
@@ -80,6 +82,10 @@ def _persist_forecast_registry(*, client: SupabaseClient, state: HermesState) ->
         "forecast_registry_assessments_skipped": result.assessments_skipped,
         "forecast_registry_amendments_written": result.amendments_written,
         "forecast_registry_amendments_skipped": result.amendments_skipped,
+        "forecast_registry_calibrations_written": result.calibrations_written,
+        "forecast_registry_calibrations_skipped": result.calibrations_skipped,
+        "forecast_registry_calibrated_forecasts_written": result.calibrated_forecasts_written,
+        "forecast_registry_calibrated_forecasts_skipped": result.calibrated_forecasts_skipped,
         "forecast_registry_conflicts": list(result.conflicts),
     }
 
@@ -114,7 +120,8 @@ def _manifest_payload(
     exactly how a 1.1 reader already sees them.
 
     ``schema_version`` 1.3 adds optional forecast-registry artifact fields (#2663):
-    status/counts only — never forecast math or prompt bodies.
+    status/counts only — never forecast math or prompt bodies. WP5.4 extends the
+    same block with shadow calibration write counts (#2684).
     """
     payload: dict[str, Any] = {
         "schema_version": "1.3",

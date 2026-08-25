@@ -611,9 +611,69 @@ def resolve_matured_forecast_outcomes(
     )
 
 
+_OUTCOME_FIELDS = frozenset(
+    {
+        "outcome_id",
+        "base_forecast_id",
+        "effective_forecast_id",
+        "ticker",
+        "reference_session",
+        "maturity_session",
+        "reference_snapshot",
+        "maturity_snapshot",
+        "forecast_mean_return",
+        "realized_return",
+        "signed_residual",
+        "positive_label",
+        "status",
+        "unavailable_reason",
+        "content_hash",
+        "event_time",
+        "known_at",
+    }
+)
+
+
+def list_resolved_outcomes_as_of(
+    *,
+    client: SupabaseClient,
+    knowledge_cutoff_at: datetime,
+) -> list[ForecastOutcome]:
+    """Exact rows with ``status=resolved`` and ``known_at <= cutoff`` (no latest lookup).
+
+    Used by WP5.4 shadow calibration attach. Late-known rows are invisible.
+    Invalid rows are skipped rather than inventing labels.
+    """
+    cutoff = require_utc_datetime(knowledge_cutoff_at, field_name="knowledge_cutoff_at")
+    resp = (
+        client.table(OUTCOMES)
+        .select("*")
+        .eq("status", OutcomeStatus.RESOLVED.value)
+        .lte("known_at", cutoff.isoformat())
+        .execute()
+    )
+    rows = list(getattr(resp, "data", None) or [])
+    out: list[ForecastOutcome] = []
+    for row in rows:
+        known = _parse_known_at(row.get("known_at"))
+        if known is None or known > cutoff:
+            continue
+        payload = {k: row[k] for k in _OUTCOME_FIELDS if k in row}
+        try:
+            out.append(ForecastOutcome.model_validate(payload))
+        except Exception as exc:
+            logger.warning(
+                "forecast outcomes: skip invalid resolved row (%s: %s)",
+                type(exc).__name__,
+                exc,
+            )
+    return sorted(out, key=lambda o: (o.known_at, str(o.outcome_id)))
+
+
 __all__ = [
     "DEFAULT_VENUE",
     "OUTCOMES",
     "OutcomeResolveResult",
+    "list_resolved_outcomes_as_of",
     "resolve_matured_forecast_outcomes",
 ]
