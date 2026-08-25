@@ -112,6 +112,8 @@ export interface Database {
           thesis_id: string | null;
           reason: string | null;
           created_at: string | null;
+          /** Compatibility label (#2422): legacy reconstruction vs ledger projection. */
+          book_source?: 'legacy' | 'authoritative';
         };
         Insert: Omit<Database['public']['Tables']['position_events']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Database['public']['Tables']['position_events']['Insert']>;
