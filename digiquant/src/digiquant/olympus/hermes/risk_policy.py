@@ -15,6 +15,15 @@ from typing import Any
 
 import polars as pl
 
+from digiquant.olympus.hermes.cost_liquidity import (
+    COST_CONFIG_KEYS,
+    DEFAULT_ADV_LOOKBACK_DAYS,
+    DEFAULT_CONSERVATIVE_MULTIPLIER,
+    DEFAULT_FEE_BPS,
+    DEFAULT_IMPACT_ALPHA,
+    DEFAULT_MAX_ADV_PARTICIPATION_PCT,
+    DEFAULT_SPREAD_RANGE_FRACTION,
+)
 from digiquant.olympus.hermes.models.risk_policy import (
     CapabilityLimit,
     CorrelationBucketEntry,
@@ -99,6 +108,15 @@ _TURNOVER_CONFIG_KEYS: dict[str, str] = {
     "holding_days": "holding_days",
     "rebalance_rel_band_pct": "rebalance_rel_band_pct",
     "rebalancing_cadence": "rebalancing_cadence",
+}
+
+_COST_DEFAULTS: dict[str, float | int] = {
+    "fee_bps": float(DEFAULT_FEE_BPS),
+    "impact_alpha": float(DEFAULT_IMPACT_ALPHA),
+    "spread_range_fraction": float(DEFAULT_SPREAD_RANGE_FRACTION),
+    "adv_lookback_days": DEFAULT_ADV_LOOKBACK_DAYS,
+    "max_adv_participation_pct": float(DEFAULT_MAX_ADV_PARTICIPATION_PCT),
+    "conservative_multiplier": float(DEFAULT_CONSERVATIVE_MULTIPLIER),
 }
 
 _GOLDEN_BUCKET_LABELS: tuple[tuple[str, str, str], ...] = (
@@ -301,6 +319,22 @@ def _phase1_unavailable_capability() -> CapabilityLimit:
     )
 
 
+def _phase1_observational_cost_capability(*, limit: float) -> CapabilityLimit:
+    return CapabilityLimit(available=True, enforced=False, limit=limit, reason=None)
+
+
+def _resolve_cost_coefficients(preferences: Mapping[str, Any]) -> dict[str, ResolvedLeaf]:
+    coeffs: dict[str, ResolvedLeaf] = {}
+    for field, default in _COST_DEFAULTS.items():
+        coeffs[field] = _resolve_scalar(
+            field=field,
+            default=default,
+            preferences=preferences,
+            config_keys=COST_CONFIG_KEYS,
+        )
+    return coeffs
+
+
 def _validate_resolved_policy(
     *,
     sizing_caps: dict[str, ResolvedLeaf],
@@ -333,6 +367,7 @@ def _policy_from_leaves(
     sizing_caps: dict[str, ResolvedLeaf],
     breaker: dict[str, ResolvedLeaf],
     turnover: dict[str, ResolvedLeaf],
+    cost_coefficients: dict[str, ResolvedLeaf],
     effective_at: datetime,
     source_run_id: str | None,
     status: PolicyArtifactStatus,
@@ -374,8 +409,11 @@ def _policy_from_leaves(
         factor_limits=_phase1_unavailable_capability(),
         stress_limits=_phase1_unavailable_capability(),
         tail_limits=_phase1_unavailable_capability(),
-        liquidity_limits=_phase1_unavailable_capability(),
-        cost_policy=_phase1_unavailable_capability(),
+        liquidity_limits=_phase1_observational_cost_capability(
+            limit=float(cost_coefficients["max_adv_participation_pct"].value)
+        ),
+        cost_policy=_phase1_observational_cost_capability(limit=None),
+        cost_coefficients=cost_coefficients,
     )
     content_hash = risk_policy_content_hash(payload=policy_hash_payload(draft))
     policy_id = risk_policy_id(method_version=METHOD_VERSION, content_hash=content_hash)
@@ -403,12 +441,14 @@ def resolve_risk_policy(
     sizing_caps = _resolve_sizing_caps(prefs)
     breaker = _resolve_breaker(prefs)
     turnover = _resolve_turnover(prefs)
+    cost_coefficients = _resolve_cost_coefficients(prefs)
     degrade_reason = _validate_resolved_policy(sizing_caps=sizing_caps, breaker=breaker)
     if degrade_reason:
         policy = _policy_from_leaves(
             sizing_caps=sizing_caps,
             breaker=breaker,
             turnover=turnover,
+            cost_coefficients=cost_coefficients,
             effective_at=at,
             source_run_id=source_run_id,
             status=PolicyArtifactStatus.DEGRADED,
@@ -419,6 +459,7 @@ def resolve_risk_policy(
             sizing_caps=sizing_caps,
             breaker=breaker,
             turnover=turnover,
+            cost_coefficients=cost_coefficients,
             effective_at=at,
             source_run_id=source_run_id,
             status=PolicyArtifactStatus.AVAILABLE,

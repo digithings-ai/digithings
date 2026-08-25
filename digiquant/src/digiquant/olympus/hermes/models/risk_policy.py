@@ -141,6 +141,7 @@ class RiskPolicy(RiskPolicyModel):
     tail_limits: CapabilityLimit
     liquidity_limits: CapabilityLimit
     cost_policy: CapabilityLimit
+    cost_coefficients: dict[str, ResolvedLeaf]
 
     @model_validator(mode="after")
     def _validate_policy(self) -> RiskPolicy:
@@ -309,6 +310,9 @@ def policy_hash_payload(policy: RiskPolicy) -> dict[str, object]:
         "tail_limits": _capability_json(policy.tail_limits),
         "liquidity_limits": _capability_json(policy.liquidity_limits),
         "cost_policy": _capability_json(policy.cost_policy),
+        "cost_coefficients": {
+            k: _leaf_json(v) for k, v in sorted(policy.cost_coefficients.items())
+        },
     }
 
 
