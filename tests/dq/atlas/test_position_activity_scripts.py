@@ -94,12 +94,12 @@ def test_market_open_gate_treats_naive_replay_timestamp_as_utc() -> None:
     )
 
 
-def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
-    """Backfill matches cron: no `--no-ledger`; cold-start decline (#2589) is the safety.
+def test_backfill_requires_the_ledger_like_the_cron_does() -> None:
+    """Every `execute_at_open.py` subprocess in the backfill carries `--require-ledger` (#2589).
 
-    After #2589 the ledger path is attempted; empty lots with a non-empty prior book decline
-    rather than booking OPEN/EXIT mislabels. Asserted over the AST. `--require-ledger` stays
-    absent until ops seeds `legacy_opening_snapshot` lots.
+    Matches `pipeline-digiquant-prices.yml`: opening-snapshot seed + cold-start decline keep
+    empty lots from inventing OPEN/EXIT; requiring the ledger prevents a silent prose
+    fallback. Asserted over the AST rather than source text.
     """
     source = (_SCRIPT_DIR / "backfill_position_events.py").read_text()
     tree = ast.parse(source)
@@ -141,15 +141,15 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
 
     assert not unclassified, (
         f"unclassified subprocess call site(s): {unclassified}; if this invokes execute_at_open.py "
-        "teach this test to see it"
+        "it must carry --require-ledger, and this test must be taught to see it"
     )
     assert len(invocations) == 2, (
         f"expected 2 literal-argv execute_at_open invocations, found {len(invocations)}; "
         "a call site was added, removed, or hoisted out of a literal list"
     )
     for argv in invocations:
+        assert "'--require-ledger'" in argv, f"invocation missing --require-ledger: {argv}"
         assert "'--no-ledger'" not in argv, f"invocation must not defer with --no-ledger: {argv}"
-        assert "'--require-ledger'" not in argv, f"invocation must not require the ledger: {argv}"
 
     # The dry-run branch prints the command instead of running it, so it escapes the walk above.
     # An operator reads that line to decide whether the real run is safe; if it drifts from the
@@ -168,7 +168,5 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
         f"expected 2 dry-run previews of execute_at_open, found {len(previews)}"
     )
     for preview in previews:
+        assert "--require-ledger" in preview, f"dry-run preview missing --require-ledger: {preview}"
         assert "--no-ledger" not in preview, f"dry-run preview must not defer: {preview}"
-        assert "--require-ledger" not in preview, (
-            f"dry-run preview must not require the ledger: {preview}"
-        )

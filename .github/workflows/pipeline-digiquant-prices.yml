@@ -271,14 +271,13 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices
       - name: execute_at_open.py (prior-trading-day rebalance)
-        # Portfolio-ledger path is live with a cold-start decline (#2589): if
-        # `holding_lots` is empty while the prior `positions` book is not,
-        # `execute_at_open` declines and falls back to prose — it will not book
-        # OPEN/EXIT mislabels into append-only 069 rows. After ops runs
-        # `seed_legacy_opening_lots.py` against core, prefer adding
-        # `--require-ledger` so a silent prose fallback cannot hide the handover.
+        # `#2589` cutover: `ensure_legacy_opening_snapshot` auto-seeds open lots from the
+        # prior `positions` book (one labeled `legacy_opening_snapshot` chain) when lots are
+        # empty, and declines if the book still has holdings after that — so residuals never
+        # invent OPEN/EXIT into append-only 069 rows. `--require-ledger` turns a decline into
+        # exit 3 instead of silently falling back to prose.
         run: |
-          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance
+          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance --require-ledger
 
   eod-macro:
     name: EOD macro ingest

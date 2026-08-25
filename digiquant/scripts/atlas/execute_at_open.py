@@ -197,7 +197,9 @@ def _rebalance_table_nonempty(payload: Dict[str, Any]) -> bool:
     return isinstance(table, list) and len(table) > 0
 
 
-def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+def resolve_rebalance_payload_fallback(
+    sb, execution_d: str
+) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
     """
     When no rebalance_decision row exists for documents.date == execution day, find the PM
     artifact used for that session: walk backward along prior trading days (Fri decision → Mon
@@ -206,7 +208,11 @@ def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[s
     d = execution_d
     for _ in range(25):
         p = _rebalance_payload_for_date(sb, d)
-        if isinstance(p, dict) and p.get("doc_type") == "rebalance_decision" and _rebalance_table_nonempty(p):
+        if (
+            isinstance(p, dict)
+            and p.get("doc_type") == "rebalance_decision"
+            and _rebalance_table_nonempty(p)
+        ):
             return d, p
         pd = _prior_trading_date(d)
         if not pd or pd == d:
@@ -229,7 +235,11 @@ def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[s
         seen.add(ad)
         ds = ad.isoformat()
         p = _rebalance_payload_for_date(sb, ds)
-        if isinstance(p, dict) and p.get("doc_type") == "rebalance_decision" and _rebalance_table_nonempty(p):
+        if (
+            isinstance(p, dict)
+            and p.get("doc_type") == "rebalance_decision"
+            and _rebalance_table_nonempty(p)
+        ):
             return ds, p
     return None, None
 
@@ -449,12 +459,16 @@ def build_events_from_paper_fills(
     try:
         from digiquant.olympus.hermes.writers.execution_io import (
             approved_weights,
-            cold_start_blocks_ledger,
             execute_pending_orders,
             ledger_is_authoritative,
             pending_symbols,
         )
         from digiquant.olympus.hermes.writers.ledger_io import ledger_enabled
+        from digiquant.olympus.hermes.writers.opening_snapshot import (
+            COLD_START_DECLINE,
+            cold_start_requires_seed,
+            ensure_legacy_opening_snapshot,
+        )
     except ImportError as exc:
         return None, f"the digiquant package is not importable from this script ({exc})"
 
@@ -484,8 +498,9 @@ def build_events_from_paper_fills(
     if not authoritative:
         return None, f"no portfolio_ledger_commits row for run_date={run_d}"
 
-    # Cold-start guard (#2589 / #2508): empty lots + non-empty prior book must decline
-    # before any fill write, or residuals invent OPEN/EXIT into append-only rows.
+    # Cold-start / opening snapshot (#2589): empty lots + non-empty prior book must not
+    # reach execute_pending_orders (residuals would invent OPEN/EXIT). Auto-ensure once;
+    # if still cold after, decline so --require-ledger exits 3 instead of mislabeling.
     prior_book_d = _prior_book_date(sb, execution_d)
     prior_book_date = None
     if prior_book_d:
@@ -494,11 +509,16 @@ def build_events_from_paper_fills(
         except ValueError:
             prior_book_date = None
     try:
-        cold = cold_start_blocks_ledger(client=sb, prior_book_date=prior_book_date)
+        if prior_book_date is not None and cold_start_requires_seed(
+            client=sb, book_date=prior_book_date
+        ):
+            ok, seed_reason = ensure_legacy_opening_snapshot(sb, prior_book_date, now=stamp)
+            if not ok:
+                return None, seed_reason
+            if cold_start_requires_seed(client=sb, book_date=prior_book_date):
+                return None, COLD_START_DECLINE
     except Exception as exc:
         return None, f"a portfolio-ledger cold-start probe failed ({exc})"
-    if cold:
-        return None, cold
 
     result = execute_pending_orders(
         client=sb,
@@ -658,7 +678,12 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     (:func:`_prior_book_date`) — the last date that actually has `positions` rows, which is
     not necessarily the prior weekday.
     """
-    res = sb.table("positions").select("ticker,weight_pct,thesis_id").eq("date", execution_d).execute()
+    res = (
+        sb.table("positions")
+        .select("ticker,weight_pct,thesis_id")
+        .eq("date", execution_d)
+        .execute()
+    )
     rows = getattr(res, "data", None) or []
     targets: Dict[str, float] = {}
     thesis: Dict[str, Optional[str]] = {}
@@ -715,9 +740,7 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     return out if out else None
 
 
-def _record_ledger_events(
-    sb, d: str, rebalance_d: str, ledger_events: List[Dict[str, Any]]
-) -> int:
+def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict[str, Any]]) -> int:
     """Write the ledger-projected events plus HOLD continuity, and report what happened.
 
     `ledger_events` may legitimately be empty — the ledger spoke and nothing traded. The
@@ -762,7 +785,11 @@ def main() -> int:
         "Execution prices use price_history.open for --date (execution day). "
         "HOLD rows keep the ledger continuous on no-trade days."
     )
-    ap.add_argument("--date", default=dt_date.today().isoformat(), help="Execution session date YYYY-MM-DD (opens from this day)")
+    ap.add_argument(
+        "--date",
+        default=dt_date.today().isoformat(),
+        help="Execution session date YYYY-MM-DD (opens from this day)",
+    )
     ap.add_argument(
         "--rebalance-date",
         default=None,
@@ -813,7 +840,10 @@ def main() -> int:
         return 0
 
     if args.prior_trading_day_rebalance and args.rebalance_date:
-        print("error: use only one of --prior-trading-day-rebalance or --rebalance-date", file=sys.stderr)
+        print(
+            "error: use only one of --prior-trading-day-rebalance or --rebalance-date",
+            file=sys.stderr,
+        )
         return 2
 
     rebalance_d = args.rebalance_date
@@ -886,7 +916,9 @@ def main() -> int:
                     f"({trade_n} trade-related, {hold_n} HOLD) — no rebalance_decision.json for this date."
                 )
                 return 0
-        print(f"No rebalance_decision payload for documents.date={rebalance_d}; filling from positions only.")
+        print(
+            f"No rebalance_decision payload for documents.date={rebalance_d}; filling from positions only."
+        )
         extra = _with_book_source(
             _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d)),
             BOOK_SOURCE_LEGACY,
@@ -1037,4 +1069,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

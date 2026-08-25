@@ -1043,9 +1043,12 @@ class TestSoleAuthority:
             f"{writers}/execution_io.py",
             f"{writers}/ledger_io.py",
         ]
-        # Nothing but the executor has any reason to know lots exist.
-        assert self._files_naming("portfolio_ledger_holding_lots") == [f"{writers}/execution_io.py"]
-
+        # Executor + owned opening-snapshot helper (+ operator CLI that names the table).
+        assert self._files_naming("portfolio_ledger_holding_lots") == [
+            "digiquant/scripts/atlas/seed_ledger_opening_snapshot.py",
+            f"{writers}/execution_io.py",
+            f"{writers}/opening_snapshot.py",
+        ]
     def test_the_executor_has_exactly_one_caller(self) -> None:
         """``execute_pending_orders(`` — the paren keeps prose cross-references out.
 

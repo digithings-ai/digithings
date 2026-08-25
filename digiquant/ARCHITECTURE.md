@@ -1608,14 +1608,23 @@ becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`
 all, and the book may be a different date than the run date.
 
 Cutover is a deliberate edit, **not** a property of the data alone (#2508 → #2589). The kill
-switch defaults *on*. After #2589 the morning job and backfill **attempt the ledger path**
-(no `--no-ledger`). Safety is the cold-start decline: if `portfolio_ledger_holding_lots` has
-no open lots while the prior `positions` book is non-empty,
-`cold_start_blocks_ledger` / `build_events_from_paper_fills` returns `(None, reason)` and the
-caller falls back to prose — it will not book OPEN/EXIT mislabels into append-only 069 rows.
-`--require-ledger` stays off until ops seeds a labeled `legacy_opening_snapshot` (NAV × weight
-÷ price → open lots); then prefer adding `--require-ledger` so prose cannot hide the handover.
-Deleting the two prose builders remains a further follow-up gated on prod reaching 070.
+switch defaults *on*. After #2589 the morning job and backfill run the ledger path with
+`--require-ledger`. Safety is the opening snapshot + cold-start decline:
+
+1. `ensure_legacy_opening_snapshot` (in `hermes/writers/opening_snapshot.py`, called from
+   `build_events_from_paper_fills` before `execute_pending_orders`) idempotently seeds open
+   lots from the prior `positions` book × `nav_history.nav` ÷ mark as one labeled
+   `policy_version_id=legacy_opening_snapshot` chain — commit → ADD/new_conviction →
+   quantity targets → executed order → paper fill (fee=0, slippage=0) → open lot. It does
+   not invent pre-cutover fill history beyond that single snapshot.
+2. If lots are still empty while the prior book has holdings,
+   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason)` and
+   `--require-ledger` exits 3 — it will not book OPEN/EXIT mislabels into append-only 069
+   rows, and prose cannot hide the handover.
+
+Ops can also run `digiquant/scripts/atlas/seed_ledger_opening_snapshot.py` (`--date` optional,
+`--dry-run` supported). Deleting the two prose builders remains a further follow-up gated on
+prod reaching 070.
 
 #### Compatibility projection labeling (#2422 / Task 2.5)
 
@@ -1639,7 +1648,8 @@ projection writers are retired only after holding_lots seed + `--no-ledger` remo
 readers pass retention checks — not as part of #2422.
 
 - **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
-  `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and
+  `TestSoleAuthority`, plus rejection/idempotency/lot coverage),
+  `tests/dq/hermes/test_opening_snapshot.py` (seed idempotency / cold-start), and
   `tests/dq/atlas/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,
   `TestBuildEventsFromPaperFillsDeclines`, `TestMainPrefersTheLedger` — the last proves the
   prose builders are never called when the ledger speaks, that HOLD continuity survives, and
