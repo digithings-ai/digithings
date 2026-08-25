@@ -22,14 +22,14 @@ from datetime import date as dt_date
 from pathlib import Path
 
 try:
-    from supabase import create_client  # type: ignore
+    from supabase import create_client  # type: ignore[import-not-found]
 
     _HAS_SB = True
 except ImportError:
     _HAS_SB = False
 
 try:
-    from dotenv import load_dotenv  # type: ignore
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
 
     load_dotenv(Path(__file__).parent.parent / "config" / "supabase.env")
     load_dotenv()

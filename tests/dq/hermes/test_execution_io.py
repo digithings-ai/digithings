@@ -1049,6 +1049,7 @@ class TestSoleAuthority:
             f"{writers}/execution_io.py",
             f"{writers}/opening_snapshot.py",
         ]
+
     def test_the_executor_has_exactly_one_caller(self) -> None:
         """``execute_pending_orders(`` — the paren keeps prose cross-references out.
 

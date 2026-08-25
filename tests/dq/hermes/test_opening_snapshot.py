@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any  # score:allow untyped any — heterogeneous fake-row / fixture dicts
 
 import pytest
 from digiquant.olympus.hermes.writers.ledger_io import (
