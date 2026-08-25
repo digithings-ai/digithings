@@ -26,6 +26,8 @@ describe('buildPipelineHref (LOCKED deep-link grammar)', () => {
     expect(stageForDocumentKey('analyst/IJR')).toBe('selection');
     expect(stageForDocumentKey('deliberation/EWT')).toBe('selection');
     expect(stageForDocumentKey('pm-rebalance')).toBe('selection');
+    expect(stageForDocumentKey('risk-debate')).toBe('selection');
+    expect(stageForDocumentKey('document-deltas/macro')).toBe('research');
     expect(stageForDocumentKey('sector-energy')).toBe('research');
     expect(stageForDocumentKey('commit-run/28041585974')).toBe('decision');
     expect(stageForDocumentKey('attention-plan')).toBe('inputs');

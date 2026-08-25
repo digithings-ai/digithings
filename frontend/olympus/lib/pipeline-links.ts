@@ -74,9 +74,11 @@ export function stageForDocumentKey(documentKey: string): PipelineStage | null {
   if (k === 'attention-plan') return 'inputs';
   if ((DIGEST_DOCUMENT_KEYS as readonly string[]).includes(k)) return 'synthesis';
   if (k.startsWith('analyst/') || k.startsWith('deliberation/')) return 'selection';
-  if (k === 'pm-direction-memo' || k === 'pm-rebalance') return 'selection';
+  if (k === 'pm-direction-memo' || k === 'pm-rebalance' || k === 'risk-debate') return 'selection';
   if (k.startsWith('commit-run/')) return 'decision';
   if (k === 'beliefs') return 'learning';
+  // Document-delta siblings of research artifacts — ledger-only, not graph leaves.
+  if (k.startsWith('document-deltas/')) return 'research';
   if (
     k.startsWith('alt-') ||
     k.startsWith('inst-') ||
