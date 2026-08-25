@@ -271,18 +271,13 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices
       - name: execute_at_open.py (prior-trading-day rebalance)
-        # `--no-ledger` keeps the portfolio-ledger cutover deliberate (#2508). Cutover is a
-        # property of the data, not of a flag: `ledger_enabled()` defaults *on*, so applying
-        # migration 069 alone would switch this job onto the ledger path. It would then size
-        # orders as a weight delta against the legacy `positions` book while naming events
-        # from `portfolio_ledger_holding_lots` — which starts empty and has no backfill — so
-        # every first sell of a held name books EXIT and every first buy OPEN, into tables 069
-        # makes append-only and therefore unrepairable. Remove this flag only once
-        # `holding_lots` is seeded from the committed book (or the ledger declines when the lot
-        # table is empty and the prior book is not), and prefer `--require-ledger` at that
-        # point so a silent fallback to prose cannot hide the handover.
+        # `#2589` cutover: `ensure_legacy_opening_snapshot` auto-seeds open lots from the
+        # prior `positions` book (one labeled `legacy_opening_snapshot` chain) when lots are
+        # empty, and declines if the book still has holdings after that — so residuals never
+        # invent OPEN/EXIT into append-only 069 rows. `--require-ledger` turns a decline into
+        # exit 3 instead of silently falling back to prose.
         run: |
-          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance --no-ledger
+          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance --require-ledger
 
   eod-macro:
     name: EOD macro ingest

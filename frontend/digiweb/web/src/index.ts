@@ -162,6 +162,11 @@ export {
   type PagerPageProps,
   type IconButtonProps,
 } from "./components/controls/NavButtons";
+export {
+  DatePager,
+  formatDatePagerLabel,
+  type DatePagerProps,
+} from "./components/controls/DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./components/controls/TagsInput";
 export { SearchBar, type SearchBarProps } from "./components/controls/SearchBar";
 

@@ -467,13 +467,13 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
 
             <section className="border-y border-hair" data-region="measured-outcome">
               <SectionHeading
-                eyebrow="Performance and attribution"
+                eyebrow="Performance and lookback"
                 title="Measured outcome"
-                meta={latestAttribution ? `window ending ${latestAttribution.date}` : null}
+                meta={latestAttribution ? `lookback ending ${latestAttribution.date}` : null}
               />
               <div className="border-b border-hair px-4 py-3 md:px-5">
                 <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-                  Latest attribution
+                  Latest current-book lookback (diagnostic)
                 </p>
               </div>
               <dl className="grid grid-cols-2 border-l border-t border-hair lg:grid-cols-4">
@@ -487,24 +487,24 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
                   label="Position return"
                   value={formatPct(latestAttribution?.position_return_pct ?? null)}
                   tone={pnlColor(latestAttribution?.position_return_pct ?? null)}
-                  sub={latestAttribution ? 'stored attribution window' : 'no snapshot'}
+                  sub={latestAttribution ? 'lookback window (not realized day)' : 'no snapshot'}
                 />
                 <Metric
-                  label="Return contribution"
+                  label="Lookback contribution"
                   value={formatPct(latestAttribution?.contribution_pct ?? null)}
                   tone={pnlColor(latestAttribution?.contribution_pct ?? null)}
-                  sub="weight × position return"
+                  sub="weight × lookback return"
                 />
                 <Metric
-                  label="Active contribution"
+                  label="Lookback active"
                   value={formatPct(latestAttribution?.total_attribution_pct ?? null)}
                   tone={pnlColor(latestAttribution?.total_attribution_pct ?? null)}
-                  sub="versus SPY"
+                  sub="versus SPY (same window)"
                 />
               </dl>
               {!latestAttribution ? (
                 <p className="border-t border-hair px-4 py-4 text-xs text-ink-mute md:px-5">
-                  No stored attribution snapshot is available for this ticker.
+                  No stored current-book lookback snapshot is available for this ticker.
                 </p>
               ) : null}
             </section>

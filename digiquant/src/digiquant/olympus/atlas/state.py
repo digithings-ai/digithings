@@ -192,6 +192,21 @@ class AtlasConfigBundle(BaseModel):
     hedge_funds: list[str] = Field(default_factory=list)
     preferences: dict[str, Any] = Field(default_factory=dict)
     macro_series: list[str] = Field(default_factory=list)
+    # Track B (#2609): exact ProfileConfig pin. None → house default at preflight.
+    profile_config_version_id: str | None = Field(
+        default=None,
+        description=(
+            "Exact olympus_profile_config.id pin for this run. None selects the "
+            "digithings house default. Overlay pins fail closed when unresolved."
+        ),
+    )
+    profile_config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Resolved ProfileConfig dump after preflight pin. Authoritative for "
+            "overlay watchlist/themes/risk; never forks or cancels the house run."
+        ),
+    )
 
 
 class PriorContext(BaseModel):

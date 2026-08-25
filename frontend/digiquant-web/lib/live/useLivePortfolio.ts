@@ -8,7 +8,9 @@
  *
  *   - `public_portfolio_positions` — latest-date book (privacy-allowlisted:
  *     performance only, never rationale / PM notes / thesis).
- *   - `public_nav_history` — NAV + cash/invested % + daily return series.
+ *   - `public_accounting_nav_history` — curated NAV (#2599): finalized accounting
+ *     tips preferred; dates without a final tip use labeled legacy nav_history
+ *     (`source=legacy_nav_history`). Rollback = `public_nav_history` (050).
  *
  * Live valuation uses a symbol's quote ONLY when it is a real (non-stale) tick;
  * otherwise the leg falls back to `current_price` and stays flat. With no live
@@ -33,7 +35,9 @@ import {
 
 const POSITION_COLUMNS =
   "ticker, name, category, sector_bucket, weight_pct, entry_price, entry_date, current_price, day_change_pct, unrealized_pnl_pct, since_entry_return_pct, metrics_as_of";
-const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct";
+/** Curated accounting NAV (#2599). Rollback target: public_nav_history. */
+const NAV_VIEW = "public_accounting_nav_history";
+const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract";
 
 export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePortfolioResult {
   const client = "client" in options ? options.client ?? null : supabase;
@@ -55,7 +59,7 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
       try {
         const [posRes, navRes] = await Promise.all([
           client.from("public_portfolio_positions").select(POSITION_COLUMNS),
-          client.from("public_nav_history").select(NAV_COLUMNS).order("date", { ascending: true }),
+          client.from(NAV_VIEW).select(NAV_COLUMNS).order("date", { ascending: true }),
         ]);
         if (cancelled) return;
         if (posRes.error) throw new Error(posRes.error.message);

@@ -4,7 +4,8 @@
 stops at ``pending`` order intents. This module appends the other half: it consumes those
 pending intents and books the fill, the position lot, and the order's terminal status.
 Nothing else in the codebase may write ``portfolio_ledger_paper_executions`` or
-``portfolio_ledger_holding_lots``.
+``portfolio_ledger_holding_lots`` except this module and its owned helper
+:mod:`opening_snapshot` (the labeled cutover seed).
 
 The point of the task is *authority*. Before this, "what did the portfolio actually do
 today" was reconstructed at read time from a prose digest snapshot or from the mutable
@@ -929,9 +930,11 @@ __all__ = [
     "FillCosts",
     "HOLDING_LOTS",
     "Rejection",
+    "approved_weights",
     "close_lot_id",
     "executed_intent_id",
     "execute_pending_orders",
     "ledger_is_authoritative",
     "open_lot_id",
+    "pending_symbols",
 ]

@@ -97,13 +97,17 @@ export interface LivePosition {
   isLive: boolean;
 }
 
-/** One point of the NAV series from `public_nav_history`. */
+/** One point of the NAV series from `public_accounting_nav_history` (#2599). */
 export interface NavPoint {
   date: string;
   nav: number;
   cashPct: number | null;
   investedPct: number | null;
   dayReturnPct: number | null;
+  /** finalized_accounting | legacy_nav_history — never unlabeled when present. */
+  source?: string | null;
+  /** finalized_accounting | legacy_estimate */
+  contract?: string | null;
 }
 
 /** Return shape of {@link useLivePortfolio}. */

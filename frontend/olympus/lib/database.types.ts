@@ -112,6 +112,8 @@ export interface Database {
           thesis_id: string | null;
           reason: string | null;
           created_at: string | null;
+          /** Compatibility label (#2422): legacy reconstruction vs ledger projection. */
+          book_source?: 'legacy' | 'authoritative';
         };
         Insert: Omit<Database['public']['Tables']['position_events']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Database['public']['Tables']['position_events']['Insert']>;
@@ -301,7 +303,8 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['thesis_vehicles']['Insert']>;
       };
       position_attribution: {
-        // Single-benchmark active-return decomposition per (date, ticker) (migration 040).
+        // Compatibility view over current_book_lookback (#2598 / migration 073).
+        // Trailing-window diagnostic — NOT realized daily contribution.
         Row: {
           id: string;
           date: string;
@@ -310,15 +313,26 @@ export interface Database {
           weight_pct: number | null;
           position_return_pct: number | null;
           benchmark_return_pct: number | null;
-          contribution_pct: number | null;       // weight × position return
+          contribution_pct: number | null;       // weight × lookback return
           selection_effect_pct: number | null;   // weight × (position − benchmark)
           allocation_effect_pct: number | null;  // cash-drag effect (CASH row)
           total_attribution_pct: number | null;  // selection + allocation; sums to active return
           metrics_as_of: string | null;
           created_at: string | null;
+          window_start_date?: string | null;
+          window_end_date?: string | null;
+          lookback_days?: number | null;
+          contract?: string | null;              // always 'current_book_lookback'
         };
         Insert: Omit<Database['public']['Tables']['position_attribution']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Database['public']['Tables']['position_attribution']['Insert']>;
+      };
+      current_book_lookback: {
+        // Canonical 21-day current-book lookback diagnostic (#2598). Same columns as
+        // the position_attribution compatibility view.
+        Row: Database['public']['Tables']['position_attribution']['Row'];
+        Insert: Database['public']['Tables']['position_attribution']['Insert'];
+        Update: Database['public']['Tables']['position_attribution']['Update'];
       };
       atlas_run_diagnostics: {
         Row: {
@@ -425,6 +439,57 @@ export interface Database {
           input_summary: string;
           output_summary: string;
           created_at: string;
+        };
+      };
+      // Curated accounting public surface (migration 074 / #2599). Prefer these over
+      // raw nav_history for public/performance readers; rollback = LEGACY public_nav_history.
+      public_accounting_nav_history: {
+        Row: {
+          date: string;
+          nav: number;
+          cash_pct: number | null;
+          invested_pct: number | null;
+          day_return_pct: number | null;
+          /** finalized_accounting | legacy_nav_history — never unlabeled. */
+          source: string;
+          /** finalized_accounting | legacy_estimate */
+          contract: string;
+        };
+      };
+      public_finalized_nav: {
+        Row: {
+          date: string;
+          nav: number;
+          cash_pct: number | null;
+          invested_pct: number | null;
+          day_return_pct: number | null;
+          source: string;
+          contract: string;
+        };
+      };
+      public_accounting_period_status: {
+        Row: {
+          date: string;
+          status: string;
+          quality_reasons: string[];
+          opening_equity: number;
+          closing_equity: number;
+          day_return_pct: number | null;
+          benchmark_symbol: string | null;
+          benchmark_return_pct: number | null;
+          contract: string;
+        };
+      };
+      public_daily_realized_attribution: {
+        Row: {
+          date: string;
+          ticker: string;
+          contribution_pct: number | null;
+          benchmark_return_pct: number | null;
+          opening_equity: number;
+          closing_equity: number;
+          contract: string;
+          period_status: string;
         };
       };
     };

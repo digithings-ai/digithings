@@ -1,4 +1,5 @@
 issue	phase	area	kind	priority	model
+2609	Phase 4 — Atlas on digigraph	digiquant	Task	P1	sonnet
 2	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 3	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 4	Phase 2 — Hardening	digismith	Epic	P1	sonnet
@@ -242,3 +243,5 @@ issue	phase	area	kind	priority	model
 2422	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
 2436	Phase 3 — Domain unification	digisearch	Task	P2	sonnet
 2459	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
+2613	Phase 4 — Atlas on digigraph	Atlas	Task	P1	sonnet
+2616	Phase 4 — Atlas on digigraph	Atlas	Task	P1	sonnet

@@ -28,6 +28,11 @@ import type {
 } from '@/components/tearsheet/types';
 import type { ContributionReturnPoint } from '@digithings/web';
 import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
+import {
+  ACCOUNTING_NAV_VIEW,
+  accountingNavToHistoryShape,
+  type AccountingNavRow,
+} from './accounting-views';
 
 const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
@@ -529,9 +534,14 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
       events: [],
     });
   }
+  // NAV: curated accounting series (#2599). Rollback = LEGACY_PUBLIC_NAV_VIEW / nav_history.
   const [navRes, positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
-    safeSelect<TableRow<'nav_history'>>('nav_history', (sb) =>
-      sb.from('nav_history').select('*').order('date', { ascending: true }).limit(PERFORMANCE_HISTORY_LIMIT)
+    safeSelect<AccountingNavRow>(ACCOUNTING_NAV_VIEW, (sb) =>
+      sb
+        .from(ACCOUNTING_NAV_VIEW)
+        .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
+        .order('date', { ascending: true })
+        .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
       sb
@@ -543,6 +553,8 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
     safeSelect<TableRow<'portfolio_metrics'>>('portfolio_metrics', (sb) =>
       sb.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1)
     ),
+    // Book attribution tab stays on current-book lookback (diagnostic). Realized daily
+    // contribution is public_daily_realized_attribution — do not mix into this series.
     safeSelect<TableRow<'position_attribution'>>('position_attribution', (sb) =>
       sb
         .from('position_attribution')
@@ -559,26 +571,35 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
   ]);
-    const navWindow = [...navRes.rows]
-      .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
-      .sort((left, right) => left.date.localeCompare(right.date));
-    const benchmarkRes =
-      navWindow.length >= 2
-        ? await safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
-            'benchmark price_history',
-            (sb) =>
-              sb
-                .from('price_history')
-                .select('ticker,date,close')
-                .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
-                .gte('date', navWindow[0].date)
-                .lte('date', navWindow.at(-1)!.date)
-                .order('date', { ascending: true })
-                .limit(PERFORMANCE_HISTORY_LIMIT)
-          )
-        : { rows: [], ok: true };
+  const navHistory: TableRow<'nav_history'>[] = navRes.rows.map((row) => {
+    const shaped = accountingNavToHistoryShape(row);
+    return {
+      date: shaped.date,
+      nav: shaped.nav,
+      cash_pct: shaped.cash_pct,
+      invested_pct: shaped.invested_pct,
+    };
+  });
+  const navWindow = [...navHistory]
+    .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  const benchmarkRes =
+    navWindow.length >= 2
+      ? await safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
+          'benchmark price_history',
+          (sb) =>
+            sb
+              .from('price_history')
+              .select('ticker,date,close')
+              .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
+              .gte('date', navWindow[0].date)
+              .lte('date', navWindow.at(-1)!.date)
+              .order('date', { ascending: true })
+              .limit(PERFORMANCE_HISTORY_LIMIT)
+        )
+      : { rows: [], ok: true };
   return buildOlympusTearsheet({
-    nav: navRes.rows,
+    nav: navHistory,
     positions: positionsRes.rows,
     metrics: metricsRes.rows[0] ?? null,
     attribution: attributionRes.rows,
