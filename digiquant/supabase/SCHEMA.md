@@ -238,6 +238,24 @@ Writers: `execute_at_open.py` stamps `authoritative` on the ledger path and `leg
 prose path. Cutover/retirement of prose writers is gated on seeded `holding_lots` and removal
 of `--no-ledger` (see ARCHITECTURE.md cutover section), not on this migration alone.
 
+### Period accounting - new in migration 072 (#2596)
+
+Private event-boundary EOD accounting schema (Phase 0 Task 3.1). User-private
+portfolio/accounting — never grant base tables to `anon`/`authenticated`; curated public
+views are Task 3.4 only. Schema only here; Task 3.2 owns the finalizer writer.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_accounting_periods` | `(id UUID)` | One reconciled (or explicitly non-final) period: opening/closing equity & cash, gross/net PnL, fees/slippage, residual, Decimal tolerances, optional benchmark, `status` (`final`/`estimated`/`incomplete`/`failed`), `quality_reasons[]`, backward-only `supersedes_id`. `status=final` requires empty `quality_reasons`. Deterministic `id` from the pure engine. |
+| `olympus_accounting_contributions` | `(id UUID)` | Per-ticker gross/net PnL, fees, slippage, contribution fraction; FK `(period_id, period_date)` → periods. |
+| `olympus_accounting_holdings` | `(id UUID)` | EOD holdings (`quantity`, nullable `mark`/`market_value`); FK to periods. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_accounting_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial unique indexes enforce one current root period
+per `period_date` and at most one superseder per prior id. Models/engine:
+`digiquant.olympus.accounting`.
+
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL
 DEFAULT now()` database write clock, matching the migration-067 telemetry idiom. RLS is
