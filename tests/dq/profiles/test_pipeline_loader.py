@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any, cast
 
 import pytest
-from digiquant.olympus.atlas.phases.preflight import PreflightDeps, build_preflight_node
-from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
 from digiquant.profiles import (
     HOUSE_PROFILE_ID,
     HOUSE_RUN_ID,
@@ -151,30 +148,21 @@ class TestLoader:
 
 
 class TestPreflightPin:
+    """Pin via ``pin_pipeline_profile_at_preflight`` (not ``build_preflight_node``).
+
+    Calling the Atlas preflight node pulls ``digigraph`` → ``openai``, which the
+    digiquant-only CI job does not install. Loader + env-mode coverage belongs here;
+    graph wiring is covered under ``tests/dq/atlas/`` (skipped without digigraph).
+    """
+
     def _fresh_client(self) -> FakeSupabaseClient:
         return FakeSupabaseClient(
-            canned_reads={
-                "daily_snapshots": [],
-                "documents": [],
-                "price_technicals": [
-                    {"date": "2026-04-25", "ticker": "SPY"},
-                ],
-                "macro_series_observations": [{"obs_date": "2026-04-25"}],
-                "olympus_pipeline_profiles": [_house_row(), _overlay_row()],
-            }
+            canned_reads={"olympus_pipeline_profiles": [_house_row(), _overlay_row()]}
         )
 
     def test_preflight_pins_house_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("OLYMPUS_PIPELINE_PROFILE_MODE", raising=False)
-        client = self._fresh_client()
-        deps = PreflightDeps(
-            client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
-        )
-        out = build_preflight_node(deps)(
-            AtlasResearchState(run_type="baseline", run_date=date(2026, 4, 26))
-        )
-        pin = out["pipeline_profile"]
+        pin = pin_pipeline_profile_at_preflight(self._fresh_client())
         assert pin.house.profile_id == HOUSE_PROFILE_ID
         assert pin.mode == "off"
         assert pin.applies_overlay is False
@@ -183,19 +171,10 @@ class TestPreflightPin:
 
     def test_preflight_shadow_overlay_does_not_apply(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("OLYMPUS_PIPELINE_PROFILE_MODE", "shadow")
-        client = self._fresh_client()
-        deps = PreflightDeps(
-            client=client,
-            config_loader=lambda: AtlasConfigBundle(watchlist=["SPY"]),
+        pin = pin_pipeline_profile_at_preflight(
+            self._fresh_client(),
+            overlay_profile_id="overlay-alpha",
         )
-        out = build_preflight_node(deps)(
-            AtlasResearchState(
-                run_type="baseline",
-                run_date=date(2026, 4, 26),
-                overlay_profile_id="overlay-alpha",
-            )
-        )
-        pin = out["pipeline_profile"]
         assert pin.overlay is not None
         assert pin.applies_overlay is False
         assert pin.effective_config.risk.risk_tolerance == "moderate"
