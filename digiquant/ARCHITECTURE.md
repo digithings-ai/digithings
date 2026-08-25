@@ -932,6 +932,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `phase_hermes.risk_policy` / `covariance_snapshot`; H9 fail-soft appends via
   `risk_policy_registry.persist_h8_risk_snapshots_from_state` after booking (manifest
   `schema_version` 1.4). Never feeds resolved objects into `size_portfolio` in Phase 1.
+  **Action cost input binding (#2700 / WP7.1):** adapters in
+  `hermes/action_cost_inputs.py` translate authoritative Phase 0 ledger rows
+  (`PortfolioCommit`, `DecisionIntent`, `OrderIntent`, `PaperExecution`) and
+  accounting `PeriodFill` into frozen `ActionCostInput` / `RealizedCostInput`
+  without inferring notional from NAV/weights. Currency is caller-supplied (Phase 0
+  rows carry no currency column); missing fee/slippage on pre-070 executions raises
+  `ActionCostBindingError` rather than defaulting to zero.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
