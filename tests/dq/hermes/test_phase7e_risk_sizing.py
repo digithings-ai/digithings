@@ -373,7 +373,9 @@ def test_gapful_h7_ranks_match_dense_fallback() -> None:
         _run(_memo_state(dense_roster), FakeSupabaseClient(canned_reads={"price_technicals": vols}))
     )
     gapful = _weights(
-        _run(_memo_state(gapful_roster), FakeSupabaseClient(canned_reads={"price_technicals": vols}))
+        _run(
+            _memo_state(gapful_roster), FakeSupabaseClient(canned_reads={"price_technicals": vols})
+        )
     )
     assert set(dense) == set(gapful) == set(tickers)
     for ticker in tickers:
@@ -387,7 +389,9 @@ def test_duplicate_h7_ranks_tie_by_symbol() -> None:
         TickerDirection(ticker="AAA", direction="long", conviction_rank=1),
     ]
     vols = _tech_rows({"AAA": 20, "BBB": 20})
-    w = _weights(_run(_memo_state(roster), FakeSupabaseClient(canned_reads={"price_technicals": vols})))
+    w = _weights(
+        _run(_memo_state(roster), FakeSupabaseClient(canned_reads={"price_technicals": vols}))
+    )
     assert w["AAA"] > w["BBB"]
 
 
@@ -418,7 +422,9 @@ def test_h7_flat_not_admitted_via_h5_buy() -> None:
     w = _weights(
         _run(
             _memo_state(roster, analysts=analysts),
-            FakeSupabaseClient(canned_reads={"price_technicals": _tech_rows({"SPY": 15, "DBO": 15})}),
+            FakeSupabaseClient(
+                canned_reads={"price_technicals": _tech_rows({"SPY": 15, "DBO": 15})}
+            ),
         )
     )
     assert "SPY" in w
