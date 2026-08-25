@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -327,9 +325,9 @@ def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str
 
 def weights_fingerprint(weights: dict[str, float]) -> str:
     """Stable hash for idempotency comparisons."""
-    canonical = {k: round(v, 4) for k, v in sorted(weights.items())}
-    blob = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(blob.encode()).hexdigest()
+    from digiquant.olympus.hermes.allocation_hashes import weights_fingerprint as _weights_fp
+
+    return _weights_fp(weights)
 
 
 def _canonical_thesis_ids(
