@@ -36,6 +36,7 @@ from digiquant.olympus.hermes.models.deliberation import (
 from digiquant.olympus.hermes.models.forecast import (
     AmendmentOutcome,
     EffectiveForecast,
+    ForecastAmendment,
     ForecastAssessment,
     ForecastTerms,
     materialize_forecast_amendment,
@@ -117,19 +118,21 @@ def _attach_forecast_lineage(
     summary: DeliberationSummary,
     *,
     effective: EffectiveForecast | None,
+    amendment: ForecastAmendment | None = None,
 ) -> DeliberationSummary:
     if effective is None:
         return summary
-    return summary.model_copy(
-        update={
-            "base_forecast_id": str(effective.base_forecast_id),
-            "amendment_id": str(effective.amendment_id) if effective.amendment_id else None,
-            "effective_forecast_id": str(effective.effective_id),
-            "amendment_outcome": effective.amendment_outcome.value,
-            "forecast_degradation": effective.degradation_reason,
-            "effective_forecast": effective.model_dump(mode="json"),
-        }
-    )
+    update: dict[str, Any] = {
+        "base_forecast_id": str(effective.base_forecast_id),
+        "amendment_id": str(effective.amendment_id) if effective.amendment_id else None,
+        "effective_forecast_id": str(effective.effective_id),
+        "amendment_outcome": effective.amendment_outcome.value,
+        "forecast_degradation": effective.degradation_reason,
+        "effective_forecast": effective.model_dump(mode="json"),
+    }
+    if amendment is not None and effective.amendment_outcome is AmendmentOutcome.ACCEPTED:
+        update["forecast_amendment"] = amendment.model_dump(mode="json")
+    return summary.model_copy(update=update)
 
 
 def _carry_prior_effective(
@@ -170,17 +173,20 @@ def _resolve_from_debate(
     analyst: dict[str, Any],
     amendment_terms_raw: dict[str, Any] | None,
     amendment_reason: str,
-) -> EffectiveForecast | None:
+) -> tuple[EffectiveForecast | None, ForecastAmendment | None]:
     base = _base_forecast_from_analyst(analyst)
     if base is None:
-        return None
+        return None, None
     cutoff = state.knowledge_cutoff_at or base.known_at
     if not amendment_terms_raw:
-        return resolve_effective_forecast(
-            base=base,
-            amendment=None,
-            amendment_outcome=AmendmentOutcome.NONE,
-            known_at=cutoff,
+        return (
+            resolve_effective_forecast(
+                base=base,
+                amendment=None,
+                amendment_outcome=AmendmentOutcome.NONE,
+                known_at=cutoff,
+            ),
+            None,
         )
     try:
         terms = ForecastTerms.model_validate(amendment_terms_raw)
@@ -193,11 +199,14 @@ def _resolve_from_debate(
             effective_at=cutoff,
             known_at=cutoff,
         )
-        return resolve_effective_forecast(
-            base=base,
-            amendment=amendment,
-            amendment_outcome=AmendmentOutcome.ACCEPTED,
-            known_at=cutoff,
+        return (
+            resolve_effective_forecast(
+                base=base,
+                amendment=amendment,
+                amendment_outcome=AmendmentOutcome.ACCEPTED,
+                known_at=cutoff,
+            ),
+            amendment,
         )
     except Exception as exc:
         logger.warning(
@@ -206,12 +215,15 @@ def _resolve_from_debate(
             type(exc).__name__,
             exc,
         )
-        return resolve_effective_forecast(
-            base=base,
-            amendment=None,
-            amendment_outcome=AmendmentOutcome.REJECTED,
-            degradation_reason="amendment_rejected",
-            known_at=cutoff,
+        return (
+            resolve_effective_forecast(
+                base=base,
+                amendment=None,
+                amendment_outcome=AmendmentOutcome.REJECTED,
+                degradation_reason="amendment_rejected",
+                known_at=cutoff,
+            ),
+            None,
         )
 
 
@@ -496,15 +508,17 @@ def _h6_node_factory(ticker: str):
                     )
                 ],
             }
+        effective, amendment = _resolve_from_debate(
+            state=state,
+            ticker=ticker,
+            analyst=analyst,
+            amendment_terms_raw=amendment_terms,
+            amendment_reason=summary.conclusion or "h6_challenge_revision",
+        )
         summary = _attach_forecast_lineage(
             summary,
-            effective=_resolve_from_debate(
-                state=state,
-                ticker=ticker,
-                analyst=analyst,
-                amendment_terms_raw=amendment_terms,
-                amendment_reason=summary.conclusion or "h6_challenge_revision",
-            ),
+            effective=effective,
+            amendment=amendment,
         )
         result: dict[str, Any] = {
             "phase_hermes": PhaseHermesState(

@@ -156,6 +156,23 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/store:
 `digiquant.olympus.research_corpus` (`ResearchCorpusStore.publish_if_missing`).
 
+### Forecast registry — migration 079 (#2663 / WP4.6)
+
+Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio
+booking only; registry failure is fail-soft and cannot rebook. No historical
+backfill, no prompt/reasoning bodies, no public base view. Outcome/calibration
+tables are WP5.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_forecast_assessments` | `(forecast_id UUID)` | Immutable H5 `ForecastAssessment` base: ticker, run/provider/prompt/artifact versions, terms jsonb, price_anchor jsonb, content_hash, effective_at, known_at, recorded_at. |
+| `olympus_forecast_amendments` | `(amendment_id UUID)` | Immutable H6 `ForecastAmendment`: FK to base, optional supersedes_amendment_id, reason, terms, evidence/contradiction id arrays, content_hash, times. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_forecast_registry_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/readers:
+`digiquant.olympus.atlas.forecast_registry`.
+
 ### Live quote transport — new in migration 063 (#1807)
 
 The only **table** in the digiquant.io public read surface (the 050 trio are views), and the

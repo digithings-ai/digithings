@@ -10,6 +10,7 @@ from typing import (
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.forecast_registry import persist_forecast_lineage_from_state
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.payloads import sized_book
@@ -55,6 +56,34 @@ def _phase_error(message: str) -> dict[str, Any]:
     }
 
 
+def _persist_forecast_registry(*, client: SupabaseClient, state: HermesState) -> dict[str, Any]:
+    """Fail-soft prospective forecast lineage (#2663). Never raises into booking."""
+    try:
+        result = persist_forecast_lineage_from_state(client=client, state=state)
+    except Exception as exc:
+        logger.warning(
+            "h9 forecast registry degraded (%s: %s); book retained",
+            type(exc).__name__,
+            exc,
+        )
+        return {
+            "forecast_registry_status": "degraded",
+            "forecast_registry_reason": f"{type(exc).__name__}: {exc}"[:300],
+            "forecast_registry_assessments_written": 0,
+            "forecast_registry_amendments_written": 0,
+        }
+    status = "ok" if result.ok else "degraded"
+    return {
+        "forecast_registry_status": status,
+        "forecast_registry_reason": result.degraded_reason,
+        "forecast_registry_assessments_written": result.assessments_written,
+        "forecast_registry_assessments_skipped": result.assessments_skipped,
+        "forecast_registry_amendments_written": result.amendments_written,
+        "forecast_registry_amendments_skipped": result.amendments_skipped,
+        "forecast_registry_conflicts": list(result.conflicts),
+    }
+
+
 def _manifest_payload(
     *,
     source_run_id: str,
@@ -66,6 +95,7 @@ def _manifest_payload(
     supersedes: list[str] | None = None,
     pruned_tickers: list[str] | None = None,
     ledger: LedgerAppend | None = None,
+    forecast_registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Commit manifest body.
 
@@ -82,9 +112,12 @@ def _manifest_payload(
     symbol frozen by an existing fill, and one with no close to price a share count
     against. All three are ``None``/empty when the ledger kill switch is off, which is
     exactly how a 1.1 reader already sees them.
+
+    ``schema_version`` 1.3 adds optional forecast-registry artifact fields (#2663):
+    status/counts only — never forecast math or prompt bodies.
     """
-    return {
-        "schema_version": "1.2",
+    payload: dict[str, Any] = {
+        "schema_version": "1.3",
         "source_run_id": source_run_id,
         "status": status,
         "weights_fingerprint": weights_fingerprint(weights),
@@ -98,6 +131,9 @@ def _manifest_payload(
         "ledger_frozen_symbols": list(ledger.frozen_symbols) if ledger else [],
         "ledger_unpriced_symbols": list(ledger.unpriced_symbols) if ledger else [],
     }
+    if forecast_registry:
+        payload.update(forecast_registry)
+    return payload
 
 
 def build_commit_run_node(deps: CommitRunDeps):
@@ -122,6 +158,9 @@ def build_commit_run_node(deps: CommitRunDeps):
 
         if latest is not None and latest.get("weights_fingerprint") == current_fp:
             # Same date, same book, already on disk — genuinely idempotent.
+            # Still attempt forecast registry (fail-soft): a prior commit may have
+            # booked while registry was degraded (#2663).
+            registry = _persist_forecast_registry(client=deps.client, state=state)
             manifest = _manifest_payload(
                 source_run_id=source_run_id,
                 status="noop",
@@ -130,6 +169,7 @@ def build_commit_run_node(deps: CommitRunDeps):
                 decision_log_rows=int(latest.get("decision_log_rows") or 0),
                 commit_seq=manifest_commit_seq(latest),
                 supersedes=[],
+                forecast_registry=registry,
             )
             return {"phase_hermes": PhaseHermesState(commit_manifest=manifest)}
 
@@ -157,6 +197,9 @@ def build_commit_run_node(deps: CommitRunDeps):
             return _phase_error("; ".join(checks))
 
         booked = book_portfolio(client=deps.client, state=state, book=book)
+        # Forecast registry is AFTER booking and fail-soft: a registry outage keeps
+        # the one committed book and must not trigger a rebook (#2663).
+        registry = _persist_forecast_registry(client=deps.client, state=state)
         brief = publish_portfolio_brief(client=deps.client, state=state, book=book)
         hermes_docs = publish_hermes_documents(client=deps.client, state=state)
         n_decisions = persist_decision_log(client=deps.client, state=state)
@@ -183,18 +226,20 @@ def build_commit_run_node(deps: CommitRunDeps):
             supersedes=superseded,
             pruned_tickers=booked.pruned_tickers,
             ledger=ledger,
+            forecast_registry=registry,
         )
         save_commit_manifest(client=deps.client, state=state, manifest=manifest)
 
         logger.info(
             "h9 commit_run: booked %d positions, nav=%.4f, %d decision_log rows, "
-            "%d pruned (run_id=%s, commit_seq=%d)",
+            "%d pruned (run_id=%s, commit_seq=%d, forecast_registry=%s)",
             len(booked.position_rows),
             booked.nav,
             n_decisions,
             len(booked.pruned_tickers),
             source_run_id,
             commit_seq,
+            registry.get("forecast_registry_status"),
         )
         return {
             "phase_hermes": PhaseHermesState(commit_manifest=manifest),
