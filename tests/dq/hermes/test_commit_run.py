@@ -1487,7 +1487,7 @@ class TestRiskPolicyRegistryH9:
         out = _run(client, state)
         manifest = out["phase_hermes"].commit_manifest
         assert manifest["status"] == "committed"
-        assert manifest["schema_version"] == "1.4"
+        assert manifest["schema_version"] == "1.5"
         assert manifest["risk_policy_registry_status"] == "ok"
         assert manifest["risk_policy_registry_run_refs_written"] == 1
         assert len(client.store.get("olympus_h8_risk_run_refs", [])) == 1

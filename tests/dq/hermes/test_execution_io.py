@@ -1040,6 +1040,7 @@ class TestSoleAuthority:
         # never inserts there, which ``test_h9_is_the_only_ledger_writer`` pins from the
         # other side.
         assert self._files_naming("portfolio_ledger_paper_executions") == [
+            "digiquant/src/digiquant/olympus/atlas/cost_liquidity_registry.py",
             f"{writers}/execution_io.py",
             f"{writers}/ledger_io.py",
         ]
