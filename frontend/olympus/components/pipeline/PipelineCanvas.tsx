@@ -128,6 +128,52 @@ export function walkthroughNavigationTarget(
     : null;
 }
 
+/** Keyboard/media-query mapping: md+ opens detail; narrower viewports only highlight. */
+export function walkthroughModeFromViewport(matchesMinMd: boolean): 'desktop' | 'mobile' {
+  return matchesMinMd ? 'desktop' : 'mobile';
+}
+
+export type WalkthroughSelectionPlan = {
+  stageIndex: number;
+  expansion: ExpansionState;
+  focusTarget: PipelineFocusTarget;
+  /** When false, walkthrough only expands/highlights — never opens document detail. */
+  activateDetail: boolean;
+};
+
+/**
+ * Pure plan for a walkthrough stop. Desktop prev/next set `openDetail` so detail
+ * opens; mobile prev/next keep it false so leaves require an explicit tap.
+ */
+export function planWalkthroughSelection(
+  node: LaidOutNode,
+  openDetail: boolean,
+): WalkthroughSelectionPlan {
+  const stageIndex = PIPELINE_TOPOLOGY.findIndex((stage) => stage.id === node.stageId);
+  const subStepId = node.id.split(':')[1];
+  const fanoutKey = subStepId ? `${node.stageId}:${subStepId}` : null;
+  const subStep = subStepId
+    ? stageById(node.stageId)?.subSteps.find((candidate) => candidate.id === subStepId)
+    : undefined;
+
+  return {
+    stageIndex,
+    expansion: {
+      expandedStages: new Set([node.stageId]),
+      expandedFanouts: new Set(
+        fanoutKey && (subStep?.fanout || node.kind === 'fanout-branch') ? [fanoutKey] : [],
+      ),
+    },
+    focusTarget:
+      node.kind === 'stage'
+        ? { kind: 'stage', stageId: node.stageId }
+        : subStep?.fanout && node.kind === 'substep'
+          ? { kind: 'fanout', nodeId: node.id }
+          : { kind: 'node', nodeId: node.id },
+    activateDetail: openDetail,
+  };
+}
+
 export function findPipelineWalkthroughIndex(
   nodes: LaidOutNode[],
   selectedNodeId?: string,
@@ -328,30 +374,14 @@ export default function PipelineCanvas({
     index: number,
     openDetail = true,
   ) => {
-    const stageIndex = PIPELINE_TOPOLOGY.findIndex((stage) => stage.id === node.stageId);
-    const subStepId = node.id.split(':')[1];
-    const fanoutKey = subStepId ? `${node.stageId}:${subStepId}` : null;
-    const subStep = subStepId
-      ? stageById(node.stageId)?.subSteps.find((candidate) => candidate.id === subStepId)
-      : undefined;
+    const plan = planWalkthroughSelection(node, openDetail);
 
     setActiveWalkthroughIndex(index);
-    setIsWalkthroughNavigating(!openDetail);
-    if (stageIndex >= 0) setActiveStageIndex(stageIndex);
-    setExpansion({
-      expandedStages: new Set([node.stageId]),
-      expandedFanouts: new Set(fanoutKey && (subStep?.fanout || node.kind === 'fanout-branch')
-        ? [fanoutKey]
-        : []),
-    });
-    setFocusTarget(
-      node.kind === 'stage'
-        ? { kind: 'stage', stageId: node.stageId }
-        : subStep?.fanout && node.kind === 'substep'
-          ? { kind: 'fanout', nodeId: node.id }
-          : { kind: 'node', nodeId: node.id },
-    );
-    if (openDetail) onNodeActivate(node);
+    setIsWalkthroughNavigating(!plan.activateDetail);
+    if (plan.stageIndex >= 0) setActiveStageIndex(plan.stageIndex);
+    setExpansion(plan.expansion);
+    setFocusTarget(plan.focusTarget);
+    if (plan.activateDetail) onNodeActivate(node);
   }, [onNodeActivate]);
 
   const walkPipeline = useCallback((direction: -1 | 1, mode: 'desktop' | 'mobile') => {
@@ -383,7 +413,9 @@ export default function PipelineCanvas({
       if (direction === null) return;
 
       event.preventDefault();
-      const mode = window.matchMedia('(min-width: 768px)').matches ? 'desktop' : 'mobile';
+      const mode = walkthroughModeFromViewport(
+        window.matchMedia('(min-width: 768px)').matches,
+      );
       walkPipeline(direction, mode);
     };
 
