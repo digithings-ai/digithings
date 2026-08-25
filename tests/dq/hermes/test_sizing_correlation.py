@@ -47,6 +47,17 @@ def test_missing_pair_uses_buckets_not_full_correlation() -> None:
     assert vol < 12.5  # strictly less than the old full-correlation default
 
 
+def test_incumbent_bucket_correlations_match_golden_fixture() -> None:
+    """WP6.1 (#2687): freeze asset-class bucket fallback table."""
+    from tests.dq.hermes.incumbent_risk_fixtures import load_incumbent_risk_fixture
+
+    golden = load_incumbent_risk_fixture()["bucket_correlations"]
+    assert _bucket_corr("EQUITY", "FIXED_INCOME") == golden["equity_bond"]
+    assert _bucket_corr("EQUITY", "EQUITY") == golden["equity_equity"]
+    assert _bucket_corr("EQUITY", "CASH") == golden["equity_cash"]
+    assert _bucket_corr("EQUITY", "UNKNOWN") == golden["equity_unknown"]
+
+
 def test_equity_bond_book_invests_rather_than_over_cashing() -> None:
     risk = {
         "SPY": TickerRisk("SPY", hist_vol_21=20.0, sector="broad", asset_class="EQUITY"),

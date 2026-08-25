@@ -1110,3 +1110,69 @@ class TestValidateH8LineageCallSite:
         rebal = out["phase7d_rebalance"]
         assert rebal["recommended_portfolio"][0]["target_pct"] == pytest.approx(50.0)
         assert "H8 lineage validation failed" in caplog.text
+
+
+# --------------------------------------------------------------------------- WP6.1 incumbent golden paths (#2687)
+
+
+def test_incumbent_memo_and_effective_inputs_match_golden_fixture() -> None:
+    """Freeze ``_memo_effective_inputs`` and ``_effective_inputs`` before WP6.2."""
+    from datetime import date
+
+    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+
+    from tests.dq.hermes.incumbent_risk_fixtures import load_incumbent_risk_fixture
+
+    golden = load_incumbent_risk_fixture()
+    memo = PMDirectionMemo(
+        date=date(2026, 6, 12),
+        roster=[
+            TickerDirection(ticker="AAA", direction="long", conviction_rank=1),
+            TickerDirection(ticker="BBB", direction="long", conviction_rank=2),
+            TickerDirection(ticker="CCC", direction="long", conviction_rank=3),
+        ],
+        memo="test",
+    )
+    memo_conv, memo_st = phase7e_risk_sizing._memo_effective_inputs(
+        memo,
+        {"AAA": {"stance": "buy"}, "BBB": {"stance": "hold"}, "CCC": {"stance": "sell"}},
+        2.0,
+    )
+    expected_memo = golden["memo_effective_inputs"]["three_long_mixed_stances"]
+    assert {k: round(v, 4) for k, v in memo_conv.items()} == expected_memo["convictions"]
+    assert memo_st == expected_memo["stances"]
+
+    leg_conv, leg_st = phase7e_risk_sizing._effective_inputs(
+        ["AAA", "BBB", "CCC"],
+        {
+            "AAA": {"conviction_score": 5, "stance": "buy"},
+            "BBB": {"conviction_score": 3, "stance": "hold"},
+        },
+        {"AAA": {"conviction_delta": 1.0}, "BBB": {"conviction_delta": -0.5}},
+        2.0,
+    )
+    expected_leg = golden["effective_inputs"]["analyst_debate_blend"]
+    assert {k: round(v, 4) for k, v in leg_conv.items()} == expected_leg["convictions"]
+    assert leg_st == expected_leg["stances"]
+
+
+def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
+    """Representative H8 end-state under default ``SizingCaps`` stays golden."""
+    from digiquant.olympus.hermes.sizing import TickerRisk, size_portfolio
+
+    from tests.dq.hermes.incumbent_risk_fixtures import (
+        assert_book_matches_golden,
+        load_incumbent_risk_fixture,
+        sizing_result_snapshot,
+    )
+
+    golden = load_incumbent_risk_fixture()["representative_books"]["default_caps_equity_bond"]
+    result = size_portfolio(
+        convictions={"SPY": 4.0, "TLT": 4.0},
+        stances={"SPY": "buy", "TLT": "buy"},
+        risk={
+            "SPY": TickerRisk("SPY", hist_vol_21=20.0, sector="broad", asset_class="EQUITY"),
+            "TLT": TickerRisk("TLT", hist_vol_21=8.0, sector="bonds", asset_class="FIXED_INCOME"),
+        },
+    )
+    assert_book_matches_golden(sizing_result_snapshot(result), golden)
