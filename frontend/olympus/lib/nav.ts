@@ -1,5 +1,5 @@
 import type { ElementType } from 'react';
-import { LayoutDashboard, PieChart, GitBranch, Activity, Globe } from 'lucide-react';
+import { LayoutDashboard, PieChart, GitBranch, Activity, Globe, Library } from 'lucide-react';
 
 export interface NavItem {
   href: string;
@@ -10,17 +10,17 @@ export interface NavItem {
 }
 
 /**
- * The portfolio-owner spine: glance → why → full, four destinations.
- * Single source of truth consumed by both the desktop sidebar and the mobile
- * app bar so they can never drift.
+ * Product chrome spine (vision brief 2026-08-25): Brief → Portfolio → Corpus →
+ * Pipeline → FX Hub, with System demoted. Single source of truth for desktop
+ * sidebar + mobile app bar.
  *
- * The FX Hub suite (/twelve-x) is a permanent destination since the
- * #1664 dashboard integration (previously env-gated behind
- * NEXT_PUBLIC_TWELVEX_ENABLED and rendered standalone).
+ * Corpus | Book | Profile lives under /corpus. Portfolio Tearsheet | Ledger |
+ * Period are Portfolio sub-routes. FX Hub (/twelve-x) is permanent since #1664.
  */
 export const NAV: NavItem[] = [
   { href: '/', label: 'Brief', icon: LayoutDashboard },
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
+  { href: '/corpus', label: 'Corpus', icon: Library },
   { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
   { href: '/twelve-x', label: 'FX Hub', icon: Globe },
   { href: '/system', label: 'System', icon: Activity, demoted: true },
@@ -41,6 +41,9 @@ export const DB_EXEMPT_PREFIXES = [
   // twelve-x reads its own research feed (isTwelveXConfigured), not the main
   // Olympus backend — the shell's DB gate must not swallow it (#1664).
   '/twelve-x',
+  // Corpus chrome is mostly typed-gap / house-seed identity; keep reachable
+  // when the main dashboard DB gate is down (#2644).
+  '/corpus',
   '/architecture',
   '/library',
   '/observability',

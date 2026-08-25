@@ -25,9 +25,9 @@ vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.
 import Sidebar from './sidebar';
 
 describe('Sidebar', () => {
-  it('renders the four owner destinations', () => {
+  it('renders the owner destinations including Corpus chrome', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
-    for (const label of ['Brief', 'Portfolio', 'Pipeline', 'System']) {
+    for (const label of ['Brief', 'Portfolio', 'Corpus', 'Pipeline', 'System']) {
       expect(html).toContain(label);
     }
   });
@@ -36,6 +36,7 @@ describe('Sidebar', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
     expect(html.indexOf('System')).toBeGreaterThan(html.indexOf('Brief'));
     expect(html.indexOf('System')).toBeGreaterThan(html.indexOf('Pipeline'));
+    expect(html.indexOf('Corpus')).toBeGreaterThan(html.indexOf('Portfolio'));
   });
 
   it('no longer shows the legacy labels', () => {

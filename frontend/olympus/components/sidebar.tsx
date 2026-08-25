@@ -29,6 +29,9 @@ function routeActive(pathname: string, base: string, href: string): boolean {
     // Portfolio absorbs the legacy /performance route (now a tab).
     return /\/portfolio(\/|$)/.test(pathname) || /\/performance(\/|$)/.test(pathname);
   }
+  if (href === '/corpus') {
+    return /\/corpus(\/|$)/.test(pathname);
+  }
   if (href === '/pipeline') {
     // Pipeline replaces Why; absorbs the legacy /why, /research, /library routes.
     return (

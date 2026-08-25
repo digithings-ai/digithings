@@ -67,10 +67,24 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     },
     {
       id: 'go-perf',
-      title: 'Portfolio — Performance',
+      title: 'Portfolio — Tearsheet',
       hint: 'NAV, returns & position performance',
       href: '/portfolio/performance',
       icon: LineChart,
+    },
+    {
+      id: 'go-ledger',
+      title: 'Portfolio — Ledger',
+      hint: 'Position change events',
+      href: '/portfolio/ledger',
+      icon: FileText,
+    },
+    {
+      id: 'go-period',
+      title: 'Portfolio — Period',
+      hint: 'Accounting tip status',
+      href: '/portfolio/period',
+      icon: Activity,
     },
     {
       id: 'go-attribution',
@@ -78,6 +92,13 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       hint: 'Position decomposition & recommendation quality',
       href: '/portfolio/attribution',
       icon: Scale,
+    },
+    {
+      id: 'go-corpus',
+      title: 'Corpus | Book | Profile',
+      hint: 'Shared corpus identity & house pins',
+      href: '/corpus',
+      icon: Brain,
     },
     {
       id: 'go-pipeline',

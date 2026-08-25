@@ -1,10 +1,24 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { NAV, isDbExempt } from './nav';
 
 describe('NAV', () => {
-  it('is the 5-destination owner spine, in order (FX Hub permanent since #1664)', () => {
-    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/twelve-x', '/system']);
-    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Hub', 'System']);
+  it('is the owner spine with Corpus chrome (#2644), in order', () => {
+    expect(NAV.map((n) => n.href)).toEqual([
+      '/',
+      '/portfolio',
+      '/corpus',
+      '/pipeline',
+      '/twelve-x',
+      '/system',
+    ]);
+    expect(NAV.map((n) => n.label)).toEqual([
+      'Brief',
+      'Portfolio',
+      'Corpus',
+      'Pipeline',
+      'FX Hub',
+      'System',
+    ]);
     expect(NAV.find((n) => n.href === '/twelve-x')?.demoted).toBeUndefined();
   });
 
@@ -28,6 +42,7 @@ describe('isDbExempt', () => {
     expect(isDbExempt('/research')).toBe(true);
     expect(isDbExempt('/strategy')).toBe(true);
     expect(isDbExempt('/portfolio/theses')).toBe(true);
+    expect(isDbExempt('/corpus')).toBe(true);
     // twelve-x gates itself on its own research feed, not the main backend (#1664)
     expect(isDbExempt('/twelve-x')).toBe(true);
   });
@@ -35,6 +50,7 @@ describe('isDbExempt', () => {
   it('matches nested paths under an exempt prefix', () => {
     expect(isDbExempt('/system/how-it-works')).toBe(true);
     expect(isDbExempt('/settings/anything')).toBe(true);
+    expect(isDbExempt('/corpus/anything')).toBe(true);
   });
 
   it('gates the data-backed surfaces', () => {

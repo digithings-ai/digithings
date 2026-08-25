@@ -18,9 +18,17 @@ finance-tearsheet grammars directly in `app/globals.css`:
 @import "@digithings/web/styles/finance-tearsheet.css"; /* print-grade .ts-* family (#1463) */
 ```
 
-The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
-return metrics, a base-zero portfolio path, current-book contribution, and
-open/closed position outcomes. Its command band uses the same compact as-of stamp
+The performance tear sheet (`/portfolio/performance`, Portfolio **Tearsheet** tab)
+renders persisted NAV and return metrics, a base-zero portfolio path, current-book
+contribution, and open/closed position outcomes. Portfolio also exposes **Ledger**
+(`/portfolio/ledger` — non-HOLD `position_events`) and **Period**
+(`/portfolio/period` — `public_accounting_period_status` tip rows with honest empty /
+query-failure gaps). **Corpus | Book | Profile** lives at `/corpus`: shared corpus
+key-kind chrome, house-book deep links, and read-only digithings house profile pins.
+Live `olympus_research_corpus` / `olympus_profile_config` rows remain service_role-only —
+the UI documents typed gaps rather than inventing pins (#2644 / #1945).
+
+Its command band uses the same compact as-of stamp
 as Holdings. Closed rows derive realized return from the persisted entry and exit
 marks; `position_events.cumulative_return_since_event_pct` is post-event drift and
 must not be presented as trade return. The separate attribution workspace

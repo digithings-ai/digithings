@@ -23,15 +23,26 @@ describe('buildCommandItems (F2 palette — static rows only)', () => {
     const items = buildCommandItems(data);
     expect(items.some((i) => i.id.startsWith('doc-'))).toBe(false);
   });
-  it('separates performance from attribution analysis', () => {
+  it('separates tearsheet, ledger, period, attribution, and corpus chrome', () => {
     const items = buildCommandItems(data);
     expect(items.find((i) => i.id === 'go-perf')).toMatchObject({
+      title: 'Portfolio — Tearsheet',
       href: '/portfolio/performance',
       hint: 'NAV, returns & position performance',
+    });
+    expect(items.find((i) => i.id === 'go-ledger')).toMatchObject({
+      href: '/portfolio/ledger',
+    });
+    expect(items.find((i) => i.id === 'go-period')).toMatchObject({
+      href: '/portfolio/period',
     });
     expect(items.find((i) => i.id === 'go-attribution')).toMatchObject({
       href: '/portfolio/attribution',
       hint: 'Position decomposition & recommendation quality',
+    });
+    expect(items.find((i) => i.id === 'go-corpus')).toMatchObject({
+      href: '/corpus',
+      title: 'Corpus | Book | Profile',
     });
   });
 });

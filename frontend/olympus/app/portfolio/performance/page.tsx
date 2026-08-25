@@ -32,7 +32,7 @@ export default function PerformancePage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PortfolioSectionNav active="performance" />
+      <PortfolioSectionNav active="tearsheet" />
       {/* No py-* utilities here: .ts-page owns the vertical padding. Under the
           old unlayered sheet they were dead declarations; against the family
           sheet's @layer components defaults they would win and shrink the
