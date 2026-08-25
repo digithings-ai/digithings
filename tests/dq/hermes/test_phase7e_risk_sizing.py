@@ -489,8 +489,16 @@ def test_sizing_error_keeps_pm_book(monkeypatch: pytest.MonkeyPatch) -> None:
         analysts={"SPY": {"conviction_score": 5, "stance": "buy"}},
         use_memo=False,
     )
-    # Legacy path: no update returned → phase7d_rebalance stays intact.
-    assert build_risk_sizing_node(RiskSizingDeps(client=FakeSupabaseClient()))(state) == {}
+    # Legacy path: no rebalance update when sizing fails; WP6.3 may still attach audit snapshots.
+    out = build_risk_sizing_node(RiskSizingDeps(client=FakeSupabaseClient()))(state)
+    assert out.get("phase7d_rebalance") is None
+    hermes = out.get("phase_hermes")
+    if hermes is not None:
+        assert hermes.sized_book is None
+        assert hermes.risk_policy is not None
+        assert hermes.covariance_snapshot is not None
+    else:
+        assert out == {}
 
 
 def test_missing_technicals_uses_default_vol() -> None:
@@ -1176,3 +1184,30 @@ def test_incumbent_default_caps_final_book_matches_golden_fixture() -> None:
         },
     )
     assert_book_matches_golden(sizing_result_snapshot(result), golden)
+
+
+def test_h8_attaches_risk_snapshots_without_changing_book() -> None:
+    """WP6.3 (#2698): resolver runs before sizing; incumbent weights unchanged."""
+    from digiquant.olympus.hermes.models.risk_policy import PolicyArtifactStatus
+
+    client = FakeSupabaseClient(
+        canned_reads={"price_technicals": _tech_rows({"SPY": 15, "TLT": 15})}
+    )
+    state = _state(
+        [{"ticker": "SPY", "target_pct": 50}, {"ticker": "TLT", "target_pct": 50}],
+        analysts={
+            "SPY": {"conviction_score": 5, "stance": "buy"},
+            "TLT": {"conviction_score": 5, "stance": "buy"},
+        },
+    )
+    baseline = _weights(_run(state, client))
+    out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
+    hermes = out["phase_hermes"]
+    assert hermes.risk_policy is not None
+    assert hermes.covariance_snapshot is not None
+    assert hermes.risk_policy["status"] in (
+        PolicyArtifactStatus.AVAILABLE.value,
+        PolicyArtifactStatus.DEGRADED.value,
+        PolicyArtifactStatus.UNAVAILABLE.value,
+    )
+    assert _weights(hermes.sized_book) == baseline

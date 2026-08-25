@@ -490,6 +490,15 @@ class PhaseHermesState(BaseModel):
         default_factory=dict,
         description="ticker → CalibratedForecast dump (H6→H7 attach)",
     )
+    # WP6.3 H8 risk audit snapshots (observational; never feeds size_portfolio in Phase 1).
+    risk_policy: dict[str, Any] | None = Field(
+        default=None,
+        description="Resolved RiskPolicy dump (H8 attach)",
+    )
+    covariance_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description="Resolved CovarianceSnapshot dump (H8 attach)",
+    )
     pm_direction_memo: Any | None = (
         None  # PMDirectionMemo JSON; typed in hermes.models.pm_direction
     )
@@ -524,6 +533,10 @@ def _merge_phase_hermes(
             **merged.calibrated_forecasts,
             **right.calibrated_forecasts,
         }
+    for field in ("risk_policy", "covariance_snapshot"):
+        val = getattr(right, field)
+        if val:
+            object.__setattr__(merged, field, val)
     for field in (
         "thesis_review",
         "market_thesis_exploration",

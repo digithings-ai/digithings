@@ -555,8 +555,10 @@ def _build_sized_book(
     prior_notes: str,
     state: AtlasResearchState,
     deps: RiskSizingDeps,
-) -> RebalancePayload | None:
+) -> tuple[RebalancePayload | None, Any | None]:
     """Run deterministic sizing; return None on no-op / fail-soft."""
+    from digiquant.olympus.hermes.h8_risk_snapshots import resolve_h8_risk_artifacts
+
     caps = SizingCaps.from_preferences(state.config.preferences)
     memo = state.phase_hermes.pm_direction_memo
 
@@ -581,6 +583,18 @@ def _build_sized_book(
     except Exception as exc:  # correlation is best-effort
         logger.warning("phase7e: correlation read failed (%s); using full-correlation default", exc)
         corr_frame = None
+
+    # WP6.3 (#2698): resolve incumbent policy + covariance snapshot before sizing.
+    # Audit-only in Phase 1 — incumbent ``size_portfolio`` inputs stay unchanged.
+    try:
+        risk_artifacts = resolve_h8_risk_artifacts(
+            state=state,
+            pm_tickers=pm_tickers,
+            corr=corr_frame,
+        )
+    except Exception as exc:
+        logger.warning("phase7e: risk snapshot resolution failed (%s); continuing sizing", exc)
+        risk_artifacts = None
 
     unchallenged: list[str] = []
     events: list[SizingAdjustment] = []
@@ -620,7 +634,7 @@ def _build_sized_book(
         )
     except Exception as exc:  # sizing must never crash the run
         logger.warning("phase7e: risk sizing failed (%s); keeping prior book", exc)
-        return None
+        return None, risk_artifacts
 
     sized = {p.ticker: p.target_pct for p in result.positions}
     # #2417: bring in every event size_portfolio already emitted (caps, corr-dedup,
@@ -682,7 +696,7 @@ def _build_sized_book(
         result.realized_portfolio_vol,
         caps.sizing_mode,
     )
-    return updated
+    return updated, risk_artifacts
 
 
 def build_risk_sizing_node(deps: RiskSizingDeps):
@@ -713,7 +727,7 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             prior_notes = str(rebalance.get("notes") or "").strip()
             original_actions = list(rebalance.get("actions") or [])
 
-        sized_book = _build_sized_book(
+        sized_book, risk_artifacts = _build_sized_book(
             pm_tickers=pm_tickers,
             pm_targets=pm_targets,
             original_actions=original_actions,
@@ -722,6 +736,15 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             deps=deps,
         )
         if sized_book is None:
+            if risk_artifacts is not None:
+                return {
+                    "phase_hermes": PhaseHermesState(
+                        risk_policy=risk_artifacts.policy.model_dump(mode="json"),
+                        covariance_snapshot=risk_artifacts.covariance_snapshot.model_dump(
+                            mode="json"
+                        ),
+                    )
+                }
             return {}
 
         # #2417 §6: unexplained-delta lineage check, layered on top of (not inside)
@@ -736,9 +759,17 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             targets_are_weights=memo is None,
         )
 
+        hermes_update = PhaseHermesState(sized_book=sized_book)
+        if risk_artifacts is not None:
+            hermes_update = PhaseHermesState(
+                sized_book=sized_book,
+                risk_policy=risk_artifacts.policy.model_dump(mode="json"),
+                covariance_snapshot=risk_artifacts.covariance_snapshot.model_dump(mode="json"),
+            )
+
         if memo is not None:
-            return {"phase_hermes": PhaseHermesState(sized_book=sized_book)}
-        return {"phase7d_rebalance": sized_book}
+            return {"phase_hermes": hermes_update}
+        return {"phase7d_rebalance": sized_book, "phase_hermes": hermes_update}
 
     return risk_sizing
 

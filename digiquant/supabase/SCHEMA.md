@@ -198,6 +198,23 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
 `digiquant.olympus.hermes.forecast_calibration` (WP5.3/5.4). Calibration table writers:
 `digiquant.olympus.atlas.forecast_registry.persist_shadow_calibrations` (WP5.4 / H9).
 
+### Risk policy snapshot registry — migration 081 (#2698 / WP6.3)
+
+Private append-only resolved H8 risk inputs: one `RiskPolicy` + one `CovarianceSnapshot`
+per run, plus a run ref binding `source_run_id`. Resolver runs at the H8 entry boundary;
+H9 fail-soft persistence via `digiquant.olympus.atlas.risk_policy_registry` after booking.
+Phase 1 audit only — incumbent `size_portfolio` inputs stay unchanged.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_risk_policies` | `(policy_id UUID)` | Immutable resolved `RiskPolicy`: method_version, status, unavailable_reason, effective_at, content_hash, full `policy_body` jsonb. |
+| `olympus_covariance_snapshots` | `(snapshot_id UUID)` | Immutable `CovarianceSnapshot`: as_of_session, lookback_days, status, resolved_at, content_hash, full `snapshot_body` jsonb. |
+| `olympus_h8_risk_run_refs` | `(source_run_id text)` | One ref per run: run_date, policy_id FK, snapshot_id FK, effective_at. |
+
+RLS enabled with **zero** policies; append-only via `reject_olympus_risk_policy_snapshot_mutation()`.
+Models: `digiquant.olympus.hermes.models.risk_policy`. Resolver: `digiquant.olympus.hermes.risk_policy`.
+Registry: `digiquant.olympus.atlas.risk_policy_registry` (exact-ID reads only).
+
 ### Live quote transport — new in migration 063 (#1807)
 
 The only **table** in the digiquant.io public read surface (the 050 trio are views), and the
