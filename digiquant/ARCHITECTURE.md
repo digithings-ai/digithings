@@ -1701,7 +1701,6 @@ that metrics/attribution job order cannot alter meaning.
   `Σ Contribution_i + CashContribution = (E1 − E0) / E0`.
 - **Tests**: `tests/dq/atlas/test_period_accounting.py`,
   `tests/dq/atlas/test_migration_072.py`,
-  `tests/dq/atlas/test_accounting_io.py`,
   `tests/dq/atlas/test_finalize_period_accounting.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
   current-book lookback as realized attribution, public base-table grants on accounting,
