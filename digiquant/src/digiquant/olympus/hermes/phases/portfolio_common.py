@@ -343,15 +343,16 @@ def _attach_forecast_lineage(
     mode: EditMode,
     phase_slug: str,
     prior_body: dict[str, Any] | None,
-) -> AnalystPayload | None:
-    """Require terms on full; materialize or carry :class:`ForecastAssessment`."""
+    errors: list[PhaseError],
+) -> AnalystPayload:
+    """Materialize or carry :class:`ForecastAssessment`; never invent terms.
+
+    Full mode without ``ForecastTerms`` retains analyst prose (shadow rollout) and
+    records ``forecast_unavailable`` rather than dropping the ticker.
+    """
     terms = payload.forecast
     prior_assessment = _assessment_from_body(prior_body) if prior_body else None
     prior_terms = _terms_from_body(prior_body) if prior_body else None
-
-    if mode == "full" and terms is None:
-        logger.warning("H5 full analysis for %s missing ForecastTerms; degrading ticker", ticker)
-        return None
 
     if terms is None:
         # Edit/skip without terms change: carry prior typed lineage when present.
@@ -365,6 +366,19 @@ def _attach_forecast_lineage(
         if prior_terms is not None:
             terms = prior_terms
         else:
+            if mode == "full":
+                logger.warning(
+                    "H5 full analysis for %s missing ForecastTerms; "
+                    "forecast_unavailable (analyst payload retained)",
+                    ticker,
+                )
+                errors.append(
+                    PhaseError(
+                        phase="phase_hermes",
+                        node=phase_slug,
+                        message="forecast_unavailable: full H5 missing ForecastTerms",
+                    )
+                )
             return payload
 
     assert terms is not None
@@ -430,16 +444,8 @@ def run_asset_analyst_llm(
             mode=mode,
             phase_slug=phase_slug,
             prior_body=prior_body,
+            errors=errors,
         )
-        if enriched is None:
-            errors.append(
-                PhaseError(
-                    phase="phase_hermes",
-                    node=phase_slug,
-                    message="forecast_unavailable: skip carry missing typed forecast",
-                )
-            )
-            return None, None, errors
         body = analyst_body_from_payload(enriched)
         carried = build_analyst_document(
             ticker=ticker,
@@ -524,9 +530,8 @@ def run_asset_analyst_llm(
                 mode="skip",
                 phase_slug=phase_slug,
                 prior_body=body_raw,
+                errors=errors,
             )
-            if enriched is None:
-                return payload, dict(prior.payload), errors
             return enriched, dict(prior.payload), errors
         materialized = dict(merge_result.materialized)
         body_raw = materialized.get("body", materialized)
@@ -540,16 +545,8 @@ def run_asset_analyst_llm(
             mode=mode,
             phase_slug=phase_slug,
             prior_body=prior_body,
+            errors=errors,
         )
-        if enriched is None:
-            errors.append(
-                PhaseError(
-                    phase="phase_hermes",
-                    node=phase_slug,
-                    message="forecast_unavailable: edit result missing ForecastTerms",
-                )
-            )
-            return None, None, errors
         doc = build_analyst_document(
             ticker=ticker,
             run_date=state.run_date,
@@ -594,16 +591,8 @@ def run_asset_analyst_llm(
         mode=mode,
         phase_slug=phase_slug,
         prior_body=prior_body,
+        errors=errors,
     )
-    if enriched is None:
-        errors.append(
-            PhaseError(
-                phase="phase_hermes",
-                node=phase_slug,
-                message="forecast_unavailable: full H5 missing ForecastTerms",
-            )
-        )
-        return None, None, errors
     body = analyst_body_from_payload(enriched)
     doc = build_analyst_document(
         ticker=ticker,

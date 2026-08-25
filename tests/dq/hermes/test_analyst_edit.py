@@ -575,8 +575,12 @@ class TestH5ForecastMaterialization:
         ):
             result = compiled.invoke(state)
         final = AtlasResearchState.model_validate(result)
-        # Full without terms → ticker degraded (no fabricated assessment).
-        assert "AAPL" not in (final.phase_hermes.asset_analysts or {})
+        # Shadow rollout: retain analyst prose; do not fabricate assessment.
+        raw = final.phase_hermes.asset_analysts["AAPL"]
+        payload = AnalystPayload.model_validate(raw)
+        assert payload.forecast is None
+        assert payload.forecast_assessment is None
+        assert payload.stance == "buy"
 
     def test_full_materializes_assessment(self) -> None:
         from datetime import UTC, datetime
