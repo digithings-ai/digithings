@@ -368,7 +368,9 @@ def persist_h8_risk_snapshots(
         kind = _persist_policy(client=client, policy=policy)
     except RiskPolicyRegistryConflict as exc:
         conflicts.append(str(exc))
-        return RiskRegistryWriteResult(conflicts=tuple(conflicts), degraded_reason="content_conflict")
+        return RiskRegistryWriteResult(
+            conflicts=tuple(conflicts), degraded_reason="content_conflict"
+        )
     if kind is _WriteKind.WRITTEN:
         p_written += 1
     else:
