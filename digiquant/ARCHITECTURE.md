@@ -1656,6 +1656,37 @@ readers pass retention checks — not as part of #2422.
   that both new exit codes are reachable). The atlas module imports the table names from the
   writers rather than restating them, so a rename breaks the test instead of drifting past it.
 
+#### Period accounting contracts and pure engine (#2596, Task 3.1)
+
+Closes OLY-REV-007 / OLY-REV-008 for the calculation boundary: exact-date target weights must
+not be applied across a full return interval. One event-boundary engine owns NAV, P&L, and
+daily contribution math from authoritative opening holdings/cash, fills/costs, and closing
+marks.
+
+- **Models**: `digiquant/src/digiquant/olympus/accounting/models.py` — frozen/strict Pydantic
+  v2 contracts (`AccountingPolicy`, `PeriodAccountingInput`, `AccountingPeriod`, ticker
+  results, marks, fills, corporate actions). Every money field is `Decimal` with
+  `allow_inf_nan=False`.
+- **Engine**: `digiquant/src/digiquant/olympus/accounting/engine.py` — pure Decimal/Polars
+  `compute_period(...)` (no I/O, no pandas, no broker paths). Status is `final` only when
+  marks are complete and fresh and residual is inside the versioned tolerance; missing marks
+  → `incomplete`, stale marks / ignored corporate actions → `estimated`, residual /
+  negative quantity / benchmark boundary mismatch → `failed`. Exact same inputs reproduce
+  the same period `id` (`uuid5` over a canonical digest).
+- **Schema**: migration `072_olympus_period_accounting.sql` —
+  `olympus_accounting_{periods,contributions,holdings}`. **User-private** (vision brief):
+  RLS with zero policies; `PUBLIC`/`anon`/`authenticated` revoked; `service_role`
+  `SELECT, INSERT` only; append-only mutation triggers. No public views in this migration
+  (Task 3.4). No finalizer writer yet (Task 3.2).
+- **Identities** (when `status == final`):
+  `E1 = E0 + Σ NetPnL_i + CashPnL`;
+  `E1 = ClosingCash + Σ q_i,1 P_i,1`;
+  `Σ Contribution_i + CashContribution = (E1 − E0) / E0`.
+- **Tests**: `tests/dq/atlas/test_period_accounting.py`,
+  `tests/dq/atlas/test_migration_072.py`.
+- **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
+  current-book lookback as realized attribution, public base-table grants on accounting.
+
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 
 The digiquant shared backend is the **`core`** Supabase project — the project historically
