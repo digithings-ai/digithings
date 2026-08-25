@@ -134,7 +134,9 @@ def _resolve_scalar(
     if raw is None and config_key != field:
         raw = preferences.get(field)
     if raw is None:
-        return ResolvedLeaf(value=default, source=ProvenanceSource.CODE_DEFAULT, config_key=config_key)
+        return ResolvedLeaf(
+            value=default, source=ProvenanceSource.CODE_DEFAULT, config_key=config_key
+        )
     try:
         if isinstance(default, bool):
             value: float | int | str | bool = bool(raw)
@@ -187,7 +189,9 @@ def _resolve_breaker(preferences: Mapping[str, Any]) -> dict[str, ResolvedLeaf]:
     for field, config_key in _BREAKER_CONFIG_KEYS.items():
         default_val = getattr(defaults, field)
 
-        def _breaker_norm(value: float, *, f: str = field, d: float | int = default_val) -> float | int:
+        def _breaker_norm(
+            value: float, *, f: str = field, d: float | int = default_val
+        ) -> float | int:
             if f in ("soft_dd_pct", "hard_dd_pct"):
                 return -abs(float(value))
             if f == "max_reduction":
@@ -579,9 +583,7 @@ def resolve_covariance_snapshot(
     try:
         matrix = _build_correlation_matrix(canonical, lookup)
         status = (
-            PolicyArtifactStatus.AVAILABLE
-            if not missing_pairs
-            else PolicyArtifactStatus.DEGRADED
+            PolicyArtifactStatus.AVAILABLE if not missing_pairs else PolicyArtifactStatus.DEGRADED
         )
         unavailable_reason = (
             f"incomplete_pairs:{','.join(f'{a}/{b}' for a, b in missing_pairs)}"

@@ -145,9 +145,7 @@ def test_rank_to_conviction_matches_golden(n_key: str) -> None:
     policy = resolve_risk_policy(effective_at=_TS).policy
     entry = next(item for item in policy.rank_to_conviction if item.n_long == n)
     expected = _GOLDEN["rank_to_conviction"][n_key]
-    assert {str(k): v for k, v in entry.mapping.items()} == {
-        str(k): v for k, v in expected.items()
-    }
+    assert {str(k): v for k, v in entry.mapping.items()} == {str(k): v for k, v in expected.items()}
 
 
 def test_phase1_advanced_capabilities_explicitly_unavailable() -> None:
@@ -191,9 +189,7 @@ def test_resolved_policy_sizing_leaves_match_golden(leaf: str) -> None:
     prefs = {k: v for k, v in asdict(caps).items()}
     resolution = resolve_risk_policy(prefs, effective_at=_TS)
     result = size_portfolio(**scenario, caps=resolution.sizing_caps)
-    assert_book_matches_golden(
-        sizing_result_snapshot(result), _GOLDEN["sizing_caps_leaves"][leaf]
-    )
+    assert_book_matches_golden(sizing_result_snapshot(result), _GOLDEN["sizing_caps_leaves"][leaf])
 
 
 @pytest.mark.parametrize("book", _REP_BOOK_SCENARIOS.keys())
@@ -312,6 +308,7 @@ def test_memo_and_effective_inputs_unchanged_under_resolver() -> None:
 
     # Resolver presence must not alter helper semantics.
     _ = resolve_risk_policy(effective_at=_TS).policy.content_hash
-    assert risk_policy_content_hash(payload={"probe": 1}) != resolve_risk_policy(
-        effective_at=_TS
-    ).policy.content_hash
+    assert (
+        risk_policy_content_hash(payload={"probe": 1})
+        != resolve_risk_policy(effective_at=_TS).policy.content_hash
+    )
