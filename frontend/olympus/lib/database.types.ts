@@ -303,7 +303,8 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['thesis_vehicles']['Insert']>;
       };
       position_attribution: {
-        // Single-benchmark active-return decomposition per (date, ticker) (migration 040).
+        // Compatibility view over current_book_lookback (#2598 / migration 073).
+        // Trailing-window diagnostic — NOT realized daily contribution.
         Row: {
           id: string;
           date: string;
@@ -312,15 +313,26 @@ export interface Database {
           weight_pct: number | null;
           position_return_pct: number | null;
           benchmark_return_pct: number | null;
-          contribution_pct: number | null;       // weight × position return
+          contribution_pct: number | null;       // weight × lookback return
           selection_effect_pct: number | null;   // weight × (position − benchmark)
           allocation_effect_pct: number | null;  // cash-drag effect (CASH row)
           total_attribution_pct: number | null;  // selection + allocation; sums to active return
           metrics_as_of: string | null;
           created_at: string | null;
+          window_start_date?: string | null;
+          window_end_date?: string | null;
+          lookback_days?: number | null;
+          contract?: string | null;              // always 'current_book_lookback'
         };
         Insert: Omit<Database['public']['Tables']['position_attribution']['Row'], 'id' | 'created_at'> & { id?: string; created_at?: string };
         Update: Partial<Database['public']['Tables']['position_attribution']['Insert']>;
+      };
+      current_book_lookback: {
+        // Canonical 21-day current-book lookback diagnostic (#2598). Same columns as
+        // the position_attribution compatibility view.
+        Row: Database['public']['Tables']['position_attribution']['Row'];
+        Insert: Database['public']['Tables']['position_attribution']['Insert'];
+        Update: Database['public']['Tables']['position_attribution']['Update'];
       };
       atlas_run_diagnostics: {
         Row: {

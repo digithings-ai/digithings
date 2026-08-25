@@ -249,11 +249,12 @@ def _performance_returns_from_history(
 
 
 def _pnl_pct_from_final_accounting(sb, as_of: str) -> Optional[float]:
-    """Day return % from a complete ``status=final`` accounting period (#2597).
+    """Day return % from a complete ``status=final`` accounting period (#2597/#2598).
 
-    Prefer this over ``position_attribution`` (21-day lookback) and over the
-    provisional H9 ``nav_history`` fallback so metrics/attribution job order
-    cannot alter daily ``pnl_pct`` semantics once the finalizer has run.
+    Authoritative daily realized return. Never reads ``current_book_lookback`` /
+    legacy ``position_attribution`` (21-day static-book diagnostic). Falls through
+    to provisional H9 ``nav_history`` only when no final period exists — job order
+    with the lookback refresh cannot alter daily ``pnl_pct`` semantics.
     Provisional H9 rows are never selected as final.
     """
     try:
@@ -270,31 +271,14 @@ def _pnl_pct_from_final_accounting(sb, as_of: str) -> Optional[float]:
 
 
 def _sum_attribution_pnl(sb, as_of: str) -> Optional[float]:
-    """SUM of non-CASH position_attribution.contribution_pct for ``as_of``.
+    """Deprecated (#2598): lookback must not feed daily ``pnl_pct``.
 
-    Returns None when no attribution rows exist for the date (e.g. first run,
-    or the attribution script has not yet been run). Falls back to None rather
-    than silently returning 0 so callers can distinguish "no data" from "0% day".
-
-    Note: after Task 3.2, :func:`upsert_portfolio_metrics_daily` prefers a
-    finalized accounting period before calling this helper — the 21-day lookback
-    must not win when authoritative daily contribution exists.
+    Retained as a no-op stub so older call sites / tests importing the name fail
+    closed (always ``None``) rather than silently reintroducing the 21-day sum.
+    Realized daily contribution is ``daily_realized_attribution`` / final periods only.
     """
-    res = (
-        sb.table("position_attribution")
-        .select("ticker,contribution_pct")
-        .eq("date", as_of)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
-    non_cash = [
-        float(r["contribution_pct"])
-        for r in rows
-        if r.get("ticker") != "CASH" and r.get("contribution_pct") is not None
-    ]
-    if not non_cash:
-        return None
-    return round(sum(non_cash), 6)
+    del sb, as_of
+    return None
 
 
 def _nav_history_count(sb, as_of: str) -> int:
@@ -347,10 +331,10 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
     tear-sheet risk metrics. Otherwise upserts with ``computed_from='refresh_script'``
     (or ``'refresh_script_insufficient_history'``
     when nav_history has < 20 rows):
-    - ``pnl_pct`` prefers a complete ``status=final`` accounting period (#2597),
-      then SUM(position_attribution.contribution_pct) for non-CASH positions,
-      then provisional H9 nav day return (#814). Attribution must not win when
-      authoritative daily contribution exists (job-order independence).
+    - ``pnl_pct`` prefers a complete ``status=final`` accounting period (#2597/#2598),
+      then provisional H9 nav day return (#814). Never SUM of
+      ``current_book_lookback`` / legacy ``position_attribution`` (21-day diagnostic;
+      OLY-REV-007 / Task 3.3). Job order with the lookback refresh is irrelevant.
       The nav fallback computes ``(nav - nav_prev) / nav_prev * 100`` using the
       most recent prior nav_history row — NOT ``nav - 100``. When no prior nav
       row exists the fallback yields None rather than a misleading value.
@@ -373,15 +357,13 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
         print(f"   portfolio_metrics {as_of}: backfilled returns (tearsheet row preserved)")
         return
 
-    # pnl_pct precedence (#2597 / OLY-REV-007):
+    # pnl_pct precedence (#2597/#2598 / OLY-REV-007):
     #   1. Finalized event-boundary accounting period (job-order independent)
-    #   2. Attribution sum (legacy; can be 21-day lookback — see workflow comment)
-    #   3. Provisional H9 nav_history day return (continuity, never authoritative final)
+    #   2. Provisional H9 nav_history day return (continuity, never authoritative final)
+    # Never: current_book_lookback / position_attribution (21-day diagnostic).
     pnl_pct = _pnl_pct_from_final_accounting(sb, as_of)
     if pnl_pct is not None:
         print(f"   portfolio_metrics {as_of}: pnl_pct from finalized accounting period")
-    else:
-        pnl_pct = _sum_attribution_pnl(sb, as_of)
     if pnl_pct is None:
         nav_res = sb.table("nav_history").select("nav").eq("date", as_of).limit(1).execute()
         nav_data = getattr(nav_res, "data", None) or []
@@ -404,9 +386,7 @@ def upsert_portfolio_metrics_daily(sb, as_of: str) -> None:
                 nav_prev = float(prev_nav_data[0]["nav"])
         if nav is not None and nav_prev is not None and nav_prev > 0:
             pnl_pct = round((nav - nav_prev) / nav_prev * 100.0, 4)
-            print(
-                f"   portfolio_metrics {as_of}: pnl_pct from nav fallback (no accounting/attribution)"
-            )
+            print(f"   portfolio_metrics {as_of}: pnl_pct from nav fallback (no final accounting)")
         else:
             pnl_pct = None
 
