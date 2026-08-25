@@ -9,6 +9,8 @@ from typing import (  # scored-lint suppression: heterogeneous graph / dict shap
 
 from pydantic import BaseModel, Field, model_validator
 
+from digiquant.olympus.hermes.models.forecast import ForecastTerms
+
 
 class EvidenceAssessment(BaseModel):
     """Itemized, checkable evidence — ``conviction_score`` is COMPUTED from this (#1672).
@@ -133,3 +135,12 @@ class AnalystPayload(BaseModel):
     price_targets: dict[str, Any] | None = None
     expectations: str = Field(default="")
     fingerprint_news_hash: str = Field(default="")
+    # Optional WP4.2 typed economics (#2637). Never derived from conviction_score
+    # or price_targets — materializers (Task 4.3+) must populate explicitly.
+    forecast: ForecastTerms | None = Field(
+        default=None,
+        description=(
+            "Typed ForecastTerms when present. Legacy conviction_score / price_targets "
+            "remain for compatibility and must not synthesize this field."
+        ),
+    )
