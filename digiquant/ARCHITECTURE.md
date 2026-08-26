@@ -976,9 +976,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   (`carry` \| `metric_patch` \| `section_patch` \| `challenge` \| `deep_refresh`)
   and rollout `off` \| `shadow` \| `enforce`. Identical state/policy/target set
   yields byte-identical plan + resource totals; exploration reservations survive
-  session budget trimming. `h6_selection_to_attention_decision` bridges WP11.3
-  `H6Selection` without forking ID schemes. API-only in 13.1 — Atlas/Hermes
-  runtime wiring is WP13.3/13.4; persistence is WP13.2.
+  session budget trimming.   `h6_selection_to_attention_decision` bridges WP11.3
+  `H6Selection` without forking ID schemes. API-only in 13.1 — Hermes
+  runtime wiring is WP13.4; persistence is WP13.2; Atlas pre-provider routing is
+  WP13.3.
   **Attention persistence (#2922 / WP13.2).** Migration
   `092_olympus_attention_context.sql` + in-memory
   `research_retrieval/store.py` `AttentionStore` persist append-only
@@ -987,8 +988,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   budget lineage and per-decision WP1 `provider_attempt_id` links. Exact
   `recorded_at` as-of reads; `reconcile_plan` joins planned budgets to actual
   attempt usage and sets `complete=False` when telemetry is missing (rollback:
-  disable writes/enforcement). Storage only — no Atlas/Hermes activation
-  (WP13.3+).
+  disable writes/enforcement). Storage only until WP13.3+ callers opt in via
+  `OLYMPUS_RESEARCH_ATTENTION_MODE`.
+  **Atlas attention routing (#2926 / WP13.3).** After triage,
+  `atlas/research_attention.py` calls `plan_research_attention`, persists reasons
+  to `AttentionStore`, and stores the plan on `AtlasResearchState.research_attention_plan`.
+  Provider-owning nodes (`_node_factory.build_segment_node`, `phase7_synthesis`) require
+  the plan before `build_grounding` when mode is `shadow`/`enforce`. `enforce` actuates
+  `carry`/`metric_patch` as zero-call paths (deterministic structured patch); `shadow`
+  records decisions while the incumbent edit path still runs. Rollback: `off`/`shadow`.
+  Env: `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default `shadow`).
   **Knowledge cutoff (#2628 / WP4.1).** `initial_state` / `run_atlas_then_hermes`
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
