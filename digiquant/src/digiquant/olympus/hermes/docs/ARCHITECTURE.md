@@ -259,8 +259,18 @@ exploration → `select`; otherwise `low_value_carry`. Modes via
 Planner failure falls back to full incumbent H6 (typed `incumbent_fallback`), never
 an unrecorded skip. `weight_pct` / materiality features are selection-only and must
 not enter provider prompts. Does not replace H4 roster/exploration ownership.
-WP11.4+ (missing-fact amendment constraint, durable lineage) still open — WP11
-incomplete.
+WP11.4+ (durable lineage round trip) still open — WP11 incomplete.
+
+### Bounded missing-fact amendment — WP11.4 (#2908)
+
+H6 no longer runs generic ``live_search`` web grounding. When the PM names exactly
+one missing fact via ``MissingFactProposal`` on ``DeliberationPmTurn``, Hermes may
+attempt a single targeted ``query_research`` fetch (blinded by ``source_kind``) and
+append ``MissingFactRequest`` + ``EvidenceBundleAmendment`` through
+``research_retrieval/h6_amendment.py``. Policy cap: one amendment per base bundle;
+invalid/exhausted/failed attempts record ``evidence_amendment_outcome`` /
+``evidence_amendment_failure_reason`` on ``DeliberationSummary`` and continue with
+the immutable H5 base — never broad re-grounding.
 
 ### Carry provenance — `carry_reason` (#1742)
 
