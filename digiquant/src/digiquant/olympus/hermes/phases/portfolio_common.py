@@ -643,6 +643,7 @@ def run_asset_analyst_llm(
     eff_model = get_model_for_phase(phase_slug) or get_model_for_mode()
 
     pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
+    lesson_pin = state.outcome_lesson_pin if isinstance(state.outcome_lesson_pin, dict) else None
 
     if mode == "edit" and prior is not None:
         phase_inputs.update(
@@ -658,6 +659,7 @@ def run_asset_analyst_llm(
             bundle=evidence_bundle,
             research_state_pin=pin,
             research_state_store=research_state_store,
+            outcome_lesson_pin=lesson_pin,
         ).phase_inputs
         try:
             result = run_research_agent(
@@ -742,6 +744,7 @@ def run_asset_analyst_llm(
         bundle=evidence_bundle,
         research_state_pin=pin,
         research_state_store=research_state_store,
+        outcome_lesson_pin=lesson_pin,
     ).phase_inputs
     try:
         result = run_research_agent(

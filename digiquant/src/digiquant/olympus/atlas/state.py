@@ -668,6 +668,22 @@ class AtlasResearchState(BaseModel):
             "outcomes, and pin linkage for H7 context compiler."
         ),
     )
+    # WP15.6 (#2975): exact structured lesson pin selected at preflight.
+    outcome_lesson_pin: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "OutcomeLessonPin dump after preflight maturation/compile. Authoritative "
+            "structured lesson for WP14 H5/H7 context — not decision_log prose."
+        ),
+    )
+    outcome_lesson_status: str | None = Field(
+        default=None,
+        description="pinned | lesson_unavailable | store_unavailable after preflight.",
+    )
+    outcome_lesson_unavailable_reason: str | None = Field(
+        default=None,
+        description="Detail when outcome_lesson_status is not pinned.",
+    )
 
     @field_validator("knowledge_cutoff_at")
     @classmethod

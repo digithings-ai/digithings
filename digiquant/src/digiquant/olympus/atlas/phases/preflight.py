@@ -82,6 +82,8 @@ class PreflightDeps:
     # WP12.3 (#2863): optional in-process ResearchStateStore for exact pin.
     # None → typed state_unavailable (compatibility documents stay shadow-only).
     research_state_store: Any | None = None
+    # WP15.6 (#2975): optional outcome-learning maturation stack for lesson pin.
+    outcome_maturation_deps: Any | None = None
     # Outer-retry attempt id (string form of OLYMPUS_ATTEMPT / DiagnosticsDeps.attempt).
     research_state_attempt_id: str | None = None
 
@@ -505,6 +507,43 @@ def _pin_research_state_update(deps: PreflightDeps, state: AtlasResearchState) -
     }
 
 
+def _outcome_maturation_update(deps: PreflightDeps, state: AtlasResearchState) -> dict[str, Any]:
+    """WP15.6: mature prior outcomes and pin one structured lesson at cutoff."""
+    from digiquant.olympus.atlas.phases.outcome_maturation import (
+        OutcomeMaturationDeps,
+        outcome_lesson_preflight_update,
+        pin_outcome_lesson_for_preflight,
+    )
+
+    if state.outcome_lesson_status == "pinned" and state.outcome_lesson_pin is not None:
+        return {}
+
+    maturation_deps = deps.outcome_maturation_deps
+    if maturation_deps is not None and not isinstance(maturation_deps, OutcomeMaturationDeps):
+        return {
+            "outcome_lesson_pin": None,
+            "outcome_lesson_status": "store_unavailable",
+            "outcome_lesson_unavailable_reason": (
+                f"outcome_maturation_deps must be OutcomeMaturationDeps; "
+                f"got {type(maturation_deps).__name__}"
+            ),
+        }
+
+    try:
+        cutoff = require_knowledge_cutoff_at(state)
+    except ValueError:
+        cutoff = state.knowledge_cutoff_at
+
+    result = pin_outcome_lesson_for_preflight(
+        maturation_deps,
+        knowledge_cutoff_at=cutoff,
+        consuming_run_id=str(state.run_id) if state.run_id is not None else None,
+        resume_pin=state.outcome_lesson_pin,
+        resume_status=state.outcome_lesson_status,
+    )
+    return outcome_lesson_preflight_update(result)
+
+
 def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], dict]:
     """Return the LangGraph preflight node bound to ``deps``."""
 
@@ -571,6 +610,7 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             "data_layer": data_layer,
         }
         update.update(_pin_research_state_update(deps, state))
+        update.update(_outcome_maturation_update(deps, state))
 
         from digiquant.olympus.research_retrieval.h7_prerequisites import (
             build_h7_prerequisite_snapshot,
@@ -592,12 +632,16 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
         pin_raw = update.get("research_state_pin")
         if not isinstance(pin_raw, dict) and isinstance(state.research_state_pin, dict):
             pin_raw = state.research_state_pin
+        lesson_pin_raw = update.get("outcome_lesson_pin")
+        if not isinstance(lesson_pin_raw, dict) and isinstance(state.outcome_lesson_pin, dict):
+            lesson_pin_raw = state.outcome_lesson_pin
         snapshot = build_h7_prerequisite_snapshot(
             client=deps.client,
             run_date=state.run_date,
             knowledge_cutoff_at=cutoff,
             research_state_pin=pin_raw if isinstance(pin_raw, dict) else None,
             prior_effective_forecast_ids=prior_effective_ids,
+            outcome_lesson_pin=lesson_pin_raw if isinstance(lesson_pin_raw, dict) else None,
         )
         if snapshot is not None:
             update["h7_prerequisite_snapshot"] = snapshot.model_dump(mode="json")
