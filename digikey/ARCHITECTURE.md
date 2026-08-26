@@ -125,9 +125,10 @@ only when `tenant_slug` came from the decoded JWT claim, `False` when it is empt
 filled from the header. **Any consumer using `tenant_slug` for real authorization (not
 just routing/logging) must check `tenant_slug_verified is True` first** — trusting
 `tenant_slug` alone lets a caller with an empty-tenant token pick any tenant via the
-header. No currently-issued token can carry an empty `tenant_slug` through the
-documented issuance API (`POST /v1/oauth/token` and `digikey issue-key` both reject it);
-this flag guards against future issuance paths, admin tooling, or bugs that might.
+header. Issuance refuses blank tenants after strip: CLI `--tenant`, `POST /v1/admin/keys`
+(Pydantic validator), `bff_session` token exchange, and `api_key` exchange of a row whose
+stored `tenant_slug` is blank. Whitespace-only strings are rejected the same way — they
+previously passed `min_length=1` then became `""` after `.strip()`.
 
 ---
 
