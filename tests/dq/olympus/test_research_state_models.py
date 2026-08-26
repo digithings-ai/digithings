@@ -76,6 +76,7 @@ def _evidence(**overrides: object) -> EvidenceRecord:
         affected_belief_ids=tuple(fields["affected_belief_ids"]),  # type: ignore[arg-type]
         novelty_of=tuple(fields["novelty_of"]),  # type: ignore[arg-type]
         contradiction_of=tuple(fields["contradiction_of"]),  # type: ignore[arg-type]
+        supersedes_evidence_id=fields.get("supersedes_evidence_id"),  # type: ignore[arg-type]
     )
     fields.setdefault("content_hash", content_hash)
     fields.setdefault(
@@ -192,6 +193,7 @@ def _patch(**overrides: object) -> ResearchPatch:
             target_kind=fields["target_kind"].value,  # type: ignore[union-attr]
             target_id=str(fields["target_id"]),
             content_hash=str(fields["content_hash"]),
+            supersedes_patch_id=fields.get("supersedes_patch_id"),  # type: ignore[arg-type]
         ),
     )
     return ResearchPatch(**fields)
@@ -261,6 +263,7 @@ def _state_version(**overrides: object) -> ResearchStateVersion:
         research_state_version_id(
             manifest_content_hash=manifest_obj.content_hash,
             parent_id=parent,  # type: ignore[arg-type]
+            schema_version=int(fields.get("schema_version", 1)),
         ),
     )
     return ResearchStateVersion(**fields)
@@ -336,9 +339,29 @@ class TestCanonicalOrdering:
 
 class TestSupersessionAndParent:
     def test_evidence_rejects_self_supersession(self) -> None:
-        evidence = _evidence()
+        # Lineage is part of content_hash, so a helper-built child cannot collide
+        # with its parent id. Hand-craft equal ids to exercise the lineage guard.
+        fake_id = uuid4()
+        content_hash = evidence_content_hash(
+            source="ingest:sec_8k",
+            authority="edgar",
+            summary="Filed 8-K item 2.02",
+            supersedes_evidence_id=fake_id,
+        )
         with pytest.raises(ValidationError, match="cannot supersede itself"):
-            _evidence(supersedes_evidence_id=evidence.evidence_id)
+            EvidenceRecord(
+                evidence_id=fake_id,
+                source="ingest:sec_8k",
+                authority="edgar",
+                summary="Filed 8-K item 2.02",
+                event_time=_TS - timedelta(hours=2),
+                effective_as_of=_TS - timedelta(hours=1),
+                known_at=_TS - timedelta(minutes=30),
+                recorded_at=_TS,
+                content_hash=content_hash,
+                provenance=_PROV,
+                supersedes_evidence_id=fake_id,
+            )
 
     def test_state_version_rejects_self_parent(self) -> None:
         manifest = _manifest()
@@ -400,6 +423,7 @@ class TestReconstructability:
             target_kind=patch.target_kind.value,
             target_id=patch.target_id,
             content_hash=patch.content_hash,
+            supersedes_patch_id=patch.supersedes_patch_id,
         )
         assert legacy.legacy_ref_id == legacy_document_ref_id(
             document_key=legacy.document_key,
@@ -431,3 +455,49 @@ class TestNoRawDictBoundaries:
         evidence = _evidence()
         assert isinstance(evidence.provenance, TypedProvenance)
         assert isinstance(evidence.affected_belief_ids, tuple)
+
+
+class TestIdentityHardening:
+    """Regression for #2856 — PK/idempotency formulas must not collide."""
+
+    def test_patch_id_includes_supersession_lineage(self) -> None:
+        parent = uuid4()
+        left = _patch(supersedes_patch_id=None)
+        right = _patch(supersedes_patch_id=parent)
+        assert left.patch_id != right.patch_id
+
+    def test_state_version_id_includes_schema_version(self) -> None:
+        v1 = _state_version(schema_version=1)
+        v2 = _state_version(schema_version=2)
+        assert v1.state_version_id != v2.state_version_id
+        assert v1.content_hash != v2.content_hash
+
+    def test_evidence_id_includes_supersedes_lineage(self) -> None:
+        parent = uuid4()
+        left = _evidence(supersedes_evidence_id=None)
+        right = _evidence(supersedes_evidence_id=parent)
+        assert left.evidence_id != right.evidence_id
+        assert left.content_hash != right.content_hash
+
+    def test_pin_rejects_requested_as_of_after_cutoff(self) -> None:
+        version = _state_version()
+        with pytest.raises(ValidationError, match="requested_as_of"):
+            ResearchStatePin(
+                run_id="run-abc",
+                attempt_id="attempt-1",
+                state_version_id=version.state_version_id,
+                knowledge_cutoff_at=_TS,
+                requested_as_of=_TS + timedelta(days=1),
+                pinned_at=_TS + timedelta(seconds=1),
+            )
+
+    def test_manifest_dedupes_duplicate_ids(self) -> None:
+        dup = uuid4()
+        manifest = _manifest(
+            evidence_ids=(dup, dup),
+            belief_version_ids=(),
+            expected_event_version_ids=(),
+            patch_ids=(),
+            legacy_ref_ids=(),
+        )
+        assert manifest.evidence_ids == (dup,)
