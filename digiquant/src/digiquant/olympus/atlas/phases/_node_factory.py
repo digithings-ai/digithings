@@ -23,6 +23,14 @@ from digigraph.model_config import get_model_for_mode, get_model_for_phase
 from pydantic import BaseModel
 
 from digiquant.olympus.atlas.phases.fail_soft import run_segment_fail_soft
+from digiquant.olympus.atlas.research_attention import (
+    apply_segment_metric_patch,
+    artifact_target_key,
+    carry_segment_slot,
+    require_research_attention_plan,
+    research_attention_enforce_path,
+    resolve_research_attention_rollout_mode,
+)
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
@@ -54,6 +62,7 @@ from digiquant.olympus.edit_mode.content_identity import (
     prior_content_date,
 )
 from digiquant.olympus.edit_mode.merge import MergeError, merge_document_patch, section_index
+from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)
 
@@ -859,6 +868,25 @@ def build_segment_node(
         # Non-gating: an edit→full fallback that then succeeds must still leave the run
         # `ok`, but it must stop being invisible (#1741).
         merge_fallbacks: dict[str, str] = {}
+        target_key = artifact_target_key("segment", spec.segment_slug)
+        rollout = resolve_research_attention_rollout_mode()
+        if rollout is not AttentionRolloutMode.OFF:
+            require_research_attention_plan(state)
+        enforce_path = research_attention_enforce_path(state, target_key=target_key)
+        if enforce_path == "carry":
+            reason = _triage_reason_for_segment(state, spec.segment_slug) or "attention_carry"
+            return write_adapter(
+                spec,
+                carry_segment_slot(state, spec.segment_slug, reason=reason),
+            )
+        if enforce_path == "metric_patch":
+            prior = _StatePriorLoader(state).load(("segment", spec.segment_slug), state.run_date)
+            if prior is not None:
+                return write_adapter(
+                    spec,
+                    apply_segment_metric_patch(state, spec.segment_slug, prior),
+                )
+            enforce_path = None
         if triage_gate is not None:
             carried = triage_gate(state, spec.segment_slug)
         else:
