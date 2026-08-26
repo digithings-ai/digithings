@@ -7,6 +7,11 @@ from digiquant.olympus.learning.beliefs_distillation import (
     run_beliefs_distillation_if_triggered,
     should_distill_beliefs,
 )
+from digiquant.olympus.learning.component_attribution import (
+    ComponentAttributor,
+    PairedReplayEvidence,
+    build_component_attribution_report,
+)
 from digiquant.olympus.learning.outcome_assembly import (
     AssemblyPassResult,
     OutcomeEpisodeAssembler,
@@ -26,6 +31,7 @@ __all__ = [
     "AttributionComponent",
     "AttributionMethod",
     "BeliefsDistillationDeps",
+    "ComponentAttributor",
     "ComponentAttributionReport",
     "ComponentObservation",
     "EpisodeDisposition",
@@ -34,6 +40,8 @@ __all__ = [
     "AssemblyPassResult",
     "OutcomeEpisodeAssembler",
     "OutcomeLearningStore",
+    "PairedReplayEvidence",
+    "build_component_attribution_report",
     "build_beliefs_distillation_phase",
     "distill_beliefs",
     "run_beliefs_distillation_if_triggered",
