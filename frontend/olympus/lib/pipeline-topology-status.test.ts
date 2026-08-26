@@ -127,15 +127,23 @@ describe('pipeline topology status audit', () => {
     expect(matrix['learning:beliefs']).toBe('not-run');
   });
 
-  it('recorded run with zero documents: degraded reach, missing expected leaves warn', () => {
+  it('recorded run with zero documents: Atlas-only reach; Hermes/Learning stay not-run', () => {
     const day: PipelineDayData = { ...emptyDay, runRecorded: true };
+    const bands = topologyEvidenceBands(day);
+    expect(bands.emptyRecordedRun).toBe(true);
+    expect(bands.atlas).toBe(true);
+    expect(bands.hermes).toBe(false);
+    expect(bands.learning).toBe(false);
+
     const matrix = auditStaticTopologyRunStatuses(day);
     expect(matrix['inputs:preflight']).toBe('state-only');
     expect(matrix['inputs:attention-plan']).toBe('not-run');
     expect(matrix['synthesis:consolidate']).toBe('state-only');
     expect(matrix['synthesis:digest']).toBe('expected-artifact-missing');
-    expect(matrix['selection:analysts']).toBe('parallel-dispatch');
-    expect(matrix['decision:commit']).toBe('expected-artifact-missing');
+    expect(matrix.selection).toBe('not-run');
+    expect(matrix['selection:analysts']).toBe('not-run');
+    expect(matrix['decision:commit']).toBe('not-run');
+    expect(matrix.learning).toBe('not-run');
     expect(matrix['learning:beliefs']).toBe('not-run');
   });
 
