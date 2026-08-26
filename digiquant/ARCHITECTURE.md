@@ -1263,7 +1263,15 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   cash/manifest/pair) reused by WP10.5 shadow comparison. Paired arms must share
   one `manifest_content_hash`; `build_replay_pair` rejects unequal shared inputs.
   Allowlisted policy families only; path/pickle-like version IDs rejected. Offline
-  only — no store, workers, or governance persistence (WP16.2+).
+  models/canonical hashing only — persistence lands in WP16.2.
+  **Policy replay governance store (#2983 / WP16.2):** `olympus/replay/store.py`
+  `PolicyReplayStore` + `governance_models.py` persist manifests, pairs, append-only
+  run events, immutable arm results, comparison reports, gate criteria versions,
+  evaluations, and human decisions. Migration `094_olympus_policy_replay.sql`.
+  Content-hash dedupe for manifests/pairs; paired arms require identical shared
+  manifest hash; run status derived from events (no mutable running row);
+  `load_gate_evidence` reconstructs full gate lineage from immutable IDs/hashes.
+  Dark launch — no workers, as-of dataset builder, or gate evaluator (WP16.3+).
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
