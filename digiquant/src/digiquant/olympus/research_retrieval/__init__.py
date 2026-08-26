@@ -38,6 +38,10 @@ WP14.3 H7 decision context wiring:
 :mod:`digiquant.olympus.research_retrieval.h7_decision_context`
 (typed mandate/calibration/contribution/risk/authorization/forecast sections;
 :mod:`digiquant.olympus.research_retrieval.h7_prerequisites` preflight snapshot).
+WP14.4 drill-down manifest pinning:
+:mod:`digiquant.olympus.research_retrieval.tools`
+(``OLYMPUS_RETRIEVAL_MANIFEST_MODE`` off|shadow|enforce; pre-call manifest persist +
+WP1 token linkage via :class:`~digiquant.olympus.research_retrieval.store.RoleRetrievalManifestStore`).
 """
 
 from __future__ import annotations
@@ -180,6 +184,11 @@ from digiquant.olympus.research_retrieval.planner import (
     select_h6,
 )
 from digiquant.olympus.research_retrieval.queries import (
+    RetrievalDocumentAllowlist,
+    RetrievalManifestMode,
+    RetrievalQueryPin,
+    apply_retrieval_pin_to_result,
+    build_retrieval_query_pin,
     extract_section,
     query_portfolio,
     query_research,
@@ -204,14 +213,27 @@ from digiquant.olympus.research_retrieval.store import (
     EvidenceBundleMissingError,
     EvidenceBundleStore,
     LoadedResearchState,
+    PersistedRoleContextManifest,
+    ProviderAttemptTokenLink,
     ResearchStateConflict,
     ResearchStateError,
     ResearchStateMissingError,
     ResearchStateStore,
+    RoleRetrievalManifestStore,
+    RoleRetrievalManifestStoreConflict,
+    RoleRetrievalManifestStoreError,
+    RoleRetrievalManifestStoreMissingError,
+    provider_attempt_token_link_id,
+    role_context_manifest_record_id,
 )
 from digiquant.olympus.research_retrieval.tools import (
+    OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV,
     RESEARCH_TOOLS,
     build_research_tool_dispatcher,
+    link_manifest_provider_tokens,
+    persist_pre_call_role_manifest,
+    resolve_retrieval_manifest_mode,
+    retrieval_pin_from_wire_result,
 )
 from digiquant.olympus.research_retrieval.views import (
     COMPILED_BRIEF_DOCUMENT_KEY,
@@ -299,10 +321,13 @@ __all__ = [
     "OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV",
     "OLYMPUS_CONTEXT_COMPILER_MODE_ENV",
     "OLYMPUS_H6_SELECTION_MODE_ENV",
+    "OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV",
     "PatchMode",
     "PatchTargetKind",
     "PersistedAttentionDecision",
     "PersistedAttentionPlan",
+    "PersistedRoleContextManifest",
+    "ProviderAttemptTokenLink",
     "RESEARCH_TOOLS",
     "ResearchCache",
     "ResearchPolicyShadowEvaluationReport",
@@ -315,11 +340,18 @@ __all__ = [
     "ResearchStatePin",
     "ResearchStatePinResult",
     "ResearchStateStore",
+    "RoleRetrievalManifestStore",
+    "RoleRetrievalManifestStoreConflict",
+    "RoleRetrievalManifestStoreError",
+    "RoleRetrievalManifestStoreMissingError",
     "ResearchStateUnavailableError",
     "ResearchStateVersion",
     "ResearchViewKind",
     "ResearchViewPublishBlocked",
+    "RetrievalDocumentAllowlist",
+    "RetrievalManifestMode",
     "RetrievalPhase",
+    "RetrievalQueryPin",
     "PromptRole",
     "RoleContextPolicy",
     "RoleContextWireResult",
@@ -329,6 +361,7 @@ __all__ = [
     "TickerEvidenceBundle",
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
+    "apply_retrieval_pin_to_result",
     "assert_blinded_h5_prompt",
     "assert_blinded_h6_prompt",
     "assert_h7_no_target_weights",
@@ -341,6 +374,7 @@ __all__ = [
     "build_h7_prerequisite_snapshot",
     "build_legacy_document_ref",
     "build_research_tool_dispatcher",
+    "build_retrieval_query_pin",
     "changed_evidence_ids_from_bundle",
     "child_version_must_name_parent",
     "cite_evidence_bundle_on_forecast",
@@ -362,9 +396,12 @@ __all__ = [
     "extract_section",
     "forbidden_prompt_keys",
     "facts_from_phase_inputs",
+    "link_manifest_provider_tokens",
     "incumbent_fallback_selection",
+    "persist_pre_call_role_manifest",
     "pin_research_state_for_preflight",
     "portfolio_tool_allowed",
+    "provider_attempt_token_link_id",
     "publish_compiled_views",
     "publish_h5_evidence_bundle",
     "query_portfolio",
@@ -372,10 +409,13 @@ __all__ = [
     "require_research_state_pin",
     "require_structured_write_ok",
     "research_document_allowed",
+    "role_context_manifest_record_id",
     "role_context_policy_content_hash",
     "resolve_context_compiler_mode",
+    "resolve_retrieval_manifest_mode",
     "resolve_h5_state_version_id",
     "resolve_h6_selection_mode",
+    "retrieval_pin_from_wire_result",
     "retrieve_missing_fact_evidence",
     "select_h6",
     "strip_blinded_forbidden_keys",

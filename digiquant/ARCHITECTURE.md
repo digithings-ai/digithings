@@ -1034,6 +1034,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   forecasts) from pinned research state plus `h7_prerequisite_snapshot` (preflight);
   `wire_h7_phase_inputs` records shadow beside incumbent PM inputs or enforces
   `structured_context` without target weights; H7 output schema unchanged.
+  **WP14.4 (#2950)** pins drill-down retrieval to compiled manifests via
+  `OLYMPUS_RETRIEVAL_MANIFEST_MODE` (`off|shadow|enforce`, default `shadow`):
+  `build_retrieval_query_pin` binds document access to pinned state legacy refs;
+  `build_research_tool_dispatcher` rejects un-pinned calls and latest-date
+  fallbacks in enforce; `RoleRetrievalManifestStore` persists pre-call manifests and
+  append-only WP1 token links (`ProviderAttemptTokenLink`) without mutating
+  manifests; `retrieval_pin_from_wire_result` bridges WP14.2/14.3 linkage fields.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`

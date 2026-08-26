@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Sequence, TypeVar
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from pydantic import BaseModel, Field
 
@@ -738,9 +738,7 @@ class AttentionStoreMissingError(LookupError):
 
 
 def _usage_to_budget(usages: Sequence[ActualProviderAttemptUsage]) -> AttentionBudgetEstimate:
-    uncached = sum(
-        (item.prompt_tokens or 0) + (item.completion_tokens or 0) for item in usages
-    )
+    uncached = sum((item.prompt_tokens or 0) + (item.completion_tokens or 0) for item in usages)
     return AttentionBudgetEstimate(
         provider_calls=len(usages),
         searches=sum(item.searches for item in usages),
@@ -828,9 +826,7 @@ class AttentionStore:
         if existing is not None:
             if existing == row:
                 return existing
-            raise AttentionStoreConflict(
-                f"decision_id {decision_id} exists with different content"
-            )
+            raise AttentionStoreConflict(f"decision_id {decision_id} exists with different content")
         self._decisions[decision_id] = row
         self._attempt_links.setdefault(decision_id, ())
         return row
@@ -903,7 +899,9 @@ class AttentionStore:
     def provider_attempt_ids_for(self, decision_id: UUID) -> tuple[UUID, ...]:
         return self._attempt_links.get(decision_id, ())
 
-    def append_context_manifest(self, manifest: AttentionContextManifest) -> AttentionContextManifest:
+    def append_context_manifest(
+        self, manifest: AttentionContextManifest
+    ) -> AttentionContextManifest:
         if manifest.plan_id not in self._plans:
             raise AttentionStoreError(
                 f"context manifest references missing plan_id {manifest.plan_id}"
@@ -1008,9 +1006,7 @@ class AttentionStore:
         evaluation: AttentionPolicyEvaluation,
     ) -> AttentionPolicyEvaluation:
         if evaluation.plan_id not in self._plans:
-            raise AttentionStoreError(
-                f"evaluation references missing plan_id {evaluation.plan_id}"
-            )
+            raise AttentionStoreError(f"evaluation references missing plan_id {evaluation.plan_id}")
         existing = self._evaluations.get(evaluation.evaluation_id)
         if existing is not None:
             if existing == evaluation:
@@ -1020,6 +1016,168 @@ class AttentionStore:
             )
         self._evaluations[evaluation.evaluation_id] = evaluation
         return evaluation
+
+
+_ROLE_MANIFEST_RECORD_ID_NS = UUID("c1a0e50c-4b8d-5f2a-9c17-3d6e8f0a1b22")
+_PROVIDER_TOKEN_LINK_ID_NS = UUID("c1a0e50d-4b8d-5f2a-9c17-3d6e8f0a1b22")
+
+
+def role_context_manifest_record_id(
+    *,
+    run_id: str,
+    attempt_id: str,
+    role: str,
+    manifest_id: UUID,
+) -> UUID:
+    return uuid5(
+        _ROLE_MANIFEST_RECORD_ID_NS,
+        f"{run_id.strip()}:{attempt_id.strip()}:{role.strip()}:{manifest_id.hex}",
+    )
+
+
+def provider_attempt_token_link_id(*, manifest_id: UUID, provider_attempt_id: UUID) -> UUID:
+    return uuid5(
+        _PROVIDER_TOKEN_LINK_ID_NS,
+        f"{manifest_id.hex}:{provider_attempt_id.hex}",
+    )
+
+
+class PersistedRoleContextManifest(BaseModel):
+    """Append-only pre-call context manifest row (WP14.4 — immutable after persist)."""
+
+    model_config = {"extra": "forbid", "frozen": True}
+
+    record_id: UUID
+    run_id: str
+    attempt_id: str
+    role: str
+    manifest_id: UUID
+    manifest_content_hash: str
+    state_version_id: UUID
+    estimated_tokens: int = Field(ge=0)
+    capsule_id: UUID | None = None
+    recorded_at: datetime
+
+
+class ProviderAttemptTokenLink(BaseModel):
+    """Link one context manifest estimate to WP1 actual tokens without mutating manifest."""
+
+    model_config = {"extra": "forbid", "frozen": True}
+
+    link_id: UUID
+    manifest_id: UUID
+    provider_attempt_id: UUID
+    estimated_tokens: int = Field(ge=0)
+    actual_prompt_tokens: int | None = Field(default=None, ge=0)
+    actual_completion_tokens: int | None = Field(default=None, ge=0)
+    recorded_at: datetime
+
+
+class RoleRetrievalManifestStoreConflict(RuntimeError):
+    """Same role retrieval record already stored with incompatible content."""
+
+
+class RoleRetrievalManifestStoreError(RuntimeError):
+    """Store refused a role retrieval manifest write."""
+
+
+class RoleRetrievalManifestStoreMissingError(LookupError):
+    """Exact pre-call manifest / token link not found."""
+
+
+class RoleRetrievalManifestStore:
+    """Append-only WP14.4 pre-call manifest + WP1 token linkage boundary."""
+
+    def __init__(self) -> None:
+        self._pre_call: dict[UUID, PersistedRoleContextManifest] = {}
+        self._token_links: dict[UUID, ProviderAttemptTokenLink] = {}
+
+    def append_pre_call_manifest(
+        self,
+        record: PersistedRoleContextManifest,
+    ) -> PersistedRoleContextManifest:
+        """Persist one pre-call context manifest; idempotent on identical content."""
+        stamp = require_utc_datetime(record.recorded_at, field_name="recorded_at")
+        normalized = PersistedRoleContextManifest(
+            record_id=record.record_id,
+            run_id=record.run_id,
+            attempt_id=record.attempt_id,
+            role=record.role,
+            manifest_id=record.manifest_id,
+            manifest_content_hash=record.manifest_content_hash,
+            state_version_id=record.state_version_id,
+            estimated_tokens=record.estimated_tokens,
+            capsule_id=record.capsule_id,
+            recorded_at=stamp,
+        )
+        existing = self._pre_call.get(normalized.record_id)
+        if existing is not None:
+            if existing == normalized:
+                return existing
+            raise RoleRetrievalManifestStoreConflict(
+                f"record_id {normalized.record_id} exists with different content"
+            )
+        self._pre_call[normalized.record_id] = normalized
+        return normalized
+
+    def load_pre_call_manifest(self, record_id: UUID) -> PersistedRoleContextManifest:
+        row = self._pre_call.get(record_id)
+        if row is None:
+            raise RoleRetrievalManifestStoreMissingError(
+                f"pre_call record_id {record_id} not found"
+            )
+        return row
+
+    def pre_call_manifest_for_attempt(
+        self,
+        *,
+        run_id: str,
+        attempt_id: str,
+        role: str,
+    ) -> PersistedRoleContextManifest | None:
+        matches = [
+            row
+            for row in self._pre_call.values()
+            if row.run_id == run_id and row.attempt_id == attempt_id and row.role == role
+        ]
+        if not matches:
+            return None
+        matches.sort(key=lambda item: item.recorded_at, reverse=True)
+        return matches[0]
+
+    def append_provider_token_link(
+        self,
+        link: ProviderAttemptTokenLink,
+    ) -> ProviderAttemptTokenLink:
+        """Append WP1 usage linkage; never updates the pre-call manifest row."""
+        stamp = require_utc_datetime(link.recorded_at, field_name="recorded_at")
+        normalized = ProviderAttemptTokenLink(
+            link_id=link.link_id,
+            manifest_id=link.manifest_id,
+            provider_attempt_id=link.provider_attempt_id,
+            estimated_tokens=link.estimated_tokens,
+            actual_prompt_tokens=link.actual_prompt_tokens,
+            actual_completion_tokens=link.actual_completion_tokens,
+            recorded_at=stamp,
+        )
+        if not any(row.manifest_id == normalized.manifest_id for row in self._pre_call.values()):
+            raise RoleRetrievalManifestStoreError(
+                f"cannot link tokens for unknown manifest_id {normalized.manifest_id}"
+            )
+        existing = self._token_links.get(normalized.link_id)
+        if existing is not None:
+            if existing == normalized:
+                return existing
+            raise RoleRetrievalManifestStoreConflict(
+                f"link_id {normalized.link_id} exists with different content"
+            )
+        self._token_links[normalized.link_id] = normalized
+        return normalized
+
+    def token_links_for_manifest(self, manifest_id: UUID) -> tuple[ProviderAttemptTokenLink, ...]:
+        rows = [row for row in self._token_links.values() if row.manifest_id == manifest_id]
+        rows.sort(key=lambda item: item.recorded_at)
+        return tuple(rows)
 
 
 __all__ = [
@@ -1033,8 +1191,16 @@ __all__ = [
     "EvidenceBundleMissingError",
     "EvidenceBundleStore",
     "LoadedResearchState",
+    "PersistedRoleContextManifest",
+    "ProviderAttemptTokenLink",
     "ResearchStateConflict",
     "ResearchStateError",
     "ResearchStateMissingError",
     "ResearchStateStore",
+    "RoleRetrievalManifestStore",
+    "RoleRetrievalManifestStoreConflict",
+    "RoleRetrievalManifestStoreError",
+    "RoleRetrievalManifestStoreMissingError",
+    "provider_attempt_token_link_id",
+    "role_context_manifest_record_id",
 ]
