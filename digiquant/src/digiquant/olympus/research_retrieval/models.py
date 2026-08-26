@@ -7,7 +7,8 @@ preflight pins (WP12.3) consume this surface; this module defines contracts only
 
 WP11.1 adds immutable H5 :class:`TickerEvidenceBundle` plus append-only
 :class:`MissingFactRequest` / :class:`EvidenceBundleAmendment` vocabulary.
-H6 selection cutover is WP11.3+ — these contracts do not change fan-out yet.
+H6 selection cutover is WP11.3 (`research_retrieval/planner.py`) — these
+contracts do not own fan-out; selection consumes bundle IDs as features.
 
 Distinct from Track B ``research_corpus`` (#2613): corpus pins are tenant-agnostic
 theme/asset/segment identity. These models are versioned claim/event/evidence
@@ -857,8 +858,9 @@ def evidence_bundle_amendment_content_hash(
 class TickerEvidenceBundle(ResearchStateModel):
     """Immutable H5 base evidence bundle for one ticker in one run.
 
-    WP11.1 contract only — H6 selection cutover is WP11.3+. Base rows never
-    mutate; H6 may only append :class:`EvidenceBundleAmendment` rows.
+    WP11.1 contract — H6 selection (WP11.3) may cite ``bundle_id`` as a
+    selection feature. Base rows never mutate; H6 may only append
+    :class:`EvidenceBundleAmendment` rows (WP11.4).
     """
 
     bundle_id: UUID

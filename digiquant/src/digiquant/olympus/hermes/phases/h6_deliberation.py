@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
@@ -18,6 +18,7 @@ from digiquant.olympus.atlas.phases._node_factory import (
     apply_web_grounding_to_inputs,
 )
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
+from digiquant.olympus.atlas.supabase_io import prior_book_current_weights
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.focus_roster import (
     fanout_ticker,
@@ -28,6 +29,7 @@ from digiquant.olympus.hermes.focus_roster import (
 from digiquant.olympus.hermes.models.deliberation import (
     CARRY_FINGERPRINT_SKIP,
     CARRY_LLM_FAILURE,
+    CARRY_LOW_VALUE,
     DeliberationAnalystTurn,
     DeliberationPmTurn,
     DeliberationSummary,
@@ -47,6 +49,17 @@ from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import deliberation_skip_signal
+from digiquant.olympus.research_retrieval.planner import (
+    H6Action,
+    H6Selection,
+    H6SelectionMode,
+    H6SelectionReason,
+    assert_no_materiality_in_prompt,
+    build_h6_decision_features,
+    incumbent_fallback_selection,
+    resolve_h6_selection_mode,
+    select_h6,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +241,7 @@ def _resolve_from_debate(
 
 
 def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
-    return {
+    inputs = {
         "ticker": ticker,
         "analyst_payload": _analyst_payload(state, ticker),
         "prior_book": list(state.prior_context.prior_book),
@@ -237,6 +250,123 @@ def _portfolio_phase_inputs(state: HermesState, ticker: str) -> dict[str, Any]:
         "held_in_prior_book": ticker
         in set(holdings_from_prior_book(state.prior_context.prior_book)),
     }
+    # WP11.3: selection materiality features must never enter provider prompts.
+    assert_no_materiality_in_prompt(inputs)
+    return inputs
+
+
+def _roster_reason_for(state: HermesState, ticker: str) -> str:
+    sym = ticker.strip().upper()
+    for entry in state.phase_hermes.focus_roster:
+        if str(entry.ticker).strip().upper() == sym:
+            return str(entry.roster_reason)
+    return "other"
+
+
+def _bundle_conflict_signal(bundle_dump: Mapping[str, Any] | None) -> bool:
+    """True when the H5 bundle dump carries conflict diagnostics (if present)."""
+    if not isinstance(bundle_dump, Mapping):
+        return False
+    conflicts = bundle_dump.get("conflicts")
+    if isinstance(conflicts, (list, tuple)) and conflicts:
+        return True
+    # Bundle contract itself has no conflicts field; counter-evidence lives on forecast.
+    return False
+
+
+def _invalidation_risk_for(state: HermesState, ticker: str, analyst: Mapping[str, Any]) -> bool:
+    """Thesis challenged / invalidation hit for this ticker → select H6."""
+    sym = ticker.strip().upper()
+    for thesis in state.prior_context.active_theses:
+        if not isinstance(thesis, Mapping):
+            continue
+        status = str(thesis.get("status") or "").strip().lower()
+        if status not in {"challenged", "invalidated"}:
+            continue
+        linked = str(thesis.get("ticker") or thesis.get("linked_ticker") or "").upper()
+        if linked == sym:
+            return True
+        vehicles = thesis.get("candidate_tickers") or thesis.get("tickers") or []
+        if isinstance(vehicles, (list, tuple)) and sym in {
+            str(v).strip().upper() for v in vehicles
+        }:
+            return True
+    risks = str(analyst.get("risks") or "").lower()
+    if "invalidat" in risks or "thesis break" in risks or "breached" in risks:
+        return True
+    return False
+
+
+def _resolve_h6_selection(state: HermesState, ticker: str, analyst: dict[str, Any]) -> H6Selection:
+    """Build features + selection; planner errors → incumbent fallback (full H6)."""
+    mode = resolve_h6_selection_mode()
+    if mode is H6SelectionMode.OFF:
+        # Off: no selection record required for actuation; still emit typed incumbent reason.
+        held = ticker in set(holdings_from_prior_book(state.prior_context.prior_book))
+        feats = build_h6_decision_features(
+            ticker=ticker,
+            roster_reason=_roster_reason_for(state, ticker),
+            held=held,
+            weight_pct=0.0,
+            analyst=analyst,
+        )
+        return incumbent_fallback_selection(feats, mode=mode)
+
+    try:
+        held_set = set(holdings_from_prior_book(state.prior_context.prior_book))
+        held = ticker.strip().upper() in held_set
+        weights = prior_book_current_weights(list(state.prior_context.prior_book))
+        weight_pct = float(weights.get(ticker.strip().upper(), 0.0) or 0.0)
+        prior_analyst = state.prior_context.prior_analyst_by_ticker.get(ticker.strip().upper())
+        if not isinstance(prior_analyst, dict):
+            prior_analyst = state.prior_context.prior_analyst_by_ticker.get(ticker)
+        bundle_dump = state.phase_hermes.ticker_evidence_bundles.get(ticker.strip().upper())
+        if not isinstance(bundle_dump, dict):
+            bundle_dump = state.phase_hermes.ticker_evidence_bundles.get(ticker)
+        bundle_id = None
+        if isinstance(bundle_dump, dict) and bundle_dump.get("bundle_id"):
+            bundle_id = str(bundle_dump["bundle_id"])
+        price_delta = state.price_deltas.get(ticker.strip().upper())
+        if price_delta is None:
+            price_delta = state.price_deltas.get(ticker)
+        feats = build_h6_decision_features(
+            ticker=ticker,
+            roster_reason=_roster_reason_for(state, ticker),
+            held=held,
+            weight_pct=weight_pct,
+            analyst=analyst,
+            prior_analyst=prior_analyst if isinstance(prior_analyst, dict) else None,
+            price_delta=float(price_delta) if price_delta is not None else None,
+            evidence_bundle_id=bundle_id,
+            has_evidence_conflict=_bundle_conflict_signal(bundle_dump),
+            invalidation_risk=_invalidation_risk_for(state, ticker, analyst),
+        )
+        return select_h6(feats, mode=mode)
+    except Exception as exc:
+        logger.warning(
+            "H6 selection failed for %s (%s: %s); falling back to full incumbent H6",
+            ticker,
+            type(exc).__name__,
+            exc,
+        )
+        held = ticker in set(holdings_from_prior_book(state.prior_context.prior_book))
+        feats = build_h6_decision_features(
+            ticker=ticker,
+            roster_reason=_roster_reason_for(state, ticker),
+            held=held,
+            weight_pct=0.0,
+            analyst=analyst,
+        )
+        return incumbent_fallback_selection(feats, mode=mode)
+
+
+def _attach_selection(summary: DeliberationSummary, selection: H6Selection) -> DeliberationSummary:
+    return summary.model_copy(
+        update={
+            "selection_reason": selection.reason.value,
+            "h6_selection": selection.model_dump(mode="json"),
+        }
+    )
 
 
 def _deliberation_summary(
@@ -430,7 +560,76 @@ def _h6_node_factory(ticker: str):
             return {}
         stance = str(analyst.get("stance") or "hold")
         base = _base_forecast_from_analyst(analyst)
-        if deliberation_skip_signal(state, ticker, analyst_stance=stance):
+        selection = _resolve_h6_selection(state, ticker, analyst)
+
+        # Enforce + low-value: carry with zero provider calls (typed reason).
+        if (
+            selection.mode is H6SelectionMode.ENFORCE
+            and selection.action is H6Action.CARRY
+            and selection.reason is H6SelectionReason.LOW_VALUE_CARRY
+        ):
+            prior = _prior_deliberation_summary(state, ticker)
+            stance_map = {"buy": "bullish", "sell": "bearish"}
+            if prior:
+                net_stance = prior.get("net_stance", "neutral")
+                conviction_delta = int(prior.get("conviction_delta") or 0)
+                conclusion = str(
+                    prior.get("conclusion_excerpt")
+                    or prior.get("conclusion")
+                    or prior.get("bull_thesis")
+                    or analyst.get("thesis")
+                    or f"low-value carry: {stance}"
+                )
+            else:
+                net_stance = stance_map.get(stance, "neutral")
+                conviction_delta = 0
+                conclusion = str(analyst.get("thesis") or f"low-value carry: {stance}")
+            carried = DeliberationSummary(
+                ticker=ticker,
+                converged=True,
+                conclusion=conclusion,
+                net_stance=net_stance,  # type: ignore[arg-type]
+                conviction_delta=conviction_delta,
+                transcript=[],
+                carried=True,
+                carry_reason=CARRY_LOW_VALUE,
+            )
+            if prior:
+                prior_amendment = None
+                raw_am = prior.get("forecast_amendment")
+                if isinstance(raw_am, dict) and raw_am:
+                    try:
+                        prior_amendment = ForecastAmendment.model_validate(raw_am)
+                    except Exception:
+                        prior_amendment = None
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=_carry_prior_effective(prior=prior, base=base, state=state),
+                    amendment=prior_amendment,
+                )
+            elif base is not None:
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=resolve_effective_forecast(
+                        base=base,
+                        amendment_outcome=AmendmentOutcome.NONE,
+                        known_at=state.knowledge_cutoff_at or base.known_at,
+                    ),
+                )
+            carried = _attach_selection(carried, selection)
+            return {
+                "phase_hermes": PhaseHermesState(
+                    deliberation_summaries={ticker: carried.model_dump(mode="json")}
+                )
+            }
+
+        # Enforce + select: skip fingerprint short-circuit so selected success meets round floor.
+        allow_fingerprint_skip = not (
+            selection.mode is H6SelectionMode.ENFORCE and selection.action is H6Action.SELECT
+        )
+        if allow_fingerprint_skip and deliberation_skip_signal(
+            state, ticker, analyst_stance=stance
+        ):
             prior = _prior_deliberation_summary(state, ticker)
             if prior:
                 carried = DeliberationSummary(
@@ -463,6 +662,7 @@ def _h6_node_factory(ticker: str):
                     effective=_carry_prior_effective(prior=prior, base=base, state=state),
                     amendment=prior_amendment,
                 )
+                carried = _attach_selection(carried, selection)
                 return {
                     "phase_hermes": PhaseHermesState(
                         deliberation_summaries={ticker: carried.model_dump(mode="json")}
@@ -503,6 +703,7 @@ def _h6_node_factory(ticker: str):
                         known_at=state.knowledge_cutoff_at or base.known_at,
                     ),
                 )
+            fallback = _attach_selection(fallback, selection)
             return {
                 "phase_hermes": PhaseHermesState(
                     deliberation_summaries={ticker: fallback.model_dump(mode="json")}
@@ -528,6 +729,7 @@ def _h6_node_factory(ticker: str):
             effective=effective,
             amendment=amendment,
         )
+        summary = _attach_selection(summary, selection)
         result: dict[str, Any] = {
             "phase_hermes": PhaseHermesState(
                 deliberation_summaries={ticker: summary.model_dump(mode="json")}
