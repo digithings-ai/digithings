@@ -199,6 +199,29 @@ Compiled prose brief/digest views (#2877 / WP12.5) are deterministic dual-write
 documents (`research-state-brief` / `research-state-digest`) from exact pinned
 versions — not authoritative state tables.
 
+### Ticker evidence bundles — migration 090 (#2844 / WP11.1)
+
+Private append-only H5 base evidence bundles and H6 missing-fact amendments.
+Contracts: `TickerEvidenceBundle`, `MissingFactRequest`,
+`EvidenceBundleAmendment` in `digiquant.olympus.research_retrieval.models`.
+Application boundary: `EvidenceBundleStore` (in-memory for unit tests; SQL IO
+adapter later). Dark launch: no public base view, no historical backfill, no
+H6 selection cutover (WP11.3+). Bundles cite `state_version_id` +
+`evidence_ids` for WP12 lineage; amendments must reference one base and one
+missing-fact request (zero unlinked amendments). Unique
+`(source_run_id, ticker)` enforces one base per run/ticker; content-idempotent
+retry is a no-op.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_ticker_evidence_bundles` | `(bundle_id UUID)` | Immutable H5 base bundle + payload jsonb; unique run/ticker and run/ticker/content. |
+| `olympus_missing_fact_requests` | `(request_id UUID)` | Named missing-fact request FK → base bundle. |
+| `olympus_evidence_bundle_amendments` | `(amendment_id UUID)` | Append-only H6 supplement FK → base + request. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_evidence_bundle_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`.
+
 ### Forecast registry — migration 079 (#2663 / WP4.6)
 
 Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio

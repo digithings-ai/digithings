@@ -116,6 +116,12 @@ Before any phase executes, the agent performs a structured context load:
    + `pin_state_for_run`) onto `AtlasResearchState.research_state_pin`. Resume
    reuses the run/attempt pin; typed `state_unavailable` keeps compatibility
    documents shadow-only. Never re-select / `load_latest` after the pin.
+6b. **Ticker evidence bundles (#2844 / WP11.1)** — durable H5
+   `TickerEvidenceBundle` + append-only H6 `MissingFactRequest` /
+   `EvidenceBundleAmendment` contracts (`research_retrieval` models +
+   `EvidenceBundleStore`, migration `090`). One immutable base per run/ticker;
+   amendments must link one base and one request. No H6 selection cutover yet
+   (WP11.3+); no public view.
 7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 
 ---

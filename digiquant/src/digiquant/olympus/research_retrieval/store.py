@@ -13,6 +13,9 @@ Semantics:
 - **Strict reads** exclude future-known rows and legacy-null-``known_at`` refs.
 - **Exact load** returns byte-equivalent typed state even after newer rows exist.
 - **No ``load_latest``** after a run pin — callers must use the pin or an exact id.
+
+WP11.1 ticker evidence bundles live beside this store as
+:class:`EvidenceBundleStore` (migration ``090_olympus_evidence_bundles.sql``).
 """
 
 from __future__ import annotations
@@ -26,12 +29,15 @@ from pydantic import BaseModel
 
 from digiquant.olympus.research_retrieval.models import (
     BeliefVersion,
+    EvidenceBundleAmendment,
     EvidenceRecord,
     ExpectedEventVersion,
     LegacyDocumentRef,
+    MissingFactRequest,
     ResearchPatch,
     ResearchStatePin,
     ResearchStateVersion,
+    TickerEvidenceBundle,
 )
 from digiquant.olympus.temporal import require_utc_datetime
 
@@ -486,7 +492,150 @@ class ResearchStateStore:
         return _payload_bytes(version)
 
 
+class EvidenceBundleConflict(RuntimeError):
+    """Same evidence-bundle identity already stored with incompatible content."""
+
+
+class EvidenceBundleError(RuntimeError):
+    """Store refused an evidence-bundle write (missing lineage / ticker mismatch)."""
+
+
+class EvidenceBundleMissingError(LookupError):
+    """Exact evidence bundle / request / amendment not found."""
+
+
+class EvidenceBundleStore:
+    """Append-only H5 base + H6 amendment boundary (no upsert / update / delete).
+
+    Dark-launch companion to :class:`ResearchStateStore`. SQL schema:
+    ``090_olympus_evidence_bundles.sql``. Does not cut over H6 selection (WP11.3+).
+    """
+
+    def __init__(self) -> None:
+        self._bases: dict[UUID, TickerEvidenceBundle] = {}
+        self._run_ticker: dict[tuple[str, str], UUID] = {}
+        self._requests: dict[UUID, MissingFactRequest] = {}
+        self._amendments: dict[UUID, EvidenceBundleAmendment] = {}
+
+    def _append_idempotent(
+        self,
+        *,
+        store: dict[UUID, T],
+        key: UUID,
+        value: T,
+        content_hash: str,
+        existing_hash: str | None,
+        label: str,
+    ) -> T:
+        if key in store:
+            if existing_hash == content_hash:
+                return store[key]
+            raise EvidenceBundleConflict(f"{label} {key} exists with different content_hash")
+        store[key] = value
+        return value
+
+    def append_base_bundle(self, bundle: TickerEvidenceBundle) -> TickerEvidenceBundle:
+        """Insert immutable H5 base; exact retry is a no-op; one base per run/ticker."""
+        run_key = (bundle.source_run_id, bundle.ticker)
+        existing_id = self._run_ticker.get(run_key)
+        if existing_id is not None and existing_id != bundle.bundle_id:
+            raise EvidenceBundleConflict(
+                f"base bundle already exists for run/ticker {bundle.source_run_id}/{bundle.ticker}"
+            )
+        existing = self._bases.get(bundle.bundle_id)
+        stored = self._append_idempotent(
+            store=self._bases,
+            key=bundle.bundle_id,
+            value=bundle,
+            content_hash=bundle.content_hash,
+            existing_hash=None if existing is None else existing.content_hash,
+            label="bundle_id",
+        )
+        self._run_ticker[run_key] = stored.bundle_id
+        return stored
+
+    def append_missing_fact_request(self, request: MissingFactRequest) -> MissingFactRequest:
+        """Insert a named missing-fact request linked to an existing base bundle."""
+        base = self._bases.get(request.base_bundle_id)
+        if base is None:
+            raise EvidenceBundleError(
+                f"missing base bundle {request.base_bundle_id} for MissingFactRequest"
+            )
+        if request.ticker != base.ticker:
+            raise EvidenceBundleError(
+                f"MissingFactRequest ticker {request.ticker} must match base {base.ticker}"
+            )
+        existing = self._requests.get(request.request_id)
+        return self._append_idempotent(
+            store=self._requests,
+            key=request.request_id,
+            value=request,
+            content_hash=request.content_hash,
+            existing_hash=None if existing is None else existing.content_hash,
+            label="request_id",
+        )
+
+    def append_amendment(self, amendment: EvidenceBundleAmendment) -> EvidenceBundleAmendment:
+        """Append H6 amendment; requires existing base + matching missing-fact request."""
+        base = self._bases.get(amendment.base_bundle_id)
+        if base is None:
+            raise EvidenceBundleError(
+                f"missing base bundle {amendment.base_bundle_id} for amendment"
+            )
+        request = self._requests.get(amendment.missing_fact_request_id)
+        if request is None:
+            raise EvidenceBundleError(
+                f"missing missing-fact request {amendment.missing_fact_request_id} for amendment"
+            )
+        if request.base_bundle_id != amendment.base_bundle_id:
+            raise EvidenceBundleError(
+                "amendment missing-fact request is not linked to the named base bundle"
+            )
+        if amendment.ticker != base.ticker:
+            raise EvidenceBundleError(
+                f"amendment ticker {amendment.ticker} must match base {base.ticker}"
+            )
+        existing = self._amendments.get(amendment.amendment_id)
+        return self._append_idempotent(
+            store=self._amendments,
+            key=amendment.amendment_id,
+            value=amendment,
+            content_hash=amendment.content_hash,
+            existing_hash=None if existing is None else existing.content_hash,
+            label="amendment_id",
+        )
+
+    def load_base_bundle(self, bundle_id: UUID) -> TickerEvidenceBundle:
+        bundle = self._bases.get(bundle_id)
+        if bundle is None:
+            raise EvidenceBundleMissingError(f"bundle_id {bundle_id} not found")
+        return bundle
+
+    def base_bundle_count_for(self, *, run_id: str, ticker: str, content_hash: str) -> int:
+        """Metric helper: count bases matching run/ticker/content (0 or 1)."""
+        return sum(
+            1
+            for bundle in self._bases.values()
+            if bundle.source_run_id == run_id
+            and bundle.ticker == ticker.strip().upper()
+            and bundle.content_hash == content_hash
+        )
+
+    def unlinked_amendment_count(self) -> int:
+        """Metric helper: amendments whose base or request is absent (always 0 if healthy)."""
+        return sum(
+            1
+            for amendment in self._amendments.values()
+            if amendment.base_bundle_id not in self._bases
+            or amendment.missing_fact_request_id not in self._requests
+        )
+
+
 __all__ = [
+    "EvidenceBundleConflict",
+    "EvidenceBundleError",
+    "EvidenceBundleMissingError",
+    "EvidenceBundleStore",
     "LoadedResearchState",
     "ResearchStateConflict",
     "ResearchStateError",

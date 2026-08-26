@@ -1,8 +1,13 @@
-"""Frozen Phase 3 research-state contracts (#2841 / WP12.1).
+"""Frozen Phase 3 research-state contracts (#2841 / WP12.1) and ticker
+evidence-bundle contracts (#2844 / WP11.1).
 
 Prose ``documents`` / digests are deterministic *views*. Authoritative research
 memory is these structured, append-only entities. Persistence (WP12.2) and
 preflight pins (WP12.3) consume this surface; this module defines contracts only.
+
+WP11.1 adds immutable H5 :class:`TickerEvidenceBundle` plus append-only
+:class:`MissingFactRequest` / :class:`EvidenceBundleAmendment` vocabulary.
+H6 selection cutover is WP11.3+ — these contracts do not change fan-out yet.
 
 Distinct from Track B ``research_corpus`` (#2613): corpus pins are tenant-agnostic
 theme/asset/segment identity. These models are versioned claim/event/evidence
@@ -39,6 +44,9 @@ _EXPECTED_EVENT_VERSION_ID_NS = UUID("c1a0e503-4b8d-5f2a-9c17-3d6e8f0a1b22")
 _PATCH_ID_NS = UUID("c1a0e504-4b8d-5f2a-9c17-3d6e8f0a1b22")
 _STATE_VERSION_ID_NS = UUID("c1a0e505-4b8d-5f2a-9c17-3d6e8f0a1b22")
 _LEGACY_REF_ID_NS = UUID("c1a0e506-4b8d-5f2a-9c17-3d6e8f0a1b22")
+_TICKER_EVIDENCE_BUNDLE_ID_NS = UUID("c1a0e507-4b8d-5f2a-9c17-3d6e8f0a1b22")
+_MISSING_FACT_REQUEST_ID_NS = UUID("c1a0e508-4b8d-5f2a-9c17-3d6e8f0a1b22")
+_EVIDENCE_BUNDLE_AMENDMENT_ID_NS = UUID("c1a0e509-4b8d-5f2a-9c17-3d6e8f0a1b22")
 
 NonEmptyStr: TypeAlias = Annotated[str, Field(min_length=1, max_length=500)]
 Confidence: TypeAlias = Annotated[
@@ -576,9 +584,7 @@ class ResearchPatch(ResearchStateModel):
             supersedes_patch_id=self.supersedes_patch_id,
         )
         if self.patch_id != expected_id:
-            raise ValueError(
-                "patch_id must be UUID5 of target_kind+target_id+parent+content_hash"
-            )
+            raise ValueError("patch_id must be UUID5 of target_kind+target_id+parent+content_hash")
         return self
 
 
@@ -751,6 +757,276 @@ class ResearchStateVersion(ResearchStateModel):
         return self
 
 
+def ticker_evidence_bundle_id(
+    *,
+    source_run_id: str,
+    ticker: str,
+    content_hash: str,
+) -> UUID:
+    """Deterministic base-bundle identity: run + ticker + content hash."""
+    if not source_run_id.strip() or not ticker.strip() or not content_hash.strip():
+        raise ValueError("source_run_id, ticker, and content_hash are required")
+    return uuid5(
+        _TICKER_EVIDENCE_BUNDLE_ID_NS,
+        f"{source_run_id.strip()}:{ticker.strip().upper()}:{content_hash.strip()}",
+    )
+
+
+def ticker_evidence_bundle_content_hash(
+    *,
+    ticker: str,
+    state_version_id: UUID,
+    evidence_ids: tuple[UUID, ...],
+    source: str,
+) -> str:
+    """Canonical digest for an H5 base ticker evidence bundle body."""
+    return content_digest(
+        {
+            "ticker": ticker.strip().upper(),
+            "state_version_id": state_version_id.hex,
+            "evidence_ids": [item.hex for item in _sorted_uuids(evidence_ids)],
+            "source": source.strip(),
+        }
+    )
+
+
+def missing_fact_request_id(
+    *,
+    base_bundle_id: UUID,
+    fact_key: str,
+    content_hash: str,
+) -> UUID:
+    """Deterministic missing-fact request identity bound to one base bundle."""
+    if not fact_key.strip() or not content_hash.strip():
+        raise ValueError("fact_key and content_hash are required")
+    return uuid5(
+        _MISSING_FACT_REQUEST_ID_NS,
+        f"{base_bundle_id.hex}:{fact_key.strip()}:{content_hash.strip()}",
+    )
+
+
+def missing_fact_request_content_hash(
+    *,
+    base_bundle_id: UUID,
+    fact_key: str,
+    rationale: str,
+) -> str:
+    """Canonical digest for a named missing-fact request."""
+    return content_digest(
+        {
+            "base_bundle_id": base_bundle_id.hex,
+            "fact_key": fact_key.strip(),
+            "rationale": rationale.strip(),
+        }
+    )
+
+
+def evidence_bundle_amendment_id(
+    *,
+    base_bundle_id: UUID,
+    missing_fact_request_id: UUID,
+    content_hash: str,
+) -> UUID:
+    """Deterministic H6 amendment identity bound to one base + one request."""
+    if not content_hash.strip():
+        raise ValueError("content_hash is required")
+    return uuid5(
+        _EVIDENCE_BUNDLE_AMENDMENT_ID_NS,
+        f"{base_bundle_id.hex}:{missing_fact_request_id.hex}:{content_hash.strip()}",
+    )
+
+
+def evidence_bundle_amendment_content_hash(
+    *,
+    base_bundle_id: UUID,
+    missing_fact_request_id: UUID,
+    evidence_ids: tuple[UUID, ...],
+    source: str,
+) -> str:
+    """Canonical digest for an append-only evidence-bundle amendment body."""
+    return content_digest(
+        {
+            "base_bundle_id": base_bundle_id.hex,
+            "missing_fact_request_id": missing_fact_request_id.hex,
+            "evidence_ids": [item.hex for item in _sorted_uuids(evidence_ids)],
+            "source": source.strip(),
+        }
+    )
+
+
+class TickerEvidenceBundle(ResearchStateModel):
+    """Immutable H5 base evidence bundle for one ticker in one run.
+
+    WP11.1 contract only — H6 selection cutover is WP11.3+. Base rows never
+    mutate; H6 may only append :class:`EvidenceBundleAmendment` rows.
+    """
+
+    bundle_id: UUID
+    ticker: NonEmptyStr
+    source_run_id: NonEmptyStr
+    attempt_id: NonEmptyStr
+    state_version_id: UUID
+    evidence_ids: tuple[UUID, ...] = Field(default_factory=tuple)
+    source: NonEmptyStr
+    event_time: AwareDatetime
+    effective_as_of: AwareDatetime
+    known_at: AwareDatetime
+    recorded_at: AwareDatetime
+    schema_version: SchemaVersion = 1
+    content_hash: NonEmptyStr
+    provenance: TypedProvenance
+
+    @field_validator("evidence_ids", mode="before")
+    @classmethod
+    def _coerce_bundle_evidence(cls, value: object) -> object:
+        return _coerce_uuid_tuple(value)
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def _canonicalize_bundle_evidence(cls, value: tuple[UUID, ...]) -> tuple[UUID, ...]:
+        return _sorted_uuids(value)
+
+    @field_validator("ticker")
+    @classmethod
+    def _normalize_ticker(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @model_validator(mode="after")
+    def _validate_bundle(self) -> TickerEvidenceBundle:
+        _validate_temporal_order(
+            event_time=self.event_time,
+            effective_as_of=self.effective_as_of,
+            known_at=self.known_at,
+            recorded_at=self.recorded_at,
+        )
+        if self.provenance.source_run_id != self.source_run_id:
+            raise ValueError("provenance.source_run_id must match source_run_id")
+        expected_hash = ticker_evidence_bundle_content_hash(
+            ticker=self.ticker,
+            state_version_id=self.state_version_id,
+            evidence_ids=self.evidence_ids,
+            source=self.source,
+        )
+        if self.content_hash != expected_hash:
+            raise ValueError("content_hash must match canonical TickerEvidenceBundle digest")
+        expected_id = ticker_evidence_bundle_id(
+            source_run_id=self.source_run_id,
+            ticker=self.ticker,
+            content_hash=self.content_hash,
+        )
+        if self.bundle_id != expected_id:
+            raise ValueError("bundle_id must be UUID5 of source_run_id+ticker+content_hash")
+        return self
+
+
+class MissingFactRequest(ResearchStateModel):
+    """Named missing-fact request H6 may answer — always linked to one base bundle."""
+
+    request_id: UUID
+    base_bundle_id: UUID
+    ticker: NonEmptyStr
+    fact_key: NonEmptyStr
+    rationale: NonEmptyStr
+    event_time: AwareDatetime
+    effective_as_of: AwareDatetime
+    known_at: AwareDatetime
+    recorded_at: AwareDatetime
+    schema_version: SchemaVersion = 1
+    content_hash: NonEmptyStr
+    provenance: TypedProvenance
+
+    @field_validator("ticker")
+    @classmethod
+    def _normalize_request_ticker(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @model_validator(mode="after")
+    def _validate_request(self) -> MissingFactRequest:
+        _validate_temporal_order(
+            event_time=self.event_time,
+            effective_as_of=self.effective_as_of,
+            known_at=self.known_at,
+            recorded_at=self.recorded_at,
+        )
+        expected_hash = missing_fact_request_content_hash(
+            base_bundle_id=self.base_bundle_id,
+            fact_key=self.fact_key,
+            rationale=self.rationale,
+        )
+        if self.content_hash != expected_hash:
+            raise ValueError("content_hash must match canonical MissingFactRequest digest")
+        expected_id = missing_fact_request_id(
+            base_bundle_id=self.base_bundle_id,
+            fact_key=self.fact_key,
+            content_hash=self.content_hash,
+        )
+        if self.request_id != expected_id:
+            raise ValueError("request_id must be UUID5 of base_bundle_id+fact_key+content_hash")
+        return self
+
+
+class EvidenceBundleAmendment(ResearchStateModel):
+    """Append-only H6 supplement for one missing-fact request on one base bundle.
+
+    Never mutates :class:`TickerEvidenceBundle`. Unlinked amendments are refused
+    by the store (WP11.1 metric: zero unlinked amendments).
+    """
+
+    amendment_id: UUID
+    base_bundle_id: UUID
+    missing_fact_request_id: UUID
+    ticker: NonEmptyStr
+    evidence_ids: tuple[UUID, ...] = Field(default_factory=tuple)
+    source: NonEmptyStr
+    event_time: AwareDatetime
+    effective_as_of: AwareDatetime
+    known_at: AwareDatetime
+    recorded_at: AwareDatetime
+    schema_version: SchemaVersion = 1
+    content_hash: NonEmptyStr
+    provenance: TypedProvenance
+
+    @field_validator("evidence_ids", mode="before")
+    @classmethod
+    def _coerce_amendment_evidence(cls, value: object) -> object:
+        return _coerce_uuid_tuple(value)
+
+    @field_validator("evidence_ids")
+    @classmethod
+    def _canonicalize_amendment_evidence(cls, value: tuple[UUID, ...]) -> tuple[UUID, ...]:
+        return _sorted_uuids(value)
+
+    @field_validator("ticker")
+    @classmethod
+    def _normalize_amendment_ticker(cls, value: str) -> str:
+        return value.strip().upper()
+
+    @model_validator(mode="after")
+    def _validate_amendment(self) -> EvidenceBundleAmendment:
+        _validate_temporal_order(
+            event_time=self.event_time,
+            effective_as_of=self.effective_as_of,
+            known_at=self.known_at,
+            recorded_at=self.recorded_at,
+        )
+        expected_hash = evidence_bundle_amendment_content_hash(
+            base_bundle_id=self.base_bundle_id,
+            missing_fact_request_id=self.missing_fact_request_id,
+            evidence_ids=self.evidence_ids,
+            source=self.source,
+        )
+        if self.content_hash != expected_hash:
+            raise ValueError("content_hash must match canonical EvidenceBundleAmendment digest")
+        expected_id = evidence_bundle_amendment_id(
+            base_bundle_id=self.base_bundle_id,
+            missing_fact_request_id=self.missing_fact_request_id,
+            content_hash=self.content_hash,
+        )
+        if self.amendment_id != expected_id:
+            raise ValueError("amendment_id must be UUID5 of base_bundle_id+request_id+content_hash")
+        return self
+
+
 class ResearchStatePin(ResearchStateModel):
     """Exact state version selected once for a run/attempt (preflight WP12.3)."""
 
@@ -781,10 +1057,12 @@ class ResearchStatePin(ResearchStateModel):
 __all__ = [
     "BeliefStatus",
     "BeliefVersion",
+    "EvidenceBundleAmendment",
     "EvidenceRecord",
     "ExpectedEventStatus",
     "ExpectedEventVersion",
     "LegacyDocumentRef",
+    "MissingFactRequest",
     "PatchMode",
     "PatchTargetKind",
     "ResearchPatch",
@@ -792,17 +1070,24 @@ __all__ = [
     "ResearchStateModel",
     "ResearchStatePin",
     "ResearchStateVersion",
+    "TickerEvidenceBundle",
     "TypedProvenance",
     "belief_content_hash",
     "belief_version_id",
     "content_digest",
+    "evidence_bundle_amendment_content_hash",
+    "evidence_bundle_amendment_id",
     "evidence_content_hash",
     "evidence_record_id",
     "expected_event_content_hash",
     "expected_event_version_id",
     "legacy_document_ref_id",
     "manifest_content_hash",
+    "missing_fact_request_content_hash",
+    "missing_fact_request_id",
     "research_patch_content_hash",
     "research_patch_id",
     "research_state_version_id",
+    "ticker_evidence_bundle_content_hash",
+    "ticker_evidence_bundle_id",
 ]

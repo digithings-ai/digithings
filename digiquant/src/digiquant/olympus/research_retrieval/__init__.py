@@ -8,6 +8,9 @@ WP12.4 legacy inventory backfill:
 :mod:`digiquant.olympus.research_retrieval.legacy_backfill`.
 WP12.5 compiled prose views:
 :mod:`digiquant.olympus.research_retrieval.views`.
+WP11.1 ticker evidence bundles + amendments:
+:class:`~digiquant.olympus.research_retrieval.store.EvidenceBundleStore`
+(models in the same ``models`` module; H6 selection cutover is WP11.3+).
 """
 
 from __future__ import annotations
@@ -28,16 +31,19 @@ from digiquant.olympus.research_retrieval.legacy_backfill import (
 from digiquant.olympus.research_retrieval.models import (
     BeliefStatus,
     BeliefVersion,
+    EvidenceBundleAmendment,
     EvidenceRecord,
     ExpectedEventStatus,
     ExpectedEventVersion,
     LegacyDocumentRef,
+    MissingFactRequest,
     PatchMode,
     PatchTargetKind,
     ResearchPatch,
     ResearchStateManifest,
     ResearchStatePin,
     ResearchStateVersion,
+    TickerEvidenceBundle,
     TypedProvenance,
 )
 from digiquant.olympus.research_retrieval.pin import (
@@ -55,6 +61,10 @@ from digiquant.olympus.research_retrieval.queries import (
 )
 from digiquant.olympus.research_retrieval.retriever import ResearchRetriever
 from digiquant.olympus.research_retrieval.store import (
+    EvidenceBundleConflict,
+    EvidenceBundleError,
+    EvidenceBundleMissingError,
+    EvidenceBundleStore,
     LoadedResearchState,
     ResearchStateConflict,
     ResearchStateError,
@@ -89,12 +99,18 @@ __all__ = [
     "COMPILED_DIGEST_DOCUMENT_KEY",
     "CompiledResearchView",
     "DIGEST_DOCUMENT_KEY",
+    "EvidenceBundleAmendment",
+    "EvidenceBundleConflict",
+    "EvidenceBundleError",
+    "EvidenceBundleMissingError",
+    "EvidenceBundleStore",
     "EvidenceRecord",
     "ExpectedEventStatus",
     "ExpectedEventVersion",
     "LegacyDocumentRef",
     "LegacySourceDocument",
     "LoadedResearchState",
+    "MissingFactRequest",
     "PatchMode",
     "PatchTargetKind",
     "RESEARCH_TOOLS",
@@ -114,6 +130,7 @@ __all__ = [
     "ResearchViewPublishBlocked",
     "RetrievalPhase",
     "STATE_UNAVAILABLE",
+    "TickerEvidenceBundle",
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
     "backfill_legacy_manifests",
