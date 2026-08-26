@@ -232,12 +232,24 @@ def test_rank_gap_change_with_fixed_forecasts_does_not_change_raw_weights() -> N
 
 
 def test_h5_stance_does_not_affect_calibrated_eligibility() -> None:
+    """H7 memo path stamps buy even when H5 says sell; calibrated sizing uses that map."""
+    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+
+    memo = PMDirectionMemo(
+        date=_SESSION,
+        roster=[TickerDirection(ticker="AAA", direction="long", conviction_rank=1)],
+        memo="m",
+    )
+    _conv, stances = phase7e_risk_sizing._memo_effective_inputs(
+        memo,
+        {"AAA": {"stance": "sell", "conviction_score": 1}},
+        2.0,
+    )
+    assert stances == {"AAA": "buy"}
     scores = {"AAA": 2.0}
-    # Sell stance would drop under incumbent select; calibrated path still sizes H7 longs
-    # when the caller stamps buy (phase7e memo path) — score drives membership.
     result = size_portfolio(
-        convictions={"AAA": 5.0},
-        stances={"AAA": "buy"},
+        convictions=scores,
+        stances=stances,
         risk=_risk(("AAA",)),
         caps=_permissive(),
         calibrated_scores=scores,
@@ -313,3 +325,183 @@ def test_incumbent_mode_still_uses_rank_path() -> None:
         caps=_permissive(),
     )
     assert result.requested_pct["HI"] / result.requested_pct["LO"] == pytest.approx(2.0, rel=0.05)
+
+
+def test_identical_raw_weights_yield_identical_post_control_book() -> None:
+    """Control shell invariance: same raw mix → same finals under a binding position cap."""
+    scores = {"A": 3.0, "B": 1.0}  # 75/25 raw
+    caps = SizingCaps(
+        min_position_pct=0.0,
+        max_position_pct=40.0,
+        max_sector_pct=100.0,
+        weight_increment_pct=0.0,
+        target_portfolio_vol=1.0e6,
+        max_gross_pct=100.0,
+        min_conviction=0.0,
+    )
+    risk = _risk(("A", "B"))
+    stances = {"A": "buy", "B": "buy"}
+    calibrated = size_portfolio(
+        convictions=scores,
+        stances=stances,
+        risk=risk,
+        caps=caps,
+        calibrated_scores=scores,
+    )
+    # Equal vol → incumbent conviction_vol raw ∝ conviction; 3:1 matches calibrated scores.
+    incumbent = size_portfolio(
+        convictions={"A": 3.0, "B": 1.0},
+        stances=stances,
+        risk=risk,
+        caps=caps,
+    )
+    assert calibrated.requested_pct == incumbent.requested_pct
+    assert {p.ticker: p.target_pct for p in calibrated.positions} == {
+        p.ticker: p.target_pct for p in incumbent.positions
+    }
+    assert calibrated.cash_pct == pytest.approx(incumbent.cash_pct)
+
+
+def test_calibrated_book_stamps_bundle_hash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digiquant.olympus.atlas.state import (
+        AtlasConfigBundle,
+        AtlasResearchState,
+        PhaseHermesState,
+    )
+    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+        RiskSizingDeps,
+        build_risk_sizing_node,
+    )
+
+    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+    from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
+
+    bundle = _bundle(returns={"AAPL": ("0.06", "0.02", "1.0"), "MSFT": ("0.03", "0.02", "1.0")})
+    policy = _risk_policy()
+    cov = _covariance(("AAPL", "MSFT"))
+    artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
+
+    monkeypatch.setattr(
+        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        lambda **_kwargs: artifacts,
+    )
+    monkeypatch.setattr(
+        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        lambda *_a, **_k: bundle,
+    )
+
+    memo = PMDirectionMemo(
+        date=date(2026, 6, 12),
+        roster=[
+            TickerDirection(ticker="AAPL", direction="long", conviction_rank=1),
+            TickerDirection(ticker="MSFT", direction="long", conviction_rank=2),
+        ],
+        memo="m",
+    )
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=date(2026, 6, 12),
+        baseline_date=date(2026, 6, 9),
+        config=AtlasConfigBundle(
+            preferences={
+                "max_single_etf_pct": 100,
+                "max_sector_pct": 100,
+                "target_portfolio_vol": 1.0e6,
+                "weight_increment_pct": 0,
+                "h8_sizing_input_mode": "calibrated",
+            }
+        ),
+        phase_hermes=PhaseHermesState(pm_direction_memo=memo),
+    )
+    client = FakeSupabaseClient(
+        canned_reads={
+            "price_technicals": [
+                {"ticker": "AAPL", "date": "2026-06-12", "hist_vol_21": 20, "atr_pct": None},
+                {"ticker": "MSFT", "date": "2026-06-12", "hist_vol_21": 20, "atr_pct": None},
+            ]
+        }
+    )
+    out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
+    book = out["phase_hermes"].sized_book
+    assert book is not None
+    assert book["h8_sizing_input_mode"] == "calibrated"
+    assert book["allocation_input_bundle_hash"] == bundle.bundle_content_hash
+    assert "allocation_input_bundle_hash=" in book["notes"]
+    weights = {row["ticker"]: row["target_pct"] for row in book["recommended_portfolio"]}
+    assert weights["AAPL"] > weights["MSFT"]
+
+
+def test_empty_calibrated_coverage_falls_back_to_incumbent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digiquant.olympus.atlas.state import (
+        AtlasConfigBundle,
+        AtlasResearchState,
+        PhaseHermesState,
+    )
+    from digiquant.olympus.hermes.h8_risk_snapshots import H8RiskArtifacts
+    from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
+    from digiquant.olympus.hermes.phases.phase7e_risk_sizing import (
+        RiskSizingDeps,
+        build_risk_sizing_node,
+    )
+
+    from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+    from tests.dq.hermes.test_allocation_inputs import _covariance, _risk_policy
+
+    # Bundle present but no usable calibrated scores → characterized incumbent_fallback.
+    base = _bundle(returns={"AAPL": ("0.05", "0.02", "1.0")})
+    policy = _risk_policy()
+    cov = _covariance(("AAPL",))
+    artifacts = H8RiskArtifacts(policy=policy, covariance_snapshot=cov)
+    monkeypatch.setattr(
+        "digiquant.olympus.hermes.h8_risk_snapshots.resolve_h8_risk_artifacts",
+        lambda **_kwargs: artifacts,
+    )
+    monkeypatch.setattr(
+        "digiquant.olympus.hermes.allocation_inputs.assemble_allocation_input_bundle_from_state",
+        lambda *_a, **_k: base,
+    )
+    monkeypatch.setattr(
+        phase7e_risk_sizing,
+        "calibrated_scores_from_bundle",
+        lambda *_a, **_k: {},
+    )
+
+    memo = PMDirectionMemo(
+        date=date(2026, 6, 12),
+        roster=[TickerDirection(ticker="AAPL", direction="long", conviction_rank=1)],
+        memo="m",
+    )
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=date(2026, 6, 12),
+        baseline_date=date(2026, 6, 9),
+        config=AtlasConfigBundle(
+            preferences={
+                "max_single_etf_pct": 100,
+                "max_sector_pct": 100,
+                "target_portfolio_vol": 1.0e6,
+                "weight_increment_pct": 0,
+                "h8_sizing_input_mode": "calibrated",
+            }
+        ),
+        phase_hermes=PhaseHermesState(pm_direction_memo=memo),
+    )
+    client = FakeSupabaseClient(
+        canned_reads={
+            "price_technicals": [
+                {"ticker": "AAPL", "date": "2026-06-12", "hist_vol_21": 20, "atr_pct": None},
+            ]
+        }
+    )
+    out = build_risk_sizing_node(RiskSizingDeps(client=client))(state)
+    book = out["phase_hermes"].sized_book
+    assert book is not None
+    assert book["h8_sizing_input_mode"] == "incumbent_fallback"
+    assert book["allocation_input_bundle_hash"] == base.bundle_content_hash
+    assert any(row["ticker"] == "AAPL" for row in book["recommended_portfolio"])
