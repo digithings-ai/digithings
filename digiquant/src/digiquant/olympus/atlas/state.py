@@ -622,6 +622,34 @@ class AtlasResearchState(BaseModel):
             "checkpoints only — new readers fail closed when missing."
         ),
     )
+    # WP12.3 (#2863): one research-state pin per run/attempt. Optional request
+    # selects an exact version; otherwise preflight uses cutoff-bound as-of.
+    # Resume reuses the checkpointed dump — never re-select as ingestion continues.
+    requested_research_state_version_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional exact ResearchStateVersion.id for preflight. None → "
+            "select_state_as_of bound by knowledge_cutoff_at."
+        ),
+    )
+    research_state_pin: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Resolved ResearchStatePin dump after preflight. Authoritative root "
+            "state_version_id for the run/attempt; same-run children must name it parent."
+        ),
+    )
+    research_state_status: str | None = Field(
+        default=None,
+        description=(
+            "pinned | state_unavailable after preflight. Typed unavailable keeps "
+            "compatibility documents shadow-only until exact-state coverage."
+        ),
+    )
+    research_state_unavailable_reason: str | None = Field(
+        default=None,
+        description="Detail when research_state_status is state_unavailable.",
+    )
 
     @field_validator("knowledge_cutoff_at")
     @classmethod
