@@ -818,7 +818,11 @@ def _retry_reason(error: Exception) -> RetryReason:
 
 
 def _optional_nonnegative_int(value: Any) -> int | None:
-    return value if isinstance(value, int) and value >= 0 else None
+    # ``bool`` subclasses ``int``, so ``isinstance(False, int)`` is True. Treating False as 0
+    # would invent a measured-zero token count when the provider omitted usage (#1989).
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 def _optional_attribute(value: Any, name: str) -> Any:
