@@ -23,8 +23,8 @@ from digiquant.olympus.atlas.phases._node_factory import (
 from digiquant.olympus.atlas.research_attention import (
     apply_digest_metric_patch,
     artifact_target_key,
-    require_research_attention_plan,
     research_attention_enforce_path,
+    resolve_attention_plan_for_node,
     resolve_research_attention_rollout_mode,
 )
 from digiquant.olympus.atlas.segments import SegmentReport
@@ -572,7 +572,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
     document_key = _digest_document_key(state)
     rollout = resolve_research_attention_rollout_mode()
     if rollout is not AttentionRolloutMode.OFF and not state.custom_prompt:
-        require_research_attention_plan(state)
+        resolve_attention_plan_for_node(state)
     target_key = artifact_target_key("digest", document_key)
     enforce_path = research_attention_enforce_path(state, target_key=target_key)
     if enforce_path == "carry":

@@ -27,8 +27,8 @@ from digiquant.olympus.atlas.research_attention import (
     apply_segment_metric_patch,
     artifact_target_key,
     carry_segment_slot,
-    require_research_attention_plan,
     research_attention_enforce_path,
+    resolve_attention_plan_for_node,
     resolve_research_attention_rollout_mode,
 )
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
@@ -871,7 +871,7 @@ def build_segment_node(
         target_key = artifact_target_key("segment", spec.segment_slug)
         rollout = resolve_research_attention_rollout_mode()
         if rollout is not AttentionRolloutMode.OFF and not state.custom_prompt:
-            require_research_attention_plan(state)
+            resolve_attention_plan_for_node(state)
         enforce_path = research_attention_enforce_path(state, target_key=target_key)
         if enforce_path == "carry":
             reason = _triage_reason_for_segment(state, spec.segment_slug) or "attention_carry"

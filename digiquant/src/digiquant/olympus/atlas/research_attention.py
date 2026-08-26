@@ -253,9 +253,27 @@ def _load_attention_plan(state: AtlasResearchState) -> AttentionPlan | None:
     return AttentionPlan.model_validate(raw)
 
 
+def resolve_attention_plan_for_node(state: AtlasResearchState) -> AttentionPlan | None:
+    """Return the plan for provider gating — lazy-build when triage ran without persist."""
+    rollout = resolve_research_attention_rollout_mode()
+    if rollout is AttentionRolloutMode.OFF or state.custom_prompt:
+        return None
+    plan = _load_attention_plan(state)
+    if plan is not None:
+        return plan
+    if state.triage is not None:
+        return plan_atlas_research_attention(state)
+    if rollout is AttentionRolloutMode.ENFORCE:
+        raise RuntimeError(
+            "research attention plan missing before provider work "
+            f"(run_id={state.run_id}); triage must plan first"
+        )
+    return None
+
+
 def require_research_attention_plan(state: AtlasResearchState) -> AttentionPlan:
     """Fail closed when provider work starts without a plan (shadow/enforce)."""
-    plan = _load_attention_plan(state)
+    plan = resolve_attention_plan_for_node(state)
     if plan is None:
         raise RuntimeError(
             "research attention plan missing before provider work "
@@ -297,7 +315,9 @@ def research_attention_enforce_path(
     """Return early-exit path under enforce mode; ``None`` for off/shadow/incumbent."""
     if resolve_research_attention_rollout_mode() is not AttentionRolloutMode.ENFORCE:
         return None
-    plan = require_research_attention_plan(state)
+    plan = resolve_attention_plan_for_node(state)
+    if plan is None:
+        return None
     decision = lookup_attention_decision(plan, target_key)
     return enforce_path_for_decision(decision)
 
@@ -401,6 +421,7 @@ __all__ = [
     "require_research_attention_plan",
     "research_attention_enforce_path",
     "reset_attention_stores",
+    "resolve_attention_plan_for_node",
     "resolve_research_attention_rollout_mode",
     "triage_phase_attention_update",
 ]
