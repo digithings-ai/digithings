@@ -310,3 +310,8 @@ class TestAttentionStoreLineage:
             recorded_at=_TS,
         )
         assert evaluation.actual_total.uncached_tokens == 15
+
+    def test_unlinked_provider_attempt_rejected(self) -> None:
+        store = AttentionStore()
+        with pytest.raises(AttentionStoreError):
+            store.link_provider_attempt(decision_id=uuid4(), provider_attempt_id=uuid4())
