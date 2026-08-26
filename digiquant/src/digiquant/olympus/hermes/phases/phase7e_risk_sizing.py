@@ -31,11 +31,21 @@ from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, 
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.allocation_contracts import (
     AllocationInputBundle,
+    AlteredTarget,
     AssetInputStatus,
+    BindingConstraint,
+    RejectedTarget,
 )
+from digiquant.olympus.hermes.allocation_hashes import weights_fingerprint
 from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
+from digiquant.olympus.hermes.pretrade_risk import (
+    CostLiquidityScalars,
+    ForecastQualityScalars,
+    PreTradeRiskBuildRequest,
+    build_pretrade_risk_report,
+)
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
 from digiquant.olympus.hermes.sizing import (
@@ -851,6 +861,272 @@ def _build_sized_book(
     return updated, risk_artifacts, allocation_bundle
 
 
+_BINDING_CONSTRAINT_TYPES = frozenset(
+    {
+        SizingAdjustmentType.SINGLE_NAME_CAP,
+        SizingAdjustmentType.SECTOR_CAP,
+        SizingAdjustmentType.CORRELATION_DEDUP,
+        SizingAdjustmentType.DRAWDOWN_BREAKER,
+        SizingAdjustmentType.GRID_ROUNDING,
+        SizingAdjustmentType.FINAL_GROSS_SCALE,
+    }
+)
+
+
+def _final_book_weights(sized_book: RebalancePayload) -> tuple[dict[str, float], float]:
+    """Extract final risky weights + cash from the post-control sized book."""
+    risky: dict[str, float] = {}
+    for row in sized_book.get("recommended_portfolio") or []:
+        if not isinstance(row, dict):
+            continue
+        ticker = row.get("ticker")
+        weight = _opt_float(row.get("target_pct"))
+        if not isinstance(ticker, str) or weight is None or _is_cash(ticker):
+            continue
+        if weight > 0:
+            risky[ticker] = float(weight)
+    invested = sum(risky.values())
+    cash = max(0.0, 100.0 - invested)
+    return risky, cash
+
+
+def _prior_book_weights_for_report(
+    state: AtlasResearchState,
+    allocation_bundle: AllocationInputBundle | None,
+) -> tuple[dict[str, float], float]:
+    """Prior risky/cash for the report — prefer the exact bundle snapshot."""
+    if allocation_bundle is not None:
+        prior = allocation_bundle.prior_book
+        return prior.risky_weights(), float(prior.cash_weight_pct)
+    prefs = dict(state.config.preferences or {})
+    current = dict(prefs.get("current_weights") or {})
+    risky: dict[str, float] = {}
+    cash = 0.0
+    for key, value in current.items():
+        weight = _opt_float(value)
+        if weight is None:
+            continue
+        if _is_cash(str(key)):
+            cash += weight
+            continue
+        if weight > 0:
+            risky[str(key)] = weight
+    if cash <= 0:
+        cash = max(0.0, 100.0 - sum(risky.values()))
+    return risky, cash
+
+
+def _controls_from_adjustments(
+    sized_book: RebalancePayload,
+) -> tuple[tuple[BindingConstraint, ...], tuple[AlteredTarget, ...], tuple[RejectedTarget, ...]]:
+    """Map H8 explanation events onto WP9.1 control blocks (observational only).
+
+    Multiple adjustments can land on one ticker (carry then final-cap, etc.). The
+    contract requires unique tickers in altered/rejected lists, so we collapse to
+    first-requested → last-adjusted per ticker while keeping every binding event.
+    """
+    binding: list[BindingConstraint] = []
+    altered_by_ticker: dict[str, AlteredTarget] = {}
+    rejected_by_ticker: dict[str, RejectedTarget] = {}
+    for raw in sized_book.get("adjustments") or []:
+        try:
+            event = (
+                raw if isinstance(raw, SizingAdjustment) else SizingAdjustment.model_validate(raw)
+            )
+        except Exception:
+            continue
+        kind = event.adjustment_type
+        if kind in _BINDING_CONSTRAINT_TYPES and event.unit == "pct":
+            binding.append(
+                BindingConstraint(
+                    constraint_id=f"{kind.value}:{event.ticker}",
+                    constraint_kind=kind.value,
+                    ticker=event.ticker,
+                    bound_value=float(event.adjusted_pct),
+                    observed_value=float(event.original_pct),
+                    reason=event.reason,
+                )
+            )
+        if event.unit != "pct":
+            continue
+        if kind is SizingAdjustmentType.FLAT_EXIT and float(event.adjusted_pct) <= 0.0:
+            rejected_by_ticker[event.ticker] = RejectedTarget(
+                ticker=event.ticker,
+                requested_weight_pct=float(event.original_pct),
+                reason=event.reason,
+            )
+            altered_by_ticker.pop(event.ticker, None)
+            continue
+        if abs(float(event.original_pct) - float(event.adjusted_pct)) <= 1e-12:
+            continue
+        prior = altered_by_ticker.get(event.ticker)
+        requested = (
+            float(prior.requested_weight_pct) if prior is not None else float(event.original_pct)
+        )
+        altered_by_ticker[event.ticker] = AlteredTarget(
+            ticker=event.ticker,
+            requested_weight_pct=requested,
+            final_weight_pct=float(event.adjusted_pct),
+            adjustment_type=kind.value,
+            reason=event.reason,
+        )
+    return (
+        tuple(binding),
+        tuple(altered_by_ticker[t] for t in sorted(altered_by_ticker)),
+        tuple(rejected_by_ticker[t] for t in sorted(rejected_by_ticker)),
+    )
+
+
+def _forecast_quality_from_bundle(
+    allocation_bundle: AllocationInputBundle | None,
+) -> ForecastQualityScalars | None:
+    if allocation_bundle is None:
+        return None
+    degraded = 0
+    uncertainty_vals: list[float] = []
+    for slice_ in allocation_bundle.calibrated_returns:
+        if slice_.status is not AssetInputStatus.AVAILABLE:
+            degraded += 1
+            continue
+        if slice_.forecast_error_std is not None:
+            uncertainty_vals.append(float(slice_.forecast_error_std))
+    uncertainty = sum(uncertainty_vals) / len(uncertainty_vals) if uncertainty_vals else None
+    return ForecastQualityScalars(
+        staleness_sessions=0.0,
+        forecast_uncertainty=uncertainty,
+        degraded_input_count=float(degraded),
+    )
+
+
+def _cost_scalars_from_state(state: AtlasResearchState) -> CostLiquidityScalars | None:
+    """Observational WP7 estimates already on state (typically empty until H9)."""
+    estimates = state.phase_hermes.action_cost_estimates or {}
+    if not estimates:
+        return None
+    expected_costs: list[float] = []
+    adv_vals: list[float] = []
+    days_vals: list[float] = []
+    for payload in estimates.values():
+        if not isinstance(payload, dict):
+            continue
+        cost = _opt_float(payload.get("expected_cost_bps"))
+        if cost is None:
+            cost = _opt_float(payload.get("expected_cost"))
+        if cost is not None:
+            expected_costs.append(cost)
+        adv = _opt_float(payload.get("adv_participation_pct"))
+        if adv is not None:
+            adv_vals.append(adv)
+        days = _opt_float(payload.get("days_to_liquidate"))
+        if days is not None:
+            days_vals.append(days)
+    if not expected_costs and not adv_vals and not days_vals:
+        return CostLiquidityScalars(unavailable_reason="cost/liquidity estimates incomplete")
+    return CostLiquidityScalars(
+        expected_cost=sum(expected_costs) / len(expected_costs) if expected_costs else None,
+        adv_participation_pct=max(adv_vals) if adv_vals else None,
+        days_to_liquidate=max(days_vals) if days_vals else None,
+    )
+
+
+def _annualized_vols_for_book(
+    *,
+    client: SupabaseClient,
+    tickers: list[str],
+    run_date: date,
+) -> dict[str, float] | None:
+    if not tickers:
+        return {}
+    risk = _load_ticker_risk(client, tickers, run_date)
+    vols = {
+        ticker: float(info.hist_vol_21)
+        for ticker, info in risk.items()
+        if info.hist_vol_21 is not None and float(info.hist_vol_21) >= 0.0
+    }
+    return vols or None
+
+
+def _sector_map_for_book(tickers: list[str]) -> dict[str, str]:
+    return {ticker: sector_bucket(ticker) for ticker in tickers}
+
+
+def build_pretrade_risk_report_for_final_book(
+    *,
+    state: AtlasResearchState,
+    sized_book: RebalancePayload,
+    allocation_bundle: AllocationInputBundle | None,
+    risk_artifacts: Any | None,
+    deps: RiskSizingDeps,
+) -> dict[str, Any] | None:
+    """Build ``PreTradeRiskReport`` from the post-control final book only.
+
+    Read-only observation — never mutates ``sized_book`` weights. Returns ``None``
+    when required identity inputs are missing or the builder fails (typed report
+    failure blocks only report promotion before H9 enforcement).
+    """
+    if allocation_bundle is None and not sized_book.get("allocation_input_bundle_hash"):
+        return None
+    policy_hash: str | None = None
+    covariance = None
+    if risk_artifacts is not None:
+        policy_hash = getattr(getattr(risk_artifacts, "policy", None), "content_hash", None)
+        covariance = getattr(risk_artifacts, "covariance_snapshot", None)
+    if policy_hash is None and allocation_bundle is not None:
+        policy_hash = allocation_bundle.control_settings.risk_policy_content_hash
+    if not policy_hash:
+        return None
+
+    bundle_hash = (
+        allocation_bundle.bundle_content_hash
+        if allocation_bundle is not None
+        else str(sized_book.get("allocation_input_bundle_hash"))
+    )
+    if not bundle_hash:
+        return None
+
+    final_risky, final_cash = _final_book_weights(sized_book)
+    prior_risky, prior_cash = _prior_book_weights_for_report(state, allocation_bundle)
+    binding, altered, rejected = _controls_from_adjustments(sized_book)
+    tickers = sorted(final_risky)
+    try:
+        report = build_pretrade_risk_report(
+            PreTradeRiskBuildRequest(
+                run_id=str(state.run_id),
+                session_date=state.run_date,
+                allocation_input_bundle_hash=bundle_hash,
+                risk_policy_hash=str(policy_hash),
+                prior_risky_weights_pct=prior_risky,
+                prior_cash_weight_pct=prior_cash,
+                final_risky_weights_pct=final_risky,
+                final_cash_weight_pct=final_cash,
+                covariance_snapshot=covariance,
+                annualized_vol_pct=_annualized_vols_for_book(
+                    client=deps.client, tickers=tickers, run_date=state.run_date
+                ),
+                sector_by_ticker=_sector_map_for_book(tickers) if tickers else None,
+                cost_liquidity=_cost_scalars_from_state(state),
+                forecast_quality=_forecast_quality_from_bundle(allocation_bundle),
+                binding_constraints=binding,
+                altered_targets=altered,
+                rejected_targets=rejected,
+            )
+        )
+    except Exception as exc:
+        logger.warning("phase7e: pre-trade risk report build failed (%s); omitting report", exc)
+        return None
+
+    expected_fp = weights_fingerprint(final_risky)
+    if report.final_book_weights_fingerprint != expected_fp:
+        logger.warning(
+            "phase7e: pre-trade risk report fingerprint mismatch "
+            "(report=%s book=%s); omitting report",
+            report.final_book_weights_fingerprint,
+            expected_fp,
+        )
+        return None
+    return report.model_dump(mode="json")
+
+
 def build_risk_sizing_node(deps: RiskSizingDeps):
     """Return the Phase 7E / H8 enforcement node bound to ``deps``."""
 
@@ -916,7 +1192,33 @@ def build_risk_sizing_node(deps: RiskSizingDeps):
             targets_are_weights=memo is None,
         )
 
-        hermes_update = _hermes_shadow(sized_book=sized_book)
+        # WP9.3: attach PreTradeRiskReport only after the final control shell.
+        # Fail-soft: report omission does not change the already-final sized book.
+        report_payload: dict[str, Any] | None = None
+        try:
+            report_payload = build_pretrade_risk_report_for_final_book(
+                state=state,
+                sized_book=sized_book,
+                allocation_bundle=allocation_bundle,
+                risk_artifacts=risk_artifacts,
+                deps=deps,
+            )
+        except Exception as exc:
+            logger.warning(
+                "phase7e: pre-trade risk report attach failed (%s); omitting report",
+                exc,
+            )
+            report_payload = None
+        if report_payload is not None:
+            sized_book = {
+                **sized_book,
+                "pre_trade_risk_report_hash": report_payload.get("report_content_hash"),
+            }
+
+        hermes_kwargs: dict[str, Any] = {"sized_book": sized_book}
+        if report_payload is not None:
+            hermes_kwargs["pre_trade_risk_report"] = report_payload
+        hermes_update = _hermes_shadow(**hermes_kwargs)
 
         if memo is not None:
             return {"phase_hermes": hermes_update}
@@ -937,6 +1239,7 @@ __all__ = [
     "H8_SIZING_INPUT_MODE_CALIBRATED",
     "H8_SIZING_INPUT_MODE_INCUMBENT",
     "RiskSizingDeps",
+    "build_pretrade_risk_report_for_final_book",
     "build_risk_sizing_node",
     "build_risk_sizing_phase",
     "calibrated_scores_from_bundle",
