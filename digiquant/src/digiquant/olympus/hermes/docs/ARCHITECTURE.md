@@ -42,6 +42,12 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
 
+**Pre-trade risk report (#2742 / WP9.1):** `hermes/allocation_contracts.py` defines
+frozen `PreTradeRiskReport` (metric leaves with provenance or typed unavailability;
+binding constraints / altered / rejected targets). SHA-256 helpers live in
+`hermes/allocation_hashes.py`. Observational only — does not mutate the final book.
+Computation (WP9.2), H8 attachment (WP9.3), and H9 persistence (WP9.4) are follow-ons.
+
 ### H2 market-thesis identity
 
 Every market proposal has a stable lowercase `topic_key` plus an explicit
