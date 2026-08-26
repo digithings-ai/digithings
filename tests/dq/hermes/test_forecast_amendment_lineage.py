@@ -131,6 +131,9 @@ class TestH6ForecastLineageCarry:
                     "base_forecast_id": str(prior_eff.base_forecast_id),
                     "amendment_id": str(prior_eff.amendment_id),
                     "effective_forecast_id": str(prior_eff.effective_id),
+                    "amendment_outcome": AmendmentOutcome.ACCEPTED.value,
+                    # Round-trip dump so H9 can re-persist after fail-soft (#2790).
+                    "forecast_amendment": amendment.model_dump(mode="json"),
                 }
             }
         )
@@ -144,6 +147,25 @@ class TestH6ForecastLineageCarry:
         assert carried.source is EffectiveSource.AMENDMENT
         assert carried.content_hash == prior_eff.content_hash
         assert carried.known_at == prior_eff.known_at
+        assert summary.get("forecast_amendment") is not None
+        assert summary["forecast_amendment"]["amendment_id"] == str(amendment.amendment_id)
+        from digiquant.olympus.atlas.forecast_registry import collect_lineage_from_state
+        from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
+
+        collected_state = AtlasResearchState(
+            run_type="delta",
+            run_date=_TS.date(),
+            knowledge_cutoff_at=_TS,
+            phase_hermes=out["phase_hermes"],
+        )
+        # H5 assessment still on the input state path for registry; attach for collect.
+        collected_state.phase_hermes = PhaseHermesState(
+            asset_analysts=state.phase_hermes.asset_analysts,
+            deliberation_summaries=out["phase_hermes"].deliberation_summaries,
+        )
+        _assessments, amendments = collect_lineage_from_state(collected_state)
+        assert len(amendments) == 1
+        assert amendments[0].amendment_id == amendment.amendment_id
 
     def test_llm_failure_preserves_base_as_effective(self) -> None:
         base = _assessment()
@@ -160,3 +182,58 @@ class TestH6ForecastLineageCarry:
         assert summary["effective_forecast_id"] == str(base.forecast_id)
         assert summary["amendment_outcome"] == AmendmentOutcome.LLM_FAILURE.value
         assert summary["forecast_degradation"] == "llm_failure"
+
+
+def test_deliberation_payloads_round_trip_forecast_amendment() -> None:
+    """Published debate shape must retain the amendment dump for registry retry."""
+    from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState
+    from digiquant.olympus.hermes.payloads import deliberation_summaries
+
+    base = _assessment()
+    amendment = materialize_forecast_amendment(
+        base=base,
+        terms=_terms(base_return=Decimal("0.02")),
+        reason="challenge",
+        source_run_id="run-abc",
+        provider_invocation_id="inv-h6",
+        effective_at=_TS,
+        known_at=_TS,
+    )
+    state = AtlasResearchState(
+        run_type="delta",
+        run_date=_TS.date(),
+        phase_hermes=PhaseHermesState(
+            deliberation_summaries={
+                "AAPL": {
+                    "ticker": "AAPL",
+                    "net_stance": "bullish",
+                    "conviction_delta": 1,
+                    "converged": True,
+                    "conclusion": "revised",
+                    "forecast_amendment": amendment.model_dump(mode="json"),
+                    "amendment_id": str(amendment.amendment_id),
+                }
+            }
+        ),
+    )
+    shaped = deliberation_summaries(state)["AAPL"]
+    assert shaped["forecast_amendment"]["amendment_id"] == str(amendment.amendment_id)
+
+
+def test_slim_deliberation_preserves_forecast_amendment() -> None:
+    from digiquant.olympus.atlas.supabase_io import _slim_deliberation_summary
+
+    slim = _slim_deliberation_summary(
+        {
+            "body": {
+                "conclusion": "revised",
+                "net_stance": "bullish",
+                "conviction_delta": 1,
+                "converged": True,
+                "forecast_amendment": {"amendment_id": "keep-me", "reason": "r"},
+                "effective_forecast": {"effective_id": "e"},
+            }
+        }
+    )
+    assert slim["forecast_amendment"]["amendment_id"] == "keep-me"
+    assert slim["effective_forecast"]["effective_id"] == "e"
