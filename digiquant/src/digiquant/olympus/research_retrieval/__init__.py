@@ -31,15 +31,23 @@ WP13.5 shadow evaluation:
 WP14.1 role context compiler:
 :mod:`digiquant.olympus.research_retrieval.context`
 (``ContextCapsule`` / ``ContextManifest`` / role allowlists; models + compiler only — WP14.2+ wiring).
+WP14.2 blinded H5/H6 context wiring:
+:mod:`digiquant.olympus.research_retrieval.context_wiring`
+(``OLYMPUS_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
 """
 
 from __future__ import annotations
 
 from digiquant.olympus.research_retrieval.blinding import (
     DIGEST_DOCUMENT_KEY,
+    PromptRole,
     RetrievalPhase,
+    assert_blinded_h5_prompt,
+    assert_blinded_h6_prompt,
+    forbidden_prompt_keys,
     portfolio_tool_allowed,
     research_document_allowed,
+    strip_blinded_forbidden_keys,
 )
 from digiquant.olympus.research_retrieval.cache import ResearchCache
 from digiquant.olympus.research_retrieval.context import (
@@ -57,6 +65,18 @@ from digiquant.olympus.research_retrieval.context import (
     compile_context_manifest,
     default_role_context_policy,
     role_context_policy_content_hash,
+)
+from digiquant.olympus.research_retrieval.context_wiring import (
+    OLYMPUS_CONTEXT_COMPILER_MODE_ENV,
+    ContextCompilerMode,
+    RoleContextWireResult,
+    changed_evidence_ids_from_bundle,
+    compile_h5_role_context,
+    compile_h6_role_context,
+    resolve_context_compiler_mode,
+    try_load_pinned_research_state,
+    wire_h5_phase_inputs,
+    wire_h6_phase_inputs,
 )
 from digiquant.olympus.research_retrieval.evidence_bundle import (
     OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV,
@@ -223,6 +243,7 @@ __all__ = [
     "ContextManifest",
     "ContextOmission",
     "ContextOmissionReason",
+    "ContextCompilerMode",
     "ContextRole",
     "DIGEST_DOCUMENT_KEY",
     "EvidenceBundleAmendment",
@@ -252,6 +273,7 @@ __all__ = [
     "MissingEvidenceField",
     "MissingFactRequest",
     "OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV",
+    "OLYMPUS_CONTEXT_COMPILER_MODE_ENV",
     "OLYMPUS_H6_SELECTION_MODE_ENV",
     "PatchMode",
     "PatchTargetKind",
@@ -274,13 +296,17 @@ __all__ = [
     "ResearchViewKind",
     "ResearchViewPublishBlocked",
     "RetrievalPhase",
+    "PromptRole",
     "RoleContextPolicy",
+    "RoleContextWireResult",
     "STATE_UNAVAILABLE",
     "ShadowDecisionEvaluationRow",
     "ShadowProviderAttemptDetail",
     "TickerEvidenceBundle",
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
+    "assert_blinded_h5_prompt",
+    "assert_blinded_h6_prompt",
     "assert_no_materiality_in_prompt",
     "attempt_h6_evidence_amendment",
     "attention_decision_id",
@@ -289,8 +315,11 @@ __all__ = [
     "build_h6_decision_features",
     "build_legacy_document_ref",
     "build_research_tool_dispatcher",
+    "changed_evidence_ids_from_bundle",
     "child_version_must_name_parent",
     "cite_evidence_bundle_on_forecast",
+    "compile_h5_role_context",
+    "compile_h6_role_context",
     "compile_context_capsule",
     "compile_context_manifest",
     "compile_research_brief",
@@ -303,6 +332,7 @@ __all__ = [
     "evaluate_research_policy_shadow",
     "evidence_bundle_writer_enabled",
     "extract_section",
+    "forbidden_prompt_keys",
     "facts_from_phase_inputs",
     "incumbent_fallback_selection",
     "pin_research_state_for_preflight",
@@ -315,10 +345,15 @@ __all__ = [
     "require_structured_write_ok",
     "research_document_allowed",
     "role_context_policy_content_hash",
+    "resolve_context_compiler_mode",
     "resolve_h5_state_version_id",
     "resolve_h6_selection_mode",
     "retrieve_missing_fact_evidence",
     "select_h6",
+    "strip_blinded_forbidden_keys",
+    "try_load_pinned_research_state",
     "validate_missing_fact_proposal",
+    "wire_h5_phase_inputs",
+    "wire_h6_phase_inputs",
     "write_shadow_evaluation_report",
 ]

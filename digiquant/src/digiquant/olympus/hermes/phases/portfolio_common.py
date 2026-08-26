@@ -50,6 +50,7 @@ from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
+from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
 from digiquant.olympus.research_retrieval.evidence_bundle import (
     build_h5_evidence_bundle,
     cite_evidence_bundle_on_forecast,
@@ -58,7 +59,7 @@ from digiquant.olympus.research_retrieval.evidence_bundle import (
     resolve_h5_state_version_id,
 )
 from digiquant.olympus.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
 logger = logging.getLogger(__name__)
@@ -503,6 +504,7 @@ def run_asset_analyst_llm(
     roster_entry: dict[str, Any],
     phase_slug: str,
     evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> tuple[
     AnalystPayload | None,
     dict[str, Any] | None,
@@ -640,6 +642,8 @@ def run_asset_analyst_llm(
 
     eff_model = get_model_for_phase(phase_slug) or get_model_for_mode()
 
+    pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
+
     if mode == "edit" and prior is not None:
         phase_inputs.update(
             {
@@ -648,6 +652,13 @@ def run_asset_analyst_llm(
                 "prior_document": prior.payload,
             }
         )
+        phase_inputs = wire_h5_phase_inputs(
+            phase_inputs,
+            ticker=ticker,
+            bundle=evidence_bundle,
+            research_state_pin=pin,
+            research_state_store=research_state_store,
+        ).phase_inputs
         try:
             result = run_research_agent(
                 skill_text=skill_text,
@@ -725,6 +736,13 @@ def run_asset_analyst_llm(
         )
         return enriched, doc, errors, evidence_bundle
 
+    phase_inputs = wire_h5_phase_inputs(
+        phase_inputs,
+        ticker=ticker,
+        bundle=evidence_bundle,
+        research_state_pin=pin,
+        research_state_store=research_state_store,
+    ).phase_inputs
     try:
         result = run_research_agent(
             skill_text=skill_text,

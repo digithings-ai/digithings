@@ -1022,7 +1022,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   artifacts. Deterministic sort/hash, byte/token budgets, typed omission reasons,
   and reject unpinned bundle/state mismatches at compile time. Models + compiler
   only — H5/H6/H7 provider wiring is WP14.2–14.4; drill-down manifest pinning is
-  WP14.4.
+  WP14.4. **WP14.2 (#2942)** wires H5/H6 via
+  `research_retrieval/context_wiring.py` (`OLYMPUS_CONTEXT_COMPILER_MODE`
+  `off|shadow|enforce`): shadow records compiled capsule/manifest beside incumbent
+  `phase_inputs`; enforce strips portfolio/PM keys and injects `structured_context`
+  with manifest linkage fields for WP1 telemetry. Prompt guards live in
+  `research_retrieval/blinding.py` (`assert_blinded_h5_prompt` /
+  `assert_blinded_h6_prompt`).
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
