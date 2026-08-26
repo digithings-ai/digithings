@@ -83,8 +83,17 @@ checkpointer secrets. Producer trust is gated to workflow
 forbidden imports (Supabase, H9 commit I/O, network clients, live Nautilus,
 brokers), write permissions, secret references, untrusted source/branch/schema/hash,
 and non-file sinks; results are written as a local JSON report artifact only.
-Challenger selection stays out of scope (WP10.3+). Disable the workflow to roll
-back; the production Hermes graph is unaffected.
+Disable the workflow to roll back; the production Hermes graph is unaffected.
+
+**Solver-free robust challenger (#2770 / WP10.3):** `hermes/shadow_optimizer.py`
+evaluates the robust objective
+\(J(w)=\hat\mu^\top w-\kappa\|D_\mu w\|_2-\frac{\lambda}{2}w^\top\Sigma w-C(w-w_0)-\gamma\|w-w_0\|_1\)
+via deterministic coordinate search (one grid quantum donor→receiver, including
+`CASH`). Shared feasibility checks enforce caps/grid/authorization; accept only
+objective improvement above epsilon; bounded iterations; byte-identical digests.
+Abstains on missing covariance/cost bindings, degraded calibrated inputs, or an
+infeasible seed. Shadow-only — never imported by `chain.py`, H8, or H9; no
+SciPy/CVXPY; no production runtime flag. Replay/comparison remains WP10.4–10.5.
 
 ### H2 market-thesis identity
 
