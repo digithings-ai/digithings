@@ -1055,8 +1055,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   attribution reports, and lesson versions (migration `093_olympus_outcome_learning.sql`).
   Content-idempotent retry; changed content appends a new version; supersession requires parent;
   `select_episode_as_of` / `select_lesson_as_of` honor `available_at` and knowledge cutoff;
-  exact load never fabricates history. Dark launch: in-memory for unit tests; assembler/compiler
-  wiring lands in WP15.3–15.5.
+  exact load never fabricates history. **Outcome episode assembler (#2963 / WP15.3).**
+  `OutcomeEpisodeAssembler` in `olympus/learning/outcome_assembly.py` joins typed reader
+  protocols only (WP2 ledger lineage, WP3 accounting slices, WP5 matured forecasts, WP7 cost
+  refs, WP9 pre-trade risk) to build one deterministic `OutcomeEpisode` per matured forecast.
+  Assembly failures return `AssemblyBlocker` without fabricating partial numbers; content-idempotent
+  retry via `OutcomeLearningStore`; corrections supersede prior versions. Compiler wiring lands in
+  WP15.4–15.5.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
