@@ -170,6 +170,29 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models/store:
 `digiquant.olympus.research_corpus` (`ResearchCorpusStore.publish_if_missing`).
 
+### Research-state store — migration 088 (#2854 / WP12.2)
+
+Private append-only exact-version research memory for Phase 3 WP12 contracts
+(`EvidenceRecord`, `BeliefVersion`, `ExpectedEventVersion`, `ResearchPatch`,
+`LegacyDocumentRef`, `ResearchStateVersion`, `ResearchStatePin`). Distinct from
+Track B corpus pins (theme/asset/segment identity). Dark launch: no public base
+view, no historical backfill, no prose parsing. Application boundary:
+`digiquant.olympus.research_retrieval.store.ResearchStateStore`.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_research_evidence` | `(evidence_id UUID)` | Immutable evidence leaf + payload jsonb; optional supersedes FK; temporal columns + content_hash. |
+| `olympus_research_belief_versions` | `(belief_version_id UUID)` | Append-only belief versions; supersession via child INSERT. |
+| `olympus_research_expected_event_versions` | `(expected_event_version_id UUID)` | Append-only expected-event versions. |
+| `olympus_research_patches` | `(patch_id UUID)` | Structured research patches (never derived from prose). |
+| `olympus_research_legacy_refs` | `(legacy_ref_id UUID)` | Inventory-only legacy prose refs; `known_at` CHECK NULL; strict readers exclude. |
+| `olympus_research_state_versions` | `(state_version_id UUID)` | Content-addressed state snapshots + optional parent FK + manifest payload. |
+| `olympus_research_state_pins` | `(run_id, attempt_id)` | Exact run/attempt pin to one `state_version_id`; no `load_latest` after pin. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_research_state_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Preflight wiring of pins = WP12.3.
+
 ### Forecast registry — migration 079 (#2663 / WP4.6)
 
 Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio
