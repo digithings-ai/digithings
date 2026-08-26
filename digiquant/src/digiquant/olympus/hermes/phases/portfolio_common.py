@@ -522,12 +522,7 @@ def run_asset_analyst_llm(
     prior_body = _body_from_prior_payload(prior.payload) if prior is not None else None
     evidence_bundle: TickerEvidenceBundle | None = None
 
-    if (
-        enforce_path == "metric_patch"
-        and mode != "full"
-        and prior is not None
-        and prior_body
-    ):
+    if enforce_path == "metric_patch" and mode != "full" and prior is not None and prior_body:
         patched = apply_analyst_metric_patch(
             state,
             ticker,
