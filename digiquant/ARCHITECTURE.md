@@ -930,14 +930,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   public view. Reuses WP12 UUID5 / `content_digest` / `TypedProvenance`
   conventions — does not invent a parallel hash scheme. WP11.2
   (`research_retrieval/evidence_bundle.py`) builds one canonical H5 base per
-  ticker (dedupe, temporal span, conflicts/missing fields), publishes via
-  `EvidenceBundleStore` **before** the provider call (`portfolio_common` /
-  `h5_asset_analyst`), retains `PhaseHermesState.ticker_evidence_bundles` even
-  when H5 fails, and cites bundle/evidence IDs on newly materialized
-  `ForecastTerms`. Durable writer is disableable with
-  `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` (typed in-run bundle retained; SQL IO
-  adapter still later). Does **not** cut over H6 selection (WP11.3+); WP11
-  remains incomplete until later tasks close.
+  ticker (dedupe, temporal span, conflicts/missing fields) **before** the
+  provider call (`portfolio_common` / `h5_asset_analyst`), retains
+  `PhaseHermesState.ticker_evidence_bundles` even when H5 fails, and cites
+  bundle/evidence IDs on newly materialized `ForecastTerms`. Default Hermes
+  graph leaves `EvidenceBundleStore` unwired (same shadow pattern as
+  `research_state_store`): typed in-run bundles always materialize; store
+  append runs only when a caller injects the store. `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off`
+  then skips that append while retaining the typed bundle. Not
+  operator-durable yet — SQL IO adapter still later; WP11 remains incomplete
+  until later tasks close. Does **not** cut over H6 selection (WP11.3+).
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
