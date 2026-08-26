@@ -294,6 +294,8 @@ def policy_hash_payload(policy: RiskPolicy) -> dict[str, object]:
     return {
         "method_version": policy.method_version,
         "status": policy.status.value,
+        # Distinct degrade/unavailable reasons must not share policy_id (#2803).
+        "unavailable_reason": policy.unavailable_reason,
         "sizing_caps": {k: _leaf_json(v) for k, v in sorted(policy.sizing_caps.items())},
         "breaker": {k: _leaf_json(v) for k, v in sorted(policy.breaker.items())},
         "turnover": {k: _leaf_json(v) for k, v in sorted(policy.turnover.items())},
@@ -328,6 +330,8 @@ def snapshot_hash_payload(snapshot: CovarianceSnapshot) -> dict[str, object]:
         "matrix": [list(row) for row in snapshot.matrix],
         "observation_count": snapshot.observation_count,
         "status": snapshot.status.value,
+        # Placeholder identity matrices must still diverge by reason (#2803).
+        "unavailable_reason": snapshot.unavailable_reason,
     }
 
 

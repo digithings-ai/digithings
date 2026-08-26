@@ -923,17 +923,20 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   cohort attach filters residuals to the subject horizon; migration 087 adds
   `UNIQUE (effective_forecast_id, maturity_session)` and refuses wall-clock
   `as_of` when knowledge cutoff is missing.
-  **Risk policy contracts (#2692 / WP6.2):** frozen models in
+  **Risk policy contracts (#2692 / WP6.2, #2803):** frozen models in
   `hermes/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
   leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure
-  resolver in `hermes/risk_policy.py`. Resolves incumbent defaults from
-  config/preferences into one fully provenanced policy and one canonical correlation
-  snapshot (63-day Pearson, asset-class bucket fallback metadata). Bridge helpers
-  derive `SizingCaps` / `BreakerConfig` for parity tests only — production H8 still
-  calls `size_portfolio` directly in Phase 1.
-  **Risk snapshot persistence (#2698 / WP6.3):** `hermes/h8_risk_snapshots.resolve_h8_risk_artifacts`
-  runs at the existing H8 entry before incumbent sizing; typed state slots
-  `phase_hermes.risk_policy` / `covariance_snapshot`; H9 fail-soft appends via
+  resolver in `hermes/risk_policy.py` (`incumbent-*-@v2`). Resolves incumbent defaults
+  from config/preferences into one fully provenanced policy and one canonical
+  correlation snapshot (63-day Pearson). Incomplete Pearson pairs fail closed as
+  ``unavailable`` (structural identity placeholder only; ``unavailable_reason`` is
+  hashed so distinct failures cannot share ``snapshot_id``). Bridge helpers derive
+  `SizingCaps` / `BreakerConfig` for parity tests only — production H8 still calls
+  `size_portfolio` directly in Phase 1.
+  **Risk snapshot persistence (#2698 / WP6.3, #2803):** `hermes/h8_risk_snapshots.resolve_h8_risk_artifacts`
+  runs at the existing H8 entry before incumbent sizing and always returns typed
+  artifacts (resolver exceptions become visible ``unavailable`` dumps); typed state
+  slots `phase_hermes.risk_policy` / `covariance_snapshot`; H9 fail-soft appends via
   `risk_policy_registry.persist_h8_risk_snapshots_from_state` after booking (manifest
   `schema_version` 1.4). Never feeds resolved objects into `size_portfolio` in Phase 1.
   **Action cost input binding (#2700 / WP7.1):** adapters in
