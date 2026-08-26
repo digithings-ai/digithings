@@ -7,6 +7,10 @@ from digiquant.olympus.learning.beliefs_distillation import (
     run_beliefs_distillation_if_triggered,
     should_distill_beliefs,
 )
+from digiquant.olympus.learning.outcome_assembly import (
+    AssemblyPassResult,
+    OutcomeEpisodeAssembler,
+)
 from digiquant.olympus.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
@@ -15,10 +19,6 @@ from digiquant.olympus.learning.outcome_models import (
     EpisodeDisposition,
     OutcomeEpisode,
     OutcomeLessonVersion,
-)
-from digiquant.olympus.learning.outcome_assembly import (
-    OutcomeEpisodeAssembler,
-    AssemblyPassResult,
 )
 from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
 
