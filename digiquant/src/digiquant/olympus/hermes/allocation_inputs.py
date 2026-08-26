@@ -1,8 +1,8 @@
 """Assemble the canonical H8 ``AllocationInputBundle`` (#2730 / WP8.3).
 
 Validate and join H7 mandate plus exact Phase 1 forecast / policy / covariance /
-cost artifacts and prior weights at H8 entry. Shadow mode only — callers must not
-feed the bundle into incumbent ``size_portfolio`` until Task 8.4.
+cost artifacts and prior weights at H8 entry. WP8.4 feeds the validated bundle into
+incumbent ``size_portfolio`` raw weights when ``h8_sizing_input_mode=calibrated``.
 """
 
 from __future__ import annotations
