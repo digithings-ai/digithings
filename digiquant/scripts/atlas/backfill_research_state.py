@@ -5,8 +5,9 @@ Writes only ``LegacyDocumentRef`` rows (``legacy_manifest_only``, ``known_at=Non
 Never fabricates evidence, beliefs, expected events, patches, or known times.
 Strict readers exclude the inventory (WP12.2).
 
-Default mode is dry-run (count only). Pass ``--apply`` to append via
-:class:`~digiquant.olympus.research_retrieval.store.ResearchStateStore`.
+Default mode is dry-run (count only). Pass ``--apply`` to append via the
+in-memory :class:`~digiquant.olympus.research_retrieval.store.ResearchStateStore`
+(SQL IO adapter later — does not INSERT ``olympus_research_legacy_refs`` yet).
 
 Usage:
   python digiquant/scripts/atlas/backfill_research_state.py
@@ -107,7 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Append LegacyDocumentRef rows (default: dry-run, no writes).",
+        help=(
+            "Append LegacyDocumentRef rows to in-memory ResearchStateStore "
+            "(default: dry-run; not durable SQL)."
+        ),
     )
     parser.add_argument(
         "--documents-json",
@@ -145,6 +149,12 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     store = ResearchStateStore()
+    if args.apply:
+        print(
+            "warning: ResearchStateStore is in-process only (SQL IO adapter later); "
+            "--apply does not INSERT into olympus_research_legacy_refs",
+            file=sys.stderr,
+        )
     counts = backfill_legacy_manifests(sources, store, apply=bool(args.apply))
     mode = "apply" if args.apply else "dry-run"
     print(

@@ -93,14 +93,17 @@ python3 scripts/backfill_simulated_runs.py --validate-all
 Inventory existing `documents` rows into `LegacyDocumentRef` pointers
 (`legacy_manifest_only`, `known_at=None`) for audit/degraded compatibility.
 Does **not** extract evidence/beliefs/events or invent known times. Strict
-readers exclude these rows. Default is dry-run; pass `--apply` to write.
+readers exclude these rows. Default is dry-run. `--apply` appends via the
+**in-memory** `ResearchStateStore` (SQL IO adapter later) — it does **not**
+INSERT into `olympus_research_legacy_refs` yet; use it to validate counts and
+library idempotency in-process.
 
 ```bash
 # Dry-run counts only (default)
 python3 scripts/backfill_research_state.py --supabase
 python3 scripts/backfill_research_state.py --documents-json /path/to/sources.json
 
-# Append inventory refs via ResearchStateStore
+# In-process append via ResearchStateStore (not durable SQL)
 python3 scripts/backfill_research_state.py --supabase --apply
 ```
 
