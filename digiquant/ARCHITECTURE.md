@@ -923,20 +923,21 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   **Ticker evidence bundles (#2844 / WP11.1 + #2892 / WP11.2).** Immutable H5 base
   `TickerEvidenceBundle` plus append-only `MissingFactRequest` /
   `EvidenceBundleAmendment` contracts in `research_retrieval/models.py`.
-  Private migration `090_olympus_evidence_bundles.sql` and in-memory
-  `EvidenceBundleStore`: content-idempotent base append, one base per
-  run/ticker, amendments must FK one base + one missing-fact request (zero
-  unlinked amendments), public grants denied, no public view. Reuses WP12
-  UUID5 / `content_digest` / `TypedProvenance` conventions — does not invent
-  a parallel hash scheme. WP11.2 (`research_retrieval/evidence_bundle.py`) builds
-  one canonical H5 base per ticker (dedupe, temporal span, conflicts/missing
-  fields), publishes via `EvidenceBundleStore` **before** the provider call
-  (`portfolio_common` / `h5_asset_analyst`), retains
-  `PhaseHermesState.ticker_evidence_bundles` even when H5 fails, and cites
-  bundle/evidence IDs on newly materialized `ForecastTerms`. Durable writer is
-  disableable with `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` (typed in-run bundle
-  retained). Does **not** cut over H6 selection (WP11.3+); WP11 remains
-  incomplete until later tasks close.
+  Private migration `090_olympus_evidence_bundles.sql` (+ `091` base/request
+  consistency trigger) and in-memory `EvidenceBundleStore`: content-idempotent
+  base append, one base per run/ticker, amendments must FK one base + one
+  missing-fact request (zero unlinked amendments), public grants denied, no
+  public view. Reuses WP12 UUID5 / `content_digest` / `TypedProvenance`
+  conventions — does not invent a parallel hash scheme. WP11.2
+  (`research_retrieval/evidence_bundle.py`) builds one canonical H5 base per
+  ticker (dedupe, temporal span, conflicts/missing fields), publishes via
+  `EvidenceBundleStore` **before** the provider call (`portfolio_common` /
+  `h5_asset_analyst`), retains `PhaseHermesState.ticker_evidence_bundles` even
+  when H5 fails, and cites bundle/evidence IDs on newly materialized
+  `ForecastTerms`. Durable writer is disableable with
+  `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` (typed in-run bundle retained; SQL IO
+  adapter still later). Does **not** cut over H6 selection (WP11.3+); WP11
+  remains incomplete until later tasks close.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
