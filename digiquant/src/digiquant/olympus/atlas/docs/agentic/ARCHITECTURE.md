@@ -110,7 +110,13 @@ Before any phase executes, the agent performs a structured context load:
    longer the only path to price/macro data (they were never invoked under
    `tool_choice="auto"`). Fail-soft: a data-layer error logs a warning and
    phases run without injected values.
-6. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
+6. **Pin research state (#2863 / WP12.3)** — when a `ResearchStateStore` is
+   wired, preflight selects one exact `ResearchStatePin` (optional explicit
+   `requested_research_state_version_id`, else cutoff-bound `select_state_as_of`
+   + `pin_state_for_run`) onto `AtlasResearchState.research_state_pin`. Resume
+   reuses the run/attempt pin; typed `state_unavailable` keeps compatibility
+   documents shadow-only. Never re-select / `load_latest` after the pin.
+7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 
 ---
 

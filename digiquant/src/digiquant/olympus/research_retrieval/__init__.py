@@ -3,6 +3,7 @@
 Phase 3 WP12.1 frozen research-state contracts live in
 :mod:`digiquant.olympus.research_retrieval.models` (prose remains a view).
 WP12.2 append-only store: :mod:`digiquant.olympus.research_retrieval.store`.
+WP12.3 preflight pin: :mod:`digiquant.olympus.research_retrieval.pin`.
 """
 
 from __future__ import annotations
@@ -28,6 +29,14 @@ from digiquant.olympus.research_retrieval.models import (
     ResearchStatePin,
     ResearchStateVersion,
     TypedProvenance,
+)
+from digiquant.olympus.research_retrieval.pin import (
+    STATE_UNAVAILABLE,
+    ResearchStatePinResult,
+    ResearchStateUnavailableError,
+    child_version_must_name_parent,
+    pin_research_state_for_preflight,
+    require_research_state_pin,
 )
 from digiquant.olympus.research_retrieval.queries import (
     extract_section,
@@ -67,14 +76,20 @@ __all__ = [
     "ResearchStateManifest",
     "ResearchStateMissingError",
     "ResearchStatePin",
+    "ResearchStatePinResult",
     "ResearchStateStore",
+    "ResearchStateUnavailableError",
     "ResearchStateVersion",
     "RetrievalPhase",
+    "STATE_UNAVAILABLE",
     "TypedProvenance",
     "build_research_tool_dispatcher",
+    "child_version_must_name_parent",
     "extract_section",
+    "pin_research_state_for_preflight",
     "portfolio_tool_allowed",
     "query_portfolio",
     "query_research",
+    "require_research_state_pin",
     "research_document_allowed",
 ]
