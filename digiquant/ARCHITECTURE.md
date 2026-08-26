@@ -1016,7 +1016,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   objective (uncertainty + covariance risk + linear cost + L1 turnover) under
   shared feasibility (caps/grid/authorization). Shadow-only; never wired into
   production H8/H9; no SciPy/CVXPY; abstains on incomplete/invalid inputs.
-  Replay/comparison evidence is WP10.4–10.5.
+  **Shared-cash Nautilus portfolio replay (#2784 / WP10.4):**
+  `olympus/replay/` — one `BacktestEngine`, one cash account, all instruments,
+  global event ordering, next-bar target deltas, and real engine fills/costs.
+  Parent API `run_portfolio_replay_isolated` spawns a fresh worker with JSON
+  I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
+  call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
+  production H8/H9 must not import `olympus.replay`. Comparison evidence is
+  WP10.5.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
@@ -1498,6 +1505,14 @@ assuming it is always present.
   Token/cost fields remain operator-only. Prompts, tool values/results, document bodies,
   credentials, PII-heavy values, model output, and reasoning are not columns. **Migration 066
   is human-gated and must not be applied to the live Supabase project without review.**
+- **WP1 join + null usage (#2763 / migration 086).** Glass-box events soft-stamp
+  `call_id` / `attempt_id` / `node_run_id` so Pipeline rows reconcile to
+  `olympus_provider_*` (Gate 3). **Authority for economics is 067**; 066 is the ordered
+  compatibility surface. Migration 086 makes `prompt_tokens` / `completion_tokens` /
+  `cached_tokens` / `cost_usd` nullable (no DEFAULT 0) so missing usage stays NULL —
+  digigraph `usage.record` and digillm `_record_usage` no longer zero-fill the event path.
+  The public view appends join keys only (still no tokens/cost). Soft stamps, not hard FKs:
+  067 quarantine may omit an attempt that glass-box still needs for ordering honesty.
 - `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
   phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
   reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
@@ -1881,13 +1896,18 @@ that metrics/attribution job order cannot alter meaning.
   otherwise falls through to provisional H9 nav only. Never sums
   `current_book_lookback` / legacy `position_attribution` into daily `pnl_pct` (#2598).
   H9 keeps writing provisional continuity; public curated views are migration
-  `074_olympus_accounting_views.sql` (#2599): `public_accounting_nav_history`
-  (finalized preferred + labeled legacy), `public_finalized_nav`,
-  `public_accounting_period_status`, `public_daily_realized_attribution`.
-  Adapters: Olympus `observability-queries` / `queries` and digiquant.io
-  `useLivePortfolio`. Rollback = repoint to `public_nav_history` / `nav_history`.
-  Cutover only after approved shadow interval (incl. one rebalance) with zero
-  unexplained reconciliation failures.
+  `074_olympus_accounting_views.sql` (#2599) with follow-ups
+  `084_olympus_accounting_day_return_pct.sql` (#2779, equity-delta
+  `day_return_pct`) and `085_olympus_accounting_tip_children_complete.sql`
+  (#2780, tip/final views require `period_children_complete` parity):
+  `public_accounting_nav_history` (finalized preferred + labeled legacy),
+  `public_finalized_nav`, `public_accounting_period_status`,
+  `public_daily_realized_attribution`. Adapters: Olympus
+  `observability-queries` / `queries` and digiquant.io `useLivePortfolio`.
+  Rollback = repoint to `public_nav_history` / `nav_history`. Cutover only after
+  approved shadow interval (incl. one rebalance) with zero unexplained
+  reconciliation failures. Do not flip `OLYMPUS_ACCOUNTING_FINALIZER=on`
+  without that ops evidence.
 - **Lookback vs realized (#2598 / Task 3.3)**: migration `073_olympus_lookback_vs_realized.sql`
   renames the physical diagnostic table to `current_book_lookback` (explicit
   `window_*` / `lookback_days` / `contract` columns). `position_attribution` remains a
@@ -1910,7 +1930,9 @@ that metrics/attribution job order cannot alter meaning.
   `tests/dq/atlas/test_finalize_period_accounting.py`,
   `tests/dq/atlas/test_migration_073.py`,
   `tests/dq/atlas/test_lookback_vs_realized.py`,
-  `tests/dq/atlas/test_migration_074.py`.
+  `tests/dq/atlas/test_migration_074.py`,
+  `tests/dq/atlas/test_migration_084.py`,
+  `tests/dq/atlas/test_migration_085.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
   current-book lookback as realized attribution, public base-table grants on accounting,
   selecting provisional rows as final, in-place period correction,

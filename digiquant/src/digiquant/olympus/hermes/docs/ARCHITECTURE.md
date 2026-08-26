@@ -93,7 +93,14 @@ via deterministic coordinate search (one grid quantum donor→receiver, includin
 objective improvement above epsilon; bounded iterations; byte-identical digests.
 Abstains on missing covariance/cost bindings, degraded calibrated inputs, or an
 infeasible seed. Shadow-only — never imported by `chain.py`, H8, or H9; no
-SciPy/CVXPY; no production runtime flag. Replay/comparison remains WP10.4–10.5.
+SciPy/CVXPY; no production runtime flag.
+
+**Shared-cash Nautilus portfolio replay (#2784 / WP10.4):** `olympus/replay/`
+(`models.py`, `nautilus_portfolio.py`, `worker.py`) replays synchronized target
+books in one Nautilus account with shared cash and real fills/costs. Spawned
+workers use JSON request/result I/O; child crash/timeout is typed inconclusive
+with no fallback. Never calls `_run_multi_symbol_backtest`; never a production
+booking path. Paired comparison evidence remains WP10.5.
 
 ### H2 market-thesis identity
 

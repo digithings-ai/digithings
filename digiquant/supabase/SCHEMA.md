@@ -106,7 +106,7 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 | `public_nav_history` | `nav_history` | Legacy NAV series + cash/invested % + derived `day_return_pct` (rollback target). |
 | `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
-### Public accounting surface — migration 074 (#2599 / Task 3.4)
+### Public accounting surface — migration 074 (#2599 / Task 3.4) + 084/085
 
 Curated security-definer views over private `olympus_accounting_*` tips. Prefer these
 for digiquant.io / Olympus performance readers after the shadow reconciliation gate.
@@ -120,8 +120,22 @@ adapters to `public_nav_history` / `nav_history` without deleting accounting row
 | `public_accounting_nav_history` | Finalized preferred; dates without a final tip use labeled legacy (`source=legacy_nav_history`, `contract=legacy_estimate`). Same date never mixes sources. |
 | `public_daily_realized_attribution` | Final-tip per-ticker contribution pct; empty when no final tip (no lookback substitution). |
 
+**Tip selection / children (#2780):** public tip and final views require the same
+child-completeness gate as Python `select_final_period` /
+`period_children_complete` (activity ⇒ ≥1 contribution; every positive
+`closing_quantity` contribution has a matching holding). Migration
+`085_olympus_accounting_tip_children_complete.sql` (CREATE OR REPLACE). A mid-chain
+crash that leaves a FINAL period row without children must not publish as a
+public tip.
+
+**`day_return_pct` (084 / #2779):** `(closing_equity − opening_equity) / opening_equity`
+(×100), matching engine identity `E1 = E0 + net_pnl_total + cash_pnl` — not
+`net_pnl_total / E0` alone. Migration 074's formula is superseded by
+`084_olympus_accounting_day_return_pct.sql`; 085 retains that equity-delta formula.
+
 **Cutover gate:** point public readers only after an approved shadow interval (including one
-rebalance session) has zero unexplained reconciliation failures.
+rebalance session) has zero unexplained reconciliation failures. Do **not** enable
+`OLYMPUS_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
 
 ### ProfileConfig — migration 075 (#2609 / Track B)
 
@@ -474,13 +488,16 @@ ledger (private, #2415)" for the full chain and failure-mode writeup.
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
   `atlas_run_diagnostics` idiom (migration 033).
-- **Exception — `olympus_run_events` (migration 066, #1945):** ordered call telemetry is
-  service-role-only. RLS is enabled with zero policies and `anon`/`authenticated` grants are
-  revoked. The definer-rights `olympus_run_event_trace` view exposes a bounded, body-free
-  projection for Pipeline: labels, timing, status, retries, source counts, and code-generated
-  shape summaries. It excludes token/cost fields and has no columns for prompts, argument or
-  result values, document bodies, credentials, or reasoning. Migration 066 is not applied live
-  without the repository's human migration review gate.
+- **Exception — `olympus_run_events` (migration 066, #1945; WP1 join 086 / #2763):** ordered
+  call telemetry is service-role-only. RLS is enabled with zero policies and
+  `anon`/`authenticated` grants are revoked. The definer-rights `olympus_run_event_trace` view
+  exposes a bounded, body-free projection for Pipeline: labels, timing, status, retries, source
+  counts, code-generated shape summaries, and soft WP1 join keys (`call_id` / `attempt_id` /
+  `node_run_id`). It excludes token/cost fields (067 `olympus_provider_attempts` is economics
+  authority) and has no columns for prompts, argument or result values, document bodies,
+  credentials, or reasoning. Migration 086 makes private token/cost columns nullable so missing
+  usage stays NULL. Migrations 066/086 are not applied live without the repository's human
+  migration review gate.
 - **Exception — strategy store lockdown (migration 051, #1462):** `strategies`,
   `strategy_signals`, and `strategy_trades` had their anon policies dropped AND their
   anon/authenticated grants revoked — anon access to live signals would bypass the
