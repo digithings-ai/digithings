@@ -222,3 +222,18 @@ def test_load_missing_raises() -> None:
     store = EvidenceBundleStore()
     with pytest.raises(EvidenceBundleMissingError):
         store.load_base_bundle(uuid4())
+
+
+def test_dump_snapshot_roundtrip_is_byte_equivalent() -> None:
+    store = EvidenceBundleStore()
+    bundle = store.append_base_bundle(_bundle(ticker="AAPL"))
+    request = store.append_missing_fact_request(_request(bundle))
+    store.append_amendment(_amendment(bundle, request))
+    msft = store.append_base_bundle(_bundle(ticker="MSFT"))
+    snapshot = store.dump_snapshot()
+    reloaded = EvidenceBundleStore.from_snapshot(snapshot)
+    assert reloaded.lineage_bytes() == snapshot
+    assert reloaded.load_base_bundle(bundle.bundle_id) == bundle
+    assert reloaded.load_base_bundle(msft.bundle_id) == msft
+    assert reloaded.amendment_count_for_base(bundle.bundle_id) == 1
+    assert reloaded.unlinked_amendment_count() == 0

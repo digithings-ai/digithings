@@ -116,17 +116,18 @@ Before any phase executes, the agent performs a structured context load:
    + `pin_state_for_run`) onto `AtlasResearchState.research_state_pin`. Resume
    reuses the run/attempt pin; typed `state_unavailable` keeps compatibility
    documents shadow-only. Never re-select / `load_latest` after the pin.
-6b. **Ticker evidence bundles (#2844 / WP11.1 + #2892 / WP11.2)** — typed H5
+6b. **Ticker evidence bundles (#2844 / WP11.1–WP11.5)** — typed H5
    `TickerEvidenceBundle` + append-only H6 `MissingFactRequest` /
    `EvidenceBundleAmendment` contracts (`research_retrieval` models +
-   in-memory `EvidenceBundleStore`; private migrations `090`/`091`; SQL IO
-   adapter later). One immutable base per run/ticker; amendments must link
-   one base and one request. WP11.2 builds the H5 base via `evidence_bundle.py`
-   before the provider call, retains `phase_hermes.ticker_evidence_bundles` on
-   H5 failure, and cites bundle/evidence IDs on new forecasts. Default Hermes
-   leaves `EvidenceBundleStore` unwired; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off`
-   only gates append when a store is injected. Not operator-durable yet. No H6
-   selection cutover yet (WP11.3+); no public view.
+   in-memory `EvidenceBundleStore` with `dump_snapshot`/`from_snapshot` for
+   checkpoint reload; private migrations `090`/`091`; SQL IO adapter later).
+   One immutable base per run/ticker; amendments must link one base and one
+   request. WP11.2 builds the H5 base before the provider call; WP11.3–11.4
+   wire deterministic H6 selection + bounded missing-fact supplements; WP11.5
+   (`simulated_pipeline` + `TestDurableH5H6LineageRoundTrip`) proves bases and
+   amendments survive store serialize/reload across the H5→H6 boundary.
+   Optional `HermesGraphDeps.evidence_bundle_store`; default graph leaves it
+   unwired; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
 
 7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 

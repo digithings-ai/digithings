@@ -952,8 +952,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   generic ``live_search``) → append-only ``MissingFactRequest`` +
   ``EvidenceBundleAmendment`` with base ``content_hash`` unchanged; invalid,
   exhausted, or failed paths record ``evidence_amendment_outcome`` on
-  ``DeliberationSummary`` and continue on the H5 base. WP11 remains incomplete
-  until 11.5 close.
+  ``DeliberationSummary`` and continue on the H5 base. WP11.5
+  (`EvidenceBundleStore.dump_snapshot` / `from_snapshot`, simulator
+  `evidence_bundle_store` + `invoke_through_h5` / `invoke_hermes_from_h6`,
+  `tests/dq/atlas/test_pipeline_simulation.py::TestDurableH5H6LineageRoundTrip`)
+  proves H5 bases + H6 amendments survive store serialize/reload across the
+  H5→H6 checkpoint boundary with byte-equivalent lineage, two-round floor,
+  accepted/invalid amendment provenance, and no generic H6 ``live_search``.
+  WP11 closes on develop when this lands.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are

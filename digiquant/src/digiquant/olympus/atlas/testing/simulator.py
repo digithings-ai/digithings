@@ -79,6 +79,8 @@ from digiquant.olympus.atlas.state import (
     RiskDebatePayload,
 )
 from digiquant.olympus.hermes.phases.phase9_evolution import Phase9Deps
+from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
 
 # Gate thresholds (spec §12.2 / §16 test_quiet_day) — re-baseline when graph changes.
 # 2026-06-20 re-baseline: mandatory δ DocumentPatches (3) + phase5 sector bypass
@@ -929,6 +931,7 @@ class SimulationRun:
     # Hermes-side deps + chain publish — populated by ``simulated_pipeline``.
     hermes_deps: Any = None
     publish_deps: Any = None
+    evidence_bundle_store: EvidenceBundleStore | None = None
 
     def llm_telemetry(self) -> LlmCallTelemetry:
         """Aggregate LLM call budget + patch-ratio telemetry for gate tests."""
@@ -953,6 +956,47 @@ class SimulationRun:
         atlas_input_with_state = atlas_input
         result = _invoke_with_config(atlas_input_with_state, chain_deps, self.config_bundle)
         return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
+
+    def invoke_through_h5(self, atlas_input: AtlasInput) -> AtlasResearchState:
+        """Run Atlas + Hermes H1–H5 only (checkpoint boundary before H6)."""
+        from digiquant.olympus.hermes.chain import ChainDeps
+        from digiquant.olympus.hermes.graph import HermesGraphDeps, build_hermes_phases_thesis
+
+        chain_deps = ChainDeps(
+            atlas=self.deps,
+            hermes=self.hermes_deps or HermesGraphDeps(),
+            publish=None,
+        )
+        state = _invoke_atlas_then_hermes_phases(
+            atlas_input,
+            chain_deps,
+            self.config_bundle,
+            hermes_phases=build_hermes_phases_thesis(
+                watchlist=list(atlas_input.watchlist),
+                deps=chain_deps.hermes,
+            )[:5],
+        )
+        return AtlasResearchState.model_validate(state) if isinstance(state, dict) else state
+
+    def invoke_hermes_from_h6(self, state: AtlasResearchState) -> AtlasResearchState:
+        """Resume Hermes from H6 onward using the wired deps (post-checkpoint)."""
+        from digiquant.olympus.hermes.chain import ChainDeps
+        from digiquant.olympus.hermes.graph import HermesGraphDeps, build_hermes_phases_thesis
+
+        chain_deps = ChainDeps(
+            atlas=self.deps,
+            hermes=self.hermes_deps or HermesGraphDeps(),
+            publish=self.publish_deps,
+        )
+        resume = _invoke_hermes_phases_from(
+            state,
+            chain_deps,
+            build_hermes_phases_thesis(
+                watchlist=list(state.config.watchlist),
+                deps=chain_deps.hermes,
+            )[5:],  # H6–H9
+        )
+        return AtlasResearchState.model_validate(resume) if isinstance(resume, dict) else resume
 
 
 def _invoke_with_config(
@@ -997,6 +1041,56 @@ def _invoke_with_config(
     return state
 
 
+def _invoke_atlas_then_hermes_phases(
+    atlas_input: AtlasInput,
+    chain_deps: "ChainDeps",  # noqa: F821
+    config_bundle: AtlasConfigBundle,
+    *,
+    hermes_phases: list[Any],
+) -> AtlasResearchState:
+    """Run Atlas through phase 7, then a subset of Hermes phases."""
+    from digigraph.graph.pipeline_builder import build_pipeline
+
+    from digiquant.olympus.atlas.graph import AtlasGraphDeps as _AGDeps
+
+    atlas_deps_no_publish = _AGDeps(
+        preflight=chain_deps.atlas.preflight,
+        publish=None,
+        triage=chain_deps.atlas.triage,
+        preflight_reflect=chain_deps.atlas.preflight_reflect,
+    )
+    state = initial_state(atlas_input, config=config_bundle)
+    atlas_graph = build_atlas_graph(
+        deps=atlas_deps_no_publish,
+        watchlist=atlas_input.watchlist,
+    )
+    state = atlas_graph.invoke(state)
+    if hermes_phases:
+        hermes_graph = build_pipeline(HermesState, hermes_phases)
+        state = hermes_graph.invoke(state)
+    return state
+
+
+def _invoke_hermes_phases_from(
+    state: AtlasResearchState,
+    chain_deps: "ChainDeps",  # noqa: F821
+    hermes_phases: list[Any],
+) -> AtlasResearchState:
+    """Resume Hermes from an existing checkpointed state."""
+    from digigraph.graph.pipeline_builder import build_pipeline
+
+    from digiquant.olympus.atlas.phases.publish_phase import build_publish_phase
+
+    if hermes_phases:
+        hermes_graph = build_pipeline(HermesState, hermes_phases)
+        state = hermes_graph.invoke(state)
+    if chain_deps.publish is not None:
+        publish_only = [build_publish_phase(chain_deps.publish)]
+        publish_graph = build_pipeline(AtlasResearchState, publish_only)
+        state = publish_graph.invoke(state)
+    return state
+
+
 @contextmanager
 def simulated_pipeline(
     *,
@@ -1010,6 +1104,7 @@ def simulated_pipeline(
     commit_run: bool = True,
     preferences: dict[str, Any] | None = None,
     replace_canned_defaults: bool = False,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
 ) -> Iterator[SimulationRun]:
     """Patch chat_completion + thread a fake client through every dep slot.
 
@@ -1029,8 +1124,12 @@ def simulated_pipeline(
     preferences
         Merged into ``AtlasConfigBundle.preferences`` so tests can flip
         ``debate_rounds``, ``holding_days``, etc.
+    evidence_bundle_store
+        Optional append-only H5/H6 bundle store. When set, Hermes H5/H6 wire
+        the store for publish/amendment persistence (WP11.5 durable tests).
     """
     client = seed_supabase_client(canned_extras, replace_defaults=replace_canned_defaults)
+    bundle_store = evidence_bundle_store
     watchlist_list = list(watchlist)
     preferences_dict = dict(preferences or {})
 
@@ -1055,6 +1154,7 @@ def simulated_pipeline(
         thesis=ThesisGraphDeps(client=client),
         risk_sizing=RiskSizingDeps(client=client),
         commit_run=CommitRunDeps(client=client) if commit_run else None,
+        evidence_bundle_store=bundle_store,
     )
     publish_deps = PublishDeps(client=client) if publish else None
     config_bundle = AtlasConfigBundle(
@@ -1068,6 +1168,7 @@ def simulated_pipeline(
         config_bundle=config_bundle,
         hermes_deps=hermes_deps,
         publish_deps=publish_deps,
+        evidence_bundle_store=bundle_store,
     )
     fake_chat = simulate_chat_completion(overrides=overrides, captured_calls=run.captured_calls)
 
