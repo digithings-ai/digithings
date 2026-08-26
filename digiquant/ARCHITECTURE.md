@@ -1015,7 +1015,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   objective (uncertainty + covariance risk + linear cost + L1 turnover) under
   shared feasibility (caps/grid/authorization). Shadow-only; never wired into
   production H8/H9; no SciPy/CVXPY; abstains on incomplete/invalid inputs.
-  Replay/comparison evidence is WP10.4–10.5.
+  **Shared-cash Nautilus portfolio replay (#2784 / WP10.4):**
+  `olympus/replay/` — one `BacktestEngine`, one cash account, all instruments,
+  global event ordering, next-bar target deltas, and real engine fills/costs.
+  Parent API `run_portfolio_replay_isolated` spawns a fresh worker with JSON
+  I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
+  call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
+  production H8/H9 must not import `olympus.replay`. Comparison evidence is
+  WP10.5.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:

@@ -150,6 +150,9 @@ jobs:
               - 'tests/dq/test_tearsheet_isolation.py'
               - 'tests/dq/test_v1_jobs.py'
               - 'tests/dq/strategies/sdca/test_nautilus_strategy.py'
+              - 'tests/dq/replay/test_nautilus_portfolio.py'
+              - 'tests/dq/replay/test_worker.py'
+              - 'digiquant/src/digiquant/olympus/replay/**'
               - '.github/workflows/test-nautilus.yml'
             atlas_graph:
               - 'digiquant/src/digiquant/olympus/atlas/**'
