@@ -130,6 +130,16 @@ class TestWorkflowIsolation:
         assert perms == {"contents": "read", "actions": "read"}
         assert "secrets" not in doc
 
+    def test_dispatch_verifies_producer_run_via_api(self) -> None:
+        """#2832 — dispatch must resolve run metadata; never hardcode a trusted name."""
+        text = _WORKFLOW.read_text(encoding="utf-8")
+        assert 'gh api "repos/${REPO}/actions/runs/${source_run_id}"' in text
+        assert "untrusted producer workflow" in text
+        # The pre-fix anti-pattern: assign trusted label without API lookup.
+        assert 'source_workflow="Pipeline: Olympus research"' not in text
+        assert "TRUSTED_WORKFLOW=" in text
+        assert "BRANCH_DISPATCH" in text
+
 
 class TestForbiddenImports:
     def test_checker_and_shadow_artifact_clean(self, iso: ModuleType) -> None:
