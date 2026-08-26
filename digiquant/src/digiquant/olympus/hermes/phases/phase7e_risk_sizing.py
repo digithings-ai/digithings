@@ -679,7 +679,6 @@ def _build_sized_book(
     if memo is not None and risk_artifacts is not None:
         try:
             from digiquant.olympus.hermes.allocation_inputs import (
-                DEFAULT_FORECAST_HORIZON_SESSIONS,
                 assemble_allocation_input_bundle_from_state,
             )
 
@@ -698,11 +697,13 @@ def _build_sized_book(
                     corr=corr_frame,
                 ).covariance_snapshot
 
+            # Derive the common horizon from H6 deliberation (DEFAULT fills gaps only).
+            # Hardcoding expected=21 rejected coherent non-21 books into silent
+            # incumbent_fallback (#2814 / WP8 review finding).
             allocation_bundle = assemble_allocation_input_bundle_from_state(
                 state,
                 risk_policy=risk_artifacts.policy,
                 covariance=bundle_covariance,
-                expected_horizon_sessions=DEFAULT_FORECAST_HORIZON_SESSIONS,
             )
         except Exception as exc:
             logger.warning("phase7e: allocation input bundle failed (%s); continuing", exc)
