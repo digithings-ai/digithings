@@ -235,7 +235,8 @@ def test_covariance_snapshot_missing_frame_is_unavailable() -> None:
     assert snap.unavailable_reason == "missing_correlation_frame"
 
 
-def test_covariance_snapshot_incomplete_pairs_is_degraded_not_repaired() -> None:
+def test_covariance_snapshot_incomplete_pairs_is_unavailable_not_repaired() -> None:
+    """Incomplete Pearson frames fail closed — no silent identity labeled degraded (#2803)."""
     corr = pl.DataFrame({"a": ["A"], "b": ["B"], "corr": [0.9]})
     snap = resolve_covariance_snapshot(
         tickers=["A", "B", "C"],
@@ -243,9 +244,35 @@ def test_covariance_snapshot_incomplete_pairs_is_degraded_not_repaired() -> None
         as_of_session=_AS_OF,
         resolved_at=_TS,
     )
-    assert snap.status is PolicyArtifactStatus.DEGRADED
-    assert snap.unavailable_reason is not None
-    assert "C" in snap.unavailable_reason
+    assert snap.status is PolicyArtifactStatus.UNAVAILABLE
+    assert snap.unavailable_reason == "incomplete_pairs:A/C,B/C"
+    # Placeholder identity only — observed A/B=0.9 must not be claimed as matrix content.
+    assert snap.matrix == (
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    )
+
+
+def test_incomplete_pair_reasons_do_not_collide_on_snapshot_id() -> None:
+    """Distinct incomplete patterns must not share content_hash / snapshot_id (#2803)."""
+    snap_ab = resolve_covariance_snapshot(
+        tickers=["A", "B", "C"],
+        corr=pl.DataFrame({"a": ["A"], "b": ["B"], "corr": [0.9]}),
+        as_of_session=_AS_OF,
+        resolved_at=_TS,
+    )
+    snap_ac = resolve_covariance_snapshot(
+        tickers=["A", "B", "C"],
+        corr=pl.DataFrame({"a": ["A"], "b": ["C"], "corr": [0.1]}),
+        as_of_session=_AS_OF,
+        resolved_at=_TS,
+    )
+    assert snap_ab.status is PolicyArtifactStatus.UNAVAILABLE
+    assert snap_ac.status is PolicyArtifactStatus.UNAVAILABLE
+    assert snap_ab.unavailable_reason != snap_ac.unavailable_reason
+    assert snap_ab.content_hash != snap_ac.content_hash
+    assert snap_ab.snapshot_id != snap_ac.snapshot_id
 
 
 def test_covariance_snapshot_hash_is_deterministic() -> None:

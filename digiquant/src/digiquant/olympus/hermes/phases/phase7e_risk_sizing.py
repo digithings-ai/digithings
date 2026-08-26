@@ -666,16 +666,12 @@ def _build_sized_book(
 
     # WP6.3 (#2698): resolve incumbent policy + covariance snapshot before sizing.
     # Audit-only in Phase 1 — incumbent ``size_portfolio`` inputs stay unchanged.
-    try:
-        risk_artifacts = resolve_h8_risk_artifacts(
-            state=state,
-            pm_tickers=pm_tickers,
-            corr=corr_frame,
-        )
-    except Exception as exc:
-        logger.warning("phase7e: risk snapshot resolution failed (%s); continuing sizing", exc)
-        risk_artifacts = None
-
+    # #2803: resolver always returns typed artifacts (unavailable on failure).
+    risk_artifacts = resolve_h8_risk_artifacts(
+        state=state,
+        pm_tickers=pm_tickers,
+        corr=corr_frame,
+    )
     # WP8.3 (#2730) / WP8.4 (#2734): assemble canonical AllocationInputBundle at H8 entry.
     # Covariance for the bundle must match the full H7 roster (long+flat), which may
     # differ from the longs-only ``pm_tickers`` snapshot used for incumbent sizing audit.
