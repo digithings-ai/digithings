@@ -17,6 +17,10 @@ inject it into provider prompts.
 WP13.1 (#2918) adds versioned :class:`ResearchAttentionPolicy`, five attention
 modes, and :func:`plan_research_attention` for pre-provider routing. Runtime
 Atlas/Hermes wiring is WP13.3/13.4 — this module exposes the policy + planner API only.
+
+WP13.2 (#2922) adds persistence contracts consumed by
+:class:`~digiquant.olympus.research_retrieval.store.AttentionStore` — storage
+only; no Atlas/Hermes activation.
 """
 
 from __future__ import annotations
@@ -32,7 +36,9 @@ from typing import Annotated, Any, Literal, Mapping, Sequence, TypeAlias
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from digiquant.olympus.temporal import require_utc_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -382,6 +388,8 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
 
 OLYMPUS_RESEARCH_POLICY_ENV = "OLYMPUS_RESEARCH_POLICY_PATH"
 _ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_plan")
+_ATTENTION_DECISION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_decision")
+_ATTENTION_EVALUATION_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_evaluation")
 _TriageMode: TypeAlias = Literal["quiet", "stale", "active"]
 
 
@@ -939,6 +947,150 @@ def plan_research_attention(
     )
 
 
+def attention_decision_id(*, plan_id: UUID, target_key: str) -> UUID:
+    """Deterministic decision row id for one plan target."""
+    cleaned = target_key.strip()
+    if not cleaned:
+        raise ValueError("target_key is required")
+    return uuid5(_ATTENTION_DECISION_NS, f"{plan_id.hex}:{cleaned}")
+
+
+def attention_evaluation_id(*, plan_id: UUID, reconciliation_digest: str) -> UUID:
+    """Deterministic evaluation id from plan + reconciliation body hash."""
+    if not reconciliation_digest.strip():
+        raise ValueError("reconciliation_digest is required")
+    return uuid5(
+        _ATTENTION_EVALUATION_NS,
+        f"{plan_id.hex}:{reconciliation_digest.strip()}",
+    )
+
+
+class PersistedAttentionPlan(H6PlannerModel):
+    """Stored attention plan envelope with run/attempt provenance."""
+
+    plan: AttentionPlan
+    attempt_id: NonEmptyStr
+    recorded_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def _validate_recorded_at(self) -> PersistedAttentionPlan:
+        require_utc_datetime(self.recorded_at, field_name="recorded_at")
+        return self
+
+
+class PersistedAttentionDecision(H6PlannerModel):
+    """One persisted attention decision linked to a plan and policy/state lineage."""
+
+    decision_id: UUID
+    plan_id: UUID
+    decision: AttentionDecision
+    run_id: NonEmptyStr
+    attempt_id: NonEmptyStr
+    state_version_id: UUID | None = None
+    policy_content_hash: NonEmptyStr
+    recorded_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def _validate_persisted_decision(self) -> PersistedAttentionDecision:
+        require_utc_datetime(self.recorded_at, field_name="recorded_at")
+        expected_id = attention_decision_id(
+            plan_id=self.plan_id,
+            target_key=self.decision.target_key,
+        )
+        if self.decision_id != expected_id:
+            raise ValueError("decision_id must match plan_id+target_key")
+        return self
+
+
+class AttentionContextManifest(H6PlannerModel):
+    """Append-only context manifest row (WP14 compiler will populate; storage only here)."""
+
+    manifest_id: UUID
+    plan_id: UUID
+    decision_id: UUID | None = None
+    run_id: NonEmptyStr
+    attempt_id: NonEmptyStr
+    role: NonEmptyStr
+    state_version_id: UUID | None = None
+    content_hash: NonEmptyStr
+    included_entity_ids: tuple[str, ...] = Field(default_factory=tuple)
+    omission_reasons: tuple[str, ...] = Field(default_factory=tuple)
+    recorded_at: AwareDatetime
+
+    @field_validator("included_entity_ids", "omission_reasons", mode="before")
+    @classmethod
+    def _coerce_string_tuples(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @field_validator("included_entity_ids")
+    @classmethod
+    def _canonicalize_included(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(sorted(item.strip() for item in value if item.strip()))
+
+    @field_validator("omission_reasons")
+    @classmethod
+    def _canonicalize_omissions(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(sorted(item.strip() for item in value if item.strip()))
+
+    @model_validator(mode="after")
+    def _validate_manifest(self) -> AttentionContextManifest:
+        require_utc_datetime(self.recorded_at, field_name="recorded_at")
+        if len(self.content_hash) != 64:
+            raise ValueError("content_hash must be a 64-char SHA-256 hex digest")
+        return self
+
+
+class AttentionDecisionReconciliation(H6PlannerModel):
+    """Planned vs actual resource linkage for one decision (WP13.5/WP16 input)."""
+
+    decision_id: UUID
+    target_key: NonEmptyStr
+    mode: AttentionMode
+    reason: AttentionReason
+    planned_budget: AttentionBudgetEstimate
+    actual_budget: AttentionBudgetEstimate
+    provider_attempt_ids: tuple[UUID, ...] = Field(default_factory=tuple)
+    complete: bool
+
+    @field_validator("provider_attempt_ids", mode="before")
+    @classmethod
+    def _coerce_attempt_ids(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+
+class AttentionPolicyEvaluation(H6PlannerModel):
+    """Shadow/enforced policy evaluation with per-decision reconciliation."""
+
+    evaluation_id: UUID
+    plan_id: UUID
+    run_id: NonEmptyStr
+    attempt_id: NonEmptyStr
+    rollout_mode: AttentionRolloutMode
+    complete: bool
+    planned_total: AttentionBudgetEstimate
+    actual_total: AttentionBudgetEstimate
+    decision_reconciliations: tuple[AttentionDecisionReconciliation, ...] = Field(
+        default_factory=tuple
+    )
+    recorded_at: AwareDatetime
+
+    @field_validator("decision_reconciliations", mode="before")
+    @classmethod
+    def _coerce_reconciliations(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def _validate_evaluation(self) -> AttentionPolicyEvaluation:
+        require_utc_datetime(self.recorded_at, field_name="recorded_at")
+        return self
+
+
 def h6_selection_to_attention_decision(
     selection: H6Selection,
     policy: ResearchAttentionPolicy,
@@ -975,13 +1127,18 @@ def h6_selection_to_attention_decision(
 
 __all__ = [
     "AttentionBudgetEstimate",
+    "AttentionContextManifest",
     "AttentionDecision",
+    "AttentionDecisionReconciliation",
     "AttentionFeatures",
     "AttentionMode",
     "AttentionPlan",
+    "AttentionPolicyEvaluation",
     "AttentionReason",
     "AttentionRolloutMode",
     "AttentionTargetKind",
+    "PersistedAttentionDecision",
+    "PersistedAttentionPlan",
     "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
     "OLYMPUS_H6_SELECTION_MODE_ENV",
     "OLYMPUS_RESEARCH_POLICY_ENV",
@@ -997,6 +1154,8 @@ __all__ = [
     "H6SelectionReason",
     "apply_session_budget",
     "assert_no_materiality_in_prompt",
+    "attention_decision_id",
+    "attention_evaluation_id",
     "attention_plan_id",
     "build_h6_decision_features",
     "default_research_policy_path",
