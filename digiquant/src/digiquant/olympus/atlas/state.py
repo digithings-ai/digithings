@@ -369,6 +369,9 @@ class RebalancePayload(TypedDict, total=False):
     # this field yet. Absent/empty is valid (fully flat book, or sizing failed soft
     # before any adjustment ran).
     adjustments: list[dict[str, Any]]
+    # WP8.4 (#2734): versioned raw-input mode and source bundle identity on every book.
+    h8_sizing_input_mode: str
+    allocation_input_bundle_hash: str
 
 
 class Phase9EvolutionPayload(TypedDict, total=False):
@@ -499,10 +502,10 @@ class PhaseHermesState(BaseModel):
         default=None,
         description="Resolved CovarianceSnapshot dump (H8 attach)",
     )
-    # WP8.3 canonical H8 allocation input bundle (shadow; never feeds size_portfolio yet).
+    # WP8.3/8.4 canonical H8 allocation input bundle (feeds calibrated raw weights when usable).
     allocation_input_bundle: dict[str, Any] | None = Field(
         default=None,
-        description="Validated AllocationInputBundle dump at H8 entry (WP8.3 shadow)",
+        description="Validated AllocationInputBundle dump at H8 entry (WP8.3/8.4)",
     )
     # WP7.3 observational cost/liquidity evidence (never feeds turnover in Phase 1).
     liquidity_snapshots: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(

@@ -5,6 +5,12 @@ This phase maps those inputs plus H5/H6 analyst context into deterministic,
 risk-managed weights via :func:`~digiquant.olympus.hermes.sizing.size_portfolio` —
 the sole weight owner on the thesis-first path (ADR-0020).
 
+**WP8.4 (#2734):** on the memo path, when ``h8_sizing_input_mode=calibrated`` (default)
+and a validated ``AllocationInputBundle`` is present, raw weights come from calibrated
+forecasts (reliability × max(0, μ) / σ_ε). Rank→conviction and fixed-premium Kelly are
+not used on that path. Missing bundle falls back to the characterized incumbent path
+(versioned; never an unversioned hybrid). Downstream controls are unchanged.
+
 **H8 inside Hermes graph (PR 4c):** output lands in ``phase_hermes.sized_book``.
 Legacy chain-terminal invocation may still write ``phase7d_rebalance`` when no memo
 is present.
@@ -23,12 +29,21 @@ from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digiquant.olympus.atlas.data.queries import get_return_correlations
 from digiquant.olympus.atlas.state import AtlasResearchState, PhaseHermesState, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.hermes.allocation_contracts import (
+    AllocationInputBundle,
+    AssetInputStatus,
+)
 from digiquant.olympus.hermes.models.deliberation import is_unchallenged_carry
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_controls import BreakerConfig, breaker_scale_from_nav_history
 from digiquant.olympus.hermes.sector_map import asset_class, sector_bucket
-from digiquant.olympus.hermes.sizing import SizingCaps, TickerRisk, size_portfolio
+from digiquant.olympus.hermes.sizing import (
+    SizingCaps,
+    TickerRisk,
+    calibrated_raw_score,
+    size_portfolio,
+)
 from digiquant.olympus.hermes.sizing_events import (
     LineageValidationError,
     SizingAdjustment,
@@ -43,6 +58,12 @@ logger = logging.getLogger(__name__)
 # clear weekends + holidays + a stale prices cron (the Saturday-baseline lag, #726).
 _VOL_LOOKBACK_DAYS = 40
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
+
+H8_SIZING_INPUT_MODE_CALIBRATED = "calibrated"
+H8_SIZING_INPUT_MODE_INCUMBENT = "incumbent"
+_H8_SIZING_INPUT_MODES = frozenset(
+    {H8_SIZING_INPUT_MODE_CALIBRATED, H8_SIZING_INPUT_MODE_INCUMBENT}
+)
 
 
 @dataclass(frozen=True)
@@ -65,6 +86,42 @@ def _is_cash(ticker: Any) -> bool:
 
 def _clamp_conviction(value: float) -> float:
     return max(_CONVICTION_FLOOR, min(_CONVICTION_CAP, value))
+
+
+def resolve_h8_sizing_input_mode(preferences: Mapping[str, Any]) -> str:
+    """Versioned H8 raw-input mode. Unknown values fall back to calibrated (Gate 2)."""
+    raw = preferences.get("h8_sizing_input_mode", H8_SIZING_INPUT_MODE_CALIBRATED)
+    mode = str(raw).strip().lower() if raw is not None else H8_SIZING_INPUT_MODE_CALIBRATED
+    if mode not in _H8_SIZING_INPUT_MODES:
+        return H8_SIZING_INPUT_MODE_CALIBRATED
+    return mode
+
+
+def calibrated_scores_from_bundle(
+    bundle: AllocationInputBundle,
+    *,
+    long_tickers: list[str],
+) -> dict[str, float]:
+    """Map H7-authorized longs to WP8.4 raw scores; degraded/negative → omitted.
+
+    Missing or non-available calibrated slices receive no new risk (cash/safety).
+    """
+    by_ticker = {item.ticker: item for item in bundle.calibrated_returns}
+    scores: dict[str, float] = {}
+    for ticker in long_tickers:
+        slice_ = by_ticker.get(ticker)
+        if slice_ is None or slice_.status is not AssetInputStatus.AVAILABLE:
+            continue
+        if slice_.expected_gross_return is None or slice_.forecast_error_std is None:
+            continue
+        score = calibrated_raw_score(
+            expected_gross_return=float(slice_.expected_gross_return),
+            forecast_error_std=float(slice_.forecast_error_std),
+            reliability_weight=float(slice_.reliability_weight),
+        )
+        if score > 0:
+            scores[ticker] = score
+    return scores
 
 
 def _pm_direction_legacy(recommended: list[Any]) -> dict[str, float]:
@@ -609,8 +666,7 @@ def _build_sized_book(
         logger.warning("phase7e: risk snapshot resolution failed (%s); continuing sizing", exc)
         risk_artifacts = None
 
-    # WP8.3 (#2730): assemble canonical AllocationInputBundle at H8 entry (shadow).
-    # Never feeds ``size_portfolio`` — cutover is Task 8.4.
+    # WP8.3 (#2730) / WP8.4 (#2734): assemble canonical AllocationInputBundle at H8 entry.
     # Covariance for the bundle must match the full H7 roster (long+flat), which may
     # differ from the longs-only ``pm_tickers`` snapshot used for incumbent sizing audit.
     allocation_bundle = None
@@ -646,13 +702,51 @@ def _build_sized_book(
             logger.warning("phase7e: allocation input bundle failed (%s); continuing", exc)
             allocation_bundle = None
 
+    input_mode = resolve_h8_sizing_input_mode(state.config.preferences)
+    calibrated_scores: dict[str, float] | None = None
+    sizing_mode_label = H8_SIZING_INPUT_MODE_INCUMBENT
+    if (
+        memo is not None
+        and input_mode == H8_SIZING_INPUT_MODE_CALIBRATED
+        and allocation_bundle is not None
+    ):
+        candidate_scores = calibrated_scores_from_bundle(allocation_bundle, long_tickers=pm_tickers)
+        if candidate_scores:
+            calibrated_scores = candidate_scores
+            sizing_mode_label = H8_SIZING_INPUT_MODE_CALIBRATED
+        else:
+            # Owner-approved degraded fallback: no AVAILABLE positive-alpha slice →
+            # characterized incumbent path (never an unversioned hybrid / silent all-cash).
+            sizing_mode_label = "incumbent_fallback"
+            logger.warning(
+                "phase7e: calibrated sizing requested but no usable calibrated scores; "
+                "falling back to characterized incumbent rank→conviction path"
+            )
+    elif memo is not None and input_mode == H8_SIZING_INPUT_MODE_CALIBRATED:
+        sizing_mode_label = "incumbent_fallback"
+        logger.warning(
+            "phase7e: calibrated sizing requested but AllocationInputBundle unavailable; "
+            "falling back to characterized incumbent rank→conviction path"
+        )
+
     unchallenged: list[str] = []
     events: list[SizingAdjustment] = []
     try:
         analysts = analyst_payloads(state)
         debates = deliberation_summaries(state)
-        if memo is not None:
+        if calibrated_scores is not None:
+            # H7 owns eligibility; H5 stance must not drop a long. Magnitude from bundle.
+            stances = {ticker: "buy" for ticker in pm_tickers}
+            # Corr-dedup priority uses calibrated scores; unused tickers stay at 0.
+            convictions = {
+                ticker: float(calibrated_scores.get(ticker, 0.0)) for ticker in pm_tickers
+            }
+            unchallenged = []
+        elif memo is not None:
             convictions, stances = _memo_effective_inputs(memo, analysts, caps.min_conviction)
+            convictions, unchallenged = _cap_unchallenged_convictions(
+                convictions, debates, bar=caps.min_conviction, events=events
+            )
         else:
             convictions, stances = _effective_inputs(
                 pm_tickers,
@@ -660,12 +754,9 @@ def _build_sized_book(
                 debates,
                 default_conviction=caps.min_conviction,
             )
-        # Applied to BOTH branches on purpose. The memo branch is the live production path
-        # (H7 writes a memo every run), so a haircut wired only into the no-memo branch
-        # would be inert in production (#1742).
-        convictions, unchallenged = _cap_unchallenged_convictions(
-            convictions, debates, bar=caps.min_conviction, events=events
-        )
+            convictions, unchallenged = _cap_unchallenged_convictions(
+                convictions, debates, bar=caps.min_conviction, events=events
+            )
         if unchallenged:
             logger.warning(
                 "phase7e: %d position(s) held at the conviction bar — H6 deliberation "
@@ -681,6 +772,7 @@ def _build_sized_book(
             corr=corr_frame,
             caps=caps,
             breaker_scale=breaker_scale,
+            calibrated_scores=calibrated_scores,
         )
     except Exception as exc:  # sizing must never crash the run
         logger.warning("phase7e: risk sizing failed (%s); keeping prior book", exc)
@@ -724,18 +816,28 @@ def _build_sized_book(
     )
     sized = _apply_held_continuity_backstop(sized, state, events=events)
     sized = _cap_total_invested(sized, events=events)
+    mode_note = f" sizing_input_mode={sizing_mode_label}."
+    bundle_note = ""
+    bundle_hash: str | None = None
+    if allocation_bundle is not None:
+        bundle_hash = allocation_bundle.bundle_content_hash
+        bundle_note = f" allocation_input_bundle_hash={bundle_hash}."
     updated: RebalancePayload = {
         "recommended_portfolio": [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
         ],
         "actions": _rebuild_actions(original_actions, pm_targets, sized, current_weights),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
-        + f"Risk-sizing (H8): {result.explanation}{breaker_note}{_unchallenged_note(unchallenged)}",
+        + f"Risk-sizing (H8): {result.explanation}{breaker_note}"
+        f"{_unchallenged_note(unchallenged)}{mode_note}{bundle_note}",
         # #2417: reason-coded, in-memory explanation of every material adjustment this
         # H8 pass made — explanation-only, never persisted, never affects the weights
         # computed above.
         "adjustments": [event.model_dump() for event in events],
+        "h8_sizing_input_mode": sizing_mode_label,
     }
+    if bundle_hash is not None:
+        updated["allocation_input_bundle_hash"] = bundle_hash
 
     logger.info(
         "phase7e: sized %d→%d holdings, %.1f%% invested / %.1f%% cash, ex-ante vol ~%s%% (%s)",
@@ -744,7 +846,7 @@ def _build_sized_book(
         result.gross_pct,
         result.cash_pct,
         result.realized_portfolio_vol,
-        caps.sizing_mode,
+        sizing_mode_label,
     )
     return updated, risk_artifacts, allocation_bundle
 
@@ -831,4 +933,12 @@ def build_risk_sizing_phase(deps: RiskSizingDeps) -> PipelinePhase:
     )
 
 
-__all__ = ["RiskSizingDeps", "build_risk_sizing_node", "build_risk_sizing_phase"]
+__all__ = [
+    "H8_SIZING_INPUT_MODE_CALIBRATED",
+    "H8_SIZING_INPUT_MODE_INCUMBENT",
+    "RiskSizingDeps",
+    "build_risk_sizing_node",
+    "build_risk_sizing_phase",
+    "calibrated_scores_from_bundle",
+    "resolve_h8_sizing_input_mode",
+]

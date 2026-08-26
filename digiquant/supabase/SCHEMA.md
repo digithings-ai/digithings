@@ -203,7 +203,9 @@ blocks `UPDATE`/`DELETE`/`TRUNCATE`. Models:
 Private append-only resolved H8 risk inputs: one `RiskPolicy` + one `CovarianceSnapshot`
 per run, plus a run ref binding `source_run_id`. Resolver runs at the H8 entry boundary;
 H9 fail-soft persistence via `digiquant.olympus.atlas.risk_policy_registry` after booking.
-Phase 1 audit only — incumbent `size_portfolio` inputs stay unchanged.
+Phase 1 audit artifact for policy/covariance; WP8.4 may consume the paired
+`AllocationInputBundle` for calibrated raw weights while leaving these registry
+tables observational.
 
 | Table | PK | Purpose |
 |-------|----|---------|
