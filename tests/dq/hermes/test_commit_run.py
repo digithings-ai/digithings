@@ -26,7 +26,11 @@ from digiquant.olympus.hermes.writers.commit_io import (
 from digiquant.olympus.hermes.writers.ledger_io import (
     _CLOSE_LOOKBACK_DAYS,
     _CLOSE_TICKER_BATCH,
+    _frozen_symbols,
     _last_closes,
+)
+from digiquant.olympus.hermes.writers.ledger_io import (
+    _heads as _ledger_heads,
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
@@ -1064,6 +1068,191 @@ class TestCommitChainLedger:
         assert manifest.get("ledger_commit_id") is None
 
 
+class TestLedgerIoMutationPins:
+    """Close the surviving ``ledger_io`` mutations from the #2482 / #2487 review.
+
+    Shape tests already cover chain linearity and insert-not-upsert. These pins lock
+    *arithmetic and window semantics* that mutation testing showed were unguarded:
+    look-ahead closes, prior-book share deltas, freeze-signal independence, fork
+    refusal, and unpriced diagnostics.
+    """
+
+    def test_last_close_is_strictly_before_run_date_not_inclusive(self) -> None:
+        """M16 — ``.lt(date)`` must not become ``.lte(date)`` (look-ahead)."""
+        rows = [
+            {"date": "2026-06-10", "ticker": "SPY", "close": 50.0},
+            {"date": "2026-06-11", "ticker": "SPY", "close": 80.0},
+            # Same calendar day as RUN_DATE — must never price the order.
+            {"date": RUN_DATE.isoformat(), "ticker": "SPY", "close": 999.0},
+        ]
+        closes = _last_closes(
+            client=FakeSupabaseClient(canned_reads={"price_history": rows}),
+            tickers={"SPY"},
+            run_date=RUN_DATE,
+        )
+        assert closes == {"SPY": 80.0}, (
+            f"look-ahead close leaked into pricing: got {closes} "
+            "(inclusive .lte would pick 999.0 on run_date)"
+        )
+
+    def test_last_close_picks_newest_in_lookback_not_oldest(self) -> None:
+        """M15 — reduction must keep the latest close, not the first seen."""
+        rows = [
+            {"date": "2026-06-01", "ticker": "SPY", "close": 10.0},
+            {"date": "2026-06-05", "ticker": "SPY", "close": 40.0},
+            {"date": "2026-06-11", "ticker": "SPY", "close": 80.0},
+        ]
+        closes = _last_closes(
+            client=FakeSupabaseClient(canned_reads={"price_history": rows}),
+            tickers={"SPY"},
+            run_date=RUN_DATE,
+        )
+        assert closes == {"SPY": 80.0}, f"oldest-or-mid close won: {closes}"
+
+    def test_share_quantity_is_exact_delta_against_prior_book(self) -> None:
+        """M1 / M23 / M24 / M26 — delta uses prior weight; nav and close must differ.
+
+        prior SPY 40% → target 60% at nav=100, close=50 → |20%| * 100 / 50 = 0.4 shares.
+        Ignoring prior (target-only) would emit 1.2; inverting nav/close would emit 10.
+        """
+        client = _ledger_client(SPY=50.0)
+        out = _run(
+            client,
+            _state(
+                sized_book=_sized_book(spy_pct=60.0),
+                preferences={"current_weights": {"SPY": 40.0}},
+            ),
+        )
+        assert not out.get("errors"), out.get("errors")
+        orders = [r for r in _rows(client, _ORDERS) if r["symbol"] == "SPY"]
+        assert len(orders) == 1, orders
+        assert float(orders[0]["quantity"]) == pytest.approx(0.4)
+
+    def test_prior_held_exit_emits_order_and_exit_decision(self) -> None:
+        """M24 — prior-held symbols must stay in the row set so exits are explicit."""
+        client = _ledger_client(SPY=50.0, MSFT=25.0)
+        _run(
+            client,
+            _state(
+                sized_book=_sized_book(spy_pct=60.0),
+                analysts=_multi_analysts("SPY"),
+                preferences={"current_weights": {"SPY": 40.0, "MSFT": 25.0}},
+            ),
+        )
+        by_symbol = {r["symbol"]: r for r in _rows(client, _INTENTS)}
+        assert by_symbol["MSFT"]["action"] == "exit"
+        assert by_symbol["MSFT"]["reason"] == "thesis_invalidated"
+        msft_orders = [r for r in _rows(client, _ORDERS) if r["symbol"] == "MSFT"]
+        assert len(msft_orders) == 1
+        # |0 - 25%| * nav 100 / close 25 = 1.0 share
+        assert float(msft_orders[0]["quantity"]) == pytest.approx(1.0)
+
+    def test_decision_mapping_is_not_collapsed_to_add(self) -> None:
+        """M2 — trim / exit / cash no-op must not all become ADD/NEW_CONVICTION."""
+        client = _ledger_client(SPY=50.0, AAPL=20.0, MSFT=25.0)
+        _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=30.0, AAPL=20.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+                preferences={"current_weights": {"SPY": 50.0, "MSFT": 10.0}},
+            ),
+        )
+        by_symbol = {r["symbol"]: (r["action"], r["reason"]) for r in _rows(client, _INTENTS)}
+        assert by_symbol["SPY"] == ("trim", "conviction_reduced")
+        assert by_symbol["AAPL"] == ("add", "new_conviction")
+        assert by_symbol["MSFT"] == ("exit", "thesis_invalidated")
+        assert by_symbol["CASH"] == ("no_op", "no_signal_change")
+
+    def test_heads_are_found_by_exclusion_not_null_supersedes(self) -> None:
+        """M5 — ``supersedes_id IS NULL`` is the permanent root, not the live head."""
+        root = {"id": "root", "supersedes_id": None, "status": "pending"}
+        tip = {"id": "tip", "supersedes_id": "root", "status": "pending"}
+        assert _ledger_heads([root, tip]) == [tip]
+        assert _ledger_heads([root]) == [root]
+
+    def test_executed_order_head_alone_freezes_symbol(self) -> None:
+        """M13 — freeze signal 1 (executed head) without a paper_executions row."""
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        _mirror_ledger(client)
+        pending = _rows(client, _ORDERS)[0]
+        filled_id = "11111111-2222-3333-4444-555555555555"
+        client.canned_reads[_ORDERS] = [
+            *client.canned_reads[_ORDERS],
+            {**pending, "id": filled_id, "status": "executed", "supersedes_id": pending["id"]},
+        ]
+        client.canned_reads[_EXECUTIONS] = []
+        frozen = _frozen_symbols(client=client, order_rows=list(client.canned_reads[_ORDERS]))
+        assert frozen == {"SPY"}
+
+    def test_paper_execution_alone_freezes_symbol(self) -> None:
+        """M14 — freeze signal 2 (fill row) without flipping the order head to executed."""
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state())
+        _mirror_ledger(client)
+        pending = _rows(client, _ORDERS)[0]
+        client.canned_reads[_EXECUTIONS] = [
+            {
+                "id": "99999999-8888-7777-6666-555555555555",
+                "order_intent_id": pending["id"],
+                "executed_date": "2026-06-15",
+                "symbol": "SPY",
+                "quantity": 1.0,
+                "price": 100.0,
+            }
+        ]
+        frozen = _frozen_symbols(client=client, order_rows=list(client.canned_reads[_ORDERS]))
+        assert frozen == {"SPY"}
+
+    def test_unpriced_symbols_surface_on_the_manifest(self) -> None:
+        """M28 — partial pricing must be visible, not silent."""
+        client = _ledger_client(SPY=50.0)  # AAPL deliberately missing
+        out = _run(
+            client,
+            _state(
+                sized_book=_multi_book(SPY=40.0, AAPL=20.0),
+                analysts=_multi_analysts("SPY", "AAPL"),
+            ),
+        )
+        assert not out.get("errors"), out.get("errors")
+        manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
+        assert manifest.get("ledger_unpriced_symbols") == ["AAPL"]
+        assert [r["symbol"] for r in _rows(client, _ORDERS)] == ["SPY"]
+        assert {r["symbol"] for r in _rows(client, _APPROVED)} >= {"SPY", "AAPL", "CASH"}
+
+    def test_multi_head_commit_fork_raises(self) -> None:
+        """M29 — two live commit heads for one run_date must fail closed."""
+        client = _ledger_client(SPY=50.0)
+        client.canned_reads[_COMMITS] = [
+            {
+                "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "run_date": RUN_DATE.isoformat(),
+                "policy_version_id": "hermes-h8-sizing/x/deadbeef0001",
+                "supersedes_id": None,
+                "effective_at": "2026-06-12T00:00:00+00:00",
+                "recorded_at": "2026-06-12T01:00:00+00:00",
+            },
+            {
+                "id": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+                "run_date": RUN_DATE.isoformat(),
+                "policy_version_id": "hermes-h8-sizing/x/deadbeef0002",
+                "supersedes_id": None,
+                "effective_at": "2026-06-12T00:00:00+00:00",
+                "recorded_at": "2026-06-12T02:00:00+00:00",
+            },
+        ]
+        with pytest.raises(RuntimeError, match="forked"):
+            _run(client, _state(sized_book=_sized_book(spy_pct=60.0)))
+
+    def test_effective_at_is_run_date_midnight_utc(self) -> None:
+        """M7 — lineage effective time is the run date, not wall clock + drift."""
+        client = _ledger_client(SPY=50.0)
+        _run(client, _state(sized_book=_sized_book(spy_pct=60.0)))
+        commit = _rows(client, _COMMITS)[0]
+        assert commit["effective_at"].startswith("2026-06-12T00:00:00")
+
+
 _MIGRATION_069 = (
     pathlib.Path(__file__).resolve().parents[3]
     / "digiquant"
@@ -1267,6 +1456,9 @@ class TestLedgerRowsSatisfyMigration069:
         assert rows, "no order_intents emitted"
         for row in rows:
             quantity = float(row["quantity"])
+            # ``_shares`` quantizes and drops non-positive quantities before insert, so
+            # a zero row never reaches this loop — the > 0 assert guards NaN/leak paths
+            # and documents the DDL CHECK rather than proving the drop branch.
             assert quantity > 0, f"quantity {quantity} violates the > 0 CHECK"
             assert quantity == quantity and quantity != float("inf"), "quantity is NaN/infinity"
             if row["status"] == "rejected":
@@ -1290,11 +1482,13 @@ class TestPriceReadRowCap:
     unbounded response.
 
     ``price_history`` holds one row per *calendar* day per ticker — migration 013
-    forward-fills weekends and holidays from the prior close — so a 14-day window is
-    up to 15 rows per ticker, while Supabase truncates an unbounded PostgREST
-    response at 1000 rows. A truncated ticker is indistinguishable from an unpriced
-    one: it lands in ``unpriced_symbols`` and its committed target books no order
-    intent at all. Silent, and it only appears once the universe grows.
+    forward-fills weekends and holidays from the prior close — so a
+    ``_CLOSE_LOOKBACK_DAYS``-day lookback with ``.gte(floor)`` + ``.lt(run_date)``
+    yields up to ``_CLOSE_LOOKBACK_DAYS`` rows per ticker (14 when lookback is 14),
+    while Supabase truncates an unbounded PostgREST response at 1000 rows. A
+    truncated ticker is indistinguishable from an unpriced one: it lands in
+    ``unpriced_symbols`` and its committed target books no order intent at all.
+    Silent, and it only appears once the universe grows.
     """
 
     CAP = 1000
