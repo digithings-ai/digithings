@@ -133,9 +133,7 @@ def build_hermes_phases_thesis(
             research_state_store=state_store,
         )
     )
-    phases.append(
-        build_h7_pm_direction(client=shared_client, research_state_store=state_store)
-    )
+    phases.append(build_h7_pm_direction(client=shared_client, research_state_store=state_store))
     phases.append(_build_h8_risk_sizing(deps))
     phases.append(build_h9_commit_run(deps.commit_run))
     return phases
