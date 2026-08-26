@@ -145,6 +145,11 @@ def _canonical_json(payload: object) -> str:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
 
+def _reject_self_supersession(*, self_id: UUID, supersedes_id: UUID | None, label: str) -> None:
+    if supersedes_id is not None and supersedes_id == self_id:
+        raise ValueError(f"{label} cannot supersede itself")
+
+
 class OutcomeTemporalContract(OutcomeLearningModel):
     """Temporal contract for episodes, reports, and lessons."""
 
@@ -168,12 +173,18 @@ class OutcomeTemporalContract(OutcomeLearningModel):
             _require_utc(getattr(self, name), field_name=name)
         if self.available_at < self.horizon_end:
             raise ValueError("available_at must be >= horizon_end")
-        if self.known_at > self.available_at:
-            raise ValueError("known_at must be <= available_at")
         if self.effective_at > self.horizon_end:
             raise ValueError("effective_at must be <= horizon_end")
+        if self.known_at > self.available_at:
+            raise ValueError("known_at must be <= available_at")
+        if self.effective_at > self.known_at:
+            raise ValueError("effective_at must be <= known_at")
         if self.recorded_at < self.known_at:
             raise ValueError("recorded_at must be >= known_at")
+        if self.replay_as_of < self.effective_at:
+            raise ValueError("replay_as_of must be >= effective_at")
+        if self.replay_as_of > self.available_at:
+            raise ValueError("replay_as_of must be <= available_at")
         return self
 
 
@@ -271,6 +282,43 @@ class OutcomeEpisode(OutcomeLearningModel):
 
     @model_validator(mode="after")
     def _validate_episode(self) -> OutcomeEpisode:
+        expected_hash = episode_content_hash(
+            episode_key=self.episode_key,
+            forecast_id=self.forecast_id,
+            outcome_id=self.outcome_id,
+            mandate_id=self.mandate_id,
+            instrument_id=self.instrument_id,
+            horizon_id=self.horizon_id,
+            source_run_id=self.source_run_id,
+            disposition=self.disposition,
+            temporal=self.temporal,
+            realized=self.realized,
+            h8_lineage=self.h8_lineage,
+            h9_links=self.h9_links,
+            evidence_bundle_id=self.evidence_bundle_id,
+            research_state_version_id=self.research_state_version_id,
+            context_manifest_id=self.context_manifest_id,
+            policy_version_id=self.policy_version_id,
+            expected_cost_id=self.expected_cost_id,
+            realized_cost_id=self.realized_cost_id,
+            pre_trade_risk_report_id=self.pre_trade_risk_report_id,
+            component_eligibility=self.component_eligibility,
+            quality_issues=self.quality_issues,
+        )
+        if self.content_hash != expected_hash:
+            raise ValueError("content_hash must match canonical OutcomeEpisode digest")
+        expected_version_id = episode_version_id(
+            episode_key=self.episode_key,
+            content_hash=self.content_hash,
+            supersedes_version_id=self.supersedes_version_id,
+        )
+        if self.episode_version_id != expected_version_id:
+            raise ValueError("episode_version_id must match canonical UUID5 identity")
+        _reject_self_supersession(
+            self_id=self.episode_version_id,
+            supersedes_id=self.supersedes_version_id,
+            label="episode_version_id",
+        )
         if self.disposition == EpisodeDisposition.AUTHORIZED:
             if self.h9_links is None:
                 raise ValueError("authorized disposition requires h9_links")
@@ -333,18 +381,23 @@ class ComponentObservation(OutcomeLearningModel):
                 raise ValueError("counterfactual_replay requires replay_artifact_id")
 
         if (
-            self.component in (AttributionComponent.SIZING, AttributionComponent.TIMING)
-            and self.metric in _CAUSAL_PNL_METRICS
+            self.metric in _CAUSAL_PNL_METRICS
             and self.method != AttributionMethod.COUNTERFACTUAL_REPLAY
         ):
             raise ValueError(
-                f"causal {self.component.value} P&L requires counterfactual_replay with replay artifact"
+                f"causal P&L metric {self.metric!r} requires counterfactual_replay with replay artifact"
             )
 
         for name in ("interval_start", "interval_end"):
             ts = getattr(self, name)
             if ts is not None:
                 _require_utc(ts, field_name=name)
+        if (
+            self.interval_start is not None
+            and self.interval_end is not None
+            and self.interval_start > self.interval_end
+        ):
+            raise ValueError("interval_start must be <= interval_end")
         return self
 
 
@@ -413,6 +466,32 @@ class OutcomeLessonVersion(OutcomeLearningModel):
     def _validate_lesson(self) -> OutcomeLessonVersion:
         _require_utc(self.compilation_cutoff, field_name="compilation_cutoff")
         _require_utc(self.available_at, field_name="available_at")
+        expected_hash = lesson_content_hash(
+            compilation_policy_id=self.compilation_policy_id,
+            compilation_cutoff=self.compilation_cutoff,
+            episode_version_ids=self.episode_version_ids,
+            report_ids=self.report_ids,
+            component=self.component,
+            estimate=self.estimate,
+            uncertainty=self.uncertainty,
+            sample_count=self.sample_count,
+            effective_sample_count=self.effective_sample_count,
+            quality_state=self.quality_state,
+        )
+        if self.content_hash != expected_hash:
+            raise ValueError("content_hash must match canonical OutcomeLessonVersion digest")
+        expected_version_id = lesson_version_id(
+            compilation_policy_id=self.compilation_policy_id,
+            content_hash=self.content_hash,
+            supersedes_version_id=self.supersedes_version_id,
+        )
+        if self.lesson_version_id != expected_version_id:
+            raise ValueError("lesson_version_id must match canonical UUID5 identity")
+        _reject_self_supersession(
+            self_id=self.lesson_version_id,
+            supersedes_id=self.supersedes_version_id,
+            label="lesson_version_id",
+        )
         if not self.episode_version_ids:
             raise ValueError("lesson requires episode_version_ids")
         if self.effective_sample_count > self.sample_count:
@@ -427,22 +506,52 @@ def episode_content_hash(
     episode_key: str,
     forecast_id: UUID,
     outcome_id: UUID,
+    mandate_id: str,
+    instrument_id: str,
+    horizon_id: str,
+    source_run_id: str,
     disposition: EpisodeDisposition,
     temporal: OutcomeTemporalContract,
     realized: RealizedReturnObservation | None,
     h8_lineage: H8TargetLineage | None,
     h9_links: H9ExecutionLinks | None,
+    evidence_bundle_id: UUID | None = None,
+    research_state_version_id: UUID | None = None,
+    context_manifest_id: UUID | None = None,
+    policy_version_id: str | None = None,
+    expected_cost_id: UUID | None = None,
+    realized_cost_id: UUID | None = None,
+    pre_trade_risk_report_id: UUID | None = None,
+    component_eligibility: tuple[ComponentEligibility, ...] = (),
+    quality_issues: tuple[OutcomeQualityIssue, ...] = (),
 ) -> str:
     """Stable digest of materially significant episode fields."""
     payload = {
         "episode_key": episode_key,
         "forecast_id": str(forecast_id),
         "outcome_id": str(outcome_id),
+        "mandate_id": mandate_id,
+        "instrument_id": instrument_id,
+        "horizon_id": horizon_id,
+        "source_run_id": source_run_id,
         "disposition": disposition.value,
         "temporal": temporal.model_dump(mode="json"),
         "realized": realized.model_dump(mode="json") if realized else None,
         "h8_lineage": h8_lineage.model_dump(mode="json") if h8_lineage else None,
         "h9_links": h9_links.model_dump(mode="json") if h9_links else None,
+        "evidence_bundle_id": str(evidence_bundle_id) if evidence_bundle_id else None,
+        "research_state_version_id": (
+            str(research_state_version_id) if research_state_version_id else None
+        ),
+        "context_manifest_id": str(context_manifest_id) if context_manifest_id else None,
+        "policy_version_id": policy_version_id,
+        "expected_cost_id": str(expected_cost_id) if expected_cost_id else None,
+        "realized_cost_id": str(realized_cost_id) if realized_cost_id else None,
+        "pre_trade_risk_report_id": (
+            str(pre_trade_risk_report_id) if pre_trade_risk_report_id else None
+        ),
+        "component_eligibility": [e.model_dump(mode="json") for e in component_eligibility],
+        "quality_issues": [q.model_dump(mode="json") for q in quality_issues],
     }
     return sha256_hex(payload)
 
@@ -469,16 +578,26 @@ def lesson_content_hash(
     compilation_policy_id: str,
     compilation_cutoff: AwareDatetime,
     episode_version_ids: tuple[UUID, ...],
+    report_ids: tuple[UUID, ...],
     component: AttributionComponent,
     estimate: Decimal,
+    uncertainty: Decimal,
+    sample_count: int,
+    effective_sample_count: int,
+    quality_state: LessonQualityState,
 ) -> str:
     """Stable digest of materially significant lesson fields."""
     payload = {
         "compilation_policy_id": compilation_policy_id,
         "compilation_cutoff": compilation_cutoff.isoformat(),
         "episode_version_ids": sorted(str(v) for v in episode_version_ids),
+        "report_ids": sorted(str(v) for v in report_ids),
         "component": component.value,
         "estimate": str(estimate),
+        "uncertainty": str(uncertainty),
+        "sample_count": sample_count,
+        "effective_sample_count": effective_sample_count,
+        "quality_state": quality_state.value,
     }
     return sha256_hex(payload)
 

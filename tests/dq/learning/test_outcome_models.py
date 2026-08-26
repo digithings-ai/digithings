@@ -26,6 +26,7 @@ from digiquant.olympus.learning.outcome_models import (
     LessonQualityState,
     OutcomeEpisode,
     OutcomeLessonVersion,
+    OutcomeQualityCode,
     OutcomeQualityIssue,
     OutcomeTemporalContract,
     RealizedReturnObservation,
@@ -118,11 +119,24 @@ def _episode(**overrides: object) -> OutcomeEpisode:
         episode_key=str(fields["episode_key"]),
         forecast_id=fields["forecast_id"],  # type: ignore[arg-type]
         outcome_id=fields["outcome_id"],  # type: ignore[arg-type]
+        mandate_id=str(fields["mandate_id"]),
+        instrument_id=str(fields["instrument_id"]),
+        horizon_id=str(fields["horizon_id"]),
+        source_run_id=str(fields["source_run_id"]),
         disposition=fields["disposition"],  # type: ignore[arg-type]
         temporal=fields["temporal"],  # type: ignore[arg-type]
         realized=fields.get("realized"),  # type: ignore[arg-type]
         h8_lineage=fields.get("h8_lineage"),  # type: ignore[arg-type]
         h9_links=fields.get("h9_links"),  # type: ignore[arg-type]
+        evidence_bundle_id=fields.get("evidence_bundle_id"),  # type: ignore[arg-type]
+        research_state_version_id=fields.get("research_state_version_id"),  # type: ignore[arg-type]
+        context_manifest_id=fields.get("context_manifest_id"),  # type: ignore[arg-type]
+        policy_version_id=fields.get("policy_version_id"),  # type: ignore[arg-type]
+        expected_cost_id=fields.get("expected_cost_id"),  # type: ignore[arg-type]
+        realized_cost_id=fields.get("realized_cost_id"),  # type: ignore[arg-type]
+        pre_trade_risk_report_id=fields.get("pre_trade_risk_report_id"),  # type: ignore[arg-type]
+        component_eligibility=tuple(fields.get("component_eligibility", ())),  # type: ignore[arg-type]
+        quality_issues=tuple(fields.get("quality_issues", ())),  # type: ignore[arg-type]
     )
     fields.setdefault("content_hash", content_hash)
     fields.setdefault(
@@ -305,6 +319,20 @@ def test_causal_sizing_timing_observed_rejected_without_replay() -> None:
         )
 
 
+def test_episode_rejects_mismatched_content_hash() -> None:
+    ep = _episode()
+    with pytest.raises(ValidationError, match="content_hash"):
+        OutcomeEpisode.model_validate({**ep.model_dump(), "content_hash": "f" * 64})
+
+
+def test_authorized_episode_requires_realized() -> None:
+    with pytest.raises(ValidationError, match="realized"):
+        _episode(
+            disposition=EpisodeDisposition.AUTHORIZED,
+            realized=None,
+        )
+
+
 def test_timing_diagnostics_observed_allowed() -> None:
     obs = _observation(
         component=AttributionComponent.TIMING,
@@ -347,8 +375,13 @@ def _lesson(**overrides: object) -> OutcomeLessonVersion:
         compilation_policy_id=str(fields["compilation_policy_id"]),
         compilation_cutoff=fields["compilation_cutoff"],  # type: ignore[arg-type]
         episode_version_ids=tuple(fields["episode_version_ids"]),  # type: ignore[arg-type]
+        report_ids=tuple(fields["report_ids"]),  # type: ignore[arg-type]
         component=fields["component"],  # type: ignore[arg-type]
         estimate=fields["estimate"],  # type: ignore[arg-type]
+        uncertainty=fields["uncertainty"],  # type: ignore[arg-type]
+        sample_count=int(fields["sample_count"]),  # type: ignore[arg-type]
+        effective_sample_count=int(fields["effective_sample_count"]),  # type: ignore[arg-type]
+        quality_state=fields["quality_state"],  # type: ignore[arg-type]
     )
     fields.setdefault("content_hash", content_hash)
     fields.setdefault(
@@ -375,18 +408,31 @@ def test_episode_content_hash_stable() -> None:
         episode_key=ep.episode_key,
         forecast_id=ep.forecast_id,
         outcome_id=ep.outcome_id,
+        mandate_id=ep.mandate_id,
+        instrument_id=ep.instrument_id,
+        horizon_id=ep.horizon_id,
+        source_run_id=ep.source_run_id,
         disposition=ep.disposition,
         temporal=ep.temporal,
         realized=ep.realized,
         h8_lineage=ep.h8_lineage,
         h9_links=ep.h9_links,
+        evidence_bundle_id=ep.evidence_bundle_id,
+        research_state_version_id=ep.research_state_version_id,
+        context_manifest_id=ep.context_manifest_id,
+        policy_version_id=ep.policy_version_id,
+        expected_cost_id=ep.expected_cost_id,
+        realized_cost_id=ep.realized_cost_id,
+        pre_trade_risk_report_id=ep.pre_trade_risk_report_id,
+        component_eligibility=ep.component_eligibility,
+        quality_issues=ep.quality_issues,
     )
     assert len(ep.content_hash) == 64
 
 
-def test_quality_issue_requires_reason_code() -> None:
+def test_quality_issue_requires_non_empty_message() -> None:
     with pytest.raises(ValidationError):
-        OutcomeQualityIssue(code="", message="bad")
+        OutcomeQualityIssue(code=OutcomeQualityCode.MISSING_BENCHMARK, message="")
 
 
 def test_component_eligibility_unavailable_needs_reason() -> None:
