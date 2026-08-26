@@ -571,6 +571,37 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             "data_layer": data_layer,
         }
         update.update(_pin_research_state_update(deps, state))
+
+        from digiquant.olympus.research_retrieval.h7_prerequisites import (
+            build_h7_prerequisite_snapshot,
+        )
+
+        prior_effective_ids = tuple(
+            sorted(
+                {
+                    str(row.get("effective_forecast_id"))
+                    for row in prior_deliberation.values()
+                    if isinstance(row, dict) and row.get("effective_forecast_id")
+                }
+            )
+        )
+        try:
+            cutoff = state.knowledge_cutoff_at
+        except Exception:
+            cutoff = None
+        pin_raw = update.get("research_state_pin")
+        if not isinstance(pin_raw, dict) and isinstance(state.research_state_pin, dict):
+            pin_raw = state.research_state_pin
+        snapshot = build_h7_prerequisite_snapshot(
+            client=deps.client,
+            run_date=state.run_date,
+            knowledge_cutoff_at=cutoff,
+            research_state_pin=pin_raw if isinstance(pin_raw, dict) else None,
+            prior_effective_forecast_ids=prior_effective_ids,
+        )
+        if snapshot is not None:
+            update["h7_prerequisite_snapshot"] = snapshot.model_dump(mode="json")
+
         return update
 
     return preflight

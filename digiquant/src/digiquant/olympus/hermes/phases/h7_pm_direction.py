@@ -40,6 +40,8 @@ from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_sum
 from digiquant.olympus.hermes.phases.portfolio_common import _portfolio_grounding
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
+from digiquant.olympus.research_retrieval.context_wiring import wire_h7_phase_inputs
+from digiquant.olympus.research_retrieval.store import ResearchStateStore
 
 NODE_ID = "hermes/portfolio/pm-direction"
 PHASE_NAME = "hermes_h7_pm_direction"
@@ -150,7 +152,12 @@ def _phase_hermes_with_shadow(
     )
 
 
-def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dict[str, Any]:
+def _h7_node(
+    state: HermesState,
+    *,
+    client: SupabaseClient | None = None,
+    research_state_store: ResearchStateStore | None = None,
+) -> dict[str, Any]:
     """H7 node body; ``client`` optional for cutoff-safe outcome load (WP5.4)."""
     # WP5.4: attach before LLM so fail-soft memo path still carries shadows.
     shadow = _attach_shadow_calibration(state, client=client)
@@ -173,6 +180,23 @@ def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dic
         "focus_roster": _focus_roster_tickers(state),
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
+    pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
+    prereq = (
+        state.h7_prerequisite_snapshot if isinstance(state.h7_prerequisite_snapshot, dict) else None
+    )
+    phase_inputs = wire_h7_phase_inputs(
+        phase_inputs,
+        research_state_pin=pin,
+        research_state_store=research_state_store,
+        h7_prerequisite_snapshot=prereq,
+        analyst_payloads=analyst_payloads(state),
+        deliberation_summaries=deliberation_summaries(state),
+        shadow_calibrations=shadow.calibration_dumps(),
+        calibrated_forecasts=shadow.calibrated_forecast_dumps(),
+        prior_direction=_prior_direction_payload(state),
+        decision_lessons=tuple(state.prior_context.decision_lessons),
+        focus_roster=tuple(_focus_roster_tickers(state)),
+    ).phase_inputs
     tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="h7_pm", segment=NODE_ID)
     phase_inputs = apply_web_grounding_to_inputs(
         phase_inputs,
@@ -226,11 +250,15 @@ def _h7_node(state: HermesState, *, client: SupabaseClient | None = None) -> dic
     return {"phase_hermes": _phase_hermes_with_shadow(memo=memo, shadow=shadow)}
 
 
-def build_h7_pm_direction(*, client: SupabaseClient | None = None) -> PipelinePhase:
+def build_h7_pm_direction(
+    *,
+    client: SupabaseClient | None = None,
+    research_state_store: ResearchStateStore | None = None,
+) -> PipelinePhase:
     """Build H7; optional ``client`` loads cutoff-safe outcomes for shadow calibration."""
 
     def _bound(state: HermesState) -> dict[str, Any]:
-        return _h7_node(state, client=client)
+        return _h7_node(state, client=client, research_state_store=research_state_store)
 
     return PipelinePhase(
         name=PHASE_NAME,

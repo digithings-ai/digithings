@@ -34,6 +34,10 @@ WP14.1 role context compiler:
 WP14.2 blinded H5/H6 context wiring:
 :mod:`digiquant.olympus.research_retrieval.context_wiring`
 (``OLYMPUS_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
+WP14.3 H7 decision context wiring:
+:mod:`digiquant.olympus.research_retrieval.h7_decision_context`
+(typed mandate/calibration/contribution/risk/authorization/forecast sections;
+:mod:`digiquant.olympus.research_retrieval.h7_prerequisites` preflight snapshot).
 """
 
 from __future__ import annotations
@@ -73,10 +77,12 @@ from digiquant.olympus.research_retrieval.context_wiring import (
     changed_evidence_ids_from_bundle,
     compile_h5_role_context,
     compile_h6_role_context,
+    compile_h7_role_context,
     resolve_context_compiler_mode,
     try_load_pinned_research_state,
     wire_h5_phase_inputs,
     wire_h6_phase_inputs,
+    wire_h7_phase_inputs,
 )
 from digiquant.olympus.research_retrieval.evidence_bundle import (
     OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV,
@@ -100,6 +106,18 @@ from digiquant.olympus.research_retrieval.h6_amendment import (
     retrieve_missing_fact_evidence,
     validate_missing_fact_proposal,
 )
+from digiquant.olympus.research_retrieval.h7_decision_context import (
+    H7ContextSection,
+    H7DecisionContext,
+    H7DecisionContextCompileInput,
+    H7PrerequisiteSnapshot,
+    H7SectionAvailability,
+    H7SectionKind,
+    assert_h7_no_target_weights,
+    compile_h7_decision_context,
+    strip_h7_weight_keys,
+)
+from digiquant.olympus.research_retrieval.h7_prerequisites import build_h7_prerequisite_snapshot
 from digiquant.olympus.research_retrieval.legacy_backfill import (
     BackfillCounts,
     LegacySourceDocument,
@@ -263,6 +281,12 @@ __all__ = [
     "H6Selection",
     "H6SelectionMode",
     "H6SelectionReason",
+    "H7DecisionContext",
+    "H7DecisionContextCompileInput",
+    "H7ContextSection",
+    "H7PrerequisiteSnapshot",
+    "H7SectionAvailability",
+    "H7SectionKind",
     "H6_AMENDMENT_POLICY_MAX_PER_BASE",
     "H6AmendmentOutcome",
     "H6AmendmentResult",
@@ -307,12 +331,14 @@ __all__ = [
     "VIEW_SCHEMA_VERSION",
     "assert_blinded_h5_prompt",
     "assert_blinded_h6_prompt",
+    "assert_h7_no_target_weights",
     "assert_no_materiality_in_prompt",
     "attempt_h6_evidence_amendment",
     "attention_decision_id",
     "backfill_legacy_manifests",
     "build_h5_evidence_bundle",
     "build_h6_decision_features",
+    "build_h7_prerequisite_snapshot",
     "build_legacy_document_ref",
     "build_research_tool_dispatcher",
     "changed_evidence_ids_from_bundle",
@@ -320,6 +346,8 @@ __all__ = [
     "cite_evidence_bundle_on_forecast",
     "compile_h5_role_context",
     "compile_h6_role_context",
+    "compile_h7_decision_context",
+    "compile_h7_role_context",
     "compile_context_capsule",
     "compile_context_manifest",
     "compile_research_brief",
@@ -351,9 +379,11 @@ __all__ = [
     "retrieve_missing_fact_evidence",
     "select_h6",
     "strip_blinded_forbidden_keys",
+    "strip_h7_weight_keys",
     "try_load_pinned_research_state",
     "validate_missing_fact_proposal",
     "wire_h5_phase_inputs",
     "wire_h6_phase_inputs",
+    "wire_h7_phase_inputs",
     "write_shadow_evaluation_report",
 ]
