@@ -897,8 +897,9 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `load_latest` after pin. Helper uses WP12.1 ID helpers only (no redefine).
   Soft API for WP12.3 must sit on the hardened store (#2868 / #2867).
   **Legacy research-state inventory (#2870 / WP12.4).** Operator backfill
-  `scripts/atlas/backfill_research_state.py` (default dry-run; `--apply` writes)
-  maps existing `documents` / JSON sources into `LegacyDocumentRef` inventory via
+  `scripts/atlas/backfill_research_state.py` (default dry-run; `--apply` appends
+  to in-memory `ResearchStateStore` only — SQL IO adapter later) maps existing
+  `documents` / JSON sources into `LegacyDocumentRef` inventory via
   `research_retrieval.legacy_backfill.backfill_legacy_manifests` — hashes source
   payloads with WP12.1 `content_digest` / `legacy_document_ref_id`, sets
   `known_at=None` + `legacy_manifest_only=True`, and never appends evidence,
