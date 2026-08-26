@@ -664,7 +664,6 @@ def test_write_row_preserves_null_usage_and_wp1_join_ids() -> None:
     assert row["node_run_id"] == node_run_id
 
 
-
 # --------------------------------------------------------------------------- cancelled status (#814)
 
 
