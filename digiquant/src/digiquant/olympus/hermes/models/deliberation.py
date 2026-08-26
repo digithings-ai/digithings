@@ -57,7 +57,8 @@ class DeliberationAnalystTurn(BaseModel):
 
 CARRY_FINGERPRINT_SKIP = "fingerprint_skip"
 CARRY_LLM_FAILURE = "llm_failure"
-CarryReason = Literal["fingerprint_skip", "llm_failure"]
+CARRY_LOW_VALUE = "low_value_carry"
+CarryReason = Literal["fingerprint_skip", "llm_failure", "low_value_carry"]
 
 
 class DeliberationSummary(BaseModel):
@@ -75,13 +76,21 @@ class DeliberationSummary(BaseModel):
         description=(
             "Why the debate did not run. ``fingerprint_skip`` is the benign quiet-ticker "
             "carry (#925); ``llm_failure`` means the deliberation crashed and no PM "
-            "challenge ever executed (#1742). ``carried`` alone cannot tell the two apart, "
-            "which is how 31 crashed debates and 4 intentional skips published the same "
-            "flag on 2026-07-31."
+            "challenge ever executed (#1742); ``low_value_carry`` is WP11.3 deterministic "
+            "selection (#2902). ``carried`` alone cannot tell these apart."
         ),
     )
     escalated: bool = False
     cap_reason: str | None = None
+    # WP11.3 — every H6 run/carry records one selection reason (+ optional full dump).
+    selection_reason: str | None = Field(
+        default=None,
+        description="Primary H6SelectionReason code for this run/carry (#2902).",
+    )
+    h6_selection: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional H6Selection dump (shadow/enforce audit; never prompt input).",
+    )
     # WP4.4 forecast lineage — IDs + optional full amendment dump for H9 registry (#2663).
     base_forecast_id: str | None = None
     amendment_id: str | None = None

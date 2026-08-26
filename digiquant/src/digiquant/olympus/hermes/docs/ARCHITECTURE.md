@@ -36,8 +36,8 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
 | **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
 | **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget** |
-| **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base publish before provider; cite on new forecasts; `OLYMPUS_EVIDENCE_BUNDLE_WRITER` kill switch) |
-| **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph | `deliberation_transcript` + summary |
+| **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; store unwired by default; `OLYMPUS_EVIDENCE_BUNDLE_WRITER` kill switch only when store injected) |
+| **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`) | `deliberation_transcript` + summary (+ `selection_reason`) |
 | **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights** |
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
@@ -237,20 +237,41 @@ Per-ticker cyclic sub-graph (not a single LLM call):
 - `h6_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
 - `h6_analyst_response` — analyst responds or revises stance
 
-Termination when either side sets `converged=true` (no product round cap; infra timeouts
-only). On fingerprint quiet (#925): `skip` — carry prior deliberation summary into H7;
-fresh `deliberation_transcript` row only when the loop runs.
+Termination when either side sets `converged=true` after the min-rounds floor
+(default 2; infra timeouts / max-rounds cap only for early exit). On fingerprint
+quiet (#925): `skip` — carry prior deliberation summary into H7; fresh
+`deliberation_transcript` row only when the loop runs.
+
+### Deterministic selection — WP11.3 (#2902)
+
+`research_retrieval/planner.py` emits typed `H6Selection` (one primary reason,
+decision features, provider/round budget) from structured features after H5:
+decision-boundary, conflict, uncertainty, invalidation-risk, material weight, or
+exploration → `select`; otherwise `low_value_carry`. Modes via
+`OLYMPUS_H6_SELECTION_MODE`:
+
+| Mode | Behavior |
+|---|---|
+| `shadow` (default) | Record selection; run **full incumbent** H6 (fingerprint skip still applies) |
+| `enforce` | Actuate: low-value carries with **zero** provider calls; selected runs skip fingerprint short-circuit so success meets the two-round floor |
+| `off` | No actuation; incumbent H6 with `incumbent_fallback` provenance |
+
+Planner failure falls back to full incumbent H6 (typed `incumbent_fallback`), never
+an unrecorded skip. `weight_pct` / materiality features are selection-only and must
+not enter provider prompts. Does not replace H4 roster/exploration ownership.
+WP11.4+ (missing-fact amendment constraint, durable lineage) still open — WP11
+incomplete.
 
 ### Carry provenance — `carry_reason` (#1742)
 
-`DeliberationSummary.carried` is set by **two** unrelated paths, and until #1742 they were
-indistinguishable: on 2026-07-31, 31 crashed debates and 4 intentional skips published the
-same `carried=true, converged=true`. `carry_reason` names which one happened:
+`DeliberationSummary.carried` is set by **multiple** unrelated paths.
+`carry_reason` names which one happened:
 
 | `carry_reason` | Path | `converged` | Meaning |
 |---|---|---|---|
 | `fingerprint_skip` | quiet ticker (#925) | `true` | a real prior debate still stands |
 | `llm_failure` | fail-soft catch (#1665) | **`false`** | no PM challenge ever ran |
+| `low_value_carry` | WP11.3 enforce selection (#2902) | `true` | deterministic skip; zero provider calls |
 
 Consequences of `llm_failure`, all downstream of the flag:
 

@@ -121,12 +121,12 @@ Before any phase executes, the agent performs a structured context load:
    `EvidenceBundleAmendment` contracts (`research_retrieval` models +
    in-memory `EvidenceBundleStore`; private migrations `090`/`091`; SQL IO
    adapter later). One immutable base per run/ticker; amendments must link
-   one base and one request. WP11.2 builds/publishes the H5 base via
-   `evidence_bundle.py` before the provider call, retains
-   `phase_hermes.ticker_evidence_bundles` on H5 failure, cites bundle/evidence
-   IDs on new forecasts, and can disable durable writes with
-   `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off`. No H6 selection cutover yet (WP11.3+);
-   no public view.
+   one base and one request. WP11.2 builds the H5 base via `evidence_bundle.py`
+   before the provider call, retains `phase_hermes.ticker_evidence_bundles` on
+   H5 failure, and cites bundle/evidence IDs on new forecasts. Default Hermes
+   leaves `EvidenceBundleStore` unwired; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off`
+   only gates append when a store is injected. Not operator-durable yet. No H6
+   selection cutover yet (WP11.3+); no public view.
 
 7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 

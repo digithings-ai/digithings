@@ -14,6 +14,9 @@ WP11.1 ticker evidence bundles + amendments:
 WP11.2 H5 publish:
 :mod:`digiquant.olympus.research_retrieval.evidence_bundle`
 (one base bundle per H5-attempted ticker before the provider call).
+WP11.3 deterministic H6 selection:
+:mod:`digiquant.olympus.research_retrieval.planner`
+(``H6Selection`` reasons/features/budget; ``OLYMPUS_H6_SELECTION_MODE``).
 """
 
 from __future__ import annotations
@@ -69,6 +72,21 @@ from digiquant.olympus.research_retrieval.pin import (
     child_version_must_name_parent,
     pin_research_state_for_preflight,
     require_research_state_pin,
+)
+from digiquant.olympus.research_retrieval.planner import (
+    H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
+    OLYMPUS_H6_SELECTION_MODE_ENV,
+    H6Action,
+    H6Budget,
+    H6DecisionFeatures,
+    H6Selection,
+    H6SelectionMode,
+    H6SelectionReason,
+    assert_no_materiality_in_prompt,
+    build_h6_decision_features,
+    incumbent_fallback_selection,
+    resolve_h6_selection_mode,
+    select_h6,
 )
 from digiquant.olympus.research_retrieval.queries import (
     extract_section,
@@ -126,12 +144,20 @@ __all__ = [
     "ExpectedEventVersion",
     "H5EvidenceBundleBuild",
     "H5EvidenceFact",
+    "H6Action",
+    "H6Budget",
+    "H6DecisionFeatures",
+    "H6Selection",
+    "H6SelectionMode",
+    "H6SelectionReason",
+    "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
     "LegacyDocumentRef",
     "LegacySourceDocument",
     "LoadedResearchState",
     "MissingEvidenceField",
     "MissingFactRequest",
     "OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV",
+    "OLYMPUS_H6_SELECTION_MODE_ENV",
     "PatchMode",
     "PatchTargetKind",
     "RESEARCH_TOOLS",
@@ -154,8 +180,10 @@ __all__ = [
     "TickerEvidenceBundle",
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
+    "assert_no_materiality_in_prompt",
     "backfill_legacy_manifests",
     "build_h5_evidence_bundle",
+    "build_h6_decision_features",
     "build_legacy_document_ref",
     "build_research_tool_dispatcher",
     "child_version_must_name_parent",
@@ -168,6 +196,7 @@ __all__ = [
     "evidence_bundle_writer_enabled",
     "extract_section",
     "facts_from_phase_inputs",
+    "incumbent_fallback_selection",
     "pin_research_state_for_preflight",
     "portfolio_tool_allowed",
     "publish_compiled_views",
@@ -178,4 +207,6 @@ __all__ = [
     "require_structured_write_ok",
     "research_document_allowed",
     "resolve_h5_state_version_id",
+    "resolve_h6_selection_mode",
+    "select_h6",
 ]
