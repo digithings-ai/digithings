@@ -112,11 +112,12 @@ immutable file-only `AllocationComparisonReport`. Hard constraints remain
 visible when return is stronger; unavailable/inconclusive metrics are explicit.
 Never wired into production H8/H9; no auto-promotion or config write.
 
-**Phase 2 lock surface (#2820 / Integration 2.1):**
+**Phase 2 lock surface (#2820 / Integration 2.1; follow-up #2837):**
 `tests/dq/hermes/test_phase2_allocation_contracts.py` and
-`phase2_e2e_fixtures.py` lock Gate 2 composition for WP8–WP10 (calibrated H8,
-PreTradeRiskReport identity, shadow isolation + comparison) without enabling
-challenger selection or changing Hermes graph topology.
+`phase2_e2e_fixtures.py` lock Phase 2 WP8–WP10 unit-composed contracts (calibrated
+H8, PreTradeRiskReport identity, shadow isolation + comparison with fingerprint
+bind) without enabling challenger selection, changing Hermes graph topology, or
+claiming metaplan Gate 2 (Signal) / Gate 3 (Shadow) closed.
 
 ### H2 market-thesis identity
 
