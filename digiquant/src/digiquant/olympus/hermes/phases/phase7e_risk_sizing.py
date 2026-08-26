@@ -871,17 +871,15 @@ _BINDING_CONSTRAINT_TYPES = frozenset(
 
 
 def _final_book_weights(sized_book: RebalancePayload) -> tuple[dict[str, float], float]:
-    """Extract final risky weights + cash from the post-control sized book."""
-    risky: dict[str, float] = {}
-    for row in sized_book.get("recommended_portfolio") or []:
-        if not isinstance(row, dict):
-            continue
-        ticker = row.get("ticker")
-        weight = _opt_float(row.get("target_pct"))
-        if not isinstance(ticker, str) or weight is None or _is_cash(ticker):
-            continue
-        if weight > 0:
-            risky[ticker] = float(weight)
+    """Extract final risky weights + cash from the post-control sized book.
+
+    Uses the same extractor as H9 (`weights_from_sized_book`) so the report
+    fingerprint equals the book H9 will validate and commit (#2824 / WP9 review).
+    """
+    # Lazy import: commit_io pulls atlas/hermes writers; avoid module-cycle at import.
+    from digiquant.olympus.hermes.writers.commit_io import weights_from_sized_book
+
+    risky = weights_from_sized_book(sized_book)
     invested = sum(risky.values())
     cash = max(0.0, 100.0 - invested)
     return risky, cash
