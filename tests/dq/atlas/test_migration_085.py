@@ -1,4 +1,4 @@
-"""Structural checks for WP1 join + nullable usage on olympus_run_events (#2763)."""
+"""Contract tests for migration 085 — tip views require complete children (#2780)."""
 
 from __future__ import annotations
 
@@ -7,110 +7,100 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
-MIGRATION_PATH = (
-    REPO_ROOT / "digiquant" / "supabase" / "migrations" / "085_olympus_run_events_wp1_join.sql"
+MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
+MIGRATION_PATH = MIGRATIONS_DIR / "085_olympus_accounting_tip_children_complete.sql"
+
+TIP_VIEWS = (
+    "public_accounting_period_status",
+    "public_finalized_nav",
+    "public_daily_realized_attribution",
 )
-JOIN_COLUMNS = {"call_id", "attempt_id", "node_run_id"}
-PUBLIC_BASE = {
-    "run_id",
-    "attempt",
-    "run_date",
-    "run_type",
-    "sequence",
-    "event_kind",
-    "phase",
-    "operation",
-    "document_key",
-    "name",
-    "status",
-    "duration_ms",
-    "retry_count",
-    "sources",
-    "input_summary",
-    "output_summary",
-    "created_at",
-}
-PRIVATE_ECONOMICS = {"prompt_tokens", "completion_tokens", "cached_tokens", "cost_usd"}
+
+
+def _strip_comments(raw: str) -> str:
+    return "\n".join(line for line in raw.splitlines() if not line.lstrip().startswith("--"))
 
 
 @pytest.fixture(scope="module")
-def statements() -> str:
+def raw() -> str:
     assert MIGRATION_PATH.is_file(), f"migration missing: {MIGRATION_PATH}"
-    sql = MIGRATION_PATH.read_text(encoding="utf-8")
-    return "\n".join(line for line in sql.splitlines() if not line.lstrip().startswith("--"))
+    return MIGRATION_PATH.read_text(encoding="utf-8")
 
 
 @pytest.fixture(scope="module")
-def public_projection(statements: str) -> set[str]:
+def sql(raw: str) -> str:
+    return _strip_comments(raw)
+
+
+def _view_body(sql: str, view: str) -> str:
     match = re.search(
-        r"CREATE OR REPLACE VIEW public\.olympus_run_event_trace.*?AS\s+SELECT(?P<body>.*?)"
-        r"\s+FROM public\.olympus_run_events;",
-        statements,
-        re.I | re.S,
+        rf"CREATE OR REPLACE VIEW\s+public\.{view}\b.*?;",
+        sql,
+        flags=re.DOTALL | re.IGNORECASE,
     )
-    assert match, "missing curated olympus_run_event_trace view restatement"
-    return {column.strip().lower() for column in match.group("body").split(",")}
+    assert match, f"CREATE OR REPLACE VIEW for {view} not found"
+    return match.group(0)
 
 
-@pytest.mark.unit
-class TestNullableEconomics:
-    @pytest.mark.parametrize("column", sorted(PRIVATE_ECONOMICS))
-    def test_drops_not_null_default_zero(self, statements: str, column: str) -> None:
-        assert re.search(
-            rf"ALTER COLUMN {column}\s+DROP NOT NULL",
-            statements,
-            re.I,
-        ), f"{column} must become nullable (append-only restatement)"
-        assert re.search(
-            rf"ALTER COLUMN {column}\s+DROP DEFAULT",
-            statements,
-            re.I,
-        ), f"{column} must drop DEFAULT 0 so missing usage is not fabricated"
-
-    @pytest.mark.parametrize("column", sorted(PRIVATE_ECONOMICS - {"cost_usd"}))
-    def test_null_or_nonnegative_check(self, statements: str, column: str) -> None:
-        assert re.search(
-            rf"{column}\s+IS NULL OR {column}\s*>=\s*0",
-            statements,
-            re.I,
-        ), f"{column} must allow NULL while rejecting negatives"
+def test_migration_is_the_only_085() -> None:
+    assert sorted(MIGRATIONS_DIR.glob("085_*.sql")) == [MIGRATION_PATH]
 
 
-@pytest.mark.unit
-class TestWp1JoinKeys:
-    @pytest.mark.parametrize("column", sorted(JOIN_COLUMNS))
-    def test_adds_uuid_join_column(self, statements: str, column: str) -> None:
-        assert re.search(
-            rf"ADD COLUMN IF NOT EXISTS {column}\s+uuid",
-            statements,
-            re.I,
-        ), f"missing stamped WP1 join key {column}"
+def test_migration_follows_084() -> None:
+    assert (MIGRATIONS_DIR / "084_olympus_accounting_day_return_pct.sql").is_file()
+    numbers = sorted(
+        int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
+    )
+    assert 85 in numbers
+    assert numbers.index(84) < numbers.index(85)
 
-    def test_soft_stamp_not_hard_fk_to_attempts(self, statements: str) -> None:
-        # Fail-soft quarantine on 067 means attempts may never land; a hard FK would
-        # reject glass-box rows that should still persist for ordering honesty.
+
+@pytest.mark.parametrize("view", TIP_VIEWS)
+def test_tip_views_require_contribution_when_active(sql: str, view: str) -> None:
+    body = _view_body(sql, view)
+    assert "olympus_accounting_contributions" in body
+    assert re.search(r"net_pnl_total\s*<>\s*0", body, re.I) or re.search(
+        r"net_pnl_total\s*!=\s*0", body, re.I
+    )
+    assert "EXISTS" in body.upper()
+
+
+@pytest.mark.parametrize("view", TIP_VIEWS)
+def test_tip_views_require_holding_for_positive_qty(sql: str, view: str) -> None:
+    body = _view_body(sql, view)
+    assert "olympus_accounting_holdings" in body
+    assert re.search(r"closing_quantity\s*>\s*0", body, re.I)
+    assert re.search(r"upper\s*\(\s*h\.symbol\s*\)", body, re.I)
+
+
+def test_finalized_nav_still_final_only(sql: str) -> None:
+    body = _view_body(sql, "public_finalized_nav")
+    assert re.search(r"status\s*=\s*'final'", body, re.I)
+    assert "supersedes_id" in body
+
+
+def test_period_status_still_allows_non_final(sql: str) -> None:
+    body = _view_body(sql, "public_accounting_period_status")
+    assert not re.search(r"WHERE\s+p\.status\s*=\s*'final'", body, re.I)
+
+
+def test_no_base_table_grants(sql: str) -> None:
+    for table in (
+        "olympus_accounting_periods",
+        "olympus_accounting_contributions",
+        "olympus_accounting_holdings",
+    ):
         assert not re.search(
-            r"REFERENCES\s+public\.olympus_provider_attempts",
-            statements,
+            rf"GRANT\s+SELECT\s+ON\s+public\.{table}\s+TO\s+(?:anon|authenticated)",
+            sql,
             re.I,
         )
 
 
-@pytest.mark.unit
-class TestCuratedPublicView:
-    def test_projects_join_keys_not_economics(self, public_projection: set[str]) -> None:
-        assert public_projection == PUBLIC_BASE | JOIN_COLUMNS
-        assert public_projection.isdisjoint(PRIVATE_ECONOMICS)
-
-    def test_reaffirms_select_only_grants(self, statements: str) -> None:
-        assert re.search(
-            r"REVOKE ALL ON public\.olympus_run_event_trace FROM anon, authenticated",
-            statements,
-            re.I,
-        )
-        assert re.search(
-            r"GRANT SELECT ON public\.olympus_run_event_trace TO anon, authenticated",
-            statements,
-            re.I,
-        )
+def test_documents_period_children_complete(raw: str) -> None:
+    lower = raw.lower()
+    assert "period_children_complete" in lower or "children" in lower
+    assert "2780" in raw

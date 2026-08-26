@@ -1,4 +1,4 @@
--- 085_olympus_run_events_wp1_join.sql
+-- 086_olympus_run_events_wp1_join.sql
 --
 -- Join glass-box ordered call telemetry (066) to the WP1 provider ledger (067) (#2763).
 --
