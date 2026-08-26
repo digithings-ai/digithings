@@ -1893,6 +1893,33 @@ class TestPreTradeRiskH9:
         assert "missing_pre_trade_risk_report" in out["errors"][0].message
         assert not client.store.get("positions")
 
+    def test_shadow_default_missing_report_commits_without_blocking(self, monkeypatch) -> None:
+        """Default/shadow is fail-soft: missing report must not block the book (#2824)."""
+        monkeypatch.delenv("OLYMPUS_PRETRADE_RISK_MODE", raising=False)
+        client = FakeSupabaseClient()
+        out = _run(client, _state())
+        assert "errors" not in out
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["pretrade_risk_registry_status"] == "shadow_invalid"
+        assert manifest["pretrade_risk_registry_reason"] == "missing_pre_trade_risk_report"
+        assert client.store.get("positions")
+
+    def test_explicit_shadow_invalid_report_commits(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "shadow")
+        client = FakeSupabaseClient()
+        state = _state()
+        state.phase_hermes = state.phase_hermes.model_copy(
+            update={"pre_trade_risk_report": {"not": "a report"}}
+        )
+        out = _run(client, state)
+        assert "errors" not in out
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["pretrade_risk_registry_status"] == "shadow_invalid"
+        assert "unknown_pre_trade_risk_report" in str(manifest["pretrade_risk_registry_reason"])
+        assert client.store.get("positions")
+
     def test_enforce_unknown_report_rejects(self, monkeypatch) -> None:
         monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
         client = FakeSupabaseClient()

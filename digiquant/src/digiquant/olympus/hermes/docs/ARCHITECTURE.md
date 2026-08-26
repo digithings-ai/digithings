@@ -52,7 +52,8 @@ supplied vols and WP7 observational scalars — never re-estimating inputs or
 mutating weights. H8 attaches the report to `phase_hermes.pre_trade_risk_report`
 (and stamps `pre_trade_risk_report_hash` on the sized book) **only after** the
 final control shell (carry → cadence → backstop → grid → final caps); report
-identity equals the final book fingerprint. Fail-soft omission does not change
+identity equals the final book fingerprint (same extractor as H9:
+`commit_io.weights_from_sized_book`). Fail-soft omission does not change
 the sized book. H9 (`commit_run`) validates report identity under
 `OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
 append-only persists hash-bound rows to `olympus_pretrade_risk_reports`
@@ -60,7 +61,7 @@ append-only persists hash-bound rows to `olympus_pretrade_risk_reports`
 `commit_io.validate_pretrade_risk_report` /
 `persist_validated_pretrade_risk_report`). Enforce rejects missing/unknown/
 fingerprint or bundle-hash mismatch before booking; shadow records status
-without blocking. H9 never recomputes the report.
+without blocking (covered by unit tests; #2824). H9 never recomputes the report.
 
 **Shadow allocation artifact (#2758 / WP10.1):** `hermes/shadow_artifact.py` defines
 frozen `ShadowAllocationArtifact` — exact `AllocationInputBundle`, incumbent final
