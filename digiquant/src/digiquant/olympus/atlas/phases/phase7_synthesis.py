@@ -571,7 +571,7 @@ def _carry_prior_digest_or_raise(
 def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
     document_key = _digest_document_key(state)
     rollout = resolve_research_attention_rollout_mode()
-    if rollout is not AttentionRolloutMode.OFF:
+    if rollout is not AttentionRolloutMode.OFF and not state.custom_prompt:
         require_research_attention_plan(state)
     target_key = artifact_target_key("digest", document_key)
     enforce_path = research_attention_enforce_path(state, target_key=target_key)

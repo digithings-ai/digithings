@@ -343,8 +343,16 @@ def carry_segment_slot(
     segment: str,
     *,
     reason: str,
+    prior: PriorPublished | None = None,
 ) -> SegmentSlot:
-    baseline = state.baseline_date or state.run_date
+    if prior is not None:
+        baseline = prior.date
+    elif state.baseline_date is not None:
+        baseline = state.baseline_date
+    else:
+        loader = _StatePriorLoader(state)
+        loaded = loader.load(("segment", segment), state.run_date)
+        baseline = loaded.date if loaded is not None else state.run_date
     return SegmentSlot(payload=Carried(baseline_date=baseline, reason=reason))
 
 

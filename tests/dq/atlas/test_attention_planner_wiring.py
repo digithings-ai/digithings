@@ -230,6 +230,34 @@ def test_enforce_carry_skips_providers(monkeypatch: pytest.MonkeyPatch) -> None:
     assert agent_calls == []
 
 
+def test_custom_prompt_skips_plan_requirement(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, "shadow")
+    state = _state_with_triage()
+    state = state.model_copy(update={"custom_prompt": "What is the outlook for TLT?"})
+
+    agent_calls: list[str] = []
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.phases._node_factory.build_grounding",
+        lambda **_: (None, None, None),
+    )
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.phases._node_factory.run_research_agent",
+        lambda **_: agent_calls.append("called") or _BondsSegment(date=RUN.isoformat()),
+    )
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.phases._node_factory.load_skill",
+        lambda _slug: "skill",
+    )
+    monkeypatch.setattr(
+        "digiquant.olympus.atlas.phases._node_factory._resolve_segment_edit_mode",
+        lambda _state, _segment: "full",
+    )
+
+    node = build_segment_node(_bonds_spec())
+    node(state)
+    assert agent_calls == ["called"]
+
+
 def test_off_mode_skips_plan_and_allows_incumbent_without_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

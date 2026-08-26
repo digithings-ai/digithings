@@ -870,14 +870,15 @@ def build_segment_node(
         merge_fallbacks: dict[str, str] = {}
         target_key = artifact_target_key("segment", spec.segment_slug)
         rollout = resolve_research_attention_rollout_mode()
-        if rollout is not AttentionRolloutMode.OFF:
+        if rollout is not AttentionRolloutMode.OFF and not state.custom_prompt:
             require_research_attention_plan(state)
         enforce_path = research_attention_enforce_path(state, target_key=target_key)
         if enforce_path == "carry":
             reason = _triage_reason_for_segment(state, spec.segment_slug) or "attention_carry"
+            prior = _StatePriorLoader(state).load(("segment", spec.segment_slug), state.run_date)
             return write_adapter(
                 spec,
-                carry_segment_slot(state, spec.segment_slug, reason=reason),
+                carry_segment_slot(state, spec.segment_slug, reason=reason, prior=prior),
             )
         if enforce_path == "metric_patch":
             prior = _StatePriorLoader(state).load(("segment", spec.segment_slug), state.run_date)
