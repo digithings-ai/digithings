@@ -952,13 +952,20 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   (fail-soft after booking). `preflight_reflect` resolves `ActionCostOutcome` when
   paper executions arrive; typed state slots `liquidity_snapshots` and
   `action_cost_estimates` on `PhaseHermesState`.
-  **H8 allocation input contracts (#2727 / WP8.2 + #2730 / WP8.3):** frozen
+  **H8 allocation input contracts (#2727 / WP8.2 + #2730 / WP8.3 + #2734 / WP8.4):** frozen
   `AllocationInputBundle` models in `hermes/allocation_contracts.py` with SHA-256
   helpers in `hermes/allocation_hashes.py`. `hermes/allocation_inputs.py` assembles
   one validated bundle at H8 entry from H7 mandate + exact Phase 1 forecast /
   policy / covariance / cost versions + prior weights; typed state slot
-  `phase_hermes.allocation_input_bundle`. Shadow only — incumbent `size_portfolio`
-  inputs are unchanged until Task 8.4 cutover.
+  `phase_hermes.allocation_input_bundle`. WP8.4 cutover: when
+  `h8_sizing_input_mode=calibrated` (default) and the bundle yields at least one
+  AVAILABLE positive-alpha score, incumbent `size_portfolio` raw weights use
+  `reliability × max(0, μ) / σ_ε` — rank→conviction and fixed-premium Kelly are
+  absent from that path. Missing/empty coverage falls back to characterized
+  incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
+  the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
+  `h8_sizing_input_mode`. Downstream caps/corr/vol/breaker/grid/continuity are
+  unchanged (no optimizer / control reorder).
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
@@ -1275,15 +1282,16 @@ Implements the FinPos direction/sizing split: **H7** owns direction + conviction
 narrative; **H8** deterministic code owns sizing, caps, and risk.
 
 - `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
-  conviction + stance into final target weights: select (conv ≥ bar, buy/hold) → raw
-  weights (conviction-∝ × inverse-vol, or fractional-Kelly) → position caps → sector caps
-  → correlation de-dup → ex-ante vol-target (√(wᵀΣw), pure-Python) → drawdown-breaker scale
-  → round-DOWN to grid → cash residual. Every reduction is **reduce-only / cash-first**:
-  freed weight becomes cash, never redistributed up (re-breaching the cap). A pair with no
-  estimated correlation falls back to an **asset-class bucket** ρ (`_bucket_corr`: equity↔bond
-  ≈0, equity↔equity≈0.8; UNKNOWN class stays ρ=1.0 conservative) rather than full-correlation —
-  the #934 over-cashing fix. `SizingCaps.from_preferences` reads `config/portfolio.json`
-  constraints.
+  conviction + stance (or WP8.4 `calibrated_scores`) into final target weights: select →
+  raw weights → position caps → sector caps → correlation de-dup → ex-ante vol-target
+  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → round-DOWN to grid → cash residual.
+  Raw-weight modes: **calibrated** (`reliability × max(0, μ) / σ_ε`, #2734),
+  conviction-∝ × inverse-vol, or fractional-Kelly (incumbent fallback only). Every
+  reduction is **reduce-only / cash-first**: freed weight becomes cash, never redistributed
+  up (re-breaching the cap). A pair with no estimated correlation falls back to an
+  **asset-class bucket** ρ (`_bucket_corr`: equity↔bond ≈0, equity↔equity≈0.8; UNKNOWN class
+  stays ρ=1.0 conservative) rather than full-correlation — the #934 over-cashing fix.
+  `SizingCaps.from_preferences` reads `config/portfolio.json` constraints.
 - `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
   control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
   cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
@@ -1291,13 +1299,17 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
 - `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
-  `PMDirectionMemo` conviction ranks, per-ticker vol from `price_technicals`, and
-  `sector_map` buckets; calls `size_portfolio`; writes `phase_hermes.sized_book`.
-  Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors.
-  Real pairwise correlations load from `price_history` via `get_return_correlations`
-  (look-ahead-guarded); a pair with no estimate uses the asset-class bucket fallback (#934).
-  The sized book passes through `turnover.apply_rebalancing_cadence`, which dispatches to
-  either `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
+  `PMDirectionMemo` (direction + ranks), assembles `AllocationInputBundle`, and on the
+  calibrated path feeds bundle scores into `size_portfolio` (rank→conviction unused).
+  Falls back to dense rank→conviction when mode is `incumbent` or calibrated coverage is
+  empty. Writes `phase_hermes.sized_book` with `allocation_input_bundle_hash` +
+  `h8_sizing_input_mode`. Per-ticker vol from `price_technicals` and `sector_map` buckets
+  still feed caps/vol-target. Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft
+  on data errors. Real pairwise correlations load from `price_history` via
+  `get_return_correlations` (look-ahead-guarded); a pair with no estimate uses the
+  asset-class bucket fallback (#934). The sized book passes through
+  `turnover.apply_rebalancing_cadence`, which dispatches to either
+  `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
   the minimum-hold override, #934) or `hold_drifted_book` (off-cadence: holds continuing
   positions at their drifted weight, still honoring an explicit PM exit, #955).
 - `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
