@@ -1,4 +1,4 @@
-"""H6 deliberation skip tests (Olympus #930 PR 4b)."""
+"""H6 deliberation skip tests (Olympus #930 PR 4b + WP11.3 #2902)."""
 
 from __future__ import annotations
 
@@ -51,6 +51,7 @@ def _quiet_state() -> AtlasResearchState:
                     },
                 }
             },
+            prior_book=[{"ticker": "AAPL", "weight_pct": 1.0}],
         ),
         price_deltas={"AAPL": 0.001},
     )
@@ -85,6 +86,7 @@ class TestDeliberationSkip:
         summary = final.phase_hermes.deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["conclusion"] == "prior agreement"
+        assert summary["selection_reason"]  # WP11.3: every run/carry has one reason
 
     def test_slim_carry_path_preserves_conclusion(self) -> None:
         """#925: the slim ``prior_deliberation_by_ticker`` carry (conclusion_excerpt)
@@ -120,6 +122,7 @@ class TestDeliberationSkip:
                         "conclusion_excerpt": "trim into strength; yields peaked",
                     }
                 },
+                prior_book=[{"ticker": "AAPL", "weight_pct": 1.0}],
             ),
             price_deltas={"AAPL": 0.001},
         )
@@ -148,3 +151,48 @@ class TestDeliberationSkip:
         summary = final.phase_hermes.deliberation_summaries["AAPL"]
         assert summary["carried"] is True
         assert summary["conclusion"] == "trim into strength; yields peaked"
+
+
+@pytest.mark.unit
+class TestH6SelectionEnforceCarry:
+    """WP11.3 — enforce mode carries low-value with zero provider calls."""
+
+    def test_enforce_low_value_carries_without_provider(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        compiled = build_pipeline(
+            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+        )
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            side_effect=AssertionError("enforce low-value must not call provider"),
+        ):
+            result = compiled.invoke(_quiet_state())
+        final = AtlasResearchState.model_validate(result)
+        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        assert summary["carried"] is True
+        assert summary["carry_reason"] == "low_value_carry"
+        assert summary["selection_reason"] == "low_value_carry"
+        assert summary["h6_selection"]["action"] == "carry"
+        assert summary["h6_selection"]["budget"]["max_provider_calls"] == 0
+
+    def test_shadow_records_selection_but_keeps_incumbent_fingerprint(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "shadow")
+        compiled = build_pipeline(
+            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+        )
+        with patch(
+            "digigraph.graph.research_agent.completion_text",
+            side_effect=AssertionError("shadow incumbent skip must not call LLM"),
+        ):
+            result = compiled.invoke(_quiet_state())
+        final = AtlasResearchState.model_validate(result)
+        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        assert summary["carried"] is True
+        assert summary["carry_reason"] == "fingerprint_skip"
+        assert summary["selection_reason"] == "low_value_carry"
+        assert summary["h6_selection"]["mode"] == "shadow"
+        assert summary["h6_selection"]["actuated"] is False

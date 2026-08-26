@@ -938,8 +938,15 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `research_state_store`): typed in-run bundles always materialize; store
   append runs only when a caller injects the store. `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off`
   then skips that append while retaining the typed bundle. Not
-  operator-durable yet — SQL IO adapter still later; WP11 remains incomplete
-  until later tasks close. Does **not** cut over H6 selection (WP11.3+).
+  operator-durable yet — SQL IO adapter still later. WP11.3
+  (`research_retrieval/planner.py`) adds deterministic `H6Selection`
+  (reasons/features/budget) wired into `h6_deliberation`:
+  `OLYMPUS_H6_SELECTION_MODE=off|shadow|enforce` (default `shadow` records
+  selection beside full incumbent H6; `enforce` actuates low-value carry with
+  zero provider calls; planner failure falls back to full incumbent H6, never
+  an unrecorded skip). Materiality (`weight_pct`) is a selection feature only
+  — never injected into H6 prompts. Selected success still meets the two-round
+  floor. WP11 remains incomplete until 11.4+ close.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
