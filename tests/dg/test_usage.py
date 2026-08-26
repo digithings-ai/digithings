@@ -431,6 +431,9 @@ def test_records_ordered_phase_scoped_events_without_call_bodies():
             "sources": 0,
             "input_summary": "Structured model request",
             "output_summary": "Model response returned",
+            "call_id": None,
+            "attempt_id": None,
+            "node_run_id": None,
         }
     )
     assert events[1]["kind"] == "tool_call"
@@ -462,3 +465,50 @@ def test_event_text_is_bounded_before_persistence():
     assert len(event["document_key"]) == 500
     assert len(event["name"]) == 255
     assert len(event["input_summary"]) == 500
+
+
+@pytest.mark.unit
+def test_missing_usage_stays_null_on_glass_box_events() -> None:
+    """WP1 invariant: unavailable tokens/cost must not become fabricated zeros (#2763)."""
+    usage.start()
+    call_id = uuid4()
+    attempt_id = uuid4()
+    node_run_id = uuid4()
+    with usage.call_context(node_run_id=node_run_id, phase="macro", operation="MacroReport"):
+        usage.record(
+            kind="chat",
+            model="openrouter/auto",
+            prompt_tokens=None,
+            completion_tokens=None,
+            cached_tokens=None,
+            cost=None,
+            call_id=call_id,
+            attempt_id=attempt_id,
+        )
+
+    event = usage.events_snapshot()[0]
+    assert event["prompt_tokens"] is None
+    assert event["completion_tokens"] is None
+    assert event["cached_tokens"] is None
+    assert event["cost_usd"] is None
+    assert event["call_id"] == str(call_id)
+    assert event["attempt_id"] == str(attempt_id)
+    assert event["node_run_id"] == str(node_run_id)
+
+
+@pytest.mark.unit
+def test_explicit_zero_usage_is_preserved() -> None:
+    usage.start()
+    usage.record(
+        kind="chat",
+        model="m",
+        prompt_tokens=0,
+        completion_tokens=0,
+        cached_tokens=0,
+        cost=0.0,
+    )
+    event = usage.events_snapshot()[0]
+    assert event["prompt_tokens"] == 0
+    assert event["completion_tokens"] == 0
+    assert event["cached_tokens"] == 0
+    assert event["cost_usd"] == 0.0

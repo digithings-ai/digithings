@@ -488,13 +488,16 @@ ledger (private, #2415)" for the full chain and failure-mode writeup.
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
   `atlas_run_diagnostics` idiom (migration 033).
-- **Exception — `olympus_run_events` (migration 066, #1945):** ordered call telemetry is
-  service-role-only. RLS is enabled with zero policies and `anon`/`authenticated` grants are
-  revoked. The definer-rights `olympus_run_event_trace` view exposes a bounded, body-free
-  projection for Pipeline: labels, timing, status, retries, source counts, and code-generated
-  shape summaries. It excludes token/cost fields and has no columns for prompts, argument or
-  result values, document bodies, credentials, or reasoning. Migration 066 is not applied live
-  without the repository's human migration review gate.
+- **Exception — `olympus_run_events` (migration 066, #1945; WP1 join 086 / #2763):** ordered
+  call telemetry is service-role-only. RLS is enabled with zero policies and
+  `anon`/`authenticated` grants are revoked. The definer-rights `olympus_run_event_trace` view
+  exposes a bounded, body-free projection for Pipeline: labels, timing, status, retries, source
+  counts, code-generated shape summaries, and soft WP1 join keys (`call_id` / `attempt_id` /
+  `node_run_id`). It excludes token/cost fields (067 `olympus_provider_attempts` is economics
+  authority) and has no columns for prompts, argument or result values, document bodies,
+  credentials, or reasoning. Migration 086 makes private token/cost columns nullable so missing
+  usage stays NULL. Migrations 066/086 are not applied live without the repository's human
+  migration review gate.
 - **Exception — strategy store lockdown (migration 051, #1462):** `strategies`,
   `strategy_signals`, and `strategy_trades` had their anon policies dropped AND their
   anon/authenticated grants revoked — anon access to live signals would bypass the
