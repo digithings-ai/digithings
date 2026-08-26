@@ -1003,6 +1003,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   failure never reruns or mutates H8/H9. No challenger optimizer, replay, or
   broker imports on the production path; `pipeline-olympus.yml` uploads
   `shadow-allocation-*.json` with run artifacts for WP10.2+ isolation.
+  **Write-denied shadow workflow (#2762 / WP10.2):**
+  `pipeline-olympus-allocation-shadow.yml` +
+  `digiquant/scripts/atlas/check_allocation_shadow_isolation.py` enforce
+  artifact-in / file-out isolation (no `secrets: inherit`, no production
+  credentials, read-only permissions, trusted producer workflow/branch,
+  schema/hash gates). Challenger optimizer remains WP10.3+; disable the
+  shadow workflow to roll back without touching production H8/H9.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
