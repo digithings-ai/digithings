@@ -270,6 +270,16 @@ def test_failed_call_requires_sanitized_type_and_failure_disposition() -> None:
         )
 
 
+def test_cost_usd_rejects_nan_and_infinity() -> None:
+    """Postgres CHECK (cost_usd >= 0) admits NaN; Pydantic must not (#1989)."""
+    node = _node_run()
+    call = _call(node.node_run_id)
+    with pytest.raises(ValidationError):
+        _attempt(call.call_id, cost_usd=Decimal("NaN"))
+    with pytest.raises(ValidationError):
+        _attempt(call.call_id, cost_usd=Decimal("Infinity"))
+
+
 def test_provider_identifiers_have_defensive_length_bounds() -> None:
     node = _node_run()
     with pytest.raises(ValidationError):
