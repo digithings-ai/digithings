@@ -1,12 +1,12 @@
-"""Deterministic shadow forecast calibrator (#2680 / WP5.3, #2684 / WP5.4).
+"""Deterministic forecast calibrator (#2680 / WP5.3, #2684 / WP5.4).
 
 Core calibrator is pure (no Supabase). WP5.4 adds cutoff-safe attach helpers
-invoked at the existing H6→H7 boundary; H9 persists observational artifacts.
-Never feeds incumbent H8.
+invoked at the existing H6→H7 boundary; H9 persists artifacts. WP8.4 feeds
+AVAILABLE ``CalibratedForecast`` slices into H8 via ``AllocationInputBundle``.
 
 Shrinks cohort residual bias toward a declared zero-mean prior, reports
-Brier/log scores, and emits shadow ``CalibratedForecast`` subjects with
-non-zero uncertainty and sample-bounded reliability.
+Brier/log scores, and emits ``CalibratedForecast`` subjects with non-zero
+uncertainty and sample-bounded reliability.
 
 Polars aggregates the eligible cohort; repeated identical inputs yield
 identical UUID5 / content-hash identities.
@@ -99,7 +99,7 @@ _Z_NORMAL: dict[str, Decimal] = {
 
 @dataclass(frozen=True)
 class CalibrationBundle:
-    """Cohort metrics plus one shadow subject — observational until Phase 2."""
+    """Cohort metrics plus one calibrated subject for H8 bundle consumption."""
 
     calibration: ForecastCalibration
     calibrated_forecast: CalibratedForecast
@@ -675,12 +675,13 @@ def attach_shadow_calibrations(
     as_of: datetime,
     regime: str = "default",
 ) -> ShadowCalibrationAttachment:
-    """Build cohort calibrations + shadow subjects for current effective forecasts.
+    """Build cohort calibrations + per-subject calibrated forecasts.
 
     One ``ForecastCalibration`` per distinct cohort key; one ``CalibratedForecast``
     per subject. Empty subjects → empty attachment. Outcomes must already be
     cutoff-bounded by the caller (``known_at > as_of`` are ignored again inside
-    the calibrator). Does not write to Supabase and does not feed H8.
+    the calibrator). Does not write to Supabase here; WP8.4 H8 consumes the
+    attached dumps via ``AllocationInputBundle``.
     """
     known_at = require_utc_datetime(as_of, field_name="as_of")
     if not subjects:

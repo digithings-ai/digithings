@@ -408,10 +408,11 @@ class ForecastCalibration(ForecastCalibrationModel):
 
 
 class CalibratedForecast(ForecastCalibrationModel):
-    """Shadow calibrated subject forecast — observational until Phase 2.
+    """Versioned calibrated subject forecast for the H8 allocation bundle (WP8.4).
 
-    Never feeds incumbent H8 sizing in Phase 1. Unavailable subjects retain
-    typed reasons and low reliability rather than inventing zeros.
+    Unavailable subjects retain typed reasons and low reliability rather than
+    inventing zeros. H8 consumes AVAILABLE slices via ``AllocationInputBundle``;
+    degraded/unavailable slices receive no new risk.
     """
 
     calibrated_forecast_id: UUID
