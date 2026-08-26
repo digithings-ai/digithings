@@ -107,6 +107,16 @@ python3 scripts/backfill_research_state.py --supabase --apply
 Counts always reconcile: `source == inserted + skipped + unverifiable`.
 Library: `digiquant.olympus.research_retrieval.legacy_backfill`.
 
+### Compiled research-state prose views (WP12.5 / #2877)
+
+`research_retrieval.views` compiles deterministic brief/digest markdown from one
+exact pinned `ResearchStateVersion` (sorted entities; embeds state id / hash /
+schema). Atlas publish dual-writes `research-state-brief` /
+`research-state-digest` only when the preflight pin is present and
+`PublishDeps.research_state_store` can exact-load that version; structured-write
+failure refuses view publication. Incumbent digest/segment documents stay until
+a later parity/retention gate.
+
 ## Market-open execution and price backfill
 
 ### Activity tab / `position_events` stops at an old date

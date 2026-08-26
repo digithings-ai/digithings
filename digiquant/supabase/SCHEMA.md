@@ -195,6 +195,9 @@ temporal ordering is also enforced in SQL via migration 089
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_research_state_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Preflight wiring of pins = WP12.3.
+Compiled prose brief/digest views (#2877 / WP12.5) are deterministic dual-write
+documents (`research-state-brief` / `research-state-digest`) from exact pinned
+versions — not authoritative state tables.
 
 ### Forecast registry — migration 079 (#2663 / WP4.6)
 
