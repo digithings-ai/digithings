@@ -2,6 +2,10 @@
 
 ``HermesState`` re-exports :class:`digiquant.olympus.atlas.state.AtlasResearchState`
 until digest-only extraction lands (epic #471).
+
+WP8.3: ``PhaseHermesState.allocation_input_bundle`` holds the shadow
+:class:`~digiquant.olympus.hermes.allocation_contracts.AllocationInputBundle`
+assembled at H8 entry — observational until Task 8.4 cutover.
 """
 
 from __future__ import annotations
@@ -9,6 +13,7 @@ from __future__ import annotations
 from digiquant.olympus.atlas.state import (
     AtlasResearchState,
     Phase7DigestPayload,
+    PhaseHermesState,
     RebalancePayload,
     RiskDebatePayload,
 )
@@ -21,6 +26,7 @@ __all__ = [
     "AtlasResearchState",
     "HermesState",
     "Phase7DigestPayload",
+    "PhaseHermesState",
     "RebalancePayload",
     "RiskDebatePayload",
 ]

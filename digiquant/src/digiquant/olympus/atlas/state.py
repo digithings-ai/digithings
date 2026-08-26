@@ -499,6 +499,11 @@ class PhaseHermesState(BaseModel):
         default=None,
         description="Resolved CovarianceSnapshot dump (H8 attach)",
     )
+    # WP8.3 canonical H8 allocation input bundle (shadow; never feeds size_portfolio yet).
+    allocation_input_bundle: dict[str, Any] | None = Field(
+        default=None,
+        description="Validated AllocationInputBundle dump at H8 entry (WP8.3 shadow)",
+    )
     # WP7.3 observational cost/liquidity evidence (never feeds turnover in Phase 1).
     liquidity_snapshots: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict,
@@ -552,7 +557,7 @@ def _merge_phase_hermes(
             **merged.action_cost_estimates,
             **right.action_cost_estimates,
         }
-    for field in ("risk_policy", "covariance_snapshot"):
+    for field in ("risk_policy", "covariance_snapshot", "allocation_input_bundle"):
         val = getattr(right, field)
         if val:
             object.__setattr__(merged, field, val)
