@@ -279,7 +279,34 @@ class TestAttentionStoreLineage:
             assert row.decision.features.state_version_id == str(_STATE)
             assert row.policy_content_hash == plan.policy_content_hash
 
-    def test_unlinked_provider_attempt_rejected(self) -> None:
+    def test_orphan_usages_excluded_from_actual_total(self) -> None:
         store = AttentionStore()
-        with pytest.raises(AttentionStoreError):
-            store.link_provider_attempt(decision_id=uuid4(), provider_attempt_id=uuid4())
+        plan = _shadow_plan()
+        store.append_plan(plan, attempt_id=_ATTEMPT, recorded_at=_TS)
+        decision = next(d for d in plan.decisions if d.mode is not AttentionMode.CARRY)
+        attempt_id = uuid4()
+        store.link_provider_attempt(
+            decision_id=attention_decision_id(plan_id=plan.plan_id, target_key=decision.target_key),
+            provider_attempt_id=attempt_id,
+        )
+        evaluation = store.reconcile_plan(
+            plan_id=plan.plan_id,
+            attempt_usages={
+                decision.target_key: (
+                    ActualProviderAttemptUsage(
+                        provider_attempt_id=attempt_id,
+                        prompt_tokens=10,
+                        completion_tokens=5,
+                    ),
+                ),
+                "ORPHAN": (
+                    ActualProviderAttemptUsage(
+                        provider_attempt_id=uuid4(),
+                        prompt_tokens=999,
+                        completion_tokens=999,
+                    ),
+                ),
+            },
+            recorded_at=_TS,
+        )
+        assert evaluation.actual_total.uncached_tokens == 15

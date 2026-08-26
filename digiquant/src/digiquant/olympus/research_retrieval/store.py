@@ -750,7 +750,12 @@ def _usage_to_budget(usages: Sequence[ActualProviderAttemptUsage]) -> AttentionB
 
 
 def _decision_needs_telemetry(planned: AttentionBudgetEstimate) -> bool:
-    return planned.provider_calls > 0 or planned.searches > 0
+    return (
+        planned.provider_calls > 0
+        or planned.searches > 0
+        or planned.min_h6_rounds > 0
+        or planned.uncached_tokens > 0
+    )
 
 
 class AttentionStore:
@@ -957,8 +962,14 @@ class AttentionStore:
             )
 
         planned_total = plan.total_budget
+        decision_targets = {row.decision.target_key for row in decisions}
         actual_total = _usage_to_budget(
-            [usage for group in attempt_usages.values() for usage in group]
+            [
+                usage
+                for target_key, group in attempt_usages.items()
+                if target_key in decision_targets
+                for usage in group
+            ]
         )
         if plan.rollout_mode is AttentionRolloutMode.OFF:
             complete = True
