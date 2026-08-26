@@ -5,6 +5,9 @@ When ``get_return_correlations`` has no estimated rho for a pair (thin history),
 which over-stated ex-ante portfolio vol so vol-targeting systematically over-raised
 cash (the Jun-19 "BIL 30% only" symptom). These tests pin the asset-class bucket
 fallback (Carver "handcrafting" style) that replaces the rho=1.0 default.
+
+WP8.5 (#2738): calibrated-path corr-dedup + cash-first locks live in
+``test_allocation_invariants.py``.
 """
 
 from __future__ import annotations
