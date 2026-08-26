@@ -831,3 +831,68 @@ class TestResearchStatePreflightPin:
         )
         assert out["research_state_status"] == "pinned"
         assert out["research_state_pin"]["state_version_id"] == str(root.state_version_id)
+
+    def test_pin_fail_closed_on_effective_as_of_after_requested(self) -> None:
+        """WP12.2 hardenings (#2867): store pin reject → typed state_unavailable."""
+        from datetime import timedelta
+
+        from digiquant.olympus.research_retrieval.pin import pin_research_state_for_preflight
+
+        store, root, ts = _seed_research_store()
+        # Preflight defaults requested_as_of to cutoff; exercise the WP12.3 helper
+        # with an earlier as-of so effective_as_of > requested_as_of while known_at
+        # still clears the cutoff envelope (same shape as store unit coverage).
+        result = pin_research_state_for_preflight(
+            store=store,
+            run_id="run-fail-closed-eff",
+            attempt_id="1",
+            knowledge_cutoff_at=ts + timedelta(hours=1),
+            requested_as_of=ts - timedelta(hours=1),
+            explicit_state_version_id=root.state_version_id,
+            pinned_at=ts + timedelta(hours=1),
+        )
+        assert result.status == "state_unavailable"
+        assert result.pin is None
+        reason = (result.unavailable_reason or "").lower()
+        assert "effective_as_of" in reason and "requested_as_of" in reason
+
+    def test_pin_fail_closed_on_look_ahead_child(self) -> None:
+        """WP12.2 hardenings (#2867): drifted future-known child → state_unavailable."""
+        from datetime import timedelta
+
+        from digiquant.olympus.research_retrieval.models import EvidenceRecord
+
+        store, root, ts = _seed_research_store()
+        # Simulate durable drift: evidence known_at moves past cutoff after append.
+        early = store._evidence[next(iter(store._evidence))]
+        drifted = EvidenceRecord.model_construct(**early.model_dump())
+        object.__setattr__(drifted, "known_at", ts + timedelta(hours=3))
+        store._evidence[early.evidence_id] = drifted
+
+        client = FakeSupabaseClient(
+            canned_reads={
+                "daily_snapshots": [],
+                "documents": [],
+                "price_technicals": [{"date": "2026-04-25", "ticker": "SPY"}],
+                "macro_series_observations": [{"obs_date": "2026-04-25"}],
+            }
+        )
+        deps = PreflightDeps(
+            client=client,
+            config_loader=lambda: AtlasConfigBundle(),
+            research_state_store=store,
+            research_state_attempt_id="fail-closed-child",
+        )
+        node = build_preflight_node(deps)
+        out = node(
+            AtlasResearchState(
+                run_type="baseline",
+                run_date=date(2026, 4, 26),
+                knowledge_cutoff_at=ts + timedelta(hours=2),
+                requested_research_state_version_id=str(root.state_version_id),
+            )
+        )
+        assert out["research_state_status"] == "state_unavailable"
+        assert out["research_state_pin"] is None
+        reason = (out["research_state_unavailable_reason"] or "").lower()
+        assert "evidence" in reason and "knowledge_cutoff" in reason

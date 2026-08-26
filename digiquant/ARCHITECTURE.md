@@ -891,8 +891,9 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   + `research_state_status` (`pinned` | `state_unavailable`). Resume reuses the
   run/attempt pin (checkpoint + store `get_pin`); same-run child versions must
   name the pinned root as `parent_state_version_id` (`child_version_must_name_parent`).
-  Typed `state_unavailable` when store missing/unusable — compatibility
-  `documents` path remains shadow-only until exact-state coverage; never
+  Typed `state_unavailable` when store missing/unusable — including fail-closed
+  store rejections (look-ahead children / `effective_as_of` after `requested_as_of`).
+  Compatibility `documents` path remains shadow-only until exact-state coverage; never
   `load_latest` after pin. Helper uses WP12.1 ID helpers only (no redefine).
   Soft API for WP12.3 must sit on the hardened store (#2868 / #2867).
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
