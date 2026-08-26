@@ -1703,6 +1703,94 @@ class TestRiskPolicyRegistryH9:
         assert client.store.get("positions", [])
 
 
+class TestCostLiquidityRegistryH9Noop:
+    """WP7 follow-up #2807 — fingerprint-noop must retry cost with prior ledger id."""
+
+    def test_fingerprint_noop_retries_cost_with_prior_ledger_commit_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+        from digiquant.olympus.hermes.writers.ledger_io import LedgerAppend
+
+        client = _ledger_client(SPY=100.0)
+        state = _state()
+        captured: list[LedgerAppend | None] = []
+        real = h9._persist_cost_liquidity_registry
+
+        def wrap(*, client, state, ledger):  # type: ignore[no-untyped-def]
+            captured.append(ledger)
+            return real(client=client, state=state, ledger=ledger)
+
+        monkeypatch.setattr(h9, "_persist_cost_liquidity_registry", wrap)
+        out1 = _run(client, state)
+        manifest1 = out1["phase_hermes"].commit_manifest
+        assert manifest1["status"] == "committed"
+        commit_id = manifest1.get("ledger_commit_id")
+        assert commit_id, "first commit must mint ledger_commit_id for noop retry"
+        assert captured and captured[0] is not None
+        assert captured[0].commit_id == commit_id
+
+        out2 = _run(client, state)
+        manifest2 = out2["phase_hermes"].commit_manifest
+        assert manifest2["status"] == "noop"
+        assert len(captured) >= 2
+        noop_ledger = captured[-1]
+        assert noop_ledger is not None, "noop must not pass ledger=None when prior commit exists"
+        assert noop_ledger.commit_id == commit_id
+        assert manifest2.get("cost_liquidity_registry_reason") != "ledger_disabled"
+
+    def test_noop_without_prior_ledger_commit_id_stays_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.olympus.hermes.phases import h9_commit_run as h9
+        from digiquant.olympus.hermes.writers.commit_io import (
+            weights_fingerprint,
+            weights_from_sized_book,
+        )
+
+        client = FakeSupabaseClient()
+        state = _state()
+        book = state.phase_hermes.sized_book
+        assert book is not None
+        weights = weights_from_sized_book(book)
+        fp = weights_fingerprint(weights)
+        monkeypatch.setattr(
+            h9,
+            "load_commit_manifests",
+            lambda **_k: [
+                {
+                    "schema_version": "1.1",
+                    "status": "committed",
+                    "weights_fingerprint": fp,
+                    "weights": {k: round(v, 4) for k, v in sorted(weights.items())},
+                    "nav": 100.0,
+                    "decision_log_rows": 0,
+                    "commit_seq": 1,
+                    # Pre-1.2 / ledger-off manifests have no ledger_commit_id.
+                }
+            ],
+        )
+        captured: list[object] = []
+
+        def wrap(*, client, state, ledger):  # type: ignore[no-untyped-def]
+            captured.append(ledger)
+            return (
+                {
+                    "cost_liquidity_registry_status": "skipped",
+                    "cost_liquidity_registry_reason": "ledger_disabled",
+                    "cost_liquidity_registry_snapshots_written": 0,
+                    "cost_liquidity_registry_estimates_written": 0,
+                },
+                {},
+                {},
+            )
+
+        monkeypatch.setattr(h9, "_persist_cost_liquidity_registry", wrap)
+        out = _run(client, state)
+        assert out["phase_hermes"].commit_manifest["status"] == "noop"
+        assert captured == [None]
+
+
 class TestPreTradeRiskH9:
     """WP9.4 — H9 hash validation + append-only PreTradeRiskReport persistence (#2754)."""
 

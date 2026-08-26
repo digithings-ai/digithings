@@ -307,19 +307,29 @@ def build_commit_run_node(deps: CommitRunDeps):
         if latest is not None and latest.get("weights_fingerprint") == current_fp:
             # Same date, same book, already on disk — genuinely idempotent.
             # Still attempt forecast registry (fail-soft): a prior commit may have
-            # booked while registry was degraded (#2663).
+            # booked while registry was degraded (#2663). Cost registry needs the
+            # prior ledger_commit_id the same way (#2807 / WP7) — ledger=None would
+            # permanently skip as ledger_disabled after a degraded first write.
             registry = _persist_forecast_registry(client=deps.client, state=state)
             risk_registry = _persist_risk_policy_registry(client=deps.client, state=state)
+            prior_commit_id = latest.get("ledger_commit_id")
+            ledger_for_retry: LedgerAppend | None = None
+            if prior_commit_id:
+                ledger_for_retry = LedgerAppend(
+                    commit_id=str(prior_commit_id),
+                    frozen_symbols=list(latest.get("ledger_frozen_symbols") or []),
+                    unpriced_symbols=list(latest.get("ledger_unpriced_symbols") or []),
+                )
             cost_registry, _, _ = _persist_cost_liquidity_registry(
                 client=deps.client,
                 state=state,
-                ledger=None,
+                ledger=ledger_for_retry,
             )
             pretrade_registry = persist_validated_pretrade_risk_report(
                 client=deps.client,
                 validation=pretrade_validation,
                 source_run_id=source_run_id,
-                ledger_commit_id=None,
+                ledger_commit_id=str(prior_commit_id) if prior_commit_id else None,
             )
             manifest = _manifest_payload(
                 source_run_id=source_run_id,
