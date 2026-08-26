@@ -19,9 +19,11 @@ from digiquant.olympus.research_retrieval.context import (
     ContextItemKind,
     ContextOmissionReason,
     ContextRole,
+    RoleContextPolicy,
     compile_context_capsule,
     compile_context_manifest,
     default_role_context_policy,
+    role_context_policy_content_hash,
 )
 from digiquant.olympus.research_retrieval.models import (
     BeliefStatus,
@@ -503,8 +505,22 @@ def test_byte_budget_emits_omission_for_truncated_items() -> None:
     ev = _evidence(summary="x" * 400)
     state = _loaded_state(evidence=(ev,))
     bundle = _bundle(state_version_id=state.version.state_version_id)
-    tight = default_role_context_policy(ContextRole.H5_ANALYST).model_copy(
-        update={"max_bytes": 120}
+    base = default_role_context_policy(ContextRole.H5_ANALYST)
+    tight = RoleContextPolicy(
+        role=base.role,
+        allowed_kinds=base.allowed_kinds,
+        max_bytes=120,
+        max_estimated_tokens=base.max_estimated_tokens,
+        requires_ticker=base.requires_ticker,
+        delta_evidence_only=base.delta_evidence_only,
+        content_hash=role_context_policy_content_hash(
+            base.role,
+            allowed_kinds=base.allowed_kinds,
+            max_bytes=120,
+            max_estimated_tokens=base.max_estimated_tokens,
+            requires_ticker=base.requires_ticker,
+            delta_evidence_only=base.delta_evidence_only,
+        ),
     )
     _, manifest = compile_context_capsule(
         ContextCompileInput(

@@ -132,6 +132,21 @@ class RoleContextPolicy(ResearchStateModel):
             return tuple(sorted(set(kinds), key=lambda item: item.value))
         return value  # type: ignore[return-value]
 
+    @model_validator(mode="after")
+    def _validate_policy_hash(self) -> RoleContextPolicy:
+        expected = role_context_policy_content_hash(
+            self.role,
+            allowed_kinds=self.allowed_kinds,
+            max_bytes=self.max_bytes,
+            max_estimated_tokens=self.max_estimated_tokens,
+            requires_ticker=self.requires_ticker,
+            delta_evidence_only=self.delta_evidence_only,
+            schema_version=self.schema_version,
+        )
+        if self.content_hash != expected:
+            raise ValueError("content_hash must match canonical RoleContextPolicy digest")
+        return self
+
 
 class ContextItem(ResearchStateModel):
     """One pinned structured entity included in a role capsule."""
@@ -419,11 +434,8 @@ def _require_pinned_bundle(
 def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], list[ContextOmission]]:
     state = inp.state
     state_version_id = state.version.state_version_id
-    allowed = frozenset(inp.policy.allowed_kinds if inp.policy else ())
-    if inp.policy is None:
-        allowed = frozenset(default_role_context_policy(inp.role).allowed_kinds)
-    else:
-        allowed = frozenset(inp.policy.allowed_kinds)
+    policy = inp.policy or default_role_context_policy(inp.role)
+    allowed = frozenset(policy.allowed_kinds)
 
     omissions: list[ContextOmission] = []
     candidates: list[_Candidate] = []
@@ -600,10 +612,9 @@ def _collect_candidates(inp: ContextCompileInput) -> tuple[list[_Candidate], lis
                 )
 
     if inp.attention_plan is not None:
-        if (
-            inp.attention_plan.state_version_id is not None
-            and inp.attention_plan.state_version_id != state_version_id
-        ):
+        if inp.attention_plan.state_version_id is None:
+            raise ValueError("attention_plan.state_version_id is required for context compile")
+        if inp.attention_plan.state_version_id != state_version_id:
             raise ValueError("attention_plan.state_version_id must match pinned state")
         for decision in inp.attention_plan.decisions:
             decision_key = decision.target_key
