@@ -268,7 +268,7 @@ class TestCompareActionCost:
         assert outcome.realized_slippage == Decimal("2.50")
         assert len(outcome.expected_components) == len(bundle.estimate.components)
 
-    def test_unpriceable_estimate_stays_pending(self) -> None:
+    def test_unpriceable_estimate_with_fill_is_unavailable(self) -> None:
         action = _action(notional=None)
         obs = prospective_observations_from_row(
             session_date=_SESSION,
@@ -279,7 +279,8 @@ class TestCompareActionCost:
         )
         estimate = estimate_action_cost(action, obs, _policy()).estimate
         outcome = compare_action_cost(estimate, self._realized(), compared_at=_TS)
-        assert outcome.status is CostOutcomeStatus.PENDING
+        assert outcome.status is CostOutcomeStatus.UNAVAILABLE
+        assert outcome.unavailable_reason == "expected_cost_unpriceable"
         assert outcome.realized_total is None
 
 
