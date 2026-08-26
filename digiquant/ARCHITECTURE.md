@@ -1872,7 +1872,9 @@ that metrics/attribution job order cannot alter meaning.
   day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
   reconcile). Mode also via `OLYMPUS_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
   ledger declines with exit 3 (no partial final). Wired ahead of metrics in
-  `pipeline-atlas-metrics.yml` (`continue-on-error` while shadowing).
+  `pipeline-atlas-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
+  page via PostgREST `.range` (`_LOT_PAGE_SIZE=1000`) so closed-lot history cannot silently
+  truncate the opening book (#2776).
 - **Metrics cutover (dual-write)**: `refresh_performance_metrics.py` prefers a finalized
   accounting period for `pnl_pct` and indexed `nav_history` compounding when one exists;
   otherwise falls through to provisional H9 nav only. Never sums
