@@ -56,6 +56,7 @@ class _FakeQuery:
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
     _order: tuple[str, bool] | None = None
     _limit: int | None = None
+    _range: tuple[int, int] | None = None
 
     def select(self, _cols: str) -> "_FakeQuery":
         return self
@@ -93,6 +94,11 @@ class _FakeQuery:
 
     def limit(self, n: int) -> "_FakeQuery":
         self._limit = n
+        return self
+
+    def range(self, start: int, end: int) -> "_FakeQuery":
+        # PostgREST ``.range`` is inclusive on both ends (0-indexed).
+        self._range = (start, end)
         return self
 
     def insert(self, row: dict[str, Any] | list[dict[str, Any]]) -> "_FakeQuery":
@@ -166,6 +172,9 @@ class _FakeQuery:
         if self._order is not None:
             col, desc = self._order
             rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
         if self._limit is not None:
             rows = rows[: self._limit]
         return _FakeResponse(data=rows)
