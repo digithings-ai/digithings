@@ -10,7 +10,8 @@ WP12.5 compiled prose views:
 :mod:`digiquant.olympus.research_retrieval.views`.
 WP11.1 ticker evidence bundles + amendments:
 :class:`~digiquant.olympus.research_retrieval.store.EvidenceBundleStore`
-(models in the same ``models`` module; H6 selection cutover is WP11.3+).
+(models in the same ``models`` module; H6 selection cutover is WP11.3+;
+WP13.1 research attention policy extends ``research_retrieval/planner.py``).
 WP11.2 H5 publish:
 :mod:`digiquant.olympus.research_retrieval.evidence_bundle`
 (one base bundle per H5-attempted ticker before the provider call).

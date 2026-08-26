@@ -13,16 +13,26 @@ Modes (``OLYMPUS_H6_SELECTION_MODE``):
 Planner failure falls back to **full incumbent H6**, never an unrecorded skip.
 Materiality (``weight_pct``) is a selection feature only — callers must not
 inject it into provider prompts.
+
+WP13.1 (#2918) adds versioned :class:`ResearchAttentionPolicy`, five attention
+modes, and :func:`plan_research_attention` for pre-provider routing. Runtime
+Atlas/Hermes wiring is WP13.3/13.4 — this module exposes the policy + planner API only.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Mapping, TypeAlias
+from functools import lru_cache
+from pathlib import Path
+from typing import Annotated, Any, Literal, Mapping, Sequence, TypeAlias
+from uuid import NAMESPACE_URL, UUID, uuid5
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -366,18 +376,638 @@ def assert_no_materiality_in_prompt(phase_inputs: Mapping[str, Any]) -> None:
         raise ValueError(f"H6 prompt must not include selection materiality keys: {sorted(leaked)}")
 
 
+# ---------------------------------------------------------------------------
+# WP13.1 — versioned research attention policy (#2918)
+# ---------------------------------------------------------------------------
+
+OLYMPUS_RESEARCH_POLICY_ENV = "OLYMPUS_RESEARCH_POLICY_PATH"
+_ATTENTION_PLAN_NS = uuid5(NAMESPACE_URL, "digithings.olympus.research_attention_plan")
+_TriageMode: TypeAlias = Literal["quiet", "stale", "active"]
+
+
+class AttentionMode(StrEnum):
+    """Five pre-provider attention modes (Phase 3 planner contract)."""
+
+    CARRY = "carry"
+    METRIC_PATCH = "metric_patch"
+    SECTION_PATCH = "section_patch"
+    CHALLENGE = "challenge"
+    DEEP_REFRESH = "deep_refresh"
+
+
+class AttentionRolloutMode(StrEnum):
+    """Rollout knob for research attention planner (off|shadow|enforce)."""
+
+    OFF = "off"
+    SHADOW = "shadow"
+    ENFORCE = "enforce"
+
+
+class AttentionReason(StrEnum):
+    """Stable attention reason codes — one primary per decision (metric gate)."""
+
+    INVALIDATION_RISK = "invalidation_risk"
+    CONFLICT = "conflict"
+    DECISION_BOUNDARY = "decision_boundary"
+    UNCERTAINTY = "uncertainty"
+    MATERIAL = "material"
+    EXPLORATION = "exploration"
+    FORCE_FULL = "force_full"
+    STALE_CONTENT = "stale_content"
+    STRUCTURED_DELTA = "structured_delta"
+    TRIAGE_STALE = "triage_stale"
+    TRIAGE_QUIET = "triage_quiet"
+    NO_PRIOR = "no_prior"
+    LOW_VALUE_CARRY = "low_value_carry"
+
+
+class AttentionTargetKind(StrEnum):
+    ARTIFACT = "artifact"
+    TICKER = "ticker"
+
+
+class AttentionBudgetEstimate(H6PlannerModel):
+    """Estimated provider/search/token budget for one attention decision."""
+
+    provider_calls: int = Field(ge=0)
+    searches: int = Field(ge=0)
+    uncached_tokens: int = Field(ge=0)
+    min_h6_rounds: int = Field(default=0, ge=0)
+
+
+class PolicyThresholds(H6PlannerModel):
+    material_weight_pct: float = Field(ge=0.0, allow_inf_nan=False)
+    boundary_price_delta: float = Field(ge=0.0, allow_inf_nan=False)
+    boundary_conviction: int = Field(ge=0)
+    stale_days_full: int = Field(ge=0)
+
+
+class PolicyExploration(H6PlannerModel):
+    min_reserved_slots: int = Field(ge=0)
+
+
+class PolicySessionBudget(H6PlannerModel):
+    max_provider_calls: int = Field(ge=0)
+    max_searches: int = Field(ge=0)
+    max_uncached_tokens: int = Field(ge=0)
+
+
+class ResearchAttentionPolicy(H6PlannerModel):
+    """Versioned YAML policy with content-addressed hash."""
+
+    schema_version: int = Field(ge=1)
+    policy_version: NonEmptyStr
+    content_hash: NonEmptyStr
+    reason_priority: tuple[AttentionReason, ...]
+    thresholds: PolicyThresholds
+    exploration: PolicyExploration
+    session_budget: PolicySessionBudget
+    mode_budgets: dict[AttentionMode, AttentionBudgetEstimate]
+
+    @field_validator("reason_priority", mode="before")
+    @classmethod
+    def _coerce_reason_priority(cls, value: object) -> tuple[AttentionReason, ...]:
+        if not isinstance(value, (list, tuple)):
+            return value  # type: ignore[return-value]
+        return tuple(AttentionReason(str(item)) for item in value)
+
+    @field_validator("mode_budgets", mode="before")
+    @classmethod
+    def _coerce_mode_budgets(cls, value: object) -> dict[AttentionMode, AttentionBudgetEstimate]:
+        if not isinstance(value, Mapping):
+            return value  # type: ignore[return-value]
+        out: dict[AttentionMode, AttentionBudgetEstimate] = {}
+        for key, raw in value.items():
+            mode = AttentionMode(str(key))
+            if isinstance(raw, AttentionBudgetEstimate):
+                out[mode] = raw
+            elif isinstance(raw, Mapping):
+                out[mode] = AttentionBudgetEstimate.model_validate(raw)
+            else:
+                raise TypeError(f"mode_budgets[{key!r}] must be a mapping")
+        return out
+
+
+class AttentionFeatures(H6PlannerModel):
+    """Structured inputs for deterministic attention routing."""
+
+    target_kind: AttentionTargetKind
+    target_key: NonEmptyStr
+    state_version_id: str | None = None
+    h6: H6DecisionFeatures | None = None
+    has_prior: bool = False
+    force_full_rewrite: bool = False
+    triage_mode: _TriageMode | None = None
+    has_structured_delta: bool = False
+    staleness_days: int | None = Field(default=None, ge=0)
+    exploration_slot: bool = False
+
+    @field_validator("target_key")
+    @classmethod
+    def _normalize_target_key(cls, value: str) -> str:
+        cleaned = value.strip()
+        if ":" in cleaned:
+            kind, ident = cleaned.split(":", 1)
+            return f"{kind.strip().lower()}:{ident.strip()}"
+        return cleaned.upper()
+
+    @model_validator(mode="after")
+    def _ticker_requires_h6(self) -> AttentionFeatures:
+        if self.target_kind is AttentionTargetKind.TICKER and self.h6 is None:
+            raise ValueError("ticker AttentionFeatures must include h6 decision features")
+        if self.target_kind is AttentionTargetKind.TICKER and self.h6 is not None:
+            if self.h6.ticker != self.target_key:
+                raise ValueError("h6.ticker must match target_key for ticker targets")
+        return self
+
+
+class AttentionDecision(H6PlannerModel):
+    """One pre-provider attention routing outcome."""
+
+    target_key: NonEmptyStr
+    mode: AttentionMode
+    reason: AttentionReason
+    reasons: tuple[AttentionReason, ...] = Field(..., min_length=1)
+    features: AttentionFeatures
+    budget: AttentionBudgetEstimate
+    exploration_reserved: bool = False
+    actuated: bool = False
+
+    @model_validator(mode="after")
+    def _primary_reason_first(self) -> AttentionDecision:
+        if self.reasons[0] is not self.reason:
+            raise ValueError("reasons[0] must equal primary reason")
+        return self
+
+
+class AttentionPlan(H6PlannerModel):
+    """Immutable research attention plan for one run under a pinned policy."""
+
+    plan_id: UUID
+    run_id: NonEmptyStr
+    state_version_id: UUID | None = None
+    policy_content_hash: NonEmptyStr
+    rollout_mode: AttentionRolloutMode
+    actuated: bool = False
+    decisions: tuple[AttentionDecision, ...] = Field(default_factory=tuple)
+    total_budget: AttentionBudgetEstimate
+    exploration_slots_reserved: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _validate_plan(self) -> AttentionPlan:
+        if self.rollout_mode is AttentionRolloutMode.OFF and self.decisions:
+            raise ValueError("rollout_mode=off must not produce decisions")
+        if self.rollout_mode is AttentionRolloutMode.ENFORCE and not self.actuated:
+            raise ValueError("enforce plans must set actuated=True")
+        if self.rollout_mode is not AttentionRolloutMode.ENFORCE and self.actuated:
+            raise ValueError("off/shadow plans must not actuate")
+        expected_id = attention_plan_id(
+            run_id=self.run_id,
+            state_version_id=self.state_version_id,
+            policy_content_hash=self.policy_content_hash,
+            target_keys=tuple(d.target_key for d in self.decisions),
+        )
+        if self.plan_id != expected_id:
+            raise ValueError("plan_id must match run/state/policy/targets")
+        return self
+
+
+def _canonical_policy_json(payload: object) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def policy_content_hash(raw: Mapping[str, object]) -> str:
+    """SHA-256 over canonical policy body (ordering-independent)."""
+    return hashlib.sha256(_canonical_policy_json(dict(raw)).encode("utf-8")).hexdigest()
+
+
+def default_research_policy_path() -> Path:
+    """Default bundled policy path relative to digiquant package root."""
+    return Path(__file__).resolve().parents[4] / "config" / "olympus_research_policy.yaml"
+
+
+def resolve_research_policy_path() -> Path:
+    override = os.environ.get(OLYMPUS_RESEARCH_POLICY_ENV, "").strip()
+    if override:
+        return Path(override)
+    return default_research_policy_path()
+
+
+@lru_cache(maxsize=4)
+def load_research_attention_policy(path: Path | None = None) -> ResearchAttentionPolicy:
+    """Load and validate the versioned research attention policy YAML."""
+    resolved = path if path is not None else resolve_research_policy_path()
+    raw = yaml.safe_load(resolved.read_text(encoding="utf-8"))
+    if not isinstance(raw, Mapping):
+        raise ValueError(f"policy YAML must be a mapping: {resolved}")
+    digest = policy_content_hash(raw)
+    body = dict(raw)
+    body["content_hash"] = digest
+    return ResearchAttentionPolicy.model_validate(body)
+
+
+def _reason_rank(policy: ResearchAttentionPolicy, reason: AttentionReason) -> int:
+    try:
+        return policy.reason_priority.index(reason)
+    except ValueError:
+        return len(policy.reason_priority)
+
+
+def _pick_primary_reason(
+    candidates: Sequence[AttentionReason],
+    policy: ResearchAttentionPolicy,
+) -> AttentionReason:
+    if not candidates:
+        return AttentionReason.LOW_VALUE_CARRY
+    return min(candidates, key=lambda item: _reason_rank(policy, item))
+
+
+def _stable_reasons(
+    candidates: Sequence[AttentionReason],
+    primary: AttentionReason,
+) -> tuple[AttentionReason, ...]:
+    ordered = sorted(set(candidates), key=lambda item: item.value)
+    if primary in ordered:
+        ordered.remove(primary)
+    return (primary, *ordered)
+
+
+def _h6_reason_to_attention(reason: H6SelectionReason) -> AttentionReason:
+    return AttentionReason(reason.value)
+
+
+def _thresholds_from_policy(policy: ResearchAttentionPolicy) -> PolicyThresholds:
+    return policy.thresholds
+
+
+def _evaluate_ticker_reasons(
+    features: AttentionFeatures,
+    policy: ResearchAttentionPolicy,
+) -> list[AttentionReason]:
+    assert features.h6 is not None
+    h6 = features.h6
+    thresholds = _thresholds_from_policy(policy)
+    reasons: list[AttentionReason] = []
+
+    if features.force_full_rewrite:
+        reasons.append(AttentionReason.FORCE_FULL)
+    if not features.has_prior:
+        reasons.append(AttentionReason.NO_PRIOR)
+    if features.triage_mode == "quiet":
+        reasons.append(AttentionReason.TRIAGE_QUIET)
+    if features.triage_mode == "stale":
+        reasons.append(AttentionReason.TRIAGE_STALE)
+    if features.has_structured_delta:
+        reasons.append(AttentionReason.STRUCTURED_DELTA)
+    if (
+        features.staleness_days is not None
+        and features.staleness_days >= thresholds.stale_days_full
+    ):
+        reasons.append(AttentionReason.STALE_CONTENT)
+
+    if h6.invalidation_risk:
+        reasons.append(AttentionReason.INVALIDATION_RISK)
+    if h6.has_evidence_conflict or h6.counter_evidence_count > 0:
+        reasons.append(AttentionReason.CONFLICT)
+    if h6.stance_changed:
+        reasons.append(AttentionReason.DECISION_BOUNDARY)
+    elif (
+        h6.stance in {"buy", "sell"} and abs(h6.conviction_score) >= thresholds.boundary_conviction
+    ):
+        reasons.append(AttentionReason.DECISION_BOUNDARY)
+    elif (
+        h6.held
+        and h6.price_delta_abs is not None
+        and h6.price_delta_abs >= thresholds.boundary_price_delta
+    ):
+        reasons.append(AttentionReason.DECISION_BOUNDARY)
+    if h6.raw_uncertainty == "high":
+        reasons.append(AttentionReason.UNCERTAINTY)
+    if h6.held and h6.weight_pct >= thresholds.material_weight_pct:
+        reasons.append(AttentionReason.MATERIAL)
+    if h6.roster_reason in _EXPLORATORY_ROSTER_REASONS or features.exploration_slot:
+        reasons.append(AttentionReason.EXPLORATION)
+
+    if not reasons:
+        reasons.append(AttentionReason.LOW_VALUE_CARRY)
+    return reasons
+
+
+def _evaluate_artifact_reasons(
+    features: AttentionFeatures,
+    policy: ResearchAttentionPolicy,
+) -> list[AttentionReason]:
+    thresholds = _thresholds_from_policy(policy)
+    reasons: list[AttentionReason] = []
+
+    if features.force_full_rewrite:
+        reasons.append(AttentionReason.FORCE_FULL)
+    if not features.has_prior:
+        reasons.append(AttentionReason.NO_PRIOR)
+    if features.triage_mode == "quiet":
+        reasons.append(AttentionReason.TRIAGE_QUIET)
+    if features.triage_mode == "stale":
+        reasons.append(AttentionReason.TRIAGE_STALE)
+    if features.has_structured_delta:
+        reasons.append(AttentionReason.STRUCTURED_DELTA)
+    if (
+        features.staleness_days is not None
+        and features.staleness_days >= thresholds.stale_days_full
+    ):
+        reasons.append(AttentionReason.STALE_CONTENT)
+
+    if not reasons:
+        reasons.append(AttentionReason.LOW_VALUE_CARRY)
+    return reasons
+
+
+def _mode_for_reason(reason: AttentionReason) -> AttentionMode:
+    if reason in {AttentionReason.LOW_VALUE_CARRY, AttentionReason.TRIAGE_QUIET}:
+        return AttentionMode.CARRY
+    if reason is AttentionReason.STRUCTURED_DELTA:
+        return AttentionMode.METRIC_PATCH
+    if reason in {AttentionReason.TRIAGE_STALE, AttentionReason.STALE_CONTENT}:
+        return AttentionMode.SECTION_PATCH
+    if reason in {
+        AttentionReason.CONFLICT,
+        AttentionReason.DECISION_BOUNDARY,
+        AttentionReason.UNCERTAINTY,
+        AttentionReason.INVALIDATION_RISK,
+        AttentionReason.MATERIAL,
+        AttentionReason.EXPLORATION,
+    }:
+        return AttentionMode.CHALLENGE
+    return AttentionMode.DEEP_REFRESH
+
+
+_MODE_RANK: dict[AttentionMode, int] = {
+    AttentionMode.CARRY: 0,
+    AttentionMode.METRIC_PATCH: 1,
+    AttentionMode.SECTION_PATCH: 2,
+    AttentionMode.CHALLENGE: 3,
+    AttentionMode.DEEP_REFRESH: 4,
+}
+
+
+def _budget_for_mode(
+    mode: AttentionMode, policy: ResearchAttentionPolicy
+) -> AttentionBudgetEstimate:
+    return policy.mode_budgets[mode]
+
+
+def route_attention(
+    features: AttentionFeatures,
+    policy: ResearchAttentionPolicy,
+    *,
+    actuated: bool = False,
+) -> AttentionDecision:
+    """Deterministic single-target attention routing — no LLM, no graph node."""
+    if features.target_kind is AttentionTargetKind.TICKER:
+        candidates = _evaluate_ticker_reasons(features, policy)
+    else:
+        candidates = _evaluate_artifact_reasons(features, policy)
+    primary = _pick_primary_reason(candidates, policy)
+    mode = _mode_for_reason(primary)
+    return AttentionDecision(
+        target_key=features.target_key,
+        mode=mode,
+        reason=primary,
+        reasons=_stable_reasons(candidates, primary),
+        features=features,
+        budget=_budget_for_mode(mode, policy),
+        exploration_reserved=False,
+        actuated=actuated,
+    )
+
+
+def sum_budget_estimates(decisions: Sequence[AttentionDecision]) -> AttentionBudgetEstimate:
+    """Aggregate call/search/token estimates across decisions."""
+    return AttentionBudgetEstimate(
+        provider_calls=sum(item.budget.provider_calls for item in decisions),
+        searches=sum(item.budget.searches for item in decisions),
+        uncached_tokens=sum(item.budget.uncached_tokens for item in decisions),
+        min_h6_rounds=max((item.budget.min_h6_rounds for item in decisions), default=0),
+    )
+
+
+def _downgrade_mode(mode: AttentionMode) -> AttentionMode:
+    order = (
+        AttentionMode.DEEP_REFRESH,
+        AttentionMode.CHALLENGE,
+        AttentionMode.SECTION_PATCH,
+        AttentionMode.METRIC_PATCH,
+        AttentionMode.CARRY,
+    )
+    idx = order.index(mode)
+    if idx + 1 >= len(order):
+        return AttentionMode.CARRY
+    return order[idx + 1]
+
+
+def apply_session_budget(
+    decisions: Sequence[AttentionDecision],
+    policy: ResearchAttentionPolicy,
+) -> tuple[tuple[AttentionDecision, ...], AttentionBudgetEstimate]:
+    """Trim decisions to session budget while preserving exploration reservations."""
+    working = list(decisions)
+    total = sum_budget_estimates(working)
+
+    def _within_budget(budget: AttentionBudgetEstimate) -> bool:
+        return (
+            budget.provider_calls <= policy.session_budget.max_provider_calls
+            and budget.searches <= policy.session_budget.max_searches
+            and budget.uncached_tokens <= policy.session_budget.max_uncached_tokens
+        )
+
+    # Ensure minimum exploration slots survive before trimming others.
+    exploration_candidates = [
+        d
+        for d in working
+        if d.features.exploration_slot
+        and d.mode in {AttentionMode.CHALLENGE, AttentionMode.DEEP_REFRESH}
+    ]
+    must_keep = set(
+        d.target_key
+        for d in sorted(
+            exploration_candidates,
+            key=lambda item: (-_MODE_RANK[item.mode], item.target_key),
+        )[: policy.exploration.min_reserved_slots]
+    )
+    for idx, decision in enumerate(working):
+        if decision.target_key in must_keep:
+            working[idx] = decision.model_copy(update={"exploration_reserved": True})
+    protected = must_keep
+
+    while working and not _within_budget(total):
+        trimmable = [
+            d
+            for d in working
+            if d.target_key not in protected or d.mode is AttentionMode.DEEP_REFRESH
+        ]
+        if not trimmable:
+            break
+        victim = max(trimmable, key=lambda item: (_MODE_RANK[item.mode], item.target_key))
+        if victim.mode is AttentionMode.CARRY:
+            working.remove(victim)
+        else:
+            new_mode = _downgrade_mode(victim.mode)
+            idx = working.index(victim)
+            working[idx] = victim.model_copy(
+                update={
+                    "mode": new_mode,
+                    "budget": _budget_for_mode(new_mode, policy),
+                    "exploration_reserved": victim.exploration_reserved
+                    and new_mode in {AttentionMode.CHALLENGE, AttentionMode.DEEP_REFRESH},
+                }
+            )
+        total = sum_budget_estimates(working)
+
+    return tuple(working), total
+
+
+def attention_plan_id(
+    *,
+    run_id: str,
+    state_version_id: UUID | None,
+    policy_content_hash: str,
+    target_keys: Sequence[str],
+) -> UUID:
+    """Deterministic plan id for identical run/state/policy/target set."""
+    state_part = "" if state_version_id is None else state_version_id.hex
+    targets = ",".join(sorted(target_keys))
+    return uuid5(
+        _ATTENTION_PLAN_NS,
+        f"{run_id}:{state_part}:{policy_content_hash}:{targets}",
+    )
+
+
+def plan_research_attention(
+    *,
+    run_id: str,
+    state_version_id: UUID | None,
+    features: Sequence[AttentionFeatures],
+    policy: ResearchAttentionPolicy | None = None,
+    rollout_mode: AttentionRolloutMode | None = None,
+) -> AttentionPlan:
+    """Build a research attention plan — API only; no Atlas/Hermes wiring (WP13.3+)."""
+    resolved_policy = policy if policy is not None else load_research_attention_policy()
+    resolved_rollout = rollout_mode if rollout_mode is not None else AttentionRolloutMode.SHADOW
+
+    if resolved_rollout is AttentionRolloutMode.OFF:
+        zero = _budget_for_mode(AttentionMode.CARRY, resolved_policy)
+        return AttentionPlan(
+            plan_id=attention_plan_id(
+                run_id=run_id,
+                state_version_id=state_version_id,
+                policy_content_hash=resolved_policy.content_hash,
+                target_keys=tuple(),
+            ),
+            run_id=run_id,
+            state_version_id=state_version_id,
+            policy_content_hash=resolved_policy.content_hash,
+            rollout_mode=AttentionRolloutMode.OFF,
+            actuated=False,
+            decisions=(),
+            total_budget=zero,
+            exploration_slots_reserved=0,
+        )
+
+    actuated = resolved_rollout is AttentionRolloutMode.ENFORCE
+    raw_decisions = [route_attention(item, resolved_policy, actuated=actuated) for item in features]
+    decisions, total = apply_session_budget(raw_decisions, resolved_policy)
+    reserved = sum(
+        1
+        for d in decisions
+        if d.exploration_reserved
+        and d.mode in {AttentionMode.CHALLENGE, AttentionMode.DEEP_REFRESH}
+    )
+    return AttentionPlan(
+        plan_id=attention_plan_id(
+            run_id=run_id,
+            state_version_id=state_version_id,
+            policy_content_hash=resolved_policy.content_hash,
+            target_keys=tuple(d.target_key for d in decisions),
+        ),
+        run_id=run_id,
+        state_version_id=state_version_id,
+        policy_content_hash=resolved_policy.content_hash,
+        rollout_mode=resolved_rollout,
+        actuated=actuated,
+        decisions=decisions,
+        total_budget=total,
+        exploration_slots_reserved=reserved,
+    )
+
+
+def h6_selection_to_attention_decision(
+    selection: H6Selection,
+    policy: ResearchAttentionPolicy,
+    *,
+    actuated: bool = False,
+) -> AttentionDecision:
+    """Bridge WP11.3 H6 selection into WP13.1 attention vocabulary."""
+    features = AttentionFeatures(
+        target_kind=AttentionTargetKind.TICKER,
+        target_key=selection.ticker,
+        h6=selection.features,
+        has_prior=True,
+        exploration_slot=selection.reason is H6SelectionReason.EXPLORATION,
+    )
+    if selection.action is H6Action.CARRY:
+        primary = AttentionReason.LOW_VALUE_CARRY
+        mode = AttentionMode.CARRY
+        budget = _budget_for_mode(mode, policy)
+    else:
+        primary = _h6_reason_to_attention(selection.reason)
+        mode = AttentionMode.CHALLENGE
+        budget = _budget_for_mode(mode, policy)
+    return AttentionDecision(
+        target_key=features.target_key,
+        mode=mode,
+        reason=primary,
+        reasons=(primary,),
+        features=features,
+        budget=budget,
+        exploration_reserved=False,
+        actuated=actuated,
+    )
+
+
 __all__ = [
+    "AttentionBudgetEstimate",
+    "AttentionDecision",
+    "AttentionFeatures",
+    "AttentionMode",
+    "AttentionPlan",
+    "AttentionReason",
+    "AttentionRolloutMode",
+    "AttentionTargetKind",
     "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
     "OLYMPUS_H6_SELECTION_MODE_ENV",
+    "OLYMPUS_RESEARCH_POLICY_ENV",
+    "PolicyExploration",
+    "PolicySessionBudget",
+    "PolicyThresholds",
+    "ResearchAttentionPolicy",
     "H6Action",
     "H6Budget",
     "H6DecisionFeatures",
     "H6Selection",
     "H6SelectionMode",
     "H6SelectionReason",
+    "apply_session_budget",
     "assert_no_materiality_in_prompt",
+    "attention_plan_id",
     "build_h6_decision_features",
+    "default_research_policy_path",
+    "h6_selection_to_attention_decision",
     "incumbent_fallback_selection",
+    "load_research_attention_policy",
+    "plan_research_attention",
+    "policy_content_hash",
     "resolve_h6_selection_mode",
+    "resolve_research_policy_path",
+    "route_attention",
     "select_h6",
+    "sum_budget_estimates",
 ]
