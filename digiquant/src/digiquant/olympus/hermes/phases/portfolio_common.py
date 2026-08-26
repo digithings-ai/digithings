@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from datetime import UTC, date, datetime
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
     Any,
@@ -45,6 +46,15 @@ from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
+from digiquant.olympus.research_retrieval.evidence_bundle import (
+    build_h5_evidence_bundle,
+    cite_evidence_bundle_on_forecast,
+    facts_from_phase_inputs,
+    publish_h5_evidence_bundle,
+    resolve_h5_state_version_id,
+)
+from digiquant.olympus.research_retrieval.models import TickerEvidenceBundle, TypedProvenance
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
 from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
 logger = logging.getLogger(__name__)
@@ -344,11 +354,16 @@ def _attach_forecast_lineage(
     phase_slug: str,
     prior_body: dict[str, Any] | None,
     errors: list[PhaseError],
+    evidence_bundle: TickerEvidenceBundle | None = None,
 ) -> AnalystPayload:
     """Materialize or carry :class:`ForecastAssessment`; never invent terms.
 
     Full mode without ``ForecastTerms`` retains analyst prose (shadow rollout) and
     records ``forecast_unavailable`` rather than dropping the ticker.
+
+    When materializing a **new** assessment, cite the H5 base bundle / evidence
+    IDs on ``ForecastTerms.evidence_ids`` (WP11.2). Skip / identical-content
+    carries preserve prior identity without re-citing.
     """
     terms = payload.forecast
     prior_assessment = _assessment_from_body(prior_body) if prior_body else None
@@ -390,6 +405,9 @@ def _attach_forecast_lineage(
             update={"forecast": terms, "forecast_assessment": prior_assessment}
         )
 
+    if evidence_bundle is not None:
+        terms = cite_evidence_bundle_on_forecast(terms, evidence_bundle)
+
     cutoff = _cutoff_or_run_date(state)
     prompt_version, artifact_version = _skill_versions(mode)
     assessment = materialize_forecast_assessment(
@@ -406,6 +424,59 @@ def _attach_forecast_lineage(
         known_at=cutoff,
     )
     return payload.model_copy(update={"forecast": terms, "forecast_assessment": assessment})
+
+
+def _h5_attempt_id() -> str:
+    raw = os.environ.get("OLYMPUS_ATTEMPT", "").strip()
+    return raw or "1"
+
+
+def _publish_base_bundle_before_provider(
+    *,
+    state: HermesState,
+    ticker: str,
+    phase_inputs: dict[str, Any],
+    phase_slug: str,
+    store: EvidenceBundleStore | None,
+) -> TickerEvidenceBundle:
+    """Canonicalize + optionally persist one base bundle before the LLM call."""
+    cutoff = _cutoff_or_run_date(state)
+    recorded_at = cutoff
+    run_id = str(state.run_id)
+    attempt_id = _h5_attempt_id()
+    state_version_id = resolve_h5_state_version_id(
+        state.research_state_pin if isinstance(state.research_state_pin, dict) else None,
+        source_run_id=run_id,
+    )
+    facts, missing = facts_from_phase_inputs(
+        ticker=ticker,
+        phase_inputs=phase_inputs,
+        knowledge_cutoff_at=cutoff,
+    )
+    provenance = TypedProvenance(
+        source_run_id=run_id,
+        attempt_id=attempt_id,
+        artifact_id=f"artifact-h5-{ticker.strip().upper()}",
+    )
+    built = build_h5_evidence_bundle(
+        ticker=ticker,
+        source_run_id=run_id,
+        attempt_id=attempt_id,
+        state_version_id=state_version_id,
+        facts=facts,
+        recorded_at=recorded_at,
+        provenance=provenance,
+        missing_fields=missing,
+    )
+    bundle = publish_h5_evidence_bundle(built=built, store=store)
+    logger.info(
+        "H5 evidence bundle published for %s bundle_id=%s durable=%s phase=%s",
+        ticker,
+        bundle.bundle_id,
+        store is not None,
+        phase_slug,
+    )
+    return bundle
 
 
 def _portfolio_grounding(state: HermesState, *, phase: RetrievalPhase, segment: str = ""):
@@ -427,15 +498,34 @@ def run_asset_analyst_llm(
     ticker: str,
     roster_entry: dict[str, Any],
     phase_slug: str,
-) -> tuple[AnalystPayload | None, dict[str, Any] | None, list[PhaseError]]:
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+) -> tuple[
+    AnalystPayload | None,
+    dict[str, Any] | None,
+    list[PhaseError],
+    TickerEvidenceBundle | None,
+]:
     errors: list[PhaseError] = []
     artifact_key = analyst_artifact_key(ticker)
     mode = resolve_analyst_edit_mode(state, ticker)
     prior_loader = _TickerPriorLoader(state, artifact_key)
     prior = prior_loader.load(artifact_key, state.run_date)
     prior_body = _body_from_prior_payload(prior.payload) if prior is not None else None
+    evidence_bundle: TickerEvidenceBundle | None = None
 
     if mode == "skip" and prior is not None and prior_body:
+        skip_inputs: dict[str, Any] = {
+            "ticker": ticker,
+            "price_deltas": dict(state.price_deltas),
+            "bias_row": state.phase6_bias_row or {},
+        }
+        evidence_bundle = _publish_base_bundle_before_provider(
+            state=state,
+            ticker=ticker,
+            phase_inputs=skip_inputs,
+            phase_slug=phase_slug,
+            store=evidence_bundle_store,
+        )
         payload = AnalystPayload.model_validate({**prior_body, "ticker": ticker})
         enriched = _attach_forecast_lineage(
             payload=payload,
@@ -445,6 +535,7 @@ def run_asset_analyst_llm(
             phase_slug=phase_slug,
             prior_body=prior_body,
             errors=errors,
+            evidence_bundle=evidence_bundle,
         )
         body = analyst_body_from_payload(enriched)
         carried = build_analyst_document(
@@ -453,7 +544,7 @@ def run_asset_analyst_llm(
             body=body,
             linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
         )
-        return enriched, carried, errors
+        return enriched, carried, errors, evidence_bundle
 
     skill_text = (
         load_skill_edit("asset-analyst") if mode == "edit" else load_skill_full("asset-analyst")
@@ -486,6 +577,15 @@ def run_asset_analyst_llm(
     if prior is not None:
         phase_inputs["prior_analyst"] = dict(prior.payload)
 
+    # WP11.2: one base bundle per H5-attempted ticker — before provider call.
+    evidence_bundle = _publish_base_bundle_before_provider(
+        state=state,
+        ticker=ticker,
+        phase_inputs=phase_inputs,
+        phase_slug=phase_slug,
+        store=evidence_bundle_store,
+    )
+
     eff_model = get_model_for_phase(phase_slug) or get_model_for_mode()
 
     if mode == "edit" and prior is not None:
@@ -496,18 +596,34 @@ def run_asset_analyst_llm(
                 "prior_document": prior.payload,
             }
         )
-        result = run_research_agent(
-            skill_text=skill_text,
-            phase_inputs=phase_inputs,
-            shared_context=_shared_context(
-                state, context_keys=("digest", "digest-delta"), data_layer_scope="ticker"
-            ),
-            output_model=DocumentPatch,
-            phase_slug=phase_slug,
-            tools=tools,
-            execute_tool=execute_tool,
-            model=eff_model,
-        )
+        try:
+            result = run_research_agent(
+                skill_text=skill_text,
+                phase_inputs=phase_inputs,
+                shared_context=_shared_context(
+                    state, context_keys=("digest", "digest-delta"), data_layer_scope="ticker"
+                ),
+                output_model=DocumentPatch,
+                phase_slug=phase_slug,
+                tools=tools,
+                execute_tool=execute_tool,
+                model=eff_model,
+            )
+        except Exception as exc:
+            logger.warning(
+                "H5 analyst edit LLM failed for %s (%s: %s); bundle retained",
+                ticker,
+                type(exc).__name__,
+                exc,
+            )
+            errors.append(
+                PhaseError(
+                    phase="phase_hermes",
+                    node=phase_slug,
+                    message=f"analyst LLM failed: {exc}"[:500],
+                )
+            )
+            return None, None, errors, evidence_bundle
         patch = coerce_document_patch(result)
         try:
             reject_partial_forecast_edits(patch)
@@ -531,8 +647,9 @@ def run_asset_analyst_llm(
                 phase_slug=phase_slug,
                 prior_body=body_raw,
                 errors=errors,
+                evidence_bundle=evidence_bundle,
             )
-            return enriched, dict(prior.payload), errors
+            return enriched, dict(prior.payload), errors, evidence_bundle
         materialized = dict(merge_result.materialized)
         body_raw = materialized.get("body", materialized)
         if not isinstance(body_raw, dict):
@@ -546,6 +663,7 @@ def run_asset_analyst_llm(
             phase_slug=phase_slug,
             prior_body=prior_body,
             errors=errors,
+            evidence_bundle=evidence_bundle,
         )
         doc = build_analyst_document(
             ticker=ticker,
@@ -553,7 +671,7 @@ def run_asset_analyst_llm(
             body=analyst_body_from_payload(enriched),
             linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
         )
-        return enriched, doc, errors
+        return enriched, doc, errors, evidence_bundle
 
     try:
         result = run_research_agent(
@@ -570,7 +688,7 @@ def run_asset_analyst_llm(
         )
     except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
         logger.warning(
-            "H5 analyst LLM failed for %s (%s: %s); skipping ticker",
+            "H5 analyst LLM failed for %s (%s: %s); skipping ticker (bundle retained)",
             ticker,
             type(exc).__name__,
             exc,
@@ -580,7 +698,7 @@ def run_asset_analyst_llm(
                 phase="phase_hermes", node=phase_slug, message=f"analyst LLM failed: {exc}"[:500]
             )
         )
-        return None, None, errors
+        return None, None, errors, evidence_bundle
     payload = result.model_copy(
         update={"fingerprint_news_hash": news_hash_for_ticker(state, ticker)}
     )
@@ -592,6 +710,7 @@ def run_asset_analyst_llm(
         phase_slug=phase_slug,
         prior_body=prior_body,
         errors=errors,
+        evidence_bundle=evidence_bundle,
     )
     body = analyst_body_from_payload(enriched)
     doc = build_analyst_document(
@@ -600,4 +719,4 @@ def run_asset_analyst_llm(
         body=body,
         linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
     )
-    return enriched, doc, errors
+    return enriched, doc, errors, evidence_bundle

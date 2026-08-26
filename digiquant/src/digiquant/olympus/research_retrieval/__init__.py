@@ -11,6 +11,9 @@ WP12.5 compiled prose views:
 WP11.1 ticker evidence bundles + amendments:
 :class:`~digiquant.olympus.research_retrieval.store.EvidenceBundleStore`
 (models in the same ``models`` module; H6 selection cutover is WP11.3+).
+WP11.2 H5 publish:
+:mod:`digiquant.olympus.research_retrieval.evidence_bundle`
+(one base bundle per H5-attempted ticker before the provider call).
 """
 
 from __future__ import annotations
@@ -22,6 +25,19 @@ from digiquant.olympus.research_retrieval.blinding import (
     research_document_allowed,
 )
 from digiquant.olympus.research_retrieval.cache import ResearchCache
+from digiquant.olympus.research_retrieval.evidence_bundle import (
+    OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV,
+    EvidenceConflict,
+    H5EvidenceBundleBuild,
+    H5EvidenceFact,
+    MissingEvidenceField,
+    build_h5_evidence_bundle,
+    cite_evidence_bundle_on_forecast,
+    evidence_bundle_writer_enabled,
+    facts_from_phase_inputs,
+    publish_h5_evidence_bundle,
+    resolve_h5_state_version_id,
+)
 from digiquant.olympus.research_retrieval.legacy_backfill import (
     BackfillCounts,
     LegacySourceDocument,
@@ -104,13 +120,18 @@ __all__ = [
     "EvidenceBundleError",
     "EvidenceBundleMissingError",
     "EvidenceBundleStore",
+    "EvidenceConflict",
     "EvidenceRecord",
     "ExpectedEventStatus",
     "ExpectedEventVersion",
+    "H5EvidenceBundleBuild",
+    "H5EvidenceFact",
     "LegacyDocumentRef",
     "LegacySourceDocument",
     "LoadedResearchState",
+    "MissingEvidenceField",
     "MissingFactRequest",
+    "OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV",
     "PatchMode",
     "PatchTargetKind",
     "RESEARCH_TOOLS",
@@ -134,21 +155,27 @@ __all__ = [
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
     "backfill_legacy_manifests",
+    "build_h5_evidence_bundle",
     "build_legacy_document_ref",
     "build_research_tool_dispatcher",
     "child_version_must_name_parent",
+    "cite_evidence_bundle_on_forecast",
     "compile_research_brief",
     "compile_research_digest",
     "compile_research_view",
     "compile_views_from_store",
     "document_key_for_view",
+    "evidence_bundle_writer_enabled",
     "extract_section",
+    "facts_from_phase_inputs",
     "pin_research_state_for_preflight",
     "portfolio_tool_allowed",
     "publish_compiled_views",
+    "publish_h5_evidence_bundle",
     "query_portfolio",
     "query_research",
     "require_research_state_pin",
     "require_structured_write_ok",
     "research_document_allowed",
+    "resolve_h5_state_version_id",
 ]
