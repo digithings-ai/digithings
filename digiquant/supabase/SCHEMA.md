@@ -200,7 +200,7 @@ H8 cutover remains later.
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `olympus_forecast_outcomes` | `(outcome_id UUID)` | Immutable `ForecastOutcome`: base/effective IDs, reference/maturity sessions + snapshots, forecast_mean/realized/signed_residual, positive_label, status, event/known times, content_hash. FK → assessments. |
+| `olympus_forecast_outcomes` | `(outcome_id UUID)` | Immutable `ForecastOutcome`: base/effective IDs, **`horizon_sessions`** (WP5/#2797), reference/maturity sessions + snapshots, forecast_mean/realized/signed_residual, positive_label, status, event/known times, content_hash. FK → assessments. **Unique** `(effective_forecast_id, maturity_session)` via migration 086. |
 | `olympus_forecast_calibrations` | `(calibration_id UUID)` | Immutable `ForecastCalibration`: cohort/prior/method, sample + equivalent size, bias/dispersion/Brier/log/reliability, outcome_ids[], status, times, content_hash. |
 | `olympus_calibrated_forecasts` | `(calibrated_forecast_id UUID)` | Shadow `CalibratedForecast`: base/effective IDs, optional calibration FK, expected return / error std / downside quantiles / positive probability / reliability weight, status, times, content_hash. |
 
