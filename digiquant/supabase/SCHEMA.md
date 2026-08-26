@@ -106,7 +106,7 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 | `public_nav_history` | `nav_history` | Legacy NAV series + cash/invested % + derived `day_return_pct` (rollback target). |
 | `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
-### Public accounting surface — migration 074 (#2599 / Task 3.4)
+### Public accounting surface — migration 074 (#2599 / Task 3.4) + 084 (#2779)
 
 Curated security-definer views over private `olympus_accounting_*` tips. Prefer these
 for digiquant.io / Olympus performance readers after the shadow reconciliation gate.
@@ -120,8 +120,14 @@ adapters to `public_nav_history` / `nav_history` without deleting accounting row
 | `public_accounting_nav_history` | Finalized preferred; dates without a final tip use labeled legacy (`source=legacy_nav_history`, `contract=legacy_estimate`). Same date never mixes sources. |
 | `public_daily_realized_attribution` | Final-tip per-ticker contribution pct; empty when no final tip (no lookback substitution). |
 
+**`day_return_pct` (084 / #2779):** `(closing_equity − opening_equity) / opening_equity`
+(×100), matching engine identity `E1 = E0 + net_pnl_total + cash_pnl` — not
+`net_pnl_total / E0` alone. Migration 074's formula is superseded by
+`084_olympus_accounting_day_return_pct.sql` (CREATE OR REPLACE; no base rewrites).
+
 **Cutover gate:** point public readers only after an approved shadow interval (including one
-rebalance session) has zero unexplained reconciliation failures.
+rebalance session) has zero unexplained reconciliation failures. Do **not** enable
+`OLYMPUS_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
 
 ### ProfileConfig — migration 075 (#2609 / Track B)
 

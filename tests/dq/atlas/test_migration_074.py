@@ -126,3 +126,23 @@ def test_anon_select_granted_on_curated_views(sql: str, view: str) -> None:
 def test_documents_shadow_cutover_gate(raw: str) -> None:
     assert "shadow" in raw.lower()
     assert "rollback" in raw.lower()
+
+
+def test_074_day_return_formula_superseded_by_084() -> None:
+    """074 historically used net_pnl_total/E0; #2779 / 084 replaces with equity delta.
+
+    Keep 074 immutable (already applied). Contract for the live formula lives in
+    ``test_migration_084.py``.
+    """
+    successor = MIGRATIONS_DIR / "084_olympus_accounting_day_return_pct.sql"
+    assert successor.is_file(), "084 must replace day_return_pct with equity delta"
+    body_074 = _strip_comments(MIGRATION_PATH.read_text(encoding="utf-8"))
+    # Historical defect retained in 074 source for replay archaeology.
+    assert re.search(r"net_pnl_total\s*/\s*p\.opening_equity", body_074, re.I)
+    body_084 = _strip_comments(successor.read_text(encoding="utf-8"))
+    assert re.search(
+        r"(?:p\.)?closing_equity\s*-\s*(?:p\.)?opening_equity",
+        body_084,
+        re.I,
+    )
+    assert not re.search(r"net_pnl_total\s*/\s*(?:p\.)?opening_equity", body_084, re.I)
