@@ -1041,14 +1041,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   hard-constraint breaches stay visible even when challenger return is stronger;
   atomic file-only report output. No auto-promotion, production config write, or
   H8/H9 wiring.
-  **Phase 2 lock surface (#2820 / Integration 2.1):**
+  **Phase 2 lock surface (#2820 / Integration 2.1; follow-up #2837):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
-  `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
-  ownership, rank-gap independence of calibrated magnitude, final-book report
-  bind, H9 hash validation without report rebuild, byte-stable shadow artifacts,
-  production import fence vs challenger/replay, write-denied isolation checker,
-  and hard-failure visibility on shared-cash replay. Challenger selection and
-  live trading remain disabled.
+  `phase2_e2e_fixtures.py`) pins **Phase 2** (WP8–WP10) unit-composed contracts —
+  H7/H8/H9 ownership, rank-gap independence of calibrated magnitude, final-book
+  report bind, H9 hash validation without report rebuild, byte-stable shadow
+  artifacts with challenger→comparison fingerprint bind, production import fence
+  vs challenger/replay, write-denied isolation checker (including artifact trust),
+  and hard-failure visibility on shared-cash replay. This suite does **not** close
+  metaplan Gate 2 (Signal) or Gate 3 (Shadow). Challenger selection and live
+  trading remain disabled.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:

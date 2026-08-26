@@ -432,8 +432,15 @@ def phase2_comparison_report(
     *,
     challenger_breaches: tuple[str, ...] = (),
     challenger_nav: str = "110000",
+    incumbent_weights_fingerprint: str | None = None,
+    challenger_weights_fingerprint: str | None = None,
 ):
-    """Paired incumbent/challenger comparison under a shared observed manifest."""
+    """Paired incumbent/challenger comparison under a shared observed manifest.
+
+    Replay NAV results stay synthetic unit stubs. Callers that claim composition
+    must pass real incumbent/challenger weight fingerprints (see
+    ``run_phase2_composition``).
+    """
     criteria = load_shadow_criteria(
         _REPO / "digiquant/src/digiquant/olympus/replay/shadow_criteria/v1.json"
     )
@@ -445,13 +452,13 @@ def phase2_comparison_report(
         criteria=criteria,
         incumbent=ComparisonArmInput(
             arm=ComparisonArm.INCUMBENT,
-            weights_fingerprint="inc-fp",
+            weights_fingerprint=incumbent_weights_fingerprint or "inc-fp",
             request=inc_req,
             result=phase2_ok_result(inc_req, ending_nav="105000"),
         ),
         challenger=ComparisonArmInput(
             arm=ComparisonArm.CHALLENGER,
-            weights_fingerprint="ch-fp",
+            weights_fingerprint=challenger_weights_fingerprint or "ch-fp",
             request=ch_req,
             result=phase2_ok_result(ch_req, ending_nav=challenger_nav),
             hard_constraint_breaches=challenger_breaches,
@@ -495,13 +502,22 @@ def load_isolation_checker() -> Any:
 
 
 def run_phase2_composition() -> dict[str, Any]:
-    """End-to-end WP8→WP10 composition: bundle → report → artifact → challenger → comparison."""
+    """Compose WP8→WP10 surfaces: artifact → challenger → comparison fingerprints.
+
+    Replay NAV leaves remain synthetic stubs (not a live Nautilus engine run).
+    Challenger selection stays off the production Hermes graph.
+    """
     artifact = phase2_shadow_artifact()
     again = phase2_shadow_artifact()
     assert artifact.artifact_content_hash == again.artifact_content_hash
 
     challenger = evaluate_shadow_challenger(phase2_challenger_request(artifact))
-    criteria, comparison = phase2_comparison_report()
+    if challenger.challenger_weights is None:
+        raise AssertionError("phase2 composition requires non-abstained challenger weights")
+    criteria, comparison = phase2_comparison_report(
+        incumbent_weights_fingerprint=artifact.incumbent_final_weights.weights_fingerprint,
+        challenger_weights_fingerprint=challenger.challenger_weights.weights_fingerprint,
+    )
     return {
         "artifact": artifact,
         "artifact_again": again,
