@@ -88,6 +88,25 @@ python3 scripts/backfill_simulated_runs.py --validate-all
 
 **Pre-executed:** Apr 5–14, 2026 backfill completed 2026-04-14 (468 documents, all days OK).
 
+### Legacy research-state inventory (WP12.4 / #2870)
+
+Inventory existing `documents` rows into `LegacyDocumentRef` pointers
+(`legacy_manifest_only`, `known_at=None`) for audit/degraded compatibility.
+Does **not** extract evidence/beliefs/events or invent known times. Strict
+readers exclude these rows. Default is dry-run; pass `--apply` to write.
+
+```bash
+# Dry-run counts only (default)
+python3 scripts/backfill_research_state.py --supabase
+python3 scripts/backfill_research_state.py --documents-json /path/to/sources.json
+
+# Append inventory refs via ResearchStateStore
+python3 scripts/backfill_research_state.py --supabase --apply
+```
+
+Counts always reconcile: `source == inserted + skipped + unverifiable`.
+Library: `digiquant.olympus.research_retrieval.legacy_backfill`.
+
 ## Market-open execution and price backfill
 
 ### Activity tab / `position_events` stops at an old date

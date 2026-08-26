@@ -896,6 +896,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Compatibility `documents` path remains shadow-only until exact-state coverage; never
   `load_latest` after pin. Helper uses WP12.1 ID helpers only (no redefine).
   Soft API for WP12.3 must sit on the hardened store (#2868 / #2867).
+  **Legacy research-state inventory (#2870 / WP12.4).** Operator backfill
+  `scripts/atlas/backfill_research_state.py` (default dry-run; `--apply` writes)
+  maps existing `documents` / JSON sources into `LegacyDocumentRef` inventory via
+  `research_retrieval.legacy_backfill.backfill_legacy_manifests` — hashes source
+  payloads with WP12.1 `content_digest` / `legacy_document_ref_id`, sets
+  `known_at=None` + `legacy_manifest_only=True`, and never appends evidence,
+  belief, expected-event, or patch rows. Idempotent counts
+  (`source == inserted + skipped + unverifiable`); strict `load_state_version`
+  continues to omit legacy refs. Audit/degraded compatibility only — not strict
+  replay/training.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
