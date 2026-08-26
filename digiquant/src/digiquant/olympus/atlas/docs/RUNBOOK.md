@@ -120,6 +120,14 @@ schema). Atlas publish dual-writes `research-state-brief` /
 failure refuses view publication. Incumbent digest/segment documents stay until
 a later parity/retention gate.
 
+**Operator note:** Atlas/Hermes CLI currently construct `PublishDeps(client=…)`
+(and preflight deps) **without** injecting `research_state_store` — same shadow
+pattern as WP12.3. Dual-write therefore does **not** run on default production
+CLI paths until callers wire the same in-memory store used for the pin (durable
+SQL IO adapter later). Do not treat `research-state-brief` /
+`research-state-digest` rows as present or operator-authoritative until that
+wiring lands.
+
 ## Market-open execution and price backfill
 
 ### Activity tab / `position_events` stops at an old date

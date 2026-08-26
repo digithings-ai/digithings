@@ -916,8 +916,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   closed when structured write did not succeed (no misleading view publication).
   Atlas publish dual-writes `research-state-brief` / `research-state-digest` only when
   `research_state_status=pinned` and `PublishDeps.research_state_store` can exact-load
-  the pin; incumbent digest/segment writers remain. Never `load_latest`; never parse
-  prose into claims.
+  the pin; incumbent digest/segment writers remain. Default Atlas/Hermes CLI leave
+  `research_state_store` unwired (WP12.3 shadow pattern), so dual-write is inactive
+  until callers inject the store; not yet an operator-authoritative document surface.
+  Never `load_latest`; never parse prose into claims.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
