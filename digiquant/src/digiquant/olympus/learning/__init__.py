@@ -16,6 +16,10 @@ from digiquant.olympus.learning.outcome_models import (
     OutcomeEpisode,
     OutcomeLessonVersion,
 )
+from digiquant.olympus.learning.outcome_assembly import (
+    OutcomeEpisodeAssembler,
+    AssemblyPassResult,
+)
 from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
 
 __all__ = [
@@ -27,6 +31,8 @@ __all__ = [
     "EpisodeDisposition",
     "OutcomeEpisode",
     "OutcomeLessonVersion",
+    "AssemblyPassResult",
+    "OutcomeEpisodeAssembler",
     "OutcomeLearningStore",
     "build_beliefs_distillation_phase",
     "distill_beliefs",
