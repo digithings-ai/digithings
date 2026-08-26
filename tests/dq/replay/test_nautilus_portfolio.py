@@ -122,6 +122,9 @@ def test_shared_cash_replay_ok_and_deterministic(tmp_path: Path) -> None:
     assert a.ending_nav == b.ending_nav
     assert a.ending_cash is not None
     assert a.holdings
+    assert a.nav_path
+    assert len(a.nav_path) == len(b.nav_path)
+    assert a.nav_path == b.nav_path
     assert a.total_commission is not None
     assert a.total_commission > 0
     # Costs reduce shared NAV vs a zero-commission twin.

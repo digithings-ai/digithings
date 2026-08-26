@@ -210,6 +210,19 @@ class HoldingSnapshot(ReplayContractModel):
     market_value: FiniteNonNegDec
 
 
+class NavPoint(ReplayContractModel):
+    """One synchronized mark-to-market NAV observation on the shared-cash path."""
+
+    ts: datetime
+    nav: FiniteNonNegDec
+
+    @model_validator(mode="after")
+    def _validate_point(self) -> NavPoint:
+        if self.ts.tzinfo is None:
+            raise ValueError("nav_path timestamps must be timezone-aware UTC")
+        return self
+
+
 class PortfolioReplayResult(ReplayContractModel):
     """Strict internal portfolio result from one spawned shared-cash engine."""
 
@@ -224,10 +237,11 @@ class PortfolioReplayResult(ReplayContractModel):
     rebalance_commission: FiniteNonNegDec | None = None
     holdings: tuple[HoldingSnapshot, ...] = ()
     fills: tuple[FillRecord, ...] = ()
+    nav_path: tuple[NavPoint, ...] = ()
     message: str = ""
     result_content_hash: NonEmptyId | None = None
 
-    @field_validator("holdings", "fills", mode="before")
+    @field_validator("holdings", "fills", "nav_path", mode="before")
     @classmethod
     def _coerce_tuples(cls, value: object) -> object:
         if isinstance(value, list):
@@ -236,6 +250,12 @@ class PortfolioReplayResult(ReplayContractModel):
 
     @model_validator(mode="after")
     def _validate_result(self) -> PortfolioReplayResult:
+        if self.nav_path:
+            stamps = [p.ts for p in self.nav_path]
+            if stamps != sorted(stamps):
+                raise ValueError("nav_path must be sorted by timestamp")
+            if len(set(stamps)) != len(stamps):
+                raise ValueError("nav_path timestamps must be unique")
         if self.status == PortfolioReplayStatus.OK:
             if self.ending_cash is None or self.ending_nav is None:
                 raise ValueError("ok result requires ending_cash and ending_nav")
@@ -263,9 +283,31 @@ def portfolio_replay_result_content_hash(result: PortfolioReplayResult) -> str:
         "rebalance_commission": result.rebalance_commission,
         "holdings": [h.model_dump(mode="json") for h in result.holdings],
         "fills": [f.model_dump(mode="json") for f in result.fills],
+        "nav_path": [p.model_dump(mode="json") for p in result.nav_path],
         "message": result.message,
     }
     return sha256_hex(payload)
+
+
+def max_drawdown_from_nav_path(nav_path: tuple[NavPoint, ...]) -> Decimal | None:
+    """Peak-to-trough drawdown fraction (≤ 0) from a synchronized NAV path.
+
+    Returns ``None`` when the path is empty (caller reports typed unavailable).
+    A single mark yields ``0`` (no trough after a peak).
+    """
+    if not nav_path:
+        return None
+    peak = nav_path[0].nav
+    worst = Decimal("0")
+    for point in nav_path:
+        if point.nav > peak:
+            peak = point.nav
+        if peak > 0:
+            dd = (point.nav - peak) / peak
+            if dd < worst:
+                worst = dd
+    return worst
+
 
 
 def inconclusive_result(
@@ -295,6 +337,7 @@ __all__ = [
     "HoldingQuantity",
     "HoldingSnapshot",
     "InstrumentBarSeries",
+    "NavPoint",
     "OhlcvBar",
     "PortfolioReplayRequest",
     "PortfolioReplayResult",
@@ -302,5 +345,6 @@ __all__ = [
     "ReplayContractModel",
     "TargetWeight",
     "inconclusive_result",
+    "max_drawdown_from_nav_path",
     "portfolio_replay_result_content_hash",
 ]
