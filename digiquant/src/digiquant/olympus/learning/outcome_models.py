@@ -380,9 +380,9 @@ class ComponentObservation(OutcomeLearningModel):
             if self.replay_artifact_id is None:
                 raise ValueError("counterfactual_replay requires replay_artifact_id")
 
-        if (
-            self.metric in _CAUSAL_PNL_METRICS
-            and self.method != AttributionMethod.COUNTERFACTUAL_REPLAY
+        if self.metric in _CAUSAL_PNL_METRICS and self.method not in (
+            AttributionMethod.COUNTERFACTUAL_REPLAY,
+            AttributionMethod.UNAVAILABLE,
         ):
             raise ValueError(
                 f"causal P&L metric {self.metric!r} requires counterfactual_replay with replay artifact"
