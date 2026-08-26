@@ -1028,7 +1028,12 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `phase_inputs`; enforce strips portfolio/PM keys and injects `structured_context`
   with manifest linkage fields for WP1 telemetry. Prompt guards live in
   `research_retrieval/blinding.py` (`assert_blinded_h5_prompt` /
-  `assert_blinded_h6_prompt`).
+  `assert_blinded_h6_prompt`). **WP14.3 (#2946)** wires H7 via the same mode knob:
+  `h7_decision_context.py` compiles typed sections (mandate, calibration,
+  contribution/cost, pre-trade risk, prior authorization, unresolved/matured
+  forecasts) from pinned research state plus `h7_prerequisite_snapshot` (preflight);
+  `wire_h7_phase_inputs` records shadow beside incumbent PM inputs or enforces
+  `structured_context` without target weights; H7 output schema unchanged.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
