@@ -239,6 +239,10 @@ class OutcomeLearningStore:
         )
         return candidates[0]
 
+    def list_episode_versions(self) -> tuple[OutcomeEpisode, ...]:
+        """All stored episode versions (unordered)."""
+        return tuple(self._episodes.values())
+
     def load_episode(self, episode_version_id: UUID) -> OutcomeEpisode:
         """Exact-version load. Never falls back to latest."""
         episode = self._episodes.get(episode_version_id)

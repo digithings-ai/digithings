@@ -1066,9 +1066,15 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `PairedReplayEvidence`. Forecast error uses identical-horizon instrument returns; execution compares
   expected vs realized cost; timing latency/price drift are descriptive only; sizing/timing causal P&L
   requires `counterfactual_replay` with a paired manifest hash and declared baseline — one-at-a-time
-  deltas from different replay artifacts are rejected. Active-return waterfall declares order, baseline,
+  deltas from different replay artifacts are rejected.   Active-return waterfall declares order, baseline,
   and residual without summing independent counterfactuals or substituting zero for missing data.
-  Lesson compiler wiring lands in WP15.5.
+  **Lesson compiler (#2971 / WP15.5).** `LessonCompiler` in `olympus/learning/lesson_registry.py`
+  aggregates eligible episodes and component attribution reports into immutable
+  `OutcomeLessonVersion` records via Polars (mean/std), low-sample prior/shrinkage toward a
+  declared compilation policy, deterministic SHA-256 content hashes, and append-only persistence
+  through `OutcomeLearningStore.append_lesson`. Cutoff rules honor `available_at` /
+  `knowledge_cutoff_at`, exclude the consuming run's own outcomes, and expose every source
+  episode/report ID — rendered prose is never authoritative. WP15.6 preflight wiring is separate.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`

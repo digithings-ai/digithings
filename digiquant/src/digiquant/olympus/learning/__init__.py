@@ -25,6 +25,11 @@ from digiquant.olympus.learning.outcome_models import (
     OutcomeEpisode,
     OutcomeLessonVersion,
 )
+from digiquant.olympus.learning.lesson_registry import (
+    LessonCompilationPolicy,
+    LessonCompiler,
+    cohort_key,
+)
 from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
 
 __all__ = [
@@ -39,8 +44,11 @@ __all__ = [
     "OutcomeLessonVersion",
     "AssemblyPassResult",
     "OutcomeEpisodeAssembler",
+    "LessonCompilationPolicy",
+    "LessonCompiler",
     "OutcomeLearningStore",
     "PairedReplayEvidence",
+    "cohort_key",
     "build_component_attribution_report",
     "build_beliefs_distillation_phase",
     "distill_beliefs",
