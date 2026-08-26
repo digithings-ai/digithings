@@ -435,7 +435,7 @@ class TestH5ForecastMaterialization:
             )
 
             assert resolve_analyst_edit_mode(state, "AAPL") == "skip"
-            payload, doc, errors = run_asset_analyst_llm(
+            payload, doc, errors, _bundle = run_asset_analyst_llm(
                 state=state,
                 ticker="AAPL",
                 roster_entry={"ticker": "AAPL", "roster_reason": "held"},
@@ -523,7 +523,7 @@ class TestH5ForecastMaterialization:
             return json.dumps(compiled_patch.model_dump(mode="json"))
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
-            payload, _doc, errors = run_asset_analyst_llm(
+            payload, _doc, errors, _bundle = run_asset_analyst_llm(
                 state=state,
                 ticker="AAPL",
                 roster_entry={"ticker": "AAPL", "roster_reason": "held"},
