@@ -16,6 +16,7 @@ from digiquant.olympus.learning.outcome_models import (
     OutcomeEpisode,
     OutcomeLessonVersion,
 )
+from digiquant.olympus.learning.outcome_store import OutcomeLearningStore
 
 __all__ = [
     "AttributionComponent",
@@ -26,6 +27,7 @@ __all__ = [
     "EpisodeDisposition",
     "OutcomeEpisode",
     "OutcomeLessonVersion",
+    "OutcomeLearningStore",
     "build_beliefs_distillation_phase",
     "distill_beliefs",
     "run_beliefs_distillation_if_triggered",

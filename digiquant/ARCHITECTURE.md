@@ -1050,7 +1050,13 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   H9 links or realized returns; authorized requires them; unavailable attribution and
   ineligible components require typed reasons; causal sizing/timing P&L requires
   `counterfactual_replay` with `replay_artifact_id`. Legacy `beliefs_distillation` prose
-  remains non-authoritative. Store/assembly/attribution/lesson compiler land in WP15.2–15.5.
+  remains non-authoritative. **Outcome-learning store (#2959 / WP15.2).** Private append-only
+  `OutcomeLearningStore` in `olympus/learning/outcome_store.py` persists episodes, component
+  attribution reports, and lesson versions (migration `093_olympus_outcome_learning.sql`).
+  Content-idempotent retry; changed content appends a new version; supersession requires parent;
+  `select_episode_as_of` / `select_lesson_as_of` honor `available_at` and knowledge cutoff;
+  exact load never fabricates history. Dark launch: in-memory for unit tests; assembler/compiler
+  wiring lands in WP15.3–15.5.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
