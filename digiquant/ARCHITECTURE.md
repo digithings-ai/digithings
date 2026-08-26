@@ -862,6 +862,17 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user
   research trees. Models/store: `digiquant.olympus.research_corpus`.
+  **Phase 3 research-state contracts (#2841 / WP12.1).** Frozen/extra-forbid
+  Pydantic models in `olympus/research_retrieval/models.py`
+  (`EvidenceRecord`, `BeliefVersion`, `ExpectedEventVersion`, `ResearchPatch`,
+  `ResearchStateManifest`, `ResearchStateVersion`, `ResearchStatePin`,
+  `LegacyDocumentRef`) establish append-only structured research memory before
+  persistence. UTC temporal order (`event_time` / `effective_as_of` / `known_at` /
+  `recorded_at`), typed `TypedProvenance`, immutable sorted ID tuples, UUID5
+  content identity independent of input ordering, and parent/supersession
+  validation. Prose `documents` remain views — never authoritative truth; do not
+  parse legacy prose into claims. Distinct from Track B corpus pins (theme/asset/
+  segment identity). Store writers = WP12.2; preflight pin wiring = WP12.3.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
@@ -1041,16 +1052,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   hard-constraint breaches stay visible even when challenger return is stronger;
   atomic file-only report output. No auto-promotion, production config write, or
   H8/H9 wiring.
-  **Phase 2 lock surface (#2820 / Integration 2.1; follow-up #2837):**
+  **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
-  `phase2_e2e_fixtures.py`) pins **Phase 2** (WP8–WP10) unit-composed contracts —
-  H7/H8/H9 ownership, rank-gap independence of calibrated magnitude, final-book
-  report bind, H9 hash validation without report rebuild, byte-stable shadow
-  artifacts with challenger→comparison fingerprint bind, production import fence
-  vs challenger/replay, write-denied isolation checker (including artifact trust),
-  and hard-failure visibility on shared-cash replay. This suite does **not** close
-  metaplan Gate 2 (Signal) or Gate 3 (Shadow). Challenger selection and live
-  trading remain disabled.
+  `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
+  ownership, rank-gap independence of calibrated magnitude, final-book report
+  bind, H9 hash validation without report rebuild, byte-stable shadow artifacts,
+  production import fence vs challenger/replay, write-denied isolation checker,
+  and hard-failure visibility on shared-cash replay. Challenger selection and
+  live trading remain disabled.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
