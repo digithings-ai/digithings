@@ -966,6 +966,19 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `off` \| `shadow` only (no enforce); `actuated` is always false. House
   ProfileConfig is the default pin; overlay pins fail closed when missing. The
   planner cannot expand H4 roster/cap or carry H7/H8 authority fields.
+  **Research attention policy (#2918 / WP13.1).** Versioned YAML at
+  `digiquant/config/olympus_research_policy.yaml` (override via
+  `OLYMPUS_RESEARCH_POLICY_PATH`) defines thresholds, session budgets, mode
+  estimates, and exploration floor — not hard-coded in planner source.
+  `research_retrieval/planner.py` exposes `AttentionFeatures`,
+  `AttentionDecision`, `AttentionPlan`, `ResearchAttentionPolicy`,
+  `route_attention`, and `plan_research_attention` with five modes
+  (`carry` \| `metric_patch` \| `section_patch` \| `challenge` \| `deep_refresh`)
+  and rollout `off` \| `shadow` \| `enforce`. Identical state/policy/target set
+  yields byte-identical plan + resource totals; exploration reservations survive
+  session budget trimming. `h6_selection_to_attention_decision` bridges WP11.3
+  `H6Selection` without forking ID schemes. API-only in 13.1 — Atlas/Hermes
+  runtime wiring is WP13.3/13.4; persistence is WP13.2.
   **Knowledge cutoff (#2628 / WP4.1).** `initial_state` / `run_atlas_then_hermes`
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
