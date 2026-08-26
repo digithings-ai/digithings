@@ -230,6 +230,26 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_evidence_bundle_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`.
 
+### Attention context store — migration 092 (#2922 / WP13.2)
+
+Private append-only research attention plans, decisions, context manifests, and
+policy evaluations. Links each decision to WP1 `olympus_provider_attempts` for
+planned-vs-actual reconciliation (WP13.5/WP16). No runtime Atlas/Hermes
+activation in 13.2 — storage boundary only; no public base view.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_attention_plans` | `(plan_id UUID)` | One attention plan per run/attempt: state_version_id, policy_content_hash, rollout_mode, total_budget jsonb, payload. |
+| `olympus_attention_decisions` | `(decision_id UUID)` | Per-target decision FK → plan; mode/reason/budget/features payload; unique (plan_id, target_key). |
+| `olympus_attention_decision_attempts` | `(decision_id, provider_attempt_id)` | Junction FK → decision + `olympus_provider_attempts` (exact usage linkage, not aggregate-only). |
+| `olympus_attention_context_manifests` | `(manifest_id UUID)` | Role-specific context manifest rows (WP14 compiler populates; storage in 13.2). |
+| `olympus_attention_policy_evaluations` | `(evaluation_id UUID)` | Shadow/enforced reconciliation report; `complete=false` when telemetry missing. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_attention_context_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/reader:
+`digiquant.olympus.research_retrieval.store.AttentionStore`.
+
 ### Forecast registry — migration 079 (#2663 / WP4.6)
 
 Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio

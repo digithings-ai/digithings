@@ -979,6 +979,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   session budget trimming. `h6_selection_to_attention_decision` bridges WP11.3
   `H6Selection` without forking ID schemes. API-only in 13.1 — Atlas/Hermes
   runtime wiring is WP13.3/13.4; persistence is WP13.2.
+  **Attention persistence (#2922 / WP13.2).** Migration
+  `092_olympus_attention_context.sql` + in-memory
+  `research_retrieval/store.py` `AttentionStore` persist append-only
+  `AttentionPlan` / `AttentionDecision` / `AttentionContextManifest` /
+  `AttentionPolicyEvaluation` rows with run/attempt/state/policy/reason/feature/
+  budget lineage and per-decision WP1 `provider_attempt_id` links. Exact
+  `recorded_at` as-of reads; `reconcile_plan` joins planned budgets to actual
+  attempt usage and sets `complete=False` when telemetry is missing (rollback:
+  disable writes/enforcement). Storage only — no Atlas/Hermes activation
+  (WP13.3+).
   **Knowledge cutoff (#2628 / WP4.1).** `initial_state` / `run_atlas_then_hermes`
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
