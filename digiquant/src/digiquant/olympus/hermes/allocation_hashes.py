@@ -226,6 +226,39 @@ def pretrade_risk_report_hash_payload(
     }
 
 
+def shadow_allocation_artifact_content_hash(*, payload: dict[str, Any]) -> str:
+    """SHA-256 over canonical shadow allocation artifact identity fields."""
+    return sha256_hex(payload)
+
+
+def shadow_allocation_artifact_hash_payload(
+    *,
+    schema_version: str,
+    run_id: str,
+    session_date: str,
+    commit_id: str | None,
+    commit_status: str | None,
+    allocation_input_bundle_hash: str,
+    pre_trade_risk_report_hash: str,
+    incumbent_final_weights_fingerprint: str,
+) -> dict[str, object]:
+    """Build order-independent shadow artifact hash input.
+
+    Nested bundle/report bodies are bound by their content hashes only — the
+    artifact identity must not embed prose, clients, or secrets.
+    """
+    return {
+        "schema_version": schema_version,
+        "run_id": run_id,
+        "session_date": session_date,
+        "commit_id": commit_id,
+        "commit_status": commit_status,
+        "allocation_input_bundle_hash": allocation_input_bundle_hash,
+        "pre_trade_risk_report_hash": pre_trade_risk_report_hash,
+        "incumbent_final_weights_fingerprint": incumbent_final_weights_fingerprint,
+    }
+
+
 __all__ = [
     "allocation_bundle_content_hash",
     "allocation_bundle_hash_payload",
@@ -236,5 +269,7 @@ __all__ = [
     "pretrade_risk_report_hash_payload",
     "prior_weights_from_entries",
     "sha256_hex",
+    "shadow_allocation_artifact_content_hash",
+    "shadow_allocation_artifact_hash_payload",
     "weights_fingerprint",
 ]

@@ -62,6 +62,17 @@ append-only persists hash-bound rows to `olympus_pretrade_risk_reports`
 fingerprint or bundle-hash mismatch before booking; shadow records status
 without blocking. H9 never recomputes the report.
 
+**Shadow allocation artifact (#2758 / WP10.1):** `hermes/shadow_artifact.py` defines
+frozen `ShadowAllocationArtifact` — exact `AllocationInputBundle`, incumbent final
+book weights, `PreTradeRiskReport`, and minimal H9 commit metadata with a SHA-256
+`artifact_content_hash`. Canonical JSON bytes are written via temp + `os.replace`
+under `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Mode
+`OLYMPUS_SHADOW_ARTIFACT_MODE` (`off`|`export`; default `export`). Chain calls
+`maybe_export_shadow_allocation_artifact` after Hermes returns (fail-soft; never
+reruns or mutates H8/H9). The module must not import challenger optimizer, replay,
+or broker surfaces. `pipeline-olympus.yml` uploads `shadow-allocation-*.json` with
+other run artifacts.
+
 ### H2 market-thesis identity
 
 Every market proposal has a stable lowercase `topic_key` plus an explicit

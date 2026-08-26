@@ -993,6 +993,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   on missing/unknown/fingerprint or bundle-hash mismatch before booking; exact
   retry skips; H9 never imports report builders. Manifest schema 1.6 carries
   `pretrade_risk_report_id` / `pretrade_risk_report_hash` + write counts.
+  **Shadow allocation artifact (#2758 / WP10.1):** frozen
+  `ShadowAllocationArtifact` in `hermes/shadow_artifact.py` binds the exact
+  `AllocationInputBundle`, incumbent final book, `PreTradeRiskReport`, and
+  minimal H9 commit metadata under one SHA-256 `artifact_content_hash`. Chain
+  exports canonical JSON atomically (temp + replace) after Hermes when
+  `OLYMPUS_SHADOW_ARTIFACT_MODE=export` (default) into
+  `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Fail-soft — export
+  failure never reruns or mutates H8/H9. No challenger optimizer, replay, or
+  broker imports on the production path; `pipeline-olympus.yml` uploads
+  `shadow-allocation-*.json` with run artifacts for WP10.2+ isolation.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
