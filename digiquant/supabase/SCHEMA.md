@@ -197,7 +197,9 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Preflight wiring of pins = WP12.3.
 Compiled prose brief/digest views (#2877 / WP12.5) are deterministic dual-write
 documents (`research-state-brief` / `research-state-digest`) from exact pinned
-versions — not authoritative state tables.
+versions — not authoritative state tables. Default Atlas/Hermes CLI leave
+`research_state_store` unwired, so these document keys are not published until
+callers inject the store.
 
 ### Ticker evidence bundles — migration 090 (#2844 / WP11.1)
 
