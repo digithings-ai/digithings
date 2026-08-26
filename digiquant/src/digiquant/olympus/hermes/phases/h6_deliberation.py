@@ -451,9 +451,17 @@ def _h6_node_factory(ticker: str):
                     # Benign: nothing moved, so the prior debate still stands (#925).
                     carry_reason=CARRY_FINGERPRINT_SKIP,
                 )
+                prior_amendment = None
+                raw_am = prior.get("forecast_amendment")
+                if isinstance(raw_am, dict) and raw_am:
+                    try:
+                        prior_amendment = ForecastAmendment.model_validate(raw_am)
+                    except Exception:
+                        prior_amendment = None
                 carried = _attach_forecast_lineage(
                     carried,
                     effective=_carry_prior_effective(prior=prior, base=base, state=state),
+                    amendment=prior_amendment,
                 )
                 return {
                     "phase_hermes": PhaseHermesState(

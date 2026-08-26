@@ -81,5 +81,7 @@ def deliberation_summaries(state: HermesState) -> dict[str, dict[str, Any]]:
             "amendment_outcome": summary.get("amendment_outcome"),
             "forecast_degradation": summary.get("forecast_degradation"),
             "effective_forecast": summary.get("effective_forecast"),
+            # Full amendment dump for H9 registry retry after fail-soft (#2790).
+            "forecast_amendment": summary.get("forecast_amendment"),
         }
     return out
