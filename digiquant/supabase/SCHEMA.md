@@ -217,6 +217,24 @@ RLS enabled with **zero** policies; append-only via `reject_olympus_risk_policy_
 Models: `digiquant.olympus.hermes.models.risk_policy`. Resolver: `digiquant.olympus.hermes.risk_policy`.
 Registry: `digiquant.olympus.atlas.risk_policy_registry` (exact-ID reads only).
 
+### Pre-trade risk report registry — migration 083 (#2754 / WP9.4)
+
+Private append-only `PreTradeRiskReport` rows bound to the final H8 book H9 commits.
+H8 attaches the observational report after final controls; H9 validates identity
+(content hash, final-book fingerprint, allocation-bundle hash) then INSERT-only
+persists. Exact retry (same `report_id` + hash) skips; content conflict never UPDATE.
+Rollout: `OLYMPUS_PRETRADE_RISK_MODE=off|shadow|enforce` (default `shadow`).
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_pretrade_risk_reports` | `(report_id UUID)` | Immutable report: source_run_id, session_date, status, report_content_hash, allocation_input_bundle_hash, final_book_weights_fingerprint, optional ledger_commit_id, full `report_body` jsonb. |
+
+RLS enabled with **zero** policies; append-only via `reject_olympus_pretrade_risk_report_mutation()`.
+Contract: `digiquant.olympus.hermes.allocation_contracts.PreTradeRiskReport`.
+Registry: `digiquant.olympus.atlas.pretrade_risk_registry`.
+H9 surface: `hermes.writers.commit_io.validate_pretrade_risk_report` /
+`persist_validated_pretrade_risk_report`.
+
 ### Live quote transport — new in migration 063 (#1807)
 
 The only **table** in the digiquant.io public read surface (the 050 trio are views), and the

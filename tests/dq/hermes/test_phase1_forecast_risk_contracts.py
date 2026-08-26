@@ -149,11 +149,13 @@ def test_h9_manifest_carries_phase1_registry_fields() -> None:
         forecast_registry={"forecast_registry_status": "ok"},
         risk_policy_registry={"risk_policy_registry_status": "ok"},
         cost_liquidity_registry={"cost_liquidity_registry_status": "ok"},
+        pretrade_risk_registry={"pretrade_risk_registry_status": "shadow_invalid"},
     )
-    assert manifest["schema_version"] == "1.5"
+    assert manifest["schema_version"] == "1.6"
     assert manifest["forecast_registry_status"] == "ok"
     assert manifest["risk_policy_registry_status"] == "ok"
     assert manifest["cost_liquidity_registry_status"] == "ok"
+    assert manifest["pretrade_risk_registry_status"] == "shadow_invalid"
 
 
 def test_incumbent_sized_book_golden_unchanged_in_phase1() -> None:
@@ -279,11 +281,17 @@ def test_phase1_composition_e2e_simulated_pipeline() -> None:
         PolicyArtifactStatus.DEGRADED.value,
     )
 
-    assert manifest["schema_version"] == "1.5"
+    assert manifest["schema_version"] == "1.6"
     assert manifest["status"] == "committed"
     assert manifest["forecast_registry_status"] == "ok"
     assert manifest["risk_policy_registry_status"] == "ok"
     assert manifest["cost_liquidity_registry_status"] == "ok"
+    assert manifest["pretrade_risk_registry_status"] in (
+        "ok",
+        "shadow_invalid",
+        "skipped",
+        "degraded",
+    )
     assert manifest["forecast_registry_assessments_written"] >= 1
     assert manifest["risk_policy_registry_run_refs_written"] == 1
     assert manifest["cost_liquidity_registry_estimates_written"] >= 1

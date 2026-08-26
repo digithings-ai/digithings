@@ -1487,7 +1487,7 @@ class TestRiskPolicyRegistryH9:
         out = _run(client, state)
         manifest = out["phase_hermes"].commit_manifest
         assert manifest["status"] == "committed"
-        assert manifest["schema_version"] == "1.5"
+        assert manifest["schema_version"] == "1.6"
         assert manifest["risk_policy_registry_status"] == "ok"
         assert manifest["risk_policy_registry_run_refs_written"] == 1
         assert len(client.store.get("olympus_h8_risk_run_refs", [])) == 1
@@ -1507,3 +1507,220 @@ class TestRiskPolicyRegistryH9:
         assert manifest["status"] == "committed"
         assert manifest["risk_policy_registry_status"] == "degraded"
         assert client.store.get("positions", [])
+
+
+class TestPreTradeRiskH9:
+    """WP9.4 — H9 hash validation + append-only PreTradeRiskReport persistence (#2754)."""
+
+    def _spy_report_payload(self, *, run_id: str = str(_SOURCE_RUN_ID)) -> dict:
+        from digiquant.olympus.hermes.pretrade_risk import (
+            PreTradeRiskBuildRequest,
+            build_pretrade_risk_report,
+        )
+
+        report = build_pretrade_risk_report(
+            PreTradeRiskBuildRequest(
+                run_id=run_id,
+                session_date=RUN_DATE,
+                allocation_input_bundle_hash="a" * 64,
+                risk_policy_hash="b" * 64,
+                prior_risky_weights_pct={},
+                prior_cash_weight_pct=100.0,
+                final_risky_weights_pct={"SPY": 100.0},
+                final_cash_weight_pct=0.0,
+            )
+        )
+        return report.model_dump(mode="json")
+
+    def _state_with_report(self, report: dict | None = None) -> AtlasResearchState:
+        state = _state()
+        payload = report if report is not None else self._spy_report_payload()
+        book = dict(state.phase_hermes.sized_book or {})
+        book["pre_trade_risk_report_hash"] = payload["report_content_hash"]
+        book["allocation_input_bundle_hash"] = payload["allocation_input_bundle_hash"]
+        state.phase_hermes = state.phase_hermes.model_copy(
+            update={
+                "sized_book": book,
+                "pre_trade_risk_report": payload,
+            }
+        )
+        return state
+
+    def _merging_client(self) -> FakeSupabaseClient:
+        from dataclasses import dataclass
+        from typing import Any
+
+        from digiquant.olympus.atlas import pretrade_risk_registry as ptr
+
+        from tests.dq.atlas.test_supabase_io import _FakeQuery, _FakeResponse
+
+        @dataclass
+        class _MergingQuery(_FakeQuery):
+            def execute(self) -> _FakeResponse:
+                if self._insert_rows is not None:
+                    self.store.setdefault(self.table_name, []).extend(self._insert_rows)
+                    return _FakeResponse(data=[dict(row) for row in self._insert_rows])
+                if self._upsert_row is not None:
+                    if self.table_name == ptr.REPORTS:
+                        raise AssertionError("upsert is forbidden on pretrade risk reports")
+                    rows = (
+                        self._upsert_row
+                        if isinstance(self._upsert_row, list)
+                        else [self._upsert_row]
+                    )
+                    self.store.setdefault(self.table_name, []).extend(rows)
+                    return _FakeResponse(data=[dict(row) for row in rows])
+                if self._update_row is not None:
+                    if self.table_name == ptr.REPORTS:
+                        raise AssertionError("update is forbidden on pretrade risk reports")
+                    updated: list[dict[str, Any]] = []
+                    for row in self.store.get(self.table_name, []):
+                        if self._matches(row):
+                            row.update(self._update_row)
+                            updated.append(row)
+                    return _FakeResponse(data=updated)
+                if self._delete:
+                    if self.table_name == ptr.REPORTS:
+                        raise AssertionError("delete is forbidden on pretrade risk reports")
+                    rows = self.store.get(self.table_name, [])
+                    removed = [r for r in rows if self._matches(r)]
+                    self.store[self.table_name] = [r for r in rows if not self._matches(r)]
+                    return _FakeResponse(data=removed)
+                merged = list(self.canned) + list(self.store.get(self.table_name, []))
+                rows = [r for r in merged if self._matches(r)]
+                if self._limit is not None:
+                    rows = rows[: self._limit]
+                return _FakeResponse(data=rows)
+
+        @dataclass
+        class PretradeRiskFake(FakeSupabaseClient):
+            def table(self, name: str) -> _MergingQuery:
+                return _MergingQuery(
+                    table_name=name,
+                    store=self.store,
+                    canned=list(self.canned_reads.get(name, [])),
+                )
+
+        return PretradeRiskFake()
+
+    def test_enforce_missing_report_rejects_before_booking(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        client = FakeSupabaseClient()
+        out = _run(client, _state())
+        assert "errors" in out
+        assert "missing_pre_trade_risk_report" in out["errors"][0].message
+        assert not client.store.get("positions")
+
+    def test_enforce_unknown_report_rejects(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        client = FakeSupabaseClient()
+        state = _state()
+        state.phase_hermes = state.phase_hermes.model_copy(
+            update={"pre_trade_risk_report": {"not": "a report"}}
+        )
+        out = _run(client, state)
+        assert "errors" in out
+        assert "unknown_pre_trade_risk_report" in out["errors"][0].message
+        assert not client.store.get("positions")
+
+    def test_enforce_book_fingerprint_mismatch_rejects(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        client = FakeSupabaseClient()
+        report = self._spy_report_payload()
+        # Attach a valid SPY report to a different book.
+        state = _state(sized_book=_sized_book(spy_pct=50.0))
+        book = dict(state.phase_hermes.sized_book or {})
+        book["recommended_portfolio"] = [
+            {"ticker": "SPY", "target_pct": 50.0},
+            {"ticker": "TLT", "target_pct": 50.0},
+        ]
+        book["pre_trade_risk_report_hash"] = report["report_content_hash"]
+        state.phase_hermes = state.phase_hermes.model_copy(
+            update={
+                "sized_book": book,
+                "pre_trade_risk_report": report,
+                "asset_analysts": {
+                    "SPY": {
+                        "ticker": "SPY",
+                        "stance": "buy",
+                        "conviction_score": 4,
+                        "thesis": "risk-on",
+                        "risks": "",
+                        "sources": [],
+                    },
+                    "TLT": {
+                        "ticker": "TLT",
+                        "stance": "buy",
+                        "conviction_score": 3,
+                        "thesis": "hedge",
+                        "risks": "",
+                        "sources": [],
+                    },
+                },
+            }
+        )
+        out = _run(client, state)
+        assert "errors" in out
+        assert "final_book_weights_fingerprint_mismatch" in out["errors"][0].message
+        assert not client.store.get("positions")
+
+    def test_enforce_persists_hash_bound_report(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        client = self._merging_client()
+        state = self._state_with_report()
+        out = _run(client, state)
+        manifest = out["phase_hermes"].commit_manifest
+        assert manifest["status"] == "committed"
+        assert manifest["schema_version"] == "1.6"
+        assert manifest["pretrade_risk_registry_status"] == "ok"
+        assert manifest["pretrade_risk_registry_reports_written"] == 1
+        assert manifest["pretrade_risk_report_hash"]
+        assert manifest["pretrade_risk_report_id"]
+        rows = client.store.get("olympus_pretrade_risk_reports", [])
+        assert len(rows) == 1
+        assert rows[0]["report_content_hash"] == manifest["pretrade_risk_report_hash"]
+        assert rows[0]["report_id"] == manifest["pretrade_risk_report_id"]
+
+    def test_identical_retry_skips_append(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        client = self._merging_client()
+        state = self._state_with_report()
+        _run(client, state)
+        assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
+        out2 = _run(client, state)
+        assert out2["phase_hermes"].commit_manifest["status"] == "noop"
+        assert out2["phase_hermes"].commit_manifest["pretrade_risk_registry_reports_skipped"] == 1
+        assert len(client.store.get("olympus_pretrade_risk_reports", [])) == 1
+
+    def test_append_only_no_upsert_or_update(self, monkeypatch) -> None:
+        monkeypatch.setenv("OLYMPUS_PRETRADE_RISK_MODE", "enforce")
+        client = self._merging_client()
+        state = self._state_with_report()
+        _run(client, state)
+        # Re-run must not mutate the stored body.
+        first = dict(client.store["olympus_pretrade_risk_reports"][0])
+        _run(client, state)
+        second = client.store["olympus_pretrade_risk_reports"][0]
+        assert second == first
+
+    def test_h9_never_imports_or_calls_report_builder(self) -> None:
+        import ast
+
+        import digiquant.olympus.hermes.phases.h9_commit_run as h9
+        import digiquant.olympus.hermes.writers.commit_io as commit_io
+
+        for module in (h9, commit_io):
+            src = pathlib.Path(module.__file__).read_text(encoding="utf-8")
+            assert "build_pretrade_risk_report" not in src
+            tree = ast.parse(src)
+            imported: set[str] = set()
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module:
+                    imported.add(node.module)
+                elif isinstance(node, ast.Import):
+                    for alias in node.names:
+                        imported.add(alias.name)
+            assert not any(
+                name == "digiquant.olympus.hermes.pretrade_risk" or name.endswith(".pretrade_risk")
+                for name in imported
+            )

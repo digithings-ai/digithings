@@ -53,7 +53,14 @@ mutating weights. H8 attaches the report to `phase_hermes.pre_trade_risk_report`
 (and stamps `pre_trade_risk_report_hash` on the sized book) **only after** the
 final control shell (carry → cadence → backstop → grid → final caps); report
 identity equals the final book fingerprint. Fail-soft omission does not change
-the sized book. H9 hash validation + append-only persistence is WP9.4.
+the sized book. H9 (`commit_run`) validates report identity under
+`OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
+append-only persists hash-bound rows to `olympus_pretrade_risk_reports`
+(migration `083`, via `atlas/pretrade_risk_registry.py` +
+`commit_io.validate_pretrade_risk_report` /
+`persist_validated_pretrade_risk_report`). Enforce rejects missing/unknown/
+fingerprint or bundle-hash mismatch before booking; shadow records status
+without blocking. H9 never recomputes the report.
 
 ### H2 market-thesis identity
 

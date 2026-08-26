@@ -24,15 +24,18 @@ from digiquant.olympus.hermes.h9_cost_evidence import build_cost_bundles_for_com
 from digiquant.olympus.hermes.payloads import sized_book
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.commit_io import (
+    PreTradeRiskMode,
     book_portfolio,
     coherence_errors,
     load_commit_manifests,
     manifest_commit_seq,
     persist_decision_log,
+    persist_validated_pretrade_risk_report,
     publish_hermes_documents,
     publish_portfolio_brief,
     resolve_prior_commit,
     save_commit_manifest,
+    validate_pretrade_risk_report,
     weights_fingerprint,
     weights_from_sized_book,
 )
@@ -216,6 +219,7 @@ def _manifest_payload(
     forecast_registry: dict[str, Any] | None = None,
     risk_policy_registry: dict[str, Any] | None = None,
     cost_liquidity_registry: dict[str, Any] | None = None,
+    pretrade_risk_registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Commit manifest body.
 
@@ -242,9 +246,12 @@ def _manifest_payload(
 
     ``schema_version`` 1.5 adds optional cost/liquidity registry fields (#2709 / WP7.3):
     status/counts only — never cost math or turnover inputs.
+
+    ``schema_version`` 1.6 adds optional pre-trade risk report registry fields
+    (#2754 / WP9.4): report id/hash + write counts — never recomputed risk math.
     """
     payload: dict[str, Any] = {
-        "schema_version": "1.5",
+        "schema_version": "1.6",
         "source_run_id": source_run_id,
         "status": status,
         "weights_fingerprint": weights_fingerprint(weights),
@@ -264,6 +271,8 @@ def _manifest_payload(
         payload.update(risk_policy_registry)
     if cost_liquidity_registry:
         payload.update(cost_liquidity_registry)
+    if pretrade_risk_registry:
+        payload.update(pretrade_risk_registry)
     return payload
 
 
@@ -287,6 +296,14 @@ def build_commit_run_node(deps: CommitRunDeps):
         priors = load_commit_manifests(client=deps.client, run_date=state.run_date)
         latest, commit_seq = resolve_prior_commit(priors)
 
+        # WP9.4: validate report identity before booking. Enforce rejects incomplete
+        # commits; shadow records status without blocking. H9 never builds the report.
+        pretrade_validation = validate_pretrade_risk_report(state, weights)
+        if not pretrade_validation.ok and pretrade_validation.mode is PreTradeRiskMode.ENFORCE:
+            return _phase_error(
+                f"pre_trade_risk_report validation failed: {pretrade_validation.reason}"
+            )
+
         if latest is not None and latest.get("weights_fingerprint") == current_fp:
             # Same date, same book, already on disk — genuinely idempotent.
             # Still attempt forecast registry (fail-soft): a prior commit may have
@@ -297,6 +314,12 @@ def build_commit_run_node(deps: CommitRunDeps):
                 client=deps.client,
                 state=state,
                 ledger=None,
+            )
+            pretrade_registry = persist_validated_pretrade_risk_report(
+                client=deps.client,
+                validation=pretrade_validation,
+                source_run_id=source_run_id,
+                ledger_commit_id=None,
             )
             manifest = _manifest_payload(
                 source_run_id=source_run_id,
@@ -309,6 +332,7 @@ def build_commit_run_node(deps: CommitRunDeps):
                 forecast_registry=registry,
                 risk_policy_registry=risk_registry,
                 cost_liquidity_registry=cost_registry,
+                pretrade_risk_registry=pretrade_registry,
             )
             return {"phase_hermes": PhaseHermesState(commit_manifest=manifest)}
 
@@ -360,6 +384,15 @@ def build_commit_run_node(deps: CommitRunDeps):
             state=state,
             ledger=ledger,
         )
+        ledger_commit_uuid: UUID | None = None
+        if ledger is not None and ledger.commit_id:
+            ledger_commit_uuid = UUID(ledger.commit_id)
+        pretrade_registry = persist_validated_pretrade_risk_report(
+            client=deps.client,
+            validation=pretrade_validation,
+            source_run_id=source_run_id,
+            ledger_commit_id=ledger_commit_uuid,
+        )
 
         manifest = _manifest_payload(
             source_run_id=source_run_id,
@@ -374,13 +407,14 @@ def build_commit_run_node(deps: CommitRunDeps):
             forecast_registry=registry,
             risk_policy_registry=risk_registry,
             cost_liquidity_registry=cost_registry,
+            pretrade_risk_registry=pretrade_registry,
         )
         save_commit_manifest(client=deps.client, state=state, manifest=manifest)
 
         logger.info(
             "h9 commit_run: booked %d positions, nav=%.4f, %d decision_log rows, "
             "%d pruned (run_id=%s, commit_seq=%d, forecast_registry=%s, "
-            "cost_liquidity_registry=%s)",
+            "cost_liquidity_registry=%s, pretrade_risk_registry=%s)",
             len(booked.position_rows),
             booked.nav,
             n_decisions,
@@ -389,6 +423,7 @@ def build_commit_run_node(deps: CommitRunDeps):
             commit_seq,
             registry.get("forecast_registry_status"),
             cost_registry.get("cost_liquidity_registry_status"),
+            pretrade_registry.get("pretrade_risk_registry_status"),
         )
         phase_hermes = PhaseHermesState(
             commit_manifest=manifest,
