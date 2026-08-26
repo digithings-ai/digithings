@@ -916,10 +916,26 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   closed when structured write did not succeed (no misleading view publication).
   Atlas publish dual-writes `research-state-brief` / `research-state-digest` only when
   `research_state_status=pinned` and `PublishDeps.research_state_store` can exact-load
+<<<<<<< HEAD
+  the pin; incumbent digest/segment writers remain. Never `load_latest`; never parse
+  prose into claims.
+  **Ticker evidence bundles (#2844 / WP11.1).** Immutable H5 base
+  `TickerEvidenceBundle` plus append-only `MissingFactRequest` /
+  `EvidenceBundleAmendment` contracts in `research_retrieval/models.py`.
+  Private migration `090_olympus_evidence_bundles.sql` and in-memory
+  `EvidenceBundleStore`: content-idempotent base append, one base per
+  run/ticker, amendments must FK one base + one missing-fact request (zero
+  unlinked amendments), public grants denied, no public view. Reuses WP12
+  UUID5 / `content_digest` / `TypedProvenance` conventions — does not invent
+  a parallel hash scheme. Does **not** cut over H6 selection (WP11.3+);
+  durable store is required before WP11 can close; in-memory typed bundles
+  remain valid in shadow if the writer is disabled.
+=======
   the pin; incumbent digest/segment writers remain. Default Atlas/Hermes CLI leave
   `research_state_store` unwired (WP12.3 shadow pattern), so dual-write is inactive
   until callers inject the store; not yet an operator-authoritative document surface.
   Never `load_latest`; never parse prose into claims.
+>>>>>>> origin/module/digiquant
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
