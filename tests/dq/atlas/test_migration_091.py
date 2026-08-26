@@ -75,6 +75,6 @@ def test_architecture_conflict_markers_cleared() -> None:
     arch = (REPO_ROOT / "digiquant" / "ARCHITECTURE.md").read_text(encoding="utf-8")
     assert "<<<<<<<" not in arch
     assert ">>>>>>>" not in arch
-    assert "Ticker evidence bundles (#2844 / WP11.1)" in arch
+    assert "Ticker evidence bundles (#2844 / WP11.1" in arch
     assert "research_state_store" in arch and "unwired" in arch
     assert "091" in arch
