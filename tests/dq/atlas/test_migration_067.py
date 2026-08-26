@@ -96,9 +96,67 @@ def test_node_run_fanout_key_is_nullable(sql: str) -> None:
 
 
 def test_node_run_fanout_key_is_length_bounded(sql: str) -> None:
-    """Same literal bound as NodeRunRecord.fanout_key; no cross-layer parity test binds them."""
+    """Same literal bound as NodeRunRecord.fanout_key (asserted cross-layer below)."""
     body = " ".join(_table_body(sql, "olympus_node_runs").split())
     assert "fanout_key IS NULL OR length(fanout_key) BETWEEN 1 AND 200" in body
+
+
+def test_python_sql_string_and_nonnegative_bounds_agree(sql: str) -> None:
+    """Keep 067 CHECKs and digillm Field constraints in lockstep (#1989).
+
+    Append-only tables cannot correct a row that Pydantic accepted and Postgres rejected.
+    This is the cheap gate that replaces hand enumeration of ~30 pairs.
+    """
+    from typing import get_args
+
+    from digillm.telemetry import NodeRunRecord, ProviderAttemptRecord, ProviderCallRecord
+
+    def _constraint_items(model: type, field: str) -> list[object]:
+        meta = model.model_fields[field]
+        items: list[object] = list(meta.metadata)
+        for arg in get_args(meta.annotation):
+            for annotated_meta in getattr(arg, "__metadata__", ()):
+                nested = getattr(annotated_meta, "metadata", None)
+                if nested is not None:
+                    items.extend(nested)
+                else:
+                    items.append(annotated_meta)
+        return items
+
+    def max_len(model: type, field: str) -> int:
+        for item in _constraint_items(model, field):
+            bound = getattr(item, "max_length", None)
+            if bound is not None:
+                return int(bound)
+        raise AssertionError(f"{model.__name__}.{field} missing max_length metadata")
+
+    def has_ge0(model: type, field: str) -> bool:
+        return any(getattr(item, "ge", None) == 0 for item in _constraint_items(model, field))
+
+    node_body = " ".join(_table_body(sql, "olympus_node_runs").split())
+    call_body = " ".join(_table_body(sql, "olympus_provider_calls").split())
+    attempt_body = " ".join(_table_body(sql, "olympus_provider_attempts").split())
+
+    fanout = max_len(NodeRunRecord, "fanout_key")
+    assert f"length(fanout_key) BETWEEN 1 AND {fanout}" in node_body
+
+    for body, model in (
+        (call_body, ProviderCallRecord),
+        (attempt_body, ProviderAttemptRecord),
+    ):
+        model_len = max_len(model, "requested_model")
+        err_len = max_len(model, "error_type")
+        assert f"length(requested_model) BETWEEN 1 AND {model_len}" in body
+        assert f"length(error_type) BETWEEN 1 AND {err_len}" in body
+
+    assert has_ge0(ProviderCallRecord, "attempt_count")
+    assert "attempt_count >= 0" in call_body
+    assert has_ge0(ProviderAttemptRecord, "prompt_tokens")
+    assert has_ge0(ProviderAttemptRecord, "completion_tokens")
+    assert "prompt_tokens IS NULL OR prompt_tokens >= 0" in attempt_body
+    assert "completion_tokens IS NULL OR completion_tokens >= 0" in attempt_body
+    assert has_ge0(ProviderAttemptRecord, "cost_usd")
+    assert "cost_usd IS NULL OR cost_usd >= 0" in attempt_body
 
 
 def test_calls_require_node_parent_and_support_logical_parent(sql: str) -> None:
