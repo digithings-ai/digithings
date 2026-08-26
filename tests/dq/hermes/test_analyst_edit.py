@@ -435,7 +435,7 @@ class TestH5ForecastMaterialization:
             )
 
             assert resolve_analyst_edit_mode(state, "AAPL") == "skip"
-            payload, doc, errors = run_asset_analyst_llm(
+            payload, doc, errors, _bundle = run_asset_analyst_llm(
                 state=state,
                 ticker="AAPL",
                 roster_entry={"ticker": "AAPL", "roster_reason": "held"},
@@ -523,7 +523,7 @@ class TestH5ForecastMaterialization:
             return json.dumps(compiled_patch.model_dump(mode="json"))
 
         with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
-            payload, _doc, errors = run_asset_analyst_llm(
+            payload, _doc, errors, _bundle = run_asset_analyst_llm(
                 state=state,
                 ticker="AAPL",
                 roster_entry={"ticker": "AAPL", "roster_reason": "held"},
@@ -626,3 +626,94 @@ class TestH5ForecastMaterialization:
         assert payload.forecast_assessment.price_anchor.unavailable_reason or (
             payload.forecast_assessment.price_anchor.observed_at is not None
         )
+
+
+@pytest.mark.unit
+def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
+    """WP11.2: publish base before provider; H5 failure retains typed bundle."""
+    from datetime import UTC, datetime
+    from unittest.mock import MagicMock
+    from uuid import UUID, uuid4
+
+    from digiquant.olympus.hermes.phases.portfolio_common import run_asset_analyst_llm
+    from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+
+    store = EvidenceBundleStore()
+    run_id = uuid4()
+    state_version = UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
+    cutoff = datetime(2026, 8, 26, 16, 0, tzinfo=UTC)
+    state = AtlasResearchState(
+        run_id=run_id,
+        run_type="delta",
+        run_date=cutoff.date(),
+        config=AtlasConfigBundle(watchlist=["AAPL"]),
+        prior_context=PriorContext(),
+        price_deltas={"AAPL": 0.01},
+        knowledge_cutoff_at=cutoff,
+        research_state_pin={"state_version_id": str(state_version)},
+    )
+    state.phase_hermes = PhaseHermesState(
+        focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")]
+    )
+
+    def _boom(*_a: Any, **_k: Any) -> Any:
+        assert len(store._bases) == 1  # persist-before-provider
+        raise RuntimeError("provider down")
+
+    with (
+        patch.dict("os.environ", {"OLYMPUS_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False),
+        patch(
+            "digiquant.olympus.hermes.phases.portfolio_common.build_grounding",
+            return_value=(
+                [],
+                MagicMock(),
+                {"summary": "news", "sources": ["https://x"], "as_of": "2026-08-26"},
+            ),
+        ),
+        patch(
+            "digiquant.olympus.hermes.phases.portfolio_common.apply_web_grounding_to_inputs",
+            side_effect=lambda inputs, **_k: {
+                **inputs,
+                "web_grounding": {
+                    "summary": "news",
+                    "sources": ["https://x"],
+                    "as_of": "2026-08-26",
+                },
+            },
+        ),
+        patch(
+            "digiquant.olympus.hermes.phases.portfolio_common.resolve_analyst_edit_mode",
+            return_value="full",
+        ),
+        patch(
+            "digiquant.olympus.hermes.phases.portfolio_common.run_research_agent",
+            side_effect=_boom,
+        ),
+        patch(
+            "digiquant.olympus.hermes.phases.portfolio_common.load_skill_full",
+            return_value="skill",
+        ),
+    ):
+        payload, doc, errors, bundle = run_asset_analyst_llm(
+            state=state,
+            ticker="AAPL",
+            roster_entry={"ticker": "AAPL", "roster_reason": "held"},
+            phase_slug="hermes/portfolio/asset-analyst-AAPL",
+            evidence_bundle_store=store,
+        )
+
+    assert payload is None
+    assert doc is None
+    assert errors
+    assert bundle is not None
+    assert (
+        store.base_bundle_count_for(
+            run_id=str(run_id), ticker="AAPL", content_hash=bundle.content_hash
+        )
+        == 1
+    )
+    retained = PhaseHermesState(
+        ticker_evidence_bundles={"AAPL": bundle.model_dump(mode="json")},
+    )
+    assert retained.asset_analysts == {}
+    assert retained.ticker_evidence_bundles["AAPL"]["bundle_id"] == str(bundle.bundle_id)

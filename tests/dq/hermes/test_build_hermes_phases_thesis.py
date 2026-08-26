@@ -100,7 +100,7 @@ class TestBuildHermesPhasesThesis:
                 risks="usd strength",
                 sources=[],
             )
-            return payload, {}, []
+            return payload, {}, [], None
 
         with patch(
             "digiquant.olympus.hermes.phases.h5_asset_analyst.run_asset_analyst_llm",
