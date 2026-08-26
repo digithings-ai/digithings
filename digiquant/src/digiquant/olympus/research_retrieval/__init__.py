@@ -28,6 +28,9 @@ WP13.2 attention persistence:
 WP13.5 shadow evaluation:
 :mod:`digiquant.olympus.research_retrieval.shadow_evaluation`
 (reconcile plans to WP1 attempts + downstream artifacts; evidence-only).
+WP14.1 role context compiler:
+:mod:`digiquant.olympus.research_retrieval.context`
+(``ContextCapsule`` / ``ContextManifest`` / role allowlists; models + compiler only — WP14.2+ wiring).
 """
 
 from __future__ import annotations
@@ -39,6 +42,22 @@ from digiquant.olympus.research_retrieval.blinding import (
     research_document_allowed,
 )
 from digiquant.olympus.research_retrieval.cache import ResearchCache
+from digiquant.olympus.research_retrieval.context import (
+    CONTEXT_SCHEMA_VERSION,
+    ContextCapsule,
+    ContextCompileInput,
+    ContextItem,
+    ContextItemKind,
+    ContextManifest,
+    ContextOmission,
+    ContextOmissionReason,
+    ContextRole,
+    RoleContextPolicy,
+    compile_context_capsule,
+    compile_context_manifest,
+    default_role_context_policy,
+    role_context_policy_content_hash,
+)
 from digiquant.olympus.research_retrieval.evidence_bundle import (
     OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV,
     EvidenceConflict,
@@ -195,7 +214,16 @@ __all__ = [
     "BeliefVersion",
     "COMPILED_BRIEF_DOCUMENT_KEY",
     "COMPILED_DIGEST_DOCUMENT_KEY",
+    "CONTEXT_SCHEMA_VERSION",
     "CompiledResearchView",
+    "ContextCapsule",
+    "ContextCompileInput",
+    "ContextItem",
+    "ContextItemKind",
+    "ContextManifest",
+    "ContextOmission",
+    "ContextOmissionReason",
+    "ContextRole",
     "DIGEST_DOCUMENT_KEY",
     "EvidenceBundleAmendment",
     "EvidenceBundleConflict",
@@ -246,6 +274,7 @@ __all__ = [
     "ResearchViewKind",
     "ResearchViewPublishBlocked",
     "RetrievalPhase",
+    "RoleContextPolicy",
     "STATE_UNAVAILABLE",
     "ShadowDecisionEvaluationRow",
     "ShadowProviderAttemptDetail",
@@ -262,10 +291,13 @@ __all__ = [
     "build_research_tool_dispatcher",
     "child_version_must_name_parent",
     "cite_evidence_bundle_on_forecast",
+    "compile_context_capsule",
+    "compile_context_manifest",
     "compile_research_brief",
     "compile_research_digest",
     "compile_research_view",
     "compile_views_from_store",
+    "default_role_context_policy",
     "document_key_for_source_kind",
     "document_key_for_view",
     "evaluate_research_policy_shadow",
@@ -282,6 +314,7 @@ __all__ = [
     "require_research_state_pin",
     "require_structured_write_ok",
     "research_document_allowed",
+    "role_context_policy_content_hash",
     "resolve_h5_state_version_id",
     "resolve_h6_selection_mode",
     "retrieve_missing_fact_evidence",
