@@ -77,7 +77,7 @@ function stageLocalEvidence(stage: StageDef, day: PipelineDayData): boolean {
 
 export interface TopologyEvidenceBands {
   runRecorded: boolean;
-  /** Recorded run with zero documents — treat every band as reached (degraded). */
+  /** Snapshot-only day: Atlas-only reach; Hermes/Learning stay not-run. */
   emptyRecordedRun: boolean;
   atlas: boolean;
   hermes: boolean;
@@ -110,10 +110,10 @@ export function topologyEvidenceBands(day: PipelineDayData): TopologyEvidenceBan
     atlas = true;
   }
 
+  // Snapshot-only day (run recorded, zero documents): Atlas entry is the only
+  // honest reach signal. Do not paint Hermes/Learning as "expected missing".
   if (emptyRecordedRun) {
     atlas = true;
-    hermes = true;
-    learning = true;
   }
 
   return { runRecorded, emptyRecordedRun, atlas, hermes, learning };
