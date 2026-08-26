@@ -271,6 +271,33 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_outcome_learning_mutation()`
 blocks `UPDATE`/`DELETE`/`TRUNCATE`.
 
+### Policy replay governance — migration 094 (#2983 / WP16.2)
+
+Private append-only policy replay manifests, pairs, run lifecycle events, arm
+results, comparison reports, gate criteria versions, evaluations, and human
+governance decisions. Contracts: WP16.1 replay models plus
+`digiquant.olympus.replay.governance_models` persistence envelopes.
+Application boundary: `PolicyReplayStore` (in-memory for unit tests; SQL IO
+adapter later). Dark launch: no public base view, no historical backfill, no
+worker/governance evaluator wiring (WP16.3+). Run status is derived from
+append-only events — no mutable running-status row. Manifest/pair dedupe on
+content hash; `load_gate_evidence` reconstructs full lineage from immutable IDs.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_replay_input_manifests` | `(record_id UUID)` | Content-addressed `ReplayInputManifest`; unique `manifest_content_hash`. |
+| `olympus_replay_pairs` | `(record_id UUID)` | `ReplayPairSpec` FK → shared manifest hash; unique `pair_content_hash`. |
+| `olympus_replay_run_events` | `(event_id UUID)` | Append-only lifecycle events; unique `(run_id, sequence)`. |
+| `olympus_replay_arm_results` | `(record_id UUID)` | Immutable final `PortfolioReplayResult` per `(run_id, arm_id)`. |
+| `olympus_policy_comparison_reports` | `(comparison_id UUID)` | Immutable comparison envelope; FK → pair + manifest hashes. |
+| `olympus_gate_criteria_versions` | `(criteria_version_id UUID)` | Human-authored criteria; optional supersedes FK. |
+| `olympus_gate_evaluations` | `(evaluation_id UUID)` | Immutable gate evaluation FK → comparison + criteria. |
+| `olympus_policy_governance_decisions` | `(decision_id UUID)` | Authenticated human decision FK → evaluation; optional supersedes FK. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_policy_replay_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`.
+
 ### Forecast registry — migration 079 (#2663 / WP4.6)
 
 Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio
