@@ -73,6 +73,19 @@ reruns or mutates H8/H9). The module must not import challenger optimizer, repla
 or broker surfaces. `pipeline-olympus.yml` uploads `shadow-allocation-*.json` with
 other run artifacts.
 
+**Write-denied allocation shadow workflow (#2762 / WP10.2):**
+`.github/workflows/pipeline-olympus-allocation-shadow.yml` consumes WP10.1 artifacts
+only. It declares `permissions: contents: read` + `actions: read`, never
+`secrets: inherit`, and never production Supabase / provider / broker /
+checkpointer secrets. Producer trust is gated to workflow
+`Pipeline: Olympus research` on `main`.
+`digiquant/scripts/atlas/check_allocation_shadow_isolation.py` statically rejects
+forbidden imports (Supabase, H9 commit I/O, network clients, live Nautilus,
+brokers), write permissions, secret references, untrusted source/branch/schema/hash,
+and non-file sinks; results are written as a local JSON report artifact only.
+Challenger selection stays out of scope (WP10.3+). Disable the workflow to roll
+back; the production Hermes graph is unaffected.
+
 ### H2 market-thesis identity
 
 Every market proposal has a stable lowercase `topic_key` plus an explicit
