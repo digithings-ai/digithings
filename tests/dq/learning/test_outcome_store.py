@@ -427,6 +427,29 @@ def test_store_has_no_update_or_delete_surface() -> None:
         assert not hasattr(store, name)
 
 
+def test_lesson_rejects_report_for_unlisted_episode() -> None:
+    store = OutcomeLearningStore()
+    episode_a = _episode()
+    episode_b = _episode(realized=_realized(instrument_return=Decimal("0.048")))
+    report_b = _report(episode_b)
+    store.append_episode(episode_a)
+    store.append_episode(episode_b)
+    store.append_report(report_b)
+    with pytest.raises(OutcomeLearningError, match="not in episode_version_ids"):
+        store.append_lesson(_lesson(episode_a, report_b))
+
+
+def test_load_episode_with_reports_fails_on_broken_index() -> None:
+    store = OutcomeLearningStore()
+    episode = _episode()
+    report = _report(episode)
+    store.append_episode(episode)
+    store.append_report(report)
+    store._reports_by_episode[episode.episode_version_id] = (uuid4(),)
+    with pytest.raises(OutcomeLearningError, match="missing report"):
+        store.load_episode_with_reports(episode.episode_version_id)
+
+
 def test_lesson_supersession_and_as_of_selection() -> None:
     store = OutcomeLearningStore()
     episode = _episode()
@@ -452,6 +475,7 @@ def test_lesson_supersession_and_as_of_selection() -> None:
         cohort="large_cap_us",
         component=AttributionComponent.FORECAST,
         horizon_id="h-21s",
+        regime="risk_on",
         as_of=mid,
     )
     assert selected is not None
@@ -463,6 +487,7 @@ def test_lesson_supersession_and_as_of_selection() -> None:
         cohort="large_cap_us",
         component=AttributionComponent.FORECAST,
         horizon_id="h-21s",
+        regime="risk_on",
         as_of=later,
     )
     assert selected_later is not None

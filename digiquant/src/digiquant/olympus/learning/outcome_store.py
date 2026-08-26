@@ -152,6 +152,12 @@ class OutcomeLearningStore:
                 raise OutcomeLearningError(
                     f"lesson {lesson.lesson_version_id} references missing report {report_id}"
                 )
+            report = self._reports[report_id]
+            if report.episode_version_id not in lesson.episode_version_ids:
+                raise OutcomeLearningError(
+                    f"lesson {lesson.lesson_version_id} report {report_id} "
+                    f"episode {report.episode_version_id} not in episode_version_ids"
+                )
         existing = self._lessons.get(lesson.lesson_version_id)
         return self._append_idempotent(
             store=self._lessons,
@@ -201,6 +207,7 @@ class OutcomeLearningStore:
         component: AttributionComponent,
         horizon_id: str,
         as_of: datetime,
+        regime: str | None = None,
     ) -> OutcomeLessonVersion | None:
         """Pick the newest eligible lesson version for a typed cohort slice."""
         bound = require_utc_datetime(as_of, field_name="as_of")
@@ -214,6 +221,8 @@ class OutcomeLearningStore:
                 continue
             if lesson.horizon_id != horizon_id:
                 continue
+            if lesson.regime != regime:
+                continue
             if lesson.compilation_cutoff > bound:
                 continue
             if lesson.available_at > bound:
@@ -222,7 +231,11 @@ class OutcomeLearningStore:
         if not candidates:
             return None
         candidates.sort(
-            key=lambda item: (item.available_at, item.compilation_cutoff),
+            key=lambda item: (
+                item.available_at,
+                item.compilation_cutoff,
+                item.lesson_version_id,
+            ),
             reverse=True,
         )
         return candidates[0]
@@ -254,8 +267,15 @@ class OutcomeLearningStore:
         """Exact episode plus linked reports — never fabricates missing rows."""
         episode = self.load_episode(episode_version_id)
         report_ids = self._reports_by_episode.get(episode_version_id, ())
-        reports = tuple(self._reports[rid] for rid in report_ids if rid in self._reports)
-        return LoadedOutcomeEpisode(episode=episode, reports=reports)
+        reports: list[ComponentAttributionReport] = []
+        for rid in report_ids:
+            report = self._reports.get(rid)
+            if report is None:
+                raise OutcomeLearningError(
+                    f"episode {episode_version_id} index references missing report {rid}"
+                )
+            reports.append(report)
+        return LoadedOutcomeEpisode(episode=episode, reports=tuple(reports))
 
     def exact_episode_bytes(self, episode_version_id: UUID) -> bytes:
         episode = self.load_episode(episode_version_id)
