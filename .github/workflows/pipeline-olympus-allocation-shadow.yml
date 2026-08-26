@@ -8,6 +8,8 @@ name: "Pipeline: Olympus allocation shadow"
 #   - no secrets: inherit
 #   - permissions: contents:read + actions:read only (artifact download)
 #   - trusted producer: "Pipeline: Olympus research" on main
+#   - workflow_dispatch verifies producer run identity via Actions API (#2832)
+#     — never trust hardcoded workflow labels from free-form inputs
 #
 # This workflow does NOT run the challenger optimizer (WP10.3+) and must never
 # call H9 commit I/O, live Nautilus, or broker adapters. Disable this workflow
@@ -75,12 +77,32 @@ jobs:
           RUN_ID_WORKFLOW: ${{ github.event.workflow_run.id }}
           BRANCH_WORKFLOW: ${{ github.event.workflow_run.head_branch }}
           WORKFLOW_NAME_WORKFLOW: ${{ github.event.workflow_run.name }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          TRUSTED_WORKFLOW="Pipeline: Olympus research"
+          TRUSTED_BRANCH="main"
           if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
             source_run_id="${RUN_ID_DISPATCH}"
-            source_branch="${BRANCH_DISPATCH:-main}"
-            source_workflow="Pipeline: Olympus research"
+            if [ -z "${source_run_id}" ]; then
+              echo "::error::missing producer run id"
+              exit 1
+            fi
+            # Verify the run id actually belongs to the trusted Olympus producer
+            # on main — never trust hardcoded labels from dispatch inputs (#2832).
+            meta="$(gh api "repos/${REPO}/actions/runs/${source_run_id}" \
+              --jq '{name:.name,head_branch:.head_branch,path:.path}')"
+            source_workflow="$(printf '%s' "$meta" | jq -r .name)"
+            source_branch="$(printf '%s' "$meta" | jq -r .head_branch)"
+            if [ "${source_workflow}" != "${TRUSTED_WORKFLOW}" ]; then
+              echo "::error::untrusted producer workflow '${source_workflow}' (required: ${TRUSTED_WORKFLOW})"
+              exit 1
+            fi
+            if [ -n "${BRANCH_DISPATCH:-}" ] && [ "${BRANCH_DISPATCH}" != "${source_branch}" ]; then
+              echo "::error::source_branch input '${BRANCH_DISPATCH}' does not match run head_branch '${source_branch}'"
+              exit 1
+            fi
           else
             source_run_id="${RUN_ID_WORKFLOW}"
             source_branch="${BRANCH_WORKFLOW}"
@@ -90,8 +112,12 @@ jobs:
             echo "::error::missing producer run id"
             exit 1
           fi
-          if [ "${source_branch}" != "main" ]; then
-            echo "::error::untrusted source branch '${source_branch}' (required: main)"
+          if [ "${source_branch}" != "${TRUSTED_BRANCH}" ]; then
+            echo "::error::untrusted source branch '${source_branch}' (required: ${TRUSTED_BRANCH})"
+            exit 1
+          fi
+          if [ "${source_workflow}" != "${TRUSTED_WORKFLOW}" ]; then
+            echo "::error::untrusted producer workflow '${source_workflow}' (required: ${TRUSTED_WORKFLOW})"
             exit 1
           fi
           {
