@@ -500,9 +500,7 @@ def run_deliberation_loop(
     """
     pm_skill = load_skill_full("deliberation")
     analyst_skill = load_skill_full("asset-analyst")
-    tools, execute_tool, _web_grounding = _h6_grounding(
-        state, segment=f"{NODE_ID}-{ticker}"
-    )
+    tools, execute_tool, _web_grounding = _h6_grounding(state, segment=f"{NODE_ID}-{ticker}")
     transcript: list[DeliberationTurn] = []
     round_number = 0
     prior_summary = _prior_deliberation_summary(state, ticker)
