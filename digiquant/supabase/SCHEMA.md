@@ -177,7 +177,10 @@ Private append-only exact-version research memory for Phase 3 WP12 contracts
 `LegacyDocumentRef`, `ResearchStateVersion`, `ResearchStatePin`). Distinct from
 Track B corpus pins (theme/asset/segment identity). Dark launch: no public base
 view, no historical backfill, no prose parsing. Application boundary:
-`digiquant.olympus.research_retrieval.store.ResearchStateStore`.
+`digiquant.olympus.research_retrieval.store.ResearchStateStore` (in-memory for
+unit tests; migration 088 is the durable schema — SQL IO adapter later). Pin
+temporal ordering is also enforced in SQL via migration 089
+(`requested_as_of <= knowledge_cutoff_at <= pinned_at`).
 
 | Table | PK | Purpose |
 |-------|----|---------|

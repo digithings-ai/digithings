@@ -875,14 +875,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `pinned_at >= requested_as_of`). Prose `documents` remain views — never authoritative
   truth; do not parse legacy prose into claims. Distinct from Track B corpus pins
   (theme/asset/segment identity).
-  **Research-state store (#2854 / WP12.2).** Private append-only tables in
-  migration `088_olympus_research_state.sql` plus
-  `research_retrieval/store.py` (`ResearchStateStore`): content-idempotent
-  appends, changed content appends new content-addressed rows (never UPDATE),
-  `select_state_as_of`, `pin_state_for_run`, exact `load_state_version` (byte-
-  equivalent after newer rows), child-parent checks. Strict reads exclude
-  future-known (`known_at` after cutoff) and legacy-null-known inventory rows.
-  Dark launch — no public base view; preflight pin wiring = WP12.3.
+  **Research-state store (#2854 / WP12.2, hardened #2867).** Private append-only tables in
+  migration `088_olympus_research_state.sql` (pin temporal CHECKs in `089`) plus
+  in-memory `research_retrieval/store.py` (`ResearchStateStore`; SQL IO adapter later):
+  content-idempotent appends, changed content appends new content-addressed rows (never
+  UPDATE), `select_state_as_of`, `pin_state_for_run`, exact `load_state_version` (byte-
+  equivalent after newer rows), child-parent checks. Pins reject future-known children and
+  `effective_as_of` after `requested_as_of`; appends reject children known after the
+  version envelope. Strict reads exclude future-known (`known_at` after cutoff) and
+  legacy-null-known inventory rows. Dark launch — no public base view; preflight pin
+  wiring = WP12.3.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are

@@ -397,17 +397,90 @@ def test_pin_state_for_run_and_idempotent_retry() -> None:
 
 def test_pin_rejects_future_known_version() -> None:
     store = ResearchStateStore()
-    _, _, version = _seed_base(store)
+    evidence = _evidence(summary="Cutoff envelope")
+    belief = _belief(evidence=evidence)
+    store.append_evidence(evidence)
+    store.append_belief(belief)
+    # effective_as_of stays within the pin's requested_as_of; known_at is after cutoff.
+    version = _version(
+        evidence=(evidence,),
+        beliefs=(belief,),
+        effective_as_of=_TS - timedelta(minutes=30),
+        known_at=_TS,
+    )
+    store.append_state_version(version)
     pin = ResearchStatePin(
         run_id="run-1",
         attempt_id="attempt-1",
         state_version_id=version.state_version_id,
-        knowledge_cutoff_at=_TS - timedelta(days=1),
-        requested_as_of=_TS - timedelta(days=1),
-        pinned_at=_TS - timedelta(days=1),
+        knowledge_cutoff_at=_TS - timedelta(minutes=15),
+        requested_as_of=_TS - timedelta(minutes=20),
+        pinned_at=_TS - timedelta(minutes=15),
     )
     with pytest.raises(ResearchStateError, match="after knowledge_cutoff"):
         store.pin_state_for_run(pin)
+
+
+def test_pin_rejects_effective_as_of_after_requested() -> None:
+    store = ResearchStateStore()
+    evidence = _evidence(summary="Future effective")
+    belief = _belief(evidence=evidence, statement="Future-effective belief")
+    store.append_evidence(evidence)
+    store.append_belief(belief)
+    future = _version(
+        evidence=(evidence,),
+        beliefs=(belief,),
+        effective_as_of=_TS + timedelta(hours=2),
+        known_at=_TS + timedelta(hours=2),
+    )
+    store.append_state_version(future)
+    pin = ResearchStatePin(
+        run_id="run-1",
+        attempt_id="attempt-1",
+        state_version_id=future.state_version_id,
+        knowledge_cutoff_at=_TS + timedelta(hours=3),
+        requested_as_of=_TS,
+        pinned_at=_TS + timedelta(hours=3),
+    )
+    with pytest.raises(ResearchStateError, match="effective_as_of is after requested_as_of"):
+        store.pin_state_for_run(pin)
+
+
+def test_pin_rejects_future_known_child_even_when_envelope_ok() -> None:
+    """Defense in depth when durable state was seeded inconsistently."""
+    store = ResearchStateStore()
+    early = _evidence(summary="Early", known_at=_TS - timedelta(minutes=45))
+    late = _evidence(summary="Late", known_at=_TS + timedelta(hours=1))
+    store.append_evidence(early)
+    store.append_evidence(late)
+    version = _version(evidence=(early, late), known_at=_TS + timedelta(hours=1))
+    store.append_state_version(version)
+    # Simulate durable drift: child known_at moved past cutoff after append.
+    drifted = EvidenceRecord.model_construct(**late.model_dump())
+    object.__setattr__(drifted, "known_at", _TS + timedelta(hours=3))
+    store._evidence[late.evidence_id] = drifted
+
+    pin = ResearchStatePin(
+        run_id="run-1",
+        attempt_id="attempt-1",
+        state_version_id=version.state_version_id,
+        knowledge_cutoff_at=_TS + timedelta(hours=2),
+        requested_as_of=_TS,
+        pinned_at=_TS + timedelta(hours=2),
+    )
+    with pytest.raises(ResearchStateError, match="evidence .* after knowledge_cutoff"):
+        store.pin_state_for_run(pin)
+
+
+def test_append_state_version_rejects_child_after_version_known_at() -> None:
+    store = ResearchStateStore()
+    early = _evidence(summary="Early", known_at=_TS - timedelta(minutes=45))
+    late = _evidence(summary="Late", known_at=_TS + timedelta(hours=2))
+    store.append_evidence(early)
+    store.append_evidence(late)
+    version = _version(evidence=(early, late), known_at=_TS)
+    with pytest.raises(ResearchStateError, match="after state version known_at"):
+        store.append_state_version(version)
 
 
 def test_pin_conflict_on_different_content() -> None:
@@ -494,12 +567,12 @@ def test_strict_load_excludes_legacy_refs() -> None:
 
 def test_strict_load_excludes_future_known_entities() -> None:
     store = ResearchStateStore()
-    # effective_as_of defaults to _TS - 1h; keep known_at >= that bound.
+    # Children must be known by the version envelope; cutoff may still be stricter.
     early = _evidence(summary="Early", known_at=_TS - timedelta(minutes=45))
     late = _evidence(summary="Late", known_at=_TS + timedelta(hours=2))
     store.append_evidence(early)
     store.append_evidence(late)
-    version = _version(evidence=(early, late), known_at=_TS)
+    version = _version(evidence=(early, late), known_at=_TS + timedelta(hours=2))
     store.append_state_version(version)
 
     loaded = store.load_state_version(
