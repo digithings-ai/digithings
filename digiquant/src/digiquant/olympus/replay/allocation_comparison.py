@@ -19,8 +19,12 @@ from typing import Annotated, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from digiquant.olympus.hermes.allocation_hashes import sha256_hex
+from digiquant.olympus.replay.canonical import (
+    cost_hash_from_execution,
+    data_hash_from_request,
+    execution_policy_hash,
+)
 from digiquant.olympus.replay.models import (
-    ExecutionPolicy,
     PortfolioReplayRequest,
     PortfolioReplayResult,
     PortfolioReplayStatus,
@@ -355,24 +359,6 @@ def load_shadow_criteria(path: Path | str | None = None) -> ShadowCriteria:
     }
     digest = shadow_criteria_content_hash(payload)
     return ShadowCriteria.model_validate({**payload, "criteria_content_hash": digest})
-
-
-def execution_policy_hash(execution: ExecutionPolicy) -> str:
-    """Stable digest of execution assumptions."""
-    return sha256_hex(execution.model_dump(mode="json"))
-
-
-def cost_hash_from_execution(execution: ExecutionPolicy) -> str:
-    """Cost schedule identity derived from commission rate (shadow arms)."""
-    return sha256_hex({"commission_rate": str(execution.commission_rate)})
-
-
-def data_hash_from_request(request: PortfolioReplayRequest) -> str:
-    """Market-data identity from synchronized bar series only."""
-    payload = {
-        "series": [s.model_dump(mode="json") for s in request.series],
-    }
-    return sha256_hex(payload)
 
 
 def build_shared_manifest(

@@ -1255,6 +1255,15 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   hard-constraint breaches stay visible even when challenger return is stronger;
   atomic file-only report output. No auto-promotion, production config write, or
   H8/H9 wiring.
+  **Policy replay manifests (#2979 / WP16.1):** `olympus/replay/models.py` adds
+  `PolicyVersionRef`, `PolicyBundle`, `SharedInputIdentity`, `WalkForwardFold`,
+  `ReplayInputManifest`, `ReplayArmSpec`, and `ReplayPairSpec` — strict frozen
+  contracts that separate shared as-of inputs from arm-specific policy refs.
+  `olympus/replay/canonical.py` centralizes SHA-256 digests (data/cost/seed/fill/
+  cash/manifest/pair) reused by WP10.5 shadow comparison. Paired arms must share
+  one `manifest_content_hash`; `build_replay_pair` rejects unequal shared inputs.
+  Allowlisted policy families only; path/pickle-like version IDs rejected. Offline
+  only — no store, workers, or governance persistence (WP16.2+).
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
