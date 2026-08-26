@@ -28,6 +28,7 @@ from digiquant.olympus.replay.models import (
     FillRecord,
     HoldingSnapshot,
     InstrumentBarSeries,
+    NavPoint,
     OhlcvBar,
     PortfolioReplayRequest,
     PortfolioReplayResult,
@@ -98,6 +99,7 @@ def _ok_result(
     ending_cash: str = "20000",
     commission: str = "50",
     fills: tuple[FillRecord, ...] = (),
+    nav_path: tuple[tuple[int, str], ...] | None = None,
 ) -> PortfolioReplayResult:
     holdings = (
         HoldingSnapshot(
@@ -107,6 +109,15 @@ def _ok_result(
             market_value=Decimal("10000"),
         ),
     )
+    path = ()
+    if nav_path is not None:
+        path = tuple(
+            NavPoint(
+                ts=datetime(2024, 1, day, tzinfo=_UTC),
+                nav=Decimal(nav),
+            )
+            for day, nav in nav_path
+        )
     draft = PortfolioReplayResult.model_construct(
         schema_version="1.0",
         request_id=request.request_id,
@@ -119,6 +130,7 @@ def _ok_result(
         rebalance_commission=Decimal(commission),
         holdings=holdings,
         fills=fills,
+        nav_path=path,
         message="",
         result_content_hash=None,
     )
@@ -242,13 +254,23 @@ def test_absolute_and_paired_metrics(criteria) -> None:
         incumbent=_arm(
             ComparisonArm.INCUMBENT,
             inc_req,
-            _ok_result(inc_req, ending_nav="101000", fills=fills),
+            _ok_result(
+                inc_req,
+                ending_nav="101000",
+                fills=fills,
+                nav_path=((2, "100000"), (3, "102000"), (4, "101000"), (5, "101000")),
+            ),
             fingerprint="inc-fp",
         ),
         challenger=_arm(
             ComparisonArm.CHALLENGER,
             ch_req,
-            _ok_result(ch_req, ending_nav="103000", fills=fills),
+            _ok_result(
+                ch_req,
+                ending_nav="103000",
+                fills=fills,
+                nav_path=((2, "100000"), (3, "105000"), (4, "99000"), (5, "103000")),
+            ),
             fingerprint="ch-fp",
         ),
         incumbent_scenarios=OptionalScenarioInputs(benchmark_return=Decimal("0.01")),
@@ -261,11 +283,37 @@ def test_absolute_and_paired_metrics(criteria) -> None:
     assert ret_delta.status is MetricAvailability.AVAILABLE
     assert ret_delta.delta == ret_delta.challenger - ret_delta.incumbent
     dd = next(d for d in report.paired_deltas if d.metric == "max_drawdown")
-    assert dd.status is MetricAvailability.UNAVAILABLE
-    assert dd.unavailable_reason == "path_nav_unavailable"
+    assert dd.status is MetricAvailability.AVAILABLE
+    # Peak 102000 → trough 101000 ⇒ -1000/102000
+    assert dd.incumbent == (Decimal("101000") - Decimal("102000")) / Decimal("102000")
+    # Peak 105000 → trough 99000
+    assert dd.challenger == (Decimal("99000") - Decimal("105000")) / Decimal("105000")
+    assert dd.delta == dd.challenger - dd.incumbent
     bm = next(d for d in report.paired_deltas if d.metric == "benchmark_return")
     assert bm.status is MetricAvailability.AVAILABLE
 
+
+def test_max_drawdown_unavailable_without_nav_path(criteria) -> None:
+    inc_req = _request(request_id="inc", targets=(("AAPL", "0.4"), ("MSFT", "0.4")))
+    ch_req = _request(request_id="ch", targets=(("AAPL", "0.5"), ("MSFT", "0.3")))
+    report = compare_allocation_arms(
+        criteria=criteria,
+        incumbent=_arm(
+            ComparisonArm.INCUMBENT,
+            inc_req,
+            _ok_result(inc_req, ending_nav="101000"),
+            fingerprint="inc-fp",
+        ),
+        challenger=_arm(
+            ComparisonArm.CHALLENGER,
+            ch_req,
+            _ok_result(ch_req, ending_nav="103000"),
+            fingerprint="ch-fp",
+        ),
+    )
+    dd = next(d for d in report.paired_deltas if d.metric == "max_drawdown")
+    assert dd.status is MetricAvailability.UNAVAILABLE
+    assert dd.unavailable_reason == "path_nav_unavailable"
 
 def test_unavailable_and_inconclusive_explicit(criteria) -> None:
     inc_req = _request(request_id="inc", targets=(("AAPL", "0.4"), ("MSFT", "0.4")))
