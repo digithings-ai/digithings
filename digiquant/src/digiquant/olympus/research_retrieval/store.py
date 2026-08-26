@@ -71,6 +71,18 @@ def _require_parent(*, label: str, parent_id: UUID | None, present: bool) -> Non
         raise ResearchStateError(f"{label} references missing parent {parent_id}")
 
 
+def _require_known_by(
+    *,
+    label: str,
+    entity_id: UUID,
+    known_at: datetime,
+    bound_at: datetime,
+    bound_name: str,
+) -> None:
+    if known_at > bound_at:
+        raise ResearchStateError(f"{label} {entity_id} known_at is after {bound_name}")
+
+
 class ResearchStateStore:
     """Append-only research-state boundary (no upsert / update / delete)."""
 
@@ -82,6 +94,56 @@ class ResearchStateStore:
         self._legacy_refs: dict[UUID, LegacyDocumentRef] = {}
         self._versions: dict[UUID, ResearchStateVersion] = {}
         self._pins: dict[tuple[str, str], ResearchStatePin] = {}
+
+    def _require_strict_manifest_known_by(
+        self,
+        version: ResearchStateVersion,
+        *,
+        bound_at: datetime,
+        bound_name: str,
+    ) -> None:
+        """Fail closed when any strict child outranks ``bound_at``."""
+        manifest = version.manifest
+        for evidence_id in manifest.evidence_ids:
+            record = self._evidence.get(evidence_id)
+            if record is not None:
+                _require_known_by(
+                    label="evidence",
+                    entity_id=evidence_id,
+                    known_at=record.known_at,
+                    bound_at=bound_at,
+                    bound_name=bound_name,
+                )
+        for belief_id in manifest.belief_version_ids:
+            belief = self._beliefs.get(belief_id)
+            if belief is not None:
+                _require_known_by(
+                    label="belief",
+                    entity_id=belief_id,
+                    known_at=belief.known_at,
+                    bound_at=bound_at,
+                    bound_name=bound_name,
+                )
+        for event_id in manifest.expected_event_version_ids:
+            event = self._expected_events.get(event_id)
+            if event is not None:
+                _require_known_by(
+                    label="expected_event",
+                    entity_id=event_id,
+                    known_at=event.known_at,
+                    bound_at=bound_at,
+                    bound_name=bound_name,
+                )
+        for patch_id in manifest.patch_ids:
+            patch = self._patches.get(patch_id)
+            if patch is not None:
+                _require_known_by(
+                    label="patch",
+                    entity_id=patch_id,
+                    known_at=patch.known_at,
+                    bound_at=bound_at,
+                    bound_name=bound_name,
+                )
 
     # --- append helpers -----------------------------------------------------
 
@@ -245,6 +307,13 @@ class ResearchStateStore:
                     f"state version {version.state_version_id} missing legacy ref {legacy_id}"
                 )
 
+        # Strict children cannot outrank the version envelope's known_at.
+        self._require_strict_manifest_known_by(
+            version,
+            bound_at=version.known_at,
+            bound_name="state version known_at",
+        )
+
         existing = self._versions.get(version.state_version_id)
         return self._append_idempotent(
             store=self._versions,
@@ -302,15 +371,26 @@ class ResearchStateStore:
     def pin_state_for_run(self, pin: ResearchStatePin) -> ResearchStatePin:
         """Append an exact run/attempt pin. Idempotent on identical pin content."""
         cutoff = require_utc_datetime(pin.knowledge_cutoff_at, field_name="knowledge_cutoff_at")
+        as_of = require_utc_datetime(pin.requested_as_of, field_name="requested_as_of")
         version = self._versions.get(pin.state_version_id)
         if version is None:
             raise ResearchStateMissingError(
                 f"cannot pin missing state_version_id {pin.state_version_id}"
             )
+        if version.effective_as_of > as_of:
+            raise ResearchStateError(
+                f"state_version {pin.state_version_id} effective_as_of is after requested_as_of"
+            )
         if version.known_at > cutoff:
             raise ResearchStateError(
                 f"state_version {pin.state_version_id} known_at is after knowledge_cutoff_at"
             )
+        # Defense in depth: reject look-ahead children even if envelope passed.
+        self._require_strict_manifest_known_by(
+            version,
+            bound_at=cutoff,
+            bound_name="knowledge_cutoff_at",
+        )
         key = (pin.run_id, pin.attempt_id)
         existing = self._pins.get(key)
         if existing is not None:

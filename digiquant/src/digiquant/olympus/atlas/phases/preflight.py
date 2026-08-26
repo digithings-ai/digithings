@@ -79,6 +79,11 @@ class PreflightDeps:
     # circuit-breaker (#928). 30 days covers a baseline + a month of deltas
     # with slack; matches the documents-read window in ``load_prior_context``.
     institutional_absence_lookback_days: int = 30
+    # WP12.3 (#2863): optional in-process ResearchStateStore for exact pin.
+    # None → typed state_unavailable (compatibility documents stay shadow-only).
+    research_state_store: Any | None = None
+    # Outer-retry attempt id (string form of OLYMPUS_ATTEMPT / DiagnosticsDeps.attempt).
+    research_state_attempt_id: str | None = None
 
 
 # Broad-market ETFs (+ BTC/ETH) always present in the injected market context.
@@ -406,6 +411,100 @@ def _hydrate_config(
     return hydrated, prior_book
 
 
+def _resolve_research_state_attempt_id(deps: PreflightDeps) -> str:
+    """Outer-retry attempt string for ResearchStatePin.attempt_id."""
+    if deps.research_state_attempt_id is not None and deps.research_state_attempt_id.strip():
+        return deps.research_state_attempt_id.strip()
+    raw = os.environ.get("OLYMPUS_ATTEMPT", "").strip()
+    if raw:
+        return raw
+    return "1"
+
+
+def _pin_research_state_update(deps: PreflightDeps, state: AtlasResearchState) -> dict[str, Any]:
+    """WP12.3: select once and carry an exact research-state pin (or typed unavailable).
+
+    Resume: if state already carries a pin dump, keep it (checkpoint / same attempt).
+    Missing store or unusable state → ``state_unavailable`` (documents remain
+    compatibility/shadow only — never invent exact state).
+    """
+    from uuid import UUID
+
+    from digiquant.olympus.research_retrieval.models import ResearchStatePin
+    from digiquant.olympus.research_retrieval.pin import (
+        STATE_UNAVAILABLE,
+        pin_research_state_for_preflight,
+    )
+    from digiquant.olympus.research_retrieval.store import ResearchStateStore
+
+    # Checkpoint / mid-run resume already has the authoritative pin.
+    if state.research_state_pin is not None and state.research_state_status == "pinned":
+        return {}
+
+    if deps.research_state_store is None:
+        return {
+            "research_state_pin": None,
+            "research_state_status": STATE_UNAVAILABLE,
+            "research_state_unavailable_reason": (
+                "research_state_store not wired; compatibility documents only (shadow)"
+            ),
+        }
+
+    store = deps.research_state_store
+    if not isinstance(store, ResearchStateStore):
+        return {
+            "research_state_pin": None,
+            "research_state_status": STATE_UNAVAILABLE,
+            "research_state_unavailable_reason": (
+                f"research_state_store must be ResearchStateStore; got {type(store).__name__}"
+            ),
+        }
+
+    try:
+        cutoff = require_knowledge_cutoff_at(state)
+    except ValueError as exc:
+        return {
+            "research_state_pin": None,
+            "research_state_status": STATE_UNAVAILABLE,
+            "research_state_unavailable_reason": str(exc),
+        }
+
+    explicit: UUID | None = None
+    if state.requested_research_state_version_id:
+        try:
+            explicit = UUID(state.requested_research_state_version_id)
+        except ValueError:
+            return {
+                "research_state_pin": None,
+                "research_state_status": STATE_UNAVAILABLE,
+                "research_state_unavailable_reason": (
+                    f"invalid requested_research_state_version_id "
+                    f"{state.requested_research_state_version_id!r}"
+                ),
+            }
+
+    result = pin_research_state_for_preflight(
+        store=store,
+        run_id=str(state.run_id),
+        attempt_id=_resolve_research_state_attempt_id(deps),
+        knowledge_cutoff_at=cutoff,
+        explicit_state_version_id=explicit,
+        pinned_at=cutoff,
+    )
+    if result.status == "pinned" and result.pin is not None:
+        pin: ResearchStatePin = result.pin
+        return {
+            "research_state_pin": pin.model_dump(mode="json"),
+            "research_state_status": "pinned",
+            "research_state_unavailable_reason": None,
+        }
+    return {
+        "research_state_pin": None,
+        "research_state_status": STATE_UNAVAILABLE,
+        "research_state_unavailable_reason": result.unavailable_reason,
+    }
+
+
 def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], dict]:
     """Return the LangGraph preflight node bound to ``deps``."""
 
@@ -466,11 +565,13 @@ def build_preflight_node(deps: PreflightDeps) -> Callable[[AtlasResearchState], 
             portfolio_performance=portfolio_performance,
         )
 
-        return {
+        update: dict[str, Any] = {
             "config": config,
             "prior_context": prior_context,
             "data_layer": data_layer,
         }
+        update.update(_pin_research_state_update(deps, state))
+        return update
 
     return preflight
 
