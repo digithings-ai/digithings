@@ -278,6 +278,16 @@ Plan persists to `hermes_research_attention_plan` + shared `AttentionStore`.
 Coexists with WP11.3 `H6Selection` — attention enforce takes precedence when both
 apply. Rollback: `off`/`shadow`.
 
+### Role context compiler — WP14.1 (#2938)
+
+`research_retrieval/context.py` compiles deterministic role capsules from one exact
+pinned research-state version. `ContextCapsule` / `ContextManifest` record included
+entity IDs, content hashes, byte/token budgets, and typed omission reasons under
+per-role allowlists. H5 delta-evidence policy, H6 bundle/amendment-only evidence,
+and H7 attention-decision sections are enforced at compile time — not yet wired
+into provider calls (WP14.2–14.4). Prose is never authoritative over structured
+state.
+
 ### Bounded missing-fact amendment — WP11.4 (#2908)
 
 H6 no longer runs generic ``live_search`` web grounding. When the PM names exactly

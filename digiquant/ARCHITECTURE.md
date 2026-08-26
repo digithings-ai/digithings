@@ -1014,6 +1014,15 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   linkage sets `complete=False`; eligible shadow runs require 100%
   decision-attempt reconciliation before enforcement. Rollback: shadow-only —
   no `enforce` activation.
+  **Role context compiler (#2938 / WP14.1).** `research_retrieval/context.py`
+  defines frozen `ContextCapsule`, `ContextItem`, `ContextManifest`, and per-role
+  allowlists (`h5_analyst`, `h6_deliberation`, `h7_pm`). `compile_context_capsule`
+  / `compile_context_manifest` compile bounded structured JSONL bodies from one
+  exact pinned `ResearchStateVersion` plus optional bundle/amendment/attention
+  artifacts. Deterministic sort/hash, byte/token budgets, typed omission reasons,
+  and reject unpinned bundle/state mismatches at compile time. Models + compiler
+  only — H5/H6/H7 provider wiring is WP14.2–14.4; drill-down manifest pinning is
+  WP14.4.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
