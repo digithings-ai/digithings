@@ -768,10 +768,6 @@ def route_attention(
         candidates = _evaluate_artifact_reasons(features, policy)
     primary = _pick_primary_reason(candidates, policy)
     mode = _mode_for_reason(primary)
-    exploration_reserved = features.exploration_slot and mode in {
-        AttentionMode.CHALLENGE,
-        AttentionMode.DEEP_REFRESH,
-    }
     return AttentionDecision(
         target_key=features.target_key,
         mode=mode,
@@ -779,7 +775,7 @@ def route_attention(
         reasons=_stable_reasons(candidates, primary),
         features=features,
         budget=_budget_for_mode(mode, policy),
-        exploration_reserved=exploration_reserved,
+        exploration_reserved=False,
         actuated=actuated,
     )
 
@@ -823,9 +819,13 @@ def apply_session_budget(
             and budget.uncached_tokens <= policy.session_budget.max_uncached_tokens
         )
 
-    reserved_keys = {d.target_key for d in working if d.exploration_reserved}
     # Ensure minimum exploration slots survive before trimming others.
-    exploration_candidates = [d for d in working if d.features.exploration_slot]
+    exploration_candidates = [
+        d
+        for d in working
+        if d.features.exploration_slot
+        and d.mode in {AttentionMode.CHALLENGE, AttentionMode.DEEP_REFRESH}
+    ]
     must_keep = set(
         d.target_key
         for d in sorted(
@@ -833,7 +833,10 @@ def apply_session_budget(
             key=lambda item: (-_MODE_RANK[item.mode], item.target_key),
         )[: policy.exploration.min_reserved_slots]
     )
-    protected = reserved_keys | must_keep
+    for idx, decision in enumerate(working):
+        if decision.target_key in must_keep:
+            working[idx] = decision.model_copy(update={"exploration_reserved": True})
+    protected = must_keep
 
     while working and not _within_budget(total):
         trimmable = [
@@ -923,7 +926,7 @@ def plan_research_attention(
             run_id=run_id,
             state_version_id=state_version_id,
             policy_content_hash=resolved_policy.content_hash,
-            target_keys=tuple(item.target_key for item in features),
+            target_keys=tuple(d.target_key for d in decisions),
         ),
         run_id=run_id,
         state_version_id=state_version_id,
@@ -965,7 +968,7 @@ def h6_selection_to_attention_decision(
         reasons=(primary,),
         features=features,
         budget=budget,
-        exploration_reserved=features.exploration_slot,
+        exploration_reserved=False,
         actuated=actuated,
     )
 

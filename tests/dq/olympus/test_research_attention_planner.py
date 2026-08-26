@@ -213,8 +213,48 @@ class TestAttentionPlan:
             run_id=RUN_ID,
             state_version_id=STATE_VERSION,
             policy_content_hash=policy.content_hash,
-            target_keys=tuple(f.target_key for f in features),
+            target_keys=tuple(d.target_key for d in a.decisions),
         )
+
+    def test_plan_survives_budget_trimming_that_drops_targets(self) -> None:
+        policy = _policy()
+        features = [
+            _ticker_features(ticker=f"LOW{i}", weight_pct=0.1, held=False, roster_reason="held")
+            for i in range(25)
+        ] + [_artifact_features(target_key=f"theme:{i}", has_prior=False) for i in range(10)]
+        plan = plan_research_attention(
+            run_id=RUN_ID,
+            state_version_id=STATE_VERSION,
+            features=features,
+            policy=policy,
+            rollout_mode=AttentionRolloutMode.SHADOW,
+        )
+        assert plan.plan_id
+        assert plan.total_budget.provider_calls <= policy.session_budget.max_provider_calls
+        assert any(d.mode is not AttentionMode.DEEP_REFRESH for d in plan.decisions)
+
+    def test_many_exploration_slots_respect_session_budget(self) -> None:
+        policy = _policy()
+        features = [
+            _ticker_features(
+                ticker=f"EXP{i}",
+                roster_reason="technical",
+                held=False,
+                weight_pct=0.0,
+                exploration_slot=True,
+            )
+            for i in range(20)
+        ]
+        plan = plan_research_attention(
+            run_id=RUN_ID,
+            state_version_id=STATE_VERSION,
+            features=features,
+            policy=policy,
+            rollout_mode=AttentionRolloutMode.SHADOW,
+        )
+        assert plan.total_budget.provider_calls <= policy.session_budget.max_provider_calls
+        reserved = [d for d in plan.decisions if d.exploration_reserved]
+        assert len(reserved) == policy.exploration.min_reserved_slots
 
     def test_shadow_records_plan_without_actuation(self) -> None:
         plan = plan_research_attention(
