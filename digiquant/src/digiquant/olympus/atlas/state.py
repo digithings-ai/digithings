@@ -660,6 +660,14 @@ class AtlasResearchState(BaseModel):
         default=None,
         description="Detail when research_state_status is state_unavailable.",
     )
+    # WP14.3 (#2946): versioned WP3/WP5/WP9 refs for H7 decision context compile.
+    h7_prerequisite_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "H7PrerequisiteSnapshot dump from preflight — accounting, forecast "
+            "outcomes, and pin linkage for H7 context compiler."
+        ),
+    )
 
     @field_validator("knowledge_cutoff_at")
     @classmethod
