@@ -970,7 +970,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `tests/dq/hermes/test_allocation_invariants.py` (explicit
   `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
   caps, calibrated mode stamps).
-  **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2):** the same
+  **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** the same
   `hermes/allocation_contracts.py` module defines frozen `PreTradeRiskReport`
   (plus `ScalarMetric` leaves, book/trade views, exposure/risk/concentration/
   cost/forecast/control blocks). Every required metric is a value +
@@ -981,8 +981,11 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   compute variance/MRC/CRC (CRC reconciles to σ_p), concentration/effective bets,
   turnover, and cost/liquidity from the exact WP6 correlation snapshot +
   caller-supplied annualized vols and WP7 observational scalars — never
-  re-estimating covariance/cost or fabricating factor/scenario values. Contract
-  may remain shadow until WP9.3 final-book attachment and WP9.4 H9 persistence.
+  re-estimating covariance/cost or fabricating factor/scenario values. H8
+  (`phase7e_risk_sizing`) attaches `phase_hermes.pre_trade_risk_report` after the
+  final control shell only; `final_book_weights_fingerprint` must equal the final
+  sized-book fingerprint. Typed report failure omits the report without changing
+  the book (H9 enforcement/persistence is WP9.4).
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
@@ -1320,12 +1323,15 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   calibrated path feeds bundle scores into `size_portfolio` (rank→conviction unused).
   Falls back to dense rank→conviction when mode is `incumbent` or calibrated coverage is
   empty. Writes `phase_hermes.sized_book` with `allocation_input_bundle_hash` +
-  `h8_sizing_input_mode`. Per-ticker vol from `price_technicals` and `sector_map` buckets
-  still feed caps/vol-target. Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft
-  on data errors. Real pairwise correlations load from `price_history` via
-  `get_return_correlations` (look-ahead-guarded); a pair with no estimate uses the
-  asset-class bucket fallback (#934). The sized book passes through
-  `turnover.apply_rebalancing_cadence`, which dispatches to either
+  `h8_sizing_input_mode`. After the final control shell (carry / cadence / backstop /
+  grid / final caps), builds and attaches `phase_hermes.pre_trade_risk_report` via
+  `build_pretrade_risk_report_for_final_book` (WP9.3 / #2750) and stamps
+  `pre_trade_risk_report_hash` on the book; report omission is fail-soft. Per-ticker vol
+  from `price_technicals` and `sector_map` buckets still feed caps/vol-target. Wired
+  in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors. Real pairwise
+  correlations load from `price_history` via `get_return_correlations` (look-ahead-guarded);
+  a pair with no estimate uses the asset-class bucket fallback (#934). The sized book
+  passes through `turnover.apply_rebalancing_cadence`, which dispatches to either
   `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
   the minimum-hold override, #934) or `hold_drifted_book` (off-cadence: holds continuing
   positions at their drifted weight, still honoring an explicit PM exit, #955).
