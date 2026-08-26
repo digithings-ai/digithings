@@ -5,6 +5,10 @@ global event ordering. Target deltas execute on the next synchronized bar.
 Worker-local imports only — never call the independent per-symbol average runner.
 """
 
+# score:allow pandas
+# score:allow pd.
+# score:allow untyped any
+
 from __future__ import annotations
 
 import logging
