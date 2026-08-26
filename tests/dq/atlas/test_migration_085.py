@@ -49,14 +49,13 @@ def test_migration_is_the_only_085() -> None:
     assert sorted(MIGRATIONS_DIR.glob("085_*.sql")) == [MIGRATION_PATH]
 
 
-def test_migration_follows_083() -> None:
-    """085 follows 083 numerically; 084 (#2779) should land first when both ship."""
-    assert (MIGRATIONS_DIR / "083_olympus_pretrade_risk_reports.sql").is_file()
+def test_migration_follows_084() -> None:
+    assert (MIGRATIONS_DIR / "084_olympus_accounting_day_return_pct.sql").is_file()
     numbers = sorted(
         int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
     )
     assert 85 in numbers
-    assert numbers.index(83) < numbers.index(85)
+    assert numbers.index(84) < numbers.index(85)
 
 
 @pytest.mark.parametrize("view", TIP_VIEWS)

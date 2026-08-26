@@ -129,7 +129,9 @@ crash that leaves a FINAL period row without children must not publish as a
 public tip.
 
 **`day_return_pct` (084 / #2779):** `(closing_equity − opening_equity) / opening_equity`
-(×100), including `cash_pnl` via the equity identity. 085 retains that formula.
+(×100), matching engine identity `E1 = E0 + net_pnl_total + cash_pnl` — not
+`net_pnl_total / E0` alone. Migration 074's formula is superseded by
+`084_olympus_accounting_day_return_pct.sql`; 085 retains that equity-delta formula.
 
 **Cutover gate:** point public readers only after an approved shadow interval (including one
 rebalance session) has zero unexplained reconciliation failures. Do **not** enable

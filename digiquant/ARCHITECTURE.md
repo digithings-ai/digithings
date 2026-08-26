@@ -1915,6 +1915,7 @@ that metrics/attribution job order cannot alter meaning.
   `tests/dq/atlas/test_migration_073.py`,
   `tests/dq/atlas/test_lookback_vs_realized.py`,
   `tests/dq/atlas/test_migration_074.py`,
+  `tests/dq/atlas/test_migration_084.py`,
   `tests/dq/atlas/test_migration_085.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
   current-book lookback as realized attribution, public base-table grants on accounting,
