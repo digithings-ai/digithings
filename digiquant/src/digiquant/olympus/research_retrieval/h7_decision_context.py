@@ -75,6 +75,8 @@ class H7PrerequisiteSnapshot(ResearchStateModel):
     unresolved_forecast_effective_ids: tuple[NonEmptyStr, ...] = Field(default_factory=tuple)
     ex_ante_risk_snapshot_hash: NonEmptyStr | None = None
     action_cost_estimate_ids: tuple[NonEmptyStr, ...] = Field(default_factory=tuple)
+    outcome_lesson_version_id: UUID | None = None
+    outcome_lesson_content_hash: NonEmptyStr | None = None
     schema_version: int = H7_SECTION_SCHEMA_VERSION
 
 
@@ -134,6 +136,7 @@ class H7DecisionContextCompileInput:
     calibrated_forecasts: dict[str, dict[str, Any]] | None = None
     prior_direction: dict[str, Any] | None = None
     decision_lessons: tuple[dict[str, Any], ...] = ()
+    outcome_lesson_version_id: UUID | None = None
     focus_roster: tuple[str, ...] = ()
     enforce_version_pin: bool = False
 
@@ -187,8 +190,12 @@ def _prior_authorization_entity_ids(
     *,
     prior_direction: dict[str, Any],
     decision_lessons: tuple[dict[str, Any], ...],
+    outcome_lesson_version_id: UUID | None = None,
 ) -> tuple[str, ...]:
     ids: set[str] = set()
+    if outcome_lesson_version_id is not None:
+        ids.add(f"outcome_lesson:{outcome_lesson_version_id}")
+        return tuple(sorted(ids))
     if prior_direction:
         memo_date = prior_direction.get("date")
         if memo_date:
@@ -321,6 +328,13 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
     auth_ids = _prior_authorization_entity_ids(
         prior_direction=prior,
         decision_lessons=inp.decision_lessons,
+        outcome_lesson_version_id=(
+            inp.outcome_lesson_version_id
+            if inp.outcome_lesson_version_id is not None
+            else (
+                prerequisites.outcome_lesson_version_id if prerequisites is not None else None
+            )
+        ),
     )
     prior_auth = _build_section(H7SectionKind.PRIOR_AUTHORIZATION, entity_ids=auth_ids)
 

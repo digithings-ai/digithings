@@ -181,6 +181,7 @@ def _h7_node(
         "fed_odds": (state.phase6_bias_row or {}).get("fed_odds"),
     }
     pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
+    lesson_pin = state.outcome_lesson_pin if isinstance(state.outcome_lesson_pin, dict) else None
     prereq = (
         state.h7_prerequisite_snapshot if isinstance(state.h7_prerequisite_snapshot, dict) else None
     )
@@ -189,6 +190,7 @@ def _h7_node(
         research_state_pin=pin,
         research_state_store=research_state_store,
         h7_prerequisite_snapshot=prereq,
+        outcome_lesson_pin=lesson_pin,
         analyst_payloads=analyst_payloads(state),
         deliberation_summaries=deliberation_summaries(state),
         shadow_calibrations=shadow.calibration_dumps(),

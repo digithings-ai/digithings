@@ -135,10 +135,15 @@ def compile_h7_role_context(
     calibrated_forecasts: dict[str, dict[str, Any]] | None = None,
     prior_direction: dict[str, Any] | None = None,
     decision_lessons: tuple[dict[str, Any], ...] = (),
+    outcome_lesson_version_id: UUID | None = None,
     focus_roster: tuple[str, ...] = (),
     enforce_version_pin: bool = False,
 ) -> H7DecisionContext:
     """Compile bounded H7 decision capsule from pinned state + prerequisites."""
+    structured_lesson = outcome_lesson_version_id
+    if structured_lesson is None and prerequisites is not None:
+        structured_lesson = prerequisites.outcome_lesson_version_id
+    legacy_lessons = () if structured_lesson is not None else decision_lessons
     return compile_h7_decision_context(
         H7DecisionContextCompileInput(
             loaded=loaded,
@@ -149,7 +154,8 @@ def compile_h7_role_context(
             shadow_calibrations=shadow_calibrations,
             calibrated_forecasts=calibrated_forecasts,
             prior_direction=prior_direction,
-            decision_lessons=decision_lessons,
+            decision_lessons=legacy_lessons,
+            outcome_lesson_version_id=structured_lesson,
             focus_roster=focus_roster,
             enforce_version_pin=enforce_version_pin,
         )
@@ -175,6 +181,25 @@ def compile_h6_role_context(
     )
 
 
+def _attach_outcome_lesson_linkage(
+    phase_inputs: dict[str, Any],
+    *,
+    outcome_lesson_pin: dict[str, object] | None,
+) -> dict[str, Any]:
+    """Embed structured lesson pin for WP14 manifest telemetry."""
+    if not isinstance(outcome_lesson_pin, dict):
+        return phase_inputs
+    lesson_id = outcome_lesson_pin.get("lesson_version_id")
+    if lesson_id is None or not str(lesson_id).strip():
+        return phase_inputs
+    out = dict(phase_inputs)
+    out["outcome_lesson_version_id"] = str(lesson_id)
+    content_hash = outcome_lesson_pin.get("content_hash")
+    if content_hash:
+        out["outcome_lesson_content_hash"] = str(content_hash)
+    return out
+
+
 def _attach_manifest_linkage(
     phase_inputs: dict[str, Any],
     *,
@@ -198,6 +223,7 @@ def wire_h5_phase_inputs(
     bundle: TickerEvidenceBundle,
     research_state_pin: dict[str, object] | None,
     research_state_store: ResearchStateStore | None = None,
+    outcome_lesson_pin: dict[str, object] | None = None,
     changed_evidence_ids: frozenset[UUID] | None = None,
 ) -> RoleContextWireResult:
     """Apply H5 context compiler wiring (shadow records; enforce replaces structured slice)."""
@@ -231,6 +257,7 @@ def wire_h5_phase_inputs(
         out = strip_blinded_forbidden_keys(phase_inputs, role="h5_analyst")
         out["structured_context"] = capsule.body
         out = _attach_manifest_linkage(out, manifest=manifest, capsule=capsule)
+        out = _attach_outcome_lesson_linkage(out, outcome_lesson_pin=outcome_lesson_pin)
         assert_blinded_h5_prompt(out)
         return RoleContextWireResult(
             phase_inputs=out,
@@ -243,6 +270,7 @@ def wire_h5_phase_inputs(
     out["context_capsule_shadow"] = capsule.model_dump(mode="json")
     out["context_manifest_shadow"] = manifest.model_dump(mode="json")
     out = _attach_manifest_linkage(out, manifest=manifest, capsule=capsule)
+    out = _attach_outcome_lesson_linkage(out, outcome_lesson_pin=outcome_lesson_pin)
     return RoleContextWireResult(
         phase_inputs=out,
         capsule=capsule,
@@ -336,6 +364,7 @@ def wire_h7_phase_inputs(
     research_state_pin: dict[str, object] | None,
     research_state_store: ResearchStateStore | None = None,
     h7_prerequisite_snapshot: dict[str, object] | None = None,
+    outcome_lesson_pin: dict[str, object] | None = None,
     attention_plan: AttentionPlan | None = None,
     analyst_payloads: dict[str, dict[str, Any]] | None = None,
     deliberation_summaries: dict[str, dict[str, Any]] | None = None,
@@ -366,6 +395,14 @@ def wire_h7_phase_inputs(
         )
 
     prerequisites = _parse_h7_prerequisites(h7_prerequisite_snapshot)
+    lesson_id: UUID | None = None
+    if isinstance(outcome_lesson_pin, dict):
+        raw_lesson = outcome_lesson_pin.get("lesson_version_id")
+        if raw_lesson is not None:
+            try:
+                lesson_id = UUID(str(raw_lesson))
+            except ValueError:
+                lesson_id = None
     enforce_pin = mode is ContextCompilerMode.ENFORCE
     try:
         decision_ctx = compile_h7_role_context(
@@ -378,6 +415,7 @@ def wire_h7_phase_inputs(
             calibrated_forecasts=calibrated_forecasts,
             prior_direction=prior_direction,
             decision_lessons=decision_lessons,
+            outcome_lesson_version_id=lesson_id,
             focus_roster=focus_roster,
             enforce_version_pin=enforce_pin,
         )
@@ -400,6 +438,7 @@ def wire_h7_phase_inputs(
         out.pop("portfolio_performance", None)
         out["structured_context"] = decision_ctx.structured_body
         out = _attach_manifest_linkage(out, manifest=manifest, capsule=capsule)
+        out = _attach_outcome_lesson_linkage(out, outcome_lesson_pin=outcome_lesson_pin)
         out["h7_decision_context_hash"] = decision_ctx.content_hash
         assert_h7_no_target_weights(out["structured_context"])
         return RoleContextWireResult(
@@ -417,6 +456,7 @@ def wire_h7_phase_inputs(
     if prerequisites is None or prerequisites.state_version_id is None:
         out["h7_context_degraded"] = "missing_versioned_prerequisites"
     out = _attach_manifest_linkage(out, manifest=manifest, capsule=capsule)
+    out = _attach_outcome_lesson_linkage(out, outcome_lesson_pin=outcome_lesson_pin)
     return RoleContextWireResult(
         phase_inputs=out,
         capsule=capsule,
