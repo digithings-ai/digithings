@@ -886,8 +886,9 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   H6 appends optional evidence-linked `ForecastAmendment` without rewriting the base;
   `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
-  carry retain effective identity/time/hash (`supabase_io._slim_deliberation_summary`,
-  deliberation payloads). **H7 forecast-reference-only (#2660 / WP4.5):** after the
+  carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
+  dump (`supabase_io._slim_deliberation_summary`, deliberation payloads) so H9 can
+  re-persist after registry fail-soft (#2790). **H7 forecast-reference-only (#2660 / WP4.5):** after the
   PM LLM (or fail-soft prior-memo carry), `bind_forecast_references` attaches one
   typed `ForecastReference` per `TickerDirection` from current H6 lineage IDs
   (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
