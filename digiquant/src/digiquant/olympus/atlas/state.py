@@ -372,6 +372,8 @@ class RebalancePayload(TypedDict, total=False):
     # WP8.4 (#2734): versioned raw-input mode and source bundle identity on every book.
     h8_sizing_input_mode: str
     allocation_input_bundle_hash: str
+    # WP9.3 (#2750): content hash of the attached PreTradeRiskReport (observational).
+    pre_trade_risk_report_hash: str
 
 
 class Phase9EvolutionPayload(TypedDict, total=False):
@@ -507,6 +509,11 @@ class PhaseHermesState(BaseModel):
         default=None,
         description="Validated AllocationInputBundle dump at H8 entry (WP8.3/8.4)",
     )
+    # WP9.3 observational PreTradeRiskReport (built after final H8 controls; H9 persist in WP9.4).
+    pre_trade_risk_report: dict[str, Any] | None = Field(
+        default=None,
+        description="Validated PreTradeRiskReport dump after final H8 book (WP9.3)",
+    )
     # WP7.3 observational cost/liquidity evidence (never feeds turnover in Phase 1).
     liquidity_snapshots: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict,
@@ -560,7 +567,12 @@ def _merge_phase_hermes(
             **merged.action_cost_estimates,
             **right.action_cost_estimates,
         }
-    for field in ("risk_policy", "covariance_snapshot", "allocation_input_bundle"):
+    for field in (
+        "risk_policy",
+        "covariance_snapshot",
+        "allocation_input_bundle",
+        "pre_trade_risk_report",
+    ):
         val = getattr(right, field)
         if val:
             object.__setattr__(merged, field, val)
