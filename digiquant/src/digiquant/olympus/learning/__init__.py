@@ -12,6 +12,11 @@ from digiquant.olympus.learning.component_attribution import (
     PairedReplayEvidence,
     build_component_attribution_report,
 )
+from digiquant.olympus.learning.lesson_registry import (
+    LessonCompilationPolicy,
+    LessonCompiler,
+    cohort_key,
+)
 from digiquant.olympus.learning.outcome_assembly import (
     AssemblyPassResult,
     OutcomeEpisodeAssembler,
@@ -39,8 +44,11 @@ __all__ = [
     "OutcomeLessonVersion",
     "AssemblyPassResult",
     "OutcomeEpisodeAssembler",
+    "LessonCompilationPolicy",
+    "LessonCompiler",
     "OutcomeLearningStore",
     "PairedReplayEvidence",
+    "cohort_key",
     "build_component_attribution_report",
     "build_beliefs_distillation_phase",
     "distill_beliefs",
