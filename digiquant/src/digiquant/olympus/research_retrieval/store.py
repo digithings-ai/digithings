@@ -630,6 +630,14 @@ class EvidenceBundleStore:
             or amendment.missing_fact_request_id not in self._requests
         )
 
+    def amendment_count_for_base(self, base_bundle_id: UUID) -> int:
+        """Policy helper: count append-only H6 supplements on one base bundle."""
+        return sum(
+            1
+            for amendment in self._amendments.values()
+            if amendment.base_bundle_id == base_bundle_id
+        )
+
 
 __all__ = [
     "EvidenceBundleConflict",

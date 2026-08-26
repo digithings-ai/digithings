@@ -17,6 +17,9 @@ WP11.2 H5 publish:
 WP11.3 deterministic H6 selection:
 :mod:`digiquant.olympus.research_retrieval.planner`
 (``H6Selection`` reasons/features/budget; ``OLYMPUS_H6_SELECTION_MODE``).
+WP11.4 bounded H6 missing-fact amendment:
+:mod:`digiquant.olympus.research_retrieval.h6_amendment`
+(one validated proposal → targeted retrieval → append-only amendment; no generic H6 search).
 """
 
 from __future__ import annotations
@@ -40,6 +43,15 @@ from digiquant.olympus.research_retrieval.evidence_bundle import (
     facts_from_phase_inputs,
     publish_h5_evidence_bundle,
     resolve_h5_state_version_id,
+)
+from digiquant.olympus.research_retrieval.h6_amendment import (
+    H6_AMENDMENT_POLICY_MAX_PER_BASE,
+    H6AmendmentOutcome,
+    H6AmendmentResult,
+    attempt_h6_evidence_amendment,
+    document_key_for_source_kind,
+    retrieve_missing_fact_evidence,
+    validate_missing_fact_proposal,
 )
 from digiquant.olympus.research_retrieval.legacy_backfill import (
     BackfillCounts,
@@ -150,6 +162,9 @@ __all__ = [
     "H6Selection",
     "H6SelectionMode",
     "H6SelectionReason",
+    "H6_AMENDMENT_POLICY_MAX_PER_BASE",
+    "H6AmendmentOutcome",
+    "H6AmendmentResult",
     "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
     "LegacyDocumentRef",
     "LegacySourceDocument",
@@ -181,6 +196,7 @@ __all__ = [
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
     "assert_no_materiality_in_prompt",
+    "attempt_h6_evidence_amendment",
     "backfill_legacy_manifests",
     "build_h5_evidence_bundle",
     "build_h6_decision_features",
@@ -192,6 +208,7 @@ __all__ = [
     "compile_research_digest",
     "compile_research_view",
     "compile_views_from_store",
+    "document_key_for_source_kind",
     "document_key_for_view",
     "evidence_bundle_writer_enabled",
     "extract_section",
@@ -208,5 +225,7 @@ __all__ = [
     "research_document_allowed",
     "resolve_h5_state_version_id",
     "resolve_h6_selection_mode",
+    "retrieve_missing_fact_evidence",
     "select_h6",
+    "validate_missing_fact_proposal",
 ]
