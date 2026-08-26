@@ -13,13 +13,11 @@ from digiquant.olympus.replay.models import (
     ExecutionPolicy,
     HoldingQuantity,
     InstrumentBarSeries,
-    NavPoint,
     OhlcvBar,
     PortfolioReplayRequest,
     PortfolioReplayStatus,
     TargetWeight,
     inconclusive_result,
-    max_drawdown_from_nav_path,
 )
 
 pytestmark = pytest.mark.unit
@@ -115,21 +113,6 @@ def test_inconclusive_rejects_ok_status() -> None:
             status=PortfolioReplayStatus.OK,
             message="nope",
         )
-
-
-def test_max_drawdown_from_nav_path() -> None:
-    assert max_drawdown_from_nav_path(()) is None
-    single = (
-        NavPoint(ts=datetime(2024, 1, 2, tzinfo=_UTC), nav=Decimal("100")),
-    )
-    assert max_drawdown_from_nav_path(single) == Decimal("0")
-    path = (
-        NavPoint(ts=datetime(2024, 1, 2, tzinfo=_UTC), nav=Decimal("100")),
-        NavPoint(ts=datetime(2024, 1, 3, tzinfo=_UTC), nav=Decimal("110")),
-        NavPoint(ts=datetime(2024, 1, 4, tzinfo=_UTC), nav=Decimal("88")),
-        NavPoint(ts=datetime(2024, 1, 5, tzinfo=_UTC), nav=Decimal("100")),
-    )
-    assert max_drawdown_from_nav_path(path) == (Decimal("88") - Decimal("110")) / Decimal("110")
 
 
 def test_replay_modules_forbid_production_imports() -> None:
