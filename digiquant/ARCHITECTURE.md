@@ -946,7 +946,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   zero provider calls; planner failure falls back to full incumbent H6, never
   an unrecorded skip). Materiality (`weight_pct`) is a selection feature only
   — never injected into H6 prompts. Selected success still meets the two-round
-  floor. WP11 remains incomplete until 11.4+ close.
+  floor. WP11.4 (`research_retrieval/h6_amendment.py`) constrains H6 to at most one
+  validated missing-fact supplement per base bundle: PM ``MissingFactProposal``
+  (claim_id/question/source_kind/reason) → blinded ``query_research`` only (no
+  generic ``live_search``) → append-only ``MissingFactRequest`` +
+  ``EvidenceBundleAmendment`` with base ``content_hash`` unchanged; invalid,
+  exhausted, or failed paths record ``evidence_amendment_outcome`` on
+  ``DeliberationSummary`` and continue on the H5 base. WP11 remains incomplete
+  until 11.5 close.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
