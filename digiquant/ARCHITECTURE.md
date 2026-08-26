@@ -919,7 +919,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   node); cutoff-bounded outcomes via `list_resolved_outcomes_as_of`; typed state slots
   `phase_hermes.forecast_calibrations` / `calibrated_forecasts`; H9 fail-soft appends
   via `forecast_registry.persist_shadow_calibrations` after booking. H8 remains
-  untouched.
+  untouched. **WP5 Gate-2 follow-up (#2797):** outcomes stamp `horizon_sessions`;
+  cohort attach filters residuals to the subject horizon; migration 087 adds
+  `UNIQUE (effective_forecast_id, maturity_session)` and refuses wall-clock
+  `as_of` when knowledge cutoff is missing.
   **Risk policy contracts (#2692 / WP6.2, #2803):** frozen models in
   `hermes/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
   leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure

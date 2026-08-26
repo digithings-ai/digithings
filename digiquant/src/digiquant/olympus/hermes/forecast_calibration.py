@@ -15,6 +15,7 @@ identical UUID5 / content-hash identities.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -44,6 +45,9 @@ from digiquant.olympus.temporal import require_utc_datetime
 
 METHOD_VERSION = "shadow-calibrator@1"
 """Implementation version stamped on every ForecastCalibration."""
+
+_COHORT_HORIZON_RE = re.compile(r"^horizon:(\d+)\|")
+
 
 PRIOR_EQUIVALENT_SAMPLE_SIZE = Decimal("8")
 """n0 — prior strength for zero-mean residual shrinkage."""
@@ -129,6 +133,14 @@ def cohort_key_for_horizon(horizon_sessions: int, *, regime: str = "default") ->
     return f"horizon:{horizon_sessions}|regime:{regime_key}"
 
 
+def horizon_sessions_from_cohort_key(cohort_key: str) -> int | None:
+    """Parse ``horizon:N|…`` from a cohort key; ``None`` when the prefix is absent."""
+    match = _COHORT_HORIZON_RE.match(cohort_key.strip())
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
 def scenario_positive_probability(terms: ForecastTerms) -> Decimal:
     """Probability mass on strictly positive scenario returns (no half-credit at 0)."""
     mass = Decimal("0")
@@ -175,8 +187,13 @@ def _eligible_outcomes(
     outcomes: Sequence[ForecastOutcome],
     *,
     as_of: datetime,
+    horizon_sessions: int | None = None,
 ) -> list[ForecastOutcome]:
-    """Resolved outcomes known at or before ``as_of``, deterministic order."""
+    """Resolved outcomes known at or before ``as_of``, deterministic order.
+
+    When ``horizon_sessions`` is set, only outcomes stamped with that horizon
+    enter the cohort (Gate 2 / WP8 common-horizon requirement).
+    """
     cutoff = require_utc_datetime(as_of, field_name="as_of")
     eligible = [
         o
@@ -186,6 +203,7 @@ def _eligible_outcomes(
         and o.forecast_mean_return is not None
         and o.positive_label is not None
         and o.known_at <= cutoff
+        and (horizon_sessions is None or o.horizon_sessions == horizon_sessions)
     ]
     return sorted(eligible, key=lambda o: (o.known_at, str(o.outcome_id)))
 
@@ -357,7 +375,11 @@ def calibrate_cohort(
                 known_at=known_at,
             )
 
-        eligible = _eligible_outcomes(outcomes, as_of=known_at)
+        eligible = _eligible_outcomes(
+            outcomes,
+            as_of=known_at,
+            horizon_sessions=horizon_sessions_from_cohort_key(key),
+        )
         if not eligible:
             return _unavailable_calibration(
                 cohort_key=key,
@@ -603,7 +625,11 @@ def calibrate_forecast(
     )
     residuals: list[Decimal] = []
     if calibration.status is CalibrationArtifactStatus.AVAILABLE:
-        eligible = _eligible_outcomes(outcomes, as_of=as_of)
+        eligible = _eligible_outcomes(
+            outcomes,
+            as_of=as_of,
+            horizon_sessions=horizon_sessions_from_cohort_key(key),
+        )
         residuals = [o.signed_residual for o in eligible if o.signed_residual is not None]
     subject = calibrate_subject(
         base_forecast_id=base_forecast_id,
@@ -673,9 +699,8 @@ def attach_shadow_calibrations(
             by_cohort[cohort_key],
             key=lambda s: (s.ticker.upper(), str(s.effective_id)),
         )
-        # Horizon-match outcomes when they carry a matching cohort via residual cohort
-        # convention: caller supplies the union; calibrator re-filters by as_of only.
-        # Subjects sharing a cohort_key share one calibration estimate.
+        # Subjects sharing a cohort_key share one calibration estimate; outcomes are
+        # filtered to the cohort horizon inside calibrate_cohort (#2797).
         calibration = calibrate_cohort(
             outcomes,
             cohort_key=cohort_key,
@@ -685,7 +710,11 @@ def attach_shadow_calibrations(
         calibrations_by_id[calibration.calibration_id] = calibration
         residuals: list[Decimal] = []
         if calibration.status is CalibrationArtifactStatus.AVAILABLE:
-            eligible = _eligible_outcomes(outcomes, as_of=known_at)
+            eligible = _eligible_outcomes(
+                outcomes,
+                as_of=known_at,
+                horizon_sessions=horizon_sessions_from_cohort_key(cohort_key),
+            )
             residuals = [o.signed_residual for o in eligible if o.signed_residual is not None]
         for subject in cohort_subjects:
             calibrated.append(
@@ -716,12 +745,16 @@ def attach_shadow_calibrations_from_state(
     as_of: datetime | None = None,
     regime: str = "default",
 ) -> ShadowCalibrationAttachment:
-    """Attach shadows for H6 effectives on ``state`` using cutoff-bounded outcomes."""
+    """Attach shadows for H6 effectives on ``state`` using cutoff-bounded outcomes.
+
+    Requires an explicit UTC ``as_of`` or ``state.knowledge_cutoff_at``. Never falls
+    back to wall-clock time (identity would diverge — #2797).
+    """
     cutoff = as_of
     if cutoff is None:
         cutoff = getattr(state, "knowledge_cutoff_at", None)
     if cutoff is None:
-        cutoff = datetime.now(tz=UTC)
+        return ShadowCalibrationAttachment(calibrations=(), calibrated_forecasts=())
     subjects = collect_effective_forecasts_from_state(state)
     return attach_shadow_calibrations(
         subjects=subjects,
@@ -749,5 +782,6 @@ __all__ = [
     "calibrate_subject",
     "cohort_key_for_horizon",
     "collect_effective_forecasts_from_state",
+    "horizon_sessions_from_cohort_key",
     "scenario_positive_probability",
 ]
