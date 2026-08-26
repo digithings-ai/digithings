@@ -96,6 +96,7 @@ class DeliberationAnalystTurn(BaseModel):
 CARRY_FINGERPRINT_SKIP = "fingerprint_skip"
 CARRY_LLM_FAILURE = "llm_failure"
 CARRY_LOW_VALUE = "low_value_carry"
+CARRY_ATTENTION = "attention_carry"
 CarryReason = Literal["fingerprint_skip", "llm_failure", "low_value_carry"]
 
 

@@ -720,6 +720,8 @@ class AtlasResearchState(BaseModel):
     # WP13.3 (#2926): deterministic research attention plan built at triage end.
     # Stored as JSON-compatible dump; validate via research_attention helpers.
     research_attention_plan: dict[str, Any] | None = None
+    # WP13.4 (#2930): post-H4 Hermes ticker attention plan — roster is already fixed.
+    hermes_research_attention_plan: dict[str, Any] | None = None
     # Per-ticker fractional pct_change between the two most-recent trading
     # days strictly before run_date. Populated by the triage phase on delta
     # runs (empty dict on baseline / monthly). Frozen-by-convention: the
