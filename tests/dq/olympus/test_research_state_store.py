@@ -79,6 +79,7 @@ def _evidence(
         source=fields["source"],
         authority=fields["authority"],
         summary=fields["summary"],
+        supersedes_evidence_id=fields.get("supersedes_evidence_id"),
     )
     return EvidenceRecord(
         evidence_id=evidence_record_id(
@@ -178,6 +179,7 @@ def _patch(*, summary: str = "Refresh rates section after CPI") -> ResearchPatch
             target_kind=PatchTargetKind.SECTION.value,
             target_id="macro:rates",
             content_hash=content_hash,
+            supersedes_patch_id=None,
         ),
         target_kind=PatchTargetKind.SECTION,
         target_id="macro:rates",
@@ -249,6 +251,7 @@ def _version(
         state_version_id=research_state_version_id(
             manifest_content_hash=manifest.content_hash,
             parent_id=parent,
+            schema_version=1,
         ),
         parent_state_version_id=parent,
         manifest=manifest,
