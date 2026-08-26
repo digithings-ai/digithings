@@ -252,6 +252,10 @@ class ResearchStateStore:
             label="patch_id",
         )
 
+    def get_legacy_ref(self, legacy_ref_id: UUID) -> LegacyDocumentRef | None:
+        """Return an inventory legacy ref by id, or ``None`` if absent."""
+        return self._legacy_refs.get(legacy_ref_id)
+
     def append_legacy_ref(self, ref: LegacyDocumentRef) -> LegacyDocumentRef:
         """Inventory-only append. Strict readers never surface these rows."""
         if ref.known_at is not None:

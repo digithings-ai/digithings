@@ -4,6 +4,8 @@ Phase 3 WP12.1 frozen research-state contracts live in
 :mod:`digiquant.olympus.research_retrieval.models` (prose remains a view).
 WP12.2 append-only store: :mod:`digiquant.olympus.research_retrieval.store`.
 WP12.3 preflight pin: :mod:`digiquant.olympus.research_retrieval.pin`.
+WP12.4 legacy inventory backfill:
+:mod:`digiquant.olympus.research_retrieval.legacy_backfill`.
 """
 
 from __future__ import annotations
@@ -15,6 +17,12 @@ from digiquant.olympus.research_retrieval.blinding import (
     research_document_allowed,
 )
 from digiquant.olympus.research_retrieval.cache import ResearchCache
+from digiquant.olympus.research_retrieval.legacy_backfill import (
+    BackfillCounts,
+    LegacySourceDocument,
+    backfill_legacy_manifests,
+    build_legacy_document_ref,
+)
 from digiquant.olympus.research_retrieval.models import (
     BeliefStatus,
     BeliefVersion,
@@ -57,6 +65,7 @@ from digiquant.olympus.research_retrieval.tools import (
 )
 
 __all__ = [
+    "BackfillCounts",
     "BeliefStatus",
     "BeliefVersion",
     "DIGEST_DOCUMENT_KEY",
@@ -64,6 +73,7 @@ __all__ = [
     "ExpectedEventStatus",
     "ExpectedEventVersion",
     "LegacyDocumentRef",
+    "LegacySourceDocument",
     "LoadedResearchState",
     "PatchMode",
     "PatchTargetKind",
@@ -83,6 +93,8 @@ __all__ = [
     "RetrievalPhase",
     "STATE_UNAVAILABLE",
     "TypedProvenance",
+    "backfill_legacy_manifests",
+    "build_legacy_document_ref",
     "build_research_tool_dispatcher",
     "child_version_must_name_parent",
     "extract_section",
