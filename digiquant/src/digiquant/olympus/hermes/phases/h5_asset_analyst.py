@@ -27,7 +27,7 @@ from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.analyst_io import upsert_analyst_coverage
 from digiquant.olympus.hermes.writers.thesis_io import upsert_vehicle_thesis_from_analyst
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,7 @@ def _h5_node_factory(
     ticker: str,
     client: SupabaseClient | None,
     evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ):
     def _node(state: HermesState) -> dict[str, Any]:
         if not ticker_in_focus_roster(state, ticker):
@@ -70,6 +71,7 @@ def _h5_node_factory(
             roster_entry=entry,
             phase_slug=f"{NODE_ID}-{ticker}",
             evidence_bundle_store=evidence_bundle_store,
+            research_state_store=research_state_store,
         )
         hermes_update = PhaseHermesState()
         if evidence_bundle is not None:
@@ -125,6 +127,7 @@ def build_h5_asset_analyst(
     held: Collection[str] = (),
     client: SupabaseClient | None = None,
     evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> PipelinePhase:
     capped = capped_tickers(tickers, held=held)
     if not capped:
@@ -141,7 +144,7 @@ def build_h5_asset_analyst(
         nodes=[
             NodeSpec(
                 name=f"{NODE_ID}-{ticker}",
-                run=_h5_node_factory(ticker, client, evidence_bundle_store),
+                run=_h5_node_factory(ticker, client, evidence_bundle_store, research_state_store),
             )
             for ticker in capped
         ],
@@ -152,6 +155,7 @@ def build_h5_from_state(
     client: SupabaseClient | None = None,
     *,
     evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> FanOutPhase:
     """Runtime roster fan-out — one parallel ``Send`` worker per H4 ``focus_roster`` ticker.
 
@@ -165,7 +169,7 @@ def build_h5_from_state(
         ticker = state.hermes_fanout_ticker
         if not ticker:
             return {}
-        return _h5_node_factory(ticker, client, evidence_bundle_store)(state)
+        return _h5_node_factory(ticker, client, evidence_bundle_store, research_state_store)(state)
 
     return FanOutPhase(
         name=PHASE_NAME,

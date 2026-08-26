@@ -8,10 +8,13 @@ import pytest
 from digiquant.olympus.research_retrieval import (
     ResearchCache,
     ResearchRetriever,
+    assert_blinded_h5_prompt,
+    assert_blinded_h6_prompt,
     portfolio_tool_allowed,
     query_portfolio,
     query_research,
     research_document_allowed,
+    strip_blinded_forbidden_keys,
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
@@ -332,3 +335,36 @@ class TestBlinding:
     def test_h1_allows_digest_and_portfolio(self) -> None:
         assert research_document_allowed("h1_thesis", "digest") is True
         assert portfolio_tool_allowed("h1_thesis") is True
+
+    def test_h6_blocks_portfolio_query(self) -> None:
+        out = query_portfolio(
+            FakeSupabaseClient(),
+            run_date=date(2026, 6, 20),
+            phase="h6_deliberation",
+        )
+        assert "error" in out
+
+
+@pytest.mark.unit
+class TestBlindedPromptGuards:
+    def test_h5_rejects_prior_book_in_prompt(self) -> None:
+        with pytest.raises(ValueError, match="blinded keys"):
+            assert_blinded_h5_prompt({"ticker": "AAPL", "prior_book": []})
+
+    def test_h6_rejects_materiality_features(self) -> None:
+        with pytest.raises(ValueError, match="blinded keys"):
+            assert_blinded_h6_prompt({"ticker": "AAPL", "weight_pct": 12.0})
+
+    def test_strip_removes_portfolio_keys_for_h6(self) -> None:
+        stripped = strip_blinded_forbidden_keys(
+            {
+                "ticker": "AAPL",
+                "analyst_payload": {"stance": "hold"},
+                "prior_book": [{"ticker": "MSFT"}],
+                "transcript": [],
+            },
+            role="h6_deliberation",
+        )
+        assert "prior_book" not in stripped
+        assert stripped["analyst_payload"]["stance"] == "hold"
+        assert stripped["transcript"] == []
