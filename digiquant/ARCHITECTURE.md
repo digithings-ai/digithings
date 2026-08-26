@@ -920,7 +920,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `phase_hermes.forecast_calibrations` / `calibrated_forecasts`; H9 fail-soft appends
   via `forecast_registry.persist_shadow_calibrations` after booking. H8 remains
   untouched. **WP5 Gate-2 follow-up (#2797):** outcomes stamp `horizon_sessions`;
-  cohort attach filters residuals to the subject horizon; migration 086 adds
+  cohort attach filters residuals to the subject horizon; migration 087 adds
   `UNIQUE (effective_forecast_id, maturity_session)` and refuses wall-clock
   `as_of` when knowledge cutoff is missing.
   **Risk policy contracts (#2692 / WP6.2):** frozen models in
@@ -1508,6 +1508,14 @@ assuming it is always present.
   Token/cost fields remain operator-only. Prompts, tool values/results, document bodies,
   credentials, PII-heavy values, model output, and reasoning are not columns. **Migration 066
   is human-gated and must not be applied to the live Supabase project without review.**
+- **WP1 join + null usage (#2763 / migration 086).** Glass-box events soft-stamp
+  `call_id` / `attempt_id` / `node_run_id` so Pipeline rows reconcile to
+  `olympus_provider_*` (Gate 3). **Authority for economics is 067**; 066 is the ordered
+  compatibility surface. Migration 086 makes `prompt_tokens` / `completion_tokens` /
+  `cached_tokens` / `cost_usd` nullable (no DEFAULT 0) so missing usage stays NULL —
+  digigraph `usage.record` and digillm `_record_usage` no longer zero-fill the event path.
+  The public view appends join keys only (still no tokens/cost). Soft stamps, not hard FKs:
+  067 quarantine may omit an attempt that glass-box still needs for ordering honesty.
 - `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
   phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
   reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
