@@ -1271,7 +1271,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Content-hash dedupe for manifests/pairs; paired arms require identical shared
   manifest hash; run status derived from events (no mutable running row);
   `load_gate_evidence` reconstructs full gate lineage from immutable IDs/hashes.
-  Dark launch — no workers, as-of dataset builder, or gate evaluator (WP16.3+).
+  Dark launch — no workers or gate evaluator (WP16.4+).
+  **As-of policy replay inputs (#2987 / WP16.3):** `olympus/replay/asof_dataset.py`
+  materializes cutoff-bound bars/cash/costs/timing/seed and builds
+  `ReplayInputManifest` envelopes; `olympus/replay/policy_registry.py` resolves
+  only allowlisted registered policies (`research_plan`, `portfolio_target`,
+  `observed_shadow` plus infrastructure refs). All reads filter
+  `known_at <= replay_as_of`; missing/unregistered/incomplete state fails closed;
+  unavailable research output is typed — never fabricate H5/H6 counterfactuals.
+  Later source mutations cannot change a historical manifest at the same cutoff.
+  No network/provider calls. Offline only — portfolio workers land in WP16.4+.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
