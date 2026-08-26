@@ -441,20 +441,26 @@ def test_late_episode_triggers_new_lesson_version_old_still_queryable() -> None:
     assert ep2.episode_version_id in second.episode_version_ids
 
     assert store.load_lesson(first.lesson_version_id) == first
-    assert store.select_lesson_as_of(
-        compilation_policy_id=_POLICY.policy_id,
-        cohort=cohort_key(ep1),
-        component=AttributionComponent.FORECAST,
-        horizon_id="h-21s",
-        as_of=first_cutoff,
-    ) == first
-    assert store.select_lesson_as_of(
-        compilation_policy_id=_POLICY.policy_id,
-        cohort=cohort_key(ep1),
-        component=AttributionComponent.FORECAST,
-        horizon_id="h-21s",
-        as_of=second_cutoff,
-    ) == second
+    assert (
+        store.select_lesson_as_of(
+            compilation_policy_id=_POLICY.policy_id,
+            cohort=cohort_key(ep1),
+            component=AttributionComponent.FORECAST,
+            horizon_id="h-21s",
+            as_of=first_cutoff,
+        )
+        == first
+    )
+    assert (
+        store.select_lesson_as_of(
+            compilation_policy_id=_POLICY.policy_id,
+            cohort=cohort_key(ep1),
+            component=AttributionComponent.FORECAST,
+            horizon_id="h-21s",
+            as_of=second_cutoff,
+        )
+        == second
+    )
 
 
 # ── Prose cannot replace payload ──────────────────────────────────────────────
@@ -566,8 +572,12 @@ def test_multiple_reports_uses_latest_per_episode() -> None:
     store = OutcomeLearningStore()
     ep = _episode()
     store.append_episode(ep)
-    first = _report(ep, report_id=UUID("11111111-1111-4111-8111-111111111111"), value=Decimal("-50.0"))
-    second = _report(ep, report_id=UUID("22222222-2222-4222-8222-222222222222"), value=Decimal("-150.0"))
+    first = _report(
+        ep, report_id=UUID("11111111-1111-4111-8111-111111111111"), value=Decimal("-50.0")
+    )
+    second = _report(
+        ep, report_id=UUID("22222222-2222-4222-8222-222222222222"), value=Decimal("-150.0")
+    )
     store.append_report(first)
     store.append_report(second)
 
