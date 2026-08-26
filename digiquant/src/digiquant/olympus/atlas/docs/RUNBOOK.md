@@ -128,6 +128,25 @@ SQL IO adapter later). Do not treat `research-state-brief` /
 `research-state-digest` rows as present or operator-authoritative until that
 wiring lands.
 
+### Research attention shadow evaluation (WP13.5 / #2934)
+
+After a shadow-mode Olympus run with `OLYMPUS_RESEARCH_ATTENTION_MODE=shadow`,
+reconcile planned attention decisions to exact WP1 attempt usage and downstream
+artifacts before considering enforcement:
+
+```bash
+python3 digiquant/scripts/atlas/evaluate_research_policy_shadow.py \
+  --store-snapshot artifacts/attention/store.json \
+  --attempt-details artifacts/attention/attempts.json \
+  --downstream artifacts/attention/downstream.json \
+  --output artifacts/attention/evaluation.json
+```
+
+The CLI is file-only evidence — it never activates `enforce` or writes to
+production booking paths. Exit code `0` when the report is `complete` (100%
+decision-attempt reconciliation plus downstream linkage for eligible shadow
+runs); `1` when telemetry or downstream artifacts are missing.
+
 ## Market-open execution and price backfill
 
 ### Activity tab / `position_events` stops at an old date
