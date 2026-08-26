@@ -2,6 +2,7 @@
 
 Phase 3 WP12.1 frozen research-state contracts live in
 :mod:`digiquant.olympus.research_retrieval.models` (prose remains a view).
+WP12.2 append-only store: :mod:`digiquant.olympus.research_retrieval.store`.
 """
 
 from __future__ import annotations
@@ -34,6 +35,13 @@ from digiquant.olympus.research_retrieval.queries import (
     query_research,
 )
 from digiquant.olympus.research_retrieval.retriever import ResearchRetriever
+from digiquant.olympus.research_retrieval.store import (
+    LoadedResearchState,
+    ResearchStateConflict,
+    ResearchStateError,
+    ResearchStateMissingError,
+    ResearchStateStore,
+)
 from digiquant.olympus.research_retrieval.tools import (
     RESEARCH_TOOLS,
     build_research_tool_dispatcher,
@@ -47,14 +55,19 @@ __all__ = [
     "ExpectedEventStatus",
     "ExpectedEventVersion",
     "LegacyDocumentRef",
+    "LoadedResearchState",
     "PatchMode",
     "PatchTargetKind",
     "RESEARCH_TOOLS",
     "ResearchCache",
     "ResearchPatch",
     "ResearchRetriever",
+    "ResearchStateConflict",
+    "ResearchStateError",
     "ResearchStateManifest",
+    "ResearchStateMissingError",
     "ResearchStatePin",
+    "ResearchStateStore",
     "ResearchStateVersion",
     "RetrievalPhase",
     "TypedProvenance",
