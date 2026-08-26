@@ -141,8 +141,16 @@ def _downstream_row_complete(*, decision, downstream: AttentionDownstreamOutcome
         return False
     if downstream.target_key != decision.target_key:
         return False
-    if decision.mode in {AttentionMode.CARRY, AttentionMode.METRIC_PATCH}:
+    if decision.mode is AttentionMode.CARRY:
         if not downstream.carried:
+            return False
+    elif decision.mode is AttentionMode.METRIC_PATCH:
+        has_artifact = bool(
+            downstream.amendment_id
+            or downstream.forecast_assessment_id
+            or downstream.artifact_refs
+        )
+        if not has_artifact:
             return False
     if _exploration_decision(decision) and not downstream.exploration_slot:
         return False
