@@ -20,6 +20,7 @@ from pydantic import ConfigDict
 from digiquant.olympus.learning.outcome_models import (
     AttributionComponent,
     AttributionMethod,
+    ComponentAttributionReport,
     LessonQualityState,
     OutcomeEpisode,
     OutcomeLearningModel,
