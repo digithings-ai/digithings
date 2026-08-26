@@ -1022,8 +1022,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Parent API `run_portfolio_replay_isolated` spawns a fresh worker with JSON
   I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
   call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
-  production H8/H9 must not import `olympus.replay`. Comparison evidence is
-  WP10.5.
+  production H8/H9 must not import `olympus.replay`.
+  **Paired shadow comparison evidence (#2799 / WP10.5):**
+  `olympus/replay/allocation_comparison.py` + packaged
+  `replay/shadow_criteria/v1.json` + CLI
+  `digiquant/scripts/atlas/compare_allocation_shadow.py`. Loads frozen criteria
+  before inspecting arm results; requires identical data/cost/execution hashes;
+  emits absolute + paired metrics with explicit unavailable/inconclusive leaves;
+  hard-constraint breaches stay visible even when challenger return is stronger;
+  atomic file-only report output. No auto-promotion, production config write, or
+  H8/H9 wiring.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:

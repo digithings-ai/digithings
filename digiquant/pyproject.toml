@@ -101,6 +101,9 @@ where = ["src"]
     "templates/**/*.json",
     "docs/**/*.md",
 ]
+"digiquant.olympus.replay" = [
+    "shadow_criteria/**/*.json",
+]
 
 [tool.ruff]
 line-length = 100

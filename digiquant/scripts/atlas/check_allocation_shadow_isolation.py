@@ -69,8 +69,10 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
 # shadow_optimizer.py is the WP10.3 challenger — still write-denied / no network.
 DEFAULT_SCAN_RELPATHS: tuple[str, ...] = (
     "digiquant/scripts/atlas/check_allocation_shadow_isolation.py",
+    "digiquant/scripts/atlas/compare_allocation_shadow.py",
     "digiquant/src/digiquant/olympus/hermes/shadow_artifact.py",
     "digiquant/src/digiquant/olympus/hermes/shadow_optimizer.py",
+    "digiquant/src/digiquant/olympus/replay/allocation_comparison.py",
 )
 
 

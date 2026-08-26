@@ -100,7 +100,16 @@ SciPy/CVXPY; no production runtime flag.
 books in one Nautilus account with shared cash and real fills/costs. Spawned
 workers use JSON request/result I/O; child crash/timeout is typed inconclusive
 with no fallback. Never calls `_run_multi_symbol_backtest`; never a production
-booking path. Paired comparison evidence remains WP10.5.
+booking path.
+
+**Paired shadow comparison evidence (#2799 / WP10.5):**
+`olympus/replay/allocation_comparison.py` compares incumbent vs challenger
+WP10.4 arms under an identical observed manifest (data/cost/execution hashes).
+Versioned criteria live in `replay/shadow_criteria/v1.json` (no activation hook).
+CLI `compare_allocation_shadow.py` freezes criteria first, then writes an
+immutable file-only `AllocationComparisonReport`. Hard constraints remain
+visible when return is stronger; unavailable/inconclusive metrics are explicit.
+Never wired into production H8/H9; no auto-promotion or config write.
 
 ### H2 market-thesis identity
 
