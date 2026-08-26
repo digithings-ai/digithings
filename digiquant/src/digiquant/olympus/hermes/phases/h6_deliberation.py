@@ -51,6 +51,7 @@ from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import deliberation_skip_signal
+from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
 from digiquant.olympus.research_retrieval.evidence_bundle import evidence_bundle_writer_enabled
 from digiquant.olympus.research_retrieval.h6_amendment import (
     H6AmendmentOutcome,
@@ -72,7 +73,7 @@ from digiquant.olympus.research_retrieval.planner import (
     resolve_h6_selection_mode,
     select_h6,
 )
-from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+from digiquant.olympus.research_retrieval.store import EvidenceBundleStore, ResearchStateStore
 
 logger = logging.getLogger(__name__)
 
@@ -494,6 +495,7 @@ def run_deliberation_loop(
     *,
     base_bundle: TickerEvidenceBundle | None = None,
     evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> tuple[DeliberationSummary, dict[str, Any] | None, H6AmendmentResult | None]:
     """PM↔analyst loop until ``converged=true`` or ``ATLAS_DELIBERATION_MAX_ROUNDS`` cap.
 
@@ -511,6 +513,7 @@ def run_deliberation_loop(
     min_rounds = min(deliberation_min_rounds(), max_rounds)
     last_amendment_terms: dict[str, Any] | None = None
     amendment_result: H6AmendmentResult | None = None
+    pin = state.research_state_pin if isinstance(state.research_state_pin, dict) else None
 
     while True:
         round_number += 1
@@ -528,6 +531,14 @@ def run_deliberation_loop(
             pm_inputs["evidence_amendment"] = [
                 item.model_dump(mode="json") for item in amendment_result.supplemental_evidence
             ]
+        pm_inputs = wire_h6_phase_inputs(
+            pm_inputs,
+            ticker=ticker,
+            bundle=base_bundle,
+            research_state_pin=pin,
+            research_state_store=research_state_store,
+            amendment=amendment_result.amendment if amendment_result else None,
+        ).phase_inputs
         pm_result = run_research_agent(
             skill_text=pm_skill,
             phase_inputs=pm_inputs,
@@ -613,6 +624,14 @@ def run_deliberation_loop(
             ]
         if amendment_result is not None and amendment_result.failure_reason:
             analyst_inputs["evidence_amendment_failure"] = amendment_result.failure_reason
+        analyst_inputs = wire_h6_phase_inputs(
+            analyst_inputs,
+            ticker=ticker,
+            bundle=base_bundle,
+            research_state_pin=pin,
+            research_state_store=research_state_store,
+            amendment=amendment_result.amendment if amendment_result else None,
+        ).phase_inputs
         analyst_result = run_research_agent(
             skill_text=analyst_skill,
             phase_inputs=analyst_inputs,
@@ -667,7 +686,11 @@ def run_deliberation_loop(
             )
 
 
-def _h6_node_factory(ticker: str, evidence_bundle_store: EvidenceBundleStore | None = None):
+def _h6_node_factory(
+    ticker: str,
+    evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
+):
     def _node(state: HermesState) -> dict[str, Any]:
         if not ticker_in_focus_roster(state, ticker):
             return {}
@@ -850,6 +873,7 @@ def _h6_node_factory(ticker: str, evidence_bundle_store: EvidenceBundleStore | N
                 ticker,
                 base_bundle=base_bundle,
                 evidence_bundle_store=evidence_bundle_store,
+                research_state_store=research_state_store,
             )
         except Exception as exc:  # LLM-output failure degrades this ticker, never the chain (#1665)
             stance_map = {"buy": "bullish", "sell": "bearish"}
@@ -942,6 +966,7 @@ def build_h6_deliberation(
     *,
     held: Collection[str] = (),
     evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> PipelinePhase:
     capped = capped_tickers(tickers, held=held)
     if not capped:
@@ -958,7 +983,7 @@ def build_h6_deliberation(
         nodes=[
             NodeSpec(
                 name=f"{NODE_ID}-{ticker}",
-                run=_h6_node_factory(ticker, evidence_bundle_store),
+                run=_h6_node_factory(ticker, evidence_bundle_store, research_state_store),
             )
             for ticker in capped
         ],
@@ -967,6 +992,7 @@ def build_h6_deliberation(
 
 def build_h6_from_state(
     evidence_bundle_store: EvidenceBundleStore | None = None,
+    research_state_store: ResearchStateStore | None = None,
 ) -> FanOutPhase:
     """Runtime roster fan-out — one parallel ``Send`` worker per focus-roster ticker.
 
@@ -980,7 +1006,7 @@ def build_h6_from_state(
         ticker = state.hermes_fanout_ticker
         if not ticker:
             return {}
-        return _h6_node_factory(ticker, evidence_bundle_store)(state)
+        return _h6_node_factory(ticker, evidence_bundle_store, research_state_store)(state)
 
     return FanOutPhase(
         name=PHASE_NAME,

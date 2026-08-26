@@ -66,7 +66,7 @@ from digiquant.olympus.research_retrieval.planner import (
     H6DecisionFeatures,
     attention_plan_id,
 )
-from digiquant.olympus.research_retrieval.store import LoadedResearchState
+from digiquant.olympus.research_retrieval.store import LoadedResearchState, ResearchStateStore
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -578,3 +578,177 @@ def test_compile_manifest_standalone_matches_capsule_manifest() -> None:
     standalone = compile_context_manifest(inp)
     _, from_capsule = compile_context_capsule(inp)
     assert standalone == from_capsule
+
+
+# ---------------------------------------------------------------------------
+# WP14.2 — blinded H5/H6 provider wiring
+# ---------------------------------------------------------------------------
+
+
+def _store_with_state(state: LoadedResearchState) -> ResearchStateStore:
+    store = ResearchStateStore()
+    for record in state.evidence:
+        store.append_evidence(record)
+    for belief in state.beliefs:
+        store.append_belief(belief)
+    for event in state.expected_events:
+        store.append_expected_event(event)
+    for patch in state.patches:
+        store.append_patch(patch)
+    known_times = [state.version.known_at]
+    known_times.extend(record.known_at for record in state.evidence)
+    known_times.extend(belief.known_at for belief in state.beliefs)
+    known_times.extend(event.known_at for event in state.expected_events)
+    known_times.extend(patch.known_at for patch in state.patches)
+    version = state.version.model_copy(
+        update={
+            "known_at": max(known_times),
+            "recorded_at": _TS,
+        }
+    )
+    store.append_state_version(version)
+    return store
+
+
+def _seed_loaded_state(
+    loaded: LoadedResearchState,
+) -> tuple[ResearchStateStore, dict[str, str], UUID]:
+    store = _store_with_state(loaded)
+    version_id = next(iter(store._versions))
+    return store, {"state_version_id": str(version_id)}, version_id
+
+
+def test_wire_h5_off_leaves_incumbent_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "off")
+    ev = _evidence(summary="Filed 8-K")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {
+        "ticker": _TICKER,
+        "prior_book": [{"ticker": "MSFT", "weight_pct": 5.0}],
+        "active_theses": [{"thesis_id": "t1"}],
+    }
+    from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
+
+    result = wire_h5_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+    )
+    assert result.capsule is None
+    assert result.manifest is None
+    assert result.phase_inputs == incumbent
+
+
+def test_wire_h5_shadow_records_manifest_beside_incumbent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "shadow")
+    ev = _evidence(summary="Filed 8-K")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {"ticker": _TICKER, "prior_book": [{"ticker": "MSFT"}]}
+    from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
+
+    result = wire_h5_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+        changed_evidence_ids=frozenset({ev.evidence_id}),
+    )
+    assert result.capsule is not None
+    assert result.manifest is not None
+    assert result.phase_inputs["prior_book"] == incumbent["prior_book"]
+    assert "context_capsule_shadow" in result.phase_inputs
+    assert "context_manifest_shadow" in result.phase_inputs
+    assert result.phase_inputs["context_manifest_id"] == str(result.manifest.manifest_id)
+
+
+def test_wire_h5_enforce_strips_portfolio_and_injects_capsule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "enforce")
+    ev = _evidence(summary="Filed 8-K")
+    belief = _belief(evidence=ev, statement="Base intact")
+    loaded = _loaded_state(evidence=(ev,), beliefs=(belief,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {
+        "ticker": _TICKER,
+        "prior_book": [{"ticker": "MSFT"}],
+        "active_theses": [{"thesis_id": "t1"}],
+        "held_in_prior_book": True,
+        "weight_pct": 12.0,
+    }
+    from digiquant.olympus.research_retrieval.context_wiring import wire_h5_phase_inputs
+
+    result = wire_h5_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+        changed_evidence_ids=frozenset({ev.evidence_id}),
+    )
+    assert "prior_book" not in result.phase_inputs
+    assert "active_theses" not in result.phase_inputs
+    assert "weight_pct" not in result.phase_inputs
+    assert result.phase_inputs["structured_context"] == result.capsule.body
+    assert f"evidence:{ev.evidence_id}" in result.manifest.included_entity_ids
+
+
+def test_wire_h6_enforce_allows_transcript_and_analyst_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "enforce")
+    ev = _evidence(summary="Bundle evidence")
+    loaded = _loaded_state(evidence=(ev,))
+    store, pin, version_id = _seed_loaded_state(loaded)
+    bundle = _bundle(state_version_id=version_id)
+    incumbent = {
+        "ticker": _TICKER,
+        "analyst_payload": {"stance": "buy", "ticker": _TICKER},
+        "transcript": [{"role": "pm", "message": "challenge"}],
+        "prior_book": [{"ticker": "MSFT"}],
+        "base_evidence_bundle": bundle.model_dump(mode="json"),
+    }
+    from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
+
+    result = wire_h6_phase_inputs(
+        incumbent,
+        ticker=_TICKER,
+        bundle=bundle,
+        research_state_pin=pin,
+        research_state_store=store,
+    )
+    assert "prior_book" not in result.phase_inputs
+    assert "base_evidence_bundle" not in result.phase_inputs
+    assert result.phase_inputs["analyst_payload"]["stance"] == "buy"
+    assert result.phase_inputs["transcript"]
+    assert result.phase_inputs["structured_context"]
+
+
+def test_wire_h6_rejects_unpinned_bundle_state_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_CONTEXT_COMPILER_MODE", "enforce")
+    ev = _evidence(summary="Bundle evidence")
+    loaded = _loaded_state(evidence=(ev,))
+    wrong_bundle = _bundle(state_version_id=uuid4())
+    store, pin, _version_id = _seed_loaded_state(loaded)
+    from digiquant.olympus.research_retrieval.context_wiring import wire_h6_phase_inputs
+
+    with pytest.raises(ValueError, match="state_version_id"):
+        wire_h6_phase_inputs(
+            {"ticker": _TICKER},
+            ticker=_TICKER,
+            bundle=wrong_bundle,
+            research_state_pin=pin,
+            research_state_store=store,
+        )
