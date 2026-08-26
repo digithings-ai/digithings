@@ -20,7 +20,6 @@ from digiquant.olympus.replay.models import (
     FillRecord,
     HoldingSnapshot,
     InstrumentBarSeries,
-    NavPoint,
     PortfolioReplayRequest,
     PortfolioReplayResult,
     PortfolioReplayStatus,
@@ -124,7 +123,6 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
             self._seeded = not needs_seed
             self._rebalanced = False
             self._fills: list[FillRecord] = []
-            self._nav_path: list[NavPoint] = []
 
         def on_start(self) -> None:
             for bt in bar_types.values():
@@ -136,11 +134,6 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
             if min(self._bar_index.values()) < self._sync_count + 1:
                 return
             self._sync_count += 1
-
-            # Mark-to-market at every synchronized close for drawdown evidence (#2831).
-            nav, _qty, _last = self._nav_and_qty()
-            ts = datetime.fromtimestamp(bar.ts_event / 1e9, tz=timezone.utc)
-            self._nav_path.append(NavPoint(ts=ts, nav=nav.quantize(_MONEY_QUANTUM)))
 
             if not self._seeded:
                 self._submit_quantity_orders(initial, tag="seed")
@@ -298,7 +291,6 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
         nav += mv
     holdings_t = tuple(sorted(holdings, key=lambda h: h.ticker))
     fills = tuple(strategy._fills)
-    nav_path = tuple(strategy._nav_path)
     total_commission = sum((f.commission for f in fills), Decimal("0")).quantize(_MONEY_QUANTUM)
     rebalance_commission = sum(
         (f.commission for f in fills if not f.is_seed),
@@ -317,7 +309,6 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
         rebalance_commission=rebalance_commission,
         holdings=holdings_t,
         fills=fills,
-        nav_path=nav_path,
         message="shared-cash portfolio replay ok",
         result_content_hash="0" * 64,
     )
@@ -333,7 +324,6 @@ def _run_engine(request: PortfolioReplayRequest) -> PortfolioReplayResult:
         rebalance_commission=rebalance_commission,
         holdings=holdings_t,
         fills=fills,
-        nav_path=nav_path,
         message="shared-cash portfolio replay ok",
         result_content_hash=digest,
     )
