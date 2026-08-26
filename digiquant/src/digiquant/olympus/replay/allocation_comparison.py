@@ -25,6 +25,7 @@ from digiquant.olympus.replay.models import (
     PortfolioReplayResult,
     PortfolioReplayStatus,
     TargetWeight,
+    max_drawdown_from_nav_path,
 )
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
@@ -471,6 +472,17 @@ def compute_absolute_metrics(
         )
 
     turnover_value = _turnover_from_fills(result)
+    drawdown_value = max_drawdown_from_nav_path(result.nav_path)
+    if drawdown_value is None:
+        max_drawdown = ScalarEvidence(
+            status=MetricAvailability.UNAVAILABLE,
+            unavailable_reason="path_nav_unavailable",
+        )
+    else:
+        max_drawdown = ScalarEvidence(
+            status=MetricAvailability.AVAILABLE,
+            value=drawdown_value,
+        )
     return AbsoluteArmMetrics(
         total_return=total_return,
         ending_nav=ScalarEvidence(status=MetricAvailability.AVAILABLE, value=result.ending_nav),
@@ -479,10 +491,7 @@ def compute_absolute_metrics(
             value=result.total_commission,
         ),
         turnover=ScalarEvidence(status=MetricAvailability.AVAILABLE, value=turnover_value),
-        max_drawdown=ScalarEvidence(
-            status=MetricAvailability.UNAVAILABLE,
-            unavailable_reason="path_nav_unavailable",
-        ),
+        max_drawdown=max_drawdown,
         benchmark_return=_optional_scalar(scenarios.benchmark_return, "benchmark_not_provided"),
         tail_loss=_optional_scalar(scenarios.tail_loss, "tail_not_provided"),
         scenario_pnl=_optional_scalar(scenarios.scenario_pnl, "scenario_not_provided"),
