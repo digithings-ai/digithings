@@ -139,7 +139,9 @@ def _episode(**overrides: object) -> OutcomeEpisode:
     return OutcomeEpisode(**fields)
 
 
-def _report(episode: OutcomeEpisode, *, report_id: UUID | None = None) -> ComponentAttributionReport:
+def _report(
+    episode: OutcomeEpisode, *, report_id: UUID | None = None
+) -> ComponentAttributionReport:
     rid = report_id or UUID("dddddddd-eeee-4fff-8000-111111111111")
     return ComponentAttributionReport(
         report_id=rid,
@@ -287,9 +289,7 @@ def test_lesson_rejects_missing_episode_ref() -> None:
     store.append_episode(episode)
     store.append_report(report)
     with pytest.raises(OutcomeLearningError, match="missing episode"):
-        store.append_lesson(
-            _lesson(episode, report, episode_version_ids=(uuid4(),))
-        )
+        store.append_lesson(_lesson(episode, report, episode_version_ids=(uuid4(),)))
 
 
 def test_select_episode_as_of_returns_version_visible_at_cutoff() -> None:
@@ -362,11 +362,14 @@ def test_select_episode_as_of_excludes_future_known() -> None:
 
 def test_select_episode_as_of_returns_none_without_fabrication() -> None:
     store = OutcomeLearningStore()
-    assert store.select_episode_as_of(
-        episode_key=_EPISODE_KEY,
-        as_of=_AVAILABLE,
-        knowledge_cutoff_at=_AVAILABLE,
-    ) is None
+    assert (
+        store.select_episode_as_of(
+            episode_key=_EPISODE_KEY,
+            as_of=_AVAILABLE,
+            knowledge_cutoff_at=_AVAILABLE,
+        )
+        is None
+    )
 
 
 def test_exact_episode_round_trip_after_newer_rows() -> None:

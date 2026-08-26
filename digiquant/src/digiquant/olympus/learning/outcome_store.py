@@ -116,8 +116,7 @@ class OutcomeLearningStore:
         """Insert attribution report; requires existing episode version."""
         if report.episode_version_id not in self._episodes:
             raise OutcomeLearningError(
-                f"report {report.report_id} references missing episode "
-                f"{report.episode_version_id}"
+                f"report {report.report_id} references missing episode {report.episode_version_id}"
             )
         stored = self._append_idempotent(
             store=self._reports,
@@ -244,9 +243,7 @@ class OutcomeLearningStore:
         """Exact-version load. Never falls back to latest."""
         episode = self._episodes.get(episode_version_id)
         if episode is None:
-            raise OutcomeLearningMissingError(
-                f"episode_version_id {episode_version_id} not found"
-            )
+            raise OutcomeLearningMissingError(f"episode_version_id {episode_version_id} not found")
         return episode
 
     def load_report(self, report_id: UUID) -> ComponentAttributionReport:
@@ -258,9 +255,7 @@ class OutcomeLearningStore:
     def load_lesson(self, lesson_version_id: UUID) -> OutcomeLessonVersion:
         lesson = self._lessons.get(lesson_version_id)
         if lesson is None:
-            raise OutcomeLearningMissingError(
-                f"lesson_version_id {lesson_version_id} not found"
-            )
+            raise OutcomeLearningMissingError(f"lesson_version_id {lesson_version_id} not found")
         return lesson
 
     def load_episode_with_reports(self, episode_version_id: UUID) -> LoadedOutcomeEpisode:
