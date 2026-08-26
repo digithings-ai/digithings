@@ -104,8 +104,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ steps.producer.outputs.source_run_id }}
+          github-token: ${{ github.token }}
+          pattern: olympus-daily-*
+          merge-multiple: true
           path: incoming
-          # GITHUB_TOKEN from permissions.actions:read — no repository secrets.
+          # github.token only — never repository secrets / secrets: inherit.
 
       - name: Collect shadow allocation artifacts
         id: collect
