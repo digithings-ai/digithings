@@ -201,20 +201,24 @@ versions — not authoritative state tables. Default Atlas/Hermes CLI leave
 `research_state_store` unwired, so these document keys are not published until
 callers inject the store.
 
-### Ticker evidence bundles — migration 090 (#2844 / WP11.1)
+### Ticker evidence bundles — migration 090 (#2844 / WP11.1 + #2892 / WP11.2)
 
 Private append-only H5 base evidence bundles and H6 missing-fact amendments.
 Contracts: `TickerEvidenceBundle`, `MissingFactRequest`,
 `EvidenceBundleAmendment` in `digiquant.olympus.research_retrieval.models`.
 Application boundary: `EvidenceBundleStore` (in-memory for unit tests; SQL IO
-adapter later). Dark launch: no public base view, no historical backfill, no
-H6 selection cutover (WP11.3+). Bundles cite `state_version_id` +
-`evidence_ids` for WP12 lineage; amendments must reference one base and one
-missing-fact request (zero unlinked amendments). Unique
-`(source_run_id, ticker)` enforces one base per run/ticker; content-idempotent
-retry is a no-op. Migration `091_olympus_evidence_amendment_base_match.sql`
-adds a BEFORE INSERT/UPDATE trigger so amendment `base_bundle_id` must equal
-the linked request's `base_bundle_id` (090 FKs alone allow a cross-link).
+adapter later). WP11.2 builds typed H5 bases into
+`phase_hermes.ticker_evidence_bundles` before the provider call; default Hermes
+graph leaves the store unwired (append + `OLYMPUS_EVIDENCE_BUNDLE_WRITER` only
+when a caller injects a store). Dark launch: no public base view, no historical
+backfill, no H6 selection cutover (WP11.3+), not operator-durable until SQL IO
++ wiring. Bundles cite `state_version_id` + `evidence_ids` for WP12 lineage;
+amendments must reference one base and one missing-fact request (zero unlinked
+amendments). Unique `(source_run_id, ticker)` enforces one base per run/ticker;
+content-idempotent retry is a no-op. Migration
+`091_olympus_evidence_amendment_base_match.sql` adds a BEFORE INSERT/UPDATE
+trigger so amendment `base_bundle_id` must equal the linked request's
+`base_bundle_id` (090 FKs alone allow a cross-link).
 
 | Table | PK | Purpose |
 |-------|----|---------|
