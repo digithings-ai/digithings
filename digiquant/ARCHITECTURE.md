@@ -883,6 +883,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   equivalent after newer rows), child-parent checks. Strict reads exclude
   future-known (`known_at` after cutoff) and legacy-null-known inventory rows.
   Dark launch — no public base view; preflight pin wiring = WP12.3.
+  **Research-state preflight pin (#2863 / WP12.3).** Atlas preflight selects one
+  exact `ResearchStatePin` via `research_retrieval.pin.pin_research_state_for_preflight`
+  (`select_state_as_of` / optional explicit `requested_research_state_version_id`,
+  then `pin_state_for_run`). Result lands on `AtlasResearchState.research_state_pin`
+  + `research_state_status` (`pinned` | `state_unavailable`). Resume reuses the
+  run/attempt pin (checkpoint + store `get_pin`); same-run child versions must
+  name the pinned root as `parent_state_version_id` (`child_version_must_name_parent`).
+  Typed `state_unavailable` when store missing/unusable — compatibility
+  `documents` path remains shadow-only until exact-state coverage; never
+  `load_latest` after pin. Helper uses WP12.1 ID helpers only (no redefine).
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
