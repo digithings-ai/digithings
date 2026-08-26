@@ -952,7 +952,8 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   (fail-soft after booking). `preflight_reflect` resolves `ActionCostOutcome` when
   paper executions arrive; typed state slots `liquidity_snapshots` and
   `action_cost_estimates` on `PhaseHermesState`.
-  **H8 allocation input contracts (#2727 / WP8.2 + #2730 / WP8.3 + #2734 / WP8.4):** frozen
+  **H8 allocation input contracts (#2727 / WP8.2 + #2730 / WP8.3 + #2734 / WP8.4 +
+  #2738 / WP8.5):** frozen
   `AllocationInputBundle` models in `hermes/allocation_contracts.py` with SHA-256
   helpers in `hermes/allocation_hashes.py`. `hermes/allocation_inputs.py` assembles
   one validated bundle at H8 entry from H7 mandate + exact Phase 1 forecast /
@@ -965,7 +966,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
   the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
   `h8_sizing_input_mode`. Downstream caps/corr/vol/breaker/grid/continuity are
-  unchanged (no optimizer / control reorder).
+  unchanged (no optimizer / control reorder). WP8.5 locks that shell in
+  `tests/dq/hermes/test_allocation_invariants.py` (explicit
+  `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
+  caps, calibrated mode stamps).
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:

@@ -1,4 +1,8 @@
-"""Tests for Hermes turnover discipline (#859 Phase D)."""
+"""Tests for Hermes turnover discipline (#859 Phase D).
+
+WP8.5 (#2738): cadence/turnover composition with the post-cutover H8 shell is locked
+in ``test_allocation_invariants.py``.
+"""
 
 from __future__ import annotations
 

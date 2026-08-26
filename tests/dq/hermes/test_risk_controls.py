@@ -4,6 +4,9 @@
 1.0 above the soft drawdown, a linear ramp to ``1 − max_reduction`` at the hard
 drawdown. It only ever reduces (never levers up). ``breaker_scale_from_nav_history``
 reads the recent ``nav_history`` window (look-ahead-guarded) and is fail-soft.
+
+WP8.5 (#2738): breaker composition with the calibrated control shell is locked in
+``test_allocation_invariants.py``.
 """
 
 from __future__ import annotations
