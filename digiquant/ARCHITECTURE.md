@@ -1497,7 +1497,7 @@ assuming it is always present.
   Token/cost fields remain operator-only. Prompts, tool values/results, document bodies,
   credentials, PII-heavy values, model output, and reasoning are not columns. **Migration 066
   is human-gated and must not be applied to the live Supabase project without review.**
-- **WP1 join + null usage (#2763 / migration 084).** Glass-box events soft-stamp
+- **WP1 join + null usage (#2763 / migration 085).** Glass-box events soft-stamp
   `call_id` / `attempt_id` / `node_run_id` so Pipeline rows reconcile to
   `olympus_provider_*` (Gate 3). **Authority for economics is 067**; 066 is the ordered
   compatibility surface. Migration 085 makes `prompt_tokens` / `completion_tokens` /
