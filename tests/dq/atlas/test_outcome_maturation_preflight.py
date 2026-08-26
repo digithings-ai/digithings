@@ -421,4 +421,3 @@ def test_graph_node_list_unchanged() -> None:
     names = set(g.get_graph().nodes.keys())
     assert "preflight" in names
     assert "outcome_maturation" not in names
-    assert "preflight-reflect" not in names or "preflight-reflect" in names
