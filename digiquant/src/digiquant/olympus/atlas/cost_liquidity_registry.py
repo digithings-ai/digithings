@@ -427,6 +427,8 @@ def persist_action_cost_estimates_for_commit(
     policy = collect_risk_policy_from_state(state)
     if policy is None:
         return CostRegistryWriteResult(degraded_reason="missing_risk_policy")
+    if investor_currency_from_state(state) is None:
+        return CostRegistryWriteResult(degraded_reason="currency_missing")
     try:
         bundles = build_cost_bundles_for_commit(
             client=client,
@@ -653,6 +655,9 @@ def resolve_realized_action_cost_outcomes_from_state(
     if run_date is None:
         return OutcomeResolveResult()
     currency = investor_currency_from_state(state)
+    if currency is None:
+        logger.info("cost liquidity registry: currency_missing — skipping outcome resolve")
+        return OutcomeResolveResult()
     return resolve_realized_action_cost_outcomes(
         client=client,
         run_date=run_date,

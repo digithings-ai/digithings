@@ -945,7 +945,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   accounting `PeriodFill` into frozen `ActionCostInput` / `RealizedCostInput`
   without inferring notional from NAV/weights. Currency is caller-supplied (Phase 0
   rows carry no currency column); missing fee/slippage on pre-070 executions raises
-  `ActionCostBindingError` rather than defaulting to zero.
+  `ActionCostBindingError` rather than defaulting to zero. H9 / preflight resolve
+  currency only via explicit `config.preferences.investor_currency` (or `currency`)
+  — never silently invent `USD` (#2808); missing currency fail-softs as
+  `currency_missing`.
   **Observational cost/liquidity (#2703 / WP7.2):** pure contracts in
   `hermes/models/cost_liquidity.py` and estimator in `hermes/cost_liquidity.py`
   consume `ActionCostInput`, prospective OHLCV/technicals, and resolved

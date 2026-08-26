@@ -20,7 +20,10 @@ from digiquant.olympus.atlas.forecast_registry import persist_forecast_lineage_f
 from digiquant.olympus.atlas.risk_policy_registry import persist_h8_risk_snapshots_from_state
 from digiquant.olympus.atlas.state import PhaseError, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
-from digiquant.olympus.hermes.h9_cost_evidence import build_cost_bundles_for_commit
+from digiquant.olympus.hermes.h9_cost_evidence import (
+    build_cost_bundles_for_commit,
+    investor_currency_from_state,
+)
 from digiquant.olympus.hermes.payloads import sized_book
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.commit_io import (
@@ -124,6 +127,17 @@ def _persist_cost_liquidity_registry(
             {
                 "cost_liquidity_registry_status": "degraded",
                 "cost_liquidity_registry_reason": "missing_risk_policy",
+                "cost_liquidity_registry_snapshots_written": 0,
+                "cost_liquidity_registry_estimates_written": 0,
+            },
+            empty_snapshots,
+            empty_estimates,
+        )
+    if investor_currency_from_state(state) is None:
+        return (
+            {
+                "cost_liquidity_registry_status": "degraded",
+                "cost_liquidity_registry_reason": "currency_missing",
                 "cost_liquidity_registry_snapshots_written": 0,
                 "cost_liquidity_registry_estimates_written": 0,
             },
