@@ -1880,13 +1880,18 @@ that metrics/attribution job order cannot alter meaning.
   otherwise falls through to provisional H9 nav only. Never sums
   `current_book_lookback` / legacy `position_attribution` into daily `pnl_pct` (#2598).
   H9 keeps writing provisional continuity; public curated views are migration
-  `074_olympus_accounting_views.sql` (#2599): `public_accounting_nav_history`
-  (finalized preferred + labeled legacy), `public_finalized_nav`,
-  `public_accounting_period_status`, `public_daily_realized_attribution`.
-  Adapters: Olympus `observability-queries` / `queries` and digiquant.io
-  `useLivePortfolio`. Rollback = repoint to `public_nav_history` / `nav_history`.
-  Cutover only after approved shadow interval (incl. one rebalance) with zero
-  unexplained reconciliation failures.
+  `074_olympus_accounting_views.sql` (#2599) with follow-ups
+  `084_olympus_accounting_day_return_pct.sql` (#2779, equity-delta
+  `day_return_pct`) and `085_olympus_accounting_tip_children_complete.sql`
+  (#2780, tip/final views require `period_children_complete` parity):
+  `public_accounting_nav_history` (finalized preferred + labeled legacy),
+  `public_finalized_nav`, `public_accounting_period_status`,
+  `public_daily_realized_attribution`. Adapters: Olympus
+  `observability-queries` / `queries` and digiquant.io `useLivePortfolio`.
+  Rollback = repoint to `public_nav_history` / `nav_history`. Cutover only after
+  approved shadow interval (incl. one rebalance) with zero unexplained
+  reconciliation failures. Do not flip `OLYMPUS_ACCOUNTING_FINALIZER=on`
+  without that ops evidence.
 - **Lookback vs realized (#2598 / Task 3.3)**: migration `073_olympus_lookback_vs_realized.sql`
   renames the physical diagnostic table to `current_book_lookback` (explicit
   `window_*` / `lookback_days` / `contract` columns). `position_attribution` remains a
@@ -1909,7 +1914,8 @@ that metrics/attribution job order cannot alter meaning.
   `tests/dq/atlas/test_finalize_period_accounting.py`,
   `tests/dq/atlas/test_migration_073.py`,
   `tests/dq/atlas/test_lookback_vs_realized.py`,
-  `tests/dq/atlas/test_migration_074.py`.
+  `tests/dq/atlas/test_migration_074.py`,
+  `tests/dq/atlas/test_migration_085.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
   current-book lookback as realized attribution, public base-table grants on accounting,
   selecting provisional rows as final, in-place period correction,

@@ -106,7 +106,7 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 | `public_nav_history` | `nav_history` | Legacy NAV series + cash/invested % + derived `day_return_pct` (rollback target). |
 | `public_price_latest` | `price_history` | Latest daily close per ticker — valuation fallback outside market hours (`prices-live` is live, not dormant, since 2026-07-13). |
 
-### Public accounting surface — migration 074 (#2599 / Task 3.4)
+### Public accounting surface — migration 074 (#2599 / Task 3.4) + 084/085
 
 Curated security-definer views over private `olympus_accounting_*` tips. Prefer these
 for digiquant.io / Olympus performance readers after the shadow reconciliation gate.
@@ -120,8 +120,20 @@ adapters to `public_nav_history` / `nav_history` without deleting accounting row
 | `public_accounting_nav_history` | Finalized preferred; dates without a final tip use labeled legacy (`source=legacy_nav_history`, `contract=legacy_estimate`). Same date never mixes sources. |
 | `public_daily_realized_attribution` | Final-tip per-ticker contribution pct; empty when no final tip (no lookback substitution). |
 
+**Tip selection / children (#2780):** public tip and final views require the same
+child-completeness gate as Python `select_final_period` /
+`period_children_complete` (activity ⇒ ≥1 contribution; every positive
+`closing_quantity` contribution has a matching holding). Migration
+`085_olympus_accounting_tip_children_complete.sql` (CREATE OR REPLACE). A mid-chain
+crash that leaves a FINAL period row without children must not publish as a
+public tip.
+
+**`day_return_pct` (084 / #2779):** `(closing_equity − opening_equity) / opening_equity`
+(×100), including `cash_pnl` via the equity identity. 085 retains that formula.
+
 **Cutover gate:** point public readers only after an approved shadow interval (including one
-rebalance session) has zero unexplained reconciliation failures.
+rebalance session) has zero unexplained reconciliation failures. Do **not** enable
+`OLYMPUS_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
 
 ### ProfileConfig — migration 075 (#2609 / Track B)
 
