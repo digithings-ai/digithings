@@ -20,9 +20,10 @@ WP11.1 ticker evidence bundles live beside this store as
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TypeVar
+from typing import Any, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -637,6 +638,61 @@ class EvidenceBundleStore:
             for amendment in self._amendments.values()
             if amendment.base_bundle_id == base_bundle_id
         )
+
+    def dump_snapshot(self) -> bytes:
+        """Serialize append-only rows for checkpoint/reload (WP11.5).
+
+        Returns deterministic UTF-8 JSON bytes — same store contents always
+        produce identical bytes (sorted entity lists + sorted run/ticker keys).
+        """
+        run_ticker = {
+            f"{run_id}\0{ticker}": str(bundle_id)
+            for (run_id, ticker), bundle_id in sorted(self._run_ticker.items())
+        }
+        payload = {
+            "schema_version": 1,
+            "bases": sorted(
+                (bundle.model_dump(mode="json") for bundle in self._bases.values()),
+                key=lambda row: row["bundle_id"],
+            ),
+            "requests": sorted(
+                (request.model_dump(mode="json") for request in self._requests.values()),
+                key=lambda row: row["request_id"],
+            ),
+            "amendments": sorted(
+                (amendment.model_dump(mode="json") for amendment in self._amendments.values()),
+                key=lambda row: row["amendment_id"],
+            ),
+            "run_ticker": run_ticker,
+        }
+        return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+    @classmethod
+    def from_snapshot(cls, data: bytes) -> EvidenceBundleStore:
+        """Restore a store from :meth:`dump_snapshot` bytes."""
+        raw: dict[str, Any] = json.loads(data.decode("utf-8"))
+        if raw.get("schema_version") != 1:
+            raise EvidenceBundleError(
+                f"unsupported evidence bundle snapshot schema_version {raw.get('schema_version')!r}"
+            )
+        store = cls()
+        for bundle_row in raw.get("bases", []):
+            store.append_base_bundle(TickerEvidenceBundle.model_validate(bundle_row))
+        for request_row in raw.get("requests", []):
+            store.append_missing_fact_request(MissingFactRequest.model_validate(request_row))
+        for amendment_row in raw.get("amendments", []):
+            store.append_amendment(EvidenceBundleAmendment.model_validate(amendment_row))
+        expected_run_ticker = {
+            f"{run_id}\0{ticker}": str(bundle_id)
+            for (run_id, ticker), bundle_id in sorted(store._run_ticker.items())
+        }
+        if raw.get("run_ticker") != expected_run_ticker:
+            raise EvidenceBundleError("evidence bundle snapshot run_ticker index mismatch")
+        return store
+
+    def lineage_bytes(self) -> bytes:
+        """Canonical lineage bytes for acceptance comparisons (alias of dump)."""
+        return self.dump_snapshot()
 
 
 __all__ = [
