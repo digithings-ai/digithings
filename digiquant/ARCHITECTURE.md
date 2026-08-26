@@ -985,7 +985,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   (`phase7e_risk_sizing`) attaches `phase_hermes.pre_trade_risk_report` after the
   final control shell only; `final_book_weights_fingerprint` must equal the final
   sized-book fingerprint. Typed report failure omits the report without changing
-  the book (H9 enforcement/persistence is WP9.4).
+  the book. H9 (`commit_run`) validates attached report hashes under
+  `OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
+  append-only persists to `olympus_pretrade_risk_reports` (migration `083`) via
+  `atlas/pretrade_risk_registry.py` + `commit_io.validate_pretrade_risk_report` /
+  `persist_validated_pretrade_risk_report` (#2754 / WP9.4). Enforce fails closed
+  on missing/unknown/fingerprint or bundle-hash mismatch before booking; exact
+  retry skips; H9 never imports report builders. Manifest schema 1.6 carries
+  `pretrade_risk_report_id` / `pretrade_risk_report_hash` + write counts.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
