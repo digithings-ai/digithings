@@ -264,8 +264,8 @@ def test_cite_forecast_includes_bundle_and_evidence_ids() -> None:
 
 
 def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
-    """Provider failure after publish still surfaces the typed bundle on state."""
-    from digiquant.olympus.hermes.phases.h5_asset_analyst import _h5_node_factory
+    """Provider failure after publish still returns the typed bundle (no digigraph)."""
+    from digiquant.olympus.hermes.phases.portfolio_common import run_asset_analyst_llm
 
     store = EvidenceBundleStore()
     run_id = uuid4()
@@ -321,18 +321,30 @@ def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
             return_value="skill",
         ),
     ):
-        update = _h5_node_factory("AAPL", client=None, evidence_bundle_store=store)(state)
+        payload, doc, errors, bundle = run_asset_analyst_llm(
+            state=state,
+            ticker="AAPL",
+            roster_entry={"ticker": "AAPL", "roster_reason": "held"},
+            phase_slug="hermes/portfolio/asset-analyst-AAPL",
+            evidence_bundle_store=store,
+        )
 
-    assert "phase_hermes" in update
-    assert "AAPL" in update["phase_hermes"].ticker_evidence_bundles
-    assert update["phase_hermes"].asset_analysts == {}
-    dumped = update["phase_hermes"].ticker_evidence_bundles["AAPL"]
+    assert payload is None
+    assert doc is None
+    assert errors
+    assert bundle is not None
     assert (
         store.base_bundle_count_for(
-            run_id=str(run_id), ticker="AAPL", content_hash=dumped["content_hash"]
+            run_id=str(run_id), ticker="AAPL", content_hash=bundle.content_hash
         )
         == 1
     )
+    # Typed in-run retention shape (what H5 node writes on failure).
+    retained = PhaseHermesState(
+        ticker_evidence_bundles={"AAPL": bundle.model_dump(mode="json")},
+    )
+    assert retained.asset_analysts == {}
+    assert retained.ticker_evidence_bundles["AAPL"]["bundle_id"] == str(bundle.bundle_id)
 
 
 def test_evidence_record_ids_reuse_wp12_helpers() -> None:
