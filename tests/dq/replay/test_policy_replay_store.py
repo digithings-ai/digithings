@@ -353,6 +353,33 @@ class TestPolicyReplayStoreRunLifecycle:
         with pytest.raises(PolicyReplayStoreConflict):
             store.append_run_event(mutated)
 
+    def test_duplicate_run_sequence_raises_conflict(self) -> None:
+        store = PolicyReplayStore()
+        manifest = _manifest()
+        store.append_manifest(manifest, recorded_at=_TS)
+        store.append_pair(_pair(manifest), recorded_at=_TS)
+        store.append_run_event(
+            ReplayRunEvent(
+                event_id=uuid4(),
+                run_id=_RUN,
+                pair_id=_PAIR_ID,
+                event_kind=ReplayRunEventKind.RUN_STARTED,
+                sequence=0,
+                recorded_at=_TS,
+            )
+        )
+        with pytest.raises(PolicyReplayStoreConflict, match="sequence already exists"):
+            store.append_run_event(
+                ReplayRunEvent(
+                    event_id=uuid4(),
+                    run_id=_RUN,
+                    pair_id=_PAIR_ID,
+                    event_kind=ReplayRunEventKind.ARM_DISPATCHED,
+                    sequence=0,
+                    recorded_at=_TS + timedelta(seconds=1),
+                )
+            )
+
     def test_arm_result_immutable_final(self) -> None:
         store = PolicyReplayStore()
         manifest = _manifest()

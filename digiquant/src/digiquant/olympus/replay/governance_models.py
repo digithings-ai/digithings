@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from digiquant.olympus.hermes.allocation_hashes import sha256_hex
+from digiquant.olympus.temporal import require_utc_datetime
 
 NonEmptyId: TypeAlias = Annotated[str, Field(min_length=1)]
 HashHex64: TypeAlias = Annotated[str, Field(min_length=64, max_length=64)]
@@ -50,9 +51,7 @@ class ReplayRunEvent(GovernanceContractModel):
     @field_validator("recorded_at")
     @classmethod
     def _require_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("recorded_at must be timezone-aware UTC")
-        return value
+        return require_utc_datetime(value, field_name="recorded_at")
 
 
 class PolicyComparisonReport(GovernanceContractModel):
@@ -69,9 +68,7 @@ class PolicyComparisonReport(GovernanceContractModel):
     @field_validator("recorded_at")
     @classmethod
     def _require_recorded_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("recorded_at must be timezone-aware UTC")
-        return value
+        return require_utc_datetime(value, field_name="recorded_at")
 
 
 class GateCriteriaVersion(GovernanceContractModel):
@@ -88,10 +85,8 @@ class GateCriteriaVersion(GovernanceContractModel):
 
     @field_validator("effective_at", "recorded_at")
     @classmethod
-    def _require_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("timestamps must be timezone-aware UTC")
-        return value
+    def _require_utc(cls, value: datetime, info) -> datetime:
+        return require_utc_datetime(value, field_name=str(info.field_name))
 
 
 class GateEvaluation(GovernanceContractModel):
@@ -108,9 +103,7 @@ class GateEvaluation(GovernanceContractModel):
     @field_validator("recorded_at")
     @classmethod
     def _require_recorded_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("recorded_at must be timezone-aware UTC")
-        return value
+        return require_utc_datetime(value, field_name="recorded_at")
 
 
 class GovernanceDecisionKind(StrEnum):
@@ -137,9 +130,7 @@ class PolicyGovernanceDecision(GovernanceContractModel):
     @field_validator("recorded_at")
     @classmethod
     def _require_recorded_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("recorded_at must be timezone-aware UTC")
-        return value
+        return require_utc_datetime(value, field_name="recorded_at")
 
 
 def governance_content_hash(model: GovernanceContractModel) -> str:

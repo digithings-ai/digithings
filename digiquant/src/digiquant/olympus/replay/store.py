@@ -110,6 +110,7 @@ class PolicyReplayStore:
         self._pairs_by_id: dict[UUID, PersistedPair] = {}
         self._events: dict[UUID, ReplayRunEvent] = {}
         self._events_by_run: dict[str, tuple[UUID, ...]] = {}
+        self._event_sequence_keys: dict[tuple[str, int], UUID] = {}
         self._arm_results: dict[tuple[str, str], PersistedArmResult] = {}
         self._comparisons: dict[UUID, PolicyComparisonReport] = {}
         self._comparisons_by_hash: dict[str, UUID] = {}
@@ -202,6 +203,12 @@ class PolicyReplayStore:
         known_pairs = {row.pair.pair_id for row in self._pairs_by_hash.values()}
         if event.pair_id not in known_pairs:
             raise PolicyReplayStoreError(f"run event references unknown pair_id {event.pair_id}")
+        seq_key = (event.run_id, event.sequence)
+        existing_seq = self._event_sequence_keys.get(seq_key)
+        if existing_seq is not None and existing_seq != event.event_id:
+            raise PolicyReplayStoreConflict(
+                f"run event sequence already exists for run={event.run_id} sequence={event.sequence}"
+            )
         stored = self._append_idempotent(
             store=self._events,
             key=event.event_id,
@@ -211,6 +218,7 @@ class PolicyReplayStore:
             label="event_id",
         )
         self._track_run_event(stored)
+        self._event_sequence_keys[(stored.run_id, stored.sequence)] = stored.event_id
         return stored
 
     def list_run_events(self, run_id: str) -> tuple[ReplayRunEvent, ...]:
