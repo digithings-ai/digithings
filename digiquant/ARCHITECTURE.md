@@ -907,6 +907,17 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   (`source == inserted + skipped + unverifiable`); strict `load_state_version`
   continues to omit legacy refs. Audit/degraded compatibility only — not strict
   replay/training.
+  **Compiled research-state prose views (#2877 / WP12.5).** Deterministic brief/digest
+  markdown from one exact `ResearchStateVersion` via `research_retrieval/views.py`
+  (`compile_research_brief` / `compile_research_digest` / `compile_views_from_store`).
+  Entities are sorted by UUID; every view embeds `state_version_id`, state
+  `content_hash`, `schema_version`, and `manifest_content_hash`. Same pinned version
+  recompiles byte-identically after newer store rows. `publish_compiled_views` fails
+  closed when structured write did not succeed (no misleading view publication).
+  Atlas publish dual-writes `research-state-brief` / `research-state-digest` only when
+  `research_state_status=pinned` and `PublishDeps.research_state_store` can exact-load
+  the pin; incumbent digest/segment writers remain. Never `load_latest`; never parse
+  prose into claims.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
