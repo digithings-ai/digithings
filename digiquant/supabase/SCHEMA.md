@@ -250,6 +250,27 @@ RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoke
 blocks `UPDATE`/`DELETE`/`TRUNCATE`. Writer/reader:
 `digiquant.olympus.research_retrieval.store.AttentionStore`.
 
+### Outcome learning — migration 093 (#2959 / WP15.2)
+
+Private append-only outcome episodes, component attribution reports, and structured
+lesson versions. Contracts: `OutcomeEpisode`, `ComponentAttributionReport`,
+`OutcomeLessonVersion` in `digiquant.olympus.learning.outcome_models`.
+Application boundary: `OutcomeLearningStore` (in-memory for unit tests; SQL IO
+adapter later). Dark launch: no public base view, no historical backfill, no
+assembler/compiler wiring (WP15.3+). Supersession appends child versions;
+`select_episode_as_of` / `select_lesson_as_of` honor `available_at` and knowledge
+cutoff; exact load never fabricates history.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `olympus_outcome_episodes` | `(episode_version_id UUID)` | Immutable episode version + temporal columns + payload jsonb; optional supersedes FK. |
+| `olympus_component_attribution_reports` | `(report_id UUID)` | Typed component observations FK → episode version. |
+| `olympus_outcome_lesson_versions` | `(lesson_version_id UUID)` | Structured lesson version + episode/report membership in payload; optional supersedes FK. |
+
+RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
+`service_role` reset then `SELECT, INSERT` only; `reject_olympus_outcome_learning_mutation()`
+blocks `UPDATE`/`DELETE`/`TRUNCATE`.
+
 ### Forecast registry — migration 079 (#2663 / WP4.6)
 
 Private append-only prospective H5/H6 forecast lineage. Written after H9 portfolio
