@@ -1,25 +1,18 @@
 """H5 evidence-bundle build + publish (#2892 / WP11.2).
 
 Red coverage: canonical dedupe; event/known/source times; conflicts/missing
-fields; persist-before-provider; forecast cites bundle/evidence IDs; H5 failure
-leaves the bundle; durable writer disable retains typed in-run bundle.
+fields; forecast cites bundle/evidence IDs; durable writer disable retains
+typed in-run bundle. H5 provider-path wiring lives in ``tests/dq/hermes/``
+(atlas-graph CI has digigraph deps).
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
-from unittest.mock import MagicMock, patch
-from uuid import UUID, uuid4
+from unittest.mock import patch
+from uuid import UUID
 
 import pytest
-from digiquant.olympus.atlas.state import (
-    AtlasConfigBundle,
-    AtlasResearchState,
-    FocusRosterEntry,
-    PhaseHermesState,
-    PriorContext,
-)
 from digiquant.olympus.hermes.models.forecast import ForecastTerms
 from digiquant.olympus.research_retrieval.models import (
     TypedProvenance,
@@ -261,90 +254,6 @@ def test_cite_forecast_includes_bundle_and_evidence_ids() -> None:
     assert "llm-cite" in terms.evidence_ids
     assert str(built.bundle.bundle_id) in terms.evidence_ids
     assert str(built.bundle.evidence_ids[0]) in terms.evidence_ids
-
-
-def test_h5_persists_before_provider_and_failure_leaves_bundle() -> None:
-    """Provider failure after publish still returns the typed bundle (no digigraph)."""
-    from digiquant.olympus.hermes.phases.portfolio_common import run_asset_analyst_llm
-
-    store = EvidenceBundleStore()
-    run_id = uuid4()
-    state = AtlasResearchState(
-        run_id=run_id,
-        run_type="delta",
-        run_date=_TS.date(),
-        config=AtlasConfigBundle(watchlist=["AAPL"]),
-        prior_context=PriorContext(),
-        price_deltas={"AAPL": 0.01},
-        knowledge_cutoff_at=_TS,
-        research_state_pin={"state_version_id": str(_STATE)},
-    )
-    state.phase_hermes = PhaseHermesState(
-        focus_roster=[FocusRosterEntry(ticker="AAPL", roster_reason="held")]
-    )
-
-    def _boom(*_a: Any, **_k: Any) -> Any:
-        assert len(store._bases) == 1  # persist-before-provider
-        raise RuntimeError("provider down")
-
-    with (
-        patch.dict("os.environ", {"OLYMPUS_EVIDENCE_BUNDLE_WRITER": "on"}, clear=False),
-        patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.build_grounding",
-            return_value=(
-                [],
-                MagicMock(),
-                {"summary": "news", "sources": ["https://x"], "as_of": "2026-08-26"},
-            ),
-        ),
-        patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.apply_web_grounding_to_inputs",
-            side_effect=lambda inputs, **_k: {
-                **inputs,
-                "web_grounding": {
-                    "summary": "news",
-                    "sources": ["https://x"],
-                    "as_of": "2026-08-26",
-                },
-            },
-        ),
-        patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.resolve_analyst_edit_mode",
-            return_value="full",
-        ),
-        patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.run_research_agent",
-            side_effect=_boom,
-        ),
-        patch(
-            "digiquant.olympus.hermes.phases.portfolio_common.load_skill_full",
-            return_value="skill",
-        ),
-    ):
-        payload, doc, errors, bundle = run_asset_analyst_llm(
-            state=state,
-            ticker="AAPL",
-            roster_entry={"ticker": "AAPL", "roster_reason": "held"},
-            phase_slug="hermes/portfolio/asset-analyst-AAPL",
-            evidence_bundle_store=store,
-        )
-
-    assert payload is None
-    assert doc is None
-    assert errors
-    assert bundle is not None
-    assert (
-        store.base_bundle_count_for(
-            run_id=str(run_id), ticker="AAPL", content_hash=bundle.content_hash
-        )
-        == 1
-    )
-    # Typed in-run retention shape (what H5 node writes on failure).
-    retained = PhaseHermesState(
-        ticker_evidence_bundles={"AAPL": bundle.model_dump(mode="json")},
-    )
-    assert retained.asset_analysts == {}
-    assert retained.ticker_evidence_bundles["AAPL"]["bundle_id"] == str(bundle.bundle_id)
 
 
 def test_evidence_record_ids_reuse_wp12_helpers() -> None:
