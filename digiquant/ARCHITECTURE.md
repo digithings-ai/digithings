@@ -978,7 +978,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   yields byte-identical plan + resource totals; exploration reservations survive
   session budget trimming.   `h6_selection_to_attention_decision` bridges WP11.3
   `H6Selection` without forking ID schemes. API-only in 13.1 — Hermes
-  runtime wiring is WP13.4; persistence is WP13.2; Atlas pre-provider routing is
+  runtime wiring is WP13.4 (landed #2930); persistence is WP13.2; Atlas pre-provider routing is
   WP13.3.
   **Attention persistence (#2922 / WP13.2).** Migration
   `092_olympus_attention_context.sql` + in-memory
@@ -998,7 +998,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `carry`/`metric_patch` as zero-call paths (deterministic structured patch); `shadow`
   records decisions while the incumbent edit path still runs. Rollback: `off`/`shadow`.
   Env: `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default `shadow`).
-  **Knowledge cutoff (#2628 / WP4.1).** `initial_state` / `run_atlas_then_hermes`
+  **Hermes attention routing (#2930 / WP13.4).** After H4 fixes the focus roster,
+  `hermes/research_attention.py` plans per-ticker attention over that roster only
+  (cannot add/remove/reorder/expand or consume exploration). Stores
+  `AtlasResearchState.hermes_research_attention_plan` and persists to the shared
+  `AttentionStore`. H5 branches on enforced `carry`/`metric_patch`/`full` before
+  provider work; H6 re-routes with post-H5 features (`challenge` vs `carry`).
+  H4 roster/exclusions are byte-identical across `off`/`shadow`/`enforce`.
+  Rollback: `off`/`shadow` restores incumbent H5/H6 paths.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`

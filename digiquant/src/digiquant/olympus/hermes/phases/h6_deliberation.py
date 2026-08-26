@@ -27,6 +27,7 @@ from digiquant.olympus.hermes.focus_roster import (
     with_fanout_ticker,
 )
 from digiquant.olympus.hermes.models.deliberation import (
+    CARRY_ATTENTION,
     CARRY_FINGERPRINT_SKIP,
     CARRY_LLM_FAILURE,
     CARRY_LOW_VALUE,
@@ -45,6 +46,7 @@ from digiquant.olympus.hermes.models.forecast import (
     materialize_forecast_amendment,
     resolve_effective_forecast,
 )
+from digiquant.olympus.hermes.research_attention import research_attention_h6_enforce_path
 from digiquant.olympus.hermes.roster_cap import capped_tickers
 from digiquant.olympus.hermes.skills import load_skill_full
 from digiquant.olympus.hermes.state import HermesState
@@ -675,10 +677,68 @@ def _h6_node_factory(ticker: str, evidence_bundle_store: EvidenceBundleStore | N
         stance = str(analyst.get("stance") or "hold")
         base = _base_forecast_from_analyst(analyst)
         selection = _resolve_h6_selection(state, ticker, analyst)
+        h6_enforce = research_attention_h6_enforce_path(state, ticker, analyst)
+
+        if h6_enforce == "carry":
+            prior = _prior_deliberation_summary(state, ticker)
+            stance_map = {"buy": "bullish", "sell": "bearish"}
+            if prior:
+                net_stance = prior.get("net_stance", "neutral")
+                conviction_delta = int(prior.get("conviction_delta") or 0)
+                conclusion = str(
+                    prior.get("conclusion_excerpt")
+                    or prior.get("conclusion")
+                    or prior.get("bull_thesis")
+                    or analyst.get("thesis")
+                    or f"attention carry: {stance}"
+                )
+            else:
+                net_stance = stance_map.get(stance, "neutral")
+                conviction_delta = 0
+                conclusion = str(analyst.get("thesis") or f"attention carry: {stance}")
+            carried = DeliberationSummary(
+                ticker=ticker,
+                converged=True,
+                conclusion=conclusion,
+                net_stance=net_stance,  # type: ignore[arg-type]
+                conviction_delta=conviction_delta,
+                transcript=[],
+                carried=True,
+                carry_reason=CARRY_ATTENTION,
+            )
+            if prior:
+                prior_amendment = None
+                raw_am = prior.get("forecast_amendment")
+                if isinstance(raw_am, dict) and raw_am:
+                    try:
+                        prior_amendment = ForecastAmendment.model_validate(raw_am)
+                    except Exception:
+                        prior_amendment = None
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=_carry_prior_effective(prior=prior, base=base, state=state),
+                    amendment=prior_amendment,
+                )
+            elif base is not None:
+                carried = _attach_forecast_lineage(
+                    carried,
+                    effective=resolve_effective_forecast(
+                        base=base,
+                        amendment_outcome=AmendmentOutcome.NONE,
+                        known_at=state.knowledge_cutoff_at or base.known_at,
+                    ),
+                )
+            carried = _attach_selection(carried, selection)
+            return {
+                "phase_hermes": PhaseHermesState(
+                    deliberation_summaries={ticker: carried.model_dump(mode="json")}
+                )
+            }
 
         # Enforce + low-value: carry with zero provider calls (typed reason).
         if (
-            selection.mode is H6SelectionMode.ENFORCE
+            h6_enforce is None
+            and selection.mode is H6SelectionMode.ENFORCE
             and selection.action is H6Action.CARRY
             and selection.reason is H6SelectionReason.LOW_VALUE_CARRY
         ):
@@ -738,7 +798,7 @@ def _h6_node_factory(ticker: str, evidence_bundle_store: EvidenceBundleStore | N
             }
 
         # Enforce + select: skip fingerprint short-circuit so selected success meets round floor.
-        allow_fingerprint_skip = not (
+        allow_fingerprint_skip = h6_enforce != "challenge" and not (
             selection.mode is H6SelectionMode.ENFORCE and selection.action is H6Action.SELECT
         )
         if allow_fingerprint_skip and deliberation_skip_signal(

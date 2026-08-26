@@ -261,6 +261,23 @@ an unrecorded skip. `weight_pct` / materiality features are selection-only and m
 not enter provider prompts. Does not replace H4 roster/exploration ownership.
 WP11.4+ (durable lineage round trip) still open — WP11 incomplete.
 
+### Research attention after H4 — WP13.4 (#2930)
+
+After H4 materializes `focus_roster`, `hermes/research_attention.py` invokes
+`plan_research_attention` over ticker targets only (helper at H4 end — not a graph
+node). Modes reuse `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default
+`shadow`). The planner cannot mutate roster width/order or consume the exploration
+floor; H4 output is byte-identical across modes.
+
+| Phase | Enforced behavior |
+|---|---|
+| H5 | `carry` → skip provider; `metric_patch` → deterministic structured patch; `deep_refresh` → force full; `challenge`/`section_patch` → incumbent edit path |
+| H6 | Re-route after H5 features: `challenge` runs deliberation; other modes carry with `attention_carry` |
+
+Plan persists to `hermes_research_attention_plan` + shared `AttentionStore`.
+Coexists with WP11.3 `H6Selection` — attention enforce takes precedence when both
+apply. Rollback: `off`/`shadow`.
+
 ### Bounded missing-fact amendment — WP11.4 (#2908)
 
 H6 no longer runs generic ``live_search`` web grounding. When the PM names exactly
@@ -282,6 +299,7 @@ the immutable H5 base — never broad re-grounding.
 | `fingerprint_skip` | quiet ticker (#925) | `true` | a real prior debate still stands |
 | `llm_failure` | fail-soft catch (#1665) | **`false`** | no PM challenge ever ran |
 | `low_value_carry` | WP11.3 enforce selection (#2902) | `true` | deterministic skip; zero provider calls |
+| `attention_carry` | WP13.4 enforce attention (#2930) | `true` | post-H5 re-route skipped H6; zero provider calls |
 
 Consequences of `llm_failure`, all downstream of the flag:
 

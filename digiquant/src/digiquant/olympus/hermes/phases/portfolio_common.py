@@ -42,6 +42,10 @@ from digiquant.olympus.hermes.models.forecast import (
     forecast_assessment_id,
     forecast_terms_content_hash,
 )
+from digiquant.olympus.hermes.research_attention import (
+    apply_analyst_metric_patch,
+    research_attention_h5_enforce_path,
+)
 from digiquant.olympus.hermes.skills import load_skill_edit, load_skill_full
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.ticker_fingerprint import news_hash_for_ticker, ticker_triage_signal
@@ -508,10 +512,58 @@ def run_asset_analyst_llm(
     errors: list[PhaseError] = []
     artifact_key = analyst_artifact_key(ticker)
     mode = resolve_analyst_edit_mode(state, ticker)
+    enforce_path = research_attention_h5_enforce_path(state, ticker=ticker)
+    if enforce_path == "full":
+        mode = "full"
+    elif enforce_path == "carry":
+        mode = "skip"
     prior_loader = _TickerPriorLoader(state, artifact_key)
     prior = prior_loader.load(artifact_key, state.run_date)
     prior_body = _body_from_prior_payload(prior.payload) if prior is not None else None
     evidence_bundle: TickerEvidenceBundle | None = None
+
+    if enforce_path == "metric_patch" and prior is not None and prior_body:
+        patched = apply_analyst_metric_patch(
+            state,
+            ticker,
+            prior,
+            roster_entry=roster_entry,
+        )
+        skip_inputs: dict[str, Any] = {
+            "ticker": ticker,
+            "price_deltas": dict(state.price_deltas),
+            "bias_row": state.phase6_bias_row or {},
+            "metric_patch": True,
+        }
+        evidence_bundle = _publish_base_bundle_before_provider(
+            state=state,
+            ticker=ticker,
+            phase_inputs=skip_inputs,
+            phase_slug=phase_slug,
+            store=evidence_bundle_store,
+        )
+        body_raw = patched.get("body", patched)
+        if not isinstance(body_raw, dict):
+            body_raw = prior_body or {}
+        payload = AnalystPayload.model_validate({**body_raw, "ticker": ticker})
+        enriched = _attach_forecast_lineage(
+            payload=payload,
+            state=state,
+            ticker=ticker,
+            mode="skip",
+            phase_slug=phase_slug,
+            prior_body=prior_body,
+            errors=errors,
+            evidence_bundle=evidence_bundle,
+        )
+        body = analyst_body_from_payload(enriched)
+        document = build_analyst_document(
+            ticker=ticker,
+            run_date=state.run_date,
+            body=body,
+            linked_thesis_id=roster_entry.get("linked_market_thesis_id"),
+        )
+        return enriched, document, errors, evidence_bundle
 
     if mode == "skip" and prior is not None and prior_body:
         skip_inputs: dict[str, Any] = {
