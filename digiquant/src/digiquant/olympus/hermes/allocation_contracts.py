@@ -690,8 +690,9 @@ class PreTradeRiskReport(AllocationContractModel):
     """Final-book risk/cost/liquidity explanation for H9 and operators.
 
     Observational only — constructing or hashing a report never mutates weights.
-    Computation of metric values is WP9.2; attachment is WP9.3; H9 persistence is
-    WP9.4. The contract may remain shadow until those land.
+    Metric computation lives in :mod:`digiquant.olympus.hermes.pretrade_risk`
+    (WP9.2); attachment is WP9.3; H9 persistence is WP9.4. The contract may remain
+    shadow until those land.
     """
 
     schema_version: str = "1.0"
