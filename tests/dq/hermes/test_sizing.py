@@ -5,6 +5,9 @@ conviction + stance into final target weights via select → raw weights → pos
 sector caps → correlation de-dup → vol-target → breaker → round-to-grid → cash residual.
 Every reduction step is **reduce-only / cash-first**: weight freed by a cap or a drop
 becomes CASH, never redistributed up (which would re-breach the cap it just enforced).
+
+WP8.5 (#2738): post-cutover calibrated-path control-shell locks live in
+``test_allocation_invariants.py``; this module remains the incumbent-leaf suite.
 """
 
 from __future__ import annotations
