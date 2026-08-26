@@ -1074,7 +1074,15 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   declared compilation policy, deterministic SHA-256 content hashes, and append-only persistence
   through `OutcomeLearningStore.append_lesson`. Cutoff rules honor `available_at` /
   `knowledge_cutoff_at`, exclude the consuming run's own outcomes, and expose every source
-  episode/report ID — rendered prose is never authoritative. WP15.6 preflight wiring is separate.
+  episode/report ID — rendered prose is never authoritative. **Preflight lesson pin (#2975 / WP15.6).**
+  `atlas/phases/outcome_maturation.py` runs inside existing `preflight` (no new graph node) in
+  order: pinned `knowledge_cutoff_at` → `OutcomeEpisodeAssembler.assemble_pass` +
+  `ComponentAttributor.attribute_and_persist` for prior-run matured forecasts →
+  `LessonCompiler.compile_and_persist` / `OutcomeLearningStore.select_lesson_as_of` →
+  `outcome_lesson_pin` on `AtlasResearchState` and `H7PrerequisiteSnapshot.outcome_lesson_*`
+  for WP14 H5/H7 context. Structured `outcome_lesson:{id}` replaces `decision_log` prose in
+  prior-authorization sections when pinned; consuming-run episodes are excluded. Unwired
+  `outcome_maturation_deps` → typed `store_unavailable` (legacy paths continue).
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`

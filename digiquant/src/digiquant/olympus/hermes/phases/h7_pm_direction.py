@@ -163,6 +163,12 @@ def _h7_node(
     shadow = _attach_shadow_calibration(state, client=client)
 
     current_weights = _current_weights_from_config(state)
+    lesson_pin = state.outcome_lesson_pin if isinstance(state.outcome_lesson_pin, dict) else None
+    legacy_lessons = (
+        []
+        if lesson_pin and lesson_pin.get("lesson_version_id")
+        else list(state.prior_context.decision_lessons)
+    )
     phase_inputs: dict[str, Any] = {
         "segment": NODE_ID,
         "bias_row": state.phase6_bias_row or {},
@@ -173,7 +179,7 @@ def _h7_node(
         "prior_direction": _prior_direction_payload(state),
         "prior_book": list(state.prior_context.prior_book),
         "preferences": dict(state.config.preferences),
-        "past_context": list(state.prior_context.decision_lessons),
+        "past_context": legacy_lessons,
         "active_theses": list(state.prior_context.active_theses),
         "portfolio_performance": dict(state.prior_context.portfolio_performance),
         "prior_analyst_gaps": _prior_analyst_gaps(state),
@@ -189,12 +195,13 @@ def _h7_node(
         research_state_pin=pin,
         research_state_store=research_state_store,
         h7_prerequisite_snapshot=prereq,
+        outcome_lesson_pin=lesson_pin,
         analyst_payloads=analyst_payloads(state),
         deliberation_summaries=deliberation_summaries(state),
         shadow_calibrations=shadow.calibration_dumps(),
         calibrated_forecasts=shadow.calibrated_forecast_dumps(),
         prior_direction=_prior_direction_payload(state),
-        decision_lessons=tuple(state.prior_context.decision_lessons),
+        decision_lessons=tuple(legacy_lessons),
         focus_roster=tuple(_focus_roster_tickers(state)),
     ).phase_inputs
     tools, execute_tool, web_grounding = _portfolio_grounding(state, phase="h7_pm", segment=NODE_ID)

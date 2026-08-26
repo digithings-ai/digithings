@@ -62,11 +62,20 @@ def build_h7_prerequisite_snapshot(
     knowledge_cutoff_at: datetime | None,
     research_state_pin: dict[str, object] | None,
     prior_effective_forecast_ids: tuple[str, ...] = (),
+    outcome_lesson_pin: dict[str, object] | None = None,
 ) -> H7PrerequisiteSnapshot | None:
-    """Pin versioned WP3/WP5 inputs for H7 context compile at preflight."""
+    """Pin versioned WP3/WP5/WP15 inputs for H7 context compile at preflight."""
     state_version_id: UUID | None = None
     if isinstance(research_state_pin, dict):
         state_version_id = _parse_uuid(research_state_pin.get("state_version_id"))
+
+    outcome_lesson_version_id: UUID | None = None
+    outcome_lesson_content_hash: str | None = None
+    if isinstance(outcome_lesson_pin, dict):
+        outcome_lesson_version_id = _parse_uuid(outcome_lesson_pin.get("lesson_version_id"))
+        raw_hash = outcome_lesson_pin.get("content_hash")
+        if raw_hash:
+            outcome_lesson_content_hash = str(raw_hash)
 
     accounting_period_id: UUID | None = None
     accounting_period_content_hash: str | None = None
@@ -99,6 +108,7 @@ def build_h7_prerequisite_snapshot(
         and accounting_period_id is None
         and not matured_ids
         and not unresolved_ids
+        and outcome_lesson_version_id is None
     ):
         return None
 
@@ -110,6 +120,8 @@ def build_h7_prerequisite_snapshot(
         unresolved_forecast_effective_ids=unresolved_ids,
         ex_ante_risk_snapshot_hash=None,
         action_cost_estimate_ids=(),
+        outcome_lesson_version_id=outcome_lesson_version_id,
+        outcome_lesson_content_hash=outcome_lesson_content_hash,
     )
 
 
