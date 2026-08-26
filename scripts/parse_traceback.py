@@ -70,8 +70,14 @@ def parse_traceback(text: str) -> dict | None:
     Parse a Python traceback string and return structured info.
     Returns None if no traceback is detected.
     """
-    if "Traceback (most recent call last):" not in text and \
-       not re.search(r'\bError\b.*:\s*.+', text):
+    # Accept a full traceback *or* a lone exception line (ValueError: …).
+    # ``\bError\b`` alone misses ``RuntimeError`` / ``ValueError`` because the
+    # ``Error`` suffix is not a separate word — keep that loose form for
+    # messages like ``Error: boom``, and also match ``*Error`` / ``*Exception``.
+    if "Traceback (most recent call last):" not in text and not re.search(
+        r"(?:\bError\b|\w+Error|\w+Exception|KeyboardInterrupt).*:.*\S",
+        text,
+    ):
         return None
 
     # Extract all frame lines: '  File "path", line N, in func'
