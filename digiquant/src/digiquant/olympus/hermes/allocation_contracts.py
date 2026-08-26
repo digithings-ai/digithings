@@ -1,9 +1,10 @@
-"""H8 allocation input contracts (#2727 / WP8.2).
+"""H8 allocation input and WP9 pre-trade risk report contracts.
 
-Defines :class:`AllocationInputBundle` and supporting frozen models that join
-Phase 1 registry hashes, H7 mandate references, prior book weights, and control
-settings into one validated identity. Assembly at H8 entry is Task 8.3 — this
-module is contracts + hashes only; incumbent sizing behavior is unchanged.
+Defines :class:`AllocationInputBundle` (#2727 / WP8.2) and
+:class:`PreTradeRiskReport` (#2742 / WP9.1) as frozen models with SHA-256
+identity. Assembly / metric computation live in later tasks — this module is
+contracts + hash validation only. Report methods must never mutate the final
+book.
 """
 
 from __future__ import annotations
@@ -26,6 +27,8 @@ from pydantic import (
 from digiquant.olympus.hermes.allocation_hashes import (
     allocation_bundle_content_hash,
     allocation_bundle_hash_payload,
+    pretrade_risk_report_content_hash,
+    pretrade_risk_report_hash_payload,
     prior_weights_from_entries,
     weights_fingerprint,
 )
@@ -439,18 +442,459 @@ def build_source_hashes(
     )
 
 
+# ── WP9.1 PreTradeRiskReport (#2742) ─────────────────────────────────────────
+
+
+FiniteFloat: TypeAlias = Annotated[float, Field(allow_inf_nan=False)]
+
+
+class ReportMetricStatus(StrEnum):
+    """Availability of one report leaf or the whole report."""
+
+    AVAILABLE = "available"
+    DEGRADED = "degraded"
+    UNAVAILABLE = "unavailable"
+
+
+class MetricProvenance(StrEnum):
+    """Origin of a reported metric value — never LLM-authored numbers."""
+
+    COVARIANCE_SNAPSHOT = "covariance_snapshot"
+    RISK_POLICY = "risk_policy"
+    COST_LIQUIDITY = "cost_liquidity"
+    FINAL_BOOK = "final_book"
+    PRIOR_BOOK = "prior_book"
+    ALLOCATION_BUNDLE = "allocation_bundle"
+    CONTROL_OUTCOME = "control_outcome"
+    DERIVED = "derived"
+
+
+class ScalarMetric(AllocationContractModel):
+    """One scalar with provenance or typed unavailability — no hidden zeroes."""
+
+    status: ReportMetricStatus
+    value: FiniteFloat | None = None
+    provenance: MetricProvenance | None = None
+    unavailable_reason: NonEmptyId | None = None
+
+    @model_validator(mode="after")
+    def _validate_metric(self) -> ScalarMetric:
+        if self.status is ReportMetricStatus.AVAILABLE:
+            if self.value is None:
+                raise ValueError("available metric requires value")
+            if self.provenance is None:
+                raise ValueError("available metric requires provenance")
+            if self.unavailable_reason is not None:
+                raise ValueError("available metric cannot carry unavailable_reason")
+        elif self.status is ReportMetricStatus.DEGRADED:
+            if self.value is None:
+                raise ValueError("degraded metric requires value")
+            if self.provenance is None:
+                raise ValueError("degraded metric requires provenance")
+            if self.unavailable_reason is None or not self.unavailable_reason.strip():
+                raise ValueError("degraded metric requires unavailable_reason")
+        else:
+            if self.value is not None:
+                raise ValueError("unavailable metric cannot carry value")
+            if self.provenance is not None:
+                raise ValueError("unavailable metric cannot carry provenance")
+            if self.unavailable_reason is None or not self.unavailable_reason.strip():
+                raise ValueError("unavailable metric requires unavailable_reason")
+        return self
+
+
+class ReportWeightEntry(AllocationContractModel):
+    """One ticker weight observed on the prior or final book."""
+
+    ticker: NonEmptyId
+    weight_pct: WeightPct
+
+
+class BookWeightsView(AllocationContractModel):
+    """Prior or final book weights bound into the report identity."""
+
+    entries: tuple[ReportWeightEntry, ...]
+    cash_weight_pct: WeightPct
+    weights_fingerprint: NonEmptyId
+
+    @field_validator("entries", mode="before")
+    @classmethod
+    def _coerce_entries(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def _validate_book_weights(self) -> BookWeightsView:
+        tickers = [entry.ticker for entry in self.entries]
+        if len(tickers) != len(set(tickers)):
+            raise ValueError("book weight entries must be unique by ticker")
+        if tickers != sorted(tickers):
+            raise ValueError("book weight entries must be sorted by ticker")
+        expected = weights_fingerprint({entry.ticker: entry.weight_pct for entry in self.entries})
+        if self.weights_fingerprint != expected:
+            raise ValueError("weights_fingerprint must match book weight entries")
+        return self
+
+
+class TradeDeltaEntry(AllocationContractModel):
+    """Final minus prior risky weight for one ticker."""
+
+    ticker: NonEmptyId
+    delta_weight_pct: FiniteFloat
+
+
+class BindingConstraint(AllocationContractModel):
+    """One hard constraint that bound the final book."""
+
+    constraint_id: NonEmptyId
+    constraint_kind: NonEmptyId
+    ticker: NonEmptyId | None = None
+    bound_value: FiniteFloat | None = None
+    observed_value: FiniteFloat | None = None
+    reason: NonEmptyId
+
+
+class AlteredTarget(AllocationContractModel):
+    """Requested target changed by a deterministic H8 control."""
+
+    ticker: NonEmptyId
+    requested_weight_pct: FiniteFloat
+    final_weight_pct: FiniteFloat
+    adjustment_type: NonEmptyId
+    reason: NonEmptyId
+
+
+class RejectedTarget(AllocationContractModel):
+    """Requested target that did not enter the final book."""
+
+    ticker: NonEmptyId
+    requested_weight_pct: FiniteFloat
+    reason: NonEmptyId
+
+
+class PerAssetRiskContribution(AllocationContractModel):
+    """Marginal and component risk for one ticker."""
+
+    ticker: NonEmptyId
+    marginal_risk: ScalarMetric
+    component_risk: ScalarMetric
+
+
+class ExposureBlock(AllocationContractModel):
+    """Gross / net / cash exposure of the final book."""
+
+    gross_exposure_pct: ScalarMetric
+    net_exposure_pct: ScalarMetric
+    cash_weight_pct: ScalarMetric
+
+
+class PortfolioRiskBlock(AllocationContractModel):
+    """Ex-ante portfolio variance/vol and per-name contributions."""
+
+    variance: ScalarMetric
+    volatility_annualized_pct: ScalarMetric
+    contributions: tuple[PerAssetRiskContribution, ...]
+
+    @field_validator("contributions", mode="before")
+    @classmethod
+    def _coerce_contributions(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def _validate_contributions(self) -> PortfolioRiskBlock:
+        tickers = [item.ticker for item in self.contributions]
+        if len(tickers) != len(set(tickers)):
+            raise ValueError("risk contributions must be unique by ticker")
+        if tickers != sorted(tickers):
+            raise ValueError("risk contributions must be sorted by ticker")
+        return self
+
+
+class ConcentrationBlock(AllocationContractModel):
+    """Concentration and effective-bet metrics."""
+
+    herfindahl: ScalarMetric
+    effective_bets: ScalarMetric
+    max_name_weight_pct: ScalarMetric
+
+
+class NameSectorFactorScenarioBlock(AllocationContractModel):
+    """Name/sector/factor/scenario exposures — often typed unavailable."""
+
+    name_max_weight_pct: ScalarMetric
+    sector_max_weight_pct: ScalarMetric
+    factor_exposure: ScalarMetric
+    scenario_stress_pct: ScalarMetric
+
+
+class CostLiquidityReportBlock(AllocationContractModel):
+    """Expected implementation burden on the final trade list."""
+
+    expected_cost: ScalarMetric
+    turnover_pct: ScalarMetric
+    adv_participation_pct: ScalarMetric
+    days_to_liquidate: ScalarMetric
+
+
+class ForecastQualityBlock(AllocationContractModel):
+    """Forecast staleness and uncertainty bound into the report."""
+
+    staleness_sessions: ScalarMetric
+    forecast_uncertainty: ScalarMetric
+    degraded_input_count: ScalarMetric
+
+
+class ControlOutcomesBlock(AllocationContractModel):
+    """Binding constraints and requested-target alterations."""
+
+    binding_constraints: tuple[BindingConstraint, ...]
+    altered_targets: tuple[AlteredTarget, ...]
+    rejected_targets: tuple[RejectedTarget, ...]
+
+    @field_validator(
+        "binding_constraints",
+        "altered_targets",
+        "rejected_targets",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_control_tuples(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def _validate_control_order(self) -> ControlOutcomesBlock:
+        altered = [item.ticker for item in self.altered_targets]
+        if altered != sorted(altered):
+            raise ValueError("altered_targets must be sorted by ticker")
+        if len(altered) != len(set(altered)):
+            raise ValueError("altered_targets must be unique by ticker")
+        rejected = [item.ticker for item in self.rejected_targets]
+        if rejected != sorted(rejected):
+            raise ValueError("rejected_targets must be sorted by ticker")
+        if len(rejected) != len(set(rejected)):
+            raise ValueError("rejected_targets must be unique by ticker")
+        binding_keys = [
+            (item.constraint_id, item.ticker or "") for item in self.binding_constraints
+        ]
+        if binding_keys != sorted(binding_keys):
+            raise ValueError("binding_constraints must be sorted by constraint_id, ticker")
+        return self
+
+
+class PreTradeRiskReport(AllocationContractModel):
+    """Final-book risk/cost/liquidity explanation for H9 and operators.
+
+    Observational only — constructing or hashing a report never mutates weights.
+    Computation of metric values is WP9.2; attachment is WP9.3; H9 persistence is
+    WP9.4. The contract may remain shadow until those land.
+    """
+
+    schema_version: str = "1.0"
+    run_id: NonEmptyId
+    session_date: date
+    status: ReportMetricStatus
+    unavailable_reason: NonEmptyId | None = None
+    allocation_input_bundle_hash: NonEmptyId
+    final_book_weights_fingerprint: NonEmptyId
+    report_content_hash: NonEmptyId
+    prior_weights: BookWeightsView
+    final_weights: BookWeightsView
+    trade_deltas: tuple[TradeDeltaEntry, ...]
+    exposures: ExposureBlock
+    portfolio_risk: PortfolioRiskBlock
+    concentration: ConcentrationBlock
+    name_sector_factor_scenario: NameSectorFactorScenarioBlock
+    cost_liquidity: CostLiquidityReportBlock
+    forecast_quality: ForecastQualityBlock
+    controls: ControlOutcomesBlock
+    risk_policy_hash: NonEmptyId
+    covariance_hash: NonEmptyId | None = None
+
+    @field_validator("trade_deltas", mode="before")
+    @classmethod
+    def _coerce_trade_deltas(cls, value: object) -> object:
+        if isinstance(value, list):
+            return tuple(value)
+        return value
+
+    @model_validator(mode="after")
+    def _validate_report(self) -> PreTradeRiskReport:
+        if self.status is ReportMetricStatus.UNAVAILABLE:
+            if self.unavailable_reason is None or not self.unavailable_reason.strip():
+                raise ValueError("unavailable report requires unavailable_reason")
+        elif self.status is ReportMetricStatus.DEGRADED:
+            if self.unavailable_reason is None or not self.unavailable_reason.strip():
+                raise ValueError("degraded report requires unavailable_reason")
+        elif self.unavailable_reason is not None:
+            raise ValueError("available report cannot carry unavailable_reason")
+
+        tickers = [item.ticker for item in self.trade_deltas]
+        if len(tickers) != len(set(tickers)):
+            raise ValueError("trade_deltas must be unique by ticker")
+        if tickers != sorted(tickers):
+            raise ValueError("trade_deltas must be sorted by ticker")
+
+        if self.final_book_weights_fingerprint != self.final_weights.weights_fingerprint:
+            raise ValueError("final_book_weights_fingerprint must match final_weights")
+
+        expected_hash = pretrade_risk_report_content_hash(payload=self._hash_payload())
+        if self.report_content_hash != expected_hash:
+            raise ValueError("report_content_hash must match canonical report digest")
+        return self
+
+    def _hash_payload(self) -> dict[str, object]:
+        def _metric_payload(metric: ScalarMetric) -> dict[str, object]:
+            return {
+                "status": metric.status.value,
+                "value": metric.value,
+                "provenance": None if metric.provenance is None else metric.provenance.value,
+                "unavailable_reason": metric.unavailable_reason,
+            }
+
+        def _weights_payload(view: BookWeightsView) -> dict[str, object]:
+            return {
+                "entries": [
+                    {"ticker": entry.ticker, "weight_pct": entry.weight_pct}
+                    for entry in view.entries
+                ],
+                "cash_weight_pct": view.cash_weight_pct,
+                "weights_fingerprint": view.weights_fingerprint,
+            }
+
+        return pretrade_risk_report_hash_payload(
+            schema_version=self.schema_version,
+            run_id=self.run_id,
+            session_date=self.session_date.isoformat(),
+            status=self.status.value,
+            unavailable_reason=self.unavailable_reason,
+            allocation_input_bundle_hash=self.allocation_input_bundle_hash,
+            final_book_weights_fingerprint=self.final_book_weights_fingerprint,
+            prior_weights=_weights_payload(self.prior_weights),
+            final_weights=_weights_payload(self.final_weights),
+            trade_deltas=tuple(
+                {"ticker": item.ticker, "delta_weight_pct": item.delta_weight_pct}
+                for item in self.trade_deltas
+            ),
+            exposures={
+                "gross_exposure_pct": _metric_payload(self.exposures.gross_exposure_pct),
+                "net_exposure_pct": _metric_payload(self.exposures.net_exposure_pct),
+                "cash_weight_pct": _metric_payload(self.exposures.cash_weight_pct),
+            },
+            portfolio_risk={
+                "variance": _metric_payload(self.portfolio_risk.variance),
+                "volatility_annualized_pct": _metric_payload(
+                    self.portfolio_risk.volatility_annualized_pct
+                ),
+                "contributions": tuple(
+                    {
+                        "ticker": item.ticker,
+                        "marginal_risk": _metric_payload(item.marginal_risk),
+                        "component_risk": _metric_payload(item.component_risk),
+                    }
+                    for item in self.portfolio_risk.contributions
+                ),
+            },
+            concentration={
+                "herfindahl": _metric_payload(self.concentration.herfindahl),
+                "effective_bets": _metric_payload(self.concentration.effective_bets),
+                "max_name_weight_pct": _metric_payload(self.concentration.max_name_weight_pct),
+            },
+            name_sector_factor_scenario={
+                "name_max_weight_pct": _metric_payload(
+                    self.name_sector_factor_scenario.name_max_weight_pct
+                ),
+                "sector_max_weight_pct": _metric_payload(
+                    self.name_sector_factor_scenario.sector_max_weight_pct
+                ),
+                "factor_exposure": _metric_payload(
+                    self.name_sector_factor_scenario.factor_exposure
+                ),
+                "scenario_stress_pct": _metric_payload(
+                    self.name_sector_factor_scenario.scenario_stress_pct
+                ),
+            },
+            cost_liquidity={
+                "expected_cost": _metric_payload(self.cost_liquidity.expected_cost),
+                "turnover_pct": _metric_payload(self.cost_liquidity.turnover_pct),
+                "adv_participation_pct": _metric_payload(self.cost_liquidity.adv_participation_pct),
+                "days_to_liquidate": _metric_payload(self.cost_liquidity.days_to_liquidate),
+            },
+            forecast_quality={
+                "staleness_sessions": _metric_payload(self.forecast_quality.staleness_sessions),
+                "forecast_uncertainty": _metric_payload(self.forecast_quality.forecast_uncertainty),
+                "degraded_input_count": _metric_payload(self.forecast_quality.degraded_input_count),
+            },
+            controls={
+                "binding_constraints": tuple(
+                    {
+                        "constraint_id": item.constraint_id,
+                        "constraint_kind": item.constraint_kind,
+                        "ticker": item.ticker,
+                        "bound_value": item.bound_value,
+                        "observed_value": item.observed_value,
+                        "reason": item.reason,
+                    }
+                    for item in self.controls.binding_constraints
+                ),
+                "altered_targets": tuple(
+                    {
+                        "ticker": item.ticker,
+                        "requested_weight_pct": item.requested_weight_pct,
+                        "final_weight_pct": item.final_weight_pct,
+                        "adjustment_type": item.adjustment_type,
+                        "reason": item.reason,
+                    }
+                    for item in self.controls.altered_targets
+                ),
+                "rejected_targets": tuple(
+                    {
+                        "ticker": item.ticker,
+                        "requested_weight_pct": item.requested_weight_pct,
+                        "reason": item.reason,
+                    }
+                    for item in self.controls.rejected_targets
+                ),
+            },
+            risk_policy_hash=self.risk_policy_hash,
+            covariance_hash=self.covariance_hash,
+        )
+
+
 __all__ = [
     "AllocationCadence",
     "AllocationInputBundle",
     "AllocationRunContext",
     "AllocationSourceHashes",
+    "AlteredTarget",
     "AssetInputStatus",
+    "BindingConstraint",
+    "BookWeightsView",
     "CalibratedReturnSlice",
+    "ConcentrationBlock",
+    "ControlOutcomesBlock",
     "ControlSettingsFingerprint",
-    "CovarianceBinding",
     "CostLiquidityBinding",
+    "CostLiquidityReportBlock",
+    "CovarianceBinding",
+    "ExposureBlock",
+    "ForecastQualityBlock",
     "MandateReference",
+    "MetricProvenance",
+    "NameSectorFactorScenarioBlock",
+    "PerAssetRiskContribution",
+    "PortfolioRiskBlock",
+    "PreTradeRiskReport",
     "PriorBookSnapshot",
     "PriorWeightEntry",
+    "RejectedTarget",
+    "ReportMetricStatus",
+    "ReportWeightEntry",
+    "ScalarMetric",
+    "TradeDeltaEntry",
     "build_source_hashes",
 ]

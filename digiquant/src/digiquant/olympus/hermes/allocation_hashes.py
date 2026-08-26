@@ -1,4 +1,4 @@
-"""Stable SHA-256 identities for H8 allocation inputs (#2727 / WP8.2).
+"""Stable SHA-256 identities for H8 allocation inputs and WP9 risk reports.
 
 Canonical JSON uses sorted keys, compact separators, UTF-8, normalized UTC
 timestamps in payloads, ``allow_nan=False``, and SHA-256 digests. Never use
@@ -6,7 +6,9 @@ Python ``hash()`` for cross-run identity.
 
 ``weights_fingerprint`` is the sole authoritative implementation —
 :mod:`digiquant.olympus.hermes.writers.commit_io` delegates here so H9
-idempotency bytes stay stable.
+idempotency bytes stay stable. Pre-trade report digests live beside the
+allocation bundle helpers so H9 can bind book + report without a second hash
+dialect (#2742 / WP9.1).
 """
 
 from __future__ import annotations
@@ -147,12 +149,91 @@ def allocation_bundle_hash_payload(
     }
 
 
+def pretrade_risk_report_content_hash(*, payload: dict[str, Any]) -> str:
+    """SHA-256 over canonical pre-trade risk report identity fields."""
+    return sha256_hex(payload)
+
+
+def pretrade_risk_report_hash_payload(
+    *,
+    schema_version: str,
+    run_id: str,
+    session_date: str,
+    status: str,
+    unavailable_reason: str | None,
+    allocation_input_bundle_hash: str,
+    final_book_weights_fingerprint: str,
+    prior_weights: dict[str, object],
+    final_weights: dict[str, object],
+    trade_deltas: tuple[dict[str, object], ...] | list[dict[str, object]],
+    exposures: dict[str, object],
+    portfolio_risk: dict[str, object],
+    concentration: dict[str, object],
+    name_sector_factor_scenario: dict[str, object],
+    cost_liquidity: dict[str, object],
+    forecast_quality: dict[str, object],
+    controls: dict[str, object],
+    risk_policy_hash: str,
+    covariance_hash: str | None,
+) -> dict[str, object]:
+    """Build order-independent report hash input."""
+    trade_by_ticker = {str(row["ticker"]): row for row in trade_deltas}
+    contributions = portfolio_risk.get("contributions", ())
+    contrib_by_ticker = {str(row["ticker"]): row for row in contributions}
+    binding = controls.get("binding_constraints", ())
+    altered = controls.get("altered_targets", ())
+    rejected = controls.get("rejected_targets", ())
+    return {
+        "schema_version": schema_version,
+        "run_id": run_id,
+        "session_date": session_date,
+        "status": status,
+        "unavailable_reason": unavailable_reason,
+        "allocation_input_bundle_hash": allocation_input_bundle_hash,
+        "final_book_weights_fingerprint": final_book_weights_fingerprint,
+        "prior_weights": prior_weights,
+        "final_weights": final_weights,
+        "trade_deltas": {ticker: trade_by_ticker[ticker] for ticker in sorted(trade_by_ticker)},
+        "exposures": exposures,
+        "portfolio_risk": {
+            "variance": portfolio_risk.get("variance"),
+            "volatility_annualized_pct": portfolio_risk.get("volatility_annualized_pct"),
+            "contributions": {
+                ticker: contrib_by_ticker[ticker] for ticker in sorted(contrib_by_ticker)
+            },
+        },
+        "concentration": concentration,
+        "name_sector_factor_scenario": name_sector_factor_scenario,
+        "cost_liquidity": cost_liquidity,
+        "forecast_quality": forecast_quality,
+        "controls": {
+            "binding_constraints": sorted(
+                binding,
+                key=lambda row: (
+                    str(row.get("constraint_id", "")),
+                    str(row.get("ticker") or ""),
+                ),
+            ),
+            "altered_targets": {
+                str(row["ticker"]): row for row in sorted(altered, key=lambda r: str(r["ticker"]))
+            },
+            "rejected_targets": {
+                str(row["ticker"]): row for row in sorted(rejected, key=lambda r: str(r["ticker"]))
+            },
+        },
+        "risk_policy_hash": risk_policy_hash,
+        "covariance_hash": covariance_hash,
+    }
+
+
 __all__ = [
     "allocation_bundle_content_hash",
     "allocation_bundle_hash_payload",
     "calibrated_slice_hash_payload",
     "canonical_json",
     "h7_memo_hash_payload",
+    "pretrade_risk_report_content_hash",
+    "pretrade_risk_report_hash_payload",
     "prior_weights_from_entries",
     "sha256_hex",
     "weights_fingerprint",
