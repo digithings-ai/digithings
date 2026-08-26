@@ -63,6 +63,7 @@ def _resolved_outcome(
     realized: str = "0.06",
     known_at: datetime = _TS,
     outcome_salt: int = 0,
+    horizon_sessions: int = 21,
 ) -> ForecastOutcome:
     mean = Decimal(forecast_mean)
     real = Decimal(realized)
@@ -73,6 +74,7 @@ def _resolved_outcome(
         base_forecast_id=_BASE_ID,
         effective_forecast_id=UUID(f"22222222-2222-5222-8222-{outcome_salt:012d}"),
         ticker=ticker,
+        horizon_sessions=horizon_sessions,
         reference_session=_REF,
         maturity_session=_MAT,
         reference_snapshot=_snapshot(session=_REF),
@@ -93,6 +95,7 @@ def _resolved_outcome(
         "base_forecast_id": str(draft["base_forecast_id"]),
         "effective_forecast_id": str(draft["effective_forecast_id"]),
         "ticker": draft["ticker"],
+        "horizon_sessions": horizon_sessions,
         "reference_session": _REF.isoformat(),
         "maturity_session": _MAT.isoformat(),
         "reference_snapshot": draft["reference_snapshot"].model_dump(mode="json"),  # type: ignore[union-attr]
@@ -316,6 +319,45 @@ class TestDeclaredPriorMetadata:
 
     def test_cohort_key_helper(self) -> None:
         assert fc.cohort_key_for_horizon(21) == "horizon:21|regime:default"
+        assert fc.horizon_sessions_from_cohort_key("horizon:21|regime:default") == 21
+        assert fc.horizon_sessions_from_cohort_key("other") is None
+
+    def test_mixed_horizon_union_does_not_contaminate_cohorts(self) -> None:
+        """Gate 2 / #2797: horizon:N keys must not share residuals across horizons."""
+        h21 = [
+            _resolved_outcome(
+                realized="0.50",
+                known_at=_TS + timedelta(minutes=i),
+                outcome_salt=100 + i,
+                horizon_sessions=21,
+            )
+            for i in range(5)
+        ]
+        h5 = [
+            _resolved_outcome(
+                realized="-0.20",
+                known_at=_TS + timedelta(minutes=10 + i),
+                outcome_salt=200 + i,
+                horizon_sessions=5,
+            )
+            for i in range(2)
+        ]
+        union = [*h21, *h5]
+        cal21 = fc.calibrate_cohort(
+            union,
+            cohort_key="horizon:21|regime:default",
+            as_of=_AS_OF,
+        )
+        cal5 = fc.calibrate_cohort(
+            union,
+            cohort_key="horizon:5|regime:default",
+            as_of=_AS_OF,
+        )
+        assert cal21.status is CalibrationArtifactStatus.AVAILABLE
+        assert cal5.status is CalibrationArtifactStatus.AVAILABLE
+        assert cal21.sample_count == 5
+        assert cal5.sample_count == 2
+        assert cal21.bias != cal5.bias
 
 
 class TestNoH8Coupling:

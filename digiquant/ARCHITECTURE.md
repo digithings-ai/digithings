@@ -919,7 +919,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   node); cutoff-bounded outcomes via `list_resolved_outcomes_as_of`; typed state slots
   `phase_hermes.forecast_calibrations` / `calibrated_forecasts`; H9 fail-soft appends
   via `forecast_registry.persist_shadow_calibrations` after booking. H8 remains
-  untouched.
+  untouched. **WP5 Gate-2 follow-up (#2797):** outcomes stamp `horizon_sessions`;
+  cohort attach filters residuals to the subject horizon; migration 087 adds
+  `UNIQUE (effective_forecast_id, maturity_session)` and refuses wall-clock
+  `as_of` when knowledge cutoff is missing.
   **Risk policy contracts (#2692 / WP6.2, #2803):** frozen models in
   `hermes/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
   leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure
@@ -1025,8 +1028,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Parent API `run_portfolio_replay_isolated` spawns a fresh worker with JSON
   I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
   call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
-  production H8/H9 must not import `olympus.replay`. Comparison evidence is
-  WP10.5.
+  production H8/H9 must not import `olympus.replay`.
+  **Paired shadow comparison evidence (#2799 / WP10.5):**
+  `olympus/replay/allocation_comparison.py` + packaged
+  `replay/shadow_criteria/v1.json` + CLI
+  `digiquant/scripts/atlas/compare_allocation_shadow.py`. Loads frozen criteria
+  before inspecting arm results; requires identical data/cost/execution hashes;
+  emits absolute + paired metrics with explicit unavailable/inconclusive leaves;
+  hard-constraint breaches stay visible even when challenger return is stronger;
+  atomic file-only report output. No auto-promotion, production config write, or
+  H8/H9 wiring.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
