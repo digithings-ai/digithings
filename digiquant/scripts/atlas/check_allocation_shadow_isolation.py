@@ -66,6 +66,7 @@ FORBIDDEN_IMPORT_PREFIXES: frozenset[str] = frozenset(
 )
 
 # Surface scanned for forbidden imports when present in-tree.
+# shadow_optimizer.py is the WP10.3 challenger — still write-denied / no network.
 DEFAULT_SCAN_RELPATHS: tuple[str, ...] = (
     "digiquant/scripts/atlas/check_allocation_shadow_isolation.py",
     "digiquant/src/digiquant/olympus/hermes/shadow_artifact.py",

@@ -1008,8 +1008,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `digiquant/scripts/atlas/check_allocation_shadow_isolation.py` enforce
   artifact-in / file-out isolation (no `secrets: inherit`, no production
   credentials, read-only permissions, trusted producer workflow/branch,
-  schema/hash gates). Challenger optimizer remains WP10.3+; disable the
-  shadow workflow to roll back without touching production H8/H9.
+  schema/hash gates). Disable the shadow workflow to roll back without
+  touching production H8/H9.
+  **Solver-free robust challenger (#2770 / WP10.3):**
+  `hermes/shadow_optimizer.py` — deterministic coordinate-search on the robust
+  objective (uncertainty + covariance risk + linear cost + L1 turnover) under
+  shared feasibility (caps/grid/authorization). Shadow-only; never wired into
+  production H8/H9; no SciPy/CVXPY; abstains on incomplete/invalid inputs.
+  Replay/comparison evidence is WP10.4–10.5.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
