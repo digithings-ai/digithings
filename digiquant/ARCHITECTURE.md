@@ -1041,6 +1041,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   fallbacks in enforce; `RoleRetrievalManifestStore` persists pre-call manifests and
   append-only WP1 token links (`ProviderAttemptTokenLink`) without mutating
   manifests; `retrieval_pin_from_wire_result` bridges WP14.2/14.3 linkage fields.
+  **Outcome-learning contracts (#2954 / WP15.1).** Frozen Pydantic v2 models in
+  `olympus/learning/outcome_models.py` (`OutcomeEpisode`, `ComponentAttributionReport`,
+  `OutcomeLessonVersion`, disposition/eligibility/quality enums) connect forecast →
+  decision → execution → realized outcome → learning eligibility without persistence.
+  UTC temporal contract (`OutcomeTemporalContract`), UUID5 version IDs, SHA-256 content
+  hashes, and disposition-aware validation: excluded/no-op/rejected forbid fabricated
+  H9 links or realized returns; authorized requires them; unavailable attribution and
+  ineligible components require typed reasons; causal sizing/timing P&L requires
+  `counterfactual_replay` with `replay_artifact_id`. Legacy `beliefs_distillation` prose
+  remains non-authoritative. Store/assembly/attribution/lesson compiler land in WP15.2–15.5.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
