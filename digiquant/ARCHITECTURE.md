@@ -970,15 +970,19 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `tests/dq/hermes/test_allocation_invariants.py` (explicit
   `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
   caps, calibrated mode stamps).
-  **Pre-trade risk report contract (#2742 / WP9.1):** the same
+  **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2):** the same
   `hermes/allocation_contracts.py` module defines frozen `PreTradeRiskReport`
   (plus `ScalarMetric` leaves, book/trade views, exposure/risk/concentration/
   cost/forecast/control blocks). Every required metric is a value +
   `MetricProvenance` or typed `UNAVAILABLE`/`DEGRADED` with reason — no hidden
   zeroes, no LLM numbers, no weight mutation. SHA-256
   `pretrade_risk_report_content_hash` / `pretrade_risk_report_hash_payload` live
-  in `hermes/allocation_hashes.py`. Contract may remain shadow until WP9.2
-  computation, WP9.3 final-book attachment, and WP9.4 H9 persistence.
+  in `hermes/allocation_hashes.py`. Pure builders in `hermes/pretrade_risk.py`
+  compute variance/MRC/CRC (CRC reconciles to σ_p), concentration/effective bets,
+  turnover, and cost/liquidity from the exact WP6 correlation snapshot +
+  caller-supplied annualized vols and WP7 observational scalars — never
+  re-estimating covariance/cost or fabricating factor/scenario values. Contract
+  may remain shadow until WP9.3 final-book attachment and WP9.4 H9 persistence.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
