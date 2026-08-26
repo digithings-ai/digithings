@@ -515,14 +515,19 @@ def run_asset_analyst_llm(
     enforce_path = research_attention_h5_enforce_path(state, ticker=ticker)
     if enforce_path == "full":
         mode = "full"
-    elif enforce_path == "carry":
+    elif enforce_path == "carry" and mode != "full":
         mode = "skip"
     prior_loader = _TickerPriorLoader(state, artifact_key)
     prior = prior_loader.load(artifact_key, state.run_date)
     prior_body = _body_from_prior_payload(prior.payload) if prior is not None else None
     evidence_bundle: TickerEvidenceBundle | None = None
 
-    if enforce_path == "metric_patch" and prior is not None and prior_body:
+    if (
+        enforce_path == "metric_patch"
+        and mode != "full"
+        and prior is not None
+        and prior_body
+    ):
         patched = apply_analyst_metric_patch(
             state,
             ticker,
