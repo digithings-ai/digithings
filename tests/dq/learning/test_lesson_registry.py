@@ -525,3 +525,65 @@ def test_persists_via_append_lesson() -> None:
     )
     loaded = store.load_lesson(lesson.lesson_version_id)
     assert loaded == lesson
+
+
+def test_superseded_episode_versions_deduped_via_as_of_selection() -> None:
+    store = OutcomeLearningStore()
+    parent = _episode()
+    store.append_episode(parent)
+    store.append_report(_report(parent, value=Decimal("-100.0")))
+    child = _episode(
+        realized=_realized(instrument_return=Decimal("0.055")),
+        supersedes_version_id=parent.episode_version_id,
+        temporal=_temporal(
+            available_at=_AVAILABLE + timedelta(days=3),
+            known_at=_AVAILABLE + timedelta(days=2),
+            recorded_at=_AVAILABLE + timedelta(days=2, hours=1),
+        ),
+    )
+    store.append_episode(child)
+    store.append_report(_report(child, value=Decimal("-200.0")))
+
+    lesson = _compiler(store).compile_and_persist(
+        policy=LessonCompilationPolicy(
+            policy_id="forecast-error-v1",
+            component=AttributionComponent.FORECAST,
+            metric="forecast_error_bps",
+            min_sample=1,
+            prior=Decimal("-10.0"),
+        ),
+        cohort=cohort_key(parent),
+        horizon_id="h-21s",
+        compilation_cutoff=_AVAILABLE + timedelta(days=4),
+        knowledge_cutoff_at=_AVAILABLE + timedelta(days=4),
+    )
+    assert lesson.sample_count == 1
+    assert lesson.episode_version_ids == (child.episode_version_id,)
+    assert lesson.estimate == Decimal("-200.0")
+
+
+def test_multiple_reports_uses_latest_per_episode() -> None:
+    store = OutcomeLearningStore()
+    ep = _episode()
+    store.append_episode(ep)
+    first = _report(ep, report_id=UUID("11111111-1111-4111-8111-111111111111"), value=Decimal("-50.0"))
+    second = _report(ep, report_id=UUID("22222222-2222-4222-8222-222222222222"), value=Decimal("-150.0"))
+    store.append_report(first)
+    store.append_report(second)
+
+    lesson = _compiler(store).compile_and_persist(
+        policy=LessonCompilationPolicy(
+            policy_id="forecast-error-v1",
+            component=AttributionComponent.FORECAST,
+            metric="forecast_error_bps",
+            min_sample=1,
+            prior=Decimal("-10.0"),
+        ),
+        cohort=cohort_key(ep),
+        horizon_id="h-21s",
+        compilation_cutoff=_AVAILABLE + timedelta(days=1),
+        knowledge_cutoff_at=_AVAILABLE + timedelta(days=1),
+    )
+    assert lesson.sample_count == 1
+    assert lesson.report_ids == (second.report_id,)
+    assert lesson.estimate == Decimal("-150.0")

@@ -93,6 +93,46 @@ def _episode_eligible(
     return True
 
 
+def _eligible_episodes(
+    store: OutcomeLearningStore,
+    *,
+    cohort: str,
+    horizon_id: str,
+    compilation_cutoff: datetime,
+    knowledge_cutoff_at: datetime,
+    consuming_run_id: str | None,
+) -> tuple[OutcomeEpisode, ...]:
+    """One as-of-visible episode version per logical ``episode_key``."""
+    keys = {episode.episode_key for episode in store.list_episode_versions()}
+    eligible: list[OutcomeEpisode] = []
+    for key in sorted(keys):
+        selected = store.select_episode_as_of(
+            episode_key=key,
+            as_of=compilation_cutoff,
+            knowledge_cutoff_at=knowledge_cutoff_at,
+        )
+        if selected is None:
+            continue
+        if not _episode_eligible(
+            selected,
+            cohort=cohort,
+            horizon_id=horizon_id,
+            compilation_cutoff=compilation_cutoff,
+            knowledge_cutoff_at=knowledge_cutoff_at,
+            consuming_run_id=consuming_run_id,
+        ):
+            continue
+        eligible.append(selected)
+    return tuple(eligible)
+
+
+def _latest_report(
+    store: OutcomeLearningStore,
+    episode_version_id: UUID,
+) -> ComponentAttributionReport | None:
+    return store.latest_report_for_episode(episode_version_id)
+
+
 def _collect_observations(
     store: OutcomeLearningStore,
     *,
@@ -104,35 +144,35 @@ def _collect_observations(
     consuming_run_id: str | None,
 ) -> tuple[_EligibleObservation, ...]:
     rows: list[_EligibleObservation] = []
-    for episode in store.list_episode_versions():
-        if not _episode_eligible(
-            episode,
-            cohort=cohort,
-            horizon_id=horizon_id,
-            compilation_cutoff=compilation_cutoff,
-            knowledge_cutoff_at=knowledge_cutoff_at,
-            consuming_run_id=consuming_run_id,
-        ):
+    for episode in _eligible_episodes(
+        store,
+        cohort=cohort,
+        horizon_id=horizon_id,
+        compilation_cutoff=compilation_cutoff,
+        knowledge_cutoff_at=knowledge_cutoff_at,
+        consuming_run_id=consuming_run_id,
+    ):
+        report = _latest_report(store, episode.episode_version_id)
+        if report is None:
             continue
-        loaded = store.load_episode_with_reports(episode.episode_version_id)
-        for report in loaded.reports:
-            for obs in report.observations:
-                if obs.component != policy.component:
-                    continue
-                if obs.metric != policy.metric:
-                    continue
-                if obs.method == AttributionMethod.UNAVAILABLE or obs.value is None:
-                    continue
-                if not _is_effective_method(obs.method):
-                    continue
-                rows.append(
-                    _EligibleObservation(
-                        episode_version_id=episode.episode_version_id,
-                        report_id=report.report_id,
-                        value=obs.value,
-                        available_at=episode.temporal.available_at,
-                    )
+        for obs in report.observations:
+            if obs.component != policy.component:
+                continue
+            if obs.metric != policy.metric:
+                continue
+            if obs.method == AttributionMethod.UNAVAILABLE or obs.value is None:
+                continue
+            if not _is_effective_method(obs.method):
+                continue
+            rows.append(
+                _EligibleObservation(
+                    episode_version_id=episode.episode_version_id,
+                    report_id=report.report_id,
+                    value=obs.value,
+                    available_at=episode.temporal.available_at,
                 )
+            )
+            break
     return tuple(rows)
 
 
@@ -211,6 +251,9 @@ class LessonCompiler:
         )
         if not observations:
             raise LessonCompilationError("no eligible episodes for lesson compilation")
+
+        if len({row.episode_version_id for row in observations}) != len(observations):
+            raise LessonCompilationError("duplicate episode observations in lesson aggregation")
 
         values = tuple(row.value for row in observations)
         sample_mean, uncertainty = _aggregate_values(values)
