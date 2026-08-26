@@ -483,6 +483,11 @@ class PhaseHermesState(BaseModel):
     asset_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
+    # WP11.2: ticker → TickerEvidenceBundle dump (H5 base; published before provider).
+    ticker_evidence_bundles: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="ticker → TickerEvidenceBundle dump (H5 base; WP11.2)",
+    )
     deliberation_summaries: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
@@ -542,6 +547,11 @@ def _merge_phase_hermes(
     merged = left.model_copy(deep=True)
     if right.asset_analysts:
         merged.asset_analysts = {**merged.asset_analysts, **right.asset_analysts}
+    if right.ticker_evidence_bundles:
+        merged.ticker_evidence_bundles = {
+            **merged.ticker_evidence_bundles,
+            **right.ticker_evidence_bundles,
+        }
     if right.deliberation_summaries:
         merged.deliberation_summaries = {
             **merged.deliberation_summaries,
