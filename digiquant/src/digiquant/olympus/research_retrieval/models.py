@@ -123,7 +123,8 @@ def _coerce_uuid_tuple(value: object) -> object:
 
 
 def _sorted_uuids(ids: tuple[UUID, ...]) -> tuple[UUID, ...]:
-    return tuple(sorted(ids, key=lambda item: item.hex))
+    """Sort and dedupe UUID tuples (manifest / link sets are unordered sets)."""
+    return tuple(sorted(set(ids), key=lambda item: item.hex))
 
 
 def _reject_self_supersession(*, self_id: UUID, supersedes_id: UUID | None, label: str) -> None:
@@ -198,22 +199,39 @@ def expected_event_version_id(
     )
 
 
-def research_patch_id(*, target_kind: str, target_id: str, content_hash: str) -> UUID:
-    """Deterministic patch identity from target + content hash."""
+def research_patch_id(
+    *,
+    target_kind: str,
+    target_id: str,
+    content_hash: str,
+    supersedes_patch_id: UUID | None,
+) -> UUID:
+    """Deterministic patch identity from target + parent + content hash."""
     if not target_kind.strip() or not target_id.strip() or not content_hash.strip():
         raise ValueError("target_kind, target_id, and content_hash are required")
+    parent = "" if supersedes_patch_id is None else supersedes_patch_id.hex
     return uuid5(
         _PATCH_ID_NS,
-        f"{target_kind.strip()}:{target_id.strip()}:{content_hash.strip()}",
+        f"{target_kind.strip()}:{target_id.strip()}:{parent}:{content_hash.strip()}",
     )
 
 
-def research_state_version_id(*, manifest_content_hash: str, parent_id: UUID | None) -> UUID:
-    """Content-addressed state version id from exact manifest digest + parent."""
+def research_state_version_id(
+    *,
+    manifest_content_hash: str,
+    parent_id: UUID | None,
+    schema_version: int = 1,
+) -> UUID:
+    """Content-addressed state version id from parent + manifest digest + schema."""
     if not manifest_content_hash.strip():
         raise ValueError("manifest_content_hash is required")
+    if schema_version < 1:
+        raise ValueError("schema_version must be >= 1")
     parent = "" if parent_id is None else parent_id.hex
-    return uuid5(_STATE_VERSION_ID_NS, f"{parent}:{manifest_content_hash.strip()}")
+    return uuid5(
+        _STATE_VERSION_ID_NS,
+        f"{parent}:{manifest_content_hash.strip()}:{schema_version}",
+    )
 
 
 def legacy_document_ref_id(*, document_key: str, as_of_date: str, source_hash: str) -> UUID:
@@ -275,6 +293,7 @@ class EvidenceRecord(ResearchStateModel):
             affected_belief_ids=self.affected_belief_ids,
             novelty_of=self.novelty_of,
             contradiction_of=self.contradiction_of,
+            supersedes_evidence_id=self.supersedes_evidence_id,
         )
         if self.content_hash != expected_hash:
             raise ValueError("content_hash must match canonical EvidenceRecord digest")
@@ -296,8 +315,9 @@ def evidence_content_hash(
     affected_belief_ids: tuple[UUID, ...] = (),
     novelty_of: tuple[UUID, ...] = (),
     contradiction_of: tuple[UUID, ...] = (),
+    supersedes_evidence_id: UUID | None = None,
 ) -> str:
-    """Canonical digest for evidence body (ID lists sorted)."""
+    """Canonical digest for evidence body (ID lists sorted; lineage included)."""
     return content_digest(
         {
             "source": source.strip(),
@@ -306,6 +326,9 @@ def evidence_content_hash(
             "affected_belief_ids": [item.hex for item in _sorted_uuids(affected_belief_ids)],
             "novelty_of": [item.hex for item in _sorted_uuids(novelty_of)],
             "contradiction_of": [item.hex for item in _sorted_uuids(contradiction_of)],
+            "supersedes_evidence_id": (
+                None if supersedes_evidence_id is None else supersedes_evidence_id.hex
+            ),
         }
     )
 
@@ -550,9 +573,12 @@ class ResearchPatch(ResearchStateModel):
             target_kind=self.target_kind.value,
             target_id=self.target_id,
             content_hash=self.content_hash,
+            supersedes_patch_id=self.supersedes_patch_id,
         )
         if self.patch_id != expected_id:
-            raise ValueError("patch_id must be UUID5 of target_kind+target_id+content_hash")
+            raise ValueError(
+                "patch_id must be UUID5 of target_kind+target_id+parent+content_hash"
+            )
         return self
 
 
@@ -716,9 +742,12 @@ class ResearchStateVersion(ResearchStateModel):
         expected_id = research_state_version_id(
             manifest_content_hash=self.manifest.content_hash,
             parent_id=self.parent_state_version_id,
+            schema_version=self.schema_version,
         )
         if self.state_version_id != expected_id:
-            raise ValueError("state_version_id must be UUID5 of parent+manifest_content_hash")
+            raise ValueError(
+                "state_version_id must be UUID5 of parent+manifest_content_hash+schema_version"
+            )
         return self
 
 
@@ -740,8 +769,12 @@ class ResearchStatePin(ResearchStateModel):
             ("pinned_at", self.pinned_at),
         ):
             _require_utc(stamp, field_name=name)
+        if self.requested_as_of > self.knowledge_cutoff_at:
+            raise ValueError("requested_as_of must be <= knowledge_cutoff_at")
         if self.pinned_at < self.knowledge_cutoff_at:
             raise ValueError("pinned_at must be >= knowledge_cutoff_at")
+        if self.pinned_at < self.requested_as_of:
+            raise ValueError("pinned_at must be >= requested_as_of")
         return self
 
 
