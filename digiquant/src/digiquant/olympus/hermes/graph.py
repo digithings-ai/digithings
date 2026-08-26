@@ -118,9 +118,7 @@ def build_hermes_phases_thesis(
     phases.append(build_h2_market_thesis_exploration(client=thesis_client))
     phases.append(build_h3_thesis_vehicle_map(client=thesis_client))
     phases.append(build_h4_opportunity_screener(client=thesis_client))
-    phases.append(
-        build_h5_from_state(client=thesis_client, evidence_bundle_store=bundle_store)
-    )
+    phases.append(build_h5_from_state(client=thesis_client, evidence_bundle_store=bundle_store))
     phases.append(build_h6_from_state(evidence_bundle_store=bundle_store))
     phases.append(build_h7_pm_direction(client=shared_client))
     phases.append(_build_h8_risk_sizing(deps))

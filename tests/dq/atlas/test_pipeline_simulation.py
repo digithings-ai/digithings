@@ -257,7 +257,9 @@ class TestDurableH5H6LineageRoundTrip:
         grounding_calls: list[bool] = []
         pm_round: dict[str, int] = {}
 
-        def _analyst_override(messages: list[dict[str, Any]], _kwargs: dict[str, Any]) -> dict[str, Any]:
+        def _analyst_override(
+            messages: list[dict[str, Any]], _kwargs: dict[str, Any]
+        ) -> dict[str, Any]:
             inputs = parse_phase_inputs(messages)
             ticker = str(inputs.get("ticker", "AAPL")).upper()
             body = dict(DEFAULT_RESPONSES["AnalystPayload"])
@@ -361,11 +363,14 @@ class TestDurableH5H6LineageRoundTrip:
                 bundle_id = UUID(str(bundle_dump["bundle_id"]))
                 loaded = reloaded_store.load_base_bundle(bundle_id)
                 assert loaded.content_hash == bundle_dump["content_hash"]
-                assert reloaded_store.base_bundle_count_for(
-                    run_id=str(checkpoint_state.run_id),
-                    ticker=ticker,
-                    content_hash=loaded.content_hash,
-                ) == 1
+                assert (
+                    reloaded_store.base_bundle_count_for(
+                        run_id=str(checkpoint_state.run_id),
+                        ticker=ticker,
+                        content_hash=loaded.content_hash,
+                    )
+                    == 1
+                )
 
             prior_lineage = reloaded_store.lineage_bytes()
             run.hermes_deps = HermesGraphDeps(
