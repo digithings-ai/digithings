@@ -212,13 +212,15 @@ H6 selection cutover (WP11.3+). Bundles cite `state_version_id` +
 `evidence_ids` for WP12 lineage; amendments must reference one base and one
 missing-fact request (zero unlinked amendments). Unique
 `(source_run_id, ticker)` enforces one base per run/ticker; content-idempotent
-retry is a no-op.
+retry is a no-op. Migration `091_olympus_evidence_amendment_base_match.sql`
+adds a BEFORE INSERT/UPDATE trigger so amendment `base_bundle_id` must equal
+the linked request's `base_bundle_id` (090 FKs alone allow a cross-link).
 
 | Table | PK | Purpose |
 |-------|----|---------|
 | `olympus_ticker_evidence_bundles` | `(bundle_id UUID)` | Immutable H5 base bundle + payload jsonb; unique run/ticker and run/ticker/content. |
 | `olympus_missing_fact_requests` | `(request_id UUID)` | Named missing-fact request FK → base bundle. |
-| `olympus_evidence_bundle_amendments` | `(amendment_id UUID)` | Append-only H6 supplement FK → base + request. |
+| `olympus_evidence_bundle_amendments` | `(amendment_id UUID)` | Append-only H6 supplement FK → base + request; `091` requires request.base = amendment.base. |
 
 RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
 `service_role` reset then `SELECT, INSERT` only; `reject_olympus_evidence_bundle_mutation()`
