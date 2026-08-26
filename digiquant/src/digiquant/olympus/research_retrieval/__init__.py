@@ -21,6 +21,10 @@ WP11.3 deterministic H6 selection:
 WP11.4 bounded H6 missing-fact amendment:
 :mod:`digiquant.olympus.research_retrieval.h6_amendment`
 (one validated proposal → targeted retrieval → append-only amendment; no generic H6 search).
+WP13.2 attention persistence:
+:class:`~digiquant.olympus.research_retrieval.store.AttentionStore`
+(plans/decisions/context manifests/policy evaluations; migration
+``092_olympus_attention_context.sql``; storage only — WP13.3+ runtime wiring).
 """
 
 from __future__ import annotations
@@ -89,13 +93,27 @@ from digiquant.olympus.research_retrieval.pin import (
 from digiquant.olympus.research_retrieval.planner import (
     H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
     OLYMPUS_H6_SELECTION_MODE_ENV,
+    AttentionBudgetEstimate,
+    AttentionContextManifest,
+    AttentionDecision,
+    AttentionDecisionReconciliation,
+    AttentionFeatures,
+    AttentionMode,
+    AttentionPlan,
+    AttentionPolicyEvaluation,
+    AttentionReason,
+    AttentionRolloutMode,
+    AttentionTargetKind,
     H6Action,
     H6Budget,
     H6DecisionFeatures,
     H6Selection,
     H6SelectionMode,
     H6SelectionReason,
+    PersistedAttentionDecision,
+    PersistedAttentionPlan,
     assert_no_materiality_in_prompt,
+    attention_decision_id,
     build_h6_decision_features,
     incumbent_fallback_selection,
     resolve_h6_selection_mode,
@@ -108,6 +126,11 @@ from digiquant.olympus.research_retrieval.queries import (
 )
 from digiquant.olympus.research_retrieval.retriever import ResearchRetriever
 from digiquant.olympus.research_retrieval.store import (
+    ActualProviderAttemptUsage,
+    AttentionStore,
+    AttentionStoreConflict,
+    AttentionStoreError,
+    AttentionStoreMissingError,
     EvidenceBundleConflict,
     EvidenceBundleError,
     EvidenceBundleMissingError,
@@ -139,6 +162,22 @@ from digiquant.olympus.research_retrieval.views import (
 )
 
 __all__ = [
+    "ActualProviderAttemptUsage",
+    "AttentionBudgetEstimate",
+    "AttentionContextManifest",
+    "AttentionDecision",
+    "AttentionDecisionReconciliation",
+    "AttentionFeatures",
+    "AttentionMode",
+    "AttentionPlan",
+    "AttentionPolicyEvaluation",
+    "AttentionReason",
+    "AttentionRolloutMode",
+    "AttentionStore",
+    "AttentionStoreConflict",
+    "AttentionStoreError",
+    "AttentionStoreMissingError",
+    "AttentionTargetKind",
     "BackfillCounts",
     "BeliefStatus",
     "BeliefVersion",
@@ -176,6 +215,8 @@ __all__ = [
     "OLYMPUS_H6_SELECTION_MODE_ENV",
     "PatchMode",
     "PatchTargetKind",
+    "PersistedAttentionDecision",
+    "PersistedAttentionPlan",
     "RESEARCH_TOOLS",
     "ResearchCache",
     "ResearchPatch",
@@ -198,6 +239,7 @@ __all__ = [
     "VIEW_SCHEMA_VERSION",
     "assert_no_materiality_in_prompt",
     "attempt_h6_evidence_amendment",
+    "attention_decision_id",
     "backfill_legacy_manifests",
     "build_h5_evidence_bundle",
     "build_h6_decision_features",

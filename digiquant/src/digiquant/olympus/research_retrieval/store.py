@@ -16,6 +16,10 @@ Semantics:
 
 WP11.1 ticker evidence bundles live beside this store as
 :class:`EvidenceBundleStore` (migration ``090_olympus_evidence_bundles.sql``).
+
+WP13.2 attention plans/decisions/context/evaluations:
+:class:`AttentionStore` (migration ``092_olympus_attention_context.sql``).
+Storage only — no Atlas/Hermes runtime activation (WP13.3+).
 """
 
 from __future__ import annotations
@@ -23,10 +27,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, TypeVar
+from decimal import Decimal
+from typing import Any, Sequence, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from digiquant.olympus.research_retrieval.models import (
     BeliefVersion,
@@ -39,6 +44,19 @@ from digiquant.olympus.research_retrieval.models import (
     ResearchStatePin,
     ResearchStateVersion,
     TickerEvidenceBundle,
+    content_digest,
+)
+from digiquant.olympus.research_retrieval.planner import (
+    AttentionBudgetEstimate,
+    AttentionContextManifest,
+    AttentionDecisionReconciliation,
+    AttentionPlan,
+    AttentionPolicyEvaluation,
+    AttentionRolloutMode,
+    PersistedAttentionDecision,
+    PersistedAttentionPlan,
+    attention_decision_id,
+    attention_evaluation_id,
 )
 from digiquant.olympus.temporal import require_utc_datetime
 
@@ -695,7 +713,321 @@ class EvidenceBundleStore:
         return self.dump_snapshot()
 
 
+class ActualProviderAttemptUsage(BaseModel):
+    """Minimal WP1 attempt usage for attention reconciliation (not aggregate billing)."""
+
+    model_config = {"extra": "forbid", "frozen": True}
+
+    provider_attempt_id: UUID
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    searches: int = Field(default=0, ge=0)
+    cost_usd: Decimal | None = None
+
+
+class AttentionStoreConflict(RuntimeError):
+    """Same attention identity already stored with incompatible content."""
+
+
+class AttentionStoreError(RuntimeError):
+    """Store refused an attention write or reconciliation."""
+
+
+class AttentionStoreMissingError(LookupError):
+    """Exact plan/decision/manifest/evaluation not found."""
+
+
+def _usage_to_budget(usages: Sequence[ActualProviderAttemptUsage]) -> AttentionBudgetEstimate:
+    uncached = sum(
+        (item.prompt_tokens or 0) + (item.completion_tokens or 0) for item in usages
+    )
+    return AttentionBudgetEstimate(
+        provider_calls=len(usages),
+        searches=sum(item.searches for item in usages),
+        uncached_tokens=uncached,
+        min_h6_rounds=0,
+    )
+
+
+def _decision_needs_telemetry(planned: AttentionBudgetEstimate) -> bool:
+    return (
+        planned.provider_calls > 0
+        or planned.searches > 0
+        or planned.min_h6_rounds > 0
+        or planned.uncached_tokens > 0
+    )
+
+
+class AttentionStore:
+    """Append-only attention plan/decision/context/evaluation boundary (#2922 / WP13.2).
+
+    Dark launch: migration ``092_olympus_attention_context.sql``. No runtime
+    Atlas/Hermes activation — callers opt in via env gates in WP13.3+.
+    """
+
+    def __init__(self) -> None:
+        self._plans: dict[UUID, PersistedAttentionPlan] = {}
+        self._run_attempt_plan: dict[tuple[str, str], UUID] = {}
+        self._decisions: dict[UUID, PersistedAttentionDecision] = {}
+        self._attempt_links: dict[UUID, tuple[UUID, ...]] = {}
+        self._manifests: dict[UUID, AttentionContextManifest] = {}
+        self._evaluations: dict[UUID, AttentionPolicyEvaluation] = {}
+
+    def append_plan(
+        self,
+        plan: AttentionPlan,
+        *,
+        attempt_id: str,
+        recorded_at: datetime,
+    ) -> PersistedAttentionPlan:
+        """Persist one attention plan and its decisions append-only."""
+        stamp = require_utc_datetime(recorded_at, field_name="recorded_at")
+        run_key = (plan.run_id, attempt_id)
+        existing_id = self._run_attempt_plan.get(run_key)
+        if existing_id is not None and existing_id != plan.plan_id:
+            raise AttentionStoreConflict(
+                f"attention plan already exists for run/attempt {plan.run_id}/{attempt_id}"
+            )
+        envelope = PersistedAttentionPlan(plan=plan, attempt_id=attempt_id, recorded_at=stamp)
+        existing = self._plans.get(plan.plan_id)
+        if existing is not None:
+            if existing == envelope:
+                return existing
+            raise AttentionStoreConflict(f"plan_id {plan.plan_id} exists with different content")
+        self._plans[plan.plan_id] = envelope
+        self._run_attempt_plan[run_key] = plan.plan_id
+        for decision in plan.decisions:
+            self._append_decision_row(
+                plan=plan,
+                decision=decision,
+                attempt_id=attempt_id,
+                recorded_at=stamp,
+            )
+        return envelope
+
+    def _append_decision_row(
+        self,
+        *,
+        plan: AttentionPlan,
+        decision,
+        attempt_id: str,
+        recorded_at: datetime,
+    ) -> PersistedAttentionDecision:
+        decision_id = attention_decision_id(plan_id=plan.plan_id, target_key=decision.target_key)
+        row = PersistedAttentionDecision(
+            decision_id=decision_id,
+            plan_id=plan.plan_id,
+            decision=decision,
+            run_id=plan.run_id,
+            attempt_id=attempt_id,
+            state_version_id=plan.state_version_id,
+            policy_content_hash=plan.policy_content_hash,
+            recorded_at=recorded_at,
+        )
+        existing = self._decisions.get(decision_id)
+        if existing is not None:
+            if existing == row:
+                return existing
+            raise AttentionStoreConflict(
+                f"decision_id {decision_id} exists with different content"
+            )
+        self._decisions[decision_id] = row
+        self._attempt_links.setdefault(decision_id, ())
+        return row
+
+    def decision_count_for_plan(self, plan_id: UUID) -> int:
+        return sum(1 for row in self._decisions.values() if row.plan_id == plan_id)
+
+    def load_plan(self, plan_id: UUID) -> PersistedAttentionPlan:
+        row = self._plans.get(plan_id)
+        if row is None:
+            raise AttentionStoreMissingError(f"plan_id {plan_id} not found")
+        return row
+
+    def load_plan_as_of(
+        self,
+        *,
+        run_id: str,
+        attempt_id: str,
+        recorded_as_of: datetime,
+    ) -> PersistedAttentionPlan | None:
+        """Exact as-of read: plan for run/attempt when ``recorded_at <= bound``."""
+        bound = require_utc_datetime(recorded_as_of, field_name="recorded_as_of")
+        plan_id = self._run_attempt_plan.get((run_id, attempt_id))
+        if plan_id is None:
+            return None
+        row = self._plans.get(plan_id)
+        if row is None or row.recorded_at > bound:
+            return None
+        return row
+
+    def load_decision(self, decision_id: UUID) -> PersistedAttentionDecision:
+        row = self._decisions.get(decision_id)
+        if row is None:
+            raise AttentionStoreMissingError(f"decision_id {decision_id} not found")
+        return row
+
+    def load_decisions_as_of(
+        self,
+        *,
+        plan_id: UUID,
+        recorded_as_of: datetime,
+    ) -> tuple[PersistedAttentionDecision, ...]:
+        bound = require_utc_datetime(recorded_as_of, field_name="recorded_as_of")
+        rows = [
+            row
+            for row in self._decisions.values()
+            if row.plan_id == plan_id and row.recorded_at <= bound
+        ]
+        rows.sort(key=lambda item: item.decision.target_key)
+        return tuple(rows)
+
+    def link_provider_attempt(
+        self,
+        *,
+        decision_id: UUID,
+        provider_attempt_id: UUID,
+    ) -> tuple[UUID, ...]:
+        """Link one WP1 provider attempt to a persisted decision (append-only set)."""
+        if decision_id not in self._decisions:
+            raise AttentionStoreError(
+                f"cannot link provider attempt to missing decision_id {decision_id}"
+            )
+        existing = self._attempt_links.get(decision_id, ())
+        if provider_attempt_id in existing:
+            return existing
+        updated = tuple(sorted((*existing, provider_attempt_id), key=lambda item: item.hex))
+        self._attempt_links[decision_id] = updated
+        return updated
+
+    def provider_attempt_ids_for(self, decision_id: UUID) -> tuple[UUID, ...]:
+        return self._attempt_links.get(decision_id, ())
+
+    def append_context_manifest(self, manifest: AttentionContextManifest) -> AttentionContextManifest:
+        if manifest.plan_id not in self._plans:
+            raise AttentionStoreError(
+                f"context manifest references missing plan_id {manifest.plan_id}"
+            )
+        if manifest.decision_id is not None and manifest.decision_id not in self._decisions:
+            raise AttentionStoreError(
+                f"context manifest references missing decision_id {manifest.decision_id}"
+            )
+        existing = self._manifests.get(manifest.manifest_id)
+        if existing is not None:
+            if existing == manifest:
+                return existing
+            raise AttentionStoreConflict(
+                f"manifest_id {manifest.manifest_id} exists with different content"
+            )
+        self._manifests[manifest.manifest_id] = manifest
+        return manifest
+
+    def reconcile_plan(
+        self,
+        *,
+        plan_id: UUID,
+        attempt_usages: dict[str, Sequence[ActualProviderAttemptUsage]],
+        recorded_at: datetime,
+    ) -> AttentionPolicyEvaluation:
+        """Join planned decisions to per-target WP1 attempt usage; fail on gaps."""
+        stamp = require_utc_datetime(recorded_at, field_name="recorded_at")
+        envelope = self.load_plan(plan_id)
+        plan = envelope.plan
+        decisions = [row for row in self._decisions.values() if row.plan_id == plan_id]
+        decisions.sort(key=lambda item: item.decision.target_key)
+
+        reconciliations: list[AttentionDecisionReconciliation] = []
+        for row in decisions:
+            decision = row.decision
+            decision_id = row.decision_id
+            linked = self.provider_attempt_ids_for(decision_id)
+            usages = attempt_usages.get(decision.target_key, ())
+            actual = _usage_to_budget(usages)
+            if not _decision_needs_telemetry(decision.budget):
+                complete = len(usages) == 0
+            else:
+                usage_ids = {item.provider_attempt_id for item in usages}
+                complete = bool(linked) and usage_ids == set(linked) and bool(usages)
+            reconciliations.append(
+                AttentionDecisionReconciliation(
+                    decision_id=decision_id,
+                    target_key=decision.target_key,
+                    mode=decision.mode,
+                    reason=decision.reason,
+                    planned_budget=decision.budget,
+                    actual_budget=actual,
+                    provider_attempt_ids=linked,
+                    complete=complete,
+                )
+            )
+
+        planned_total = plan.total_budget
+        decision_targets = {row.decision.target_key for row in decisions}
+        actual_total = _usage_to_budget(
+            [
+                usage
+                for target_key, group in attempt_usages.items()
+                if target_key in decision_targets
+                for usage in group
+            ]
+        )
+        if plan.rollout_mode is AttentionRolloutMode.OFF:
+            complete = True
+        else:
+            complete = all(item.complete for item in reconciliations)
+
+        digest = content_digest(
+            {
+                "plan_id": plan_id.hex,
+                "reconciliations": [
+                    {
+                        "decision_id": item.decision_id.hex,
+                        "planned": item.planned_budget.model_dump(),
+                        "actual": item.actual_budget.model_dump(),
+                        "complete": item.complete,
+                    }
+                    for item in reconciliations
+                ],
+            }
+        )
+        return AttentionPolicyEvaluation(
+            evaluation_id=attention_evaluation_id(plan_id=plan_id, reconciliation_digest=digest),
+            plan_id=plan_id,
+            run_id=plan.run_id,
+            attempt_id=envelope.attempt_id,
+            rollout_mode=plan.rollout_mode,
+            complete=complete,
+            planned_total=planned_total,
+            actual_total=actual_total,
+            decision_reconciliations=tuple(reconciliations),
+            recorded_at=stamp,
+        )
+
+    def append_evaluation(
+        self,
+        evaluation: AttentionPolicyEvaluation,
+    ) -> AttentionPolicyEvaluation:
+        if evaluation.plan_id not in self._plans:
+            raise AttentionStoreError(
+                f"evaluation references missing plan_id {evaluation.plan_id}"
+            )
+        existing = self._evaluations.get(evaluation.evaluation_id)
+        if existing is not None:
+            if existing == evaluation:
+                return existing
+            raise AttentionStoreConflict(
+                f"evaluation_id {evaluation.evaluation_id} exists with different content"
+            )
+        self._evaluations[evaluation.evaluation_id] = evaluation
+        return evaluation
+
+
 __all__ = [
+    "ActualProviderAttemptUsage",
+    "AttentionStore",
+    "AttentionStoreConflict",
+    "AttentionStoreError",
+    "AttentionStoreMissingError",
     "EvidenceBundleConflict",
     "EvidenceBundleError",
     "EvidenceBundleMissingError",
