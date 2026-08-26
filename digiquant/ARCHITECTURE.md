@@ -862,17 +862,19 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
   publish-if-missing only — house writes defaults; overlays never fork per-user
   research trees. Models/store: `digiquant.olympus.research_corpus`.
-  **Phase 3 research-state contracts (#2841 / WP12.1).** Frozen/extra-forbid
+  **Phase 3 research-state contracts (#2841 / WP12.1, hardened #2856).** Frozen/extra-forbid
   Pydantic models in `olympus/research_retrieval/models.py`
   (`EvidenceRecord`, `BeliefVersion`, `ExpectedEventVersion`, `ResearchPatch`,
   `ResearchStateManifest`, `ResearchStateVersion`, `ResearchStatePin`,
   `LegacyDocumentRef`) establish append-only structured research memory before
   persistence. UTC temporal order (`event_time` / `effective_as_of` / `known_at` /
-  `recorded_at`), typed `TypedProvenance`, immutable sorted ID tuples, UUID5
-  content identity independent of input ordering, and parent/supersession
-  validation. Prose `documents` remain views — never authoritative truth; do not
-  parse legacy prose into claims. Distinct from Track B corpus pins (theme/asset/
-  segment identity). Store writers = WP12.2; preflight pin wiring = WP12.3.
+  `recorded_at`), typed `TypedProvenance`, immutable sorted+deduped ID tuples, UUID5
+  content identity independent of input ordering (lineage in evidence/patch IDs;
+  `state_version_id` includes `schema_version`), parent/supersession validation, and
+  pin invariants (`requested_as_of <= knowledge_cutoff_at <= pinned_at` with
+  `pinned_at >= requested_as_of`). Prose `documents` remain views — never authoritative
+  truth; do not parse legacy prose into claims. Distinct from Track B corpus pins
+  (theme/asset/segment identity). Store writers = WP12.2; preflight pin wiring = WP12.3.
   AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
   decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
   (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
