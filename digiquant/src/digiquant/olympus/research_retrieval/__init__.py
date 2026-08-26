@@ -25,6 +25,9 @@ WP13.2 attention persistence:
 :class:`~digiquant.olympus.research_retrieval.store.AttentionStore`
 (plans/decisions/context manifests/policy evaluations; migration
 ``092_olympus_attention_context.sql``; storage only — WP13.3+ runtime wiring).
+WP13.5 shadow evaluation:
+:mod:`digiquant.olympus.research_retrieval.shadow_evaluation`
+(reconcile plans to WP1 attempts + downstream artifacts; evidence-only).
 """
 
 from __future__ import annotations
@@ -125,6 +128,14 @@ from digiquant.olympus.research_retrieval.queries import (
     query_research,
 )
 from digiquant.olympus.research_retrieval.retriever import ResearchRetriever
+from digiquant.olympus.research_retrieval.shadow_evaluation import (
+    AttentionDownstreamOutcomes,
+    ResearchPolicyShadowEvaluationReport,
+    ShadowDecisionEvaluationRow,
+    ShadowProviderAttemptDetail,
+    evaluate_research_policy_shadow,
+    write_shadow_evaluation_report,
+)
 from digiquant.olympus.research_retrieval.store import (
     ActualProviderAttemptUsage,
     AttentionStore,
@@ -167,6 +178,7 @@ __all__ = [
     "AttentionContextManifest",
     "AttentionDecision",
     "AttentionDecisionReconciliation",
+    "AttentionDownstreamOutcomes",
     "AttentionFeatures",
     "AttentionMode",
     "AttentionPlan",
@@ -219,6 +231,7 @@ __all__ = [
     "PersistedAttentionPlan",
     "RESEARCH_TOOLS",
     "ResearchCache",
+    "ResearchPolicyShadowEvaluationReport",
     "ResearchPatch",
     "ResearchRetriever",
     "ResearchStateConflict",
@@ -234,6 +247,8 @@ __all__ = [
     "ResearchViewPublishBlocked",
     "RetrievalPhase",
     "STATE_UNAVAILABLE",
+    "ShadowDecisionEvaluationRow",
+    "ShadowProviderAttemptDetail",
     "TickerEvidenceBundle",
     "TypedProvenance",
     "VIEW_SCHEMA_VERSION",
@@ -253,6 +268,7 @@ __all__ = [
     "compile_views_from_store",
     "document_key_for_source_kind",
     "document_key_for_view",
+    "evaluate_research_policy_shadow",
     "evidence_bundle_writer_enabled",
     "extract_section",
     "facts_from_phase_inputs",
@@ -271,4 +287,5 @@ __all__ = [
     "retrieve_missing_fact_evidence",
     "select_h6",
     "validate_missing_fact_proposal",
+    "write_shadow_evaluation_report",
 ]

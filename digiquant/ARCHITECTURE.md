@@ -1006,6 +1006,14 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   provider work; H6 re-routes with post-H5 features (`challenge` vs `carry`).
   H4 roster/exclusions are byte-identical across `off`/`shadow`/`enforce`.
   Rollback: `off`/`shadow` restores incumbent H5/H6 paths.
+  **Attention shadow evaluation (#2934 / WP13.5).** File-only CLI
+  `scripts/atlas/evaluate_research_policy_shadow.py` joins `AttentionStore`
+  plans/decisions to exact WP1 `provider_attempt_id` usage and per-target
+  downstream outcomes (carries, amendments, forecast, H7, exploration) via
+  `research_retrieval/shadow_evaluation.py`. Missing telemetry or downstream
+  linkage sets `complete=False`; eligible shadow runs require 100%
+  decision-attempt reconciliation before enforcement. Rollback: shadow-only —
+  no `enforce` activation.
   pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
   graph construction (`digiquant.olympus.temporal`). Registry readers must call
   `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
