@@ -1500,7 +1500,7 @@ assuming it is always present.
 - **WP1 join + null usage (#2763 / migration 084).** Glass-box events soft-stamp
   `call_id` / `attempt_id` / `node_run_id` so Pipeline rows reconcile to
   `olympus_provider_*` (Gate 3). **Authority for economics is 067**; 066 is the ordered
-  compatibility surface. Migration 084 makes `prompt_tokens` / `completion_tokens` /
+  compatibility surface. Migration 085 makes `prompt_tokens` / `completion_tokens` /
   `cached_tokens` / `cost_usd` nullable (no DEFAULT 0) so missing usage stays NULL —
   digigraph `usage.record` and digillm `_record_usage` no longer zero-fill the event path.
   The public view appends join keys only (still no tokens/cost). Soft stamps, not hard FKs:
@@ -1888,13 +1888,16 @@ that metrics/attribution job order cannot alter meaning.
   otherwise falls through to provisional H9 nav only. Never sums
   `current_book_lookback` / legacy `position_attribution` into daily `pnl_pct` (#2598).
   H9 keeps writing provisional continuity; public curated views are migration
-  `074_olympus_accounting_views.sql` (#2599): `public_accounting_nav_history`
+  `074_olympus_accounting_views.sql` (#2599) with `day_return_pct` corrected in
+  `084_olympus_accounting_day_return_pct.sql` (#2779) to equity delta
+  `(E1 − E0) / E0` (includes `cash_pnl`): `public_accounting_nav_history`
   (finalized preferred + labeled legacy), `public_finalized_nav`,
   `public_accounting_period_status`, `public_daily_realized_attribution`.
   Adapters: Olympus `observability-queries` / `queries` and digiquant.io
   `useLivePortfolio`. Rollback = repoint to `public_nav_history` / `nav_history`.
   Cutover only after approved shadow interval (incl. one rebalance) with zero
-  unexplained reconciliation failures.
+  unexplained reconciliation failures. Do not flip
+  `OLYMPUS_ACCOUNTING_FINALIZER=on` without that ops evidence.
 - **Lookback vs realized (#2598 / Task 3.3)**: migration `073_olympus_lookback_vs_realized.sql`
   renames the physical diagnostic table to `current_book_lookback` (explicit
   `window_*` / `lookback_days` / `contract` columns). `position_attribution` remains a
@@ -1917,7 +1920,8 @@ that metrics/attribution job order cannot alter meaning.
   `tests/dq/atlas/test_finalize_period_accounting.py`,
   `tests/dq/atlas/test_migration_073.py`,
   `tests/dq/atlas/test_lookback_vs_realized.py`,
-  `tests/dq/atlas/test_migration_074.py`.
+  `tests/dq/atlas/test_migration_074.py`,
+  `tests/dq/atlas/test_migration_084.py`.
 - **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
   current-book lookback as realized attribution, public base-table grants on accounting,
   selecting provisional rows as final, in-place period correction,

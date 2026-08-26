@@ -417,7 +417,7 @@ export interface Database {
           attempt: number;
         };
       };
-      // Body-free Pipeline call trace (migration 066 + WP1 join keys in 084 / #2763).
+      // Body-free Pipeline call trace (migration 066 + WP1 join keys in 085 / #2763).
       // The base table remains service-role-only; this view excludes token and cost
       // telemetry (067 is economics authority) as well as prompts, tool values/results,
       // document bodies, credentials, and reasoning. Soft-stamped call_id / attempt_id /
