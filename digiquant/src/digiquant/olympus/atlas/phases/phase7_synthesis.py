@@ -587,9 +587,7 @@ def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
         )
         if prior is not None and _prior_is_valid_digest(prior):
             return {
-                "phase7_digest": _finalize_digest(
-                    state, apply_digest_metric_patch(state, prior)
-                )
+                "phase7_digest": _finalize_digest(state, apply_digest_metric_patch(state, prior))
             }
     mode = resolve_edit_mode(
         artifact_key=("digest", document_key),
