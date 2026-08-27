@@ -95,14 +95,14 @@ export function ResearchToWhyRedirectPage() {
   );
 }
 
-/** Old `/observability` URL → System (1:1 route rename; preserve query params). */
+/** Old `/observability` URL → Pipeline (run health lives there now). */
 function ObservabilityToSystemInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const qs = searchParams.toString();
-    router.replace(qs ? `/system?${qs}` : '/system');
+    router.replace(qs ? `/pipeline?${qs}` : '/pipeline');
   }, [router, searchParams]);
 
   return <RedirectFallback />;
@@ -140,14 +140,14 @@ export function ThesesHubToPortfolioRedirectPage() {
   );
 }
 
-/** Old `/architecture` URL → System (the "How Olympus works" explainer lives there now). */
+/** Old `/architecture` URL → Pipeline (System explainer removed). */
 function ArchitectureToSystemInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
     const qs = searchParams.toString();
-    router.replace(qs ? `/system?${qs}` : '/system');
+    router.replace(qs ? `/pipeline?${qs}` : '/pipeline');
   }, [router, searchParams]);
 
   return <RedirectFallback />;
