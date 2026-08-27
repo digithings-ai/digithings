@@ -19,6 +19,7 @@ import PipelineCanvas from './PipelineCanvas';
 import PipelineNodeDetail from './PipelineNodeDetail';
 import PipelineArtifactLedger from './PipelineArtifactLedger';
 import PipelineTraceLedger from './PipelineTraceLedger';
+import PipelineRunHealth from './PipelineRunHealth';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -255,6 +256,8 @@ export default function PipelineClient() {
           onChange={handleDateChange}
         />
       </header>
+
+      <PipelineRunHealth date={selectedDate} />
 
       <div
         data-testid="pipeline-workflow"

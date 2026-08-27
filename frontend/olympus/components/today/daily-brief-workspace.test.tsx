@@ -115,6 +115,7 @@ const populatedProps: DailyBriefWorkspaceProps = {
     segmentsTotal: 8,
     segmentsCarried: 0,
     segmentsFailed: 0,
+    durationS: 420,
   },
 };
 
