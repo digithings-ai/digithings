@@ -25,6 +25,7 @@ from digiquant.olympus.hermes.h9_cost_evidence import (
     investor_currency_from_state,
 )
 from digiquant.olympus.hermes.payloads import sized_book
+from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 from digiquant.olympus.hermes.state import HermesState
 from digiquant.olympus.hermes.writers.commit_io import (
     PreTradeRiskMode,
@@ -396,12 +397,20 @@ def build_commit_run_node(deps: CommitRunDeps):
         # attempt reads to decide "already committed", so a partial chain must leave no
         # manifest behind — otherwise a failed append reports as a clean no-op and the
         # lineage is silently short a commit. Raising here is the honest outcome.
+        h8_adjustments = [
+            SizingAdjustment.model_validate(event) for event in (book.get("adjustments") or [])
+        ]
+        h8_requested = {
+            str(ticker): float(pct) for ticker, pct in (book.get("requested_pct") or {}).items()
+        }
         ledger = append_commit_chain(
             client=deps.client,
             state=state,
             weights=booked.weights,
             cash_pct=booked.cash_pct,
             nav=booked.nav,
+            adjustments=h8_adjustments,
+            requested_pct=h8_requested,
         )
         cost_registry, cost_snapshots, cost_estimates = _persist_cost_liquidity_registry(
             client=deps.client,

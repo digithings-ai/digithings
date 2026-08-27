@@ -362,13 +362,15 @@ class RebalancePayload(TypedDict, total=False):
     recommended_portfolio: list[TargetWeightRow]
     actions: list[RebalanceActionRow]
     notes: str
-    # Reason-coded H8 sizing adjustments (#2417) — explanation-only, in-memory,
-    # never persisted. Each row mirrors ``SizingAdjustment.model_dump()``. Intended
-    # for future in-process consumers (H9 narrative/notes, pre-trade risk explaining
-    # a requested->approved delta, outcome-episode logging) — no such consumer reads
-    # this field yet. Absent/empty is valid (fully flat book, or sizing failed soft
-    # before any adjustment ran).
+    # Reason-coded H8 sizing adjustments (#2417) — mirrored into durable
+    # ``TargetAdjustment`` rows by H9 (#2768) when ``unit`` is ``pct``. Each row
+    # mirrors ``SizingAdjustment.model_dump()``. Absent/empty is valid (fully flat
+    # book, or sizing failed soft before any adjustment ran).
     adjustments: list[dict[str, Any]]
+    # Pre-cap request weights in percent (#2768) — H8's ``SizingResult.requested_pct``.
+    # H9 writes these onto ``portfolio_ledger_requested_targets.requested_weight``
+    # when they differ from the approved book.
+    requested_pct: dict[str, float]
     # WP8.4 (#2734): versioned raw-input mode and source bundle identity on every book.
     h8_sizing_input_mode: str
     allocation_input_bundle_hash: str

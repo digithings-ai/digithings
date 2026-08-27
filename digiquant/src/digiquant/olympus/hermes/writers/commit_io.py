@@ -631,13 +631,14 @@ def publish_portfolio_brief(
 ) -> PublishedArtifact:
     """Publish operator brief — weights from H8 ``sized_book`` only.
 
-    ``adjustments`` is excluded from the persisted payload: per its own docstring
-    on ``RebalancePayload`` (atlas/state.py), the H8 adjustment-event list is
-    in-memory/explanation-only and "never persisted" (#2417) — ``dict(book)``
-    would otherwise carry it into Supabase unconditionally whenever present.
+    ``adjustments`` and ``requested_pct`` are excluded from the document payload:
+    H9 persists them on the portfolio ledger (#2768); carrying them into the
+    ``pm-rebalance`` document would duplicate lineage without a reader contract.
     """
     date_str = state.run_date.isoformat()
-    payload = {k: v for k, v in dict(book).items() if k != "adjustments"}
+    payload = {
+        k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}
+    }
     return publish_document(
         client=client,
         document_key="pm-rebalance",

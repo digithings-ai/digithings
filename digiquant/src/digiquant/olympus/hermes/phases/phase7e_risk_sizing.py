@@ -837,10 +837,11 @@ def _build_sized_book(
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
         + f"Risk-sizing (H8): {result.explanation}{breaker_note}"
         f"{_unchallenged_note(unchallenged)}{mode_note}{bundle_note}",
-        # #2417: reason-coded, in-memory explanation of every material adjustment this
-        # H8 pass made — explanation-only, never persisted, never affects the weights
-        # computed above.
+        # #2417 / #2768: reason-coded H8 adjustments — persisted by H9 as
+        # TargetAdjustment rows when unit is ``pct``. ``requested_pct`` is the
+        # pre-cap map so ledger requested_weight can differ from approved.
         "adjustments": [event.model_dump() for event in events],
+        "requested_pct": dict(result.requested_pct),
         "h8_sizing_input_mode": sizing_mode_label,
     }
     if bundle_hash is not None:
