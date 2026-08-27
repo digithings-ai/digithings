@@ -214,4 +214,28 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('No decision published');
     expect(html).not.toContain('Holding the book');
   });
+
+  it('never shows mechanical sizing text in hero, portfolio beat, or latest decision', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace
+        {...populatedProps}
+        actions={[
+          {
+            ticker: 'XLF',
+            current_pct: 12,
+            recommended_pct: 8,
+            action: 'TRIM',
+            rationale: 'Position weight set by deterministic risk sizing.',
+          },
+        ]}
+        rationaleByTicker={{
+          XLF: 'Position weight set by deterministic risk sizing.',
+        }}
+      />
+    );
+
+    expect(html).not.toMatch(/deterministic risk sizing/i);
+    expect(html).toContain('Trim XLF');
+    expect(html).toContain('1 allocation change');
+  });
 });

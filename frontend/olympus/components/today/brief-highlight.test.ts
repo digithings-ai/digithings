@@ -111,4 +111,46 @@ describe('buildBriefHighlight', () => {
     expect(highlight.beats[0].text).toBe('Breadth improves while duration risk remains elevated.');
     expect(highlight.attention).not.toMatch(/%|bps|confidence/i);
   });
+
+  it('never shows mechanical sizing boilerplate — action + ticker only', () => {
+    const highlight = buildBriefHighlight({
+      ...base,
+      actions: [
+        {
+          ticker: 'XLF',
+          current_pct: 12,
+          recommended_pct: 8,
+          action: 'TRIM',
+          rationale: 'Position weight set by deterministic risk sizing.',
+        },
+      ],
+      rationaleByTicker: {
+        XLF: 'Position weight set by deterministic risk sizing.',
+      },
+    });
+    expect(highlight.attention).toBe('Trim XLF (12.0% → 8.0%)');
+    expect(highlight.attention).not.toMatch(/deterministic risk sizing/i);
+    expect(highlight.beats[1].text).toBe('Trim XLF (12.0% → 8.0%)');
+  });
+
+  it('prefers a mapped PM thesis over mechanical action.rationale', () => {
+    const highlight = buildBriefHighlight({
+      ...base,
+      actions: [
+        {
+          ticker: 'XLF',
+          current_pct: 12,
+          recommended_pct: 8,
+          action: 'TRIM',
+          rationale: 'Position weight set by deterministic risk sizing.',
+        },
+      ],
+      rationaleByTicker: {
+        XLF: 'Financials still track the breadth recovery after the selloff.',
+      },
+    });
+    expect(highlight.attention).toBe(
+      'Trim XLF — Financials still track the breadth recovery after the selloff.'
+    );
+  });
 });
