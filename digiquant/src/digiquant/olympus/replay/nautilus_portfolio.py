@@ -1,8 +1,11 @@
-"""WP10.4 — one-account shared-cash Nautilus portfolio replay (#2784).
+"""WP10.4/WP16.4 — one-account shared-cash Nautilus portfolio replay (#2784, #2991).
 
 Builds a single ``BacktestEngine`` with one cash account, all instruments, and
 global event ordering. Target deltas execute on the next synchronized bar.
 Worker-local imports only — never call the independent per-symbol average runner.
+
+WP16.4 adds :func:`reconcile_portfolio_replay_result` so every successful arm
+reconciles NAV, cash, positions, fills, and commission totals in one engine.
 """
 
 # score:allow pandas
@@ -376,4 +379,51 @@ def _money_to_decimal(value: Any) -> Decimal:
     return Decimal(text)
 
 
-__all__ = ["run_shared_cash_portfolio_replay"]
+def reconcile_portfolio_replay_result(result: PortfolioReplayResult) -> None:
+    """Verify NAV, cash, holdings, fills, and commission reconcile for *result*.
+
+    Raises ``ValueError`` when financially material fields disagree. Callers use
+    this as the WP16.4 acceptance metric: one engine, one reconciled book.
+    """
+    if result.status is not PortfolioReplayStatus.OK:
+        raise ValueError("reconcile requires status=ok")
+    if result.ending_cash is None or result.ending_nav is None:
+        raise ValueError("ok result missing ending_cash or ending_nav")
+    if result.total_commission is None or result.rebalance_commission is None:
+        raise ValueError("ok result missing commission totals")
+
+    holdings_value = sum((h.market_value for h in result.holdings), Decimal("0"))
+    expected_nav = (result.ending_cash + holdings_value).quantize(_MONEY_QUANTUM)
+    if result.ending_nav != expected_nav:
+        raise ValueError(
+            f"ending_nav {result.ending_nav} != ending_cash + holdings ({expected_nav})"
+        )
+
+    for holding in result.holdings:
+        expected_mv = (holding.quantity * holding.last_price).quantize(_MONEY_QUANTUM)
+        if holding.market_value != expected_mv:
+            raise ValueError(
+                f"{holding.ticker} market_value {holding.market_value} != qty*price ({expected_mv})"
+            )
+
+    fill_commission = sum((f.commission for f in result.fills), Decimal("0")).quantize(
+        _MONEY_QUANTUM
+    )
+    if fill_commission != result.total_commission:
+        raise ValueError(
+            f"total_commission {result.total_commission} != sum(fill commissions) "
+            f"({fill_commission})"
+        )
+
+    rebalance_commission = sum(
+        (f.commission for f in result.fills if not f.is_seed),
+        Decimal("0"),
+    ).quantize(_MONEY_QUANTUM)
+    if rebalance_commission != result.rebalance_commission:
+        raise ValueError(
+            f"rebalance_commission {result.rebalance_commission} != non-seed fills "
+            f"({rebalance_commission})"
+        )
+
+
+__all__ = ["reconcile_portfolio_replay_result", "run_shared_cash_portfolio_replay"]
