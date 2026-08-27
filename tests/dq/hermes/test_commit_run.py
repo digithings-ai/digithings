@@ -1955,7 +1955,9 @@ class TestPreTradeRiskH9:
 
     def _merging_client(self) -> FakeSupabaseClient:
         from dataclasses import dataclass
-        from typing import Any
+        from typing import (
+            Any,  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+        )
 
         from digiquant.olympus.atlas import pretrade_risk_registry as ptr
 

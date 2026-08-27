@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 

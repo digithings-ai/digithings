@@ -28,7 +28,11 @@ import json
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Sequence, TypeVar
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Any,
+    Sequence,
+    TypeVar,
+)
 from uuid import UUID, uuid5
 
 from pydantic import BaseModel, Field

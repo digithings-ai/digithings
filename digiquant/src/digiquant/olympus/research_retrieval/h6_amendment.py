@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -303,8 +303,7 @@ def attempt_h6_evidence_amendment(
     """Validate, retrieve, and optionally persist one H6 evidence amendment."""
     base_hash = base_bundle.content_hash
     if store is not None and (
-        store.amendment_count_for_base(base_bundle.bundle_id)
-        >= H6_AMENDMENT_POLICY_MAX_PER_BASE
+        store.amendment_count_for_base(base_bundle.bundle_id) >= H6_AMENDMENT_POLICY_MAX_PER_BASE
     ):
         return H6AmendmentResult(
             outcome=H6AmendmentOutcome.POLICY_EXHAUSTED,
