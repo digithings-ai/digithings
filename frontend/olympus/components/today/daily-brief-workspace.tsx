@@ -22,7 +22,7 @@ import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
 import { usablePmRationale } from '@/lib/pm-rationale';
-import { activeRebalanceActions, buildBriefHighlight } from './brief-highlight';
+import { activeRebalanceActions, buildBriefHighlight, portfolioActionChip } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
 export interface BriefRunHealth {
@@ -174,7 +174,8 @@ function decisionSummary(actions: RebalanceAction[]): {
   }
   return {
     label: `${active.length} allocation change${active.length === 1 ? '' : 's'}`,
-    detail: active.map((action) => `${action.action} ${action.ticker}`).join(' · '),
+    // Compact action chips only — thesis prose lives in the hero attention.
+    detail: active.map((action) => portfolioActionChip(action)).join(' · '),
     active,
   };
 }
@@ -239,14 +240,6 @@ export function DailyBriefWorkspace({
   const latestThesis = theses[0] ?? null;
   const latestRisk = risks[0] ?? null;
   const latestContext = contextBullets[0] ?? null;
-  const rationaleActions = decision.active.length > 0 ? decision.active : actions;
-  const decisionRationale = rationaleActions
-    .map((action) =>
-      usablePmRationale(
-        rationaleByTicker[action.ticker.trim().toUpperCase()] ?? action.rationale
-      )
-    )
-    .find(Boolean);
   const digestHref = buildPipelineHref({ date: digestDate, stage: 'synthesis', node: 'digest' });
 
   // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
@@ -360,11 +353,6 @@ export function DailyBriefWorkspace({
               </p>
               <p className="mt-1 text-lg font-semibold text-ink">{decision.label}</p>
               <p className="mt-0.5 text-xs text-ink-soft">{decision.detail}</p>
-              {decisionRationale ? (
-                <p className="mt-2 line-clamp-2 text-xs leading-snug text-ink-mute">
-                  {decisionRationale}
-                </p>
-              ) : null}
             </div>
             <Link
               href="/pipeline"
