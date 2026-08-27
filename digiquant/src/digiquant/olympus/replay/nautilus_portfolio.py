@@ -382,8 +382,8 @@ def _money_to_decimal(value: Any) -> Decimal:
 def reconcile_portfolio_replay_result(result: PortfolioReplayResult) -> None:
     """Verify NAV, cash, holdings, fills, and commission reconcile for *result*.
 
-  Raises ``ValueError`` when financially material fields disagree. Callers use
-  this as the WP16.4 acceptance metric: one engine, one reconciled book.
+    Raises ``ValueError`` when financially material fields disagree. Callers use
+    this as the WP16.4 acceptance metric: one engine, one reconciled book.
     """
     if result.status is not PortfolioReplayStatus.OK:
         raise ValueError("reconcile requires status=ok")

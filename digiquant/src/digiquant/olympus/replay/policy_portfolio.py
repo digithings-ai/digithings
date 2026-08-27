@@ -40,7 +40,6 @@ __all__ = [
     "slice_series_for_eval_fold",
 ]
 
-_MONEY_QUANTUM = Decimal("0.01")
 _MIN_EVAL_BARS = 3
 
 
@@ -183,5 +182,14 @@ def run_policy_arm_replay_isolated(
         work_dir=work_dir,
     )
     if result.status == PortfolioReplayStatus.OK:
-        reconcile_portfolio_replay_result(result)
+        try:
+            reconcile_portfolio_replay_result(result)
+        except ValueError as exc:
+            return inconclusive_result(
+                request_id=request.request_id,
+                request_content_hash=request.content_hash(),
+                status=PortfolioReplayStatus.ERROR,
+                message=f"reconcile failed: {exc}",
+                starting_cash=snapshot.starting_cash,
+            )
     return result

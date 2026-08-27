@@ -504,6 +504,40 @@ def test_reconcile_rejects_inconsistent_nav() -> None:
         reconcile_portfolio_replay_result(bad)
 
 
+def test_reconcile_failure_returns_typed_error(tmp_path) -> None:
+    pytest.importorskip("nautilus_trader")
+    from unittest.mock import patch
+
+    snapshot, manifest = _fixture_snapshot_and_manifest()
+    registry = PolicyRegistry()
+    ref = _register_portfolio_policy(
+        registry,
+        version_id="t1",
+        targets=(("AAPL", "0.4"), ("MSFT", "0.4")),
+    )
+    arm = _arm_spec(
+        arm=ReplayArmLabel.INCUMBENT,
+        arm_id="reconcile-fail",
+        manifest_hash=manifest.manifest_content_hash,
+        weights_fp="w",
+        portfolio_ref=ref,
+    )
+    with patch(
+        "digiquant.olympus.replay.policy_portfolio.reconcile_portfolio_replay_result",
+        side_effect=ValueError("synthetic reconcile failure"),
+    ):
+        result = run_policy_arm_replay_isolated(
+            snapshot=snapshot,
+            manifest=manifest,
+            arm=arm,
+            registry=registry,
+            work_dir=tmp_path,
+        )
+    assert result.status == PortfolioReplayStatus.ERROR
+    assert "reconcile failed" in result.message
+    assert result.ending_nav is None
+
+
 def test_policy_portfolio_never_calls_multi_symbol_runner() -> None:
     for name in ("policy_portfolio.py", "nautilus_portfolio.py"):
         tree = ast.parse((_REPLAY_ROOT / name).read_text(encoding="utf-8"))
