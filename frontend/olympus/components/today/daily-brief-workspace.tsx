@@ -22,7 +22,7 @@ import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
 import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
-import { buildBriefHighlight } from './brief-highlight';
+import { activeRebalanceActions, buildBriefHighlight } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
 export interface BriefRunHealth {
@@ -160,10 +160,14 @@ function decisionSummary(actions: RebalanceAction[]): {
   detail: string;
   active: RebalanceAction[];
 } {
-  const active = actions.filter((action) => {
-    const kind = (action.action || '').trim().toUpperCase();
-    return kind !== 'HOLD' && !(kind === 'EXIT' && (action.current_pct ?? 0) === 0);
-  });
+  const active = activeRebalanceActions(actions);
+  if (actions.length === 0) {
+    return {
+      label: 'No decision published',
+      detail: 'Awaiting portfolio recommendation',
+      active,
+    };
+  }
   if (active.length === 0) {
     return {
       label: 'Holding the book',

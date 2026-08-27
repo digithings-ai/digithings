@@ -206,5 +206,7 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('No additional digest context was recorded.');
     expect(html).toContain('Nothing material was published for this run yet.');
     expect(html).toContain('No research highlight was published for this run.');
+    expect(html).toContain('No decision published');
+    expect(html).not.toContain('Holding the book');
   });
 });
