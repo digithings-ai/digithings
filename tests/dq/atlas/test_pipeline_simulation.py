@@ -21,14 +21,14 @@ from uuid import UUID
 
 import pytest
 from digiquant.olympus.atlas.graph import AtlasInput
-from digiquant.olympus.atlas.state import AtlasResearchState
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
 from digiquant.olympus.atlas.testing import (
     DEFAULT_RESPONSES,
     parse_phase_inputs,
     parse_schema_name,
     simulated_pipeline,
 )
-from digiquant.olympus.hermes.graph import HermesGraphDeps
+from digiquant.olympus.hermes.graph import HermesGraphDeps, ThesisGraphDeps
 from digiquant.olympus.hermes.models.deliberation import (
     DeliberationAnalystTurn,
     DeliberationPmTurn,
@@ -36,6 +36,8 @@ from digiquant.olympus.hermes.models.deliberation import (
 )
 from digiquant.olympus.research_retrieval.h6_amendment import H6AmendmentOutcome
 from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
+
+from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
 
 @pytest.mark.unit
@@ -415,3 +417,63 @@ class TestDurableH5H6LineageRoundTrip:
         assert roundtrip_store.lineage_bytes() != prior_lineage
         assert len(roundtrip_store._amendments) >= 1
         assert roundtrip_store.unlinked_amendment_count() == 0
+
+
+@pytest.mark.unit
+class TestPhase3ResearchComposition:
+    """Integration 3.1 — one-graph Phase 3 lock surface (#3019)."""
+
+    def test_simulator_graphs_exclude_planner_nodes(self) -> None:
+        from digiquant.olympus.atlas.graph import AtlasGraphDeps, build_atlas_graph
+        from digiquant.olympus.atlas.phases.preflight import PreflightDeps
+        from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
+        from digiquant.olympus.hermes.graph import build_hermes_graph
+        from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps
+        from digiquant.olympus.hermes.phases.phase7e_risk_sizing import RiskSizingDeps
+
+        from tests.dq.hermes.phase3_e2e_fixtures import FORBIDDEN_PHASE3_NODES
+
+        client = FakeSupabaseClient()
+        atlas = build_atlas_graph(
+            deps=AtlasGraphDeps(
+                preflight=PreflightDeps(
+                    client=client,
+                    config_loader=lambda: AtlasConfigBundle(watchlist=["AAPL"]),
+                ),
+                triage=TriageDeps(client=client),
+            ),
+            watchlist=("AAPL", "MSFT"),
+        )
+        hermes = build_hermes_graph(
+            watchlist=["AAPL", "MSFT"],
+            deps=HermesGraphDeps(
+                thesis=ThesisGraphDeps(client=client),
+                risk_sizing=RiskSizingDeps(client=client),
+                commit_run=CommitRunDeps(client=client),
+            ),
+        )
+        atlas_nodes = set(atlas.get_graph().nodes.keys())
+        hermes_nodes = set(hermes.get_graph().nodes.keys())
+        assert FORBIDDEN_PHASE3_NODES.isdisjoint(atlas_nodes)
+        assert FORBIDDEN_PHASE3_NODES.isdisjoint(hermes_nodes)
+
+    def test_simulated_run_threads_evidence_bundle_store(self) -> None:
+        store = EvidenceBundleStore()
+        with simulated_pipeline(
+            watchlist=("AAPL",),
+            evidence_bundle_store=store,
+            publish=False,
+            commit_run=False,
+        ) as run:
+            final = run.invoke(
+                AtlasInput(
+                    refresh_scope="all",
+                    run_date=date(2026, 4, 26),
+                    watchlist=("AAPL",),
+                )
+            )
+        assert final.phase_hermes.asset_analysts.get("AAPL")
+        assert store._bases, "H5 must persist at least one base bundle when writer enabled"
+        snapshot = store.dump_snapshot()
+        reloaded = EvidenceBundleStore.from_snapshot(snapshot)
+        assert reloaded.lineage_bytes() == snapshot
