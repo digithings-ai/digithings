@@ -20,4 +20,4 @@ def _digigraph_importable() -> bool:
 
 
 if not _digigraph_importable():
-    collect_ignore = ["test_walk_forward.py"]
+    collect_ignore = ["test_walk_forward.py", "test_phase4_end_to_end.py"]
