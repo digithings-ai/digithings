@@ -1767,12 +1767,13 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
 
 #### H8 adjustment-event taxonomy (#2417)
 
-Explanation-only layer: every place H8 moves a ticker away from its raw requested value
-emits an in-memory `digiquant.olympus.hermes.sizing_events.SizingAdjustment` (frozen,
-`extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it computes —
-never persisted (no DB write, no `portfolio_ledger` interaction), never fed back into the
-weight math, and never reordering or renaming an existing control. `SizingAdjustmentType`
-enumerates all 12 causes and where each is emitted:
+Explanation-only at emission time: every place H8 moves a ticker away from its raw
+requested value emits an in-memory `digiquant.olympus.hermes.sizing_events.SizingAdjustment`
+(frozen, `extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it
+computes — never fed back into the weight math, and never reordering or renaming an
+existing control. Since #2768, H9 persists `unit="pct"` events as durable
+`TargetAdjustment` rows (migration 095); `unit="conviction"` stays in-memory only.
+`SizingAdjustmentType` enumerates all 12 causes and where each is emitted:
 
 | Type | Emitted by | Reduce-only? |
 |------|-----------|--------------|
@@ -2096,9 +2097,12 @@ Conventions this writer fixes, each of which is easy to get backwards:
   row references one of its order ids, the symbol is dropped from the append: only fills alter
   realized quantity (invariant 9), and superseding an order that already traded would rewrite
   history.
-- **Requested equals approved, for now.** H8 applies its caps upstream inside `size_portfolio`,
-  so H9 never sees a distinct pre-cap number and Phase 0 writes no `TargetAdjustment` rows.
-  Recording the pre-cap target is a later task, not an omission in this one.
+- **Requested vs approved.** H8 publishes ``requested_pct`` and pct-unit
+  ``SizingAdjustment`` events on the sized book; H9 writes
+  ``requested_weight`` from the pre-cap request when present and appends
+  ``TargetAdjustment`` rows keyed to each ``RequestedTarget`` (#2768 / migration
+  095). When H8 emits no request map and no pct adjustments for a symbol,
+  requested equals approved (no durable delta).
 - **Prior weights come from Atlas preflight** (`state.config.preferences["current_weights"]`) and
   are simply absent on a first run, so every delta is measured against 0. A first commit being
   all `add` is correct, not a bug.
