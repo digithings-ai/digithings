@@ -31,7 +31,8 @@ export default function PipelineRunHealth({ date }: { date: string }) {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    // Initial `loading` is already true — avoid setState in the effect body
+    // (react-hooks/set-state-in-effect). Writes stay in async callbacks.
     fetchAtlasRunDiagnostics()
       .then((d) => alive && setDiagnostics(d))
       .catch(() => alive && setDiagnostics([]))
