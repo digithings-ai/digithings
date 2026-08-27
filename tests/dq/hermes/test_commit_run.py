@@ -796,10 +796,13 @@ class TestMemoUnaddressedHeldCarry:
 _COMMITS = "portfolio_ledger_commits"
 _INTENTS = "portfolio_ledger_decision_intents"
 _REQUESTED = "portfolio_ledger_requested_targets"
+_ADJUSTMENTS = "portfolio_ledger_target_adjustments"
 _APPROVED = "portfolio_ledger_approved_targets"
 _ORDERS = "portfolio_ledger_order_intents"
 _EXECUTIONS = "portfolio_ledger_paper_executions"
 
+# Adjustments may be empty on a commit with no H8 deltas — keep them out of the
+# "every table must have rows" loops; they are mirrored for supersession reads.
 _LEDGER_TABLES = (_COMMITS, _INTENTS, _REQUESTED, _APPROVED, _ORDERS)
 
 
@@ -828,7 +831,7 @@ def _mirror_ledger(client: FakeSupabaseClient) -> None:
     docstring on ``_FakeQuery``), so a two-attempt supersession test has to bridge
     them by hand.
     """
-    for table in (*_LEDGER_TABLES, _EXECUTIONS):
+    for table in (*_LEDGER_TABLES, _ADJUSTMENTS, _EXECUTIONS):
         client.canned_reads[table] = [dict(r) for r in client.store.get(table, [])]
 
 
@@ -1063,9 +1066,131 @@ class TestCommitChainLedger:
 
         assert not out.get("errors"), out.get("errors")
         assert all(not _rows(client, t) for t in _LEDGER_TABLES)
+        assert not _rows(client, _ADJUSTMENTS)
         assert {r["ticker"] for r in _rows(client, "positions")} == {"SPY"}
         manifest = (out.get("phase_hermes") or PhaseHermesState()).commit_manifest or {}
         assert manifest.get("ledger_commit_id") is None
+
+
+class TestTargetAdjustmentPersistence:
+    """WP2 residual #2768 — durable requested→approved adjustment lineage."""
+
+    def _book_with_cap(self) -> dict:
+        return {
+            "recommended_portfolio": [{"ticker": "SPY", "target_pct": 40.0}],
+            "actions": [],
+            "notes": "H8 sized with single-name cap",
+            "requested_pct": {"SPY": 80.0},
+            "adjustments": [
+                {
+                    "ticker": "SPY",
+                    "adjustment_type": "single_name_cap",
+                    "original_pct": 80.0,
+                    "adjusted_pct": 40.0,
+                    "unit": "pct",
+                    "reason": "single-name cap 40%",
+                }
+            ],
+        }
+
+    def test_persists_target_adjustment_rows_keyed_to_requested_target(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state(sized_book=self._book_with_cap()))
+
+        adjustments = _rows(client, _ADJUSTMENTS)
+        assert len(adjustments) == 1
+        row = adjustments[0]
+        assert row["symbol"] == "SPY"
+        assert row["adjustment_type"] == "single_name_cap"
+        assert float(row["original_value"]) == pytest.approx(0.80)
+        assert float(row["adjusted_value"]) == pytest.approx(0.40)
+        assert row["reason"] == "single-name cap 40%"
+
+        requested = {r["id"]: r for r in _rows(client, _REQUESTED)}
+        assert row["requested_target_id"] in requested
+        assert requested[row["requested_target_id"]]["symbol"] == "SPY"
+
+    def test_requested_weight_reflects_pre_cap_intent(self) -> None:
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state(sized_book=self._book_with_cap()))
+
+        spy_requested = next(r for r in _rows(client, _REQUESTED) if r["symbol"] == "SPY")
+        spy_approved = next(r for r in _rows(client, _APPROVED) if r["symbol"] == "SPY")
+        assert float(spy_requested["requested_weight"]) == pytest.approx(0.80)
+        assert float(spy_approved["approved_weight"]) == pytest.approx(0.40)
+        assert spy_approved["requested_target_id"] == spy_requested["id"]
+
+    def test_conviction_unit_adjustments_are_not_persisted_as_weight_rows(self) -> None:
+        book = {
+            "recommended_portfolio": [{"ticker": "SPY", "target_pct": 50.0}],
+            "actions": [],
+            "notes": "conviction floor only",
+            "requested_pct": {"SPY": 50.0},
+            "adjustments": [
+                {
+                    "ticker": "SPY",
+                    "adjustment_type": "conviction_floor",
+                    "original_pct": 0.9,
+                    "adjusted_pct": 0.55,
+                    "unit": "conviction",
+                    "reason": "unchallenged conviction floor",
+                }
+            ],
+        }
+        client = _ledger_client(SPY=100.0)
+        _run(client, _state(sized_book=book))
+        assert not _rows(client, _ADJUSTMENTS)
+
+    def test_no_unexplained_durable_delta_when_adjustments_cover_request(self) -> None:
+        """Every material requested≠approved symbol must carry ≥1 adjustment row."""
+        client = _ledger_client(SPY=100.0, AAPL=50.0)
+        book = {
+            "recommended_portfolio": [
+                {"ticker": "SPY", "target_pct": 30.0},
+                {"ticker": "AAPL", "target_pct": 20.0},
+            ],
+            "actions": [],
+            "notes": "two capped names",
+            "requested_pct": {"SPY": 60.0, "AAPL": 40.0},
+            "adjustments": [
+                {
+                    "ticker": "SPY",
+                    "adjustment_type": "single_name_cap",
+                    "original_pct": 60.0,
+                    "adjusted_pct": 30.0,
+                    "unit": "pct",
+                    "reason": "single-name cap",
+                },
+                {
+                    "ticker": "AAPL",
+                    "adjustment_type": "sector_cap",
+                    "original_pct": 40.0,
+                    "adjusted_pct": 20.0,
+                    "unit": "pct",
+                    "reason": "sector cap",
+                },
+            ],
+        }
+        _run(client, _state(sized_book=book, analysts=_multi_analysts("SPY", "AAPL")))
+
+        by_symbol: dict[str, list[dict]] = {}
+        for row in _rows(client, _ADJUSTMENTS):
+            by_symbol.setdefault(row["symbol"], []).append(row)
+
+        for req in _rows(client, _REQUESTED):
+            if req["symbol"] == "CASH":
+                continue
+            approved = next(
+                r for r in _rows(client, _APPROVED) if r["requested_target_id"] == req["id"]
+            )
+            req_w = float(req["requested_weight"])
+            appr_w = float(approved["approved_weight"])
+            if abs(req_w - appr_w) <= 1e-9:
+                continue
+            assert by_symbol.get(req["symbol"]), (
+                f"{req['symbol']}: requested={req_w} approved={appr_w} with no "
+                "TargetAdjustment row — durable delta unexplained"
+            )
 
 
 class TestLedgerIoMutationPins:

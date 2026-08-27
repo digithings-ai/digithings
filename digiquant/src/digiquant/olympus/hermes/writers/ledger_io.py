@@ -1,9 +1,10 @@
-"""H9 authoritative commit chain — append-only portfolio lineage (#2418).
+"""H9 authoritative commit chain — append-only portfolio lineage (#2418, #2768).
 
 H9 is the *only* writer of the migration-069 lineage tables. One call to
 :func:`append_commit_chain` appends a whole commit: one ``portfolio_ledger_commits``
-row, one decision intent / requested target / approved target per symbol, and one
-order intent per symbol whose weight actually moved.
+row, one decision intent / requested target / approved target per symbol, zero or
+more ``target_adjustments`` for H8 pct-unit deltas (#2768), and one order intent
+per symbol whose weight actually moved.
 
 Three properties shape every line below.
 
@@ -17,9 +18,10 @@ chain *root*, not the current head: attempt 1's row keeps its NULL forever. The 
 is the row nobody supersedes (:func:`_heads`).
 
 **Only three tables chain.** ``commits``, ``approved_targets`` and ``order_intents``
-carry ``supersedes_id``. ``decision_intents`` and ``requested_targets`` do not — they
-are per-commit children, so a changed recommit appends *fresh* intent and requested
-rows beneath the new commit rather than superseding the old ones.
+carry ``supersedes_id``. ``decision_intents``, ``requested_targets``, and
+``target_adjustments`` do not — they are per-commit children, so a changed recommit
+appends *fresh* intent / requested / adjustment rows beneath the new commit rather
+than superseding the old ones.
 """
 
 from __future__ import annotations
@@ -28,6 +30,8 @@ import hashlib
 import json
 import logging
 import os
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -47,14 +51,18 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
     OrderIntentStatus,
     PortfolioCommit,
     RequestedTarget,
+    TargetAdjustment,
+    TargetAdjustmentType,
 )
 from digiquant.olympus.hermes.sizing import SizingCaps
+from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 
 logger = logging.getLogger(__name__)
 
 COMMITS = "portfolio_ledger_commits"
 DECISION_INTENTS = "portfolio_ledger_decision_intents"
 REQUESTED_TARGETS = "portfolio_ledger_requested_targets"
+TARGET_ADJUSTMENTS = "portfolio_ledger_target_adjustments"
 APPROVED_TARGETS = "portfolio_ledger_approved_targets"
 ORDER_INTENTS = "portfolio_ledger_order_intents"
 PAPER_EXECUTIONS = "portfolio_ledger_paper_executions"
@@ -309,6 +317,39 @@ def _policy_version_id(state: AtlasResearchState) -> str:
     return f"{_POLICY_PREFIX}/{caps.sizing_mode}/{digest}"
 
 
+def _request_pct_for_symbol(
+    *,
+    symbol: str,
+    target_pct: float,
+    requested_pct: Mapping[str, float],
+    pct_adjustments: Sequence[SizingAdjustment],
+) -> float:
+    """Pre-cap weight percent for ``symbol``, falling back to the approved target.
+
+    Preference order: explicit H8 ``requested_pct`` map; else the first pct-unit
+    adjustment's ``original_pct`` (chain start); else the approved target (no delta).
+    """
+    if symbol in requested_pct:
+        return float(requested_pct[symbol])
+    if pct_adjustments:
+        return float(pct_adjustments[0].original_pct)
+    return float(target_pct)
+
+
+def _pct_adjustments_by_symbol(
+    adjustments: Sequence[SizingAdjustment],
+) -> dict[str, list[SizingAdjustment]]:
+    """Group weight-percent adjustments; skip conviction-unit events."""
+    by_symbol: dict[str, list[SizingAdjustment]] = defaultdict(list)
+    for adjustment in adjustments:
+        if adjustment.unit != "pct":
+            continue
+        if _is_cash(adjustment.ticker):
+            continue
+        by_symbol[_symbol(adjustment.ticker)].append(adjustment)
+    return by_symbol
+
+
 def append_commit_chain(
     *,
     client: SupabaseClient,
@@ -316,14 +357,20 @@ def append_commit_chain(
     weights: dict[str, float],
     cash_pct: float,
     nav: float,
+    adjustments: Sequence[SizingAdjustment] | None = None,
+    requested_pct: Mapping[str, float] | None = None,
 ) -> LedgerAppend | None:
     """Append one authoritative commit and its lineage. Returns ``None`` when disabled.
 
     ``weights`` and ``cash_pct`` are H8's final book in percent; ``nav`` is the NAV
-    ``commit_io.book_portfolio`` computed from the same prior-book snapshot. Callers
-    must invoke this **before** persisting the commit manifest: a raise here has to
-    leave no manifest behind, so the next attempt re-commits instead of reporting a
-    false no-op.
+    ``commit_io.book_portfolio`` computed from the same prior-book snapshot.
+    ``adjustments`` / ``requested_pct`` come from the sized book (#2768): when a
+    pre-cap request differs from the approved weight, ``requested_weight`` stores
+    the request and matching ``TargetAdjustment`` rows explain the delta.
+
+    Callers must invoke this **before** persisting the commit manifest: a raise here
+    has to leave no manifest behind, so the next attempt re-commits instead of
+    reporting a false no-op.
     """
     if not ledger_enabled():
         logger.info(
@@ -336,6 +383,9 @@ def append_commit_chain(
     date_str = run_date.isoformat()
     effective_at = datetime.combine(run_date, time(0, 0), tzinfo=UTC)
     recorded_at = datetime.now(UTC)
+    h8_adjustments = list(adjustments or ())
+    h8_requested = {_symbol(k): float(v) for k, v in (requested_pct or {}).items()}
+    adjustments_by_symbol = _pct_adjustments_by_symbol(h8_adjustments)
 
     prior_commits = _rows_for_date(client=client, table=COMMITS, run_date=run_date)
     prior_approved = _rows_for_date(client=client, table=APPROVED_TARGETS, run_date=run_date)
@@ -356,11 +406,14 @@ def append_commit_chain(
     prior = _prior_weights(state)
 
     # A symbol earns a row if the new book names it, if the prior book still holds it
-    # (so an exit is recorded rather than implied by absence), or if it has an open
-    # approved target to supersede. Frozen symbols are excluded outright.
+    # (so an exit is recorded rather than implied by absence), if H8 requested it
+    # (even when caps drove it to zero), or if it has an open approved target to
+    # supersede. Frozen symbols are excluded outright.
     symbols = set(targets)
     symbols |= {s for s, pct in prior.items() if abs(pct) > _WEIGHT_EPSILON}
     symbols |= set(approved_heads)
+    symbols |= set(h8_requested)
+    symbols |= set(adjustments_by_symbol)
     symbols -= frozen
 
     closes = _last_closes(
@@ -379,6 +432,7 @@ def append_commit_chain(
 
     intent_rows: list[dict[str, Any]] = []
     requested_rows: list[dict[str, Any]] = []
+    adjustment_rows: list[dict[str, Any]] = []
     approved_rows: list[dict[str, Any]] = []
     order_rows: list[dict[str, Any]] = []
     unpriced: list[str] = []
@@ -386,6 +440,13 @@ def append_commit_chain(
     for symbol in sorted(symbols):
         target_pct = targets.get(symbol, 0.0)
         prior_pct = prior.get(symbol, 0.0)
+        symbol_adjustments = adjustments_by_symbol.get(symbol, [])
+        request_pct = _request_pct_for_symbol(
+            symbol=symbol,
+            target_pct=target_pct,
+            requested_pct=h8_requested,
+            pct_adjustments=symbol_adjustments,
+        )
         action, reason = _decision(symbol=symbol, prior_pct=prior_pct, target_pct=target_pct)
 
         intent = DecisionIntent(
@@ -398,20 +459,31 @@ def append_commit_chain(
             effective_at=effective_at,
             recorded_at=recorded_at,
         )
-        # H8 publishes no pre-adjustment weights, so the requested weight equals the
-        # approved one for now — a named Phase-0 limitation, not an assertion that no
-        # adjustment happened. ``requested_quantity`` stays NULL to satisfy the
-        # schema's weight-XOR-quantity check.
         requested = RequestedTarget(
             id=uuid4(),
             decision_intent_id=intent.id,
             run_date=run_date,
             symbol=symbol,
-            requested_weight=_weight(target_pct),
+            requested_weight=_weight(request_pct),
             requested_quantity=None,
             effective_at=effective_at,
             recorded_at=recorded_at,
         )
+        for event in symbol_adjustments:
+            adjustment_rows.append(
+                TargetAdjustment(
+                    id=uuid4(),
+                    requested_target_id=requested.id,
+                    run_date=run_date,
+                    symbol=symbol,
+                    adjustment_type=TargetAdjustmentType(event.adjustment_type.value),
+                    original_value=_weight(event.original_pct),
+                    adjusted_value=_weight(event.adjusted_pct),
+                    reason=event.reason,
+                    effective_at=effective_at,
+                    recorded_at=recorded_at,
+                ).model_dump(mode="json")
+            )
         approved = ApprovedTarget(
             id=uuid4(),
             requested_target_id=requested.id,
@@ -455,6 +527,7 @@ def append_commit_chain(
     _insert(client=client, table=COMMITS, rows=[commit.model_dump(mode="json")])
     _insert(client=client, table=DECISION_INTENTS, rows=intent_rows)
     _insert(client=client, table=REQUESTED_TARGETS, rows=requested_rows)
+    _insert(client=client, table=TARGET_ADJUSTMENTS, rows=adjustment_rows)
     _insert(client=client, table=APPROVED_TARGETS, rows=approved_rows)
     _insert(client=client, table=ORDER_INTENTS, rows=order_rows)
 
@@ -465,10 +538,11 @@ def append_commit_chain(
             ", ".join(unpriced),
         )
     logger.info(
-        "ledger_io: commit %s for %s — %d intents, %d orders, frozen=%s",
+        "ledger_io: commit %s for %s — %d intents, %d adjustments, %d orders, frozen=%s",
         commit_id,
         date_str,
         len(intent_rows),
+        len(adjustment_rows),
         len(order_rows),
         ",".join(sorted(frozen)) or "none",
     )
