@@ -165,6 +165,9 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Research');
     expect(html).toContain('Hold breadth above 65%');
     expect(html).toContain('Portfolio');
+    // Portfolio beat + latest decision are compact action chips — thesis once in hero.
+    expect(html).toContain('Trim NVDA (8.0% → 6.0%)');
+    expect(html.match(/Valuation stretched into earnings/g)?.length).toBe(1);
     expect(html).toContain('Watch');
     expect(html).toContain('Duration selloff');
     expect(html).toContain('1 allocation change');
@@ -181,9 +184,12 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('>NAV<');
     expect(html).not.toContain('98.5');
     expect(html).not.toContain('Sharpe');
-    // Regime string + confidence stayed out of the hero (badge only).
+    // Regime / run-type / confidence stay out of the Brief header strip.
     expect(html).not.toContain('0.6 confidence');
     expect(html).not.toContain('Slowing / Cooling / Neutral / Risk-Off');
+    expect(html).not.toContain('>delta<');
+    expect(html).not.toContain('>bearish<');
+    expect(html).toContain('as of Aug 6');
     expect(html).toContain('International breadth is improving');
     expect(html).toContain('Gold strength conflicts');
     expect(html).toContain('Maintain financial exposure');
@@ -199,6 +205,46 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('overflow-x-auto');
     expect(html).not.toContain('glass-card');
     expect(html).not.toContain('Market state');
+  });
+
+  it('shows the portfolio thesis once in the hero — not again in beats or latest decision', () => {
+    const thesis = 'Held at ~20%. ADX 26.1 confirms trend strength; trim into stretched financials.';
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace
+        {...populatedProps}
+        actions={[
+          {
+            ticker: 'XLF',
+            current_pct: 22,
+            recommended_pct: 18,
+            action: 'TRIM',
+            rationale: thesis,
+          },
+        ]}
+        rationaleByTicker={{ XLF: thesis }}
+        latestEvent={{
+          ...latestEvent,
+          reason: 'Maintain financial exposure while breadth confirms.',
+        }}
+      />
+    );
+
+    expect(html).toContain(`Trim XLF — ${thesis}`);
+    expect(html).toContain('Trim XLF (22.0% → 18.0%)');
+    expect(html).toContain('1 allocation change');
+    const attentionMatch = html.match(
+      /data-testid="brief-attention"[^>]*>([^<]*)</
+    );
+    expect(attentionMatch?.[1]).toContain(thesis);
+    const beatsMatch = html.match(/data-testid="brief-beats"[\s\S]*?<\/ul>/);
+    expect(beatsMatch?.[0]).toContain('Trim XLF (22.0% → 18.0%)');
+    expect(beatsMatch?.[0]).not.toContain('ADX 26.1');
+    // Sidebar: label + compact chip only (stop before Pipeline health).
+    const decisionBlock = html.match(
+      /Latest decision<\/p><p[^>]*>[^<]*<\/p><p[^>]*>([^<]*)<\/p>/
+    );
+    expect(decisionBlock?.[1]).toBe('Trim XLF (22.0% → 18.0%)');
+    expect(decisionBlock?.[1]).not.toContain('ADX');
   });
 
   it('does not imply a healthy pipeline when run telemetry is unavailable', () => {
