@@ -328,10 +328,11 @@ def run_research_agent(
 
     # Pre-LLM compaction (#399): Atlas phases can ship large phase_inputs / prior
     # briefs in ``messages``. Tier-1 also wraps the tool executor so digillm never
-    # injects multi-MB tool payloads into its local transcript.
+    # injects multi-MB tool payloads into its local transcript. Without a session
+    # workspace, compaction is a no-op for offload (keeps full payloads).
     tool_grounded = bool(tools) and execute_tool is not None
     compaction_cfg = compaction_config_from_env()
-    compaction = compact_messages(messages, compaction_cfg, session_id=None)
+    compaction = compact_messages(messages, compaction_cfg)
     messages = compaction.llm_messages
     execute_for_llm = (
         wrap_execute_tool_for_tier1(traced_execute_tool, config=compaction_cfg)
@@ -347,7 +348,7 @@ def run_research_agent(
             # Re-compact on retries: repair turns append assistant+user messages and
             # can push the transcript over the token threshold.
             if attempt > 0:
-                compaction = compact_messages(messages, compaction_cfg, session_id=None)
+                compaction = compact_messages(messages, compaction_cfg)
                 messages = compaction.llm_messages
             # The `finally` must span every deferral site, not just the parse block: a
             # deferred logical record is held in the handle until `finalize()` delivers it,

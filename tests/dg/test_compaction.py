@@ -316,3 +316,15 @@ class TestMaybeTruncate:
         )
         assert stub == "small"
         assert ref is None
+
+    def test_no_workspace_keeps_full_payload(self) -> None:
+        """Without run_data_dir, truncation must not drop the only copy."""
+        big = "W" * 4000
+        stub, ref = maybe_truncate_tool_payload(
+            big,
+            config=CompactionConfig(tier1_truncation_kb=1),
+            session_id=None,
+            workspace=None,
+        )
+        assert stub == big
+        assert ref is None

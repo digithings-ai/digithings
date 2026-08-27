@@ -225,8 +225,10 @@ def apply_tier1_truncation(
         msg_id = _msg_id(msg, i)
         filename = f"msg_{msg_id}.json"
         ref = offload_tool_result(session_id, msg_id, content, workspace=workspace)
-        if ref:
-            refs.append(ref)
+        if not ref:
+            # No workspace / write failed — keep the full payload (non-destructive).
+            continue
+        refs.append(ref)
         stub = _TRUNCATION_STUB_TMPL.format(filename=filename)
         out[i] = {**msg, "content": stub}
     return out, refs
@@ -286,6 +288,9 @@ def apply_tier2_summarisation(
     Returns ``(llm_view, evicted_count, evicted_ref)``. Summary messages already
     tagged with :data:`COMPACTION_SUMMARY_TAG` are never included in the eviction
     set (they stay or move with the kept prefix as protected).
+
+    When no session workspace is available, tier-2 is skipped so eviction cannot
+    destroy the only copy of the transcript (non-destructive contract).
     """
     tokens = estimate_tokens(messages)
     if tokens <= config.token_threshold:
@@ -293,6 +298,11 @@ def apply_tier2_summarisation(
 
     keep = max(0, config.keep_recent_messages)
     if keep >= len(messages):
+        return messages, 0, None
+
+    base = workspace if workspace is not None else session_workspace_dir(session_id)
+    if base is None:
+        logger.debug("compaction tier-2 skipped: no session workspace to offload evicted messages")
         return messages, 0, None
 
     recent = messages[-keep:] if keep else []
@@ -305,7 +315,10 @@ def apply_tier2_summarisation(
         return messages, 0, None
 
     eid = event_id or uuid.uuid4().hex[:12]
-    evicted_ref = offload_evicted_messages(session_id, to_evict, event_id=eid, workspace=workspace)
+    evicted_ref = offload_evicted_messages(session_id, to_evict, event_id=eid, workspace=base)
+    if not evicted_ref:
+        logger.warning("compaction tier-2 aborted: could not offload evicted messages")
+        return messages, 0, None
 
     summarise_fn = summarise or summarise_messages
     summary_body = summarise_fn(to_evict, model=config.summary_model)
@@ -313,8 +326,7 @@ def apply_tier2_summarisation(
         "role": "user",
         "content": (
             f"{COMPACTION_SUMMARY_TAG} Prior context was compacted to stay under the "
-            f"token budget. Full evicted messages: "
-            f"{evicted_ref or 'workspace/compaction (unavailable)'}.\n\n{summary_body}"
+            f"token budget. Full evicted messages: {evicted_ref}.\n\n{summary_body}"
         ),
     }
     out = [*protected, summary_msg, *recent]
@@ -431,6 +443,8 @@ def maybe_truncate_tool_payload(
     mid = msg_id or uuid.uuid4().hex[:12]
     filename = f"msg_{mid}.json"
     ref = offload_tool_result(session_id, mid, content, workspace=workspace)
+    if not ref:
+        return content, None
     stub = _TRUNCATION_STUB_TMPL.format(filename=filename)
     return stub, ref
 
