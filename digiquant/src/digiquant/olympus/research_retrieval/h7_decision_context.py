@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from pydantic import Field, model_validator

@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
 import yaml

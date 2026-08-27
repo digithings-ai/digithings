@@ -11,7 +11,7 @@ import ast
 import inspect
 import pathlib
 from datetime import date
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 import pytest
 from digiquant.olympus.atlas.state import (

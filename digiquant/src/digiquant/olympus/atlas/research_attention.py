@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, date, datetime
-from typing import Any, Literal
+from typing import Any, Literal  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from digiquant.olympus.atlas.state import (

@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID, uuid4
 
 from digiquant.olympus.research_retrieval.context_wiring import (

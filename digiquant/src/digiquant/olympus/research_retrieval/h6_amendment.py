@@ -12,7 +12,7 @@ import logging
 from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
