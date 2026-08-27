@@ -254,12 +254,45 @@ describe('DailyBriefWorkspace', () => {
 
     expect(html).toContain('Pipeline status unavailable');
     expect(html).not.toContain('Pipeline complete');
-    expect(html).toContain('No book decision recorded');
+    expect(html).toContain('No book change this session');
     expect(html).toContain('No additional digest context was recorded.');
     expect(html).toContain('Nothing material was published for this run yet.');
     expect(html).toContain('No research highlight was published for this run.');
     expect(html).toContain('No decision published');
     expect(html).not.toContain('Holding the book');
+  });
+
+  it('never surfaces derived book-event engineering jargon or +0.0pp ADD', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace
+        {...populatedProps}
+        latestEvent={{
+          date: '2026-08-25',
+          ticker: 'EWZ',
+          event: 'ADD',
+          weight_pct: 12,
+          prev_weight_pct: 12,
+          weight_change_pct: 0,
+          price: null,
+          thesis_id: null,
+          reason:
+            'Derived from positions book vs prior committed book 2026-08-24 (digest proposed_positions unavailable; no rebalance_decision.json for this date).',
+        }}
+      />
+    );
+
+    expect(html).not.toMatch(/proposed_positions|rebalance_decision\.json/i);
+    expect(html).not.toContain('+0.0pp');
+    expect(html).not.toContain('EWZ');
+    expect(html).toContain('No book change this session');
+  });
+
+  it('shows honest empty copy when no material book event is selected', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace {...populatedProps} latestEvent={null} />
+    );
+    expect(html).toContain('No book change this session');
+    expect(html).not.toContain('Last recorded book event</p><div');
   });
 
   it('never shows mechanical sizing text in hero, portfolio beat, or latest decision', () => {

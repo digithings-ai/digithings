@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDisplayRationaleByTicker,
+  isDerivedBookReason,
   isMechanicalSizingRationale,
   narrativesFromPmDirectionMemo,
   resolvePmRationale,
@@ -31,6 +32,19 @@ describe('isMechanicalSizingRationale', () => {
     expect(isMechanicalSizingRationale('')).toBe(true);
     expect(isMechanicalSizingRationale(null)).toBe(true);
     expect(usablePmRationale('   ')).toBeNull();
+  });
+});
+
+describe('isDerivedBookReason', () => {
+  it('hides execute_at_open derived fallback prose from desk UI', () => {
+    const reason =
+      'Derived from positions book vs prior committed book 2026-08-24 (digest proposed_positions unavailable; no rebalance_decision.json for this date).';
+    expect(isDerivedBookReason(reason)).toBe(true);
+    expect(usablePmRationale(reason)).toBeNull();
+  });
+
+  it('keeps real PM thesis text', () => {
+    expect(isDerivedBookReason('Maintain financial exposure while breadth confirms.')).toBe(false);
   });
 });
 
