@@ -1271,7 +1271,7 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Content-hash dedupe for manifests/pairs; paired arms require identical shared
   manifest hash; run status derived from events (no mutable running row);
   `load_gate_evidence` reconstructs full gate lineage from immutable IDs/hashes.
-  Dark launch — no workers or gate evaluator (WP16.4+).
+  Dark launch — gate evaluator remains WP16.6+; portfolio workers ship in WP16.4.
   **As-of policy replay inputs (#2987 / WP16.3):** `olympus/replay/asof_dataset.py`
   materializes cutoff-bound bars/cash/costs/timing/seed and builds
   `ReplayInputManifest` envelopes; `olympus/replay/policy_registry.py` resolves
@@ -1280,7 +1280,18 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   `known_at <= replay_as_of`; missing/unregistered/incomplete state fails closed;
   unavailable research output is typed — never fabricate H5/H6 counterfactuals.
   Later source mutations cannot change a historical manifest at the same cutoff.
-  No network/provider calls. Offline only — portfolio workers land in WP16.4+.
+  No network/provider calls. Offline only.
+  **Policy portfolio replay (#2991 / WP16.4):** `olympus/replay/policy_portfolio.py`
+  binds WP16.3 `AsOfDatasetSnapshot` + `ReplayInputManifest` + `ReplayArmSpec` to
+  the WP10.4 shared-cash adapter. Registered `portfolio_target` policies supply
+  sorted target weights; walk-forward folds slice eval bars deterministically
+  (`slice_series_for_eval_fold`). `build_policy_arm_request` validates manifest/arm
+  hash alignment and shared-input identity; `run_policy_arm_replay_isolated` spawns
+  one fresh worker per arm/fold. `reconcile_portfolio_replay_result` in
+  `nautilus_portfolio.py` asserts every OK result reconciles NAV, cash, holdings,
+  fills, and commission totals in one engine. Unavailable/mismatched policy → typed
+  ERROR inconclusive (never fabricated book). No `nautilus_runner`, no vectorized
+  fallback, no `BacktestResult` changes.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
