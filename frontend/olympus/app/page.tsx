@@ -13,7 +13,7 @@ import {
   DailyBriefWorkspace,
   type BriefRunHealth,
 } from '@/components/today/daily-brief-workspace';
-
+import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
 
 function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
@@ -136,20 +136,36 @@ export default function OverviewPage() {
   const pipe = data.pipeline_observability;
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
 
-  // Per-ticker rationale from the Hermes pm-rebalance decision (#704) — joined onto
-  // the move by ticker (normalized trim+UPPER).
-  const rationaleByTicker: Record<string, string> = {};
+  // Per-ticker PM thesis for Brief / actions (#704). Prefer real H7/H8 narrative;
+  // never pass through H8's mechanical sizing fallback (historical docs still
+  // carry it until the next pipeline run after #3043).
   const pmActions = (pipe?.pm_rebalance as { actions?: unknown } | null)?.actions;
-  if (Array.isArray(pmActions)) {
-    for (const row of pmActions) {
-      if (row && typeof row === 'object') {
-        const r = row as { ticker?: unknown; rationale?: unknown };
-        if (typeof r.ticker === 'string' && typeof r.rationale === 'string' && r.rationale.trim()) {
-          rationaleByTicker[r.ticker.trim().toUpperCase()] = r.rationale.trim();
-        }
-      }
+  const extrasByTicker: Record<string, string> = {};
+  for (const pos of positions) {
+    const key = pos.ticker.trim().toUpperCase();
+    if (!key || key === 'CASH') continue;
+    if (typeof pos.rationale === 'string' && pos.rationale.trim()) {
+      extrasByTicker[key] = pos.rationale.trim();
     }
   }
+  for (const doc of pipe?.deliberation_transcripts ?? []) {
+    const key = doc.ticker.trim().toUpperCase();
+    if (!key) continue;
+    const conclusion =
+      typeof doc.payload.conclusion === 'string'
+        ? doc.payload.conclusion
+        : typeof doc.payload.net_stance_reason === 'string'
+          ? doc.payload.net_stance_reason
+          : null;
+    if (conclusion?.trim() && !extrasByTicker[key]) {
+      extrasByTicker[key] = conclusion.trim();
+    }
+  }
+  const rationaleByTicker = buildDisplayRationaleByTicker({
+    pmRebalanceActions: pmActions,
+    pmDirectionMemo: pipe?.pm_direction_memo ?? null,
+    extrasByTicker,
+  });
 
   const performanceHistoryResolved = portfolio.snapshots ?? [];
   // The book's own as-of (latest performance-history point) — deliberately NOT

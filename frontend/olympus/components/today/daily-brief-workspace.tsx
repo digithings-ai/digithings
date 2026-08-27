@@ -24,6 +24,7 @@ import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
 import { formatDuration } from '@/components/system/run-economics-row';
 import { RunHealthTimeline } from '@/components/system/run-health-timeline';
+import { usablePmRationale } from '@/lib/pm-rationale';
 import { activeRebalanceActions, buildBriefHighlight } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
@@ -247,7 +248,11 @@ export function DailyBriefWorkspace({
   const latestContext = contextBullets[0] ?? null;
   const rationaleActions = decision.active.length > 0 ? decision.active : actions;
   const decisionRationale = rationaleActions
-    .map((action) => rationaleByTicker[action.ticker.trim().toUpperCase()])
+    .map((action) =>
+      usablePmRationale(
+        rationaleByTicker[action.ticker.trim().toUpperCase()] ?? action.rationale
+      )
+    )
     .find(Boolean);
   const digestHref = buildPipelineHref({ date: digestDate, stage: 'synthesis', node: 'digest' });
 
@@ -524,7 +529,8 @@ export function DailyBriefWorkspace({
                   ) : null}
                 </div>
                 <p className="mt-2 text-xs leading-snug text-ink-soft">
-                  {latestEvent.reason || 'No decision rationale was recorded.'}
+                  {usablePmRationale(latestEvent.reason) ||
+                    'No decision rationale was recorded.'}
                 </p>
                 <p className="mt-2 font-mono text-[10px] text-ink-mute">
                   {formatAsOf(latestEvent.date)}

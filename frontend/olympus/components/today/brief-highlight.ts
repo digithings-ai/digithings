@@ -4,6 +4,7 @@ import type {
   RebalanceAction,
   RiskItem,
 } from '@/lib/types';
+import { resolvePmRationale } from '@/lib/pm-rationale';
 
 /**
  * Personal Morning Brief hero copy (variant B: research + portfolio dual beat).
@@ -69,11 +70,10 @@ function rationaleFor(
   action: RebalanceAction,
   rationaleByTicker: Record<string, string>
 ): string | null {
-  const fromRow = typeof action.rationale === 'string' ? action.rationale.trim() : '';
-  if (fromRow) return fromRow;
   const key = action.ticker.trim().toUpperCase();
-  const mapped = rationaleByTicker[key]?.trim();
-  return mapped || null;
+  // Never surface H8's mechanical sizing fallback as a "reason" — prefer real
+  // PM thesis text already filtered into rationaleByTicker, else action+ticker only.
+  return resolvePmRationale(action.rationale, rationaleByTicker[key]);
 }
 
 function portfolioMoveLine(
@@ -95,7 +95,8 @@ function portfolioMoveLine(
 function eventLine(event: DashboardPositionEvent): string {
   const verb = titleCaseAction(event.event);
   const ticker = event.ticker.trim().toUpperCase();
-  if (event.reason?.trim()) return clip(`${verb} ${ticker} — ${event.reason.trim()}`);
+  const reason = resolvePmRationale(event.reason);
+  if (reason) return clip(`${verb} ${ticker} — ${reason}`);
   return clip(`${verb} ${ticker} recorded in the book ledger`);
 }
 
