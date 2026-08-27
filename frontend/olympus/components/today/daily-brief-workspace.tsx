@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type {
   ActionableItem,
+  AtlasRunDiagnostics,
   DashboardPositionEvent,
   Position,
   RebalanceAction,
@@ -21,6 +22,8 @@ import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
+import { formatDuration } from '@/components/system/run-economics-row';
+import { RunHealthTimeline } from '@/components/system/run-health-timeline';
 import { usablePmRationale } from '@/lib/pm-rationale';
 import { activeRebalanceActions, buildBriefHighlight } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
@@ -33,6 +36,7 @@ export interface BriefRunHealth {
   segmentsTotal: number | null;
   segmentsCarried: number | null;
   segmentsFailed: number | null;
+  durationS: number | null;
 }
 
 export interface DailyBriefWorkspaceProps {
@@ -70,6 +74,8 @@ export interface DailyBriefWorkspaceProps {
   latestEvent: DashboardPositionEvent | null;
   /** `undefined` while loading, `null` when the public health view has no row. */
   runHealth: BriefRunHealth | null | undefined;
+  /** Recent run diagnostics for the compact horizontal timeline (optional). */
+  runDiagnostics?: AtlasRunDiagnostics[];
 }
 
 type Tone = 'neutral' | 'positive' | 'negative' | 'warning';
@@ -218,6 +224,7 @@ export function DailyBriefWorkspace({
   contextBullets,
   latestEvent,
   runHealth,
+  runDiagnostics = [],
 }: DailyBriefWorkspaceProps) {
   // `regime` + `confidence` remain on the props contract for callers / badges
   // elsewhere; the personal hero no longer dumps them as a metrics sub-line (#3036).
@@ -371,14 +378,6 @@ export function DailyBriefWorkspace({
               className="group px-5 py-4 transition-colors hover:bg-ink/[0.03] sm:px-6"
             >
               <div className="flex items-center justify-between gap-3">
-                {/* "Pipeline health", not "System state" (full-UI-suite
-                    critique, P1): the sidebar's own nav (lib/nav.ts) pairs
-                    the label "System" with this exact Activity icon and
-                    points it at /system -- a different section. This tile
-                    links to /pipeline, so it now reuses GitBranch, the same
-                    icon this file's own footer link already uses for
-                    Pipeline (line ~192), instead of colliding with a label
-                    and icon users have learned means somewhere else. */}
                 <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
                   Pipeline health
                 </p>
@@ -389,10 +388,19 @@ export function DailyBriefWorkspace({
               </p>
               <p className="mt-0.5 font-mono text-[10px] tabular-nums text-ink-mute">
                 {pipeline.detail}
+                {runHealth?.durationS != null
+                  ? ` · ${formatDuration(runHealth.durationS)}`
+                  : null}
               </p>
             </Link>
           </div>
         </div>
+
+        {runDiagnostics.length > 0 ? (
+          <div className="border-t border-hair px-5 py-4 sm:px-7">
+            <RunHealthTimeline diagnostics={runDiagnostics} compact />
+          </div>
+        ) : null}
       </header>
 
       <dl

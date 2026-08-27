@@ -7,10 +7,10 @@
  * so the main Morning Read bundle stays lean; these fire only when their consumer mounts.
  *
  * Attribution and recommendation quality now live on Portfolio Attribution; per-position
- * risk remains on Holdings. System reads run telemetry from `atlas_run_health` — the curated projection
- * that bypasses the base-table RLS on `atlas_run_diagnostics` (migration 033). Spend
- * telemetry (cost, tokens, error_summary, breakdown) is intentionally excluded from the
- * view; economics tiles render "—" on the public anon-key dashboard.
+ * risk remains on Holdings. Pipeline + Brief read run telemetry from `atlas_run_health` —
+ * the curated projection that bypasses the base-table RLS on `atlas_run_diagnostics`
+ * (migration 033). Spend telemetry (cost, tokens, error_summary, breakdown) is intentionally
+ * excluded from the view; economics tiles render "—" on the public anon-key dashboard.
  *
  * Most queries are FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
  * empty result rather than throwing, so consumers render a clean empty state instead of an

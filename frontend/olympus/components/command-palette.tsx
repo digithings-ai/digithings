@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState, type ElementType } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Activity,
   BookMarked,
   Brain,
   CalendarRange,
@@ -106,7 +105,7 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
     {
       id: 'go-pipeline',
       title: 'Pipeline — the daily graph',
-      hint: 'Research → deliberation → decision',
+      hint: 'Graph, artifacts & run health',
       href: '/pipeline',
       icon: GitBranch,
     },
@@ -137,13 +136,6 @@ export function buildCommandItems(data: ReturnType<typeof useDashboard>['data'])
       hint: 'The research pipeline, explained',
       href: '/twelve-x?tab=how-it-works',
       icon: Globe,
-    },
-    {
-      id: 'go-system',
-      title: 'System',
-      hint: 'Run health & how Olympus works',
-      href: '/system',
-      icon: Activity,
     },
     {
       id: 'go-settings',
