@@ -65,4 +65,14 @@ export {
 } from "./types";
 export { fmtCompact, fmtPct, fmtMoney, fmtNum, toneClass } from "./format";
 export { dailyReturnsFromEquity, annualizedVolPct } from "./stats";
+export {
+  computeLivePerformanceKpis,
+  computeLiveVsMarkPct,
+  derivePriceAsOfDate,
+  type LiveKpiPosition,
+  type LiveKpiNavPoint,
+  type LiveKpiBenchmarkPoint,
+  type LivePerformanceKpis,
+  type LivePerformanceKpisInput,
+} from "./live-performance-kpis";
 export { TEARSHEET_DEMO } from "./demo-data";

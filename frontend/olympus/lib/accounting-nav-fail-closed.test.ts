@@ -43,8 +43,12 @@ describe('accounting NAV fail-closed wiring (#3029)', () => {
     const panelSrc = readFileSync(panel, 'utf8');
     expect(hookSrc).toContain('AccountingNavContractError');
     expect(hookSrc).toContain('ACCOUNTING_NAV_VIEW');
+    expect(hookSrc).toContain('navContractError');
     expect(hookSrc).not.toMatch(/from\(["']public_nav_history["']\)/);
+    expect(hookSrc).toContain('computeLivePerformanceKpis');
     expect(panelSrc).not.toContain('momentarily unavailable');
-    expect(panelSrc).toContain('{error}');
+    expect(panelSrc).toContain('navContractError');
+    expect(panelSrc).toContain('ContractBanner');
+    expect(panelSrc).toContain('PositionsTable');
   });
 });

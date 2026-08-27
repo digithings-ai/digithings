@@ -4,7 +4,9 @@ import { describe, it, expect, vi } from 'vitest';
 import type { DashboardData } from '@/lib/types';
 
 const { useDashboardMock } = vi.hoisted(() => ({ useDashboardMock: vi.fn() }));
+const { useLiveBriefKpisMock } = vi.hoisted(() => ({ useLiveBriefKpisMock: vi.fn(() => null) }));
 vi.mock('@/lib/dashboard-context', () => ({ useDashboard: () => useDashboardMock() }));
+vi.mock('@/lib/hooks/use-live-brief-kpis', () => ({ useLiveBriefKpis: () => useLiveBriefKpisMock() }));
 vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.children }));
 
 import OverviewPage from './page';

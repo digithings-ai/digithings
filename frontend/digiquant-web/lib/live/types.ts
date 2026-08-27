@@ -113,7 +113,13 @@ export interface NavPoint {
 /** Return shape of {@link useLivePortfolio}. */
 export interface LivePortfolioResult {
   loading: boolean;
+  /** Fatal error — positions could not load. */
   error: string | null;
+  /**
+   * Accounting NAV contract failure — positions may still be available.
+   * Surfaces {@link AccountingNavContractError} message; never silent fallback.
+   */
+  navContractError: string | null;
   /** `true` when a Supabase client exists (public env vars are set). */
   configured: boolean;
   /** The position book (latest snapshot date), each enriched with its mark. */
@@ -137,6 +143,8 @@ export interface LivePortfolioResult {
   liveVsMarkPct: number;
   /** Snapshot date the marks/weights are as of. */
   metricsAsOf: string | null;
+  /** Live-computed performance KPIs when accounting NAV history is present. */
+  kpis: import("@digithings/web").LivePerformanceKpis | null;
   /** Always `true` for this book — a research/paper portfolio, not a live fund. */
   isResearchPortfolio: boolean;
 }

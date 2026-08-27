@@ -106,7 +106,7 @@ function SectionShell({ children }: { children: React.ReactNode }) {
             <p className="dq-sub" style={{ marginInline: "auto" }}>
               The paper portfolio Atlas and Hermes maintain, marked against the same price
               feed. Positions and weights are the published book; prices tick live during
-              market hours, and P&amp;L is stated as of the last close.
+              market hours, and P&amp;L is stated as of the last price date.
             </p>
           </div>
         </Reveal>
@@ -121,6 +121,17 @@ function NoticeCard({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-[12px] border border-hair bg-surface px-[1.4rem] py-[1.6rem] text-center font-mono text-[0.82rem] text-ink-mute">
       {children}
+    </div>
+  );
+}
+
+function ContractBanner({ message }: { message: string }) {
+  return (
+    <div
+      role="alert"
+      className="mb-[1.1rem] rounded-[12px] border border-warn/40 bg-warn/[0.08] px-[1.2rem] py-[0.9rem] text-left font-mono text-[0.72rem] text-ink"
+    >
+      <span className="font-semibold text-warn">Accounting NAV unavailable.</span> {message}
     </div>
   );
 }
@@ -191,8 +202,18 @@ function PositionsTable({ positions }: { positions: LivePosition[] }) {
 
 export function OlympusPortfolioPanel() {
   const book = useLivePortfolio();
-  const { configured, loading, error, positions, nav, latestNav, liveTotalValue, liveVsMarkPct } =
-    book;
+  const {
+    configured,
+    loading,
+    error,
+    navContractError,
+    positions,
+    nav,
+    latestNav,
+    liveTotalValue,
+    liveVsMarkPct,
+    kpis,
+  } = book;
 
   if (!configured) {
     return (
@@ -220,7 +241,7 @@ export function OlympusPortfolioPanel() {
       </SectionShell>
     );
   }
-  if (positions.length === 0) {
+  if (positions.length === 0 && !loading) {
     return (
       <SectionShell>
         <NoticeCard>
@@ -231,59 +252,93 @@ export function OlympusPortfolioPanel() {
     );
   }
 
-  // base 100 (see docblock): since-inception is level − 100. `latestNav` is
-  // sourced from the NAV series, so it is null only if that series is empty
-  // (positions without NAV) — guard so the headline can never read "−100%".
-  const liveNav = liveTotalValue ?? latestNav;
-  const sinceInception = liveNav == null ? null : liveNav - 100;
+  // base 100 (see docblock): since-inception is level − 100 when the series
+  // seeds at 100. KPIs come from the shared live-mark path when NAV history
+  // exists; otherwise headline metrics stay hidden behind the contract banner.
+  const liveNav = kpis?.liveNav ?? liveTotalValue ?? latestNav;
+  const sinceInception = kpis?.sinceInceptionPct ?? (liveNav == null ? null : liveNav - 100);
+  const dayReturn = kpis?.dayReturnPct ?? null;
+  const excessReturn = kpis?.excessReturnPct ?? null;
+  const priceAsOf = kpis?.priceAsOfDate ?? book.metricsAsOf;
   const latest = nav.length > 0 ? nav[nav.length - 1] : null;
   const liveCount = positions.filter((p) => p.isLive).length;
   const investable = positions.filter((p) => p.ticker !== "CASH");
+  const asOfNote = priceAsOf ? `as of ${priceAsOf}` : undefined;
 
-  const headlines: DashboardHeadline[] = [
-    {
-      label: "portfolio NAV",
-      value: fmtNum(liveNav, 2),
-      note:
-        sinceInception == null
-          ? "base 100 · paper index"
-          : `${signedPct(sinceInception)} since inception · base 100`,
-      noteTone:
-        sinceInception == null
-          ? undefined
-          : sinceInception > 0
-            ? "up"
-            : sinceInception < 0
-              ? "down"
-              : undefined,
-    },
-    {
-      label: "live vs last close",
-      value: signedPct(liveVsMarkPct),
-      tone: liveVsMarkPct > 0 ? "up" : liveVsMarkPct < 0 ? "down" : undefined,
-      note:
-        liveCount > 0
-          ? `${liveCount} of ${investable.length} legs live`
-          : "market closed · marked at close",
-    },
-  ];
+  const headlines: DashboardHeadline[] = navContractError
+    ? []
+    : [
+        {
+          label: "portfolio NAV",
+          value: fmtNum(liveNav, 2),
+          note:
+            sinceInception == null
+              ? asOfNote ?? "base 100 · paper index"
+              : `${signedPct(sinceInception)} since inception · ${asOfNote ?? "base 100"}`,
+          noteTone:
+            sinceInception == null
+              ? undefined
+              : sinceInception > 0
+                ? "up"
+                : sinceInception < 0
+                  ? "down"
+                  : undefined,
+        },
+        {
+          label: "day return",
+          value: signedPct(dayReturn),
+          tone: dayReturn == null ? undefined : dayReturn > 0 ? "up" : dayReturn < 0 ? "down" : undefined,
+          note: asOfNote,
+        },
+        {
+          label: kpis?.benchmarkTicker ? `excess vs ${kpis.benchmarkTicker}` : "excess return",
+          value: signedPct(excessReturn),
+          tone:
+            excessReturn == null ? undefined : excessReturn > 0 ? "up" : excessReturn < 0 ? "down" : undefined,
+          note: asOfNote,
+        },
+        {
+          label: "live vs last close",
+          value: signedPct(kpis?.liveVsMarkPct ?? liveVsMarkPct),
+          tone:
+            (kpis?.liveVsMarkPct ?? liveVsMarkPct) > 0
+              ? "up"
+              : (kpis?.liveVsMarkPct ?? liveVsMarkPct) < 0
+                ? "down"
+                : undefined,
+          note:
+            liveCount > 0
+              ? `${liveCount} of ${investable.length} legs live`
+              : priceAsOf
+                ? `marked at ${priceAsOf}`
+                : "market closed · marked at close",
+        },
+      ];
 
-  const ratios: DashboardRatio[] = [
-    { label: "invested", value: `${fmtNum(latest?.investedPct ?? null, 0)}%` },
-    { label: "cash", value: `${fmtNum(latest?.cashPct ?? null, 0)}%` },
-    { label: "positions", value: String(investable.length) },
-    {
-      label: "prior day",
-      value: signedPct(latest?.dayReturnPct ?? null),
-      tone:
-        (latest?.dayReturnPct ?? 0) > 0 ? "up" : (latest?.dayReturnPct ?? 0) < 0 ? "down" : undefined,
-    },
-  ];
+  const ratios: DashboardRatio[] = navContractError
+    ? []
+    : [
+        { label: "invested", value: `${fmtNum(latest?.investedPct ?? null, 0)}%` },
+        { label: "cash", value: `${fmtNum(latest?.cashPct ?? null, 0)}%` },
+        { label: "positions", value: String(investable.length) },
+        {
+          label: "prior day",
+          value: signedPct(latest?.dayReturnPct ?? null),
+          tone:
+            (latest?.dayReturnPct ?? 0) > 0
+              ? "up"
+              : (latest?.dayReturnPct ?? 0) < 0
+                ? "down"
+                : undefined,
+        },
+      ];
 
-  const asOf = positions.find((p) => p.metricsAsOf)?.metricsAsOf ?? book.metricsAsOf;
+  const asOf = priceAsOf;
 
   return (
     <SectionShell>
+      {navContractError ? <ContractBanner message={navContractError} /> : null}
+
       <div className="mb-[1.1rem] flex flex-wrap items-center justify-center gap-x-[0.9rem] gap-y-[0.4rem]">
         <LiveBadge label="live research portfolio" ariaLabel="Live research portfolio" />
         {asOf ? (
@@ -293,13 +348,16 @@ export function OlympusPortfolioPanel() {
         ) : null}
       </div>
 
-      <PerformanceDashboard headlines={headlines} ratios={ratios} ratioColumns={4} />
+      {headlines.length > 0 ? (
+        <PerformanceDashboard headlines={headlines} ratios={ratios} ratioColumns={4} />
+      ) : null}
 
       <PositionsTable positions={positions} />
 
       <p className="mx-auto mt-[0.9rem] max-w-[640px] text-center font-mono text-[0.64rem] text-ink-mute">
         Research/paper portfolio — not a live-traded fund. Prices tick live during US market
-        hours; positions, weights and P&amp;L are stated as of the last published close.
+        hours; positions, weights and P&amp;L are stated as of the last price date
+        {asOf ? ` (${asOf})` : ""}.
       </p>
     </SectionShell>
   );
