@@ -22,6 +22,7 @@ import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
 import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
+import { buildBriefHighlight } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
 export interface BriefRunHealth {
@@ -200,10 +201,8 @@ const DESTINATIONS = [
 ] as const;
 
 export function DailyBriefWorkspace({
-  regime,
   regimeLabel,
   headline,
-  confidence,
   digestDate,
   bookDate,
   runType,
@@ -220,12 +219,23 @@ export function DailyBriefWorkspace({
   latestEvent,
   runHealth,
 }: DailyBriefWorkspaceProps) {
+  // `regime` + `confidence` remain on the props contract for callers / badges
+  // elsewhere; the personal hero no longer dumps them as a metrics sub-line (#3036).
   const book = reconcileBook(positions, { investedPct });
   const held = book.rows
     .filter((position) => position.ticker.toUpperCase() !== 'CASH')
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
   const decision = decisionSummary(actions);
   const pipeline = runStatus(runHealth);
+  const highlight = buildBriefHighlight({
+    headline,
+    actions,
+    rationaleByTicker,
+    actionables,
+    risks,
+    contextBullets,
+    latestEvent,
+  });
   const latestThesis = theses[0] ?? null;
   const latestRisk = risks[0] ?? null;
   const latestContext = contextBullets[0] ?? null;
@@ -304,17 +314,36 @@ export function DailyBriefWorkspace({
 
         <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="px-5 py-6 sm:px-7 sm:py-7 lg:border-r lg:border-hair">
+            {/* Personal pipeline update (variant B) — one attention sentence +
+                Research / Portfolio / Watch beats. Regime string + confidence
+                stay on the command-bar badge only; raw levels/indicators are
+                deliberately out of this hero (#3036). */}
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-              Market state · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
+              Your update · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
             </p>
-            <h1 className="mt-2 line-clamp-6 max-w-4xl font-display text-2xl leading-tight text-ink sm:line-clamp-none sm:text-3xl xl:text-4xl">
-              {headline ?? 'The latest market synthesis is not available yet.'}
+            <h1
+              data-testid="brief-attention"
+              className="mt-2 line-clamp-6 max-w-4xl font-display text-2xl leading-tight text-ink sm:line-clamp-none sm:text-3xl xl:text-4xl"
+            >
+              {highlight.attention}
             </h1>
+            <ul
+              data-testid="brief-beats"
+              className="mt-5 max-w-3xl space-y-2.5"
+              aria-label="Research, portfolio, and watch beats"
+            >
+              {highlight.beats.map((beat) => (
+                <li key={beat.kind} className="grid grid-cols-[5.5rem_1fr] gap-3 text-sm leading-snug">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+                    {beat.label}
+                  </span>
+                  <span className={beat.available ? 'text-ink-soft' : 'text-ink-mute'}>
+                    {beat.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-soft">
-              <span>{regime}</span>
-              {confidence != null ? (
-                <span className="font-mono tabular-nums">{confidence.toFixed(1)} confidence</span>
-              ) : null}
               <Link href={digestHref} className="font-medium text-accent hover:underline sm:hidden">
                 Open digest →
               </Link>
