@@ -353,6 +353,26 @@ class PolicyReplayStore:
         self._evaluations_by_hash[evaluation.evaluation_content_hash] = evaluation.evaluation_id
         return evaluation
 
+    def get_pair_by_content_hash(self, pair_content_hash: str) -> PersistedPair | None:
+        """Return a stored pair envelope by content hash, or ``None``."""
+        return self._pairs_by_hash.get(pair_content_hash)
+
+    def get_pair_by_pair_id(self, pair_id: str) -> PersistedPair | None:
+        """Return the first stored pair matching logical ``pair_id``, or ``None``."""
+        for row in self._pairs_by_hash.values():
+            if row.pair.pair_id == pair_id:
+                return row
+        return None
+
+    def get_comparison(self, comparison_id: UUID) -> PolicyComparisonReport | None:
+        """Return a stored comparison envelope by id, or ``None``."""
+        return self._comparisons.get(comparison_id)
+
+    def list_arm_ids_for_run(self, run_id: str) -> tuple[str, ...]:
+        """Arm ids that have an immutable result for ``run_id``."""
+        arms = sorted(arm_id for (rid, arm_id) in self._arm_results if rid == run_id)
+        return tuple(arms)
+
     def get_evaluation(self, evaluation_id: UUID) -> GateEvaluation | None:
         """Return a stored evaluation by id, or ``None`` if absent."""
         return self._evaluations.get(evaluation_id)
