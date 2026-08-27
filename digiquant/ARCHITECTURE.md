@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-03-29
+**Last updated:** 2026-08-27
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -716,6 +716,35 @@ The digiclaw heartbeat container calls `GET /check_drift?strategy_id=…` on a s
 
 ## 10. Docker and MCP Composition
 
+### Component layers (service vs research sandbox)
+
+digiquant ships **two** Docker images. They must not be merged:
+
+```mermaid
+flowchart TB
+  subgraph callers["Callers"]
+    DG["digigraph / MCP clients"]
+    Atlas["Atlas agents — research / paper book"]
+  end
+
+  subgraph images["digiquant images"]
+    SVC["digiquant/Dockerfile<br/>HTTP :8001 + Nautilus pipeline"]
+    SBX["digiquant/Dockerfile.sandbox<br/>baked quant stack — no service"]
+  end
+
+  DG -->|"JWT / orchestrator"| SVC
+  Atlas -->|"docker run python -c / script<br/>(#396; execute_code later #397)"| SBX
+
+  SBX -.->|"never"| Live["live brokers / order venues"]
+```
+
+| Image | Dockerfile | Role |
+|-------|------------|------|
+| Service | `digiquant/Dockerfile` | FastAPI + `digiquant[nautilus]` on port 8001 |
+| Research sandbox (#396) | `digiquant/Dockerfile.sandbox` | Isolated Python env with TA / portfolio / risk packages baked in for Atlas agent code |
+
+The sandbox is paper-book / research only: no broker credentials, no live-order path, no Nautilus live engine. Free-data clients (`yfinance`, `pandas-datareader`) may use outbound HTTPS; do not point the image at trading venues. MCP `execute_code` wrappers that consume this image are tracked separately (#397).
+
 ### Docker Compose Service Definition
 
 The `digiquant` service in `docker-compose.yml`:
@@ -747,6 +776,26 @@ digiquant:
 The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
 
 The image always installs `digiquant[nautilus]` (NautilusTrader + Polars pipeline). It does **not** download upstream Nautilus test CSVs at build time — market samples for backtests are under `digiquant/data/` (compose-mounted). Optional Nautilus package fixtures for local unit tests: `python digiquant/scripts/fetch_nautilus_test_data.py`.
+
+### Atlas research sandbox image (#396)
+
+Build context is the `digiquant/` directory (not the monorepo root):
+
+```bash
+docker build -f digiquant/Dockerfile.sandbox -t digiquant-sandbox digiquant
+docker run --rm digiquant-sandbox \
+  python -c "import skfolio, riskfolio, pandas_ta, arch, alphalens"
+```
+
+Manifest: `digiquant/requirements.sandbox.txt`. Notable bake choices:
+
+- **TA-Lib:** `TA-Lib>=0.7` manylinux wheels bundle `libta-lib` — debian slim has no `libta-lib-dev`. Apt install of that package is documented as a historical/OS-dependent alternative in the Dockerfile header.
+- **`pandas_ta`:** `pandas-ta-classic` installs as `pandas_ta_classic`; a thin shim under `digiquant/sandbox/pandas_ta/` (on `PYTHONPATH=/opt/digiquant_sandbox`) restores `import pandas_ta`.
+- **pandas 2.x:** pinned `<3` so `alphalens-reloaded` / `pyfolio-reloaded` resolve; `vectorbt` is pinned to `1.0.0` (1.1 requires pandas 3) and `plotly>=5.18,<6` (vectorbt 1.0 templates still use `scattermapbox`).
+- **yfinance retries:** `yfinance_retry.download_with_retry` / `history_with_retry` are baked for Yahoo rate-limits.
+- **Size budget:** keep the image under 3GB; record the measured size from `docker images digiquant-sandbox` in the PR that lands or verifies the build. Verified locally at **1.59GB**.
+
+The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itself — agents import the baked third-party stack only.
 
 ### Environment Variables
 
@@ -810,7 +859,9 @@ IB, Alpaca, and QuantConnect adapters all raise `NotImplementedError`. Implement
 
 ### Sandboxed Strategy Execution
 
-There is no sandbox for strategy code. This gap is documented in `ARCHITECTURE.md` under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
+There is no sandbox for **Nautilus strategy** code inside the HTTP service process. That gap remains under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
+
+Separately, the **Atlas research sandbox image** (`Dockerfile.sandbox`, #396) isolates agent-written research Python (indicators, portfolio maths, tearsheets) from the service process. It does not yet replace strategy-code isolation for `run_backtest`; MCP `execute_code` that shells into the sandbox is #397.
 
 ### Persistent Run History
 
