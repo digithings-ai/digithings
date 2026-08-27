@@ -1301,7 +1301,21 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   eval. Paired replay arms share identical fold plans; undersampled history returns
   `insufficient_history` — never silent drop or pass/fail by omission.
   `verify_fold_assignments` property-checks zero train/eval overlap and embargo
-  boundaries. Comparison/governance wiring remains WP16.6+.
+  boundaries.
+  **Paired policy comparison reports (#2999 / WP16.6):** `olympus/replay/comparison.py`
+  aggregates fold/arm evidence into a rich `PolicyComparisonReport` across required
+  metric groups — research (calls/searches/tokens/cost/latency/budget), signal
+  quality (novelty/conflict/coverage/exploration/staleness), forecast calibration/
+  proper scores/uncertainty, actions/turnover/cost/fills, NAV/active return/
+  drawdown, tail/scenarios/constraints, and engine/data/failure metadata. Shared
+  manifest hash is required; every leaf carries direction, absolute/delta,
+  count/missing, provenance, and evidence mode. Observed and modeled evidence are
+  never pooled into one leaf; missing inputs are typed unavailable (never zero).
+  Undersampled folds, accounting breaches, and hard-constraint breaches block
+  promotion (`eligible_for_governance=False`) while remaining visible. Fold IDs
+  are retained; `report_content_hash` is deterministic. `to_governance_envelope()`
+  projects into the WP16.2 store `PolicyComparisonReport` persistence row. Gate
+  criteria evaluation remains WP16.7+.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
