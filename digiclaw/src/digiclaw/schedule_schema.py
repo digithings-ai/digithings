@@ -103,7 +103,7 @@ def load_agent_definition(path: Path) -> AgentDefinition:
             f"{path}: expected a mapping at document root",
         )
 
-    data: dict[str, Any] = dict(raw)
+    data: dict[str, object] = dict(raw)
     if "name" not in data:
         data["name"] = path.stem
 
