@@ -48,8 +48,11 @@ export interface DailyBriefWorkspaceProps {
     sincePct: number | null;
     sinceDate: string | null;
     dailyPct: number | null;
+    dailyAsOf: string | null;
+    sinceAsOf: string | null;
     benchTicker: string | null;
     excessPct: number | null;
+    excessAsOf: string | null;
   };
   metrics: {
     maxDrawdown: number | null;
@@ -364,9 +367,9 @@ export function DailyBriefWorkspace({
         data-brief-section="scoreboard"
         className="grid grid-cols-2 divide-y divide-hair border-b border-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0"
       >
-        <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={bookDate && digestDate !== bookDate ? formatAsOf(bookDate) : 'latest close'} />
-        <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
-        <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note="aligned return window" />
+        <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
+        <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
+        <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
         <Metric label="Max drawdown" value={signedPct(metrics.maxDrawdown)} tone={metrics.maxDrawdown == null ? 'neutral' : 'negative'} />
         <Metric label="Volatility" value={unsignedPct(metrics.volatility)} />
         <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />

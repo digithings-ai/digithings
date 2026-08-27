@@ -29,6 +29,10 @@ import { supabase } from "./supabaseClient";
 import { useLivePrices } from "./useLivePrices";
 import type { LivePortfolioResult, NavPoint, UseLivePortfolioOptions } from "./types";
 import {
+  computeLivePerformanceKpis,
+  type LivePerformanceKpis,
+} from "@digithings/web";
+import {
   computeLiveTotal,
   navRowToPoint,
   positionRowToLive,
@@ -42,6 +46,7 @@ import {
 const POSITION_COLUMNS =
   "ticker, name, category, sector_bucket, weight_pct, entry_price, entry_date, current_price, day_change_pct, unrealized_pnl_pct, since_entry_return_pct, metrics_as_of";
 const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract";
+const LANDING_BENCHMARK_TICKER = "SPY";
 
 export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePortfolioResult {
   const client = "client" in options ? options.client ?? null : supabase;
@@ -49,8 +54,12 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
 
   const [rawPositions, setRawPositions] = useState<PositionRow[]>([]);
   const [nav, setNav] = useState<NavPoint[]>([]);
+  const [benchmarkHistory, setBenchmarkHistory] = useState<Array<{ date: string; price: number }>>(
+    [],
+  );
   const [loading, setLoading] = useState<boolean>(configured);
   const [error, setError] = useState<string | null>(null);
+  const [navContractError, setNavContractError] = useState<string | null>(null);
 
   // One-shot read of the book + NAV series. No client → `loading` stays at its
   // initial `false` (see useState above); nothing to fetch.
@@ -59,21 +68,55 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setNavContractError(null);
     void (async () => {
       try {
-        const [posRes, navRes] = await Promise.all([
-          client.from("public_portfolio_positions").select(POSITION_COLUMNS),
-          client.from(ACCOUNTING_NAV_VIEW).select(NAV_COLUMNS).order("date", { ascending: true }),
-        ]);
+        const posRes = await client.from("public_portfolio_positions").select(POSITION_COLUMNS);
         if (cancelled) return;
         if (posRes.error) throw new Error(posRes.error.message);
-        if (navRes.error) throw new AccountingNavContractError(navRes.error);
         setRawPositions(Array.isArray(posRes.data) ? (posRes.data as PositionRow[]) : []);
-        setNav(
-          (Array.isArray(navRes.data) ? navRes.data : [])
+
+        const navRes = await client
+          .from(ACCOUNTING_NAV_VIEW)
+          .select(NAV_COLUMNS)
+          .order("date", { ascending: true });
+        if (cancelled) return;
+        if (navRes.error) {
+          const contractErr = new AccountingNavContractError(navRes.error);
+          setNavContractError(contractErr.message);
+          setNav([]);
+          setBenchmarkHistory([]);
+        } else {
+          const navPoints = (Array.isArray(navRes.data) ? navRes.data : [])
             .map((r) => navRowToPoint(r as Record<string, unknown>))
-            .filter((p): p is NavPoint => p !== null),
-        );
+            .filter((p): p is NavPoint => p !== null);
+          setNav(navPoints);
+
+          const firstDate = navPoints[0]?.date;
+          if (firstDate) {
+            const benchRes = await client
+              .from("price_history")
+              .select("date, close")
+              .eq("ticker", LANDING_BENCHMARK_TICKER)
+              .gte("date", firstDate)
+              .order("date", { ascending: true });
+            if (!cancelled && !benchRes.error && Array.isArray(benchRes.data)) {
+              setBenchmarkHistory(
+                benchRes.data
+                  .map((r) => {
+                    const date = typeof r.date === "string" ? r.date : null;
+                    const price = typeof r.close === "number" ? r.close : Number(r.close);
+                    return date && Number.isFinite(price) ? { date, price } : null;
+                  })
+                  .filter((p): p is { date: string; price: number } => p !== null),
+              );
+            } else if (!cancelled) {
+              setBenchmarkHistory([]);
+            }
+          } else {
+            setBenchmarkHistory([]);
+          }
+        }
       } catch (e) {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : "Failed to load portfolio");
@@ -116,16 +159,44 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
     [positions],
   );
 
+  const kpis: LivePerformanceKpis | null = useMemo(() => {
+    if (nav.length === 0) return null;
+    const kpiPositions = positions.map((p) => {
+      const q = quotes[p.ticker];
+      const livePriceDate =
+        p.isLive && q?.ts
+          ? new Date(q.ts).toISOString().slice(0, 10)
+          : null;
+      return {
+        ticker: p.ticker,
+        weightPct: p.weightPct,
+        markPrice: p.currentPrice,
+        effectivePrice: p.livePrice,
+        isLive: p.isLive,
+        metricsAsOf: p.metricsAsOf,
+        livePriceDate,
+      };
+    });
+    return computeLivePerformanceKpis({
+      positions: kpiPositions,
+      navHistory: nav.map((n) => ({ date: n.date, nav: n.nav })),
+      benchmarkHistory,
+      benchmarkTicker: benchmarkHistory.length ? LANDING_BENCHMARK_TICKER : null,
+    });
+  }, [positions, quotes, nav, benchmarkHistory]);
+
   return {
     loading,
     error,
+    navContractError,
     configured,
     positions,
     nav,
     latestNav,
-    liveTotalValue,
-    liveVsMarkPct,
-    metricsAsOf,
+    liveTotalValue: kpis?.liveNav ?? liveTotalValue,
+    liveVsMarkPct: kpis?.liveVsMarkPct ?? liveVsMarkPct,
+    metricsAsOf: kpis?.priceAsOfDate ?? metricsAsOf,
+    kpis,
     isResearchPortfolio: true,
   };
 }

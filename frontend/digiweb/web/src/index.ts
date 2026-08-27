@@ -308,6 +308,9 @@ export {
   toneClass,
   dailyReturnsFromEquity,
   annualizedVolPct,
+  computeLivePerformanceKpis,
+  computeLiveVsMarkPct,
+  derivePriceAsOfDate,
   TEARSHEET_DEMO,
   type CandlestickChartProps,
   type TimeSeriesProps,
@@ -332,6 +335,11 @@ export {
   type TearsheetOhlcBar,
   type TearsheetTrade,
   type TradeReturnBar,
+  type LiveKpiPosition,
+  type LiveKpiNavPoint,
+  type LiveKpiBenchmarkPoint,
+  type LivePerformanceKpis,
+  type LivePerformanceKpisInput,
 } from "./components/finance-tearsheet";
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";
