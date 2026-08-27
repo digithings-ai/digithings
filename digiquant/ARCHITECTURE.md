@@ -1378,7 +1378,17 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   get/evaluate. `POST /v1/olympus/policy_governance_decisions` records
   decisions from `AuthenticatedPrincipal.from_digi_auth(request.state.digi_auth)`.
   Running/evaluating cannot change active policy; no promote/activate/set-live
-  tools exist. Integration 4.1 golden fixture is out of scope for this task.
+  tools exist. **Phase 4 lock surface (#3015 / Integration 4.1):**
+  `tests/dq/replay/test_phase4_end_to_end.py` + `phase4_e2e_fixtures.py` pin the
+  governed learning loop across WP15–WP16 — reconciled accounting before learning,
+  episode assembly (authorized/excluded/no-op), late-known correction supersession
+  without changing historical replay manifests, observed vs counterfactual attribution,
+  lesson pin at preflight cutoffs, identical paired-arm manifests, shared-cash
+  portfolio replay (real Nautilus gated by ``SKIP_NATIVE_CRASH`` on Linux CI #42),
+  purged walk-forward when history suffices, all comparison metric groups or typed
+  unavailable, eligible/ineligible/insufficient gate evaluation, authenticated human
+  approval without activation, and byte-stable rerun hashes. Production policy
+  activation remains external.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
