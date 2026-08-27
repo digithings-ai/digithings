@@ -56,15 +56,29 @@ function HoldingsPerformanceTable({
           <tr className="border-b border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
             <th className="px-5 py-2.5 text-left font-normal">Holding</th>
             <th className="px-3 py-2.5 text-left font-normal">Category</th>
-            <th className="px-3 py-2.5 text-right font-normal">Weight</th>
+            <th className="px-3 py-2.5 text-right font-normal">
+              {returnLabel === 'Realized' ? 'Sold wt' : 'Weight'}
+            </th>
             <th className="px-3 py-2.5 text-right font-normal">{returnLabel}</th>
             <th className="px-5 py-2.5 text-right font-normal">As of</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-hair">
           {rows.map((row) => (
-            <tr key={row.ticker} className="hover:bg-ink/[0.02]">
-              <td className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</td>
+            <tr
+              key={row.eventId ?? `${row.ticker}-${row.attributionDate ?? ''}-${row.disposition ?? 'open'}`}
+              className="hover:bg-ink/[0.02]"
+            >
+              <td className="px-5 py-2.5 font-semibold text-ink">
+                <span className="inline-flex items-baseline gap-2">
+                  {row.ticker}
+                  {row.disposition ? (
+                    <span className="font-mono text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute">
+                      {row.disposition}
+                    </span>
+                  ) : null}
+                </span>
+              </td>
               <td className="px-3 py-2.5 text-ink-soft">
                 {formatAllocationCategory(row.category)}
               </td>
@@ -144,7 +158,7 @@ function HoldingsPanel({
       <div className="flex items-center justify-between gap-3 border-b border-hair px-5 py-3">
         <h2 className="font-display text-xl font-normal text-ink">{title}</h2>
         <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-          {returnLabel === 'Unrealized' ? 'open book' : 'recorded exits'}
+          {returnLabel === 'Unrealized' ? 'open book' : 'exits & trims'}
         </span>
       </div>
       <HoldingsPerformanceTable rows={rows} emptyMessage={emptyMessage} returnLabel={returnLabel} />
@@ -169,6 +183,14 @@ function RealizedSummary({ rows }: { rows: PerformanceHoldingRow[] }) {
   const avg = realized.reduce((sum, v) => sum + v, 0) / realized.length;
   const best = Math.max(...realized);
   const worst = Math.min(...realized);
+  const exits = rows.filter((row) => row.disposition === 'EXIT').length;
+  const trims = rows.filter((row) => row.disposition === 'TRIM').length;
+  const mix =
+    exits && trims
+      ? `${exits} exit${exits === 1 ? '' : 's'} · ${trims} trim${trims === 1 ? '' : 's'}`
+      : trims
+        ? `${trims} trim${trims === 1 ? '' : 's'}`
+        : `${realized.length} exit${realized.length === 1 ? '' : 's'}`;
   const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
   return (
     <div
@@ -176,7 +198,7 @@ function RealizedSummary({ rows }: { rows: PerformanceHoldingRow[] }) {
       className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-x border-b border-hair bg-surface px-5 py-2 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
     >
       <span className="font-semibold">Realized · closed positions</span>
-      <span>{realized.length} exit{realized.length === 1 ? '' : 's'}</span>
+      <span>{mix}</span>
       <span>win rate {Math.round((winners / realized.length) * 100)}%</span>
       <span>avg {pct(avg)}</span>
       <span>best {pct(best)}</span>
@@ -332,7 +354,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
           <HoldingsPanel
             rows={data.historicalHoldings}
             title="Closed positions"
-            emptyMessage="No realized exit performance is stored yet."
+            emptyMessage="No realized exit or trim performance is stored yet."
             id="historical"
             tabIndex={1}
             returnLabel="Realized"
@@ -351,7 +373,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
         <HoldingsPanel
           rows={data.historicalHoldings}
           title="Closed positions"
-          emptyMessage="No realized exit performance is stored yet."
+          emptyMessage="No realized exit or trim performance is stored yet."
           id="historical"
           tabIndex={1}
           returnLabel="Realized"

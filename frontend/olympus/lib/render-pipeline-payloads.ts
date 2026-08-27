@@ -556,22 +556,47 @@ export function renderAnalystSpecialistMarkdown(payload: unknown): string {
 
 /* ── Bull/bear debate (Phase 7CD) ─────────────────────────────────────────── */
 
-/** True for the Hermes per-ticker `DebateSummary` payload (`deliberation/{ticker}`). */
+function isPmAnalystChatTurnRow(row: unknown): boolean {
+  const o = asObj(row);
+  if (!o) return false;
+  const message = s(o.message).trim();
+  if (!message) return false;
+  const role = s(o.role).trim().toLowerCase();
+  return role === 'pm' || role === 'analyst';
+}
+
+/** Collect H6 PM↔analyst turns from `transcript` or chat-shaped `rounds`. */
+export function chatTurnsFromDebatePayload(payload: unknown): Record<string, unknown>[] {
+  const p = asObj(payload);
+  if (!p) return [];
+  const fromTranscript = Array.isArray(p.transcript)
+    ? p.transcript.filter(isPmAnalystChatTurnRow)
+    : [];
+  if (fromTranscript.length) return fromTranscript.map((r) => asObj(r) ?? {});
+  const fromRounds = Array.isArray(p.rounds) ? p.rounds.filter(isPmAnalystChatTurnRow) : [];
+  return fromRounds.map((r) => asObj(r) ?? {});
+}
+
+/** True for the Hermes per-ticker deliberation payload (`deliberation/{ticker}`). */
 export function isDebateSummaryPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
-  return (
-    typeof p.bull_thesis === 'string' &&
-    typeof p.bear_thesis === 'string' &&
-    typeof p.net_stance === 'string'
-  );
+  if (typeof p.net_stance !== 'string') return false;
+  // H6 chat shape may leave bull/bear empty once publish stops mirroring conclusion.
+  if (chatTurnsFromDebatePayload(p).length > 0) return true;
+  if (typeof p.conclusion === 'string' && p.conclusion.trim() !== '') return true;
+  return typeof p.bull_thesis === 'string' && typeof p.bear_thesis === 'string';
 }
 
-/** Markdown for a bull/bear debate summary (one ticker, N rounds). */
+/** Markdown for a bull/bear debate summary or H6 PM↔analyst deliberation. */
 export function renderDebateSummaryMarkdown(payload: unknown): string {
   const p = asObj(payload) ?? {};
   const ticker = s(p.ticker).trim();
-  const out: string[] = [`# Bull / Bear Debate${ticker ? ` — ${ticker}` : ''}`, ''];
+  const chat = chatTurnsFromDebatePayload(p);
+  const title = chat.length
+    ? `# Deliberation${ticker ? ` — ${ticker}` : ''}`
+    : `# Bull / Bear Debate${ticker ? ` — ${ticker}` : ''}`;
+  const out: string[] = [title, ''];
 
   const stance = s(p.net_stance).trim();
   const delta = s(p.conviction_delta).trim();
@@ -580,15 +605,40 @@ export function renderDebateSummaryMarkdown(payload: unknown): string {
     out.push(`**Net stance:** ${stance}${delta ? ` · conviction Δ ${sign}` : ''}`, '');
   }
 
+  if (chat.length) {
+    out.push('## Deliberation', '');
+    chat.forEach((turn) => {
+      const role = s(turn.role).trim().toLowerCase() === 'pm' ? 'PM' : 'Analyst';
+      const n = s(turn.round_number).trim();
+      out.push(`### ${role}${n ? ` · Round ${n}` : ''}`, '', cleanMemoProse(s(turn.message)), '');
+    });
+  }
+
+  const conclusion = s(p.conclusion).trim();
+  if (conclusion) out.push('## Conclusion', '', cleanMemoProse(conclusion), '');
+
   const bull = s(p.bull_thesis).trim();
   const bear = s(p.bear_thesis).trim();
-  if (bull) out.push('## Bull thesis', '', cleanMemoProse(bull), '');
-  if (bear) out.push('## Bear thesis', '', cleanMemoProse(bear), '');
+  const thesesAreMirrors =
+    Boolean(conclusion) &&
+    (!bull || bull === conclusion) &&
+    (!bear || bear === conclusion) &&
+    (Boolean(bull) || Boolean(bear));
+  if (!thesesAreMirrors) {
+    if (bull && bull !== bear) out.push('## Bull thesis', '', cleanMemoProse(bull), '');
+    if (bear && bear !== bull) out.push('## Bear thesis', '', cleanMemoProse(bear), '');
+  }
 
   const rounds = Array.isArray(p.rounds) ? p.rounds : [];
-  if (rounds.length) {
+  const bullBearRounds = rounds.filter((r) => {
+    if (isPmAnalystChatTurnRow(r)) return false;
+    const o = asObj(r);
+    if (!o) return false;
+    return Boolean(s(o.bull_argument).trim() || s(o.bear_argument).trim());
+  });
+  if (bullBearRounds.length) {
     out.push('## Rounds', '');
-    rounds.forEach((r, i) => {
+    bullBearRounds.forEach((r, i) => {
       const o = asObj(r);
       if (!o) return;
       const n = s(o.round_number).trim();

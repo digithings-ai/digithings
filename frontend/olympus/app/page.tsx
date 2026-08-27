@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useLiveBriefKpis } from '@/lib/hooks/use-live-brief-kpis';
-import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
+import type { AtlasRunDiagnostics, BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
@@ -13,7 +13,8 @@ import {
   DailyBriefWorkspace,
   type BriefRunHealth,
 } from '@/components/today/daily-brief-workspace';
-
+import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
+import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
 
 function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
@@ -55,6 +56,7 @@ export default function OverviewPage() {
   const { data, loading, error } = useDashboard();
   const dashboardDate = data?.portfolio?.meta.last_updated ?? null;
   const [runHealth, setRunHealth] = useState<BriefRunHealth | null>();
+  const [runDiagnostics, setRunDiagnostics] = useState<AtlasRunDiagnostics[]>([]);
 
   useEffect(() => {
     if (!dashboardDate) return;
@@ -63,6 +65,7 @@ export default function OverviewPage() {
     void fetchAtlasRunDiagnostics()
       .then((runs) => {
         if (cancelled) return;
+        setRunDiagnostics(runs);
         const latestForDate = runs.find((run) => run.run_date === dashboardDate) ?? null;
         setRunHealth(
           latestForDate
@@ -74,12 +77,16 @@ export default function OverviewPage() {
                 segmentsTotal: latestForDate.segments_total,
                 segmentsCarried: latestForDate.segments_carried,
                 segmentsFailed: latestForDate.segments_failed,
+                durationS: latestForDate.duration_s,
               }
             : null
         );
       })
       .catch(() => {
-        if (!cancelled) setRunHealth(null);
+        if (!cancelled) {
+          setRunHealth(null);
+          setRunDiagnostics([]);
+        }
       });
 
     return () => {
@@ -130,20 +137,36 @@ export default function OverviewPage() {
   const pipe = data.pipeline_observability;
   const rebalanceActions = data.portfolio_management?.rebalance_actions ?? [];
 
-  // Per-ticker rationale from the Hermes pm-rebalance decision (#704) — joined onto
-  // the move by ticker (normalized trim+UPPER).
-  const rationaleByTicker: Record<string, string> = {};
+  // Per-ticker PM thesis for Brief / actions (#704). Prefer real H7/H8 narrative;
+  // never pass through H8's mechanical sizing fallback (historical docs still
+  // carry it until the next pipeline run after #3043).
   const pmActions = (pipe?.pm_rebalance as { actions?: unknown } | null)?.actions;
-  if (Array.isArray(pmActions)) {
-    for (const row of pmActions) {
-      if (row && typeof row === 'object') {
-        const r = row as { ticker?: unknown; rationale?: unknown };
-        if (typeof r.ticker === 'string' && typeof r.rationale === 'string' && r.rationale.trim()) {
-          rationaleByTicker[r.ticker.trim().toUpperCase()] = r.rationale.trim();
-        }
-      }
+  const extrasByTicker: Record<string, string> = {};
+  for (const pos of positions) {
+    const key = pos.ticker.trim().toUpperCase();
+    if (!key || key === 'CASH') continue;
+    if (typeof pos.rationale === 'string' && pos.rationale.trim()) {
+      extrasByTicker[key] = pos.rationale.trim();
     }
   }
+  for (const doc of pipe?.deliberation_transcripts ?? []) {
+    const key = doc.ticker.trim().toUpperCase();
+    if (!key) continue;
+    const conclusion =
+      typeof doc.payload.conclusion === 'string'
+        ? doc.payload.conclusion
+        : typeof doc.payload.net_stance_reason === 'string'
+          ? doc.payload.net_stance_reason
+          : null;
+    if (conclusion?.trim() && !extrasByTicker[key]) {
+      extrasByTicker[key] = conclusion.trim();
+    }
+  }
+  const rationaleByTicker = buildDisplayRationaleByTicker({
+    pmRebalanceActions: pmActions,
+    pmDirectionMemo: pipe?.pm_direction_memo ?? null,
+    extrasByTicker,
+  });
 
   const performanceHistoryResolved = portfolio.snapshots ?? [];
   // The book's own as-of (latest performance-history point) — deliberately NOT
@@ -212,8 +235,11 @@ export default function OverviewPage() {
         risks={strategy.riskItems ?? []}
         theses={strategy.theses ?? []}
         contextBullets={data.snapshot_context_bullets ?? []}
-        latestEvent={data.position_events?.[0] ?? null}
+        // Brief/session date = digest as-of, not lagged book NAV. Using bookAsOf
+        // here previously surfaced Aug 25 VGK next to an Aug 27 digest decision.
+        ledgerDayEvents={selectBriefLedgerDayEvents(data.position_events, latestDate)}
         runHealth={latestDate ? runHealth : null}
+        runDiagnostics={runDiagnostics}
       />
     </div>
   );

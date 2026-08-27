@@ -340,6 +340,29 @@ describe('renderDocumentMarkdownFromPayload routing', () => {
     expect(md).toContain('Datacenter capex');
   });
 
+  it('renders H6 PM↔analyst chat turns published under rounds (DBO shape)', () => {
+    const h6 = {
+      ticker: 'DBO',
+      net_stance: 'neutral',
+      conviction_delta: 0,
+      conclusion: 'Pass — no position.',
+      bull_thesis: 'Pass — no position.',
+      bear_thesis: 'Pass — no position.',
+      rounds: [
+        { role: 'pm', round_number: 1, message: 'Conviction 0 is a non-call.' },
+        { role: 'analyst', round_number: 1, message: 'Accepted. Recommend COMPLETED.' },
+      ],
+    };
+    expect(isDebateSummaryPayload(h6)).toBe(true);
+    const md = renderDocumentMarkdownFromPayload(h6, 'deliberation/DBO');
+    expect(md).toContain('# Deliberation — DBO');
+    expect(md).toContain('### PM · Round 1');
+    expect(md).toContain('Conviction 0 is a non-call.');
+    expect(md).toContain('## Conclusion');
+    expect(md).not.toContain('## Bull thesis');
+    expect(md).not.toContain('## Bear thesis');
+  });
+
   it('renders risk-debate documents with the risk-debate renderer (#698)', () => {
     const md = renderDocumentMarkdownFromPayload(RISK_DEBATE_PAYLOAD, 'risk-debate');
     expect(md).toContain('# Risk Temperament Debate');

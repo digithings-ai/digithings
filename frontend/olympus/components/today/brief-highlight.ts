@@ -4,6 +4,8 @@ import type {
   RebalanceAction,
   RiskItem,
 } from '@/lib/types';
+import { isMaterialBookEvent } from '@/lib/brief-book-event';
+import { resolvePmRationale } from '@/lib/pm-rationale';
 
 /**
  * Personal Morning Brief hero copy (variant B: research + portfolio dual beat).
@@ -69,21 +71,16 @@ function rationaleFor(
   action: RebalanceAction,
   rationaleByTicker: Record<string, string>
 ): string | null {
-  const fromRow = typeof action.rationale === 'string' ? action.rationale.trim() : '';
-  if (fromRow) return fromRow;
   const key = action.ticker.trim().toUpperCase();
-  const mapped = rationaleByTicker[key]?.trim();
-  return mapped || null;
+  // Never surface H8's mechanical sizing fallback as a "reason" — prefer real
+  // PM thesis text already filtered into rationaleByTicker, else action+ticker only.
+  return resolvePmRationale(action.rationale, rationaleByTicker[key]);
 }
 
-function portfolioMoveLine(
-  action: RebalanceAction,
-  rationaleByTicker: Record<string, string>
-): string {
+/** Compact book move — action + ticker (+ weight delta). No thesis prose. */
+export function portfolioActionChip(action: RebalanceAction): string {
   const verb = titleCaseAction(action.action);
   const ticker = action.ticker.trim().toUpperCase();
-  const reason = rationaleFor(action, rationaleByTicker);
-  if (reason) return clip(`${verb} ${ticker} — ${reason}`);
   const from = action.current_pct;
   const to = action.recommended_pct;
   if (Number.isFinite(from) && Number.isFinite(to) && from !== to) {
@@ -92,11 +89,31 @@ function portfolioMoveLine(
   return clip(`${verb} ${ticker}`);
 }
 
+/** Full narrative move for the hero attention lead (thesis lives here once). */
+function portfolioMoveLine(
+  action: RebalanceAction,
+  rationaleByTicker: Record<string, string>
+): string {
+  const verb = titleCaseAction(action.action);
+  const ticker = action.ticker.trim().toUpperCase();
+  const reason = rationaleFor(action, rationaleByTicker);
+  if (reason) return clip(`${verb} ${ticker} — ${reason}`);
+  return portfolioActionChip(action);
+}
+
 function eventLine(event: DashboardPositionEvent): string {
   const verb = titleCaseAction(event.event);
   const ticker = event.ticker.trim().toUpperCase();
-  if (event.reason?.trim()) return clip(`${verb} ${ticker} — ${event.reason.trim()}`);
+  const reason = resolvePmRationale(event.reason);
+  if (reason) return clip(`${verb} ${ticker} — ${reason}`);
   return clip(`${verb} ${ticker} recorded in the book ledger`);
+}
+
+function materialLatestEvent(
+  event: DashboardPositionEvent | null
+): DashboardPositionEvent | null {
+  if (!event || !isMaterialBookEvent(event)) return null;
+  return event;
 }
 
 function researchLine(input: BriefHighlightInput): BriefBeat {
@@ -136,13 +153,15 @@ function researchLine(input: BriefHighlightInput): BriefBeat {
 function portfolioLine(input: BriefHighlightInput): BriefBeat {
   const active = activeRebalanceActions(input.actions);
   if (active.length > 0) {
-    const first = portfolioMoveLine(active[0], input.rationaleByTicker);
+    // Attention already owns the full thesis for the lead move — beats list
+    // stays action-only so the same essay is not pasted twice.
+    const first = portfolioActionChip(active[0]);
     if (active.length === 1) {
       return { kind: 'portfolio', label: 'Portfolio', text: first, available: true };
     }
     const rest = active
       .slice(1, 3)
-      .map((a) => `${titleCaseAction(a.action)} ${a.ticker.trim().toUpperCase()}`)
+      .map((a) => portfolioActionChip(a))
       .join(' · ');
     return {
       kind: 'portfolio',
@@ -151,7 +170,7 @@ function portfolioLine(input: BriefHighlightInput): BriefBeat {
       available: true,
     };
   }
-  if (input.latestEvent && input.latestEvent.event !== 'HOLD') {
+  if (input.latestEvent && isMaterialBookEvent(input.latestEvent)) {
     return {
       kind: 'portfolio',
       label: 'Portfolio',
@@ -226,8 +245,9 @@ function attentionSentence(input: BriefHighlightInput): string {
   if (input.headline?.trim()) {
     return clip(input.headline.trim());
   }
-  if (input.latestEvent && input.latestEvent.event !== 'HOLD') {
-    return eventLine(input.latestEvent);
+  const latestMaterial = materialLatestEvent(input.latestEvent);
+  if (latestMaterial) {
+    return eventLine(latestMaterial);
   }
   const risk = input.risks[0];
   if (risk?.label?.trim()) {

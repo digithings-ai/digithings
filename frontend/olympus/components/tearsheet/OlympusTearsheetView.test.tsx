@@ -59,6 +59,8 @@ const sample: OlympusTearsheet = {
       unrealizedReturnPct: null,
       realizedReturnPct: -2,
       attributionDate: '2026-06-20',
+      disposition: 'EXIT',
+      eventId: 'old-exit',
     },
   ],
 };
@@ -197,6 +199,31 @@ describe('headline vs realized presentation (#1664)', () => {
     expect(out).toContain('win rate');
   });
 
+  it('labels TRIM in the realized summary when closed-tab rows include trims', () => {
+    const out = html({
+      ...sample,
+      historicalHoldings: [
+        {
+          ticker: 'XLF',
+          category: 'Financials',
+          weightPct: 5,
+          unrealizedReturnPct: null,
+          realizedReturnPct: 8,
+          attributionDate: '2026-08-26',
+          disposition: 'TRIM',
+          eventId: 'xlf-trim',
+        },
+      ],
+    });
+    // Default tab is open book (SSR); summary strip still reflects realized trims.
+    expect(out).toContain('data-testid="realized-summary"');
+    expect(out).toContain('1 trim');
+    expect(out).toContain('avg +8.00%');
+    expect(out).toContain('Closed positions');
+  });
+});
+
+describe('contribution chart presentation', () => {
   it('contribution chart has no per-asset legend — popup carries the identification', () => {
     const out = html();
     expect(out).toContain('Return contribution');
