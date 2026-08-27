@@ -1,21 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { SegmentedControl } from '@digithings/web';
-import type { DashboardPositionEvent, Position, PositionHistoryRow, Thesis } from '@/lib/types';
+import { useMemo } from 'react';
+import type { Position, PositionHistoryRow, Thesis } from '@/lib/types';
 import type { TableRow } from '@/lib/database.types';
 import type { SleeveStackMode } from '@/lib/portfolio-aggregates';
 import { reconcileBook } from '@/lib/book-reconciliation';
 import AllocationsPositionsTable from '@/components/portfolio/AllocationsPositionsTable';
 import BookReconciliationStrip from '@/components/portfolio/BookReconciliationStrip';
-import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
 
 export default function AllocationsTab(props: {
   lastUpdated: string | null;
   positions: Position[];
   decisions: TableRow<'decision_log'>[];
   positionHistory: PositionHistoryRow[];
-  positionEvents: DashboardPositionEvent[];
   thesisById: Map<string, Thesis>;
   effHistoryDate: string | null;
   onSelectHistoryDate: (iso: string) => void;
@@ -28,10 +25,7 @@ export default function AllocationsTab(props: {
   sleeveKeys: string[];
   formatSleeveKey: (k: string) => string;
 }) {
-  const {
-    lastUpdated, positions, positionEvents,
-  } = props;
-  const [view, setView] = useState<'positions' | 'activity'>('positions');
+  const { lastUpdated, positions } = props;
 
   const reconciliation = useMemo(() => reconcileBook(positions), [positions]);
   const positionCount = reconciliation.rows.length;
@@ -50,22 +44,11 @@ export default function AllocationsTab(props: {
         <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
           book monitor
         </span>
-        <SegmentedControl<'positions' | 'activity'>
-          options={['positions', 'activity']}
-          value={view}
-          onChange={setView}
-          dress="accent"
-          aria-label="Holdings view"
-        />
       </div>
       <div data-region="workspace" className="min-h-0 min-w-0 flex-1">
-        {view === 'positions' ? (
-          <section data-region="ledger" className="h-full min-h-0 min-w-0">
+        <section data-region="ledger" className="h-full min-h-0 min-w-0">
           <AllocationsPositionsTable reconciliation={reconciliation} />
-          </section>
-        ) : (
-          <HoldingsActivityTable events={positionEvents} />
-        )}
+        </section>
       </div>
     </div>
   );

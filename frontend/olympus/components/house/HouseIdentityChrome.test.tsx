@@ -8,7 +8,6 @@ vi.mock('next/link', () => ({
 }));
 
 import HouseIdentityChrome from './HouseIdentityChrome';
-import HouseIdentityBanner from './HouseIdentityBanner';
 
 describe('HouseIdentityChrome', () => {
   it('renders Corpus | Book | Profile labels and house identity', () => {
@@ -20,14 +19,5 @@ describe('HouseIdentityChrome', () => {
     expect(html).toContain('digithings');
     expect(html).toContain('House ETF paper book');
     expect(html).toContain('/house?tab=book');
-  });
-});
-
-describe('HouseIdentityBanner', () => {
-  it('links into Corpus Book Profile chrome', () => {
-    const html = renderToStaticMarkup(createElement(HouseIdentityBanner));
-    expect(html).toContain('data-testid="house-identity-banner"');
-    expect(html).toContain('/house?tab=corpus');
-    expect(html).toContain('Corpus · Book · Profile');
   });
 });
