@@ -12,7 +12,10 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Any,
+    Literal,
+)
 from uuid import UUID
 
 from pydantic import ConfigDict

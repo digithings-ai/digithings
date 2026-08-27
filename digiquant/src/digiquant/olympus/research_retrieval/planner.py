@@ -32,7 +32,14 @@ import os
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal, Mapping, Sequence, TypeAlias  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Annotated,
+    Any,
+    Literal,
+    Mapping,
+    Sequence,
+    TypeAlias,
+)
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import yaml

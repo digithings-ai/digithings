@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Literal  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Any,
+    Literal,
+)
 
 from digiquant.olympus.research_retrieval.planner import (
     H6_SELECTION_PROMPT_FORBIDDEN_KEYS,

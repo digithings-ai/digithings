@@ -7,7 +7,11 @@ deterministically from the current effective-forecast map — never from LLM IDs
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Literal, Mapping  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Any,
+    Literal,
+    Mapping,
+)
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
