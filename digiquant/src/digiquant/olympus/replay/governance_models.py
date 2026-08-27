@@ -116,7 +116,13 @@ class GovernanceDecisionKind(StrEnum):
 
 
 class PolicyGovernanceDecision(GovernanceContractModel):
-    """Immutable authenticated human decision record."""
+    """Immutable authenticated human decision record.
+
+    Never activates production policy. ``actor_principal`` must come from a
+    trusted ``AuthenticatedPrincipal`` at the recording boundary — never from a
+    caller-supplied actor string. ``current_policy_version_id`` is required for
+    ``rollback_review`` so the decision links evaluation + incumbent version.
+    """
 
     decision_id: UUID
     evaluation_id: UUID
@@ -126,6 +132,7 @@ class PolicyGovernanceDecision(GovernanceContractModel):
     decision_content_hash: HashHex64
     recorded_at: datetime
     supersedes_decision_id: UUID | None = None
+    current_policy_version_id: NonEmptyId | None = None
 
     @field_validator("recorded_at")
     @classmethod
