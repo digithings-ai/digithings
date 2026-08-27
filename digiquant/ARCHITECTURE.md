@@ -1292,6 +1292,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   fills, and commission totals in one engine. Unavailable/mismatched policy → typed
   ERROR inconclusive (never fabricated book). No `nautilus_runner`, no vectorized
   fallback, no `BacktestResult` changes.
+  **Purged walk-forward folds (#2995 / WP16.5):** `olympus/replay/walk_forward.py`
+  builds deterministic train/calibration/eval assignments from WP15
+  `OutcomeEpisode` temporal fields and WP16.1 `WalkForwardFold` windows.
+  `WalkForwardScheduleParams` versions all fold/sample parameters with a content
+  hash; crossing-horizon labels are purged from train/calibration, late-known
+  episodes are excluded at role cutoffs, and embargo gaps separate train from
+  eval. Paired replay arms share identical fold plans; undersampled history returns
+  `insufficient_history` — never silent drop or pass/fail by omission.
+  `verify_fold_assignments` property-checks zero train/eval overlap and embargo
+  boundaries. Comparison/governance wiring remains WP16.6+.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
