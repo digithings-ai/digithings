@@ -353,6 +353,19 @@ class PolicyReplayStore:
         self._evaluations_by_hash[evaluation.evaluation_content_hash] = evaluation.evaluation_id
         return evaluation
 
+    def get_evaluation(self, evaluation_id: UUID) -> GateEvaluation | None:
+        """Return a stored evaluation by id, or ``None`` if absent."""
+        return self._evaluations.get(evaluation_id)
+
+    def list_decisions_for_evaluation(
+        self, evaluation_id: UUID
+    ) -> tuple[PolicyGovernanceDecision, ...]:
+        """Decisions linked to one evaluation, ordered by recorded_at."""
+        decision_ids = self._decisions_by_evaluation.get(evaluation_id, ())
+        rows = [self._decisions[did] for did in decision_ids if did in self._decisions]
+        rows.sort(key=lambda item: item.recorded_at)
+        return tuple(rows)
+
     def append_decision(self, decision: PolicyGovernanceDecision) -> PolicyGovernanceDecision:
         """Insert immutable human governance decision."""
         require_utc_datetime(decision.recorded_at, field_name="recorded_at")

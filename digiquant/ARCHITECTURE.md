@@ -1329,6 +1329,19 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   separately from promotion. `persist_gate_evaluation` appends into
   `PolicyReplayStore` via immutable criteria/evaluation IDs. No source-code
   production thresholds, no evaluator-authored criteria, no config write.
+  **Authenticated human decisions (#3007 / WP16.8):** `record_policy_governance_decision`
+  in `olympus/replay/governance.py` appends approve/reject/defer/rollback-review
+  `PolicyGovernanceDecision` rows via `PolicyReplayStore.append_decision`. Actor
+  identity comes only from an `AuthenticatedPrincipal` value object (construct
+  with `AuthenticatedPrincipal.from_digi_auth` from digikey middleware's
+  `request.state.digi_auth` / `DigiAuthContext` — no digikey source edits). There
+  is no caller-supplied actor string parameter; MCP cannot impersonate. Approve
+  requires `eligible_for_human_review`; reject/defer need non-empty rationale;
+  rollback-review links `evaluation_id` + `current_policy_version_id`. Decisions
+  are immutable and may supersede prior decisions. **No activation, deploy,
+  broker, or policy mutation** — production activation remains an external
+  human-controlled process. HTTP/MCP decision-write exposure is deferred to
+  WP16.9; the library API is the secure recording boundary.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9

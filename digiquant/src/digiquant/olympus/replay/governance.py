@@ -1,8 +1,11 @@
-"""WP16.7 — evaluate immutable human-authored gate criteria.
+"""WP16.7 / WP16.8 — gate evaluation and authenticated human decisions.
 
 Machine output is eligibility for human review only — never promotion,
 activation, or production config mutation. Criteria must be authored outside
 this module; the evaluator only applies a pre-versioned package.
+
+WP16.8 records approve/reject/defer/rollback-review decisions from an
+``AuthenticatedPrincipal`` (trusted identity). Activation remains external.
 """
 
 from __future__ import annotations
@@ -26,6 +29,9 @@ from digiquant.olympus.replay.comparison import (
 from digiquant.olympus.replay.governance_models import (
     GateCriteriaVersion,
     GateEvaluation,
+    GovernanceDecisionKind,
+    PolicyGovernanceDecision,
+    governance_content_hash,
 )
 from digiquant.olympus.replay.store import PolicyReplayStore
 from digiquant.olympus.temporal import require_utc_datetime
@@ -513,13 +519,104 @@ def _threshold_met(
     return abs(observed) <= abs(threshold)
 
 
+class GovernanceDecisionError(ValueError):
+    """Human decision recording refused (eligibility, identity, or contract)."""
+
+
+class AuthenticatedPrincipal(GovernanceModel):
+    """Trusted operator identity — construct only at authenticated boundaries.
+
+    Digiquant already receives verified JWT claims via digikey's
+    ``DigiAuthMiddleware`` (``request.state.digi_auth``). Use
+    :meth:`from_digi_auth` at that boundary. Do not invent caller-supplied
+    actor strings. No digikey source changes are required for this VO.
+    """
+
+    subject: NonEmptyId
+    principal_kind: NonEmptyId = "api_key"
+
+    @classmethod
+    def from_digi_auth(cls, auth: object) -> AuthenticatedPrincipal:
+        """Build from ``DigiAuthContext`` / ``request.state.digi_auth``."""
+        subject = str(getattr(auth, "subject", "") or "").strip()
+        if not subject:
+            raise GovernanceDecisionError("authenticated principal subject required")
+        kind = str(getattr(auth, "principal_kind", "") or "").strip() or "api_key"
+        return cls(subject=subject, principal_kind=kind)
+
+
+def record_policy_governance_decision(
+    store: PolicyReplayStore,
+    *,
+    principal: AuthenticatedPrincipal,
+    evaluation_id: UUID,
+    decision_kind: GovernanceDecisionKind,
+    rationale: str,
+    recorded_at: datetime,
+    current_policy_version_id: str | None = None,
+    supersedes_decision_id: UUID | None = None,
+    decision_id: UUID | None = None,
+) -> PolicyGovernanceDecision:
+    """Append an authenticated human governance decision (no activation).
+
+    Identity is taken only from ``principal.subject``. There is no
+    ``actor`` / ``actor_principal`` parameter — MCP and unauthenticated
+    callers cannot impersonate. Approval requires a stored evaluation with
+    ``eligible_for_human_review=True``. Reject/defer need a non-empty
+    rationale. Rollback-review must link ``current_policy_version_id``.
+    """
+    if not isinstance(principal, AuthenticatedPrincipal):
+        raise GovernanceDecisionError("principal must be AuthenticatedPrincipal")
+
+    reason = (rationale or "").strip()
+    if not reason:
+        raise GovernanceDecisionError("rationale is required")
+
+    evaluation = store.get_evaluation(evaluation_id)
+    if evaluation is None:
+        raise GovernanceDecisionError(f"evaluation_id {evaluation_id} not found")
+
+    if decision_kind is GovernanceDecisionKind.APPROVE:
+        if not evaluation.eligible_for_human_review:
+            raise GovernanceDecisionError("approve requires evaluation.eligible_for_human_review")
+
+    version_id: str | None = None
+    if current_policy_version_id is not None:
+        version_id = current_policy_version_id.strip() or None
+
+    if decision_kind is GovernanceDecisionKind.ROLLBACK_REVIEW:
+        if not version_id:
+            raise GovernanceDecisionError("rollback_review requires current_policy_version_id")
+
+    stamp = require_utc_datetime(recorded_at, field_name="recorded_at")
+    did = decision_id or uuid4()
+    draft = PolicyGovernanceDecision.model_construct(
+        decision_id=did,
+        evaluation_id=evaluation_id,
+        decision_kind=decision_kind,
+        actor_principal=principal.subject,
+        rationale=reason,
+        decision_content_hash="0" * 64,
+        recorded_at=stamp,
+        supersedes_decision_id=supersedes_decision_id,
+        current_policy_version_id=version_id,
+    )
+    digest = governance_content_hash(draft)
+    decision = PolicyGovernanceDecision.model_validate(
+        {**draft.model_dump(mode="python"), "decision_content_hash": digest}
+    )
+    return store.append_decision(decision)
+
+
 __all__ = [
+    "AuthenticatedPrincipal",
     "ConfidenceBoundRule",
     "CriterionEvaluationResult",
     "CriterionOutcome",
     "GateCriterion",
     "GateEvaluationDetail",
     "GateKind",
+    "GovernanceDecisionError",
     "HumanAuthoredGateCriteria",
     "MetricComparisonKind",
     "MissingDataRule",
@@ -527,6 +624,7 @@ __all__ = [
     "gate_criteria_content_hash",
     "gate_evaluation_content_hash",
     "persist_gate_evaluation",
+    "record_policy_governance_decision",
     "to_store_criteria_version",
     "to_store_evaluation",
 ]
