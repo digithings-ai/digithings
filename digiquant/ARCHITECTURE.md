@@ -1271,7 +1271,8 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   Content-hash dedupe for manifests/pairs; paired arms require identical shared
   manifest hash; run status derived from events (no mutable running row);
   `load_gate_evidence` reconstructs full gate lineage from immutable IDs/hashes.
-  Dark launch — gate evaluator remains WP16.6+; portfolio workers ship in WP16.4.
+  Dark launch — gate evaluator is WP16.7 (`replay/governance.py`); portfolio workers
+  ship in WP16.4.
   **As-of policy replay inputs (#2987 / WP16.3):** `olympus/replay/asof_dataset.py`
   materializes cutoff-bound bars/cash/costs/timing/seed and builds
   `ReplayInputManifest` envelopes; `olympus/replay/policy_registry.py` resolves
@@ -1316,6 +1317,18 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   are retained; `report_content_hash` is deterministic. `to_governance_envelope()`
   projects into the WP16.2 store `PolicyComparisonReport` persistence row. Gate
   criteria evaluation remains WP16.7+.
+  **Immutable gate criteria evaluation (#3003 / WP16.7):** `olympus/replay/governance.py`
+  applies pre-versioned `HumanAuthoredGateCriteria` (metric/cohort, absolute or
+  paired delta, direction/threshold, evidence mode, min sample/folds/duration,
+  missing-data and confidence-bound rules, author/rationale/effective time/hash)
+  to a WP16.6 `PolicyComparisonReport`. Machine output is
+  `eligible_for_human_review` / `rollback_eligible_for_human_review` only —
+  never promotion or activation. Empty criteria fail closed; missing metrics are
+  insufficient; accounting/hard-constraint breaches and ineligible comparisons
+  block review; per-criterion results are retained; rollback is evaluated
+  separately from promotion. `persist_gate_evaluation` appends into
+  `PolicyReplayStore` via immutable criteria/evaluation IDs. No source-code
+  production thresholds, no evaluator-authored criteria, no config write.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
