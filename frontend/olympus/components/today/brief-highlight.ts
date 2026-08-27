@@ -4,6 +4,7 @@ import type {
   RebalanceAction,
   RiskItem,
 } from '@/lib/types';
+import { isMaterialBookEvent } from '@/lib/brief-book-event';
 import { resolvePmRationale } from '@/lib/pm-rationale';
 
 /**
@@ -100,6 +101,13 @@ function eventLine(event: DashboardPositionEvent): string {
   return clip(`${verb} ${ticker} recorded in the book ledger`);
 }
 
+function materialLatestEvent(
+  event: DashboardPositionEvent | null
+): DashboardPositionEvent | null {
+  if (!event || !isMaterialBookEvent(event)) return null;
+  return event;
+}
+
 function researchLine(input: BriefHighlightInput): BriefBeat {
   const top = input.actionables[0];
   if (top?.label?.trim()) {
@@ -152,7 +160,7 @@ function portfolioLine(input: BriefHighlightInput): BriefBeat {
       available: true,
     };
   }
-  if (input.latestEvent && input.latestEvent.event !== 'HOLD') {
+  if (input.latestEvent && isMaterialBookEvent(input.latestEvent)) {
     return {
       kind: 'portfolio',
       label: 'Portfolio',
@@ -227,8 +235,9 @@ function attentionSentence(input: BriefHighlightInput): string {
   if (input.headline?.trim()) {
     return clip(input.headline.trim());
   }
-  if (input.latestEvent && input.latestEvent.event !== 'HOLD') {
-    return eventLine(input.latestEvent);
+  const latestMaterial = materialLatestEvent(input.latestEvent);
+  if (latestMaterial) {
+    return eventLine(latestMaterial);
   }
   const risk = input.risks[0];
   if (risk?.label?.trim()) {

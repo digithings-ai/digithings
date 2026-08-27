@@ -24,6 +24,7 @@ import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
 import { formatDuration } from '@/components/system/run-economics-row';
 import { RunHealthTimeline } from '@/components/system/run-health-timeline';
+import { formatBriefWeightChange, isMaterialBookEvent } from '@/lib/brief-book-event';
 import { usablePmRationale } from '@/lib/pm-rationale';
 import { activeRebalanceActions, buildBriefHighlight } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
@@ -193,12 +194,6 @@ function statusDot(status: string): string {
   return 'bg-ink-mute/50';
 }
 
-function formatWeightChange(event: DashboardPositionEvent): string | null {
-  if (event.weight_pct == null || event.prev_weight_pct == null) return null;
-  const delta = event.weight_pct - event.prev_weight_pct;
-  return `${delta > 0 ? '+' : ''}${delta.toFixed(1)}pp`;
-}
-
 const DESTINATIONS = [
   { label: 'Digest', href: null, icon: BookOpen },
   { label: 'Pipeline', href: '/pipeline', icon: GitBranch },
@@ -234,6 +229,7 @@ export function DailyBriefWorkspace({
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
   const decision = decisionSummary(actions);
   const pipeline = runStatus(runHealth);
+  const bookEvent = latestEvent && isMaterialBookEvent(latestEvent) ? latestEvent : null;
   const highlight = buildBriefHighlight({
     headline,
     actions,
@@ -241,7 +237,7 @@ export function DailyBriefWorkspace({
     actionables,
     risks,
     contextBullets,
-    latestEvent,
+    latestEvent: bookEvent,
   });
   const latestThesis = theses[0] ?? null;
   const latestRisk = risks[0] ?? null;
@@ -517,27 +513,27 @@ export function DailyBriefWorkspace({
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
               Last recorded book event
             </p>
-            {latestEvent ? (
+            {bookEvent ? (
               <div className="mt-2">
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="font-mono text-sm font-bold text-ink">{latestEvent.ticker}</span>
-                  <span className="text-sm capitalize text-ink-soft">{latestEvent.event}</span>
-                  {formatWeightChange(latestEvent) ? (
+                  <span className="font-mono text-sm font-bold text-ink">{bookEvent.ticker}</span>
+                  <span className="text-sm capitalize text-ink-soft">{bookEvent.event}</span>
+                  {formatBriefWeightChange(bookEvent) ? (
                     <span className="font-mono text-xs tabular-nums text-ink-mute">
-                      {formatWeightChange(latestEvent)}
+                      {formatBriefWeightChange(bookEvent)}
                     </span>
                   ) : null}
                 </div>
                 <p className="mt-2 text-xs leading-snug text-ink-soft">
-                  {usablePmRationale(latestEvent.reason) ||
+                  {usablePmRationale(bookEvent.reason) ||
                     'No decision rationale was recorded.'}
                 </p>
                 <p className="mt-2 font-mono text-[10px] text-ink-mute">
-                  {formatAsOf(latestEvent.date)}
+                  {formatAsOf(bookEvent.date)}
                 </p>
               </div>
             ) : (
-              <p className="mt-2 text-sm text-ink-mute">No book decision recorded.</p>
+              <p className="mt-2 text-sm text-ink-mute">No book change this session</p>
             )}
           </div>
 

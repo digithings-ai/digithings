@@ -13,6 +13,7 @@ import {
   DailyBriefWorkspace,
   type BriefRunHealth,
 } from '@/components/today/daily-brief-workspace';
+import { selectBriefBookEvent } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
 
@@ -234,7 +235,9 @@ export default function OverviewPage() {
         risks={strategy.riskItems ?? []}
         theses={strategy.theses ?? []}
         contextBullets={data.snapshot_context_bullets ?? []}
-        latestEvent={data.position_events?.[0] ?? null}
+        latestEvent={selectBriefBookEvent(data.position_events, {
+          sessionDate: bookAsOf ?? latestDate,
+        })}
         runHealth={latestDate ? runHealth : null}
         runDiagnostics={runDiagnostics}
       />
