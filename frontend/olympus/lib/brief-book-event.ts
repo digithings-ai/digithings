@@ -1,7 +1,7 @@
 import type { DashboardPositionEvent } from './types';
 
 /**
- * Brief "Last recorded book event" — only material ledger moves, never
+ * Brief ledger / book-event helpers — material position moves only, never
  * execute_at_open derived fallbacks with engineering jargon or +0.0pp noise.
  */
 
@@ -54,30 +54,49 @@ function pickLargestMove(events: DashboardPositionEvent[]): DashboardPositionEve
 }
 
 /**
- * Select the Brief book-event panel row.
+ * Material ledger rows for a single calendar date (brief / session as-of).
+ * Sorted largest |Δw| first. Empty when that day has no decision-grade moves —
+ * callers must show an honest empty state (never invent, never borrow an older day).
+ */
+export function selectBriefLedgerDayEvents(
+  events: DashboardPositionEvent[] | null | undefined,
+  sessionDate: string | null | undefined
+): DashboardPositionEvent[] {
+  const session = sessionDate?.trim() || null;
+  if (!session) return [];
+
+  return (events ?? [])
+    .filter((e) => e.date === session && isMaterialBookEvent(e))
+    .sort((a, b) => {
+      const bySize = absDelta(b) - absDelta(a);
+      if (bySize !== 0) return bySize;
+      return a.ticker.localeCompare(b.ticker);
+    });
+}
+
+/**
+ * Select a single Brief book-event row (hero portfolio beat / legacy callers).
  *
- * Prefer a material move on `sessionDate` (book / brief as-of); else the latest
- * material change on any date. Returns null when nothing is decision-grade —
- * callers show an honest empty state instead of inventing ADD +0.0pp.
+ * When `sessionDate` is set, only a material move on that date qualifies —
+ * no fallback to an older larger move (that caused Aug 25 VGK to sit next to
+ * an Aug 27 digest decision). Without a session date, pick the latest
+ * material date's largest move.
  */
 export function selectBriefBookEvent(
   events: DashboardPositionEvent[] | null | undefined,
   opts?: { sessionDate?: string | null }
 ): DashboardPositionEvent | null {
+  const session = opts?.sessionDate?.trim() || null;
+  if (session) {
+    return pickLargestMove(selectBriefLedgerDayEvents(events, session));
+  }
+
   const material = (events ?? []).filter(isMaterialBookEvent);
   if (material.length === 0) return null;
 
   const byDateDesc = [...material].sort(
     (a, b) => b.date.localeCompare(a.date) || a.ticker.localeCompare(b.ticker)
   );
-
-  const session = opts?.sessionDate?.trim() || null;
-  if (session) {
-    const onSession = byDateDesc.filter((e) => e.date === session);
-    const pick = pickLargestMove(onSession);
-    if (pick) return pick;
-  }
-
   const latestDate = byDateDesc[0]?.date;
   if (!latestDate) return null;
   return pickLargestMove(byDateDesc.filter((e) => e.date === latestDate));

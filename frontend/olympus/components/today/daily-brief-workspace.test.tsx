@@ -1,7 +1,26 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 
-vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.children }));
+vi.mock('next/link', () => ({
+  default: ({
+    children,
+    href,
+    className,
+    'aria-label': ariaLabel,
+    'data-testid': testId,
+  }: {
+    children?: ReactNode;
+    href?: string;
+    className?: string;
+    'aria-label'?: string;
+    'data-testid'?: string;
+  }) => (
+    <a href={href} className={className} aria-label={ariaLabel} data-testid={testId}>
+      {children}
+    </a>
+  ),
+}));
 
 import { DailyBriefWorkspace, type DailyBriefWorkspaceProps } from './daily-brief-workspace';
 import type { DashboardPositionEvent, Position } from '@/lib/types';
@@ -55,8 +74,8 @@ const positions = [
   },
 ] as Position[];
 
-const latestEvent: DashboardPositionEvent = {
-  date: '2026-08-05',
+const sessionLedgerEvent: DashboardPositionEvent = {
+  date: '2026-08-06',
   ticker: 'XLF',
   event: 'ADD',
   weight_pct: 15.2,
@@ -106,7 +125,7 @@ const populatedProps: DailyBriefWorkspaceProps = {
   risks: [{ label: 'Duration selloff', trigger: '10Y above 4.80%', horizonHours: 48 }],
   theses: [{ id: 'T1', name: 'International breadth is improving', status: 'active' }],
   contextBullets: ['Gold strength conflicts with the risk-on breadth signal.'],
-  latestEvent,
+  ledgerDayEvents: [sessionLedgerEvent],
   runHealth: {
     status: 'completed',
     runDate: '2026-08-06',
@@ -148,7 +167,7 @@ const emptyProps: DailyBriefWorkspaceProps = {
   risks: [],
   theses: [],
   contextBullets: [],
-  latestEvent: null,
+  ledgerDayEvents: [],
   runHealth: null,
 };
 
@@ -205,10 +224,31 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Theses');
     expect(html).toContain('data-testid="daily-brief-workspace"');
     expect(html).toContain('line-clamp-6');
-    expect(html).toContain('Open digest');
     expect(html).toContain('overflow-x-auto');
     expect(html).not.toContain('glass-card');
     expect(html).not.toContain('Market state');
+    // Pass-through micro-links removed — whole cards are the affordance.
+    expect(html).not.toContain('Full digest');
+    expect(html).not.toContain('All holdings');
+    expect(html).not.toContain('Open digest');
+    expect(html).not.toContain('Last recorded book event');
+    expect(html).toContain('data-testid="brief-ledger-day"');
+    expect(html).toContain('Ledger');
+  });
+
+  it('wires brief sections to one destination each', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace {...populatedProps} />
+    );
+
+    expect(html).toContain('data-testid="brief-scoreboard-link"');
+    expect(html).toContain('href="/portfolio/performance"');
+    expect(html).toContain('data-testid="brief-signals-link"');
+    expect(html).toContain('data-testid="brief-risk-thesis-link"');
+    expect(html).toContain('href="/portfolio?tab=theses"');
+    expect(html).toContain('data-testid="brief-ledger-link"');
+    expect(html).toContain('href="/portfolio/ledger"');
+    expect(html).toContain('data-testid="brief-holdings-link"');
   });
 
   it('shows the portfolio thesis once in the hero — not again in beats or latest decision', () => {
@@ -226,10 +266,12 @@ describe('DailyBriefWorkspace', () => {
           },
         ]}
         rationaleByTicker={{ XLF: thesis }}
-        latestEvent={{
-          ...latestEvent,
-          reason: 'Maintain financial exposure while breadth confirms.',
-        }}
+        ledgerDayEvents={[
+          {
+            ...sessionLedgerEvent,
+            reason: 'Maintain financial exposure while breadth confirms.',
+          },
+        ]}
       />
     );
 
@@ -258,7 +300,7 @@ describe('DailyBriefWorkspace', () => {
 
     expect(html).toContain('Pipeline status unavailable');
     expect(html).not.toContain('Pipeline complete');
-    expect(html).toContain('No book change this session');
+    expect(html).toContain('No ledger activity this session');
     expect(html).toContain('No additional digest context was recorded.');
     expect(html).toContain('Nothing material was published for this run yet.');
     expect(html).toContain('No research highlight was published for this run.');
@@ -267,36 +309,54 @@ describe('DailyBriefWorkspace', () => {
   });
 
   it('never surfaces derived book-event engineering jargon or +0.0pp ADD', () => {
+    // Caller must not pass zero-delta junk into ledgerDayEvents; empty list is honest.
     const html = renderToStaticMarkup(
-      <DailyBriefWorkspace
-        {...populatedProps}
-        latestEvent={{
-          date: '2026-08-25',
-          ticker: 'EWZ',
-          event: 'ADD',
-          weight_pct: 12,
-          prev_weight_pct: 12,
-          weight_change_pct: 0,
-          price: null,
-          thesis_id: null,
-          reason:
-            'Derived from positions book vs prior committed book 2026-08-24 (digest proposed_positions unavailable; no rebalance_decision.json for this date).',
-        }}
-      />
+      <DailyBriefWorkspace {...populatedProps} ledgerDayEvents={[]} />
     );
 
     expect(html).not.toMatch(/proposed_positions|rebalance_decision\.json/i);
     expect(html).not.toContain('+0.0pp');
-    expect(html).not.toContain('EWZ');
-    expect(html).toContain('No book change this session');
+    expect(html).toContain('No ledger activity this session');
+    expect(html).toContain('data-testid="brief-ledger-empty"');
   });
 
-  it('shows honest empty copy when no material book event is selected', () => {
+  it('shows honest empty copy when the brief date has no ledger rows', () => {
     const html = renderToStaticMarkup(
-      <DailyBriefWorkspace {...populatedProps} latestEvent={null} />
+      <DailyBriefWorkspace {...populatedProps} ledgerDayEvents={[]} />
     );
-    expect(html).toContain('No book change this session');
-    expect(html).not.toContain('Last recorded book event</p><div');
+    expect(html).toContain('No ledger activity this session');
+    expect(html).not.toContain('Last recorded book event');
+    expect(html).not.toContain('data-testid="brief-ledger-day"');
+  });
+
+  it('summarizes session ledger rows without borrowing an older large move', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace
+        {...populatedProps}
+        digestDate="2026-08-27"
+        ledgerDayEvents={[
+          {
+            date: '2026-08-27',
+            ticker: 'XLF',
+            event: 'TRIM',
+            weight_pct: 18,
+            prev_weight_pct: 22,
+            weight_change_pct: -4,
+            price: null,
+            thesis_id: null,
+            reason: 'Trim into stretched financials.',
+          },
+        ]}
+      />
+    );
+
+    const ledger = html.match(/data-testid="brief-ledger-day"[\s\S]*?<\/ul>/)?.[0] ?? '';
+    expect(ledger).toContain('XLF');
+    expect(ledger).toContain('trim');
+    expect(ledger).toContain('-4.0pp');
+    expect(ledger).not.toContain('VGK');
+    expect(ledger).not.toContain('-9.9pp');
+    expect(html).not.toContain('Last recorded book event');
   });
 
   it('never shows mechanical sizing text in hero, portfolio beat, or latest decision', () => {
