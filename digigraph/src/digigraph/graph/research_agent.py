@@ -31,6 +31,11 @@ from digillm import CallPurpose, NoArtifactReason
 from pydantic import BaseModel, ValidationError
 
 from digigraph import usage as _usage
+from digigraph.compaction import (
+    compact_messages,
+    compaction_config_from_env,
+    wrap_execute_tool_for_tier1,
+)
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
 
@@ -321,12 +326,29 @@ def run_research_agent(
         )
         return result
 
+    # Pre-LLM compaction (#399): Atlas phases can ship large phase_inputs / prior
+    # briefs in ``messages``. Tier-1 also wraps the tool executor so digillm never
+    # injects multi-MB tool payloads into its local transcript.
+    tool_grounded = bool(tools) and execute_tool is not None
+    compaction_cfg = compaction_config_from_env()
+    compaction = compact_messages(messages, compaction_cfg, session_id=None)
+    messages = compaction.llm_messages
+    execute_for_llm = (
+        wrap_execute_tool_for_tier1(traced_execute_tool, config=compaction_cfg)
+        if tool_grounded
+        else traced_execute_tool
+    )
+
     last_error: Exception | None = None
     parent_call_id = None
-    tool_grounded = bool(tools) and execute_tool is not None
     with _usage.call_context(phase=phase_slug, operation=schema_name):
         for attempt in range(max_retries + 1):
             call = None
+            # Re-compact on retries: repair turns append assistant+user messages and
+            # can push the transcript over the token threshold.
+            if attempt > 0:
+                compaction = compact_messages(messages, compaction_cfg, session_id=None)
+                messages = compaction.llm_messages
             # The `finally` must span every deferral site, not just the parse block: a
             # deferred logical record is held in the handle until `finalize()` delivers it,
             # so an exception out of the tool loop below would otherwise discard it. That
@@ -347,7 +369,7 @@ def run_research_agent(
                             effective_model,
                             messages,
                             tools=tools,
-                            execute_tool=traced_execute_tool,
+                            execute_tool=execute_for_llm,
                             temperature=temperature,
                             search_parameters=search_parameters,
                         )
