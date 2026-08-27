@@ -64,11 +64,15 @@ def _run_trials_parallel(
             results.append((params, bt))
         return results
 
-    args_list = [(strategy_name, symbols, params, data_path, data_dir) for params in trials]
+    args_list = [
+        (strategy_name, symbols, params, data_path, data_dir) for params in trials
+    ]
     results: list[tuple[dict, BacktestResult]] = [None] * len(trials)  # type: ignore
     try:
         with ProcessPoolExecutor(max_workers=max_workers) as pool:
-            future_to_idx = {pool.submit(_run_trial, args): i for i, args in enumerate(args_list)}
+            future_to_idx = {
+                pool.submit(_run_trial, args): i for i, args in enumerate(args_list)
+            }
             for future in as_completed(future_to_idx):
                 i = future_to_idx[future]
                 params, bt = future.result()
@@ -81,7 +85,9 @@ def _run_trials_parallel(
                     bt.total_return_pct,
                 )
     except (BrokenProcessPool, OSError, RuntimeError) as exc:
-        logger.warning("Parallel optimization failed (%s); falling back to sequential.", exc)
+        logger.warning(
+            "Parallel optimization failed (%s); falling back to sequential.", exc
+        )
         results = []
         for i, params in enumerate(trials):
             logger.info("Trial %d/%d (sequential): %s", i + 1, len(trials), params)
@@ -116,10 +122,8 @@ def generate_param_grid(
     param_values: dict[str, list[float | int | str]] = {}
 
     for name, spec in param_specs.items():
-        if (
-            isinstance(spec, (list, tuple))
-            and len(spec) == 3
-            and all(isinstance(x, (int, float)) for x in spec)
+        if isinstance(spec, (list, tuple)) and len(spec) == 3 and all(
+            isinstance(x, (int, float)) for x in spec
         ):
             # (min, max, step)
             lo, hi, step = spec[0], spec[1], spec[2]

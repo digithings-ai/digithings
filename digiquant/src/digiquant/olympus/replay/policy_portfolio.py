@@ -63,7 +63,11 @@ def slice_series_for_eval_fold(
 
     eval_start = fold.eval_start
     eval_end = fold.eval_end
-    keep_indices = [i for i, ts in enumerate(reference_stamps) if eval_start <= ts <= eval_end]
+    keep_indices = [
+        i
+        for i, ts in enumerate(reference_stamps)
+        if eval_start <= ts <= eval_end
+    ]
     sliced: list[InstrumentBarSeries] = []
     for inst in series:
         bars = tuple(inst.bars[i] for i in keep_indices)
@@ -99,7 +103,9 @@ def build_policy_arm_request(
 ) -> PortfolioReplayRequest:
     """Build one portfolio replay request from pinned manifest + arm policy."""
     if arm.manifest_content_hash != manifest.manifest_content_hash:
-        raise PolicyArmReplayError("arm manifest_content_hash does not match ReplayInputManifest")
+        raise PolicyArmReplayError(
+            "arm manifest_content_hash does not match ReplayInputManifest"
+        )
     if snapshot.shared != manifest.shared:
         raise PolicyArmReplayError("snapshot shared inputs do not match manifest.shared")
 

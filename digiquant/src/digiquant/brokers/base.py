@@ -22,8 +22,6 @@ class BrokerAdapter(Protocol):
         """Disconnect. Stub raises NotImplementedError."""
         ...
 
-    def submit_order(
-        self, symbol: str, side: str, quantity: float, order_type: str = "market"
-    ) -> str:
+    def submit_order(self, symbol: str, side: str, quantity: float, order_type: str = "market") -> str:
         """Submit order; returns order_id. Stub raises NotImplementedError."""
         ...

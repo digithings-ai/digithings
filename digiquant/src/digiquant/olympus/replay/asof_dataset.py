@@ -211,7 +211,9 @@ def build_asof_dataset(
     resolved: dict[str, RegisteredPolicyVersion] | None = None
     if policy_refs:
         if policy_registry is None:
-            raise AsOfDatasetBuildError("policy_registry required when policy_refs are declared")
+            raise AsOfDatasetBuildError(
+                "policy_registry required when policy_refs are declared"
+            )
         resolved = {}
         for ref in policy_refs:
             version = policy_registry.resolve(ref, replay_as_of=cutoff, review_pinned=True)

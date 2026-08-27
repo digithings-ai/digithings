@@ -331,7 +331,9 @@ def compile_h7_decision_context(inp: H7DecisionContextCompileInput) -> H7Decisio
         outcome_lesson_version_id=(
             inp.outcome_lesson_version_id
             if inp.outcome_lesson_version_id is not None
-            else (prerequisites.outcome_lesson_version_id if prerequisites is not None else None)
+            else (
+                prerequisites.outcome_lesson_version_id if prerequisites is not None else None
+            )
         ),
     )
     prior_auth = _build_section(H7SectionKind.PRIOR_AUTHORIZATION, entity_ids=auth_ids)

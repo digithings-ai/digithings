@@ -67,7 +67,9 @@ def load_calibrations_from_supabase(
     return out
 
 
-def merge_trade_start(calibration: dict[str, Any], trade_start: str | None) -> dict[str, Any]:
+def merge_trade_start(
+    calibration: dict[str, Any], trade_start: str | None
+) -> dict[str, Any]:
     """Layer public ``trade_start`` from settings.json onto a calibration dict."""
     merged = dict(calibration)
     if trade_start:

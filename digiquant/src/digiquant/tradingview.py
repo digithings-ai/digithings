@@ -127,20 +127,20 @@ plot(hist,        color=hist >= 0 ? color.teal : color.red, style=plot.style_his
 
 # Default param values used when caller does not provide a value.
 _PARAM_DEFAULTS: dict[str, dict[str, float | int]] = {
-    "ema_cross": {"fast_period": 9, "slow_period": 21},
-    "bollinger_mr": {"bb_period": 20, "bb_std": 2.0, "sl_pct": 1.0},
-    "rsi_momentum": {"rsi_period": 14, "oversold": 30.0, "overbought": 70.0},
-    "macd_trend": {"fast_period": 12, "slow_period": 26, "signal_period": 9},
+    "ema_cross":     {"fast_period": 9, "slow_period": 21},
+    "bollinger_mr":  {"bb_period": 20, "bb_std": 2.0, "sl_pct": 1.0},
+    "rsi_momentum":  {"rsi_period": 14, "oversold": 30.0, "overbought": 70.0},
+    "macd_trend":    {"fast_period": 12, "slow_period": 26, "signal_period": 9},
 }
 
 # Strategy name aliases (mirrors strategy_specs.py).
 _ALIAS_MAP: dict[str, str] = {
-    "ema": "ema_cross",
+    "ema":           "ema_cross",
     "ema_crossover": "ema_cross",
-    "bollinger": "bollinger_mr",
-    "bb_mr": "bollinger_mr",
-    "rsi": "rsi_momentum",
-    "macd": "macd_trend",
+    "bollinger":     "bollinger_mr",
+    "bb_mr":         "bollinger_mr",
+    "rsi":           "rsi_momentum",
+    "macd":          "macd_trend",
 }
 
 
@@ -204,9 +204,7 @@ def export_to_pine(
         success=True,
         script=script,
         artifact_path=artifact,
-        message="Pine Script v5 export succeeded."
-        if artifact
-        else "Pine Script v5 generated (no output_path provided).",
+        message="Pine Script v5 export succeeded." if artifact else "Pine Script v5 generated (no output_path provided).",
     )
 
 

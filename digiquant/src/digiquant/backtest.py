@@ -26,17 +26,17 @@ def _get_known_strategies() -> frozenset[str]:
             import digiquant.strategies  # noqa: F401
             from digiquant.strategies.registry import _ALIASES as _ra
             from digiquant.strategies.registry import _REGISTRY as _reg
-
             registry_names: frozenset[str] = frozenset(_reg.keys()) | frozenset(_ra.keys())
         except ImportError:
             registry_names = frozenset()
         _KNOWN_STRATEGIES = base | registry_names
     return _KNOWN_STRATEGIES
 
-
 logger = logging.getLogger(__name__)
 
-NAUTILUS_UNAVAILABLE_MSG = "Nautilus backtest unavailable. Install digiquant[nautilus]."
+NAUTILUS_UNAVAILABLE_MSG = (
+    "Nautilus backtest unavailable. Install digiquant[nautilus]."
+)
 DATA_REQUIRED_MSG = (
     "Backtest requires data_path (single OHLCV CSV) or data_dir with symbols. "
     "Specify strategy, symbols, and data source."
@@ -49,20 +49,14 @@ DATA_NOT_FOUND_MSG = (
 # In-memory backtest result cache keyed by SHA-256 of (strategy, symbols, params, data source).
 # Skipped when tearsheet_path is set. Disable with DIGIQUANT_BACKTEST_CACHE=false.
 _CACHE_ENABLED = os.environ.get("DIGIQUANT_BACKTEST_CACHE", "true").strip().lower() not in (
-    "0",
-    "false",
-    "no",
+    "0", "false", "no"
 )
-
-
 def _backtest_cache_max() -> int:
     raw = (os.environ.get("DIGIQUANT_BACKTEST_CACHE_MAX") or "128").strip()
     try:
         return max(1, int(raw))
     except ValueError:
         return 128
-
-
 _backtest_cache: dict[str, BacktestResult] = {}
 _backtest_cache_order: list[str] = []
 
@@ -118,7 +112,9 @@ def run_backtest(
     """
     known = _get_known_strategies()
     if strategy_name not in known:
-        raise ValueError(f"Unknown strategy: {strategy_name!r}. Known strategies: {sorted(known)}")
+        raise ValueError(
+            f"Unknown strategy: {strategy_name!r}. Known strategies: {sorted(known)}"
+        )
     if not symbols:
         raise RuntimeError("symbols required (non-empty list).")
     if data_path is None and data_dir is None:

@@ -234,9 +234,7 @@ def build_equity_rows(
     ``is_trading_day=True``; weekday non-sessions become ``reason='holiday'``;
     Sat/Sun become ``reason='weekend'``.
     """
-    sessions, effective_start, effective_end = _calendar_session_dates(
-        venue, start, end, get_calendar=get_calendar
-    )
+    sessions, effective_start, effective_end = _calendar_session_dates(venue, start, end, get_calendar=get_calendar)
     rows: list[dict[str, Any]] = []
     for d in _iter_dates(effective_start, effective_end):
         if d in sessions:
