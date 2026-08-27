@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.2](https://github.com/digithings-ai/digithings/compare/digichat-v1.3.1...digichat-v1.3.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **byok:** kill a dead auth argument and a refusal that named the wrong model ([#2550](https://github.com/digithings-ai/digithings/issues/2550)) ([337ff56](https://github.com/digithings-ai/digithings/commit/337ff5673194d61748e264826173047dbf880822))
+* **byok:** strip the refusal example, and stop a parenthetical crashing startup ([#2568](https://github.com/digithings-ai/digithings/issues/2568)) ([98d7a49](https://github.com/digithings-ai/digithings/commit/98d7a496f8e233e007dd96e7948852bff55d7d60))
+
 ## [1.3.1](https://github.com/digithings-ai/digithings/compare/digichat-v1.3.0...digichat-v1.3.1) (2026-08-20)
 
 

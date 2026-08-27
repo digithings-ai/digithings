@@ -75,14 +75,29 @@ const populatedProps: DailyBriefWorkspaceProps = {
   digestDate: '2026-08-06',
   bookDate: '2026-08-05',
   runType: 'delta',
-  actions: [{ ticker: 'XLF', current_pct: 15.1, recommended_pct: 15.2, action: 'HOLD' }],
-  rationaleByTicker: {},
+  actions: [
+    {
+      ticker: 'NVDA',
+      current_pct: 8,
+      recommended_pct: 6,
+      action: 'TRIM',
+      rationale: 'Valuation stretched into earnings.',
+    },
+  ],
+  rationaleByTicker: {
+    XLF: 'Maintain financial exposure while breadth confirms.',
+  },
   returns: {
     sincePct: -0.9,
     sinceDate: '2026-06-23',
     dailyPct: 0,
+    dailyAsOf: '2026-08-05',
+    sinceAsOf: '2026-08-05',
     benchTicker: 'SPY',
     excessPct: 1.8,
+    excessAsOf: '2026-08-05',
+    alphaPct: 0.4,
+    informationRatio: 0.35,
   },
   metrics: { maxDrawdown: -2.4, volatility: 11.8 },
   investedPct: 30.2,
@@ -117,8 +132,13 @@ const emptyProps: DailyBriefWorkspaceProps = {
     sincePct: null,
     sinceDate: null,
     dailyPct: null,
+    dailyAsOf: null,
+    sinceAsOf: null,
     benchTicker: null,
     excessPct: null,
+    excessAsOf: null,
+    alphaPct: null,
+    informationRatio: null,
   },
   metrics: { maxDrawdown: null, volatility: null },
   investedPct: null,
@@ -138,27 +158,36 @@ describe('DailyBriefWorkspace', () => {
     );
 
     expect(html).toContain('Morning brief');
-    expect(html).toContain('Breadth improves while duration risk remains elevated.');
-    expect(html).toContain('Holding the book');
+    expect(html).toContain('Your update');
+    expect(html).toContain('data-testid="brief-attention"');
+    expect(html).toContain('Trim NVDA — Valuation stretched into earnings.');
+    expect(html).toContain('Research');
+    expect(html).toContain('Hold breadth above 65%');
+    expect(html).toContain('Portfolio');
+    expect(html).toContain('Watch');
+    expect(html).toContain('Duration selloff');
+    expect(html).toContain('1 allocation change');
     expect(html).toContain('Pipeline complete');
     expect(html).toContain('8 / 8 segments');
-    expect(html).toContain('Max drawdown');
-    expect(html).toContain('-2.4%');
-    expect(html).toContain('Volatility');
-    expect(html).toContain('11.8%');
-    expect(html).not.toContain('+11.8%');
+    expect(html).toContain('Alpha');
+    expect(html).toContain('+0.4%');
+    expect(html).toContain('Info ratio');
+    expect(html).toContain('0.35');
+    expect(html).not.toContain('Max drawdown');
+    expect(html).not.toContain('Volatility');
     expect(html).toContain('Invested');
     expect(html).toContain('30%');
     expect(html).not.toContain('>NAV<');
     expect(html).not.toContain('98.5');
     expect(html).not.toContain('Sharpe');
-    expect(html).toContain('Duration selloff');
+    // Regime string + confidence stayed out of the hero (badge only).
+    expect(html).not.toContain('0.6 confidence');
+    expect(html).not.toContain('Slowing / Cooling / Neutral / Risk-Off');
     expect(html).toContain('International breadth is improving');
     expect(html).toContain('Gold strength conflicts');
     expect(html).toContain('Maintain financial exposure');
     expect(html).toContain('XLF');
     expect(html).toContain('VGK');
-    expect(html.match(/Breadth improves while duration risk remains elevated\./g)).toHaveLength(1);
     expect(html).toContain('Pipeline');
     expect(html).toContain('Performance');
     expect(html).toContain('Holdings');
@@ -168,6 +197,7 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Open digest');
     expect(html).toContain('overflow-x-auto');
     expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('Market state');
   });
 
   it('does not imply a healthy pipeline when run telemetry is unavailable', () => {
@@ -179,5 +209,9 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('Pipeline complete');
     expect(html).toContain('No book decision recorded');
     expect(html).toContain('No additional digest context was recorded.');
+    expect(html).toContain('Nothing material was published for this run yet.');
+    expect(html).toContain('No research highlight was published for this run.');
+    expect(html).toContain('No decision published');
+    expect(html).not.toContain('Holding the book');
   });
 });

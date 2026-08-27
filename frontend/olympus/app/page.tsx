@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
+import { useLiveBriefKpis } from '@/lib/hooks/use-live-brief-kpis';
 import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
@@ -91,6 +92,13 @@ export default function OverviewPage() {
     return inceptionVsBenchmark(data.portfolio.snapshots, data.benchmarks);
   }, [data]);
 
+  const performanceHistory = data?.portfolio?.snapshots ?? [];
+  const liveKpis = useLiveBriefKpis(
+    data?.positions ?? [],
+    performanceHistory,
+    data?.benchmarks
+  );
+
   if (loading) return <PageSkeleton />;
   if (error || !data)
     return (
@@ -137,31 +145,34 @@ export default function OverviewPage() {
     }
   }
 
-  const performanceHistory = portfolio.snapshots ?? [];
+  const performanceHistoryResolved = portfolio.snapshots ?? [];
   // The book's own as-of (latest performance-history point) — deliberately NOT
   // latestDate (the digest date): research publishes daily even when the
   // book-persistence half is frozen (#1555), and book surfaces must carry
   // their own date rather than borrow the digest's freshness.
-  const bookAsOf = performanceHistory.length
-    ? performanceHistory[performanceHistory.length - 1].date
+  const bookAsOf = liveKpis?.bookNavDate ?? (performanceHistoryResolved.length
+    ? performanceHistoryResolved[performanceHistoryResolved.length - 1].date
+    : null);
+  const priceAsOf = liveKpis?.priceAsOfDate ?? bookAsOf;
+  // Percentage returns only — never lead with the base-100 NAV index.
+  // Prefer the shared live KPI path; fall back to snapshot ratio (same formula).
+  const initialPortfolioValue = performanceHistoryResolved.length
+    ? performanceHistoryResolved[0].nav
     : null;
-  const latestPortfolioValue = performanceHistory.length
-    ? performanceHistory[performanceHistory.length - 1].nav
-    : null;
-  const initialPortfolioValue = performanceHistory.length ? performanceHistory[0].nav : null;
+  const latestPortfolioValue = liveKpis?.liveNav ?? (performanceHistoryResolved.length
+    ? performanceHistoryResolved[performanceHistoryResolved.length - 1].nav
+    : null);
   const sincePct =
-    latestPortfolioValue != null && initialPortfolioValue != null && initialPortfolioValue > 0
+    liveKpis?.sinceInceptionPct ??
+    (latestPortfolioValue != null && initialPortfolioValue != null && initialPortfolioValue > 0
       ? (latestPortfolioValue / initialPortfolioValue - 1) * 100
-      : null;
-  const sinceDate = performanceHistory.length ? performanceHistory[0].date : null;
-  // Daily return + benchmark are gated on at least two persisted points.
-  const dailyRet =
-    performanceHistory.length >= 2
-      ? ((performanceHistory[performanceHistory.length - 1].nav -
-          performanceHistory[performanceHistory.length - 2].nav) /
-          performanceHistory[performanceHistory.length - 2].nav) *
-        100
-      : null;
+      : null);
+  const sinceDate = liveKpis?.sinceInceptionStartDate ?? (performanceHistoryResolved.length
+    ? performanceHistoryResolved[0].date
+    : null);
+  const dailyRet = liveKpis?.dayReturnPct ?? null;
+  const excessPct = liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null;
+  const benchTicker = liveKpis?.benchmarkTicker ?? benchmarkBlurb?.ticker ?? null;
 
   return (
     <div className={`${SUBPAGE_MAX} py-4 md:py-7`}>
@@ -179,8 +190,13 @@ export default function OverviewPage() {
           sincePct,
           sinceDate,
           dailyPct: dailyRet,
-          benchTicker: benchmarkBlurb?.ticker ?? null,
-          excessPct: benchmarkBlurb?.excessPct ?? null,
+          dailyAsOf: priceAsOf,
+          sinceAsOf: priceAsOf,
+          benchTicker,
+          excessPct,
+          excessAsOf: priceAsOf,
+          alphaPct: liveKpis?.alphaPct ?? null,
+          informationRatio: liveKpis?.informationRatio ?? null,
         }}
         metrics={{
           maxDrawdown:

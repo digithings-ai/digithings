@@ -1,4 +1,8 @@
-"""Tests for Hermes turnover discipline (#859 Phase D)."""
+"""Tests for Hermes turnover discipline (#859 Phase D).
+
+WP8.5 (#2738): cadence/turnover composition with the post-cutover H8 shell is locked
+in ``test_allocation_invariants.py``.
+"""
 
 from __future__ import annotations
 
@@ -58,6 +62,17 @@ def test_relative_band_protects_large_position_from_small_drift() -> None:
         run_date=date(2026, 6, 19),
     )
     assert sized["SPY"] == 30.0
+
+
+def test_incumbent_turnover_preference_defaults_frozen() -> None:
+    """WP6.1 (#2687): document turnover/cadence defaults exercised by H8 backstop."""
+    from tests.dq.hermes.incumbent_risk_fixtures import load_incumbent_risk_fixture
+
+    prefs = load_incumbent_risk_fixture()["policy_defaults"]["turnover_preferences"]
+    assert prefs["rebalance_threshold_pct"] == 3
+    assert prefs["holding_days"] == 5
+    assert prefs["rebalance_rel_band_pct"] == 20
+    assert prefs["rebalancing_cadence"] == "daily"
 
 
 def test_relative_band_allows_large_drift() -> None:

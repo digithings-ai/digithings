@@ -6,6 +6,7 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import type { PortfolioSectionId } from '@/components/portfolio/PortfolioSectionNav';
+import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
 import { getDocLibraryTier } from '@/lib/library-doc-tier';
 import { fetchObservabilityData } from '@/lib/observability-queries';
 import { fetchThesisVehicleMap } from '@/lib/queries';
@@ -200,6 +201,7 @@ export default function PortfolioShellInner() {
 
   return (
     <div className="flex min-h-full flex-col">
+      <HouseIdentityBanner />
       <PortfolioSectionNav active={sectionActive} />
 
       <div className={`${SUBPAGE_MAX} flex min-h-0 flex-1 flex-col space-y-6 py-4 md:py-5`}>

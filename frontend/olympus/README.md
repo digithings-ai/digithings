@@ -69,6 +69,17 @@ at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
 `process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
 
+**House identity (#2643 / #1945 Track C):** Brief and Portfolio surfaces show a
+compact digithings house ETF paper book banner linking to `/house` —
+**Corpus | Book | Profile** (read-only). Profile pins are declared chrome until
+Track B ProfileConfig DB lands; they are not editable Settings.
+
+**Portfolio sections:** Holdings · Theses · **Tearsheet** (`/portfolio/performance`) ·
+**Ledger** (position-event activity) · **Period** (`public_accounting_period_status`
+tip rows; empty / query-failure gaps stay honest; raw `olympus_accounting_*` bases
+remain service_role-only) · Attribution. Period chrome does not invent private
+accounting rows (#2652).
+
 Shared workspace gutters use `SUBPAGE_MAX` from
 `components/layout-constants.ts`. The constant intentionally lives outside
 client components so server-rendered pages and Suspense fallbacks receive a
@@ -283,13 +294,29 @@ reasoning workflow without replacing their domain interactions:
   page-level card primitives.
 - Pipeline has three separate inspection surfaces: the topology explains process and
   run status, All artifacts lists every persisted `document_key`, and Call trace lists
-  ordered model/search/tool operations from `olympus_run_event_trace`. The trace pages
-  100 rows at a time, groups by run attempt and phase, and opens retries/errors by default.
-  Historical runs without ingestion-time events say "Call details were not recorded for
-  this run"; they are never reconstructed from aggregate diagnostics.
+  ordered model/search/tool operations from `olympus_run_event_trace`. Soft-stamped
+  `call_id` / `attempt_id` / `node_run_id` (#2763) join each row to WP1
+  `olympus_provider_*` (067 is economics authority; the public view still omits
+  tokens/cost). Every known
+  representative-run key is classified as a topology leaf, fan-out branch, or
+  ledger-only discovery path (`lib/pipeline-document-discoverability.ts`) so deep
+  links can still resolve a stage. Call trace pages 100 rows at a time (searchable and
+  stage-filterable via `lib/pipeline-trace-stage.ts`), groups by run attempt and phase,
+  and opens retries/errors by default. Vitest pins a ~300-call fixture for filter +
+  paginate. Stage filter prefers `document_key` (Pipeline deep-link grammar) with
+  phase-slug fallback. **Inputs** is a typed call-persistence gap (preflight /
+  attention-plan do not emit model/search/tool rows) — the UI says so and does not
+  invent calls. Historical runs without ingestion-time events say "Call details were
+  not recorded for this run"; they are never reconstructed from aggregate diagnostics.
 - Graph status is explicit: not run, state-only operation, persisted artifact, expected
-  artifact missing, and parallel dispatch. Snapshot presence establishes that a run was
-  recorded even when it published no documents.
+  artifact missing, parallel dispatch, and stage overview (`lib/pipeline-topology-status.ts`).
+  Atlas / Hermes / Learning bands gate active chrome — research artifacts never paint Hermes
+  or Learning as run. Snapshot presence establishes that a run was recorded even when it
+  published no documents (degraded reach across bands).
+- Screenshot matrix (#2645): every topology stage × desktop/mobile plus representative
+  artifact families are listed in [`docs/screenshot-matrix.md`](docs/screenshot-matrix.md).
+  Vitest (`lib/screenshot-manifest.test.ts`) fails if a required path is missing from
+  `fixtures/screenshots/` (1×1 PNG placeholders are allowed until operator capture).
 - **Why** owns one reasoning command band above the shared responsive tab bar.
   `?why=read` presents the latest synthesis as a divided reading workspace;
   `?why=deliberations` presents rebalance actions, risk and ticker debates,

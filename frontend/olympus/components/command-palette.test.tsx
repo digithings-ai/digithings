@@ -23,11 +23,21 @@ describe('buildCommandItems (F2 palette — static rows only)', () => {
     const items = buildCommandItems(data);
     expect(items.some((i) => i.id.startsWith('doc-'))).toBe(false);
   });
-  it('separates performance from attribution analysis', () => {
+  it('separates tearsheet / ledger / period from attribution analysis', () => {
     const items = buildCommandItems(data);
     expect(items.find((i) => i.id === 'go-perf')).toMatchObject({
+      title: 'Portfolio — Tearsheet',
       href: '/portfolio/performance',
       hint: 'NAV, returns & position performance',
+    });
+    expect(items.find((i) => i.id === 'go-ledger')).toMatchObject({
+      href: '/portfolio/ledger',
+    });
+    expect(items.find((i) => i.id === 'go-period')).toMatchObject({
+      href: '/portfolio/period',
+    });
+    expect(items.find((i) => i.id === 'go-house')).toMatchObject({
+      href: '/house?tab=corpus',
     });
     expect(items.find((i) => i.id === 'go-attribution')).toMatchObject({
       href: '/portfolio/attribution',

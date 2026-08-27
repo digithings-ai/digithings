@@ -116,6 +116,9 @@ class _MergingQuery(_FakeQuery):
         if self._order is not None:
             col, desc = self._order
             rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
         if self._limit is not None:
             rows = rows[: self._limit]
         return _FakeResponse(data=rows)
@@ -405,3 +408,39 @@ def test_dry_run_writes_nothing() -> None:
         PeriodStatus.ESTIMATED,
         PeriodStatus.FAILED,
     }
+
+
+def test_opening_quantities_pages_past_postgrest_max_rows() -> None:
+    """Closed-lot history >1000 must not drop a later open lot (#2776 / WP3 review)."""
+    mod = _load_finalize_mod()
+    from digiquant.olympus.hermes.models.portfolio_ledger import HoldingLotStatus
+    from digiquant.olympus.hermes.writers.execution_io import HOLDING_LOTS
+
+    closed_lots = [
+        {
+            "id": f"closed-{i}",
+            "opened_by_execution_id": f"exec-closed-{i}",
+            "opened_at": "2026-01-01T15:00:00+00:00",
+            "run_date": "2026-01-01",
+            "quantity": "1",
+            "status": HoldingLotStatus.CLOSED,
+            "closed_at": "2026-01-02T15:00:00+00:00",
+            "symbol": f"ZZZ{i:04d}",
+        }
+        for i in range(1000)
+    ]
+    open_lot = {
+        "id": "open-aapl",
+        "opened_by_execution_id": "exec-aapl",
+        "opened_at": "2026-08-20T15:00:00+00:00",
+        "run_date": "2026-08-20",
+        "quantity": "100",
+        "status": HoldingLotStatus.OPEN,
+        "closed_at": None,
+        "symbol": "AAPL",
+    }
+    client = MergingFake(canned_reads={HOLDING_LOTS: [*closed_lots, open_lot]})
+    qty = mod._opening_quantities(client=client, period_date=PERIOD)
+    assert qty.get("AAPL") == Decimal("100")
+    # Unpaginated PostgREST would return only the first 1000 (all closed) and miss AAPL.
+    assert len(closed_lots) == mod._LOT_PAGE_SIZE

@@ -12,9 +12,13 @@
  * telemetry (cost, tokens, error_summary, breakdown) is intentionally excluded from the
  * view; economics tiles render "—" on the public anon-key dashboard.
  *
- * Every query is FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
+ * Most queries are FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
  * empty result rather than throwing, so consumers render a clean empty state instead of an
  * error wall.
+ *
+ * Exception — accounting NAV (#2599 / #3029): `fetchOlympusTearsheet` FAILS CLOSED when
+ * `public_accounting_nav_history` errors. Swallowing that into an empty series looked like
+ * a healthy empty book and hid unapplied migrations 072–074.
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
@@ -30,6 +34,7 @@ import type { ContributionReturnPoint } from '@digithings/web';
 import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
 import {
   ACCOUNTING_NAV_VIEW,
+  AccountingNavContractError,
   accountingNavToHistoryShape,
   type AccountingNavRow,
 } from './accounting-views';
@@ -458,7 +463,11 @@ export function buildOlympusTearsheet(args: {
         (b.attributionDate ?? '').localeCompare(a.attributionDate ?? '') ||
         Math.abs(b.realizedReturnPct ?? 0) - Math.abs(a.realizedReturnPct ?? 0)
     );
-  const derivedNetReturnPct = periodReturnPct(navAsc.map((row) => row.nav));
+  // Accounting NAV series is the single source of truth for since-inception %.
+  // Prefer derived over persisted metrics so a stale/wrong net_return_pct cannot
+  // show a positive portfolio return while the base-100 index sits under 100.
+  // Use filtered navSeries (same finite/positive gate as return charts), not raw navAsc.
+  const derivedNetReturnPct = periodReturnPct(navSeries.map((row) => row.nav));
   const persistedBenchmarkTicker = args.metrics?.benchmark_ticker ?? 'SPY';
   const benchmarkComparisons = buildBenchmarkComparisons(
     navSeries,
@@ -470,25 +479,20 @@ export function buildOlympusTearsheet(args: {
     benchmarkComparisons.find((comparison) => comparison.ticker === persistedBenchmarkTicker) ??
     benchmarkComparisons[0];
   const derivedBenchmarkReturnPct = defaultComparison?.returnPct ?? null;
-  const netReturnPct = args.metrics?.net_return_pct ?? derivedNetReturnPct;
+  const netReturnPct = derivedNetReturnPct ?? args.metrics?.net_return_pct ?? null;
   const benchmarkReturnPct =
-    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct;
+    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct ?? null;
   const relativeReturnPct =
-    defaultComparison && netReturnPct != null && benchmarkReturnPct != null
+    netReturnPct != null && benchmarkReturnPct != null
       ? roundPct(netReturnPct - benchmarkReturnPct)
-      : args.metrics?.relative_return_pct ??
-        (netReturnPct != null && benchmarkReturnPct != null
-          ? roundPct(netReturnPct - benchmarkReturnPct)
-          : null);
+      : args.metrics?.relative_return_pct ?? null;
   const persistedUsed = [
     args.metrics?.net_return_pct,
     args.metrics?.benchmark_return_pct,
     args.metrics?.relative_return_pct,
   ].some((value) => value != null);
-  const derivedUsed =
-    (args.metrics?.net_return_pct == null && derivedNetReturnPct != null) ||
-    (args.metrics?.benchmark_return_pct == null && derivedBenchmarkReturnPct != null) ||
-    (args.metrics?.relative_return_pct == null && relativeReturnPct != null);
+  // Derived wins for portfolio return whenever the NAV series can produce one.
+  const derivedUsed = derivedNetReturnPct != null || derivedBenchmarkReturnPct != null;
   const returnsSource = persistedUsed
     ? derivedUsed
       ? 'mixed'
@@ -534,15 +538,20 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
       events: [],
     });
   }
-  // NAV: curated accounting series (#2599). Rollback = LEGACY_PUBLIC_NAV_VIEW / nav_history.
-  const [navRes, positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
-    safeSelect<AccountingNavRow>(ACCOUNTING_NAV_VIEW, (sb) =>
-      sb
-        .from(ACCOUNTING_NAV_VIEW)
-        .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
-        .order('date', { ascending: true })
-        .limit(PERFORMANCE_HISTORY_LIMIT)
-    ),
+  // NAV: curated accounting series (#2599). Fail closed on query error (#3029) —
+  // never build an empty tearsheet that looks like a healthy empty book.
+  // Query directly (not via safeSelect) so the PostgREST error is preserved.
+  const navQuery = await supabase
+    .from(ACCOUNTING_NAV_VIEW)
+    .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
+    .order('date', { ascending: true })
+    .limit(PERFORMANCE_HISTORY_LIMIT);
+  if (navQuery.error) {
+    throw new AccountingNavContractError(navQuery.error);
+  }
+  const navRows = (navQuery.data ?? []) as AccountingNavRow[];
+
+  const [positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
       sb
         .from('positions')
@@ -571,7 +580,7 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
   ]);
-  const navHistory: TableRow<'nav_history'>[] = navRes.rows.map((row) => {
+  const navHistory: TableRow<'nav_history'>[] = navRows.map((row) => {
     const shaped = accountingNavToHistoryShape(row);
     return {
       date: shaped.date,

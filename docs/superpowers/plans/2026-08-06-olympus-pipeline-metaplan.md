@@ -11,8 +11,8 @@
 **Facts (do not renumber WPs):**
 
 - **WP1** telemetry / call-attempt ledger — **done**.
-- **WP2** action/fill dual-write — **coded** but hollow in places (`--no-ledger` / empty `holding_lots`); residual work (incl. #2422 when scheduled) before WP2 is non-fiction.
-- **WP3** reconciled period accounting — **unfiled**.
+- **WP2** action/fill dual-write — **cutover closed** on develop (`#2594` `book_source` labeling, `#2595` `legacy_opening_snapshot` seed + prices cron `--require-ledger`). Residual `#2487` / `#2772` (ledger_io money-arithmetic test lock) **done**. Residual `#2768` (durable `TargetAdjustment` rows) is the remaining WP2 Gate-1 caveat tracked in code.
+- **WP3** reconciled period accounting — **coded** on develop (promote `#2603`); deep review / Gate 1 residual caveats still apply.
 - **`module/digiquant`** — synced with develop via #2587 (the earlier “273 commits stale” audit finding is **historical**; still never branch from a stale module ref — `make task` enforces current `origin/<base>`).
 
 **Product intent (additive; full detail in the vision brief):**

@@ -87,6 +87,12 @@ _DEFAULT_POLICY = "accounting-v1"
 _BENCHMARK = "SPY"
 _RECONCILE_ABS_TOL = Decimal("0.05")  # 5 bps on percent return scale (0.05%)
 _EXIT_DECLINED = 3
+# PostgREST / supabase-js default max_rows is 1000 (see digiquant/supabase/config.toml).
+# Closed lots accumulate forever; an unbounded select silently truncates the opening book.
+_LOT_PAGE_SIZE = 1000
+_LOT_SELECT_COLS = (
+    "opened_by_execution_id,opened_at,run_date,quantity,status,closed_at,symbol"
+)
 
 
 class FinalizerDeclined(RuntimeError):
@@ -203,12 +209,29 @@ def _opening_cash(*, client: Any, period_date: date) -> Decimal:
     return Decimal(0)
 
 
+def _fetch_all_holding_lots(*, client: Any) -> list[dict[str, Any]]:
+    """Page through ``HOLDING_LOTS`` so PostgREST ``max_rows`` cannot truncate the book."""
+    rows: list[dict[str, Any]] = []
+    start = 0
+    while True:
+        resp = (
+            client.table(HOLDING_LOTS)
+            .select(_LOT_SELECT_COLS)
+            .order("opened_at")
+            .range(start, start + _LOT_PAGE_SIZE - 1)
+            .execute()
+        )
+        batch = list(getattr(resp, "data", None) or [])
+        rows.extend(batch)
+        if len(batch) < _LOT_PAGE_SIZE:
+            break
+        start += _LOT_PAGE_SIZE
+    return rows
+
+
 def _opening_quantities(*, client: Any, period_date: date) -> dict[str, Decimal]:
     """Live lot quantities strictly before ``period_date`` (EOD prior)."""
-    # Bound the lot read: every symbol that has ever traded is too wide; pull all lots
-    # and filter by opened_at / run_date. PostgREST caps at 1000 — batch if needed later.
-    resp = client.table(HOLDING_LOTS).select("*").execute()
-    rows = list(getattr(resp, "data", None) or [])
+    rows = _fetch_all_holding_lots(client=client)
     cutoff = datetime.combine(period_date, time(0, 0), tzinfo=UTC).isoformat()
 
     opens: dict[str, dict[str, Any]] = {}

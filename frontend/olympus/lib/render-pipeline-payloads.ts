@@ -627,3 +627,73 @@ export function renderRiskDebateMarkdown(payload: unknown): string {
   if (tension) out.push('## Key tension', '', cleanMemoProse(tension), '');
   return `${out.join('\n').trim()}\n`;
 }
+
+/* ── AttentionPlan shadow (#1945 glass-box) ───────────────────────────────── */
+
+/** True for WP13 AttentionPlan shadow documents (`attention-plan`). */
+export function isAttentionPlanPayload(payload: unknown, documentKey?: string): boolean {
+  const p = asObj(payload);
+  if (!p) return false;
+  if (documentKey && documentKey.toLowerCase() === 'attention-plan') return true;
+  if (s(p.doc_type) === 'attention_plan') return true;
+  return p.shadow === true && asObj(p.profile_pin) != null && asObj(p.plan) != null;
+}
+
+/** Human-readable AttentionPlan: profile pin, shadow banner, refresh reasons. */
+export function renderAttentionPlanMarkdown(payload: unknown): string {
+  const p = asObj(payload) || {};
+  const dateStr = s(p.date).trim();
+  const out: string[] = [`# Attention plan${dateStr ? ` — ${dateStr}` : ''}`, ''];
+
+  const mode = s(p.planner_mode).trim() || 'shadow';
+  out.push(
+    `**Mode:** ${mode} (shadow only — does not actuate routing)`,
+    `**Actuated:** ${p.actuated === true ? 'yes' : 'no'}`,
+    '',
+  );
+
+  const pin = asObj(p.profile_pin) || {};
+  out.push('## Profile pin', '');
+  out.push(
+    `| Field | Value |`,
+    `| --- | --- |`,
+    `| Profile | ${escapeTableCell(pin.label || pin.profile_key || '—')} |`,
+    `| House default | ${pin.is_house_default === true ? 'yes' : 'no'} |`,
+    `| Version id | ${escapeTableCell(pin.profile_config_version_id || '—')} |`,
+    '',
+  );
+
+  const plan = asObj(p.plan) || {};
+  const roster = Array.isArray(plan.h4_roster)
+    ? plan.h4_roster.map((x) => s(x).trim()).filter(Boolean)
+    : [];
+  if (roster.length) {
+    out.push('## H4 roster (read-only)', '', roster.map((t) => `- ${t}`).join('\n'), '');
+  }
+
+  const decisions = Array.isArray(plan.decisions) ? plan.decisions : [];
+  out.push('## Refresh decisions', '');
+  if (!decisions.length) {
+    out.push('_No artifact decisions recorded for this plan._', '');
+  } else {
+    out.push(
+      `| Artifact | Action | Edit mode | Refresh reasons |`,
+      `| --- | --- | --- | --- |`,
+    );
+    for (const raw of decisions) {
+      const d = asObj(raw);
+      if (!d) continue;
+      const labels = Array.isArray(d.refresh_reason_labels)
+        ? d.refresh_reason_labels.map((x) => s(x).trim()).filter(Boolean)
+        : Array.isArray(d.refresh_reasons)
+          ? d.refresh_reasons.map((x) => s(x).replace(/_/g, ' ').trim()).filter(Boolean)
+          : [];
+      out.push(
+        `| ${escapeTableCell(d.artifact_key)} | ${escapeTableCell(d.action)} | ${escapeTableCell(d.proposed_edit_mode)} | ${escapeTableCell(labels.join('; ') || '—')} |`,
+      );
+    }
+    out.push('');
+  }
+
+  return `${out.join('\n').trim()}\n`;
+}

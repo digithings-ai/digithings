@@ -21,6 +21,8 @@ import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
+import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
+import { activeRebalanceActions, buildBriefHighlight } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
 export interface BriefRunHealth {
@@ -47,8 +49,13 @@ export interface DailyBriefWorkspaceProps {
     sincePct: number | null;
     sinceDate: string | null;
     dailyPct: number | null;
+    dailyAsOf: string | null;
+    sinceAsOf: string | null;
     benchTicker: string | null;
     excessPct: number | null;
+    excessAsOf: string | null;
+    alphaPct: number | null;
+    informationRatio: number | null;
   };
   metrics: {
     maxDrawdown: number | null;
@@ -70,11 +77,6 @@ type Tone = 'neutral' | 'positive' | 'negative' | 'warning';
 function signedPct(value: number | null): string {
   if (value == null) return '—';
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
-}
-
-function unsignedPct(value: number | null): string {
-  if (value == null) return '—';
-  return `${Math.abs(value).toFixed(1)}%`;
 }
 
 function metricTone(value: number | null): Tone {
@@ -155,10 +157,14 @@ function decisionSummary(actions: RebalanceAction[]): {
   detail: string;
   active: RebalanceAction[];
 } {
-  const active = actions.filter((action) => {
-    const kind = (action.action || '').trim().toUpperCase();
-    return kind !== 'HOLD' && !(kind === 'EXIT' && (action.current_pct ?? 0) === 0);
-  });
+  const active = activeRebalanceActions(actions);
+  if (actions.length === 0) {
+    return {
+      label: 'No decision published',
+      detail: 'Awaiting portfolio recommendation',
+      active,
+    };
+  }
   if (active.length === 0) {
     return {
       label: 'Holding the book',
@@ -196,17 +202,14 @@ const DESTINATIONS = [
 ] as const;
 
 export function DailyBriefWorkspace({
-  regime,
   regimeLabel,
   headline,
-  confidence,
   digestDate,
   bookDate,
   runType,
   actions,
   rationaleByTicker,
   returns,
-  metrics,
   investedPct,
   positions,
   actionables,
@@ -216,12 +219,23 @@ export function DailyBriefWorkspace({
   latestEvent,
   runHealth,
 }: DailyBriefWorkspaceProps) {
+  // `regime` + `confidence` remain on the props contract for callers / badges
+  // elsewhere; the personal hero no longer dumps them as a metrics sub-line (#3036).
   const book = reconcileBook(positions, { investedPct });
   const held = book.rows
     .filter((position) => position.ticker.toUpperCase() !== 'CASH')
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
   const decision = decisionSummary(actions);
   const pipeline = runStatus(runHealth);
+  const highlight = buildBriefHighlight({
+    headline,
+    actions,
+    rationaleByTicker,
+    actionables,
+    risks,
+    contextBullets,
+    latestEvent,
+  });
   const latestThesis = theses[0] ?? null;
   const latestRisk = risks[0] ?? null;
   const latestContext = contextBullets[0] ?? null;
@@ -269,6 +283,8 @@ export function DailyBriefWorkspace({
   }, [held.length]);
 
   return (
+    <div className="space-y-0">
+      <HouseIdentityBanner />
     <section
       data-testid="daily-brief-workspace"
       aria-label="Daily investment brief"
@@ -298,17 +314,36 @@ export function DailyBriefWorkspace({
 
         <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="px-5 py-6 sm:px-7 sm:py-7 lg:border-r lg:border-hair">
+            {/* Personal pipeline update (variant B) — one attention sentence +
+                Research / Portfolio / Watch beats. Regime string + confidence
+                stay on the command-bar badge only; raw levels/indicators are
+                deliberately out of this hero (#3036). */}
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-              Market state · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
+              Your update · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
             </p>
-            <h1 className="mt-2 line-clamp-6 max-w-4xl font-display text-2xl leading-tight text-ink sm:line-clamp-none sm:text-3xl xl:text-4xl">
-              {headline ?? 'The latest market synthesis is not available yet.'}
+            <h1
+              data-testid="brief-attention"
+              className="mt-2 line-clamp-6 max-w-4xl font-display text-2xl leading-tight text-ink sm:line-clamp-none sm:text-3xl xl:text-4xl"
+            >
+              {highlight.attention}
             </h1>
+            <ul
+              data-testid="brief-beats"
+              className="mt-5 max-w-3xl space-y-2.5"
+              aria-label="Research, portfolio, and watch beats"
+            >
+              {highlight.beats.map((beat) => (
+                <li key={beat.kind} className="grid grid-cols-[5.5rem_1fr] gap-3 text-sm leading-snug">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+                    {beat.label}
+                  </span>
+                  <span className={beat.available ? 'text-ink-soft' : 'text-ink-mute'}>
+                    {beat.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
             <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-soft">
-              <span>{regime}</span>
-              {confidence != null ? (
-                <span className="font-mono tabular-nums">{confidence.toFixed(1)} confidence</span>
-              ) : null}
               <Link href={digestHref} className="font-medium text-accent hover:underline sm:hidden">
                 Open digest →
               </Link>
@@ -361,11 +396,11 @@ export function DailyBriefWorkspace({
         data-brief-section="scoreboard"
         className="grid grid-cols-2 divide-y divide-hair border-b border-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0"
       >
-        <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={bookDate && digestDate !== bookDate ? formatAsOf(bookDate) : 'latest close'} />
-        <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
-        <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note="aligned return window" />
-        <Metric label="Max drawdown" value={signedPct(metrics.maxDrawdown)} tone={metrics.maxDrawdown == null ? 'neutral' : 'negative'} />
-        <Metric label="Volatility" value={unsignedPct(metrics.volatility)} />
+        <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
+        <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
+        <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
+        <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
+        <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
         <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />
       </dl>
 
@@ -572,5 +607,6 @@ export function DailyBriefWorkspace({
         ))}
       </nav>
     </section>
+    </div>
   );
 }

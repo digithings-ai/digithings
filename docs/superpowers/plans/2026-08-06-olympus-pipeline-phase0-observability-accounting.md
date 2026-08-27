@@ -1,7 +1,7 @@
 # Olympus Pipeline Phase 0: Observability and Accounting Implementation Plan
 
 > **Status:** Draft for implementation review  
-> **As of 2026-08-25:** WP1 done; WP2 dual-write coded but hollow (`--no-ledger` / empty lots); WP3 unfiled. Product-shape / parallel-track intent lives in the [metaplan Progress strip](2026-08-06-olympus-pipeline-metaplan.md#progress--product-intent-2026-08-25) and [vision realignment brief](2026-08-25-olympus-vision-realignment-brief.md) — Phase 0 task list below is unchanged.  
+> **As of 2026-08-26:** WP1 done; WP2 cutover closed (`#2594` / `#2595` / `--require-ledger`) with residuals `#2487`/`#2772` and `#2768`; WP3 coded on develop (`#2603`). Product-shape / parallel-track intent lives in the [metaplan Progress strip](2026-08-06-olympus-pipeline-metaplan.md#progress--product-intent-2026-08-25) and [vision realignment brief](2026-08-25-olympus-vision-realignment-brief.md) — Phase 0 task list below is unchanged.  
 > **Canonical findings:** [Olympus pipeline review](../../reviews/2026-08-06-olympus-pipeline-review.md), `OLY-REV-001`, `OLY-REV-007`, `OLY-REV-008`, `OLY-REV-009`
 > **Execution:** One issue and one `task/<N>-<slug>` branch per task. Use red-green-refactor. Allocate migration numbers only after syncing the implementation branch.
 

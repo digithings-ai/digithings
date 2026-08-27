@@ -667,6 +667,7 @@ class _AttemptScope:
     finalized: bool = False
     terminal_outcome: ProviderCallOutcome | None = None
     logical_error_type: str | None = None
+    last_attempt_id: UUID | None = None
 
     def start(self) -> tuple[int, RetryReason, datetime]:
         attempt_number = self.next_attempt_number
@@ -818,7 +819,11 @@ def _retry_reason(error: Exception) -> RetryReason:
 
 
 def _optional_nonnegative_int(value: Any) -> int | None:
-    return value if isinstance(value, int) and value >= 0 else None
+    # ``bool`` subclasses ``int``, so ``isinstance(False, int)`` is True. Treating False as 0
+    # would invent a measured-zero token count when the provider omitted usage (#1989).
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 def _optional_attribute(value: Any, name: str) -> Any:
@@ -883,6 +888,8 @@ def _emit_attempt(
     response: Any = None,
     error: Exception | None = None,
 ) -> None:
+    attempt_id = uuid4()
+    scope.last_attempt_id = attempt_id
     observer = _telemetry_observer
     if observer is None:
         return
@@ -890,7 +897,7 @@ def _emit_attempt(
         prompt_tokens, completion_tokens, cost_usd = _response_usage(response)
         served_model = _optional_attribute(response, "model")
         record = ProviderAttemptRecord(
-            attempt_id=uuid4(),
+            attempt_id=attempt_id,
             call_id=scope.call_id,
             attempt_number=attempt_number,
             provider=provider,
@@ -908,6 +915,19 @@ def _emit_attempt(
         emit_telemetry(observer, record)
     except Exception as telemetry_error:
         logger.debug("attempt telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _wp1_join_fields() -> dict[str, Any]:
+    """Soft-stamp fields for the glass-box usage observer (#2763)."""
+    scope = _attempt_scope.get()
+    if scope is None:
+        return {}
+    fields: dict[str, Any] = {"call_id": scope.call_id}
+    if scope.last_attempt_id is not None:
+        fields["attempt_id"] = scope.last_attempt_id
+    if scope.metadata is not None and scope.metadata.node_run_id is not None:
+        fields["node_run_id"] = scope.metadata.node_run_id
+    return fields
 
 
 def _responses_create_with_attempt(
@@ -987,6 +1007,9 @@ def _record_usage(**fields: Any) -> None:
     if observer is None:
         return
     try:
+        # Stamp WP1 join keys from the active attempt scope unless the caller already set them.
+        for key, value in _wp1_join_fields().items():
+            fields.setdefault(key, value)
         observer(**fields)
     except Exception as exc:  # telemetry must never break the LLM call
         logger.debug("usage observer raised: %s", exc)
@@ -1167,27 +1190,29 @@ def _is_empty_completion(resp: Any) -> bool:
     return not content and not tool_calls
 
 
-def _openrouter_usage_cost(usage: Any) -> float:
-    """Actual USD charged for a call, from OpenRouter's ``usage.cost`` (always present on its
-    responses). The OpenAI SDK is typed for OpenAI's schema, so an unknown ``cost`` field lands
-    in pydantic ``model_extra`` rather than a typed attribute — check both. Returns 0.0 for any
-    provider/SDK that doesn't surface it, so non-OpenRouter calls record no cost."""
+def _openrouter_usage_cost(usage: Any) -> float | None:
+    """Actual USD charged for a call, from OpenRouter's ``usage.cost`` when present.
+
+    The OpenAI SDK is typed for OpenAI's schema, so an unknown ``cost`` field lands in
+    pydantic ``model_extra`` rather than a typed attribute — check both. Returns ``None``
+    when the provider/SDK does not surface cost so glass-box / WP1 paths never fabricate 0
+    (#2763)."""
     if usage is None:
-        return 0.0
+        return None
     cost = getattr(usage, "cost", None)
     if cost is None:
         extra = getattr(usage, "model_extra", None)
         if isinstance(extra, dict):
             cost = extra.get("cost")
     if cost is None:
-        return 0.0
+        return None
     try:
         value = float(cost)
     except (TypeError, ValueError):
-        return 0.0
+        return None
     # float() also accepts 'nan'/'inf'/negatives; a bad cost must not poison run-level
-    # aggregation (one nan turns the whole run's cost_usd into nan). Clamp to a sane 0.0.
-    return value if math.isfinite(value) and value >= 0 else 0.0
+    # aggregation (one nan turns the whole run's cost_usd into nan).
+    return value if math.isfinite(value) and value >= 0 else None
 
 
 def _openrouter_fallback_models() -> list[str]:
@@ -1563,18 +1588,19 @@ def completion(
             raise
 
     _u = getattr(r, "usage", None)
-    _cached_tokens = getattr(getattr(_u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
+    _details = getattr(_u, "prompt_tokens_details", None) if _u is not None else None
+    _cached_raw = getattr(_details, "cached_tokens", None) if _details is not None else None
     _record_usage(
         kind=usage_kind,
         # Record the model OpenRouter actually served (``r.model``), not the request string
         # ("auto" / the allowlist), so cost telemetry reflects what was really billed.
         model=getattr(r, "model", None) or effective_model,
-        prompt_tokens=getattr(_u, "prompt_tokens", 0) or 0,
-        completion_tokens=getattr(_u, "completion_tokens", 0) or 0,
-        cached_tokens=_cached_tokens,
-        # Actual USD charged. OpenRouter always includes ``usage.cost`` on its responses
-        # (usage accounting is on by default); the OpenAI SDK keeps unknown fields in
-        # ``model_extra``. Other providers don't report it → 0.0.
+        prompt_tokens=_optional_nonnegative_int(getattr(_u, "prompt_tokens", None) if _u else None),
+        completion_tokens=_optional_nonnegative_int(
+            getattr(_u, "completion_tokens", None) if _u else None
+        ),
+        cached_tokens=_optional_nonnegative_int(_cached_raw),
+        # Actual USD when reported; None when unknown — never fabricate 0 (#2763).
         cost=_openrouter_usage_cost(_u),
         duration_ms=round((time.perf_counter() - usage_started) * 1000),
         retry_count=max(0, provider_attempts - 1),
@@ -1741,7 +1767,7 @@ def web_search(
     _record_usage(
         kind="web_search",
         model=model_id,
-        cost=float(cost_usd) if cost_usd is not None else 0.0,
+        cost=float(cost_usd) if cost_usd is not None else None,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),
@@ -1797,7 +1823,7 @@ def x_search(
     _record_usage(
         kind="x_search",
         model=model_id,
-        cost=float(cost_usd) if cost_usd is not None else 0.0,
+        cost=float(cost_usd) if cost_usd is not None else None,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),

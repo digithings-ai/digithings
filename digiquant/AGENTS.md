@@ -45,6 +45,7 @@ Beyond root `AGENTS.md`:
 | Path | Reason | Migration |
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
+| `digiquant/olympus/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
 | `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
 | `digiquant/scripts/atlas/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579); `compute-technicals.py` Polars date fix (REM-009) |
@@ -106,7 +107,11 @@ When touching `digiquant/src/digiquant/olympus/`:
    - Track B WP13-class shadow (#2616): `digiquant.olympus.attention_plan.plan_attention_shadow`
      records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
      never actuates; cannot expand H4 or rewrite H7/H8).
-5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
+   - Track C glass-box (#1945 / #2622): `attention_plan_io` +
+     `attention_plan_graph.maybe_publish_attention_plan_shadow` (Atlas
+     `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
+     `OLYMPUS_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
+     a published document; never actuate (`enforce` absent).5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
    sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.

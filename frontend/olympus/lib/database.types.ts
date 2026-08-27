@@ -417,9 +417,11 @@ export interface Database {
           attempt: number;
         };
       };
-      // Body-free Pipeline call trace (migration 066). The base table remains
-      // service-role-only; this view excludes token and cost telemetry as well as
-      // prompts, tool values/results, document bodies, credentials, and reasoning.
+      // Body-free Pipeline call trace (migration 066 + WP1 join keys in 086 / #2763).
+      // The base table remains service-role-only; this view excludes token and cost
+      // telemetry (067 is economics authority) as well as prompts, tool values/results,
+      // document bodies, credentials, and reasoning. Soft-stamped call_id / attempt_id /
+      // node_run_id enable Gate 3 reconciliation to olympus_provider_*.
       olympus_run_event_trace: {
         Row: {
           run_id: string;
@@ -439,6 +441,9 @@ export interface Database {
           input_summary: string;
           output_summary: string;
           created_at: string;
+          call_id: string | null;
+          attempt_id: string | null;
+          node_run_id: string | null;
         };
       };
       // Curated accounting public surface (migration 074 / #2599). Prefer these over

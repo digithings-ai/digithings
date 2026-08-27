@@ -39,6 +39,7 @@ import { holdingWeightChange } from './holding-weight-change';
 import {
   ACCOUNTING_NAV_VIEW,
   accountingNavToHistoryShape,
+  assertAccountingNavQueryOk,
   type AccountingNavRow,
 } from './accounting-views';
 import {
@@ -817,6 +818,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const allInstruments: TableRow<'instruments'>[] = instrumentsRes.data ?? [];
   const instrumentByTicker = buildInstrumentLookup(allInstruments);
   const allTheses: TableRow<'theses'>[] = thesesRes.data ?? [];
+  // Fail closed: never drop NAV into [] when the contracted accounting view errors —
+  // that previously rendered empty Performance charts as if the book had no history (#3029).
+  assertAccountingNavQueryOk(navRes.error);
   const navHistory: TableRow<'nav_history'>[] = (
     (navRes.data ?? []) as AccountingNavRow[]
   ).map((row) => {

@@ -88,6 +88,65 @@ python3 scripts/backfill_simulated_runs.py --validate-all
 
 **Pre-executed:** Apr 5–14, 2026 backfill completed 2026-04-14 (468 documents, all days OK).
 
+### Legacy research-state inventory (WP12.4 / #2870)
+
+Inventory existing `documents` rows into `LegacyDocumentRef` pointers
+(`legacy_manifest_only`, `known_at=None`) for audit/degraded compatibility.
+Does **not** extract evidence/beliefs/events or invent known times. Strict
+readers exclude these rows. Default is dry-run. `--apply` appends via the
+**in-memory** `ResearchStateStore` (SQL IO adapter later) — it does **not**
+INSERT into `olympus_research_legacy_refs` yet; use it to validate counts and
+library idempotency in-process.
+
+```bash
+# Dry-run counts only (default)
+python3 scripts/backfill_research_state.py --supabase
+python3 scripts/backfill_research_state.py --documents-json /path/to/sources.json
+
+# In-process append via ResearchStateStore (not durable SQL)
+python3 scripts/backfill_research_state.py --supabase --apply
+```
+
+Counts always reconcile: `source == inserted + skipped + unverifiable`.
+Library: `digiquant.olympus.research_retrieval.legacy_backfill`.
+
+### Compiled research-state prose views (WP12.5 / #2877)
+
+`research_retrieval.views` compiles deterministic brief/digest markdown from one
+exact pinned `ResearchStateVersion` (sorted entities; embeds state id / hash /
+schema). Atlas publish dual-writes `research-state-brief` /
+`research-state-digest` only when the preflight pin is present and
+`PublishDeps.research_state_store` can exact-load that version; structured-write
+failure refuses view publication. Incumbent digest/segment documents stay until
+a later parity/retention gate.
+
+**Operator note:** Atlas/Hermes CLI currently construct `PublishDeps(client=…)`
+(and preflight deps) **without** injecting `research_state_store` — same shadow
+pattern as WP12.3. Dual-write therefore does **not** run on default production
+CLI paths until callers wire the same in-memory store used for the pin (durable
+SQL IO adapter later). Do not treat `research-state-brief` /
+`research-state-digest` rows as present or operator-authoritative until that
+wiring lands.
+
+### Research attention shadow evaluation (WP13.5 / #2934)
+
+After a shadow-mode Olympus run with `OLYMPUS_RESEARCH_ATTENTION_MODE=shadow`,
+reconcile planned attention decisions to exact WP1 attempt usage and downstream
+artifacts before considering enforcement:
+
+```bash
+python3 digiquant/scripts/atlas/evaluate_research_policy_shadow.py \
+  --store-snapshot artifacts/attention/store.json \
+  --attempt-details artifacts/attention/attempts.json \
+  --downstream artifacts/attention/downstream.json \
+  --output artifacts/attention/evaluation.json
+```
+
+The CLI is file-only evidence — it never activates `enforce` or writes to
+production booking paths. Exit code `0` when the report is `complete` (100%
+decision-attempt reconciliation plus downstream linkage for eligible shadow
+runs); `1` when telemetry or downstream artifacts are missing.
+
 ## Market-open execution and price backfill
 
 ### Activity tab / `position_events` stops at an old date
