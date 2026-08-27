@@ -373,8 +373,11 @@ def verify_fold_assignments(
     plan: WalkForwardFoldPlan,
     *,
     episode_by_key: dict[str, OutcomeEpisode],
+    replay_as_of: datetime | None = None,
 ) -> None:
     """Property check: zero temporal/label overlap violations."""
+    as_of = replay_as_of if replay_as_of is not None else plan.fold.eval_end
+    as_of = require_utc_datetime(as_of, field_name="replay_as_of")
     train_keys = set(plan.train_episode_keys)
     cal_keys = set(plan.calibration_episode_keys)
     eval_keys = set(plan.eval_episode_keys)
@@ -388,9 +391,10 @@ def verify_fold_assignments(
     fold = plan.fold
     if fold.train_end >= fold.eval_start:
         raise ValueError("train_end must precede eval_start")
-    gap = (fold.eval_start.date() - fold.train_end.date()).days
+    embargo_anchor = fold.calibration_end if fold.calibration_end is not None else fold.train_end
+    gap = (fold.eval_start.date() - embargo_anchor.date()).days
     if gap <= fold.embargo_days:
-        raise ValueError("embargo boundary violated between train_end and eval_start")
+        raise ValueError("embargo boundary violated before eval_start")
 
     for key in train_keys | cal_keys:
         episode = episode_by_key[key]
@@ -405,7 +409,7 @@ def verify_fold_assignments(
         if is_late_known_for_role(
             episode,
             role_cutoff=cutoff,
-            replay_as_of=episode.temporal.available_at,
+            replay_as_of=as_of,
         ):
             raise ValueError(f"late-known episode {key} assigned to train/calibration")
 
@@ -417,6 +421,14 @@ def verify_fold_assignments(
             fold.eval_end,
         ):
             raise ValueError(f"eval episode {key} outside eval window")
+        if not _episode_visible(episode, replay_as_of=as_of):
+            raise ValueError(f"eval episode {key} not yet available at replay_as_of")
+        if is_late_known_for_role(
+            episode,
+            role_cutoff=fold.eval_end,
+            replay_as_of=as_of,
+        ):
+            raise ValueError(f"late-known episode {key} assigned to eval")
 
 
 def build_walk_forward_folds(

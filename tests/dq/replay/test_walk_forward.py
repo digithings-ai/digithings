@@ -407,7 +407,49 @@ def test_verify_fold_assignments_zero_overlap_property() -> None:
     assert result.status == WalkForwardBuildStatus.OK
     episode_by_key = {ep.episode_key: ep for ep in episodes}
     for plan in result.folds:
-        verify_fold_assignments(plan, episode_by_key=episode_by_key)
+        verify_fold_assignments(plan, episode_by_key=episode_by_key, replay_as_of=_utc(2024, 12, 31))
+
+
+def test_not_yet_available_excluded() -> None:
+    ep = _episode(
+        episode_key="future",
+        effective_at=_utc(2024, 6, 1),
+        horizon_end=_utc(2024, 6, 20),
+        available_at=_utc(2024, 8, 1),
+    )
+    result = build_walk_forward_folds(
+        episodes=(ep,),
+        replay_as_of=_utc(2024, 7, 1),
+        params=_params(min_train_episodes=0, min_eval_episodes=0),
+        history_start=date(2024, 1, 1),
+        history_end=date(2024, 7, 31),
+    )
+    for plan in result.folds:
+        assert "future" not in plan.train_episode_keys
+        assert "future" not in plan.eval_episode_keys
+        unavailable = [
+            ex for ex in plan.exclusions if ex.reason == WalkForwardExclusionReason.NOT_YET_AVAILABLE
+        ]
+        assert any(ex.episode_key == "future" for ex in unavailable)
+
+
+def test_history_span_too_short_returns_insufficient_history() -> None:
+    result = build_walk_forward_folds(
+        episodes=(
+            _episode(
+                episode_key="solo",
+                effective_at=_utc(2024, 1, 1),
+                horizon_end=_utc(2024, 1, 20),
+                available_at=_utc(2024, 1, 21),
+            ),
+        ),
+        replay_as_of=_utc(2024, 12, 31),
+        params=_params(train_days=120, eval_days=60),
+        history_start=date(2024, 1, 1),
+        history_end=date(2024, 2, 28),
+    )
+    assert result.status == WalkForwardBuildStatus.INSUFFICIENT_HISTORY
+    assert "history span too short" in result.message
 
 
 def test_assign_episodes_to_fold_direct_helper() -> None:
