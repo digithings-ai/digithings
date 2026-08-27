@@ -271,12 +271,13 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
   // lives in the row's `date` column. risk-debate + pm-rebalance are singletons.
   const kRisk = 'risk-debate';
   const kPmReb = 'pm-rebalance';
+  const kPmDir = 'pm-direction-memo';
   const [exactRes, arRes, delRes, pipeDelRes] = await Promise.all([
     sb
       .from('documents')
       .select('document_key, payload')
       .eq('date', dashboardDate)
-      .in('document_key', [kExpl, kMap, kMemo, kIdx, kRisk, kPmReb]),
+      .in('document_key', [kExpl, kMap, kMemo, kIdx, kRisk, kPmReb, kPmDir]),
     sb
       .from('documents')
       .select('document_key, payload')
@@ -355,6 +356,7 @@ async function fetchPipelineObservabilityForDate(dashboardDate: string): Promise
     asset_recommendations,
     risk_debate: get(kRisk),
     pm_rebalance: get(kPmReb),
+    pm_direction_memo: get(kPmDir),
   };
 }
 

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, ArrowUpRight, XCircle, PlusCircle, ListChecks } from 'lucide-react';
 import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
+import { usablePmRationale } from '@/lib/pm-rationale';
 import type { RebalanceAction } from '@/lib/types';
 
 /**
@@ -118,7 +119,7 @@ export function TodayActionsPanel({
   const [showHolds, setShowHolds] = useState(false);
   const [showRemoved, setShowRemoved] = useState(false);
   const rationale = (ticker: string): string | undefined =>
-    rationaleByTicker?.[ticker.trim().toUpperCase()];
+    usablePmRationale(rationaleByTicker?.[ticker.trim().toUpperCase()]) ?? undefined;
   const { changes, holds, sizerRemoved } = useMemo(() => {
     const sorted = [...actions].sort((x, y) => ORDER[kindOf(x.action)] - ORDER[kindOf(y.action)]);
     return {
