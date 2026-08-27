@@ -21,7 +21,6 @@ import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
-import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
 import { activeRebalanceActions, buildBriefHighlight } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
@@ -284,7 +283,6 @@ export function DailyBriefWorkspace({
 
   return (
     <div className="space-y-0">
-      <HouseIdentityBanner />
     <section
       data-testid="daily-brief-workspace"
       aria-label="Daily investment brief"
