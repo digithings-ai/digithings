@@ -42,6 +42,7 @@ def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
         if _yaml_cache is not None and _yaml_cache[0] == path_str and _yaml_cache[1] == mtime:
             return _yaml_cache[2]
         import yaml  # type: ignore[import-untyped]
+
         with open(path) as f:
             data = yaml.safe_load(f) or {}
         strategies = data.get("strategies") or {}
@@ -49,14 +50,13 @@ def _load_yaml_specs() -> dict[str, dict[str, tuple]]:
         for strat_name, params in strategies.items():
             if not isinstance(params, dict):
                 continue
-            result[strat_name] = {
-                pname: tuple(pspec) for pname, pspec in params.items()
-            }
+            result[strat_name] = {pname: tuple(pspec) for pname, pspec in params.items()}
         _yaml_cache = (path_str, mtime, result)
         return result
     except Exception as exc:
         logger.warning("Failed to load strategy specs YAML from %s: %s", path_str, exc)
         return {}
+
 
 # Hard cap on grid size to prevent accidental combinatorial explosion.
 MAX_GRID_SIZE = 10_000
@@ -92,7 +92,7 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
         "trade_size": (1.0, 10000.0, 1000, None, "int"),
     },
     "ema_cross": {
-        "fast_ema_period": (5.0, 12.0, 10, 2.0, "int"),   # must be < slow
+        "fast_ema_period": (5.0, 12.0, 10, 2.0, "int"),  # must be < slow
         "slow_ema_period": (15.0, 30.0, 20, 5.0, "int"),
         "trade_size": (1.0, 10000.0, 1000, None, "int"),
     },
@@ -109,6 +109,7 @@ STRATEGY_PARAM_SPECS: dict[str, dict[str, tuple[float, float, Any, float | None,
         "trade_size": (1.0, 10000.0, 1000, None, "int"),
     },
 }
+
 
 def _resolve_strategy_name(strategy_name: str) -> str:
     """Resolve alias to canonical strategy name."""
@@ -162,15 +163,24 @@ def infer_param_grid(
             continue
         if type_str == "int":
             lo, hi = int(lo), int(hi)
-            step = step_hint if step_hint is not None else max(1, (hi - lo) // (num_points_per_param - 1))
+            step = (
+                step_hint
+                if step_hint is not None
+                else max(1, (hi - lo) // (num_points_per_param - 1))
+            )
             vals = list(range(lo, hi + 1, max(1, int(step))))
             if len(vals) > num_points_per_param:
                 # Sample evenly
-                idx = [i * (len(vals) - 1) // (num_points_per_param - 1) for i in range(num_points_per_param)]
+                idx = [
+                    i * (len(vals) - 1) // (num_points_per_param - 1)
+                    for i in range(num_points_per_param)
+                ]
                 vals = [vals[i] for i in idx]
             param_values[name] = vals if vals else [default]
         else:
-            vals = [lo + (hi - lo) * i / (num_points_per_param - 1) for i in range(num_points_per_param)]
+            vals = [
+                lo + (hi - lo) * i / (num_points_per_param - 1) for i in range(num_points_per_param)
+            ]
             param_values[name] = [round(v, 2) for v in vals]
 
     if not param_values:
@@ -190,7 +200,9 @@ def infer_param_grid(
     grids: list[dict[str, float | int | str]] = []
     for combo in itertools.product(*value_lists):
         grids.append({**base, **dict(zip(names, combo))})
-    logger.debug("Generated param grid: %d combinations for strategy '%s'", len(grids), strategy_name)
+    logger.debug(
+        "Generated param grid: %d combinations for strategy '%s'", len(grids), strategy_name
+    )
     return grids
 
 

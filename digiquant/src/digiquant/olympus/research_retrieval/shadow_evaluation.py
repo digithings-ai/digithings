@@ -146,9 +146,7 @@ def _downstream_row_complete(*, decision, downstream: AttentionDownstreamOutcome
             return False
     elif decision.mode is AttentionMode.METRIC_PATCH:
         has_artifact = bool(
-            downstream.amendment_id
-            or downstream.forecast_assessment_id
-            or downstream.artifact_refs
+            downstream.amendment_id or downstream.forecast_assessment_id or downstream.artifact_refs
         )
         if not has_artifact:
             return False

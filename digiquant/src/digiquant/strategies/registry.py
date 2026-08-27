@@ -86,10 +86,12 @@ def list_strategies() -> list[dict[str, Any]]:
             continue
         seen.add(name)
         aliases = [a for a, c in _ALIASES.items() if c == name]
-        result.append({
-            "name": name,
-            "aliases": aliases,
-            "description": spec.description[:200] if spec.description else "",
-            "default_params": spec.default_params,
-        })
+        result.append(
+            {
+                "name": name,
+                "aliases": aliases,
+                "description": spec.description[:200] if spec.description else "",
+                "default_params": spec.default_params,
+            }
+        )
     return result

@@ -636,9 +636,7 @@ def publish_portfolio_brief(
     ``pm-rebalance`` document would duplicate lineage without a reader contract.
     """
     date_str = state.run_date.isoformat()
-    payload = {
-        k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}
-    }
+    payload = {k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}}
     return publish_document(
         client=client,
         document_key="pm-rebalance",
