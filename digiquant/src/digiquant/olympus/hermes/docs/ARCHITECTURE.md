@@ -118,6 +118,15 @@ Never wired into production H8/H9; no auto-promotion or config write.
 PreTradeRiskReport identity, shadow isolation + comparison) without enabling
 challenger selection or changing Hermes graph topology.
 
+**Phase 3 lock surface (#3019 / Integration 3.1):**
+`tests/dq/hermes/test_phase3_research_contracts.py` and
+`phase3_e2e_fixtures.py` lock Gate 3 composition for WP11–WP14 (immutable
+evidence bundles/amendments, pinned research state, shadow attention planner,
+blinded role contexts, H6 selection round floor, telemetry reconciliation)
+without planner graph nodes or enforce-mode promotion. Pipeline simulation
+(`tests/dq/atlas/test_pipeline_simulation.py`) extends the WP11.5 durable
+H5/H6 lineage round-trip with graph-level planner-node guards.
+
 ### H2 market-thesis identity
 
 Every market proposal has a stable lowercase `topic_key` plus an explicit
