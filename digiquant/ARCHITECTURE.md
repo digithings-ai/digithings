@@ -166,8 +166,24 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 
 | Method | Path | Auth Scope | Description |
 |---|---|---|---|
-| `POST` | `/v1/orchestrator_tools` | `digiquant:backtest` | Return OpenAI-style tool manifest (6 tools) |
+| `POST` | `/v1/orchestrator_tools` | `digiquant:backtest` | Return OpenAI-style tool manifest (11 tools: 6 digiquant + 5 olympus policy-replay) |
 | `POST` | `/v1/orchestrator_invoke` | `digiquant:backtest` + `digiquant:optimize` | Dispatch named tool by `tool` field in request body |
+
+#### Olympus policy replay endpoints (#3011 / WP16.9)
+
+Recommendation/read surfaces for offline policy replay evidence. Summaries and
+artifact IDs only — no confidential fills/holdings/nav dumps. Running and
+evaluating never activate production policy. Default path scope remains
+`digiquant:backtest` (no digikey edits).
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/olympus/policy_replay/run` | Register a replay run against a stored pair |
+| `GET` | `/v1/olympus/policy_replay/{run_id}` | Replay-run summary (fail closed) |
+| `GET` | `/v1/olympus/policy_comparison/{comparison_id}` | Comparison summary (IDs/status only) |
+| `POST` | `/v1/olympus/policy_gate/evaluate` | Evaluate immutable gate criteria (eligibility only) |
+| `GET` | `/v1/olympus/policy_gate/evaluations/{evaluation_id}` | Gate-evaluation summary |
+| `POST` | `/v1/olympus/policy_governance_decisions` | Authenticated human decision write (`request.state.digi_auth` → `AuthenticatedPrincipal`) — **not** on MCP |
 
 ### Rate Limits
 
@@ -199,6 +215,15 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
+| `olympus_run_policy_replay` | Register a policy replay run (summary IDs only; never activates) |
+| `olympus_get_policy_replay` | Fetch a replay-run summary by `run_id` (fail closed) |
+| `olympus_get_policy_comparison` | Fetch a comparison summary (artifact IDs / status only) |
+| `olympus_evaluate_policy_gate` | Evaluate immutable gate criteria (eligibility only) |
+| `olympus_get_policy_gate_evaluation` | Fetch a gate-evaluation summary by `evaluation_id` |
+
+Human decision write (`record_policy_governance_decision`) is **not** an MCP tool —
+only the DigiAuth HTTP boundary may record decisions. There is no
+promote/activate/set-live/rollback-live tool on any surface.
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
 
@@ -651,7 +676,7 @@ JSON export is near-instant (file write of a small JSON object). The `nautilus_b
 
 ### Orchestrator Tools Contract with digigraph
 
-digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 6 tools. digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*", "arguments": {...}}`.
+digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 11 tools (6 digiquant pipeline + 5 olympus policy-replay). digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*"|olympus_*, "arguments": {...}}`.
 
 The manifest is built by `build_orchestrator_tool_manifest()` in `orchestrator_tools.py`. It is static (not dynamically generated from Pydantic schemas), which creates a risk of schema drift if `BacktestRequest` or `PipelineRequest` evolves without a corresponding update to the manifest.
 
@@ -1340,8 +1365,20 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   rollback-review links `evaluation_id` + `current_policy_version_id`. Decisions
   are immutable and may supersede prior decisions. **No activation, deploy,
   broker, or policy mutation** — production activation remains an external
-  human-controlled process. HTTP/MCP decision-write exposure is deferred to
-  WP16.9; the library API is the secure recording boundary.
+  human-controlled process. Library API is the secure recording boundary;
+  WP16.9 exposes the DigiAuth HTTP write only (never unauthenticated MCP).
+  **Policy replay service/MCP/CLI exposure (#3011 / WP16.9):**
+  `olympus/replay/exposure.py` + `service.py` provide typed summary I/O —
+  `service_run_policy_replay`, `service_get_policy_replay`,
+  `service_get_policy_comparison`, `service_evaluate_policy_gate`,
+  `service_get_policy_gate_evaluation` — returning artifact IDs / coarse status
+  only (no confidential evidence dumps). Invalid IDs fail closed. MCP tools and
+  orchestrator manifest register the five `olympus_*` recommendation tools;
+  CLI group `digiquant policy-replay` (`olympus/replay/cli.py`) mirrors run/
+  get/evaluate. `POST /v1/olympus/policy_governance_decisions` records
+  decisions from `AuthenticatedPrincipal.from_digi_auth(request.state.digi_auth)`.
+  Running/evaluating cannot change active policy; no promote/activate/set-live
+  tools exist. Integration 4.1 golden fixture is out of scope for this task.
   **Phase 2 lock surface (#2820 / Integration 2.1):**
   `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
   `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
