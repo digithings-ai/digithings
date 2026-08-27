@@ -11,14 +11,9 @@ app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 
 def _pick_chunker(name: str) -> Any:
-    from digisearch.ingestion.chunkers.fixed import FixedSizeChunker
-    from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
+    from digisearch.chunking.factory import get_ingest_chunker
 
-    if name == "recursive":
-        return SegmentAwareChunker()
-    if name == "fixed":
-        return FixedSizeChunker(chunk_size=512)
-    return SegmentAwareChunker()
+    return get_ingest_chunker(name)
 
 
 def _sidecar_path_for(file_path: Path) -> Path:
@@ -63,7 +58,12 @@ def _ingest_paths(paths: list[Path], index: str, chunker_name: str) -> int:
 def ingest(
     index: str = typer.Option("default", "--index", "-i", help="Index name"),
     source: Path = typer.Argument(..., help="File or directory to ingest"),
-    chunker: str = typer.Option("recursive", "--chunker", "-c", help="recursive | fixed | sentence"),
+    chunker: str = typer.Option(
+        "semantic",
+        "--chunker",
+        "-c",
+        help="semantic (default) | token | recursive | fixed",
+    ),
 ) -> None:
     """Ingest documents into an index (stub in-process). Loads ``{stem}.yaml`` / ``.yml`` sidecars."""
     sources = list(source.rglob("*")) if source.is_dir() else [source]
@@ -75,8 +75,15 @@ def ingest(
 @app.command("ingest-batch")
 def ingest_batch(
     index: str = typer.Option("default", "--index", "-i", help="Index name"),
-    directory: Path = typer.Argument(..., help="Directory of PDFs/Markdown and optional YAML sidecars"),
-    chunker: str = typer.Option("recursive", "--chunker", "-c", help="recursive | fixed | sentence"),
+    directory: Path = typer.Argument(
+        ..., help="Directory of PDFs/Markdown and optional YAML sidecars"
+    ),
+    chunker: str = typer.Option(
+        "semantic",
+        "--chunker",
+        "-c",
+        help="semantic (default) | token | recursive | fixed",
+    ),
 ) -> None:
     """Batch-ingest every supported file under a directory (PDF + YAML sidecar pattern)."""
     paths = sorted(directory.rglob("*"))
