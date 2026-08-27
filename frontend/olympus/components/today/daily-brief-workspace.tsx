@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -21,22 +22,41 @@ import type {
 import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
-import { formatDuration } from '@/components/system/run-economics-row';
-import { RunHealthTimeline } from '@/components/system/run-health-timeline';
-import { formatBriefWeightChange, isMaterialBookEvent } from '@/lib/brief-book-event';
+import { formatBriefWeightChange } from '@/lib/brief-book-event';
 import { usablePmRationale } from '@/lib/pm-rationale';
+import {
+  BriefPipelineHealth,
+  type BriefRunHealth,
+} from './brief-pipeline-health';
 import { activeRebalanceActions, buildBriefHighlight, portfolioActionChip } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
-export interface BriefRunHealth {
-  status: string | null;
-  runDate: string | null;
-  finishedAt: string | null;
-  segmentsOk: number | null;
-  segmentsTotal: number | null;
-  segmentsCarried: number | null;
-  segmentsFailed: number | null;
-  durationS: number | null;
+export type { BriefRunHealth };
+
+/** Whole-card drill-in — hover affordance, one destination, no nested micro-links. */
+function BriefCardLink({
+  href,
+  className,
+  children,
+  'aria-label': ariaLabel,
+  'data-testid': testId,
+}: {
+  href: string;
+  className?: string;
+  children: ReactNode;
+  'aria-label'?: string;
+  'data-testid'?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-label={ariaLabel}
+      data-testid={testId}
+      className={`block transition-colors hover:bg-ink/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent ${className ?? ''}`}
+    >
+      {children}
+    </Link>
+  );
 }
 
 export interface DailyBriefWorkspaceProps {
@@ -71,10 +91,14 @@ export interface DailyBriefWorkspaceProps {
   risks: RiskItem[];
   theses: TodayThesis[];
   contextBullets: string[];
-  latestEvent: DashboardPositionEvent | null;
+  /**
+   * Material position events for the brief/session date only (Portfolio Ledger
+   * day summary). Empty → honest empty copy; never an older session's move.
+   */
+  ledgerDayEvents: DashboardPositionEvent[];
   /** `undefined` while loading, `null` when the public health view has no row. */
   runHealth: BriefRunHealth | null | undefined;
-  /** Recent run diagnostics for the compact horizontal timeline (optional). */
+  /** Recent run diagnostics for the Pipeline Health week bar (optional). */
   runDiagnostics?: AtlasRunDiagnostics[];
 }
 
@@ -112,50 +136,6 @@ function Metric({ label, value, note, tone = 'neutral' }: {
       {note ? <p className="mt-0.5 truncate text-[10px] text-ink-mute">{note}</p> : null}
     </div>
   );
-}
-
-function runStatus(runHealth: BriefRunHealth | null | undefined): {
-  label: string;
-  detail: string;
-  tone: Tone;
-} {
-  if (runHealth === undefined) {
-    return {
-      label: 'Checking pipeline status',
-      detail: 'Reading public run telemetry',
-      tone: 'neutral',
-    };
-  }
-  if (!runHealth) {
-    return {
-      label: 'Pipeline status unavailable',
-      detail: 'No public run telemetry',
-      tone: 'neutral',
-    };
-  }
-
-  const status = (runHealth.status || '').toLowerCase();
-  const failed = runHealth.segmentsFailed ?? 0;
-  const carried = runHealth.segmentsCarried ?? 0;
-  const segmentDetail =
-    runHealth.segmentsOk != null && runHealth.segmentsTotal != null
-      ? `${runHealth.segmentsOk} / ${runHealth.segmentsTotal} segments`
-      : 'Segment coverage unavailable';
-
-  if (failed > 0 || ['failed', 'error'].includes(status)) {
-    return { label: 'Pipeline needs attention', detail: segmentDetail, tone: 'negative' };
-  }
-  if (carried > 0 || ['partial', 'degraded'].includes(status)) {
-    return { label: 'Pipeline completed with carry', detail: segmentDetail, tone: 'warning' };
-  }
-  if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)) {
-    return { label: 'Pipeline complete', detail: segmentDetail, tone: 'positive' };
-  }
-  return {
-    label: status ? `Pipeline ${status}` : 'Pipeline status unavailable',
-    detail: segmentDetail,
-    tone: 'neutral',
-  };
 }
 
 function decisionSummary(actions: RebalanceAction[]): {
@@ -197,10 +177,12 @@ function statusDot(status: string): string {
 const DESTINATIONS = [
   { label: 'Digest', href: null, icon: BookOpen },
   { label: 'Pipeline', href: '/pipeline', icon: GitBranch },
-  { label: 'Performance', href: '/portfolio/attribution', icon: ChartNoAxesCombined },
+  { label: 'Performance', href: '/portfolio/performance', icon: ChartNoAxesCombined },
   { label: 'Holdings', href: '/portfolio', icon: Wallet },
   { label: 'Theses', href: '/portfolio?tab=theses', icon: Shield },
 ] as const;
+
+const LEDGER_DAY_PREVIEW = 4;
 
 export function DailyBriefWorkspace({
   headline,
@@ -215,7 +197,7 @@ export function DailyBriefWorkspace({
   risks,
   theses,
   contextBullets,
-  latestEvent,
+  ledgerDayEvents,
   runHealth,
   runDiagnostics = [],
 }: DailyBriefWorkspaceProps) {
@@ -227,8 +209,8 @@ export function DailyBriefWorkspace({
     .filter((position) => position.ticker.toUpperCase() !== 'CASH')
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
   const decision = decisionSummary(actions);
-  const pipeline = runStatus(runHealth);
-  const bookEvent = latestEvent && isMaterialBookEvent(latestEvent) ? latestEvent : null;
+  const ledgerPreview = ledgerDayEvents.slice(0, LEDGER_DAY_PREVIEW);
+  const highlightEvent = ledgerDayEvents[0] ?? null;
   const highlight = buildBriefHighlight({
     headline,
     actions,
@@ -236,12 +218,13 @@ export function DailyBriefWorkspace({
     actionables,
     risks,
     contextBullets,
-    latestEvent: bookEvent,
+    latestEvent: highlightEvent,
   });
   const latestThesis = theses[0] ?? null;
   const latestRisk = risks[0] ?? null;
   const latestContext = contextBullets[0] ?? null;
   const digestHref = buildPipelineHref({ date: digestDate, stage: 'synthesis', node: 'digest' });
+  const thesesHref = '/portfolio?tab=theses';
 
   // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
   // CodeRabbit on PR #2287): only shown while the table genuinely overflows
@@ -329,11 +312,6 @@ export function DailyBriefWorkspace({
                 </li>
               ))}
             </ul>
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-ink-soft">
-              <Link href={digestHref} className="font-medium text-accent hover:underline sm:hidden">
-                Open digest →
-              </Link>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 divide-y divide-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-1 lg:divide-x-0 lg:divide-y">
@@ -344,65 +322,45 @@ export function DailyBriefWorkspace({
               <p className="mt-1 text-lg font-semibold text-ink">{decision.label}</p>
               <p className="mt-0.5 text-xs text-ink-soft">{decision.detail}</p>
             </div>
-            <Link
-              href="/pipeline"
-              className="group px-5 py-4 transition-colors hover:bg-ink/[0.03] sm:px-6"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                  Pipeline health
-                </p>
-                <GitBranch size={14} className={toneClass(pipeline.tone)} />
-              </div>
-              <p className={`mt-1 text-sm font-semibold ${toneClass(pipeline.tone)}`}>
-                {pipeline.label}
-              </p>
-              <p className="mt-0.5 font-mono text-[10px] tabular-nums text-ink-mute">
-                {pipeline.detail}
-                {runHealth?.durationS != null
-                  ? ` · ${formatDuration(runHealth.durationS)}`
-                  : null}
-              </p>
-            </Link>
+            <BriefPipelineHealth runHealth={runHealth} diagnostics={runDiagnostics} />
           </div>
         </div>
-
-        {runDiagnostics.length > 0 ? (
-          <div className="border-t border-hair px-5 py-4 sm:px-7">
-            <RunHealthTimeline diagnostics={runDiagnostics} compact />
-          </div>
-        ) : null}
       </header>
 
-      <dl
-        data-brief-section="scoreboard"
-        className="grid grid-cols-2 divide-y divide-hair border-b border-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0"
+      <BriefCardLink
+        href="/portfolio/performance"
+        aria-label="Open performance tearsheet"
+        data-testid="brief-scoreboard-link"
+        className="border-b border-hair"
       >
-        <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
-        <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
-        <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
-        <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
-        <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
-        <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />
-      </dl>
+        <dl
+          data-brief-section="scoreboard"
+          className="grid grid-cols-2 divide-y divide-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0"
+        >
+          <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
+          <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
+          <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
+          <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
+          <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
+          <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />
+        </dl>
+      </BriefCardLink>
 
       <section data-brief-section="monitor" className="grid border-b border-hair lg:grid-cols-2 lg:divide-x lg:divide-hair">
-        <div className="px-5 py-5 sm:px-7">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                What matters now
-              </p>
-              <h2 className="mt-0.5 text-lg font-semibold text-ink">Signals to resolve</h2>
-            </div>
-            <Link href={digestHref} className="text-[10px] font-medium text-accent hover:underline">
-              Full digest →
-            </Link>
-          </div>
+        <BriefCardLink
+          href={digestHref}
+          aria-label="Open pipeline digest"
+          data-testid="brief-signals-link"
+          className="px-5 py-5 sm:px-7"
+        >
+          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+            What matters now
+          </p>
+          <h2 className="mt-0.5 text-lg font-semibold text-ink">Signals to resolve</h2>
           {actionables.length === 0 ? (
-            <p className="text-sm text-ink-mute">No actionable monitor was published.</p>
+            <p className="mt-4 text-sm text-ink-mute">No actionable monitor was published.</p>
           ) : (
-            <ol className="divide-y divide-hair/70">
+            <ol className="mt-4 divide-y divide-hair/70">
               {actionables.slice(0, 3).map((action, index) => (
                 <li key={`${action.label}-${index}`} className="grid grid-cols-[1.5rem_1fr] gap-3 py-3 first:pt-0">
                   <span className="font-mono text-xs tabular-nums text-ink-mute">
@@ -418,9 +376,14 @@ export function DailyBriefWorkspace({
               ))}
             </ol>
           )}
-        </div>
+        </BriefCardLink>
 
-        <div className="px-5 py-5 sm:px-7">
+        <BriefCardLink
+          href={thesesHref}
+          aria-label="Open portfolio theses"
+          data-testid="brief-risk-thesis-link"
+          className="px-5 py-5 sm:px-7"
+        >
           <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
             Risk and debate
           </p>
@@ -464,7 +427,7 @@ export function DailyBriefWorkspace({
               </p>
             </div>
           </div>
-        </div>
+        </BriefCardLink>
       </section>
 
       <section data-brief-section="book" className="border-b border-hair px-5 py-5 sm:px-7">
@@ -475,105 +438,117 @@ export function DailyBriefWorkspace({
             </p>
             <h2 className="mt-0.5 text-lg font-semibold text-ink">Allocation and movers</h2>
           </div>
-          <div className="flex items-center gap-3">
-            <AsOfBadge date={bookDate} />
-            <Link href="/portfolio" className="text-[10px] font-medium text-accent hover:underline">
-              All holdings →
-            </Link>
-          </div>
+          <AsOfBadge date={bookDate} />
         </div>
 
         <div className="mt-4 grid border-y border-hair lg:grid-cols-[minmax(14rem,0.8fr)_minmax(0,2fr)] lg:divide-x lg:divide-hair">
-          <div className="px-0 py-4 lg:pr-5">
+          <BriefCardLink
+            href="/portfolio/ledger"
+            aria-label="Open portfolio ledger"
+            data-testid="brief-ledger-link"
+            className="px-0 py-4 lg:pr-5"
+          >
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-              Last recorded book event
+              Ledger
+              {digestDate ? ` · ${formatAsOf(digestDate)}` : ''}
             </p>
-            {bookEvent ? (
-              <div className="mt-2">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="font-mono text-sm font-bold text-ink">{bookEvent.ticker}</span>
-                  <span className="text-sm capitalize text-ink-soft">{bookEvent.event}</span>
-                  {formatBriefWeightChange(bookEvent) ? (
-                    <span className="font-mono text-xs tabular-nums text-ink-mute">
-                      {formatBriefWeightChange(bookEvent)}
-                    </span>
-                  ) : null}
-                </div>
-                <p className="mt-2 text-xs leading-snug text-ink-soft">
-                  {usablePmRationale(bookEvent.reason) ||
-                    'No decision rationale was recorded.'}
-                </p>
-                <p className="mt-2 font-mono text-[10px] text-ink-mute">
-                  {formatAsOf(bookEvent.date)}
-                </p>
-              </div>
+            {ledgerPreview.length > 0 ? (
+              <ul className="mt-2 divide-y divide-hair/70" data-testid="brief-ledger-day">
+                {ledgerPreview.map((event) => {
+                  const delta = formatBriefWeightChange(event);
+                  const reason = usablePmRationale(event.reason);
+                  return (
+                    <li key={`${event.date}-${event.ticker}-${event.event}`} className="py-2.5 first:pt-0">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                        <span className="font-mono text-sm font-bold text-ink">{event.ticker}</span>
+                        <span className="text-sm capitalize text-ink-soft">{event.event.toLowerCase()}</span>
+                        {delta ? (
+                          <span className="font-mono text-xs tabular-nums text-ink-mute">{delta}</span>
+                        ) : null}
+                      </div>
+                      {reason ? (
+                        <p className="mt-1 line-clamp-2 text-xs leading-snug text-ink-soft">{reason}</p>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
             ) : (
-              <p className="mt-2 text-sm text-ink-mute">No book change this session</p>
+              <p className="mt-2 text-sm text-ink-mute" data-testid="brief-ledger-empty">
+                No ledger activity this session
+              </p>
             )}
-          </div>
+          </BriefCardLink>
 
-          <div ref={bookScrollRef} className="relative overflow-x-auto py-2 lg:pl-5">
-            {held.length === 0 ? (
-              <p className="py-3 text-sm text-ink-mute">No positions held; the book is all cash.</p>
-            ) : (
-              <>
-                <table ref={bookTableRef} className="w-full min-w-[34rem] border-collapse text-left">
-                  <thead>
-                    <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                      <th className="py-2 pr-3 font-bold">Holding</th>
-                      <th className="px-3 py-2 text-right font-bold">Weight</th>
-                      <th className="px-3 py-2 text-right font-bold">Change</th>
-                      {/* pr-4, not pl-3 alone (CodeRabbit, PR #2287): the fade
-                          below sits flush against this column's own right
-                          edge, so its values need clearance to stay legible
-                          under it rather than running all the way to the
-                          most-opaque part of the gradient. */}
-                      <th className="py-2 pl-3 pr-4 text-right font-bold">Day</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-hair/70">
-                    {held.slice(0, 6).map((position) => {
-                      const dayTone = metricTone(position.day_change_pct ?? null);
-                      const deltaTone = metricTone(position.normalizedDelta ?? null);
-                      return (
-                        <tr key={position.ticker} className="text-xs">
-                          <td className="py-2.5 pr-3">
-                            <span className="font-mono font-bold text-ink">{position.ticker}</span>
-                            <span className="ml-2 text-ink-mute">{position.name}</span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
-                            {position.normalizedWeight.toFixed(1)}%
-                          </td>
-                          <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
-                            {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
-                          </td>
-                          <td className={`py-2.5 pl-3 pr-4 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
-                            {signedPct(position.day_change_pct ?? null)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                {/* Scroll-edge cue (full-UI-suite critique, P2; refined per
-                    CodeRabbit on PR #2287): the table's min-w-[34rem] (544px)
-                    forces horizontal scroll on any viewport under ~560px --
-                    every phone -- with nothing previously signaling the
-                    Change/Day columns run off-screen. Shown only while
-                    showBookFade is true (genuinely overflowing AND not
-                    already scrolled to the end, tracked above), so it never
-                    sits over content once there is nothing left to reveal --
-                    and the Day column's own pr-4 keeps its values clear of
-                    the fade's most-opaque edge on the trip there. */}
-                {showBookFade ? (
-                  <div
-                    aria-hidden="true"
-                    className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
-                  />
-                ) : null}
-              </>
-            )}
-          </div>
+          <BriefCardLink
+            href="/portfolio"
+            aria-label="Open portfolio holdings"
+            data-testid="brief-holdings-link"
+            className="relative block py-2 lg:pl-5"
+          >
+            <div ref={bookScrollRef} className="overflow-x-auto">
+              {held.length === 0 ? (
+                <p className="py-3 text-sm text-ink-mute">No positions held; the book is all cash.</p>
+              ) : (
+                <>
+                  <table ref={bookTableRef} className="w-full min-w-[34rem] border-collapse text-left">
+                    <thead>
+                      <tr className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+                        <th className="py-2 pr-3 font-bold">Holding</th>
+                        <th className="px-3 py-2 text-right font-bold">Weight</th>
+                        <th className="px-3 py-2 text-right font-bold">Change</th>
+                        {/* pr-4, not pl-3 alone (CodeRabbit, PR #2287): the fade
+                            below sits flush against this column's own right
+                            edge, so its values need clearance to stay legible
+                            under it rather than running all the way to the
+                            most-opaque part of the gradient. */}
+                        <th className="py-2 pl-3 pr-4 text-right font-bold">Day</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-hair/70">
+                      {held.slice(0, 6).map((position) => {
+                        const dayTone = metricTone(position.day_change_pct ?? null);
+                        const deltaTone = metricTone(position.normalizedDelta ?? null);
+                        return (
+                          <tr key={position.ticker} className="text-xs">
+                            <td className="py-2.5 pr-3">
+                              <span className="font-mono font-bold text-ink">{position.ticker}</span>
+                              <span className="ml-2 text-ink-mute">{position.name}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
+                              {position.normalizedWeight.toFixed(1)}%
+                            </td>
+                            <td className={`px-3 py-2.5 text-right font-mono tabular-nums ${toneClass(deltaTone)}`}>
+                              {position.normalizedDelta == null ? '—' : `${position.normalizedDelta > 0 ? '+' : ''}${position.normalizedDelta.toFixed(1)}pp`}
+                            </td>
+                            <td className={`py-2.5 pl-3 pr-4 text-right font-mono tabular-nums ${toneClass(dayTone)}`}>
+                              {signedPct(position.day_change_pct ?? null)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {/* Scroll-edge cue (full-UI-suite critique, P2; refined per
+                      CodeRabbit on PR #2287): the table's min-w-[34rem] (544px)
+                      forces horizontal scroll on any viewport under ~560px --
+                      every phone -- with nothing previously signaling the
+                      Change/Day columns run off-screen. Shown only while
+                      showBookFade is true (genuinely overflowing AND not
+                      already scrolled to the end, tracked above), so it never
+                      sits over content once there is nothing left to reveal --
+                      and the Day column's own pr-4 keeps its values clear of
+                      the fade's most-opaque edge on the trip there. */}
+                  {showBookFade ? (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent"
+                    />
+                  ) : null}
+                </>
+              )}
+            </div>
+          </BriefCardLink>
         </div>
       </section>
 
