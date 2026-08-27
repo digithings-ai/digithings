@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>digichat embed parent (local)</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0e0c;
+        --ink: #e8ebe9;
+        --mute: #8b958f;
+        --hair: #1c2420;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font: 400 1rem/1.5 ui-sans-serif, system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--ink);
+      }
+      header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--hair);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+      }
+      header p {
+        margin: 0.65rem 0 0;
+        color: var(--mute);
+        font-size: 0.75rem;
+        line-height: 1.55;
+        max-width: 62ch;
+      }
+      #try {
+        height: calc(100dvh - 5.5rem);
+        min-height: 28rem;
+      }
+      #try iframe {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: transparent;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Local digichat embed parent</h1>
+      <p>
+        Stand-in for the removed <code>frontend/website/</code> marketing shell.
+        Serve this directory with <code>python3 -m http.server 8765</code> while
+        digichat runs on <code>127.0.0.1:3000</code>. See
+        <code>frontend/digichat/README.md</code>.
+      </p>
+    </header>
+    <!--
+      #try mirrors the historical landing-page section id from CHR-68 / #266.
+      host=127.0.0.1 selects a loopback tenant when DIGICHAT_EMBED_TENANTS
+      registers it (development first-party bypass). Without tenants, set
+      DIGICHAT_LEGACY_EMBED_ENABLED=1 so POST /api/chat admits the embed host.
+    -->
+    <section id="try" aria-label="Try digichat">
+      <iframe
+        title="digichat"
+        src="http://127.0.0.1:3000/embed?host=127.0.0.1&amp;accent=digithings&amp;layout=embed"
+        allow="clipboard-write"
+      ></iframe>
+    </section>
+  </body>
+</html>
