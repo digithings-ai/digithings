@@ -41,6 +41,7 @@ from digiquant.olympus.research_retrieval.planner import (
     H6Action,
     H6SelectionMode,
     incumbent_fallback_selection,
+    resolve_h6_selection_mode,
 )
 from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
 
@@ -267,6 +268,7 @@ def test_default_rollout_modes_are_shadow_not_enforce(
     monkeypatch.delenv("OLYMPUS_H6_SELECTION_MODE", raising=False)
     assert resolve_research_attention_rollout_mode() is AttentionRolloutMode.SHADOW
     assert resolve_context_compiler_mode().value == "shadow"
+    assert resolve_h6_selection_mode() is H6SelectionMode.SHADOW
 
 
 def test_production_surfaces_do_not_import_policy_promotion() -> None:

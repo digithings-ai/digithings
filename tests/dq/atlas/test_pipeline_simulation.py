@@ -473,7 +473,7 @@ class TestPhase3ResearchComposition:
                 )
             )
         assert final.phase_hermes.asset_analysts.get("AAPL")
-        if store._bases:
-            snapshot = store.dump_snapshot()
-            reloaded = EvidenceBundleStore.from_snapshot(snapshot)
-            assert reloaded.lineage_bytes() == snapshot
+        assert store._bases, "H5 must persist at least one base bundle when writer enabled"
+        snapshot = store.dump_snapshot()
+        reloaded = EvidenceBundleStore.from_snapshot(snapshot)
+        assert reloaded.lineage_bytes() == snapshot
