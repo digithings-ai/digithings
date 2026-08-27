@@ -75,3 +75,46 @@ export function contributionsSumToDayReturn(
   const sum = contributionPctPoints.reduce((acc, v) => acc + v, 0);
   return Math.abs(sum - dayReturnPct) <= absTol;
 }
+
+/** True when PostgREST cannot find the relation (unapplied migration / schema cache). */
+export function isMissingPublicRelationError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as { code?: string; message?: string };
+  if (e.code === 'PGRST205') return true;
+  const msg = typeof e.message === 'string' ? e.message.toLowerCase() : '';
+  return msg.includes('schema cache') || msg.includes('could not find the table');
+}
+
+/**
+ * Fail-closed contract error for the curated public NAV series (#2599 / #3029).
+ * Callers must surface this — never swallow into an empty success tearsheet/book.
+ */
+export class AccountingNavContractError extends Error {
+  readonly code = 'accounting_nav_contract' as const;
+  readonly view = ACCOUNTING_NAV_VIEW;
+  readonly causeError: unknown;
+
+  constructor(causeError: unknown) {
+    const detail =
+      causeError && typeof causeError === 'object' && 'message' in causeError
+        ? String((causeError as { message: unknown }).message)
+        : causeError instanceof Error
+          ? causeError.message
+          : String(causeError ?? 'unknown error');
+    const missing = isMissingPublicRelationError(causeError);
+    super(
+      missing
+        ? `Accounting NAV contract failed: view "${ACCOUNTING_NAV_VIEW}" is missing ` +
+            `(PostgREST PGRST205). Apply digiquant migrations 072–074 on the core ` +
+            `Supabase project, then reload. Detail: ${detail}`
+        : `Accounting NAV contract failed reading "${ACCOUNTING_NAV_VIEW}": ${detail}`
+    );
+    this.name = 'AccountingNavContractError';
+    this.causeError = causeError;
+  }
+}
+
+/** Throw when a public accounting NAV query did not succeed. */
+export function assertAccountingNavQueryOk(error: unknown): void {
+  if (error) throw new AccountingNavContractError(error);
+}

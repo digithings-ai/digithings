@@ -12,9 +12,13 @@
  * telemetry (cost, tokens, error_summary, breakdown) is intentionally excluded from the
  * view; economics tiles render "—" on the public anon-key dashboard.
  *
- * Every query is FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
+ * Most queries are FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
  * empty result rather than throwing, so consumers render a clean empty state instead of an
  * error wall.
+ *
+ * Exception — accounting NAV (#2599 / #3029): `fetchOlympusTearsheet` FAILS CLOSED when
+ * `public_accounting_nav_history` errors. Swallowing that into an empty series looked like
+ * a healthy empty book and hid unapplied migrations 072–074.
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
@@ -30,6 +34,7 @@ import type { ContributionReturnPoint } from '@digithings/web';
 import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
 import {
   ACCOUNTING_NAV_VIEW,
+  AccountingNavContractError,
   accountingNavToHistoryShape,
   type AccountingNavRow,
 } from './accounting-views';
@@ -534,15 +539,20 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
       events: [],
     });
   }
-  // NAV: curated accounting series (#2599). Rollback = LEGACY_PUBLIC_NAV_VIEW / nav_history.
-  const [navRes, positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
-    safeSelect<AccountingNavRow>(ACCOUNTING_NAV_VIEW, (sb) =>
-      sb
-        .from(ACCOUNTING_NAV_VIEW)
-        .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
-        .order('date', { ascending: true })
-        .limit(PERFORMANCE_HISTORY_LIMIT)
-    ),
+  // NAV: curated accounting series (#2599). Fail closed on query error (#3029) —
+  // never build an empty tearsheet that looks like a healthy empty book.
+  // Query directly (not via safeSelect) so the PostgREST error is preserved.
+  const navQuery = await supabase
+    .from(ACCOUNTING_NAV_VIEW)
+    .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
+    .order('date', { ascending: true })
+    .limit(PERFORMANCE_HISTORY_LIMIT);
+  if (navQuery.error) {
+    throw new AccountingNavContractError(navQuery.error);
+  }
+  const navRows = (navQuery.data ?? []) as AccountingNavRow[];
+
+  const [positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
       sb
         .from('positions')
@@ -571,7 +581,7 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
   ]);
-  const navHistory: TableRow<'nav_history'>[] = navRes.rows.map((row) => {
+  const navHistory: TableRow<'nav_history'>[] = navRows.map((row) => {
     const shaped = accountingNavToHistoryShape(row);
     return {
       date: shaped.date,

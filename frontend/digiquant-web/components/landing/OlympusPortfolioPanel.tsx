@@ -211,10 +211,22 @@ export function OlympusPortfolioPanel() {
       </SectionShell>
     );
   }
-  if (error || positions.length === 0) {
+  if (error) {
     return (
       <SectionShell>
-        <NoticeCard>The live book is momentarily unavailable — check back shortly.</NoticeCard>
+        <NoticeCard>
+          <span className="text-ink">Live research portfolio unavailable.</span> {error}
+        </NoticeCard>
+      </SectionShell>
+    );
+  }
+  if (positions.length === 0) {
+    return (
+      <SectionShell>
+        <NoticeCard>
+          Live research portfolio has no published positions yet (empty book — not a
+          transient outage).
+        </NoticeCard>
       </SectionShell>
     );
   }

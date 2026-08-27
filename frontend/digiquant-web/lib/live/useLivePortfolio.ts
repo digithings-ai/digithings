@@ -10,7 +10,9 @@
  *     performance only, never rationale / PM notes / thesis).
  *   - `public_accounting_nav_history` — curated NAV (#2599): finalized accounting
  *     tips preferred; dates without a final tip use labeled legacy nav_history
- *     (`source=legacy_nav_history`). Rollback = `public_nav_history` (050).
+ *     (`source=legacy_nav_history`). This view is the contracted public series —
+ *     readers fail closed when it is missing (apply migrations 072–074). Do not
+ *     silently re-point to `public_nav_history` in the browser.
  *
  * Live valuation uses a symbol's quote ONLY when it is a real (non-stale) tick;
  * otherwise the leg falls back to `current_price` and stays flat. With no live
@@ -32,11 +34,13 @@ import {
   positionRowToLive,
   type PositionRow,
 } from "./quote-transforms";
+import {
+  ACCOUNTING_NAV_VIEW,
+  AccountingNavContractError,
+} from "./accounting-nav-contract";
 
 const POSITION_COLUMNS =
   "ticker, name, category, sector_bucket, weight_pct, entry_price, entry_date, current_price, day_change_pct, unrealized_pnl_pct, since_entry_return_pct, metrics_as_of";
-/** Curated accounting NAV (#2599). Rollback target: public_nav_history. */
-const NAV_VIEW = "public_accounting_nav_history";
 const NAV_COLUMNS = "date, nav, cash_pct, invested_pct, day_return_pct, source, contract";
 
 export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePortfolioResult {
@@ -59,11 +63,11 @@ export function useLivePortfolio(options: UseLivePortfolioOptions = {}): LivePor
       try {
         const [posRes, navRes] = await Promise.all([
           client.from("public_portfolio_positions").select(POSITION_COLUMNS),
-          client.from(NAV_VIEW).select(NAV_COLUMNS).order("date", { ascending: true }),
+          client.from(ACCOUNTING_NAV_VIEW).select(NAV_COLUMNS).order("date", { ascending: true }),
         ]);
         if (cancelled) return;
         if (posRes.error) throw new Error(posRes.error.message);
-        if (navRes.error) throw new Error(navRes.error.message);
+        if (navRes.error) throw new AccountingNavContractError(navRes.error);
         setRawPositions(Array.isArray(posRes.data) ? (posRes.data as PositionRow[]) : []);
         setNav(
           (Array.isArray(navRes.data) ? navRes.data : [])
