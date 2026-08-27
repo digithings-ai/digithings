@@ -217,33 +217,142 @@ function latestAttributionByTicker(
   return latest;
 }
 
-function toHoldingRow(
+function finitePositive(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+/** Desk unrealized % vs average entry — fail closed without basis or mark. */
+function unrealizedReturnPctFromPosition(
+  position: TableRow<'positions'> | null
+): number | null {
+  if (!position) return null;
+  const stored = position.unrealized_pnl_pct ?? position.since_entry_return_pct ?? null;
+  if (stored != null && Number.isFinite(stored)) return roundPct(stored);
+  const entry = finitePositive(position.entry_price);
+  const mark = finitePositive(position.current_price);
+  if (entry == null || mark == null) return null;
+  return roundPct((mark / entry - 1) * 100);
+}
+
+/** Latest positive close per ticker (marks sorted newest-first or any order). */
+function latestCloseByTicker(
+  marks: Array<{ ticker: string; date: string; close: number }>
+): Map<string, { date: string; close: number }> {
+  const latest = new Map<string, { date: string; close: number }>();
+  for (const row of [...marks].sort((a, b) => b.date.localeCompare(a.date))) {
+    const ticker = row.ticker.toUpperCase();
+    const close = finitePositive(row.close);
+    if (!close || latest.has(ticker)) continue;
+    latest.set(ticker, { date: row.date, close });
+  }
+  return latest;
+}
+
+/**
+ * When the nightly metrics refresh did not stamp `current_price` /
+ * `unrealized_pnl_pct` (sync-only book rows), fill the mark from `price_history`
+ * so open-book unrealized can derive from entry vs close. Never invent a mark.
+ */
+function applyHoldingMarks(
+  position: TableRow<'positions'>,
+  marksByTicker: Map<string, { date: string; close: number }>
+): TableRow<'positions'> {
+  if (
+    (position.unrealized_pnl_pct != null && Number.isFinite(position.unrealized_pnl_pct)) ||
+    (position.since_entry_return_pct != null && Number.isFinite(position.since_entry_return_pct))
+  ) {
+    return position;
+  }
+  if (finitePositive(position.current_price) != null) return position;
+  const mark = marksByTicker.get(position.ticker.toUpperCase());
+  if (!mark) return position;
+  return {
+    ...position,
+    current_price: mark.close,
+    // Provenance of the close actually used — matches refresh_performance_metrics (#1833).
+    metrics_as_of: mark.date,
+  };
+}
+
+/**
+ * Average entry as of a realized event date: latest `positions.entry_price` on or
+ * before that date. Sells do not change average cost; do not invent from marks.
+ */
+function averageEntryAsOf(
+  positions: TableRow<'positions'>[],
+  ticker: string,
+  asOfDate: string
+): number | null {
+  const key = ticker.toUpperCase();
+  let best: TableRow<'positions'> | null = null;
+  for (const row of positions) {
+    if (row.ticker.toUpperCase() !== key) continue;
+    if (row.date > asOfDate) continue;
+    if (finitePositive(row.entry_price) == null) continue;
+    if (!best || row.date.localeCompare(best.date) > 0) best = row;
+  }
+  return finitePositive(best?.entry_price);
+}
+
+function soldWeightPct(event: TableRow<'position_events'>): number | null {
+  const prev = event.prev_weight_pct;
+  const residual = event.weight_pct;
+  if (prev != null && Number.isFinite(prev) && residual != null && Number.isFinite(residual)) {
+    const sold = prev - residual;
+    return Number.isFinite(sold) ? roundPct(sold) : null;
+  }
+  if (event.event === 'EXIT' && prev != null && Number.isFinite(prev)) return roundPct(prev);
+  return null;
+}
+
+function realizedReturnVsAverageEntry(
+  exitPrice: number | null | undefined,
+  averageEntry: number | null
+): number | null {
+  const sell = finitePositive(exitPrice);
+  const entry = finitePositive(averageEntry);
+  if (sell == null || entry == null) return null;
+  return roundPct((sell / entry - 1) * 100);
+}
+
+function toOpenHoldingRow(
   ticker: string,
   position: TableRow<'positions'> | null,
-  attribution: TableRow<'position_attribution'> | null,
-  exit: TableRow<'position_events'> | null = null,
-  isClosed = false
+  attribution: TableRow<'position_attribution'> | null
 ): PerformanceHoldingRow {
-  const entryPrice = position?.entry_price;
-  const exitPrice = exit?.price ?? position?.current_price;
-  const realizedReturnPct =
-    isClosed && entryPrice != null && entryPrice > 0 && exitPrice != null && exitPrice > 0
-      ? roundPct((exitPrice / entryPrice - 1) * 100)
-      : null;
   return {
     ticker,
     category:
       attribution?.sector_bucket ?? position?.sector_bucket ?? position?.category ?? null,
-    weightPct: attribution?.weight_pct ?? position?.weight_pct ?? null,
-    unrealizedReturnPct:
-      position?.unrealized_pnl_pct ?? position?.since_entry_return_pct ?? null,
-    realizedReturnPct,
-    attributionDate:
-      exit?.date ??
-      attribution?.date ??
-      position?.metrics_as_of ??
-      (isClosed ? position?.date : null) ??
-      null,
+    weightPct: position?.weight_pct ?? attribution?.weight_pct ?? null,
+    unrealizedReturnPct: unrealizedReturnPctFromPosition(position),
+    realizedReturnPct: null,
+    // Prefer the position mark date over attribution — attribution can lag the live book.
+    attributionDate: position?.metrics_as_of ?? position?.date ?? attribution?.date ?? null,
+    disposition: null,
+    eventId: null,
+  };
+}
+
+function toRealizedHoldingRow(
+  event: TableRow<'position_events'>,
+  averageEntry: number | null,
+  attribution: TableRow<'position_attribution'> | null,
+  position: TableRow<'positions'> | null
+): PerformanceHoldingRow {
+  const disposition: PerformanceHoldingRow['disposition'] =
+    event.event === 'TRIM' ? 'TRIM' : 'EXIT';
+  return {
+    ticker: event.ticker.toUpperCase(),
+    category:
+      attribution?.sector_bucket ?? position?.sector_bucket ?? position?.category ?? null,
+    weightPct: soldWeightPct(event),
+    unrealizedReturnPct: null,
+    realizedReturnPct: realizedReturnVsAverageEntry(event.price, averageEntry),
+    attributionDate: event.date,
+    disposition,
+    eventId: event.id,
   };
 }
 
@@ -386,17 +495,6 @@ function buildPositionContributionSeries(
   }));
 }
 
-function latestExitByTicker(
-  events: TableRow<'position_events'>[]
-): Map<string, TableRow<'position_events'>> {
-  const latest = new Map<string, TableRow<'position_events'>>();
-  for (const event of [...events].sort((a, b) => b.date.localeCompare(a.date))) {
-    const ticker = event.ticker.toUpperCase();
-    if (event.event === 'EXIT' && !latest.has(ticker)) latest.set(ticker, event);
-  }
-  return latest;
-}
-
 function latestPositionByTicker(
   positions: TableRow<'positions'>[]
 ): Map<string, TableRow<'positions'>> {
@@ -408,6 +506,13 @@ function latestPositionByTicker(
   return latest;
 }
 
+/** Ledger sells only — EXIT (full) and TRIM (partial). One row per fill event. */
+function realizedSellEvents(
+  events: TableRow<'position_events'>[]
+): TableRow<'position_events'>[] {
+  return events.filter((event) => event.event === 'EXIT' || event.event === 'TRIM');
+}
+
 export function buildOlympusTearsheet(args: {
   nav: TableRow<'nav_history'>[];
   positions: TableRow<'positions'>[];
@@ -415,16 +520,18 @@ export function buildOlympusTearsheet(args: {
   attribution: TableRow<'position_attribution'>[];
   events?: TableRow<'position_events'>[];
   benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
+  /** Latest closes for open-book tickers when positions rows lack marks. */
+  holdingMarks?: Array<{ ticker: string; date: string; close: number }>;
 }): OlympusTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
   const inceptionDate = navAsc[0]?.date ?? null;
   const navSeries = buildPortfolioReturnSeries(navAsc);
   const currentSnapshot = latestDateRows(args.positions);
-  const currentPositions = currentSnapshot.rows.filter(
-    (position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0
-  );
+  const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);
+  const currentPositions = currentSnapshot.rows
+    .filter((position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0)
+    .map((position) => applyHoldingMarks(position, marksByTicker));
   const attributionByTicker = latestAttributionByTicker(args.attribution);
-  const exitByTicker = latestExitByTicker(args.events ?? []);
   const latestPosition = latestPositionByTicker(args.positions);
   const latestAttribution = latestDateRows(args.attribution);
   const currentTickers = new Set(
@@ -437,30 +544,29 @@ export function buildOlympusTearsheet(args: {
   );
   const currentHoldings = [...currentTickers]
     .map((ticker) =>
-      toHoldingRow(
+      toOpenHoldingRow(
         ticker,
         positionByTicker.get(ticker) ?? null,
         attributionByTicker.get(ticker) ?? null
       )
     )
     .sort((a, b) => (b.weightPct ?? 0) - (a.weightPct ?? 0));
-  const historicalTickers = new Set([
-    ...[...attributionByTicker.keys()].filter((ticker) => !currentTickers.has(ticker)),
-    ...[...exitByTicker.keys()].filter((ticker) => !currentTickers.has(ticker)),
-  ]);
-  const historicalHoldings = [...historicalTickers]
-    .map((ticker) =>
-      toHoldingRow(
-        ticker,
-        latestPosition.get(ticker) ?? null,
+  // Realized section = ledger EXIT + TRIM fills (including trims while still held).
+  // Do not synthesize closed rows from attribution ghosts — that invented P&L without fills.
+  const historicalHoldings = realizedSellEvents(args.events ?? [])
+    .map((event) => {
+      const ticker = event.ticker.toUpperCase();
+      return toRealizedHoldingRow(
+        event,
+        averageEntryAsOf(args.positions, ticker, event.date),
         attributionByTicker.get(ticker) ?? null,
-        exitByTicker.get(ticker) ?? null,
-        true
-      )
-    )
+        latestPosition.get(ticker) ?? null
+      );
+    })
     .sort(
       (a, b) =>
         (b.attributionDate ?? '').localeCompare(a.attributionDate ?? '') ||
+        a.ticker.localeCompare(b.ticker) ||
         Math.abs(b.realizedReturnPct ?? 0) - Math.abs(a.realizedReturnPct ?? 0)
     );
   // Accounting NAV series is the single source of truth for since-inception %.
@@ -575,7 +681,8 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
       sb
         .from('position_events')
         .select('*')
-        .eq('event', 'EXIT')
+        // EXIT = full close; TRIM = partial sell — both are realized vs average entry.
+        .in('event', ['EXIT', 'TRIM'])
         .order('date', { ascending: false })
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
@@ -592,9 +699,17 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
   const navWindow = [...navHistory]
     .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
     .sort((left, right) => left.date.localeCompare(right.date));
-  const benchmarkRes =
+  const currentBook = latestDateRows(positionsRes.rows);
+  const openTickers = [
+    ...new Set(
+      currentBook.rows
+        .filter((row) => row.ticker.toUpperCase() !== 'CASH' && row.weight_pct > 0)
+        .map((row) => row.ticker.toUpperCase())
+    ),
+  ];
+  const [benchmarkRes, holdingMarksRes] = await Promise.all([
     navWindow.length >= 2
-      ? await safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
+      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
           'benchmark price_history',
           (sb) =>
             sb
@@ -606,7 +721,21 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
               .order('date', { ascending: true })
               .limit(PERFORMANCE_HISTORY_LIMIT)
         )
-      : { rows: [], ok: true };
+      : Promise.resolve({ rows: [], ok: true as const }),
+    openTickers.length
+      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
+          'holding mark price_history',
+          (sb) =>
+            sb
+              .from('price_history')
+              .select('ticker,date,close')
+              .in('ticker', openTickers)
+              .order('date', { ascending: false })
+              // One recent window per open name is enough to resolve a close mark.
+              .limit(Math.max(openTickers.length * 40, 200))
+        )
+      : Promise.resolve({ rows: [], ok: true as const }),
+  ]);
   return buildOlympusTearsheet({
     nav: navHistory,
     positions: positionsRes.rows,
@@ -614,5 +743,6 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
     attribution: attributionRes.rows,
     events: eventsRes.rows,
     benchmarkPrices: benchmarkRes.rows,
+    holdingMarks: holdingMarksRes.rows,
   });
 }
