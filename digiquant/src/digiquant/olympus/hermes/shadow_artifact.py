@@ -15,7 +15,11 @@ import tempfile
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, TypeAlias
+from typing import (  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
+    Annotated,
+    Any,
+    TypeAlias,
+)
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 

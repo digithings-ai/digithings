@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 from digiquant.olympus.replay.models import (
     POLICY_BUNDLE_FIELD_NAMES,

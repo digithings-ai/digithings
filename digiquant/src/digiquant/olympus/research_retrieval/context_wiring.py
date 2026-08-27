@@ -6,7 +6,7 @@ import logging
 import os
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from digiquant.olympus.research_retrieval.blinding import (

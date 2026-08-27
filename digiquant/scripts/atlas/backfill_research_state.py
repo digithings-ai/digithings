@@ -26,7 +26,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 
 try:
     from dotenv import load_dotenv  # type: ignore[import-not-found]

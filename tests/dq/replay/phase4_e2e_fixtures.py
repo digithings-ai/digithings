@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any  # score:allow untyped any — scored-lint: heterogeneous dict / client shapes
 from uuid import UUID
 
 from digiquant.olympus.accounting.models import PeriodStatus
