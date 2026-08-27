@@ -76,6 +76,19 @@ function rationaleFor(
   return resolvePmRationale(action.rationale, rationaleByTicker[key]);
 }
 
+/** Compact book move — action + ticker (+ weight delta). No thesis prose. */
+export function portfolioActionChip(action: RebalanceAction): string {
+  const verb = titleCaseAction(action.action);
+  const ticker = action.ticker.trim().toUpperCase();
+  const from = action.current_pct;
+  const to = action.recommended_pct;
+  if (Number.isFinite(from) && Number.isFinite(to) && from !== to) {
+    return clip(`${verb} ${ticker} (${from.toFixed(1)}% → ${to.toFixed(1)}%)`);
+  }
+  return clip(`${verb} ${ticker}`);
+}
+
+/** Full narrative move for the hero attention lead (thesis lives here once). */
 function portfolioMoveLine(
   action: RebalanceAction,
   rationaleByTicker: Record<string, string>
@@ -84,12 +97,7 @@ function portfolioMoveLine(
   const ticker = action.ticker.trim().toUpperCase();
   const reason = rationaleFor(action, rationaleByTicker);
   if (reason) return clip(`${verb} ${ticker} — ${reason}`);
-  const from = action.current_pct;
-  const to = action.recommended_pct;
-  if (Number.isFinite(from) && Number.isFinite(to) && from !== to) {
-    return clip(`${verb} ${ticker} (${from.toFixed(1)}% → ${to.toFixed(1)}%)`);
-  }
-  return clip(`${verb} ${ticker}`);
+  return portfolioActionChip(action);
 }
 
 function eventLine(event: DashboardPositionEvent): string {
@@ -137,13 +145,15 @@ function researchLine(input: BriefHighlightInput): BriefBeat {
 function portfolioLine(input: BriefHighlightInput): BriefBeat {
   const active = activeRebalanceActions(input.actions);
   if (active.length > 0) {
-    const first = portfolioMoveLine(active[0], input.rationaleByTicker);
+    // Attention already owns the full thesis for the lead move — beats list
+    // stays action-only so the same essay is not pasted twice.
+    const first = portfolioActionChip(active[0]);
     if (active.length === 1) {
       return { kind: 'portfolio', label: 'Portfolio', text: first, available: true };
     }
     const rest = active
       .slice(1, 3)
-      .map((a) => `${titleCaseAction(a.action)} ${a.ticker.trim().toUpperCase()}`)
+      .map((a) => portfolioActionChip(a))
       .join(' · ');
     return {
       kind: 'portfolio',
