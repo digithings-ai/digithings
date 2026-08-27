@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useLiveBriefKpis } from '@/lib/hooks/use-live-brief-kpis';
-import type { BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
+import type { AtlasRunDiagnostics, BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
 import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
@@ -55,6 +55,7 @@ export default function OverviewPage() {
   const { data, loading, error } = useDashboard();
   const dashboardDate = data?.portfolio?.meta.last_updated ?? null;
   const [runHealth, setRunHealth] = useState<BriefRunHealth | null>();
+  const [runDiagnostics, setRunDiagnostics] = useState<AtlasRunDiagnostics[]>([]);
 
   useEffect(() => {
     if (!dashboardDate) return;
@@ -63,6 +64,7 @@ export default function OverviewPage() {
     void fetchAtlasRunDiagnostics()
       .then((runs) => {
         if (cancelled) return;
+        setRunDiagnostics(runs);
         const latestForDate = runs.find((run) => run.run_date === dashboardDate) ?? null;
         setRunHealth(
           latestForDate
@@ -74,12 +76,16 @@ export default function OverviewPage() {
                 segmentsTotal: latestForDate.segments_total,
                 segmentsCarried: latestForDate.segments_carried,
                 segmentsFailed: latestForDate.segments_failed,
+                durationS: latestForDate.duration_s,
               }
             : null
         );
       })
       .catch(() => {
-        if (!cancelled) setRunHealth(null);
+        if (!cancelled) {
+          setRunHealth(null);
+          setRunDiagnostics([]);
+        }
       });
 
     return () => {
@@ -214,6 +220,7 @@ export default function OverviewPage() {
         contextBullets={data.snapshot_context_bullets ?? []}
         latestEvent={data.position_events?.[0] ?? null}
         runHealth={latestDate ? runHealth : null}
+        runDiagnostics={runDiagnostics}
       />
     </div>
   );
