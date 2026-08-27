@@ -84,10 +84,11 @@ describe('Today (Overview) page', () => {
     expect(html).toContain('Pipeline health');
     expect(html).toContain('Checking pipeline status');
     expect(html).toContain('Since inception');
-    expect(html).toContain('Max drawdown');
-    expect(html).toContain('Volatility');
+    expect(html).toContain('Alpha');
+    expect(html).toContain('Info ratio');
     expect(html).toContain('Invested');
     expect(html).not.toContain('>NAV<');
+    expect(html).not.toContain('Max drawdown');
     expect(html).not.toContain('Sharpe');
     expect(html).toContain('Monitor DXY above 120.4');
     expect(html).toContain('BOJ intervention');

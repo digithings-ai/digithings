@@ -53,6 +53,8 @@ export interface DailyBriefWorkspaceProps {
     benchTicker: string | null;
     excessPct: number | null;
     excessAsOf: string | null;
+    alphaPct: number | null;
+    informationRatio: number | null;
   };
   metrics: {
     maxDrawdown: number | null;
@@ -74,11 +76,6 @@ type Tone = 'neutral' | 'positive' | 'negative' | 'warning';
 function signedPct(value: number | null): string {
   if (value == null) return '—';
   return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
-}
-
-function unsignedPct(value: number | null): string {
-  if (value == null) return '—';
-  return `${Math.abs(value).toFixed(1)}%`;
 }
 
 function metricTone(value: number | null): Tone {
@@ -210,7 +207,6 @@ export function DailyBriefWorkspace({
   actions,
   rationaleByTicker,
   returns,
-  metrics,
   investedPct,
   positions,
   actionables,
@@ -370,8 +366,8 @@ export function DailyBriefWorkspace({
         <Metric label="Day return" value={signedPct(returns.dailyPct)} tone={metricTone(returns.dailyPct)} note={returns.dailyAsOf ? `as of ${formatAsOf(returns.dailyAsOf)}` : bookDate ? formatAsOf(bookDate) : 'latest price date'} />
         <Metric label="Since inception" value={signedPct(returns.sincePct)} tone={metricTone(returns.sincePct)} note={returns.sinceAsOf ? `as of ${formatAsOf(returns.sinceAsOf)}` : returns.sinceDate ? `from ${formatAsOf(returns.sinceDate)}` : null} />
         <Metric label={returns.benchTicker ? `vs ${returns.benchTicker}` : 'Excess return'} value={signedPct(returns.excessPct)} tone={metricTone(returns.excessPct)} note={returns.excessAsOf ? `as of ${formatAsOf(returns.excessAsOf)}` : 'aligned return window'} />
-        <Metric label="Max drawdown" value={signedPct(metrics.maxDrawdown)} tone={metrics.maxDrawdown == null ? 'neutral' : 'negative'} />
-        <Metric label="Volatility" value={unsignedPct(metrics.volatility)} />
+        <Metric label="Alpha" value={signedPct(returns.alphaPct)} tone={metricTone(returns.alphaPct)} note="Jensen · needs ≥20d overlap" />
+        <Metric label="Info ratio" value={returns.informationRatio == null ? '—' : returns.informationRatio.toFixed(2)} tone={metricTone(returns.informationRatio)} note="ann. active ÷ tracking error" />
         <Metric label="Invested" value={`${book.investedPct.toFixed(0)}%`} note={`${book.cashPct.toFixed(0)}% cash`} />
       </dl>
 

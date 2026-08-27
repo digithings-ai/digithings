@@ -463,7 +463,11 @@ export function buildOlympusTearsheet(args: {
         (b.attributionDate ?? '').localeCompare(a.attributionDate ?? '') ||
         Math.abs(b.realizedReturnPct ?? 0) - Math.abs(a.realizedReturnPct ?? 0)
     );
-  const derivedNetReturnPct = periodReturnPct(navAsc.map((row) => row.nav));
+  // Accounting NAV series is the single source of truth for since-inception %.
+  // Prefer derived over persisted metrics so a stale/wrong net_return_pct cannot
+  // show a positive portfolio return while the base-100 index sits under 100.
+  // Use filtered navSeries (same finite/positive gate as return charts), not raw navAsc.
+  const derivedNetReturnPct = periodReturnPct(navSeries.map((row) => row.nav));
   const persistedBenchmarkTicker = args.metrics?.benchmark_ticker ?? 'SPY';
   const benchmarkComparisons = buildBenchmarkComparisons(
     navSeries,
@@ -475,25 +479,20 @@ export function buildOlympusTearsheet(args: {
     benchmarkComparisons.find((comparison) => comparison.ticker === persistedBenchmarkTicker) ??
     benchmarkComparisons[0];
   const derivedBenchmarkReturnPct = defaultComparison?.returnPct ?? null;
-  const netReturnPct = args.metrics?.net_return_pct ?? derivedNetReturnPct;
+  const netReturnPct = derivedNetReturnPct ?? args.metrics?.net_return_pct ?? null;
   const benchmarkReturnPct =
-    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct;
+    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct ?? null;
   const relativeReturnPct =
-    defaultComparison && netReturnPct != null && benchmarkReturnPct != null
+    netReturnPct != null && benchmarkReturnPct != null
       ? roundPct(netReturnPct - benchmarkReturnPct)
-      : args.metrics?.relative_return_pct ??
-        (netReturnPct != null && benchmarkReturnPct != null
-          ? roundPct(netReturnPct - benchmarkReturnPct)
-          : null);
+      : args.metrics?.relative_return_pct ?? null;
   const persistedUsed = [
     args.metrics?.net_return_pct,
     args.metrics?.benchmark_return_pct,
     args.metrics?.relative_return_pct,
   ].some((value) => value != null);
-  const derivedUsed =
-    (args.metrics?.net_return_pct == null && derivedNetReturnPct != null) ||
-    (args.metrics?.benchmark_return_pct == null && derivedBenchmarkReturnPct != null) ||
-    (args.metrics?.relative_return_pct == null && relativeReturnPct != null);
+  // Derived wins for portfolio return whenever the NAV series can produce one.
+  const derivedUsed = derivedNetReturnPct != null || derivedBenchmarkReturnPct != null;
   const returnsSource = persistedUsed
     ? derivedUsed
       ? 'mixed'

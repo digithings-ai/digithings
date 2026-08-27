@@ -19,9 +19,8 @@
  * Data facts this markup is built on (verified against the live views + the
  * writer, digiquant/src/digiquant/olympus/hermes/portfolio_materialize.py):
  *   - NAV is a base-100 normalized paper index (that file: "NAV is a base-100
- *     normalized index", _SEED_NAV = 100.0). Inception is 100, seeded the day
- *     before the first stored row — which is why that row's day return is null.
- *     So the headline is a level and "since inception" = level − 100.
+ *     normalized index", _SEED_NAV = 100.0). It is an internal valuation
+ *     anchor only — headlines lead with percentage returns, never the index.
  *   - weight_pct / cash_pct / invested_pct are 0–100; every *_pct return is in
  *     percent points; metrics_as_of is a YYYY-MM-DD string.
  *   - Today's book is macro ETFs (no crypto legs), so the live lane ticks only
@@ -209,8 +208,6 @@ export function OlympusPortfolioPanel() {
     navContractError,
     positions,
     nav,
-    latestNav,
-    liveTotalValue,
     liveVsMarkPct,
     kpis,
   } = book;
@@ -252,38 +249,26 @@ export function OlympusPortfolioPanel() {
     );
   }
 
-  // base 100 (see docblock): since-inception is level − 100 when the series
-  // seeds at 100. KPIs come from the shared live-mark path when NAV history
-  // exists; otherwise headline metrics stay hidden behind the contract banner.
-  const liveNav = kpis?.liveNav ?? liveTotalValue ?? latestNav;
-  const sinceInception = kpis?.sinceInceptionPct ?? (liveNav == null ? null : liveNav - 100);
+  // Percentage returns lead — NAV is a base-100 internal index, not a headline.
+  // KPIs come from the shared live-mark path when accounting NAV history exists;
+  // otherwise headline metrics stay hidden behind the contract banner.
+  const sinceInception = kpis?.sinceInceptionPct ?? null;
   const dayReturn = kpis?.dayReturnPct ?? null;
   const excessReturn = kpis?.excessReturnPct ?? null;
+  const alphaPct = kpis?.alphaPct ?? null;
+  const informationRatio = kpis?.informationRatio ?? null;
   const priceAsOf = kpis?.priceAsOfDate ?? book.metricsAsOf;
   const latest = nav.length > 0 ? nav[nav.length - 1] : null;
   const liveCount = positions.filter((p) => p.isLive).length;
   const investable = positions.filter((p) => p.ticker !== "CASH");
   const asOfNote = priceAsOf ? `as of ${priceAsOf}` : undefined;
+  const sinceNote = kpis?.sinceInceptionStartDate
+    ? `from ${kpis.sinceInceptionStartDate}${asOfNote ? ` · ${asOfNote}` : ""}`
+    : asOfNote;
 
   const headlines: DashboardHeadline[] = navContractError
     ? []
     : [
-        {
-          label: "portfolio NAV",
-          value: fmtNum(liveNav, 2),
-          note:
-            sinceInception == null
-              ? asOfNote ?? "base 100 · paper index"
-              : `${signedPct(sinceInception)} since inception · ${asOfNote ?? "base 100"}`,
-          noteTone:
-            sinceInception == null
-              ? undefined
-              : sinceInception > 0
-                ? "up"
-                : sinceInception < 0
-                  ? "down"
-                  : undefined,
-        },
         {
           label: "day return",
           value: signedPct(dayReturn),
@@ -291,11 +276,24 @@ export function OlympusPortfolioPanel() {
           note: asOfNote,
         },
         {
+          label: "since inception",
+          value: signedPct(sinceInception),
+          tone:
+            sinceInception == null
+              ? undefined
+              : sinceInception > 0
+                ? "up"
+                : sinceInception < 0
+                  ? "down"
+                  : undefined,
+          note: sinceNote,
+        },
+        {
           label: kpis?.benchmarkTicker ? `excess vs ${kpis.benchmarkTicker}` : "excess return",
           value: signedPct(excessReturn),
           tone:
             excessReturn == null ? undefined : excessReturn > 0 ? "up" : excessReturn < 0 ? "down" : undefined,
-          note: asOfNote,
+          note: asOfNote ?? "aligned return window",
         },
         {
           label: "live vs last close",
@@ -318,19 +316,26 @@ export function OlympusPortfolioPanel() {
   const ratios: DashboardRatio[] = navContractError
     ? []
     : [
+        {
+          label: "alpha",
+          value: alphaPct == null ? "—" : signedPct(alphaPct),
+          tone:
+            alphaPct == null ? undefined : alphaPct > 0 ? "up" : alphaPct < 0 ? "down" : undefined,
+        },
+        {
+          label: "info ratio",
+          value: informationRatio == null ? "—" : fmtNum(informationRatio, 2),
+          tone:
+            informationRatio == null
+              ? undefined
+              : informationRatio > 0
+                ? "up"
+                : informationRatio < 0
+                  ? "down"
+                  : undefined,
+        },
         { label: "invested", value: `${fmtNum(latest?.investedPct ?? null, 0)}%` },
         { label: "cash", value: `${fmtNum(latest?.cashPct ?? null, 0)}%` },
-        { label: "positions", value: String(investable.length) },
-        {
-          label: "prior day",
-          value: signedPct(latest?.dayReturnPct ?? null),
-          tone:
-            (latest?.dayReturnPct ?? 0) > 0
-              ? "up"
-              : (latest?.dayReturnPct ?? 0) < 0
-                ? "down"
-                : undefined,
-        },
       ];
 
   const asOf = priceAsOf;

@@ -76,7 +76,7 @@ const exitEvent = (date: string, ticker: string, realized: number): TableRow<'po
 });
 
 describe('buildOlympusTearsheet', () => {
-  it('passes persisted headline returns through without deriving them from NAV', () => {
+  it('falls back to persisted headline returns when NAV history is too short to derive', () => {
     const result = buildOlympusTearsheet({
       nav: [{ date: '2026-05-01', nav: 999, cash_pct: 20, invested_pct: 80 }],
       positions: [position('2026-07-17', 'AAA', 20)],
@@ -112,7 +112,7 @@ describe('buildOlympusTearsheet', () => {
     expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 2]);
   });
 
-  it('derives only missing cumulative returns from the exact live history window', () => {
+  it('prefers NAV-derived portfolio return over a conflicting persisted net_return_pct', () => {
     const result = buildOlympusTearsheet({
       nav: [
         { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
@@ -132,11 +132,56 @@ describe('buildOlympusTearsheet', () => {
       ],
     });
 
-    expect(result.netReturnPct).toBe(7);
+    expect(result.netReturnPct).toBe(6);
     expect(result.benchmarkReturnPct).toBe(2);
-    expect(result.relativeReturnPct).toBe(5);
+    expect(result.relativeReturnPct).toBe(4);
     expect(result.returnsSource).toBe('mixed');
     expect(result.metricsAsOf).toBe('2026-07-17');
+  });
+
+  it('never reports positive since-inception when the base-100 NAV index is under 100', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-06-23', nav: 100, cash_pct: 25, invested_pct: 75 },
+        { date: '2026-08-26', nav: 98.5, cash_pct: 25, invested_pct: 75 },
+      ],
+      positions: [],
+      metrics: {
+        ...metrics,
+        net_return_pct: 1.2, // stale/wrong persisted — must not win
+        relative_return_pct: 2,
+      },
+      attribution: [],
+      benchmarkPrices: [
+        { ticker: 'SPY', date: '2026-06-23', close: 500 },
+        { ticker: 'SPY', date: '2026-08-26', close: 490 },
+      ],
+    });
+
+    expect(result.currentNav).toBe(98.5);
+    expect(result.netReturnPct).toBeLessThan(0);
+    expect(result.netReturnPct).toBeCloseTo(-1.5, 6);
+  });
+
+  it('derives net return from filtered navSeries even when an early raw row is non-finite', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: Number.NaN, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-02', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: {
+        ...metrics,
+        net_return_pct: 99,
+        benchmark_return_pct: null,
+        relative_return_pct: null,
+      },
+      attribution: [],
+    });
+
+    expect(result.netReturnPct).toBe(6);
+    expect(result.navSeries.map((p) => p.nav)).toEqual([100, 106]);
   });
 
   it('builds populated benchmark comparisons aligned to the NAV window', () => {
@@ -159,8 +204,9 @@ describe('buildOlympusTearsheet', () => {
     });
 
     expect(result.benchmarkTicker).toBe('SPY');
+    expect(result.netReturnPct).toBe(6);
     expect(result.benchmarkReturnPct).toBe(2);
-    expect(result.relativeReturnPct).toBe(10);
+    expect(result.relativeReturnPct).toBe(4);
     expect(result.benchmarkComparisons).toEqual([
       {
         ticker: 'SPY',
