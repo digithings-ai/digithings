@@ -21,23 +21,16 @@ import type {
 import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
-import { formatDuration } from '@/components/system/run-economics-row';
-import { RunHealthTimeline } from '@/components/system/run-health-timeline';
 import { formatBriefWeightChange, isMaterialBookEvent } from '@/lib/brief-book-event';
 import { usablePmRationale } from '@/lib/pm-rationale';
+import {
+  BriefPipelineHealth,
+  type BriefRunHealth,
+} from './brief-pipeline-health';
 import { activeRebalanceActions, buildBriefHighlight, portfolioActionChip } from './brief-highlight';
 import type { TodayThesis } from './today-summaries';
 
-export interface BriefRunHealth {
-  status: string | null;
-  runDate: string | null;
-  finishedAt: string | null;
-  segmentsOk: number | null;
-  segmentsTotal: number | null;
-  segmentsCarried: number | null;
-  segmentsFailed: number | null;
-  durationS: number | null;
-}
+export type { BriefRunHealth };
 
 export interface DailyBriefWorkspaceProps {
   regime: string;
@@ -74,7 +67,7 @@ export interface DailyBriefWorkspaceProps {
   latestEvent: DashboardPositionEvent | null;
   /** `undefined` while loading, `null` when the public health view has no row. */
   runHealth: BriefRunHealth | null | undefined;
-  /** Recent run diagnostics for the compact horizontal timeline (optional). */
+  /** Recent run diagnostics for the Pipeline Health week bar (optional). */
   runDiagnostics?: AtlasRunDiagnostics[];
 }
 
@@ -112,50 +105,6 @@ function Metric({ label, value, note, tone = 'neutral' }: {
       {note ? <p className="mt-0.5 truncate text-[10px] text-ink-mute">{note}</p> : null}
     </div>
   );
-}
-
-function runStatus(runHealth: BriefRunHealth | null | undefined): {
-  label: string;
-  detail: string;
-  tone: Tone;
-} {
-  if (runHealth === undefined) {
-    return {
-      label: 'Checking pipeline status',
-      detail: 'Reading public run telemetry',
-      tone: 'neutral',
-    };
-  }
-  if (!runHealth) {
-    return {
-      label: 'Pipeline status unavailable',
-      detail: 'No public run telemetry',
-      tone: 'neutral',
-    };
-  }
-
-  const status = (runHealth.status || '').toLowerCase();
-  const failed = runHealth.segmentsFailed ?? 0;
-  const carried = runHealth.segmentsCarried ?? 0;
-  const segmentDetail =
-    runHealth.segmentsOk != null && runHealth.segmentsTotal != null
-      ? `${runHealth.segmentsOk} / ${runHealth.segmentsTotal} segments`
-      : 'Segment coverage unavailable';
-
-  if (failed > 0 || ['failed', 'error'].includes(status)) {
-    return { label: 'Pipeline needs attention', detail: segmentDetail, tone: 'negative' };
-  }
-  if (carried > 0 || ['partial', 'degraded'].includes(status)) {
-    return { label: 'Pipeline completed with carry', detail: segmentDetail, tone: 'warning' };
-  }
-  if (['completed', 'complete', 'success', 'succeeded', 'ok'].includes(status)) {
-    return { label: 'Pipeline complete', detail: segmentDetail, tone: 'positive' };
-  }
-  return {
-    label: status ? `Pipeline ${status}` : 'Pipeline status unavailable',
-    detail: segmentDetail,
-    tone: 'neutral',
-  };
 }
 
 function decisionSummary(actions: RebalanceAction[]): {
@@ -227,7 +176,6 @@ export function DailyBriefWorkspace({
     .filter((position) => position.ticker.toUpperCase() !== 'CASH')
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
   const decision = decisionSummary(actions);
-  const pipeline = runStatus(runHealth);
   const bookEvent = latestEvent && isMaterialBookEvent(latestEvent) ? latestEvent : null;
   const highlight = buildBriefHighlight({
     headline,
@@ -344,34 +292,9 @@ export function DailyBriefWorkspace({
               <p className="mt-1 text-lg font-semibold text-ink">{decision.label}</p>
               <p className="mt-0.5 text-xs text-ink-soft">{decision.detail}</p>
             </div>
-            <Link
-              href="/pipeline"
-              className="group px-5 py-4 transition-colors hover:bg-ink/[0.03] sm:px-6"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-                  Pipeline health
-                </p>
-                <GitBranch size={14} className={toneClass(pipeline.tone)} />
-              </div>
-              <p className={`mt-1 text-sm font-semibold ${toneClass(pipeline.tone)}`}>
-                {pipeline.label}
-              </p>
-              <p className="mt-0.5 font-mono text-[10px] tabular-nums text-ink-mute">
-                {pipeline.detail}
-                {runHealth?.durationS != null
-                  ? ` · ${formatDuration(runHealth.durationS)}`
-                  : null}
-              </p>
-            </Link>
+            <BriefPipelineHealth runHealth={runHealth} diagnostics={runDiagnostics} />
           </div>
         </div>
-
-        {runDiagnostics.length > 0 ? (
-          <div className="border-t border-hair px-5 py-4 sm:px-7">
-            <RunHealthTimeline diagnostics={runDiagnostics} compact />
-          </div>
-        ) : null}
       </header>
 
       <dl

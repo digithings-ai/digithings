@@ -173,6 +173,10 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('1 allocation change');
     expect(html).toContain('Pipeline complete');
     expect(html).toContain('8 / 8 segments');
+    expect(html).toContain('data-testid="brief-pipeline-health"');
+    expect(html).toContain('data-testid="brief-pipeline-summary"');
+    // Run health lives inside Pipeline health — not a full-width strip under the hero.
+    expect(html).not.toContain('data-testid="brief-run-health-timeline"');
     expect(html).toContain('Alpha');
     expect(html).toContain('+0.4%');
     expect(html).toContain('Info ratio');
