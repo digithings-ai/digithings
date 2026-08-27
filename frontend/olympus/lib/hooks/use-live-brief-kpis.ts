@@ -4,7 +4,7 @@
  * Live performance KPIs for the Brief scoreboard — same computation path as
  * digiquant.io landing ({@link computeLivePerformanceKpis} in @digithings/web).
  */
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   computeLivePerformanceKpis,
   type LivePerformanceKpis,
@@ -13,6 +13,22 @@ import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
 import { useLivePrices } from '@/lib/hooks/use-live-prices';
 import { isQuoteFresh, quoteAgeMs, type LiveQuoteMap } from '@/lib/live-valuation';
 import type { BenchmarkHistoryMap, NavChartPoint, Position } from '@/lib/types';
+
+/** Same cadence as AllocationsPositionsTable — keep freshness labels from freezing mid-session. */
+const CLOCK_TICK_MS = 30_000;
+
+/**
+ * Reference clock for quote freshness. `Date.now()` must not run in render
+ * (`react-hooks/purity`); read it in a lazy useState initializer and interval effect.
+ */
+function useNowMs(intervalMs = CLOCK_TICK_MS): number {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), intervalMs);
+    return () => clearInterval(id);
+  }, [intervalMs]);
+  return nowMs;
+}
 
 function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
   for (const t of DASHBOARD_BENCHMARK_TICKERS) {
@@ -37,8 +53,10 @@ export function useLiveBriefKpis(
   positions: Position[],
   navHistory: NavChartPoint[],
   benchmarks: BenchmarkHistoryMap | undefined,
-  nowMs: number = Date.now()
+  nowMs?: number
 ): LivePerformanceKpis | null {
+  const ticking = useNowMs();
+  const effectiveNowMs = nowMs ?? ticking;
   const tickers = useMemo(
     () =>
       positions
@@ -62,7 +80,7 @@ export function useLiveBriefKpis(
         const ticker = p.ticker.trim().toUpperCase();
         const mark = p.current_price ?? null;
         const q = quotes[ticker];
-        const live = positionIsLive(ticker, quotes, nowMs);
+        const live = positionIsLive(ticker, quotes, effectiveNowMs);
         const effective = live && q?.price != null && q.price > 0 ? q.price : mark;
         return {
           ticker,
@@ -71,7 +89,7 @@ export function useLiveBriefKpis(
           effectivePrice: effective,
           isLive: live,
           metricsAsOf: p.metrics_as_of ?? null,
-          livePriceDate: livePriceDate(ticker, quotes, nowMs),
+          livePriceDate: livePriceDate(ticker, quotes, effectiveNowMs),
         };
       });
 
@@ -81,5 +99,5 @@ export function useLiveBriefKpis(
       benchmarkHistory,
       benchmarkTicker: benchTicker,
     });
-  }, [positions, navHistory, benchmarks, quotes, nowMs]);
+  }, [positions, navHistory, benchmarks, quotes, effectiveNowMs]);
 }
