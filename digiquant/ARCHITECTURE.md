@@ -2197,7 +2197,10 @@ the grants would refuse anyway.
   the second sees the first's residual, not the pre-run book.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
-  row at all.
+  row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
+  via the public `marks: dict[str, float | Decimal]` signature) take the same decline —
+  `_rejection_reason` checks `is_finite()` before any comparison so the executor does not
+  raise (#2497).
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
 declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
