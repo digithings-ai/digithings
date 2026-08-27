@@ -1397,6 +1397,16 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   production import fence vs challenger/replay, write-denied isolation checker,
   and hard-failure visibility on shared-cash replay. Challenger selection and
   live trading remain disabled.
+  **Phase 3 lock surface (#3019 / Integration 3.1):**
+  `tests/dq/hermes/test_phase3_research_contracts.py` (+
+  `phase3_e2e_fixtures.py`, extended `tests/dq/atlas/test_pipeline_simulation.py`)
+  pins Gate 3 composition across WP11–WP14 — one A0–A4/H1–H9 graph with no
+  planner node/service, H4 roster preservation under shadow attention routing,
+  immutable H5 bundles + H6 amendments (no broad live search), H6 two-round floor
+  + carry/failure provenance, blinded deterministic H5/H6/H7 contexts from one
+  pinned research-state version, byte-identical exact-version replay and evidence
+  bundle serialize/reload, and pre-call manifest → WP1 token reconciliation.
+  Rollout stays `off`/`shadow` only — no runtime policy promotion or second graph.
   Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
   publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
   refresh-reason labels + read-only profile pin. Daily wiring:
