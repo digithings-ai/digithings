@@ -75,8 +75,18 @@ const populatedProps: DailyBriefWorkspaceProps = {
   digestDate: '2026-08-06',
   bookDate: '2026-08-05',
   runType: 'delta',
-  actions: [{ ticker: 'XLF', current_pct: 15.1, recommended_pct: 15.2, action: 'HOLD' }],
-  rationaleByTicker: {},
+  actions: [
+    {
+      ticker: 'NVDA',
+      current_pct: 8,
+      recommended_pct: 6,
+      action: 'TRIM',
+      rationale: 'Valuation stretched into earnings.',
+    },
+  ],
+  rationaleByTicker: {
+    XLF: 'Maintain financial exposure while breadth confirms.',
+  },
   returns: {
     sincePct: -0.9,
     sinceDate: '2026-06-23',
@@ -148,8 +158,15 @@ describe('DailyBriefWorkspace', () => {
     );
 
     expect(html).toContain('Morning brief');
-    expect(html).toContain('Breadth improves while duration risk remains elevated.');
-    expect(html).toContain('Holding the book');
+    expect(html).toContain('Your update');
+    expect(html).toContain('data-testid="brief-attention"');
+    expect(html).toContain('Trim NVDA — Valuation stretched into earnings.');
+    expect(html).toContain('Research');
+    expect(html).toContain('Hold breadth above 65%');
+    expect(html).toContain('Portfolio');
+    expect(html).toContain('Watch');
+    expect(html).toContain('Duration selloff');
+    expect(html).toContain('1 allocation change');
     expect(html).toContain('Pipeline complete');
     expect(html).toContain('8 / 8 segments');
     expect(html).toContain('Alpha');
@@ -163,13 +180,14 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('>NAV<');
     expect(html).not.toContain('98.5');
     expect(html).not.toContain('Sharpe');
-    expect(html).toContain('Duration selloff');
+    // Regime string + confidence stayed out of the hero (badge only).
+    expect(html).not.toContain('0.6 confidence');
+    expect(html).not.toContain('Slowing / Cooling / Neutral / Risk-Off');
     expect(html).toContain('International breadth is improving');
     expect(html).toContain('Gold strength conflicts');
     expect(html).toContain('Maintain financial exposure');
     expect(html).toContain('XLF');
     expect(html).toContain('VGK');
-    expect(html.match(/Breadth improves while duration risk remains elevated\./g)).toHaveLength(1);
     expect(html).toContain('Pipeline');
     expect(html).toContain('Performance');
     expect(html).toContain('Holdings');
@@ -179,6 +197,7 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Open digest');
     expect(html).toContain('overflow-x-auto');
     expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('Market state');
   });
 
   it('does not imply a healthy pipeline when run telemetry is unavailable', () => {
@@ -190,5 +209,9 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('Pipeline complete');
     expect(html).toContain('No book decision recorded');
     expect(html).toContain('No additional digest context was recorded.');
+    expect(html).toContain('Nothing material was published for this run yet.');
+    expect(html).toContain('No research highlight was published for this run.');
+    expect(html).toContain('No decision published');
+    expect(html).not.toContain('Holding the book');
   });
 });

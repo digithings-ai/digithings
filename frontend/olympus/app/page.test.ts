@@ -71,14 +71,18 @@ describe('Today (Overview) page', () => {
     expect(html).not.toContain('glass-card');
   });
 
-  it('orders the daily story from market state through decisions, risk, and drill-ins', () => {
+  it('orders the daily story from personal update through decisions, risk, and drill-ins', () => {
     useDashboardMock.mockReturnValue({
       data: makeData([{ ticker: 'NVDA', current_pct: 8, recommended_pct: 6, action: 'TRIM' }]),
       loading: false,
       error: null,
     });
     const html = renderToStaticMarkup(createElement(OverviewPage));
-    expect(html.match(/Mixed signals persist as tech leads equities and USD strengthens\./g)).toHaveLength(1);
+    expect(html).toContain('Your update');
+    expect(html).toContain('data-testid="brief-attention"');
+    // Attention prefers the book move when present; research beat keeps digest signal.
+    expect(html).toContain('Trim NVDA');
+    expect(html).toContain('Monitor DXY above 120.4');
     expect(html).toContain('Latest decision');
     expect(html).toContain('1 allocation change');
     expect(html).toContain('Pipeline health');
@@ -90,7 +94,6 @@ describe('Today (Overview) page', () => {
     expect(html).not.toContain('>NAV<');
     expect(html).not.toContain('Max drawdown');
     expect(html).not.toContain('Sharpe');
-    expect(html).toContain('Monitor DXY above 120.4');
     expect(html).toContain('BOJ intervention');
     expect(html).toContain('AI capex supercycle');
     expect(html).toContain('Allocation and movers');
@@ -99,6 +102,7 @@ describe('Today (Overview) page', () => {
     for (const label of ['Digest', 'Pipeline', 'Performance', 'Holdings', 'Theses']) {
       expect(html).toContain(label);
     }
+    expect(html).not.toContain('Market state');
   });
 
   it('shows the holding-the-book status on a no-change day', () => {
