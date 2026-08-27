@@ -1,8 +1,8 @@
 """WP16.2 — minimal governance persistence contracts (#2983).
 
 Store-ready frozen models for replay evidence, gate criteria, evaluations, and
-human decisions. WP16.6/16.7 extend comparison and evaluation logic; this module
-defines the persistence envelope only.
+human decisions. WP16.6 owns the rich comparison builder in ``comparison.py``;
+this module keeps the thin persistence envelope consumed by ``PolicyReplayStore``.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ class ReplayRunEvent(GovernanceContractModel):
 
 
 class PolicyComparisonReport(GovernanceContractModel):
-    """Paired policy comparison evidence envelope (WP16.6 expands metric groups)."""
+    """Paired policy comparison persistence envelope (rich report: comparison.py)."""
 
     comparison_id: UUID
     pair_content_hash: HashHex64
