@@ -23,6 +23,7 @@ from digikey.db import init_db, session_factory
 from digikey.db_schema import ApiKeyRow, JtiIssuedRow, utcnow
 from digikey.jwt_issue import issue_access_token, public_jwks
 from digikey.key_crypto import generate_raw_key, hash_secret, verify_secret
+from digikey.profile_pointer import get_profile_pointer
 from digikey.ratelimit import rate_limit_dependency, register_rate_limit_handler
 from digikey.scopes import DEFAULT_BFF_SESSION_SCOPES, scope_grants_required
 from digikey.settings import KEY_PREFIX_LEN, admin_token, allow_dev_global_keys, bff_token
@@ -252,10 +253,22 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
                     status_code=400, detail="requested_scopes not allowed for bff session"
                 )
             scopes = body.requested_scopes
+        # Profile pointers (#308): include on JWT when a row exists for this
+        # subject; omit both claims when missing so clients can route to intake.
+        # Full profile payload CRUD is #307 — this lookup is id/version only.
+        subject = body.subject.strip()
+        profile_id: str | None = None
+        profile_version: int | None = None
+        sf = session_factory()
+        with sf() as session:
+            pointer = get_profile_pointer(session, subject)
+            if pointer is not None:
+                profile_id = pointer.profile_id
+                profile_version = pointer.profile_version
         token, _jti = issue_access_token(
             _private_key,
             kid=_kid,
-            sub=f"bff:{body.subject}",
+            sub=f"bff:{subject}",
             tenant_slug=tenant_slug,
             scopes=scopes,
             key_pub=None,
@@ -264,6 +277,8 @@ def oauth_token(body: TokenRequest, request: Request) -> TokenResponse:
             principal_kind="bff_session",
             audience=body.audience,
             ttl_sec=ttl,
+            profile_id=profile_id,
+            profile_version=profile_version,
         )
         llm_key = (os.environ.get("DIGIKEY_LITELLM_PROXY_KEY") or "").strip() or None
         return TokenResponse(access_token=token, expires_in=ttl, litellm_proxy_api_key=llm_key)
