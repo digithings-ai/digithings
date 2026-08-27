@@ -212,6 +212,8 @@ atlas_graph:
   - digiquant/src/digiquant/olympus/edit_mode/**
   - digiquant/src/digiquant/olympus/hermes/**
   - digiquant/src/digiquant/olympus/learning/**
+  - digiquant/src/digiquant/olympus/replay/walk_forward.py
+  - tests/dq/replay/test_walk_forward.py
   - tests/dq/hermes/**
   - tests/dq/learning/**
   - .github/workflows/test-atlas-graph.yml
