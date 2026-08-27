@@ -676,7 +676,7 @@ JSON export is near-instant (file write of a small JSON object). The `nautilus_b
 
 ### Orchestrator Tools Contract with digigraph
 
-digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 11 tools (6 digiquant pipeline + 5 olympus policy-replay). digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*"|olympus_*, "arguments": {...}}`.
+digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 11 tools (6 digiquant pipeline + 5 olympus policy-replay). digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "<name>", "arguments": {...}}` (digiquant_* or olympus_*).
 
 The manifest is built by `build_orchestrator_tool_manifest()` in `orchestrator_tools.py`. It is static (not dynamically generated from Pydantic schemas), which creates a risk of schema drift if `BacktestRequest` or `PipelineRequest` evolves without a corresponding update to the manifest.
 
