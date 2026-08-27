@@ -407,7 +407,9 @@ def test_verify_fold_assignments_zero_overlap_property() -> None:
     assert result.status == WalkForwardBuildStatus.OK
     episode_by_key = {ep.episode_key: ep for ep in episodes}
     for plan in result.folds:
-        verify_fold_assignments(plan, episode_by_key=episode_by_key, replay_as_of=_utc(2024, 12, 31))
+        verify_fold_assignments(
+            plan, episode_by_key=episode_by_key, replay_as_of=_utc(2024, 12, 31)
+        )
 
 
 def test_not_yet_available_excluded() -> None:
@@ -428,7 +430,9 @@ def test_not_yet_available_excluded() -> None:
         assert "future" not in plan.train_episode_keys
         assert "future" not in plan.eval_episode_keys
         unavailable = [
-            ex for ex in plan.exclusions if ex.reason == WalkForwardExclusionReason.NOT_YET_AVAILABLE
+            ex
+            for ex in plan.exclusions
+            if ex.reason == WalkForwardExclusionReason.NOT_YET_AVAILABLE
         ]
         assert any(ex.episode_key == "future" for ex in unavailable)
 
