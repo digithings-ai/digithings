@@ -466,7 +466,8 @@ export function buildOlympusTearsheet(args: {
   // Accounting NAV series is the single source of truth for since-inception %.
   // Prefer derived over persisted metrics so a stale/wrong net_return_pct cannot
   // show a positive portfolio return while the base-100 index sits under 100.
-  const derivedNetReturnPct = periodReturnPct(navAsc.map((row) => row.nav));
+  // Use filtered navSeries (same finite/positive gate as return charts), not raw navAsc.
+  const derivedNetReturnPct = periodReturnPct(navSeries.map((row) => row.nav));
   const persistedBenchmarkTicker = args.metrics?.benchmark_ticker ?? 'SPY';
   const benchmarkComparisons = buildBenchmarkComparisons(
     navSeries,

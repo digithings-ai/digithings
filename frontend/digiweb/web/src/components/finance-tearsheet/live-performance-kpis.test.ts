@@ -168,6 +168,32 @@ describe('computeLivePerformanceKpis', () => {
     expect(kpis.benchmarkReturnPct).toBeCloseTo(benchPct, 1);
   });
 
+  it('does not shrink the benchmark window when metrics_as_of is older than book NAV', () => {
+    const staleMarks = positions.map((p) => ({
+      ...p,
+      isLive: false,
+      livePriceDate: null,
+      metricsAsOf: '2026-08-20',
+    }));
+    const kpis = computeLivePerformanceKpis({
+      positions: staleMarks,
+      navHistory: [
+        { date: '2026-06-23', nav: 100 },
+        { date: '2026-08-26', nav: 103 },
+      ],
+      benchmarkHistory: [
+        { date: '2026-06-23', price: 500 },
+        { date: '2026-08-20', price: 510 },
+        { date: '2026-08-26', price: 520 },
+      ],
+      benchmarkTicker: 'SPY',
+    });
+    // Book is 2026-08-26; stale mark date must not win the endDate pick.
+    expect(kpis.bookNavDate).toBe('2026-08-26');
+    expect(kpis.priceAsOfDate).toBe('2026-08-20');
+    expect(kpis.benchmarkReturnPct).toBeCloseTo((520 / 500 - 1) * 100, 6);
+  });
+
   it('returns null KPIs when NAV history is empty', () => {
     const kpis = computeLivePerformanceKpis({ positions, navHistory: [] });
     expect(kpis.liveNav).toBeNull();

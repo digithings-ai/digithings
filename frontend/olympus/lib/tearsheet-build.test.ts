@@ -163,6 +163,27 @@ describe('buildOlympusTearsheet', () => {
     expect(result.netReturnPct).toBeCloseTo(-1.5, 6);
   });
 
+  it('derives net return from filtered navSeries even when an early raw row is non-finite', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: Number.NaN, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-02', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: {
+        ...metrics,
+        net_return_pct: 99,
+        benchmark_return_pct: null,
+        relative_return_pct: null,
+      },
+      attribution: [],
+    });
+
+    expect(result.netReturnPct).toBe(6);
+    expect(result.navSeries.map((p) => p.nav)).toEqual([100, 106]);
+  });
+
   it('builds populated benchmark comparisons aligned to the NAV window', () => {
     const result = buildOlympusTearsheet({
       nav: [

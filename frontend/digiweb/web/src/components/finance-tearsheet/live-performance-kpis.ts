@@ -308,7 +308,13 @@ export function computeLivePerformanceKpis(input: LivePerformanceKpisInput): Liv
     benchmarkHistory?.length &&
     benchTickerOut
   ) {
-    const endDate = priceAsOfDate ?? bookNavDate ?? latestNavRow?.date ?? null;
+    // Prefer live mark date only when it is *after* the book row; a stale
+    // metrics_as_of earlier than bookNavDate must not shrink the window while
+    // portfolio return still uses the later liveNav.
+    const endDate =
+      priceAsOfDate && bookNavDate && priceAsOfDate > bookNavDate
+        ? priceAsOfDate
+        : (bookNavDate ?? priceAsOfDate ?? latestNavRow?.date ?? null);
     const startDate = firstNavRow.date;
     if (endDate) {
       const aligned = pickBenchmarkPoints(benchmarkHistory, startDate, endDate);
