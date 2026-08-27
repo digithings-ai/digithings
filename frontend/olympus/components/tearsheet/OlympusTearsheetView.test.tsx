@@ -68,18 +68,38 @@ function html(data: OlympusTearsheet = sample) {
 }
 
 describe('OlympusTearsheetView', () => {
-  it('prioritizes NAV, persisted portfolio return, and active return', () => {
+  it('leads with percentage returns — not the base-100 NAV index', () => {
     const out = html();
-    expect(out).toContain('>NAV index<');
+    expect(out).not.toContain('>NAV index<');
     expect(out).toContain('Portfolio return');
-    expect(out).toContain('Active return');
-    expect(out).toContain('112.50');
+    expect(out).toContain('Excess return');
+    expect(out).toContain('Relative gain');
     expect(out).toContain('12.50%');
     expect(out).toContain('4.25%');
-    expect(out).toContain('Benchmark return');
+    expect(out).toContain('SPY return');
     expect(out).toContain('8.25%');
     expect(out).toContain('>period<');
     expect(out).toContain('2026-05-01–2026-07-17');
+    expect(out).toContain('paper NAV index 112.50');
+  });
+
+  it('keeps the benchmark control outside the chart (page-global)', () => {
+    const out = html();
+    expect(out).toContain('data-testid="global-benchmark-control"');
+    expect(out).toContain('aria-label="Comparison benchmark"');
+    expect(out).toContain('<option value="SPY" selected="">SPY</option>');
+    expect(out).toContain('<option value="QQQ">QQQ</option>');
+    // Chart legend shows the selected ticker as a series label, not a second <select>
+    const chartStart = out.indexOf('data-testid="portfolio-contribution-chart"');
+    const chartBlock = out.slice(chartStart);
+    expect(chartBlock).not.toContain('<select');
+  });
+
+  it('renders insight band for alpha and information ratio', () => {
+    const out = html();
+    expect(out).toContain('data-testid="performance-insight-band"');
+    expect(out).toContain('>Alpha<');
+    expect(out).toContain('Information ratio');
   });
 
   it('renders one additive contribution and exact portfolio-return chart', () => {
@@ -161,7 +181,6 @@ describe('headline vs realized presentation (#1664)', () => {
     expect(out).toContain('data-region="stamp"');
     expect(out).not.toContain('persisted metrics');
     expect(out).not.toContain('marks the open book · incl. unrealized');
-    expect(out).not.toContain('vs SPY');
   });
 
   it('offers populated benchmark assets with SPY selected by default', () => {

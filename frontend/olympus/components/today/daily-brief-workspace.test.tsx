@@ -86,6 +86,8 @@ const populatedProps: DailyBriefWorkspaceProps = {
     benchTicker: 'SPY',
     excessPct: 1.8,
     excessAsOf: '2026-08-05',
+    alphaPct: 0.4,
+    informationRatio: 0.35,
   },
   metrics: { maxDrawdown: -2.4, volatility: 11.8 },
   investedPct: 30.2,
@@ -125,6 +127,8 @@ const emptyProps: DailyBriefWorkspaceProps = {
     benchTicker: null,
     excessPct: null,
     excessAsOf: null,
+    alphaPct: null,
+    informationRatio: null,
   },
   metrics: { maxDrawdown: null, volatility: null },
   investedPct: null,
@@ -148,11 +152,12 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Holding the book');
     expect(html).toContain('Pipeline complete');
     expect(html).toContain('8 / 8 segments');
-    expect(html).toContain('Max drawdown');
-    expect(html).toContain('-2.4%');
-    expect(html).toContain('Volatility');
-    expect(html).toContain('11.8%');
-    expect(html).not.toContain('+11.8%');
+    expect(html).toContain('Alpha');
+    expect(html).toContain('+0.4%');
+    expect(html).toContain('Info ratio');
+    expect(html).toContain('0.35');
+    expect(html).not.toContain('Max drawdown');
+    expect(html).not.toContain('Volatility');
     expect(html).toContain('Invested');
     expect(html).toContain('30%');
     expect(html).not.toContain('>NAV<');

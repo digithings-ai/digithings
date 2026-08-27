@@ -154,12 +154,14 @@ export default function OverviewPage() {
     ? performanceHistoryResolved[performanceHistoryResolved.length - 1].date
     : null);
   const priceAsOf = liveKpis?.priceAsOfDate ?? bookAsOf;
-  const latestPortfolioValue = liveKpis?.liveNav ?? (performanceHistoryResolved.length
-    ? performanceHistoryResolved[performanceHistoryResolved.length - 1].nav
-    : null);
+  // Percentage returns only — never lead with the base-100 NAV index.
+  // Prefer the shared live KPI path; fall back to snapshot ratio (same formula).
   const initialPortfolioValue = performanceHistoryResolved.length
     ? performanceHistoryResolved[0].nav
     : null;
+  const latestPortfolioValue = liveKpis?.liveNav ?? (performanceHistoryResolved.length
+    ? performanceHistoryResolved[performanceHistoryResolved.length - 1].nav
+    : null);
   const sincePct =
     liveKpis?.sinceInceptionPct ??
     (latestPortfolioValue != null && initialPortfolioValue != null && initialPortfolioValue > 0
@@ -168,14 +170,7 @@ export default function OverviewPage() {
   const sinceDate = liveKpis?.sinceInceptionStartDate ?? (performanceHistoryResolved.length
     ? performanceHistoryResolved[0].date
     : null);
-  const dailyRet =
-    liveKpis?.dayReturnPct ??
-    (performanceHistoryResolved.length >= 2
-      ? ((performanceHistoryResolved[performanceHistoryResolved.length - 1].nav -
-          performanceHistoryResolved[performanceHistoryResolved.length - 2].nav) /
-          performanceHistoryResolved[performanceHistoryResolved.length - 2].nav) *
-        100
-      : null);
+  const dailyRet = liveKpis?.dayReturnPct ?? null;
   const excessPct = liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null;
   const benchTicker = liveKpis?.benchmarkTicker ?? benchmarkBlurb?.ticker ?? null;
 
@@ -200,6 +195,8 @@ export default function OverviewPage() {
           benchTicker,
           excessPct,
           excessAsOf: priceAsOf,
+          alphaPct: liveKpis?.alphaPct ?? null,
+          informationRatio: liveKpis?.informationRatio ?? null,
         }}
         metrics={{
           maxDrawdown:
