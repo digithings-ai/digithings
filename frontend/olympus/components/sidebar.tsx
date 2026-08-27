@@ -30,17 +30,13 @@ function routeActive(pathname: string, base: string, href: string): boolean {
     return /\/portfolio(\/|$)/.test(pathname) || /\/performance(\/|$)/.test(pathname);
   }
   if (href === '/pipeline') {
-    // Pipeline replaces Why; absorbs the legacy /why, /research, /library routes.
+    // Pipeline replaces Why + System; absorbs legacy /why, /research, /library,
+    // /system, /observability, /architecture routes.
     return (
       /\/pipeline(\/|$)/.test(pathname) ||
       /\/why(\/|$)/.test(pathname) ||
       /\/research(\/|$)/.test(pathname) ||
-      /\/library(\/|$)/.test(pathname)
-    );
-  }
-  if (href === '/system') {
-    // System absorbs the legacy /observability and /architecture routes.
-    return (
+      /\/library(\/|$)/.test(pathname) ||
       /\/system(\/|$)/.test(pathname) ||
       /\/observability(\/|$)/.test(pathname) ||
       /\/architecture(\/|$)/.test(pathname)
