@@ -74,6 +74,17 @@ export function PerformanceToPortfolioRedirectPage() {
   return <RedirectFallback />;
 }
 
+/** Retired Period inspect page (#3060) → Tearsheet. */
+export function PeriodToTearsheetRedirectPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace('/portfolio/performance');
+  }, [router]);
+
+  return <RedirectFallback />;
+}
+
 /** Old `/research` URL → Pipeline (route rename; preserve a date param when present). */
 function ResearchToWhyInner() {
   const router = useRouter();

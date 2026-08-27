@@ -7,7 +7,6 @@ import {
   Scale,
   TrendingUp,
   ScrollText,
-  CalendarRange,
 } from 'lucide-react';
 import { SubpageStickyTabBar, subpageTabButtonClass } from '@/components/subpage-tab-bar';
 
@@ -16,7 +15,6 @@ export type PortfolioSectionId =
   | 'theses'
   | 'tearsheet'
   | 'ledger'
-  | 'period'
   | 'attribution';
 
 const SECTIONS: {
@@ -29,7 +27,6 @@ const SECTIONS: {
   { id: 'theses', label: 'Theses', href: '/portfolio?tab=theses', icon: BookMarked },
   { id: 'tearsheet', label: 'Tearsheet', href: '/portfolio/performance', icon: TrendingUp },
   { id: 'ledger', label: 'Ledger', href: '/portfolio/ledger', icon: ScrollText },
-  { id: 'period', label: 'Period', href: '/portfolio/period', icon: CalendarRange },
   { id: 'attribution', label: 'Attribution', href: '/portfolio/attribution', icon: Scale },
 ];
 
