@@ -21,7 +21,6 @@ import type {
 import { reconcileBook } from '@/lib/book-reconciliation';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
-import { Badge } from '@/components/ui';
 import { formatDuration } from '@/components/system/run-economics-row';
 import { RunHealthTimeline } from '@/components/system/run-health-timeline';
 import { usablePmRationale } from '@/lib/pm-rationale';
@@ -209,11 +208,9 @@ const DESTINATIONS = [
 ] as const;
 
 export function DailyBriefWorkspace({
-  regimeLabel,
   headline,
   digestDate,
   bookDate,
-  runType,
   actions,
   rationaleByTicker,
   returns,
@@ -227,8 +224,9 @@ export function DailyBriefWorkspace({
   runHealth,
   runDiagnostics = [],
 }: DailyBriefWorkspaceProps) {
-  // `regime` + `confidence` remain on the props contract for callers / badges
-  // elsewhere; the personal hero no longer dumps them as a metrics sub-line (#3036).
+  // `regime`, `regimeLabel`, `confidence`, and `runType` remain on the props
+  // contract for callers; the Brief header keeps only the as-of date — no
+  // decorative run-type / tone pills (#3036 follow-up).
   const book = reconcileBook(positions, { investedPct });
   const held = book.rows
     .filter((position) => position.ticker.toUpperCase() !== 'CASH')
@@ -302,25 +300,14 @@ export function DailyBriefWorkspace({
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <AsOfBadge date={digestDate} />
-            {runType ? <Badge variant="default">{runType}</Badge> : null}
-            {/* Raw `regime` dropped here (full-UI-suite critique, P3): it was
-                rendered twice in this header (here, and again in the sub-line
-                below next to confidence) plus once more as this styled Badge
-                -- three renderings of one signal. The sub-line keeps the raw
-                string paired with confidence; the command bar keeps only the
-                styled, tone-colored read. */}
-            <Badge variant={regimeLabel === 'bearish' || regimeLabel === 'caution' ? 'amber' : 'default'}>
-              {regimeLabel}
-            </Badge>
           </div>
         </div>
 
         <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="px-5 py-6 sm:px-7 sm:py-7 lg:border-r lg:border-hair">
             {/* Personal pipeline update (variant B) — one attention sentence +
-                Research / Portfolio / Watch beats. Regime string + confidence
-                stay on the command-bar badge only; raw levels/indicators are
-                deliberately out of this hero (#3036). */}
+                Research / Portfolio / Watch beats. Regime / run-type chrome
+                stays out of this hero (#3036). */}
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
               Your update · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
             </p>

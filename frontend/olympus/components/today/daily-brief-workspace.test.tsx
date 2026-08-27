@@ -184,9 +184,12 @@ describe('DailyBriefWorkspace', () => {
     expect(html).not.toContain('>NAV<');
     expect(html).not.toContain('98.5');
     expect(html).not.toContain('Sharpe');
-    // Regime string + confidence stayed out of the hero (badge only).
+    // Regime / run-type / confidence stay out of the Brief header strip.
     expect(html).not.toContain('0.6 confidence');
     expect(html).not.toContain('Slowing / Cooling / Neutral / Risk-Off');
+    expect(html).not.toContain('>delta<');
+    expect(html).not.toContain('>bearish<');
+    expect(html).toContain('as of Aug 6');
     expect(html).toContain('International breadth is improving');
     expect(html).toContain('Gold strength conflicts');
     expect(html).toContain('Maintain financial exposure');
