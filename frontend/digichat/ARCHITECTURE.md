@@ -1,7 +1,7 @@
 # digichat — Architecture
 
-> **Scope:** Production Next.js 16 BFF + React 19 chat UI at `digichat/`.
-> The legacy zero-dependency demo at `website/digichat/` is out of scope.
+> **Scope:** Production Next.js 16 BFF + React 19 chat UI at `frontend/digichat/`.
+> Marketing parent is `frontend/digithings-web` `/chat` → iframe `/embed` (not the deleted `frontend/website/`).
 
 ---
 
