@@ -213,6 +213,33 @@ def _shares(value: Decimal) -> Decimal:
     return value.quantize(_QUANTUM, rounding=ROUND_HALF_UP)
 
 
+def _pending_quantity(raw: Any) -> Decimal:
+    """Normalize a pending order's quantity for the fill/reject gate.
+
+    Non-finite values must reach :func:`_rejection_reason` intact — ``_shares`` raises
+    ``InvalidOperation`` on Infinity, which would crash the public executor before the
+    gate can decline (#2497). Finite values are still share-quantized.
+    """
+    value = _decimal(raw) or Decimal(0)
+    if not value.is_finite():
+        return value
+    return _shares(value)
+
+
+def _intent_quantity(pending_row: dict[str, Any]) -> Decimal:
+    """``OrderIntent.quantity`` is ``PositiveQuantity`` (finite, > 0).
+
+    A pending head with a non-finite or non-positive quantity cannot be mirrored onto
+    the terminal rejected row — Postgres ``numeric`` and Pydantic both refuse them.
+    Stamp one share; ``rejection_reason`` and the absence of a fill are authoritative
+    (#2497).
+    """
+    value = _decimal(pending_row.get("quantity")) or Decimal(0)
+    if value.is_finite() and value > 0:
+        return _shares(value)
+    return Decimal("1")
+
+
 def _decimal(raw: Any) -> Decimal | None:
     """Supabase returns numerics as str/int/float. Never float(); never a bare Decimal(float)."""
     if raw is None:
@@ -616,7 +643,7 @@ def execute_pending_orders(
     for row in sorted(pending, key=lambda r: (_symbol(r.get("symbol")), str(r.get("id")))):
         order_id = str(row["id"])
         symbol = _symbol(row.get("symbol"))
-        quantity = _shares(_decimal(row.get("quantity")) or Decimal(0))
+        quantity = _pending_quantity(row.get("quantity"))
         existing = fills_by_order.get(order_id)
 
         if existing is not None:
@@ -742,7 +769,17 @@ def _rejection_reason(
         # Either way the direction is not derivable from the recorded data, and guessing
         # it would be exactly the read-time reconstruction this task removes.
         return OrderRejectionReason.DATA_UNAVAILABLE
-    if mark is None or mark <= 0 or quantity <= 0:
+    # is_finite() before any comparison: Decimal NaN/sNaN raises InvalidOperation on
+    # ``<=``, and Infinity clears ``<= 0`` then dies later in PaperExecution validation.
+    # The marks signature is ``float | Decimal``, so float("nan") is in-bounds and must
+    # decline rather than raise (#2497).
+    if (
+        mark is None
+        or not mark.is_finite()
+        or mark <= 0
+        or not quantity.is_finite()
+        or quantity <= 0
+    ):
         return OrderRejectionReason.DATA_UNAVAILABLE
     return None
 
@@ -764,7 +801,7 @@ def _executed_intent_row(
         approved_target_id=UUID(str(pending_row["approved_target_id"])),
         run_date=date.fromisoformat(str(pending_row["run_date"])),
         symbol=_symbol(pending_row.get("symbol")),
-        quantity=_shares(_decimal(pending_row.get("quantity")) or Decimal(0)),
+        quantity=_intent_quantity(pending_row),
         status=OrderIntentStatus.EXECUTED,
         supersedes_id=order_id,
         effective_at=now,
@@ -787,7 +824,7 @@ def _rejected_intent_row(
         approved_target_id=UUID(str(pending_row["approved_target_id"])),
         run_date=date.fromisoformat(str(pending_row["run_date"])),
         symbol=_symbol(pending_row.get("symbol")),
-        quantity=_shares(_decimal(pending_row.get("quantity")) or Decimal(0)),
+        quantity=_intent_quantity(pending_row),
         status=OrderIntentStatus.REJECTED,
         supersedes_id=order_id,
         rejection_reason=reason,
