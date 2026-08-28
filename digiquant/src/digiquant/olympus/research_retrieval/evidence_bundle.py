@@ -19,6 +19,7 @@ from digiquant.olympus.hermes.models.forecast import ForecastTerms
 from digiquant.olympus.research_retrieval.models import (
     EvidenceRecord,
     NonEmptyStr,
+    NonEmptyText,
     TickerEvidenceBundle,
     TypedProvenance,
     evidence_content_hash,
@@ -30,6 +31,8 @@ from digiquant.olympus.research_retrieval.store import EvidenceBundleStore
 
 OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV = "OLYMPUS_EVIDENCE_BUNDLE_WRITER"
 _H5_BASE_SOURCE = "h5:base"
+# source / authority columns are CHECK (length BETWEEN 1 AND 500) in WP11/WP12 stores.
+_SOURCE_MAX_LEN = 500
 
 # Keys that must never become evidence authorities (H5 blinding / anti-leak).
 _PORTFOLIO_LEAK_AUTHORITIES = frozenset(
@@ -53,7 +56,7 @@ class H5EvidenceFact(BaseModel):
 
     source: NonEmptyStr
     authority: NonEmptyStr
-    summary: NonEmptyStr
+    summary: NonEmptyText
     event_time: AwareDatetime
     effective_as_of: AwareDatetime
     known_at: AwareDatetime
@@ -146,7 +149,7 @@ def facts_from_phase_inputs(
         for src in source_list:
             facts.append(
                 H5EvidenceFact(
-                    source=src[:500],
+                    source=src[:_SOURCE_MAX_LEN],
                     authority="web_grounding",
                     summary=summary,
                     event_time=event_time,
@@ -196,7 +199,7 @@ def facts_from_phase_inputs(
                 H5EvidenceFact(
                     source="phase6_bias_row",
                     authority="bias_row",
-                    summary=str(safe)[:500],
+                    summary=str(safe),
                     event_time=cutoff,
                     effective_as_of=cutoff,
                     known_at=cutoff,

@@ -461,24 +461,25 @@ class TestEditMergeFallback:
         assert not out.get("merge_fallbacks")
 
 
-# ─── #1740: schema limits must reach the model ─────────────────────────
+# ─── #1740 / #3063: schema constraints must reach the model ────────────
 
 
 @pytest.mark.unit
 class TestEditSchemaConstraintsReachTheModel:
-    """Regression for #1740.
+    """Regression for #1740 / #3063.
 
-    The 240-char `reason` cap was enforced by the schema but stated in none of
-    the 17 *-edit.md skills, so the model was never told the limit it kept
-    breaking. Appended at the single load chokepoint so it cannot drift between
-    17 heterogeneous files.
+    Shared loader appends schema constraints so skills cannot drift from the
+    Pydantic models. Prose fields (`reason`, `one_line_summary`) must stay
+    uncapped; inventing a character limit again reintroduces discarded patches.
     """
 
     @pytest.mark.parametrize("slug", _ATLAS_EDIT_SKILL_SLUGS)
     def test_every_atlas_edit_skill_states_the_limits(self, slug: str) -> None:
         body = load_skill_edit(slug)
-        assert "240 characters maximum" in body
         assert "Output constraints (schema-enforced)" in body
+        assert "512 characters maximum" in body
+        assert "no** character" in body or "no character" in body.lower()
+        assert "240 characters maximum" not in body
         # The skill's own content must survive the append.
         assert "DocumentPatch" in body
 
@@ -486,16 +487,29 @@ class TestEditSchemaConstraintsReachTheModel:
         from digiquant.olympus.hermes.skills import load_skill_edit as hermes_load_edit
 
         body = hermes_load_edit("asset-analyst")
-        assert "240 characters maximum" in body
+        assert "Output constraints (schema-enforced)" in body
+        assert "240 characters maximum" not in body
 
     def test_stated_cap_matches_the_schema(self) -> None:
-        """Drift guard: change PatchOp.reason's cap and this fails loudly."""
+        """Drift guard: path stays capped; reason/summary must stay uncapped."""
         from annotated_types import MaxLen
         from digiquant.olympus.atlas.skills import EDIT_SCHEMA_CONSTRAINTS
-        from digiquant.olympus.edit_mode.models import PatchOp
+        from digiquant.olympus.edit_mode.models import DocumentPatch, PatchOp
 
-        caps = [
+        path_caps = [
+            m.max_length for m in PatchOp.model_fields["path"].metadata if isinstance(m, MaxLen)
+        ]
+        reason_caps = [
             m.max_length for m in PatchOp.model_fields["reason"].metadata if isinstance(m, MaxLen)
         ]
-        assert caps == [240], f"unexpected schema cap: {caps}"
-        assert f"{caps[0]} characters maximum" in EDIT_SCHEMA_CONSTRAINTS
+        summary_caps = [
+            m.max_length
+            for m in DocumentPatch.model_fields["one_line_summary"].metadata
+            if isinstance(m, MaxLen)
+        ]
+        assert path_caps == [512], f"unexpected path cap: {path_caps}"
+        assert reason_caps == [], f"reason must have no max_length: {reason_caps}"
+        assert summary_caps == [], f"one_line_summary must have no max_length: {summary_caps}"
+        assert "512 characters maximum" in EDIT_SCHEMA_CONSTRAINTS
+        assert "240 characters maximum" not in EDIT_SCHEMA_CONSTRAINTS
+        assert "400 characters maximum" not in EDIT_SCHEMA_CONSTRAINTS

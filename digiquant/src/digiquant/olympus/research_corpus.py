@@ -101,7 +101,7 @@ class ResearchCorpusPin(BaseModel):
     schema_version: int = Field(default=1, ge=1)
     writer_role: WriterRole
     label: str = Field(..., min_length=1, max_length=200)
-    summary: str = Field(default="", max_length=4000)
+    summary: str = Field(default="")
     payload: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("corpus_key")
