@@ -66,7 +66,7 @@ class BeliefsBlob(BaseModel):
     schema_version: str = "1.0"
     doc_type: Literal["beliefs"] = "beliefs"
     date: date
-    body: str = Field(min_length=1, max_length=12000)
+    body: str = Field(min_length=1)
 
 
 def beliefs_backlog_threshold() -> int:

@@ -122,7 +122,7 @@ def _facts_from_research_payload(
         body = payload.get("summary") or payload.get("thesis") or payload.get("content")
     if not isinstance(body, str) or not body.strip():
         return ()
-    summary = body.strip()[:500]
+    summary = body.strip()
     return (
         H5EvidenceFact(
             source=document_key[:500],
