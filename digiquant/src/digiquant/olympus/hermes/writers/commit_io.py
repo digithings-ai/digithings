@@ -322,7 +322,7 @@ def _action_rationale_by_ticker(book: RebalancePayload | dict[str, Any]) -> dict
             continue
         rationale = str(action.get("rationale") or "").strip()
         if rationale:
-            out[ticker.strip().upper()] = rationale[:2000]
+            out[ticker.strip().upper()] = rationale
     return out
 
 

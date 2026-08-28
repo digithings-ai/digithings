@@ -460,7 +460,7 @@ class ExpectedEventVersion(ResearchStateModel):
 
     expected_event_version_id: UUID
     expected_event_id: UUID
-    label: NonEmptyStr
+    label: NonEmptyText
     status: ExpectedEventStatus
     event_time: AwareDatetime
     supporting_evidence_ids: tuple[UUID, ...] = Field(default_factory=tuple)
@@ -932,7 +932,7 @@ class MissingFactRequest(ResearchStateModel):
     base_bundle_id: UUID
     ticker: NonEmptyStr
     fact_key: NonEmptyStr
-    rationale: NonEmptyStr
+    rationale: NonEmptyText
     event_time: AwareDatetime
     effective_as_of: AwareDatetime
     known_at: AwareDatetime
