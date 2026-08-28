@@ -119,7 +119,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `models.py` | Pydantic v2 result models |
 | `constraints.py` | `satisfies_constraints()` filter |
 | `addm.py` | Rolling Sharpe Z-score drift detection |
-| `audit.py` | JSONL append-only audit log |
+| `audit.py` | Thin `audit_log` → `digibase.audit.emit_event` |
 | `mcp_server.py` | FastMCP server wrapping `service.py` |
 | `orchestrator_tools.py` | OpenAI-style tool manifest for digigraph |
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
@@ -569,11 +569,20 @@ The dispatch in `run_optimize()`:
 
 ### Audit JSONL Flow
 
-`audit.py` appends one JSON line per event to the file at `AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). Each event contains: `ts`, `event_type`, `agent_id`, `payload`, and optional `key_prefix`, `tenant`, `project_id`, `jti`, `path`.
+`digiquant.audit.audit_log` is a thin wrapper over `digibase.audit.emit_event`
+(CHR-151 / #1193). The digibase emitter appends one JSON line per event to
+`AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). Each event
+matches the Pydantic `AuditEvent` schema: `ts`, `event_type`, `agent_id`,
+`payload`, and optional `key_prefix`, `tenant`, `project_id`, `jti`, `path`.
 
-Before writing, `audit_log()` redacts any payload key containing `password`, `api_key`, `token`, or `secret` (case-insensitive substring match). The file is opened in append mode on every call; there is no buffering or rotation mechanism.
+Before writing, `emit_event` redacts any payload key containing `password`,
+`api_key`, `token`, or `secret` (case-insensitive substring match, recursive into
+nested dicts/lists). The file is opened in append mode on every call; there is
+no buffering or rotation mechanism.
 
-Audit events are written explicitly in `server.py` after `run_backtest`, `run_optimize`, pipeline, and `v1_workflow`. The `run_export` synchronous endpoint does not write an audit event.
+Audit events are written explicitly in `server.py` after `run_backtest`,
+`run_optimize`, pipeline, and `v1_workflow`. The `run_export` synchronous
+endpoint does not write an audit event.
 
 ---
 
@@ -608,9 +617,18 @@ CORS is configured via the shared `digibase.cors.install_cors(app, service="digi
 
 ### Audit Log Secret Redaction
 
-The `audit_log()` function redacts payload keys containing `password`, `api_key`, `token`, or `secret`. This is a substring match, so it catches variations like `api_key_prefix` or `access_token`. However, secrets could leak through non-obvious keys (e.g., `bearer`, `credential`, `auth`) or through nested dicts (redaction only applies to the top-level `payload` dict, not recursively). The redaction list is hardcoded and cannot be extended without code changes.
+`digibase.audit.emit_event` (via `redact_mapping`) redacts payload keys
+containing `password`, `api_key`, `token`, or `secret`. This is a substring
+match, so it catches variations like `api_key_prefix` or `access_token`, and it
+recurses into nested dicts and lists. Secrets can still leak through
+non-obvious keys (e.g., `bearer`, `credential`, `auth`) or values under safe
+key names. The default redaction list is hardcoded; callers may pass an
+extended `redact=` tuple.
 
-The audit JSONL file is world-readable if default filesystem permissions apply. In Docker, the file is mounted at `./digiquant/results/audit` and shared with the digigraph and digiclaw containers. Access controls on this directory should be reviewed.
+The audit JSONL file is world-readable if default filesystem permissions apply.
+In Docker, the file is mounted at `./digiquant/results/audit` and shared with
+the digigraph and digiclaw containers. Access controls on this directory should
+be reviewed.
 
 ---
 

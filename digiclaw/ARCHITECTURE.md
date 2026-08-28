@@ -11,7 +11,7 @@
 digiclaw is the intended user-facing gateway and runtime layer for the digithings stack. Its full vision encompasses a persistent, multi-channel interface (Slack, Discord, Telegram, WhatsApp), session and queue management, a WebSocket control plane, and a self-healing loop driven by ADDM drift detection. In practice, as of Phase 3, only two concerns are implemented:
 
 1. **Heartbeat runner** — a single-shot Python script that pings digigraph and digiquant health endpoints, checks strategy drift via digiquant `GET /check_drift` (requires a digikey bearer), and logs results to the JSONL audit file.
-2. **JSONL audit log** — an append-only structured log consumed by any component that imports `digiclaw.audit.audit_log`.
+2. **JSONL audit log** — an append-only structured log; digiclaw callers use `digiclaw.audit.audit_log`, which delegates to `digibase.audit.emit_event` (fleet-wide emitter, CHR-151 / #1193).
 
 Everything else in scope for digiclaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
 
@@ -35,7 +35,7 @@ Everything else in scope for digiclaw — a persistent gateway runtime with chan
 | `digiclaw/__init__.py` | Package stub; one-line comment noting OpenClaw integration is deferred |
 | `digiclaw/__main__.py` | Entry point: imports `heartbeat_runner.main` and calls it via `raise SystemExit(main())` |
 | `digiclaw/heartbeat_runner.py` | Single-cycle heartbeat: pings `/health` on digigraph and digiquant, calls `/check_drift` with digikey bearer, triggers re-optimization when drift is reported, writes `HEARTBEAT.md` checklist-seen event |
-| `digiclaw/audit.py` | `audit_log()` function: appends one JSONL line per call; optionally POSTs a copy to `AUDIT_SINK_URL` |
+| `digiclaw/audit.py` | Thin `audit_log()` wrapper → `digibase.audit.emit_event` (JSONL + optional `AUDIT_SINK_URL`) |
 | `digiclaw/skills/README.md` | Skill contract definition for `run_digigraph_workflow` (Phase 0 contract only, no implementation) |
 | `HEARTBEAT.md` (repo root) | Checklist document read by the heartbeat agent; documents four check categories and the 7-day unattended run milestone |
 
@@ -57,12 +57,14 @@ Drift checks are **auth-blocked**, not logic-blocked: without a digikey bearer (
 
 ### Audit log behaviour
 
-`audit_log()` in `digiclaw/audit.py`:
-- Creates parent directories if missing (`Path.mkdir(parents=True, exist_ok=True)`).
+`audit_log()` in `digiclaw/audit.py` is a thin wrapper around
+`digibase.audit.emit_event` (heartbeat event types and payload shapes are
+unchanged — format migration is out of scope for #1193):
+- Creates parent directories if missing (`ensure_dir` / `Path.mkdir`).
 - Writes one JSON line per call, UTF-8 encoded, newline-terminated.
 - Default path: `digiquant/results/audit/events.jsonl` (overridden by `AUDIT_LOG_PATH`).
-- Redacts payload keys containing `password`, `api_key`, `token`, or `secret` (case-insensitive substring match) by replacing values with `"[REDACTED]"`.
-- If `AUDIT_SINK_URL` is set, makes a fire-and-forget `POST` with `Content-Type: application/x-ndjson`; any exception is silently swallowed (`except Exception: pass`).
+- Redacts payload keys containing `password`, `api_key`, `token`, or `secret` (case-insensitive substring match, recursive) by replacing values with `"[REDACTED]"`.
+- If `AUDIT_SINK_URL` is set, makes a fire-and-forget `POST` with `Content-Type: application/x-ndjson`; sink failures are swallowed (local JSONL write already succeeded).
 
 ---
 
@@ -73,7 +75,7 @@ Drift checks are **auth-blocked**, not logic-blocked: without a digikey bearer (
 | Surface | Description |
 |---------|-------------|
 | `python -m digiclaw` | CLI entry point; runs one heartbeat cycle and exits |
-| `AUDIT_LOG_PATH` (JSONL file) | Append-only event log written by all components that import `digiclaw.audit` |
+| `AUDIT_LOG_PATH` (JSONL file) | Append-only event log written via `digibase.audit.emit_event` (component wrappers call it) |
 | `AUDIT_SINK_URL` (HTTP POST) | Optional remote audit mirror (NDJSON); best-effort, no auth, no retry |
 
 digiclaw has **no HTTP server of its own**. It only calls outbound HTTP (digigraph `/health`, digiquant `/health`, digiquant `/check_drift`, digiquant `/run_optimize`, optional `AUDIT_SINK_URL`).
@@ -93,7 +95,7 @@ digiclaw has **no HTTP server of its own**. It only calls outbound HTTP (digigra
 
 ### Audit event (JSONL)
 
-Every line written by `audit_log()` is a JSON object with the following schema:
+Every line written by `digibase.audit.emit_event` (Pydantic `AuditEvent`) is a JSON object with the following schema:
 
 ```
 {
@@ -286,7 +288,7 @@ Both health checks in `run_heartbeat()` have a 5-second timeout. The total worst
 
 The heartbeat runner polls `{DIGIGRAPH_URL}/health` (default `http://127.0.0.1:8000`) via HTTP GET. In Docker, this resolves to the `digigraph` service container on the internal network. The heartbeat service declares `depends_on: digigraph: condition: service_healthy` in `docker-compose.yml`, so it will not start until digigraph's health check passes.
 
-digigraph also imports `digiclaw.audit.audit_log` directly for its own audit events. The `AUDIT_LOG_PATH` environment variable is set to `/audit/events.jsonl` in both the `digigraph` and `heartbeat` service definitions, and both mount the same host directory (`./digiquant/results/audit`), so audit lines from all sources converge in one file.
+digigraph and digiquant use their own thin `audit_log` wrappers over the same `digibase.audit.emit_event` emitter (not `digiclaw.audit`). The `AUDIT_LOG_PATH` environment variable is set to `/audit/events.jsonl` in the `digigraph` and `heartbeat` service definitions, and both mount the same host directory (`./digiquant/results/audit`), so audit lines from all sources converge in one file.
 
 ### digiquant
 
