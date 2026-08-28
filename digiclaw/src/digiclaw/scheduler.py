@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
+from typing import Protocol
 
 from pydantic import BaseModel, Field
 
@@ -87,6 +88,12 @@ class RunOutcome(BaseModel):
     ok: bool
     error: str | None = None
     ran_at: datetime
+
+
+class _StateStore(Protocol):
+    def load(self) -> SchedulerState: ...
+
+    def save(self, state: SchedulerState) -> None: ...
 
 
 class JsonStateStore:
