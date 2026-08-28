@@ -737,6 +737,8 @@ CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effecti
 
 Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
+`digistore_get` / `resolve_dataset_ref` enforce the session boundary: a ref (logical name, relative path, or absolute path returned by `digistore_put`) must resolve under `{run_data_dir}/{session_id}/`. Paths that only stay under the run-data root — e.g. `../other_session/datasets/search_1.json` or another session's absolute ref — are rejected. Same-session absolute refs continue to work.
+
 ### 8.4 Parallel Tool Execution
 
 When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor` inside `digillm.run_tools` (the `parallel_safe` set is computed from the registry in `llm_client.py` and passed through). Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
