@@ -56,18 +56,15 @@ def _skill_edit_path(slug: str) -> Path:
 # segments per run, and the master digest itself on 2026-07-28.
 #
 # Appended at the single load chokepoint rather than copied into 17 heterogeneous
-# files, so it cannot drift between them. Keep the numbers in sync with
+# files, so it cannot drift between them. Keep in sync with
 # digiquant.olympus.edit_mode.models.PatchOp / DocumentPatch — there is a test
-# asserting they match.
+# asserting path caps and that reason/summary have no max_length (#1740 / #3063).
 EDIT_SCHEMA_CONSTRAINTS = """## Output constraints (schema-enforced)
 
-These are hard limits. Exceeding one previously discarded the entire patch:
-
-- `ops[].reason` — **240 characters maximum**. One short sentence. Over-long
-  values are now truncated rather than rejected, so anything past 240 chars is
-  silently lost; keep it brief instead.
 - `ops[].path` — 512 characters maximum; an RFC 6901 JSON Pointer starting `/`.
-- `one_line_summary` — 400 characters maximum."""
+- `ops[].reason` and `one_line_summary` — free prose with **no** character
+  maximum. A previous 240/400-char hard cap discarded entire patches (#1740);
+  do not invent a limit or truncate these fields."""
 
 
 # Appended to EVERY skill, full and edit alike (#1750). Deliberately at the single load
