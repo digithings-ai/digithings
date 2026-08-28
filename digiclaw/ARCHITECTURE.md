@@ -2,18 +2,19 @@
 
 **Component:** digiclaw — Gateway, Heartbeat, and Audit Layer
 **Status:** Phase 3 (heartbeat + audit implemented); OpenClaw gateway deferred
-**Last updated:** 2026-03-29
+**Last updated:** 2026-08-27
 
 ---
 
 ## 1. Overview
 
-digiclaw is the intended user-facing gateway and runtime layer for the digithings stack. Its full vision encompasses a persistent, multi-channel interface (Slack, Discord, Telegram, WhatsApp), session and queue management, a WebSocket control plane, and a self-healing loop driven by ADDM drift detection. In practice, as of Phase 3, only two concerns are implemented:
+digiclaw is the intended user-facing gateway and runtime layer for the digithings stack. Its full vision encompasses a persistent, multi-channel interface (Slack, Discord, Telegram, WhatsApp), session and queue management, a WebSocket control plane, and a self-healing loop driven by ADDM drift detection. In practice, as of Phase 3, three concerns are implemented:
 
 1. **Heartbeat runner** — a single-shot Python script that pings digigraph and digiquant health endpoints, checks strategy drift via digiquant `GET /check_drift` (requires a digikey bearer), and logs results to the JSONL audit file.
 2. **JSONL audit log** — an append-only structured log; digiclaw callers use `digiclaw.audit.audit_log`, which delegates to `digibase.audit.emit_event` (fleet-wide emitter, CHR-151 / #1193).
+3. **Agent scheduler** — cron and continuous scheduling with durable lifecycle state (`start` / `stop` / `pause` / `resume`), YAML schedule definitions under `digiclaw/agents/`, and `digiclaw schedule status` for next-run visibility. Event-mode is modeled in the schema but not triggered yet.
 
-Everything else in scope for digiclaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
+Everything else in scope for digiclaw — a persistent gateway runtime with channel adapters, session manager, queue manager, WebSocket control plane, full agent registry (#217), and MCP skill integration — is deferred. The `digiclaw/skills/README.md` defines the `run_digigraph_workflow` skill contract as a Phase 0 placeholder; no runtime implements it yet.
 
 **What is NOT implemented today:**
 - OpenClaw Node.js runtime (any version)
@@ -21,6 +22,8 @@ Everything else in scope for digiclaw — a persistent gateway runtime with chan
 - Session manager and queue manager
 - WebSocket control plane
 - `run_digigraph_workflow` MCP skill execution
+- Full agent registry (tools / output_sink) — schedule-only YAML today (#217)
+- Event-triggered agent runs (schema only)
 - Durable ADDM history across digiquant restarts (in-process deque today)
 - Any HTTP API or REST health endpoint for digiclaw itself
 
@@ -32,10 +35,15 @@ Everything else in scope for digiclaw — a persistent gateway runtime with chan
 
 | File | Role |
 |------|------|
-| `digiclaw/__init__.py` | Package stub; one-line comment noting OpenClaw integration is deferred |
+| `digiclaw/__init__.py` | Package stub; notes OpenClaw integration is deferred |
 | `digiclaw/__main__.py` | Entry point: imports `heartbeat_runner.main` and calls it via `raise SystemExit(main())` |
+| `digiclaw/cli.py` | `digiclaw` console script — `heartbeat` and `schedule` subcommands |
 | `digiclaw/heartbeat_runner.py` | Single-cycle heartbeat: pings `/health` on digigraph and digiquant, calls `/check_drift` with digikey bearer, triggers re-optimization when drift is reported, writes `HEARTBEAT.md` checklist-seen event |
 | `digiclaw/audit.py` | Thin `audit_log()` wrapper → `digibase.audit.emit_event` (JSONL + optional `AUDIT_SINK_URL`) |
+| `digiclaw/schedule_schema.py` | Pydantic v2 schedule models + YAML loader for agent definitions |
+| `digiclaw/cron.py` | Standard 5-field cron parse + next-fire calculation |
+| `digiclaw/scheduler.py` | Scheduler: lifecycle, persistence, isolated ticks, status rows |
+| `digiclaw/agents/*.yaml` | Example schedule-focused agent definitions |
 | `digiclaw/skills/README.md` | Skill contract definition for `run_digigraph_workflow` (Phase 0 contract only, no implementation) |
 | `HEARTBEAT.md` (repo root) | Checklist document read by the heartbeat agent; documents four check categories and the 7-day unattended run milestone |
 
@@ -75,8 +83,14 @@ unchanged — format migration is out of scope for #1193):
 | Surface | Description |
 |---------|-------------|
 | `python -m digiclaw` | CLI entry point; runs one heartbeat cycle and exits |
+| `digiclaw heartbeat` | Same single-shot heartbeat via the `digiclaw` console script |
+| `digiclaw schedule status` | Lists agents, lifecycle, and next run times |
+| `digiclaw schedule start\|stop\|pause\|resume <agent>` | Lifecycle controls |
+| `digiclaw schedule tick` | Process due jobs once (supervisor / test entry) |
 | `AUDIT_LOG_PATH` (JSONL file) | Append-only event log written via `digibase.audit.emit_event` (component wrappers call it) |
 | `AUDIT_SINK_URL` (HTTP POST) | Optional remote audit mirror (NDJSON); best-effort, no auth, no retry |
+| `DIGICLAW_AGENTS_DIR` | Optional override for agent YAML directory (default `digiclaw/agents`) |
+| `DIGICLAW_SCHEDULER_STATE` | Optional path for durable scheduler JSON (default `{DIGI_WORKSPACE}/.digiclaw/scheduler_state.json`) |
 
 digiclaw has **no HTTP server of its own**. It only calls outbound HTTP (digigraph `/health`, digiquant `/health`, digiquant `/check_drift`, digiquant `/run_optimize`, optional `AUDIT_SINK_URL`).
 
@@ -140,6 +154,43 @@ For `event_type = "heartbeat"`, the `payload` object contains:
 ### digikey correlation fields
 
 When digigraph validates a JWT and emits an audit event, it may pass `key_prefix`, `tenant`, `project_id`, and `jti` into `audit_log()`. These fields allow post-hoc correlation of audit lines with the issuing API key or JWT without embedding the full token. The heartbeat runner does not currently populate these fields.
+
+### Agent schedule definition (YAML)
+
+Schedule-focused agent YAML under `digiclaw/agents/` (or `DIGICLAW_AGENTS_DIR`):
+
+```yaml
+name: example-cron
+description: optional
+schedule:
+  mode: cron          # cron | continuous | event
+  cron: "*/30 * * * *"
+  interval_seconds: 60  # required for continuous
+  event_name: on_foo    # required for event (trigger not wired yet)
+  enabled: true
+```
+
+### Scheduler state (JSON)
+
+Persisted at `DIGICLAW_SCHEDULER_STATE` (default `{DIGI_WORKSPACE}/.digiclaw/scheduler_state.json`):
+
+```json
+{
+  "agents": {
+    "example-cron": {
+      "lifecycle": "running",
+      "next_run_at": "2026-08-27T12:30:00+00:00",
+      "last_run_at": "2026-08-27T12:00:00+00:00",
+      "last_status": "ok",
+      "last_error": null,
+      "pending": false
+    }
+  },
+  "updated_at": "2026-08-27T12:00:01+00:00"
+}
+```
+
+On restart, running agents whose `next_run_at` is overdue (or marked `pending`) are re-queued immediately so missed ticks are not dropped.
 
 ---
 
@@ -335,6 +386,8 @@ while true; do python -m digiclaw; sleep 1800; done
 | `DIGI_WORKSPACE` | `.` | Directory searched for `HEARTBEAT.md` |
 | `REOPTIMIZE_STRATEGY` | `mean_reversion_tech` | Strategy ID passed to `/check_drift` and `/run_optimize` |
 | `DIGIQUANT_DATA_DIR` | (unset) | Required by `/run_optimize`; skips re-optimization if missing |
+| `DIGICLAW_AGENTS_DIR` | `digiclaw/agents` | Directory of agent schedule YAML files |
+| `DIGICLAW_SCHEDULER_STATE` | `{DIGI_WORKSPACE}/.digiclaw/scheduler_state.json` | Durable scheduler lifecycle / next-run state |
 
 In Docker Compose, `DIGIGRAPH_URL` and `DIGIQUANT_URL` are overridden to use internal service names (`http://digigraph:8000`, `http://digiquant:8001`).
 
