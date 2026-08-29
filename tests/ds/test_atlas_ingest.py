@@ -28,13 +28,16 @@ from digisearch.search._stub import _stub_index
 
 
 @pytest.fixture(autouse=True)
-def _isolate_atlas_index() -> None:
+def _isolate_atlas_index(monkeypatch: pytest.MonkeyPatch) -> None:
     """Use a per-test stub index so concurrent tests cannot interfere.
 
     ``ATLAS_INDEX_NAME`` is module-evaluated from the env once per process;
     we clear and restore the matching slot in ``_stub_index`` around each
-    test.
+    test. Force ``DIGISEARCH_CHUNKER=token`` so these unit tests use
+    Chonkie TokenChunker (character tokenizer) without downloading the
+    semantic embedding model.
     """
+    monkeypatch.setenv("DIGISEARCH_CHUNKER", "token")
     _stub_index.pop(ATLAS_INDEX_NAME, None)
     yield
     _stub_index.pop(ATLAS_INDEX_NAME, None)

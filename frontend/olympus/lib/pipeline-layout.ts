@@ -1,7 +1,18 @@
 import { PIPELINE_TOPOLOGY } from './pipeline-topology';
 import type { PipelineStageId } from './pipeline-topology';
 import type { PipelineDayData } from './pipeline-graph-data';
-import { leafDocumentKey, resolvePresentDigestKey } from './pipeline-links';
+import {
+  bandReached,
+  pipelineNodeRunStatusLabel,
+  resolveLeafDocumentKey,
+  resolveStageRunStatus,
+  resolveSubStepRunStatus,
+  topologyEvidenceBands,
+  type PipelineNodeRunStatus,
+} from './pipeline-topology-status';
+
+export type { PipelineNodeRunStatus };
+export { pipelineNodeRunStatusLabel };
 
 export interface LaidOutNode {
   id: string;
@@ -16,23 +27,6 @@ export interface LaidOutNode {
   /** Backend runs this step in-state only — it never publishes a document (see SubStep.stateOnly). */
   stateOnly?: boolean;
   runStatus?: PipelineNodeRunStatus;
-}
-
-export type PipelineNodeRunStatus =
-  | 'stage-overview'
-  | 'not-run'
-  | 'state-only'
-  | 'persisted-artifact'
-  | 'expected-artifact-missing'
-  | 'parallel-dispatch';
-
-export function pipelineNodeRunStatusLabel(status: PipelineNodeRunStatus): string {
-  if (status === 'stage-overview') return 'Stage overview';
-  if (status === 'not-run') return 'Not run';
-  if (status === 'state-only') return 'State-only operation';
-  if (status === 'persisted-artifact') return 'Persisted artifact';
-  if (status === 'expected-artifact-missing') return 'Expected artifact missing';
-  return 'Parallel dispatch';
 }
 
 export interface Connector { fromId: string; toId: string; active?: boolean; }
@@ -55,36 +49,6 @@ const GAP_X = 24;
 const GAP_Y = 12;
 const BASE_Y = 0;
 
-/**
- * Resolve a leaf sub-step's document_key, honouring the golden rule: only
- * return a key that is actually present in this day's documents. `commit` is
- * special-cased — there can be several `commit-run/{run_id}` keys per day
- * (CI outer retries mint a new GITHUB_RUN_ID each attempt), so we pick the
- * newest by numeric run_id — lexicographic order is wrong across digit-length
- * boundaries ('9999999999' > '10000000000'). `digest` is special-cased too —
- * it's published as `digest` on baseline days and `digest-delta` on delta
- * days (see `resolvePresentDigestKey`).
- */
-function resolveLeafDocumentKey(subStepId: string, day: PipelineDayData): string | undefined {
-  if (subStepId === 'commit') {
-    const runId = (k: string) => Number.parseInt(k.slice('commit-run/'.length), 10);
-    const runs = [...day.presentKeys]
-      .filter((k) => k.startsWith('commit-run/'))
-      .sort((a, b) => {
-        const na = runId(a);
-        const nb = runId(b);
-        if (Number.isNaN(na) || Number.isNaN(nb)) return a.localeCompare(b);
-        return na - nb;
-      });
-    return runs.length > 0 ? runs[runs.length - 1] : undefined;
-  }
-  if (subStepId === 'digest') {
-    return resolvePresentDigestKey(day);
-  }
-  const key = leafDocumentKey(subStepId);
-  return key && day.presentKeys.has(key) ? key : undefined;
-}
-
 /** Derive the human-readable branch label (entity suffix) from a fan-out document_key. */
 function branchLabel(fanoutId: string, documentKey: string): string {
   if (fanoutId === 'analysts' || fanoutId === 'deliberation') {
@@ -100,11 +64,12 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
   const connectors: Connector[] = [];
   let cursorX = 0;
   let maxY = NODE_H;
-  const runRecorded = day.runRecorded ?? day.presentKeys.size > 0;
+  const bands = topologyEvidenceBands(day);
 
   for (const stage of PIPELINE_TOPOLOGY) {
     const stageExpanded = expansion.expandedStages.has(stage.id);
     const stageNodeId = stage.id;
+    const stageStatus = resolveStageRunStatus(stage, day, bands);
 
     if (!stageExpanded) {
       nodes.push({
@@ -116,7 +81,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         y: BASE_Y,
         width: NODE_W,
         height: NODE_H,
-        runStatus: runRecorded ? 'stage-overview' : 'not-run',
+        runStatus: stageStatus,
       });
       if (nodes.length > 1) {
         connectors.push({ fromId: nodes[nodes.length - 2].id, toId: stageNodeId });
@@ -137,7 +102,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         y: BASE_Y,
         width: NODE_W,
         height: NODE_H,
-        runStatus: runRecorded ? 'stage-overview' : 'not-run',
+        runStatus: stageStatus,
       });
       if (nodes.length > 1) {
         const prevStageNode = nodes.find(
@@ -159,20 +124,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
         // but publishes nothing (thesis framing, screener, consolidate, preflight).
         const leafKey =
           sub.fanout || sub.stateOnly ? undefined : resolveLeafDocumentKey(sub.id, day);
-        const fanoutKeys = sub.fanout ? day.fanoutKeys[sub.fanout.id] ?? [] : [];
-        const runStatus: PipelineNodeRunStatus = !runRecorded
-          ? 'not-run'
-          : sub.stateOnly
-            ? 'state-only'
-            : sub.fanout
-              ? fanoutKeys.length > 0 || sub.fanout.defaultCount === 0
-                ? 'parallel-dispatch'
-                : 'expected-artifact-missing'
-              : leafKey
-                ? 'persisted-artifact'
-                : sub.conditionalArtifact
-                  ? 'not-run'
-                  : 'expected-artifact-missing';
+        const runStatus = resolveSubStepRunStatus(sub, day, bands, stage.id);
 
         nodes.push({
           id: subId,
@@ -220,6 +172,9 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
             // No-data fallback: index-emit placeholder branches with NO documentKey
             // (renders the shape but is not clickable) so nothing regresses.
             const count = day.fanoutCounts[sub.fanout.id] ?? sub.fanout.defaultCount;
+            const branchStatus: PipelineNodeRunStatus = bandReached(bands, stage.id)
+              ? 'expected-artifact-missing'
+              : 'not-run';
             for (let i = 0; i < count; i++) {
               const branchId = `${stage.id}:${sub.id}:${i}`;
               const branchY = BASE_Y + (i + 1) * (NODE_H + GAP_Y);
@@ -232,7 +187,7 @@ export function layoutPipeline(day: PipelineDayData, expansion: ExpansionState):
                 y: branchY,
                 width: NODE_W,
                 height: NODE_H,
-                runStatus: runRecorded ? 'expected-artifact-missing' : 'not-run',
+                runStatus: branchStatus,
               });
               connectors.push({ fromId: subId, toId: branchId, active: true });
               if (branchY + NODE_H > maxY) maxY = branchY + NODE_H;

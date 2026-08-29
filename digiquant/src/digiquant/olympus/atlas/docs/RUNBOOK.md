@@ -7,7 +7,7 @@ This is the **single authoritative** run instruction for digiquant-atlas.
 | Layer | When | What runs | Supabase impact |
 |--------|------|-----------|-----------------|
 | **GitHub — Daily Price Update** | Weekdays **00:00 UTC** (~**8:00 PM Eastern** during EDT, ~**7:00 PM Eastern** during EST; after NYSE close; GitHub cron is UTC-only) | [`preload-history.py`](scripts/preload-history.py) (stale refresh) → [`compute-technicals.py`](scripts/compute-technicals.py) → macro ingest ([`ingest_fred.py`](scripts/ingest_fred.py), [`ingest_fx_frankfurter.py`](scripts/ingest_fx_frankfurter.py), [`ingest_crypto_fng.py`](scripts/ingest_crypto_fng.py), [`ingest_treasury_curve.py`](scripts/ingest_treasury_curve.py)) | `price_history`, `price_technicals`, **`macro_series_observations`** — **no** digest, no agent research |
-| **GitHub — Atlas metrics refresh** (`.github/workflows/pipeline-atlas-metrics.yml`) | **22:00 UTC, DAILY** — after the 21:00 EOD price ingest and the 12:00 Olympus book. Seven days a week since #1833: the book cron is daily, so a MON-SAT metrics cron left every Sunday book permanently unenriched (0 of N rows marked, not merely late). | [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py) `--supabase` (**no** `--fill-calendar-through`; see below) → [`refresh_attribution.py`](scripts/refresh_attribution.py) | **`positions`** performance columns, **`nav_history`**, **`portfolio_metrics`** (script rows), **`position_events`** cumulative-return fields, **`position_attribution`** |
+| **GitHub — Atlas metrics refresh** (`.github/workflows/pipeline-atlas-metrics.yml`) | **22:00 UTC, DAILY** — after the 21:00 EOD price ingest and the 12:00 Olympus book. Seven days a week since #1833: the book cron is daily, so a MON-SAT metrics cron left every Sunday book permanently unenriched (0 of N rows marked, not merely late). | [`finalize_period_accounting.py`](scripts/finalize_period_accounting.py) (shadow) → [`refresh_performance_metrics.py`](scripts/refresh_performance_metrics.py) `--supabase` (**no** `--fill-calendar-through`; see below) → [`refresh_attribution.py`](scripts/refresh_attribution.py) | **`positions`** performance columns, **`nav_history`**, **`portfolio_metrics`** (script rows), **`position_events`** cumulative-return fields, **`current_book_lookback`** (legacy alias view: `position_attribution`); realized daily contribution only via **`daily_realized_attribution`** / finalized accounting |
 | **Co-work / operator — research & portfolio** | Typically **pre-market** (e.g. 8:00 AM local) or per [`config/schedule.json`](config/schedule.json) | Agent validates + publishes JSON to Supabase (`materialize_snapshot.py`, `publish_document.py`, …) → operator runs [`run_db_first.py`](scripts/run_db_first.py) (optional disk checks → metrics → `execute_at_open.py` → [`validate_db_first.py`](scripts/validate_db_first.py)) | `daily_snapshots`, `documents`, `positions`, `theses`, `position_events`, etc. |
 
 ### Daily portfolio continuity (post-close)
@@ -27,7 +27,13 @@ For each **calendar day** after the latest snapshot through the target date: if 
 
 **Limitation:** `--fill-calendar-through` advances from the **latest** `positions` snapshot date forward only; it does not scan for **holes** on earlier dates, so it cannot repair a historical gap. For a missing day *before* your latest snapshot, run once with `--date YYYY-MM-DD` (after `price_history` has that day). `--date` is unguarded by design — it is the explicit reprocess path.
 
-**Attribution runs *after* metrics, deliberately.** `pnl_pct` prefers `SUM(position_attribution.contribution_pct)` and falls back to the one-day `nav_history` return, but `refresh_attribution.py` computes a **21-day trailing window** (`--window-days`, default 21) — so that sum is a 21-day contribution, ~5-10x the daily move and frequently the opposite sign. Metrics-first means today's attribution rows do not exist yet and `pnl_pct` takes the correct one-day path. Do not reorder the two steps.
+**Lookback runs after metrics and is diagnostic only (#2598).** `pnl_pct` prefers a
+finalized accounting period, then the one-day `nav_history` return. It **never** reads
+`current_book_lookback` / legacy `position_attribution` — those rows are a **21-day trailing
+window** (`--window-days`, default 21) using today's weights and must not masquerade as
+realized period contribution (OLY-REV-007). Realized daily contribution is
+`daily_realized_attribution` (finalized `olympus_accounting_*` tip). Job order between
+metrics and lookback cannot alter daily `pnl_pct` semantics.
 
 **GitHub — manual “Daily Price Update”:** Uses the same steps as the weekday schedule — **`preload-history.py --supabase --supabase-sync`** (per ticker: gap-fill from latest `price_history` date through UTC today; tickers with no rows get a full-history pull, default **`--new-ticker-period max`**). No workflow inputs. For a one-off local run without Actions: `python3 scripts/preload-history.py --supabase --supabase-sync`.
 
@@ -81,6 +87,65 @@ python3 scripts/backfill_simulated_runs.py --validate-all
 **As-of date constraints:** all web research must use `before:DATE` query constraints; prices/macro come from Supabase filtered to `<= DATE` (see `backfill_context.py`). The `cowork/tasks/backfill-historical-day.md` recipe is the canonical task definition for each historical day.
 
 **Pre-executed:** Apr 5–14, 2026 backfill completed 2026-04-14 (468 documents, all days OK).
+
+### Legacy research-state inventory (WP12.4 / #2870)
+
+Inventory existing `documents` rows into `LegacyDocumentRef` pointers
+(`legacy_manifest_only`, `known_at=None`) for audit/degraded compatibility.
+Does **not** extract evidence/beliefs/events or invent known times. Strict
+readers exclude these rows. Default is dry-run. `--apply` appends via the
+**in-memory** `ResearchStateStore` (SQL IO adapter later) — it does **not**
+INSERT into `olympus_research_legacy_refs` yet; use it to validate counts and
+library idempotency in-process.
+
+```bash
+# Dry-run counts only (default)
+python3 scripts/backfill_research_state.py --supabase
+python3 scripts/backfill_research_state.py --documents-json /path/to/sources.json
+
+# In-process append via ResearchStateStore (not durable SQL)
+python3 scripts/backfill_research_state.py --supabase --apply
+```
+
+Counts always reconcile: `source == inserted + skipped + unverifiable`.
+Library: `digiquant.olympus.research_retrieval.legacy_backfill`.
+
+### Compiled research-state prose views (WP12.5 / #2877)
+
+`research_retrieval.views` compiles deterministic brief/digest markdown from one
+exact pinned `ResearchStateVersion` (sorted entities; embeds state id / hash /
+schema). Atlas publish dual-writes `research-state-brief` /
+`research-state-digest` only when the preflight pin is present and
+`PublishDeps.research_state_store` can exact-load that version; structured-write
+failure refuses view publication. Incumbent digest/segment documents stay until
+a later parity/retention gate.
+
+**Operator note:** Atlas/Hermes CLI currently construct `PublishDeps(client=…)`
+(and preflight deps) **without** injecting `research_state_store` — same shadow
+pattern as WP12.3. Dual-write therefore does **not** run on default production
+CLI paths until callers wire the same in-memory store used for the pin (durable
+SQL IO adapter later). Do not treat `research-state-brief` /
+`research-state-digest` rows as present or operator-authoritative until that
+wiring lands.
+
+### Research attention shadow evaluation (WP13.5 / #2934)
+
+After a shadow-mode Olympus run with `OLYMPUS_RESEARCH_ATTENTION_MODE=shadow`,
+reconcile planned attention decisions to exact WP1 attempt usage and downstream
+artifacts before considering enforcement:
+
+```bash
+python3 digiquant/scripts/atlas/evaluate_research_policy_shadow.py \
+  --store-snapshot artifacts/attention/store.json \
+  --attempt-details artifacts/attention/attempts.json \
+  --downstream artifacts/attention/downstream.json \
+  --output artifacts/attention/evaluation.json
+```
+
+The CLI is file-only evidence — it never activates `enforce` or writes to
+production booking paths. Exit code `0` when the report is `complete` (100%
+decision-attempt reconciliation plus downstream linkage for eligible shadow
+runs); `1` when telemetry or downstream artifacts are missing.
 
 ## Market-open execution and price backfill
 

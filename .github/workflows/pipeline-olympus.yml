@@ -188,6 +188,10 @@ jobs:
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: olympus-daily
+          # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
+          # (uploaded below). Export is fail-soft; disable with OLYMPUS_SHADOW_ARTIFACT_MODE=off.
+          OLYMPUS_SHADOW_ARTIFACT_MODE: export
+          OLYMPUS_SHADOW_ARTIFACT_DIR: artifacts
         run: |
           mkdir -p artifacts
           set -o pipefail
@@ -225,6 +229,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: olympus-daily-${{ needs.resolve.outputs.refresh_scope }}-${{ needs.resolve.outputs.run_date }}
+          # Includes run.log and WP10.1 shadow-allocation-*.json when H9 completed.
           path: artifacts/
           retention-days: ${{ needs.resolve.outputs.refresh_scope == 'all' && 90 || 30 }}
 

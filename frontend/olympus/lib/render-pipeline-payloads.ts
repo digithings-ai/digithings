@@ -556,22 +556,47 @@ export function renderAnalystSpecialistMarkdown(payload: unknown): string {
 
 /* ── Bull/bear debate (Phase 7CD) ─────────────────────────────────────────── */
 
-/** True for the Hermes per-ticker `DebateSummary` payload (`deliberation/{ticker}`). */
+function isPmAnalystChatTurnRow(row: unknown): boolean {
+  const o = asObj(row);
+  if (!o) return false;
+  const message = s(o.message).trim();
+  if (!message) return false;
+  const role = s(o.role).trim().toLowerCase();
+  return role === 'pm' || role === 'analyst';
+}
+
+/** Collect H6 PM↔analyst turns from `transcript` or chat-shaped `rounds`. */
+export function chatTurnsFromDebatePayload(payload: unknown): Record<string, unknown>[] {
+  const p = asObj(payload);
+  if (!p) return [];
+  const fromTranscript = Array.isArray(p.transcript)
+    ? p.transcript.filter(isPmAnalystChatTurnRow)
+    : [];
+  if (fromTranscript.length) return fromTranscript.map((r) => asObj(r) ?? {});
+  const fromRounds = Array.isArray(p.rounds) ? p.rounds.filter(isPmAnalystChatTurnRow) : [];
+  return fromRounds.map((r) => asObj(r) ?? {});
+}
+
+/** True for the Hermes per-ticker deliberation payload (`deliberation/{ticker}`). */
 export function isDebateSummaryPayload(payload: unknown): boolean {
   const p = asObj(payload);
   if (!p) return false;
-  return (
-    typeof p.bull_thesis === 'string' &&
-    typeof p.bear_thesis === 'string' &&
-    typeof p.net_stance === 'string'
-  );
+  if (typeof p.net_stance !== 'string') return false;
+  // H6 chat shape may leave bull/bear empty once publish stops mirroring conclusion.
+  if (chatTurnsFromDebatePayload(p).length > 0) return true;
+  if (typeof p.conclusion === 'string' && p.conclusion.trim() !== '') return true;
+  return typeof p.bull_thesis === 'string' && typeof p.bear_thesis === 'string';
 }
 
-/** Markdown for a bull/bear debate summary (one ticker, N rounds). */
+/** Markdown for a bull/bear debate summary or H6 PM↔analyst deliberation. */
 export function renderDebateSummaryMarkdown(payload: unknown): string {
   const p = asObj(payload) ?? {};
   const ticker = s(p.ticker).trim();
-  const out: string[] = [`# Bull / Bear Debate${ticker ? ` — ${ticker}` : ''}`, ''];
+  const chat = chatTurnsFromDebatePayload(p);
+  const title = chat.length
+    ? `# Deliberation${ticker ? ` — ${ticker}` : ''}`
+    : `# Bull / Bear Debate${ticker ? ` — ${ticker}` : ''}`;
+  const out: string[] = [title, ''];
 
   const stance = s(p.net_stance).trim();
   const delta = s(p.conviction_delta).trim();
@@ -580,15 +605,40 @@ export function renderDebateSummaryMarkdown(payload: unknown): string {
     out.push(`**Net stance:** ${stance}${delta ? ` · conviction Δ ${sign}` : ''}`, '');
   }
 
+  if (chat.length) {
+    out.push('## Deliberation', '');
+    chat.forEach((turn) => {
+      const role = s(turn.role).trim().toLowerCase() === 'pm' ? 'PM' : 'Analyst';
+      const n = s(turn.round_number).trim();
+      out.push(`### ${role}${n ? ` · Round ${n}` : ''}`, '', cleanMemoProse(s(turn.message)), '');
+    });
+  }
+
+  const conclusion = s(p.conclusion).trim();
+  if (conclusion) out.push('## Conclusion', '', cleanMemoProse(conclusion), '');
+
   const bull = s(p.bull_thesis).trim();
   const bear = s(p.bear_thesis).trim();
-  if (bull) out.push('## Bull thesis', '', cleanMemoProse(bull), '');
-  if (bear) out.push('## Bear thesis', '', cleanMemoProse(bear), '');
+  const thesesAreMirrors =
+    Boolean(conclusion) &&
+    (!bull || bull === conclusion) &&
+    (!bear || bear === conclusion) &&
+    (Boolean(bull) || Boolean(bear));
+  if (!thesesAreMirrors) {
+    if (bull && bull !== bear) out.push('## Bull thesis', '', cleanMemoProse(bull), '');
+    if (bear && bear !== bull) out.push('## Bear thesis', '', cleanMemoProse(bear), '');
+  }
 
   const rounds = Array.isArray(p.rounds) ? p.rounds : [];
-  if (rounds.length) {
+  const bullBearRounds = rounds.filter((r) => {
+    if (isPmAnalystChatTurnRow(r)) return false;
+    const o = asObj(r);
+    if (!o) return false;
+    return Boolean(s(o.bull_argument).trim() || s(o.bear_argument).trim());
+  });
+  if (bullBearRounds.length) {
     out.push('## Rounds', '');
-    rounds.forEach((r, i) => {
+    bullBearRounds.forEach((r, i) => {
       const o = asObj(r);
       if (!o) return;
       const n = s(o.round_number).trim();
@@ -625,5 +675,75 @@ export function renderRiskDebateMarkdown(payload: unknown): string {
   if (agg) out.push('## Aggressive case', '', cleanMemoProse(agg), '');
   if (con) out.push('## Conservative case', '', cleanMemoProse(con), '');
   if (tension) out.push('## Key tension', '', cleanMemoProse(tension), '');
+  return `${out.join('\n').trim()}\n`;
+}
+
+/* ── AttentionPlan shadow (#1945 glass-box) ───────────────────────────────── */
+
+/** True for WP13 AttentionPlan shadow documents (`attention-plan`). */
+export function isAttentionPlanPayload(payload: unknown, documentKey?: string): boolean {
+  const p = asObj(payload);
+  if (!p) return false;
+  if (documentKey && documentKey.toLowerCase() === 'attention-plan') return true;
+  if (s(p.doc_type) === 'attention_plan') return true;
+  return p.shadow === true && asObj(p.profile_pin) != null && asObj(p.plan) != null;
+}
+
+/** Human-readable AttentionPlan: profile pin, shadow banner, refresh reasons. */
+export function renderAttentionPlanMarkdown(payload: unknown): string {
+  const p = asObj(payload) || {};
+  const dateStr = s(p.date).trim();
+  const out: string[] = [`# Attention plan${dateStr ? ` — ${dateStr}` : ''}`, ''];
+
+  const mode = s(p.planner_mode).trim() || 'shadow';
+  out.push(
+    `**Mode:** ${mode} (shadow only — does not actuate routing)`,
+    `**Actuated:** ${p.actuated === true ? 'yes' : 'no'}`,
+    '',
+  );
+
+  const pin = asObj(p.profile_pin) || {};
+  out.push('## Profile pin', '');
+  out.push(
+    `| Field | Value |`,
+    `| --- | --- |`,
+    `| Profile | ${escapeTableCell(pin.label || pin.profile_key || '—')} |`,
+    `| House default | ${pin.is_house_default === true ? 'yes' : 'no'} |`,
+    `| Version id | ${escapeTableCell(pin.profile_config_version_id || '—')} |`,
+    '',
+  );
+
+  const plan = asObj(p.plan) || {};
+  const roster = Array.isArray(plan.h4_roster)
+    ? plan.h4_roster.map((x) => s(x).trim()).filter(Boolean)
+    : [];
+  if (roster.length) {
+    out.push('## H4 roster (read-only)', '', roster.map((t) => `- ${t}`).join('\n'), '');
+  }
+
+  const decisions = Array.isArray(plan.decisions) ? plan.decisions : [];
+  out.push('## Refresh decisions', '');
+  if (!decisions.length) {
+    out.push('_No artifact decisions recorded for this plan._', '');
+  } else {
+    out.push(
+      `| Artifact | Action | Edit mode | Refresh reasons |`,
+      `| --- | --- | --- | --- |`,
+    );
+    for (const raw of decisions) {
+      const d = asObj(raw);
+      if (!d) continue;
+      const labels = Array.isArray(d.refresh_reason_labels)
+        ? d.refresh_reason_labels.map((x) => s(x).trim()).filter(Boolean)
+        : Array.isArray(d.refresh_reasons)
+          ? d.refresh_reasons.map((x) => s(x).replace(/_/g, ' ').trim()).filter(Boolean)
+          : [];
+      out.push(
+        `| ${escapeTableCell(d.artifact_key)} | ${escapeTableCell(d.action)} | ${escapeTableCell(d.proposed_edit_mode)} | ${escapeTableCell(labels.join('; ') || '—')} |`,
+      );
+    }
+    out.push('');
+  }
+
   return `${out.join('\n').trim()}\n`;
 }

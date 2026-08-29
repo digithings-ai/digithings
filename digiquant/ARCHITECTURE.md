@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-03-29
+**Last updated:** 2026-08-27
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -119,7 +119,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `models.py` | Pydantic v2 result models |
 | `constraints.py` | `satisfies_constraints()` filter |
 | `addm.py` | Rolling Sharpe Z-score drift detection |
-| `audit.py` | JSONL append-only audit log |
+| `audit.py` | Thin `audit_log` → `digibase.audit.emit_event` |
 | `mcp_server.py` | FastMCP server wrapping `service.py` |
 | `orchestrator_tools.py` | OpenAI-style tool manifest for digigraph |
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
@@ -166,8 +166,24 @@ All endpoints bind on `127.0.0.1:8001` by default. Auth is enforced by `DigiAuth
 
 | Method | Path | Auth Scope | Description |
 |---|---|---|---|
-| `POST` | `/v1/orchestrator_tools` | `digiquant:backtest` | Return OpenAI-style tool manifest (6 tools) |
+| `POST` | `/v1/orchestrator_tools` | `digiquant:backtest` | Return OpenAI-style tool manifest (11 tools: 6 digiquant + 5 olympus policy-replay) |
 | `POST` | `/v1/orchestrator_invoke` | `digiquant:backtest` + `digiquant:optimize` | Dispatch named tool by `tool` field in request body |
+
+#### Olympus policy replay endpoints (#3011 / WP16.9)
+
+Recommendation/read surfaces for offline policy replay evidence. Summaries and
+artifact IDs only — no confidential fills/holdings/nav dumps. Running and
+evaluating never activate production policy. Default path scope remains
+`digiquant:backtest` (no digikey edits).
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/olympus/policy_replay/run` | Register a replay run against a stored pair |
+| `GET` | `/v1/olympus/policy_replay/{run_id}` | Replay-run summary (fail closed) |
+| `GET` | `/v1/olympus/policy_comparison/{comparison_id}` | Comparison summary (IDs/status only) |
+| `POST` | `/v1/olympus/policy_gate/evaluate` | Evaluate immutable gate criteria (eligibility only) |
+| `GET` | `/v1/olympus/policy_gate/evaluations/{evaluation_id}` | Gate-evaluation summary |
+| `POST` | `/v1/olympus/policy_governance_decisions` | Authenticated human decision write (`request.state.digi_auth` → `AuthenticatedPrincipal`) — **not** on MCP |
 
 ### Rate Limits
 
@@ -199,6 +215,15 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
+| `olympus_run_policy_replay` | Register a policy replay run (summary IDs only; never activates) |
+| `olympus_get_policy_replay` | Fetch a replay-run summary by `run_id` (fail closed) |
+| `olympus_get_policy_comparison` | Fetch a comparison summary (artifact IDs / status only) |
+| `olympus_evaluate_policy_gate` | Evaluate immutable gate criteria (eligibility only) |
+| `olympus_get_policy_gate_evaluation` | Fetch a gate-evaluation summary by `evaluation_id` |
+
+Human decision write (`record_policy_governance_decision`) is **not** an MCP tool —
+only the DigiAuth HTTP boundary may record decisions. There is no
+promote/activate/set-live/rollback-live tool on any surface.
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
 
@@ -544,11 +569,20 @@ The dispatch in `run_optimize()`:
 
 ### Audit JSONL Flow
 
-`audit.py` appends one JSON line per event to the file at `AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). Each event contains: `ts`, `event_type`, `agent_id`, `payload`, and optional `key_prefix`, `tenant`, `project_id`, `jti`, `path`.
+`digiquant.audit.audit_log` is a thin wrapper over `digibase.audit.emit_event`
+(CHR-151 / #1193). The digibase emitter appends one JSON line per event to
+`AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). Each event
+matches the Pydantic `AuditEvent` schema: `ts`, `event_type`, `agent_id`,
+`payload`, and optional `key_prefix`, `tenant`, `project_id`, `jti`, `path`.
 
-Before writing, `audit_log()` redacts any payload key containing `password`, `api_key`, `token`, or `secret` (case-insensitive substring match). The file is opened in append mode on every call; there is no buffering or rotation mechanism.
+Before writing, `emit_event` redacts any payload key containing `password`,
+`api_key`, `token`, or `secret` (case-insensitive substring match, recursive into
+nested dicts/lists). The file is opened in append mode on every call; there is
+no buffering or rotation mechanism.
 
-Audit events are written explicitly in `server.py` after `run_backtest`, `run_optimize`, pipeline, and `v1_workflow`. The `run_export` synchronous endpoint does not write an audit event.
+Audit events are written explicitly in `server.py` after `run_backtest`,
+`run_optimize`, pipeline, and `v1_workflow`. The `run_export` synchronous
+endpoint does not write an audit event.
 
 ---
 
@@ -583,9 +617,18 @@ CORS is configured via the shared `digibase.cors.install_cors(app, service="digi
 
 ### Audit Log Secret Redaction
 
-The `audit_log()` function redacts payload keys containing `password`, `api_key`, `token`, or `secret`. This is a substring match, so it catches variations like `api_key_prefix` or `access_token`. However, secrets could leak through non-obvious keys (e.g., `bearer`, `credential`, `auth`) or through nested dicts (redaction only applies to the top-level `payload` dict, not recursively). The redaction list is hardcoded and cannot be extended without code changes.
+`digibase.audit.emit_event` (via `redact_mapping`) redacts payload keys
+containing `password`, `api_key`, `token`, or `secret`. This is a substring
+match, so it catches variations like `api_key_prefix` or `access_token`, and it
+recurses into nested dicts and lists. Secrets can still leak through
+non-obvious keys (e.g., `bearer`, `credential`, `auth`) or values under safe
+key names. The default redaction list is hardcoded; callers may pass an
+extended `redact=` tuple.
 
-The audit JSONL file is world-readable if default filesystem permissions apply. In Docker, the file is mounted at `./digiquant/results/audit` and shared with the digigraph and digiclaw containers. Access controls on this directory should be reviewed.
+The audit JSONL file is world-readable if default filesystem permissions apply.
+In Docker, the file is mounted at `./digiquant/results/audit` and shared with
+the digigraph and digiclaw containers. Access controls on this directory should
+be reviewed.
 
 ---
 
@@ -651,7 +694,7 @@ JSON export is near-instant (file write of a small JSON object). The `nautilus_b
 
 ### Orchestrator Tools Contract with digigraph
 
-digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 6 tools. digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "digiquant_*", "arguments": {...}}`.
+digigraph discovers digiquant's capabilities via `POST /v1/orchestrator_tools`, which returns an OpenAI function-calling compatible manifest of 11 tools (6 digiquant pipeline + 5 olympus policy-replay). digigraph then dispatches tool calls via `POST /v1/orchestrator_invoke` with `{"tool": "<name>", "arguments": {...}}` (digiquant_* or olympus_*).
 
 The manifest is built by `build_orchestrator_tool_manifest()` in `orchestrator_tools.py`. It is static (not dynamically generated from Pydantic schemas), which creates a risk of schema drift if `BacktestRequest` or `PipelineRequest` evolves without a corresponding update to the manifest.
 
@@ -672,6 +715,35 @@ The digiclaw heartbeat container calls `GET /check_drift?strategy_id=…` on a s
 ---
 
 ## 10. Docker and MCP Composition
+
+### Component layers (service vs research sandbox)
+
+digiquant ships **two** Docker images. They must not be merged:
+
+```mermaid
+flowchart TB
+  subgraph callers["Callers"]
+    DG["digigraph / MCP clients"]
+    Atlas["Atlas agents — research / paper book"]
+  end
+
+  subgraph images["digiquant images"]
+    SVC["digiquant/Dockerfile<br/>HTTP :8001 + Nautilus pipeline"]
+    SBX["digiquant/Dockerfile.sandbox<br/>baked quant stack — no service"]
+  end
+
+  DG -->|"JWT / orchestrator"| SVC
+  Atlas -->|"docker run python -c / script<br/>(#396; execute_code later #397)"| SBX
+
+  SBX -.->|"never"| Live["live brokers / order venues"]
+```
+
+| Image | Dockerfile | Role |
+|-------|------------|------|
+| Service | `digiquant/Dockerfile` | FastAPI + `digiquant[nautilus]` on port 8001 |
+| Research sandbox (#396) | `digiquant/Dockerfile.sandbox` | Isolated Python env with TA / portfolio / risk packages baked in for Atlas agent code |
+
+The sandbox is paper-book / research only: no broker credentials, no live-order path, no Nautilus live engine. Free-data clients (`yfinance`, `pandas-datareader`) may use outbound HTTPS; do not point the image at trading venues. MCP `execute_code` wrappers that consume this image are tracked separately (#397).
 
 ### Docker Compose Service Definition
 
@@ -704,6 +776,26 @@ digiquant:
 The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
 
 The image always installs `digiquant[nautilus]` (NautilusTrader + Polars pipeline). It does **not** download upstream Nautilus test CSVs at build time — market samples for backtests are under `digiquant/data/` (compose-mounted). Optional Nautilus package fixtures for local unit tests: `python digiquant/scripts/fetch_nautilus_test_data.py`.
+
+### Atlas research sandbox image (#396)
+
+Build context is the `digiquant/` directory (not the monorepo root):
+
+```bash
+docker build -f digiquant/Dockerfile.sandbox -t digiquant-sandbox digiquant
+docker run --rm digiquant-sandbox \
+  python -c "import skfolio, riskfolio, pandas_ta, arch, alphalens"
+```
+
+Manifest: `digiquant/requirements.sandbox.txt`. Notable bake choices:
+
+- **TA-Lib:** `TA-Lib>=0.7` manylinux wheels bundle `libta-lib` — debian slim has no `libta-lib-dev`. Apt install of that package is documented as a historical/OS-dependent alternative in the Dockerfile header.
+- **`pandas_ta`:** `pandas-ta-classic` installs as `pandas_ta_classic`; a thin shim under `digiquant/sandbox/pandas_ta/` (on `PYTHONPATH=/opt/digiquant_sandbox`) restores `import pandas_ta`.
+- **pandas 2.x:** pinned `<3` so `alphalens-reloaded` / `pyfolio-reloaded` resolve; `vectorbt` is pinned to `1.0.0` (1.1 requires pandas 3) and `plotly>=5.18,<6` (vectorbt 1.0 templates still use `scattermapbox`).
+- **yfinance retries:** `yfinance_retry.download_with_retry` / `history_with_retry` are baked for Yahoo rate-limits.
+- **Size budget:** keep the image under 3GB; record the measured size from `docker images digiquant-sandbox` in the PR that lands or verifies the build. Verified locally at **1.59GB**.
+
+The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itself — agents import the baked third-party stack only.
 
 ### Environment Variables
 
@@ -767,7 +859,9 @@ IB, Alpaca, and QuantConnect adapters all raise `NotImplementedError`. Implement
 
 ### Sandboxed Strategy Execution
 
-There is no sandbox for strategy code. This gap is documented in `ARCHITECTURE.md` under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
+There is no sandbox for **Nautilus strategy** code inside the HTTP service process. That gap remains under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
+
+Separately, the **Atlas research sandbox image** (`Dockerfile.sandbox`, #396) isolates agent-written research Python (indicators, portfolio maths, tearsheets) from the service process. It does not yet replace strategy-code isolation for `run_backtest`; MCP `execute_code` that shells into the sandbox is #397.
 
 ### Persistent Run History
 
@@ -852,6 +946,544 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
 
 - **Atlas** (`digiquant/src/digiquant/olympus/atlas/`) — research only. **A0–A4:**
   preflight → triage → phases 1–5 segments → phase6 consolidate → phase7 digest.
+  Preflight (#2609 Track B) pins a versioned `ProfileConfig` onto
+  `AtlasConfigBundle.profile_config_version_id` / `.profile_config`: omitting the pin
+  selects the digithings **house** default (always-on, immutable); an overlay pin
+  fails closed when the exact `olympus_profile_config.id` is missing. Overlays must
+  not fork the graph or cancel the house run. Models:
+  `digiquant.olympus.profile_config`.
+  Shared research corpus (#2613 Track B / WP12-class) uses tenant-agnostic keys
+  `theme:` / `asset:` / `segment:` in `olympus_research_corpus` with
+  publish-if-missing only — house writes defaults; overlays never fork per-user
+  research trees. Models/store: `digiquant.olympus.research_corpus`.
+  **Phase 3 research-state contracts (#2841 / WP12.1, hardened #2856).** Frozen/extra-forbid
+  Pydantic models in `olympus/research_retrieval/models.py`
+  (`EvidenceRecord`, `BeliefVersion`, `ExpectedEventVersion`, `ResearchPatch`,
+  `ResearchStateManifest`, `ResearchStateVersion`, `ResearchStatePin`,
+  `LegacyDocumentRef`) establish append-only structured research memory before
+  persistence. UTC temporal order (`event_time` / `effective_as_of` / `known_at` /
+  `recorded_at`), typed `TypedProvenance`, immutable sorted+deduped ID tuples, UUID5
+  content identity independent of input ordering (lineage in evidence/patch IDs;
+  `state_version_id` includes `schema_version`), parent/supersession validation, and
+  pin invariants (`requested_as_of <= knowledge_cutoff_at <= pinned_at` with
+  `pinned_at >= requested_as_of`). Prose `documents` remain views — never authoritative
+  truth; do not parse legacy prose into claims. Distinct from Track B corpus pins
+  (theme/asset/segment identity).
+**Research-state store (#2854 / WP12.2, hardened #2867).** Private append-only tables in
+  migration `088_olympus_research_state.sql` (pin temporal CHECKs in `089`) plus
+  in-memory `research_retrieval/store.py` (`ResearchStateStore`; SQL IO adapter later):
+  content-idempotent appends, changed content appends new content-addressed rows (never
+  UPDATE), `select_state_as_of`, `pin_state_for_run`, exact `load_state_version` (byte-
+  equivalent after newer rows), child-parent checks. Pins reject future-known children and
+  `effective_as_of` after `requested_as_of`; appends reject children known after the
+  version envelope. Strict reads exclude future-known (`known_at` after cutoff) and
+  legacy-null-known inventory rows. Dark launch — no public base view.
+  **Research-state preflight pin (#2863 / WP12.3).** Atlas preflight selects one
+  exact `ResearchStatePin` via `research_retrieval.pin.pin_research_state_for_preflight`
+  (`select_state_as_of` / optional explicit `requested_research_state_version_id`,
+  then `pin_state_for_run`). Result lands on `AtlasResearchState.research_state_pin`
+  + `research_state_status` (`pinned` | `state_unavailable`). Resume reuses the
+  run/attempt pin (checkpoint + store `get_pin`); same-run child versions must
+  name the pinned root as `parent_state_version_id` (`child_version_must_name_parent`).
+  Typed `state_unavailable` when store missing/unusable — including fail-closed
+  store rejections (look-ahead children / `effective_as_of` after `requested_as_of`).
+  Compatibility `documents` path remains shadow-only until exact-state coverage; never
+  `load_latest` after pin. Helper uses WP12.1 ID helpers only (no redefine).
+  Soft API for WP12.3 must sit on the hardened store (#2868 / #2867).
+  **Legacy research-state inventory (#2870 / WP12.4).** Operator backfill
+  `scripts/atlas/backfill_research_state.py` (default dry-run; `--apply` appends
+  to in-memory `ResearchStateStore` only — SQL IO adapter later) maps existing
+  `documents` / JSON sources into `LegacyDocumentRef` inventory via
+  `research_retrieval.legacy_backfill.backfill_legacy_manifests` — hashes source
+  payloads with WP12.1 `content_digest` / `legacy_document_ref_id`, sets
+  `known_at=None` + `legacy_manifest_only=True`, and never appends evidence,
+  belief, expected-event, or patch rows. Idempotent counts
+  (`source == inserted + skipped + unverifiable`); strict `load_state_version`
+  continues to omit legacy refs. Audit/degraded compatibility only — not strict
+  replay/training.
+  **Compiled research-state prose views (#2877 / WP12.5).** Deterministic brief/digest
+  markdown from one exact `ResearchStateVersion` via `research_retrieval/views.py`
+  (`compile_research_brief` / `compile_research_digest` / `compile_views_from_store`).
+  Entities are sorted by UUID; every view embeds `state_version_id`, state
+  `content_hash`, `schema_version`, and `manifest_content_hash`. Same pinned version
+  recompiles byte-identically after newer store rows. `publish_compiled_views` fails
+  closed when structured write did not succeed (no misleading view publication).
+  Atlas publish dual-writes `research-state-brief` / `research-state-digest` only when
+  `research_state_status=pinned` and `PublishDeps.research_state_store` can exact-load
+  the pin; incumbent digest/segment writers remain. Default Atlas/Hermes CLI leave
+  `research_state_store` unwired (WP12.3 shadow pattern), so dual-write is inactive
+  until callers inject the store; not yet an operator-authoritative document surface.
+  Never `load_latest`; never parse prose into claims.
+  **Ticker evidence bundles (#2844 / WP11.1 + #2892 / WP11.2).** Immutable H5 base
+  `TickerEvidenceBundle` plus append-only `MissingFactRequest` /
+  `EvidenceBundleAmendment` contracts in `research_retrieval/models.py`.
+  Private migration `090_olympus_evidence_bundles.sql` (+ `091` base/request
+  consistency trigger) and in-memory `EvidenceBundleStore`: content-idempotent
+  base append, one base per run/ticker, amendments must FK one base + one
+  missing-fact request (zero unlinked amendments), public grants denied, no
+  public view. Reuses WP12 UUID5 / `content_digest` / `TypedProvenance`
+  conventions — does not invent a parallel hash scheme. WP11.2
+  (`research_retrieval/evidence_bundle.py`) builds one canonical H5 base per
+  ticker (dedupe, temporal span, conflicts/missing fields) **before** the
+  provider call (`portfolio_common` / `h5_asset_analyst`), retains
+  `PhaseHermesState.ticker_evidence_bundles` even when H5 fails, and cites
+  bundle/evidence IDs on newly materialized `ForecastTerms`. Default Hermes
+  graph leaves `EvidenceBundleStore` unwired (same shadow pattern as
+  `research_state_store`): typed in-run bundles always materialize; store
+  append runs only when a caller injects the store. `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off`
+  then skips that append while retaining the typed bundle. Not
+  operator-durable yet — SQL IO adapter still later. WP11.3
+  (`research_retrieval/planner.py`) adds deterministic `H6Selection`
+  (reasons/features/budget) wired into `h6_deliberation`:
+  `OLYMPUS_H6_SELECTION_MODE=off|shadow|enforce` (default `shadow` records
+  selection beside full incumbent H6; `enforce` actuates low-value carry with
+  zero provider calls; planner failure falls back to full incumbent H6, never
+  an unrecorded skip). Materiality (`weight_pct`) is a selection feature only
+  — never injected into H6 prompts. Selected success still meets the two-round
+  floor. WP11.4 (`research_retrieval/h6_amendment.py`) constrains H6 to at most one
+  validated missing-fact supplement per base bundle: PM ``MissingFactProposal``
+  (claim_id/question/source_kind/reason) → blinded ``query_research`` only (no
+  generic ``live_search``) → append-only ``MissingFactRequest`` +
+  ``EvidenceBundleAmendment`` with base ``content_hash`` unchanged; invalid,
+  exhausted, or failed paths record ``evidence_amendment_outcome`` on
+  ``DeliberationSummary`` and continue on the H5 base. WP11.5
+  (`EvidenceBundleStore.dump_snapshot` / `from_snapshot`, simulator
+  `evidence_bundle_store` + `invoke_through_h5` / `invoke_hermes_from_h6`,
+  `tests/dq/atlas/test_pipeline_simulation.py::TestDurableH5H6LineageRoundTrip`)
+  proves H5 bases + H6 amendments survive store serialize/reload across the
+  H5→H6 checkpoint boundary with byte-equivalent lineage, two-round floor,
+  accepted/invalid amendment provenance, and no generic H6 ``live_search``.
+  WP11 closes on develop when this lands.
+  AttentionPlan shadow (#2616 Track B / WP13-class) records typed pre-provider
+  decisions + stable `RefreshReasonCode`s via `digiquant.olympus.attention_plan`
+  (`plan_attention_shadow`) beside incumbent `resolve_edit_mode`. Modes are
+  `off` \| `shadow` only (no enforce); `actuated` is always false. House
+  ProfileConfig is the default pin; overlay pins fail closed when missing. The
+  planner cannot expand H4 roster/cap or carry H7/H8 authority fields.
+  **Research attention policy (#2918 / WP13.1).** Versioned YAML at
+  `digiquant/config/olympus_research_policy.yaml` (override via
+  `OLYMPUS_RESEARCH_POLICY_PATH`) defines thresholds, session budgets, mode
+  estimates, and exploration floor — not hard-coded in planner source.
+  `research_retrieval/planner.py` exposes `AttentionFeatures`,
+  `AttentionDecision`, `AttentionPlan`, `ResearchAttentionPolicy`,
+  `route_attention`, and `plan_research_attention` with five modes
+  (`carry` \| `metric_patch` \| `section_patch` \| `challenge` \| `deep_refresh`)
+  and rollout `off` \| `shadow` \| `enforce`. Identical state/policy/target set
+  yields byte-identical plan + resource totals; exploration reservations survive
+  session budget trimming.   `h6_selection_to_attention_decision` bridges WP11.3
+  `H6Selection` without forking ID schemes. API-only in 13.1 — Hermes
+  runtime wiring is WP13.4 (landed #2930); persistence is WP13.2; Atlas pre-provider routing is
+  WP13.3.
+  **Attention persistence (#2922 / WP13.2).** Migration
+  `092_olympus_attention_context.sql` + in-memory
+  `research_retrieval/store.py` `AttentionStore` persist append-only
+  `AttentionPlan` / `AttentionDecision` / `AttentionContextManifest` /
+  `AttentionPolicyEvaluation` rows with run/attempt/state/policy/reason/feature/
+  budget lineage and per-decision WP1 `provider_attempt_id` links. Exact
+  `recorded_at` as-of reads; `reconcile_plan` joins planned budgets to actual
+  attempt usage and sets `complete=False` when telemetry is missing (rollback:
+  disable writes/enforcement). Storage only until WP13.3+ callers opt in via
+  `OLYMPUS_RESEARCH_ATTENTION_MODE`.
+  **Atlas attention routing (#2926 / WP13.3).** After triage,
+  `atlas/research_attention.py` calls `plan_research_attention`, persists reasons
+  to `AttentionStore`, and stores the plan on `AtlasResearchState.research_attention_plan`.
+  Provider-owning nodes (`_node_factory.build_segment_node`, `phase7_synthesis`) require
+  the plan before `build_grounding` when mode is `shadow`/`enforce`. `enforce` actuates
+  `carry`/`metric_patch` as zero-call paths (deterministic structured patch); `shadow`
+  records decisions while the incumbent edit path still runs. Rollback: `off`/`shadow`.
+  Env: `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default `shadow`).
+  **Hermes attention routing (#2930 / WP13.4).** After H4 fixes the focus roster,
+  `hermes/research_attention.py` plans per-ticker attention over that roster only
+  (cannot add/remove/reorder/expand or consume exploration). Stores
+  `AtlasResearchState.hermes_research_attention_plan` and persists to the shared
+  `AttentionStore`. H5 branches on enforced `carry`/`metric_patch`/`full` before
+  provider work; H6 re-routes with post-H5 features (`challenge` vs `carry`).
+  H4 roster/exclusions are byte-identical across `off`/`shadow`/`enforce`.
+  Rollback: `off`/`shadow` restores incumbent H5/H6 paths.
+  **Attention shadow evaluation (#2934 / WP13.5).** File-only CLI
+  `scripts/atlas/evaluate_research_policy_shadow.py` joins `AttentionStore`
+  plans/decisions to exact WP1 `provider_attempt_id` usage and per-target
+  downstream outcomes (carries, amendments, forecast, H7, exploration) via
+  `research_retrieval/shadow_evaluation.py`. Missing telemetry or downstream
+  linkage sets `complete=False`; eligible shadow runs require 100%
+  decision-attempt reconciliation before enforcement. Rollback: shadow-only —
+  no `enforce` activation.
+  **Role context compiler (#2938 / WP14.1).** `research_retrieval/context.py`
+  defines frozen `ContextCapsule`, `ContextItem`, `ContextManifest`, and per-role
+  allowlists (`h5_analyst`, `h6_deliberation`, `h7_pm`). `compile_context_capsule`
+  / `compile_context_manifest` compile bounded structured JSONL bodies from one
+  exact pinned `ResearchStateVersion` plus optional bundle/amendment/attention
+  artifacts. Deterministic sort/hash, byte/token budgets, typed omission reasons,
+  and reject unpinned bundle/state mismatches at compile time. Models + compiler
+  only — H5/H6/H7 provider wiring is WP14.2–14.4; drill-down manifest pinning is
+  WP14.4. **WP14.2 (#2942)** wires H5/H6 via
+  `research_retrieval/context_wiring.py` (`OLYMPUS_CONTEXT_COMPILER_MODE`
+  `off|shadow|enforce`): shadow records compiled capsule/manifest beside incumbent
+  `phase_inputs`; enforce strips portfolio/PM keys and injects `structured_context`
+  with manifest linkage fields for WP1 telemetry. Prompt guards live in
+  `research_retrieval/blinding.py` (`assert_blinded_h5_prompt` /
+  `assert_blinded_h6_prompt`). **WP14.3 (#2946)** wires H7 via the same mode knob:
+  `h7_decision_context.py` compiles typed sections (mandate, calibration,
+  contribution/cost, pre-trade risk, prior authorization, unresolved/matured
+  forecasts) from pinned research state plus `h7_prerequisite_snapshot` (preflight);
+  `wire_h7_phase_inputs` records shadow beside incumbent PM inputs or enforces
+  `structured_context` without target weights; H7 output schema unchanged.
+  **WP14.4 (#2950)** pins drill-down retrieval to compiled manifests via
+  `OLYMPUS_RETRIEVAL_MANIFEST_MODE` (`off|shadow|enforce`, default `shadow`):
+  `build_retrieval_query_pin` binds document access to pinned state legacy refs;
+  `build_research_tool_dispatcher` rejects un-pinned calls and latest-date
+  fallbacks in enforce; `RoleRetrievalManifestStore` persists pre-call manifests and
+  append-only WP1 token links (`ProviderAttemptTokenLink`) without mutating
+  manifests; `retrieval_pin_from_wire_result` bridges WP14.2/14.3 linkage fields.
+  **Outcome-learning contracts (#2954 / WP15.1).** Frozen Pydantic v2 models in
+  `olympus/learning/outcome_models.py` (`OutcomeEpisode`, `ComponentAttributionReport`,
+  `OutcomeLessonVersion`, disposition/eligibility/quality enums) connect forecast →
+  decision → execution → realized outcome → learning eligibility without persistence.
+  UTC temporal contract (`OutcomeTemporalContract`), UUID5 version IDs, SHA-256 content
+  hashes, and disposition-aware validation: excluded/no-op/rejected forbid fabricated
+  H9 links or realized returns; authorized requires them; unavailable attribution and
+  ineligible components require typed reasons; causal sizing/timing P&L requires
+  `counterfactual_replay` with `replay_artifact_id`. Legacy `beliefs_distillation` prose
+  remains non-authoritative. **Outcome-learning store (#2959 / WP15.2).** Private append-only
+  `OutcomeLearningStore` in `olympus/learning/outcome_store.py` persists episodes, component
+  attribution reports, and lesson versions (migration `093_olympus_outcome_learning.sql`).
+  Content-idempotent retry; changed content appends a new version; supersession requires parent;
+  `select_episode_as_of` / `select_lesson_as_of` honor `available_at` and knowledge cutoff;
+  exact load never fabricates history. **Outcome episode assembler (#2963 / WP15.3).**
+  `OutcomeEpisodeAssembler` in `olympus/learning/outcome_assembly.py` joins typed reader
+  protocols only (WP2 ledger lineage, WP3 accounting slices, WP5 matured forecasts, WP7 cost
+  refs, WP9 pre-trade risk) to build one deterministic `OutcomeEpisode` per matured forecast.
+  Assembly failures return `AssemblyBlocker` without fabricating partial numbers; content-idempotent
+  retry via `OutcomeLearningStore`; corrections supersede prior versions. **Component attribution
+  (#2967 / WP15.4).** `ComponentAttributor` in `olympus/learning/component_attribution.py` builds
+  independent `ComponentAttributionReport` observations from one `OutcomeEpisode` plus optional
+  `PairedReplayEvidence`. Forecast error uses identical-horizon instrument returns; execution compares
+  expected vs realized cost; timing latency/price drift are descriptive only; sizing/timing causal P&L
+  requires `counterfactual_replay` with a paired manifest hash and declared baseline — one-at-a-time
+  deltas from different replay artifacts are rejected.   Active-return waterfall declares order, baseline,
+  and residual without summing independent counterfactuals or substituting zero for missing data.
+  **Lesson compiler (#2971 / WP15.5).** `LessonCompiler` in `olympus/learning/lesson_registry.py`
+  aggregates eligible episodes and component attribution reports into immutable
+  `OutcomeLessonVersion` records via Polars (mean/std), low-sample prior/shrinkage toward a
+  declared compilation policy, deterministic SHA-256 content hashes, and append-only persistence
+  through `OutcomeLearningStore.append_lesson`. Cutoff rules honor `available_at` /
+  `knowledge_cutoff_at`, exclude the consuming run's own outcomes, and expose every source
+  episode/report ID — rendered prose is never authoritative. **Preflight lesson pin (#2975 / WP15.6).**
+  `atlas/phases/outcome_maturation.py` runs inside existing `preflight` (no new graph node) in
+  order: pinned `knowledge_cutoff_at` → `OutcomeEpisodeAssembler.assemble_pass` +
+  `ComponentAttributor.attribute_and_persist` for prior-run matured forecasts →
+  `LessonCompiler.compile_and_persist` / `OutcomeLearningStore.select_lesson_as_of` →
+  `outcome_lesson_pin` on `AtlasResearchState` and `H7PrerequisiteSnapshot.outcome_lesson_*`
+  for WP14 H5/H7 context. Structured `outcome_lesson:{id}` replaces `decision_log` prose in
+  prior-authorization sections when pinned; consuming-run episodes are excluded. Unwired
+  `outcome_maturation_deps` → typed `store_unavailable` (legacy paths continue).
+  pin one timezone-aware UTC `AtlasResearchState.knowledge_cutoff_at` before
+  graph construction (`digiquant.olympus.temporal`). Registry readers must call
+  `require_knowledge_cutoff_at` — missing cutoff fails closed (no `now()`
+  fallback). Checkpoint resume preserves the pinned value; naive / non-UTC
+  stamps are rejected at capture and on the state field validator.
+  **Typed forecast contracts (#2637 / WP4.2, #2649 / WP4.3, #2656 / WP4.4).** Frozen Pydantic
+  models in `hermes/models/forecast.py` (`ForecastTerms`, `ForecastAssessment`,
+  `ForecastAmendment`, `EffectiveForecast`, `PriceAnchor`) separate scenario economics
+  from UUID5 identity / content hash. Optional `AnalystPayload.forecast` may carry terms;
+  legacy `conviction_score` / `price_targets` never synthesize them. H5 full/edit
+  materializes an immutable `ForecastAssessment` via
+  `hermes/phases/portfolio_common.py` (`materialize_forecast_assessment`,
+  serializer includes assessment; legacy priors without typed forecast force
+  full; skip preserves identity; partial nested forecast edits are rejected).
+  H6 appends optional evidence-linked `ForecastAmendment` without rewriting the base;
+  `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
+  amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
+  carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
+  dump (`supabase_io._slim_deliberation_summary`, deliberation payloads) so H9 can
+  re-persist after registry fail-soft (#2790). **H7 forecast-reference-only (#2660 / WP4.5):** after the
+  PM LLM (or fail-soft prior-memo carry), `bind_forecast_references` attaches one
+  typed `ForecastReference` per `TickerDirection` from current H6 lineage IDs
+  (`effective_forecast_id` / nested `effective_forecast`) — identity only, never
+  terms/weights; missing lineage is an explicit degraded reference (null IDs +
+  `degradation_reason`, no fabricated UUIDs); fail-soft rebinds from the current
+  map and cannot retain prior refs. H8 still reads direction/rank only.
+  **H9 forecast registry (#2663 / WP4.6):** after portfolio booking, H9 fail-soft
+  appends prospective `olympus_forecast_assessments` / `olympus_forecast_amendments`
+  via `atlas/forecast_registry.py` (exact retry / content conflict; exact-ID cutoff
+  reads). Registry failure keeps the one committed book and cannot rebook; status
+  lands on the commit manifest (`schema_version` 1.3). No calibration writers.
+  **Forecast calibration contracts (#2672 / WP5.1 + #2676 / WP5.2 + #2680 / WP5.3 +
+  #2684 / WP5.4):** frozen models in
+  `hermes/models/forecast_calibration.py` (`ForecastOutcome`, `ForecastCalibration`,
+  `CalibratedForecast`, `SessionPriceSnapshot`) plus private append-only tables in
+  migration `080_olympus_forecast_calibration.sql`. Prospective labels only (no
+  portfolio contribution); trading-session maturity; UUID5 + content-hash identity.
+  **Outcome resolver (#2676 / WP5.2):** `atlas/forecast_outcomes.py` runs beside
+  `preflight_reflect` (not inside `decision_log`), snapshots due typed forecasts into
+  `olympus_forecast_outcomes` using the trading calendar + first observed closes,
+  cutoff eligibility, same-run exclusion, and append-only idempotency. Missing
+  calendar/close stays pending (never zero-return). **Shadow calibrator (#2680 / WP5.3):**
+  `hermes/forecast_calibration.py` shrinks cohort residual bias toward a declared
+  zero-mean prior (`PRIOR_DEFINITION` / `METHOD_VERSION`), reports Brier/log scores via
+  Polars aggregation, and emits observational `CalibratedForecast` subjects with
+  non-zero uncertainty and sample-bounded reliability. **Shadow persistence (#2684 /
+  WP5.4):** `attach_shadow_calibrations*` runs at the existing H6→H7 boundary (no new
+  node); cutoff-bounded outcomes via `list_resolved_outcomes_as_of`; typed state slots
+  `phase_hermes.forecast_calibrations` / `calibrated_forecasts`; H9 fail-soft appends
+  via `forecast_registry.persist_shadow_calibrations` after booking. H8 remains
+  untouched. **WP5 Gate-2 follow-up (#2797):** outcomes stamp `horizon_sessions`;
+  cohort attach filters residuals to the subject horizon; migration 087 adds
+  `UNIQUE (effective_forecast_id, maturity_session)` and refuses wall-clock
+  `as_of` when knowledge cutoff is missing.
+  **Risk policy contracts (#2692 / WP6.2, #2803):** frozen models in
+  `hermes/models/risk_policy.py` (`RiskPolicy`, `CovarianceSnapshot`, provenance
+  leaves, explicit Phase 1 unavailable factor/stress/tail capabilities) plus pure
+  resolver in `hermes/risk_policy.py` (`incumbent-*-@v2`). Resolves incumbent defaults
+  from config/preferences into one fully provenanced policy and one canonical
+  correlation snapshot (63-day Pearson). Incomplete Pearson pairs fail closed as
+  ``unavailable`` (structural identity placeholder only; ``unavailable_reason`` is
+  hashed so distinct failures cannot share ``snapshot_id``). Bridge helpers derive
+  `SizingCaps` / `BreakerConfig` for parity tests only — production H8 still calls
+  `size_portfolio` directly in Phase 1.
+  **Risk snapshot persistence (#2698 / WP6.3, #2803):** `hermes/h8_risk_snapshots.resolve_h8_risk_artifacts`
+  runs at the existing H8 entry before incumbent sizing and always returns typed
+  artifacts (resolver exceptions become visible ``unavailable`` dumps); typed state
+  slots `phase_hermes.risk_policy` / `covariance_snapshot`; H9 fail-soft appends via
+  `risk_policy_registry.persist_h8_risk_snapshots_from_state` after booking (manifest
+  `schema_version` 1.4). Never feeds resolved objects into `size_portfolio` in Phase 1.
+  **Action cost input binding (#2700 / WP7.1):** adapters in
+  `hermes/action_cost_inputs.py` translate authoritative Phase 0 ledger rows
+  (`PortfolioCommit`, `DecisionIntent`, `OrderIntent`, `PaperExecution`) and
+  accounting `PeriodFill` into frozen `ActionCostInput` / `RealizedCostInput`
+  without inferring notional from NAV/weights. Currency is caller-supplied (Phase 0
+  rows carry no currency column); missing fee/slippage on pre-070 executions raises
+  `ActionCostBindingError` rather than defaulting to zero. H9 / preflight resolve
+  currency only via explicit `config.preferences.investor_currency` (or `currency`)
+  — never silently invent `USD` (#2808); missing currency fail-softs as
+  `currency_missing`.
+  **Observational cost/liquidity (#2703 / WP7.2):** pure contracts in
+  `hermes/models/cost_liquidity.py` and estimator in `hermes/cost_liquidity.py`
+  consume `ActionCostInput`, prospective OHLCV/technicals, and resolved
+  `RiskPolicy.cost_coefficients` to emit `LiquiditySnapshot`, `ActionCostEstimate`,
+  and `ActionCostOutcome`. Spread uses labeled high-low range fractions (not quotes);
+  missing economics map to `unpriceable`/`degraded` with explicit reasons — never
+  zero-by-omission. Phase 1 observational only — estimates do not feed turnover.
+  **Cost/liquidity persistence (#2709 / WP7.3):** after H9 mints `order_intent_id`,
+  `hermes/h9_cost_evidence.py` builds bundles and
+  `atlas/cost_liquidity_registry.py` append-writes to migration `082` tables
+  (fail-soft after booking). `preflight_reflect` resolves `ActionCostOutcome` when
+  paper executions arrive; typed state slots `liquidity_snapshots` and
+  `action_cost_estimates` on `PhaseHermesState`.
+  **H8 allocation input contracts (#2727 / WP8.2 + #2730 / WP8.3 + #2734 / WP8.4 +
+  #2738 / WP8.5):** frozen
+  `AllocationInputBundle` models in `hermes/allocation_contracts.py` with SHA-256
+  helpers in `hermes/allocation_hashes.py`. `hermes/allocation_inputs.py` assembles
+  one validated bundle at H8 entry from H7 mandate + exact Phase 1 forecast /
+  policy / covariance / cost versions + prior weights; typed state slot
+  `phase_hermes.allocation_input_bundle`. WP8.4 cutover: when
+  `h8_sizing_input_mode=calibrated` (default) and the bundle yields at least one
+  AVAILABLE positive-alpha score, incumbent `size_portfolio` raw weights use
+  `reliability × max(0, μ) / σ_ε` — rank→conviction and fixed-premium Kelly are
+  absent from that path. Missing/empty coverage falls back to characterized
+  incumbent (`incumbent_fallback`); set `h8_sizing_input_mode=incumbent` to force
+  the legacy path. Every sized book stamps `allocation_input_bundle_hash` +
+  `h8_sizing_input_mode`. Downstream caps/corr/vol/breaker/grid/continuity are
+  unchanged (no optimizer / control reorder). WP8.5 locks that shell in
+  `tests/dq/hermes/test_allocation_invariants.py` (explicit
+  `INCUMBENT_CONTROL_ORDER`, cash-first caps, continuity/cadence/turnover/final
+  caps, calibrated mode stamps).
+  **Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** the same
+  `hermes/allocation_contracts.py` module defines frozen `PreTradeRiskReport`
+  (plus `ScalarMetric` leaves, book/trade views, exposure/risk/concentration/
+  cost/forecast/control blocks). Every required metric is a value +
+  `MetricProvenance` or typed `UNAVAILABLE`/`DEGRADED` with reason — no hidden
+  zeroes, no LLM numbers, no weight mutation. SHA-256
+  `pretrade_risk_report_content_hash` / `pretrade_risk_report_hash_payload` live
+  in `hermes/allocation_hashes.py`. Pure builders in `hermes/pretrade_risk.py`
+  compute variance/MRC/CRC (CRC reconciles to σ_p), concentration/effective bets,
+  turnover, and cost/liquidity from the exact WP6 correlation snapshot +
+  caller-supplied annualized vols and WP7 observational scalars — never
+  re-estimating covariance/cost or fabricating factor/scenario values. H8
+  (`phase7e_risk_sizing`) attaches `phase_hermes.pre_trade_risk_report` after the
+  final control shell only; `final_book_weights_fingerprint` must equal the final
+  sized-book fingerprint. Typed report failure omits the report without changing
+  the book. H9 (`commit_run`) validates attached report hashes under
+  `OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
+  append-only persists to `olympus_pretrade_risk_reports` (migration `083`) via
+  `atlas/pretrade_risk_registry.py` + `commit_io.validate_pretrade_risk_report` /
+  `persist_validated_pretrade_risk_report` (#2754 / WP9.4). Enforce fails closed
+  on missing/unknown/fingerprint or bundle-hash mismatch before booking; exact
+  retry skips; H9 never imports report builders. Manifest schema 1.6 carries
+  `pretrade_risk_report_id` / `pretrade_risk_report_hash` + write counts.
+  **Shadow allocation artifact (#2758 / WP10.1):** frozen
+  `ShadowAllocationArtifact` in `hermes/shadow_artifact.py` binds the exact
+  `AllocationInputBundle`, incumbent final book, `PreTradeRiskReport`, and
+  minimal H9 commit metadata under one SHA-256 `artifact_content_hash`. Chain
+  exports canonical JSON atomically (temp + replace) after Hermes when
+  `OLYMPUS_SHADOW_ARTIFACT_MODE=export` (default) into
+  `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Fail-soft — export
+  failure never reruns or mutates H8/H9. No challenger optimizer, replay, or
+  broker imports on the production path; `pipeline-olympus.yml` uploads
+  `shadow-allocation-*.json` with run artifacts for WP10.2+ isolation.
+  **Write-denied shadow workflow (#2762 / WP10.2):**
+  `pipeline-olympus-allocation-shadow.yml` +
+  `digiquant/scripts/atlas/check_allocation_shadow_isolation.py` enforce
+  artifact-in / file-out isolation (no `secrets: inherit`, no production
+  credentials, read-only permissions, trusted producer workflow/branch,
+  schema/hash gates). Disable the shadow workflow to roll back without
+  touching production H8/H9.
+  **Solver-free robust challenger (#2770 / WP10.3):**
+  `hermes/shadow_optimizer.py` — deterministic coordinate-search on the robust
+  objective (uncertainty + covariance risk + linear cost + L1 turnover) under
+  shared feasibility (caps/grid/authorization). Shadow-only; never wired into
+  production H8/H9; no SciPy/CVXPY; abstains on incomplete/invalid inputs.
+  **Shared-cash Nautilus portfolio replay (#2784 / WP10.4):**
+  `olympus/replay/` — one `BacktestEngine`, one cash account, all instruments,
+  global event ordering, next-bar target deltas, and real engine fills/costs.
+  Parent API `run_portfolio_replay_isolated` spawns a fresh worker with JSON
+  I/O; crash/timeout → typed inconclusive (never a fabricated book). Must not
+  call `nautilus_runner._run_multi_symbol_backtest`. Shadow/challenger only —
+  production H8/H9 must not import `olympus.replay`.
+  **Paired shadow comparison evidence (#2799 / WP10.5):**
+  `olympus/replay/allocation_comparison.py` + packaged
+  `replay/shadow_criteria/v1.json` + CLI
+  `digiquant/scripts/atlas/compare_allocation_shadow.py`. Loads frozen criteria
+  before inspecting arm results; requires identical data/cost/execution hashes;
+  emits absolute + paired metrics with explicit unavailable/inconclusive leaves;
+  hard-constraint breaches stay visible even when challenger return is stronger;
+  atomic file-only report output. No auto-promotion, production config write, or
+  H8/H9 wiring.
+  **Policy replay manifests (#2979 / WP16.1):** `olympus/replay/models.py` adds
+  `PolicyVersionRef`, `PolicyBundle`, `SharedInputIdentity`, `WalkForwardFold`,
+  `ReplayInputManifest`, `ReplayArmSpec`, and `ReplayPairSpec` — strict frozen
+  contracts that separate shared as-of inputs from arm-specific policy refs.
+  `olympus/replay/canonical.py` centralizes SHA-256 digests (data/cost/seed/fill/
+  cash/manifest/pair) reused by WP10.5 shadow comparison. Paired arms must share
+  one `manifest_content_hash`; `build_replay_pair` rejects unequal shared inputs.
+  Allowlisted policy families only; path/pickle-like version IDs rejected. Offline
+  models/canonical hashing only — persistence lands in WP16.2.
+  **Policy replay governance store (#2983 / WP16.2):** `olympus/replay/store.py`
+  `PolicyReplayStore` + `governance_models.py` persist manifests, pairs, append-only
+  run events, immutable arm results, comparison reports, gate criteria versions,
+  evaluations, and human decisions. Migration `094_olympus_policy_replay.sql`.
+  Content-hash dedupe for manifests/pairs; paired arms require identical shared
+  manifest hash; run status derived from events (no mutable running row);
+  `load_gate_evidence` reconstructs full gate lineage from immutable IDs/hashes.
+  Dark launch — gate evaluator is WP16.7 (`replay/governance.py`); portfolio workers
+  ship in WP16.4.
+  **As-of policy replay inputs (#2987 / WP16.3):** `olympus/replay/asof_dataset.py`
+  materializes cutoff-bound bars/cash/costs/timing/seed and builds
+  `ReplayInputManifest` envelopes; `olympus/replay/policy_registry.py` resolves
+  only allowlisted registered policies (`research_plan`, `portfolio_target`,
+  `observed_shadow` plus infrastructure refs). All reads filter
+  `known_at <= replay_as_of`; missing/unregistered/incomplete state fails closed;
+  unavailable research output is typed — never fabricate H5/H6 counterfactuals.
+  Later source mutations cannot change a historical manifest at the same cutoff.
+  No network/provider calls. Offline only.
+  **Policy portfolio replay (#2991 / WP16.4):** `olympus/replay/policy_portfolio.py`
+  binds WP16.3 `AsOfDatasetSnapshot` + `ReplayInputManifest` + `ReplayArmSpec` to
+  the WP10.4 shared-cash adapter. Registered `portfolio_target` policies supply
+  sorted target weights; walk-forward folds slice eval bars deterministically
+  (`slice_series_for_eval_fold`). `build_policy_arm_request` validates manifest/arm
+  hash alignment and shared-input identity; `run_policy_arm_replay_isolated` spawns
+  one fresh worker per arm/fold. `reconcile_portfolio_replay_result` in
+  `nautilus_portfolio.py` asserts every OK result reconciles NAV, cash, holdings,
+  fills, and commission totals in one engine. Unavailable/mismatched policy → typed
+  ERROR inconclusive (never fabricated book). No `nautilus_runner`, no vectorized
+  fallback, no `BacktestResult` changes.
+  **Purged walk-forward folds (#2995 / WP16.5):** `olympus/replay/walk_forward.py`
+  builds deterministic train/calibration/eval assignments from WP15
+  `OutcomeEpisode` temporal fields and WP16.1 `WalkForwardFold` windows.
+  `WalkForwardScheduleParams` versions all fold/sample parameters with a content
+  hash; crossing-horizon labels are purged from train/calibration, late-known
+  episodes are excluded at role cutoffs, and embargo gaps separate train from
+  eval. Paired replay arms share identical fold plans; undersampled history returns
+  `insufficient_history` — never silent drop or pass/fail by omission.
+  `verify_fold_assignments` property-checks zero train/eval overlap and embargo
+  boundaries.
+  **Paired policy comparison reports (#2999 / WP16.6):** `olympus/replay/comparison.py`
+  aggregates fold/arm evidence into a rich `PolicyComparisonReport` across required
+  metric groups — research (calls/searches/tokens/cost/latency/budget), signal
+  quality (novelty/conflict/coverage/exploration/staleness), forecast calibration/
+  proper scores/uncertainty, actions/turnover/cost/fills, NAV/active return/
+  drawdown, tail/scenarios/constraints, and engine/data/failure metadata. Shared
+  manifest hash is required; every leaf carries direction, absolute/delta,
+  count/missing, provenance, and evidence mode. Observed and modeled evidence are
+  never pooled into one leaf; missing inputs are typed unavailable (never zero).
+  Undersampled folds, accounting breaches, and hard-constraint breaches block
+  promotion (`eligible_for_governance=False`) while remaining visible. Fold IDs
+  are retained; `report_content_hash` is deterministic. `to_governance_envelope()`
+  projects into the WP16.2 store `PolicyComparisonReport` persistence row. Gate
+  criteria evaluation remains WP16.7+.
+  **Immutable gate criteria evaluation (#3003 / WP16.7):** `olympus/replay/governance.py`
+  applies pre-versioned `HumanAuthoredGateCriteria` (metric/cohort, absolute or
+  paired delta, direction/threshold, evidence mode, min sample/folds/duration,
+  missing-data and confidence-bound rules, author/rationale/effective time/hash)
+  to a WP16.6 `PolicyComparisonReport`. Machine output is
+  `eligible_for_human_review` / `rollback_eligible_for_human_review` only —
+  never promotion or activation. Empty criteria fail closed; missing metrics are
+  insufficient; accounting/hard-constraint breaches and ineligible comparisons
+  block review; per-criterion results are retained; rollback is evaluated
+  separately from promotion. `persist_gate_evaluation` appends into
+  `PolicyReplayStore` via immutable criteria/evaluation IDs. No source-code
+  production thresholds, no evaluator-authored criteria, no config write.
+  **Authenticated human decisions (#3007 / WP16.8):** `record_policy_governance_decision`
+  in `olympus/replay/governance.py` appends approve/reject/defer/rollback-review
+  `PolicyGovernanceDecision` rows via `PolicyReplayStore.append_decision`. Actor
+  identity comes only from an `AuthenticatedPrincipal` value object (construct
+  with `AuthenticatedPrincipal.from_digi_auth` from digikey middleware's
+  `request.state.digi_auth` / `DigiAuthContext` — no digikey source edits). There
+  is no caller-supplied actor string parameter; MCP cannot impersonate. Approve
+  requires `eligible_for_human_review`; reject/defer need non-empty rationale;
+  rollback-review links `evaluation_id` + `current_policy_version_id`. Decisions
+  are immutable and may supersede prior decisions. **No activation, deploy,
+  broker, or policy mutation** — production activation remains an external
+  human-controlled process. Library API is the secure recording boundary;
+  WP16.9 exposes the DigiAuth HTTP write only (never unauthenticated MCP).
+  **Policy replay service/MCP/CLI exposure (#3011 / WP16.9):**
+  `olympus/replay/exposure.py` + `service.py` provide typed summary I/O —
+  `service_run_policy_replay`, `service_get_policy_replay`,
+  `service_get_policy_comparison`, `service_evaluate_policy_gate`,
+  `service_get_policy_gate_evaluation` — returning artifact IDs / coarse status
+  only (no confidential evidence dumps). Invalid IDs fail closed. MCP tools and
+  orchestrator manifest register the five `olympus_*` recommendation tools;
+  CLI group `digiquant policy-replay` (`olympus/replay/cli.py`) mirrors run/
+  get/evaluate. `POST /v1/olympus/policy_governance_decisions` records
+  decisions from `AuthenticatedPrincipal.from_digi_auth(request.state.digi_auth)`.
+  Running/evaluating cannot change active policy; no promote/activate/set-live
+  tools exist. **Phase 4 lock surface (#3015 / Integration 4.1):**
+  `tests/dq/replay/test_phase4_end_to_end.py` + `phase4_e2e_fixtures.py` pin the
+  governed learning loop across WP15–WP16 — reconciled accounting before learning,
+  episode assembly (authorized/excluded/no-op), late-known correction supersession
+  without changing historical replay manifests, observed vs counterfactual attribution,
+  lesson pin at preflight cutoffs, identical paired-arm manifests, shared-cash
+  portfolio replay (real Nautilus gated by ``SKIP_NATIVE_CRASH`` on Linux CI #42),
+  purged walk-forward when history suffices, all comparison metric groups or typed
+  unavailable, eligible/ineligible/insufficient gate evaluation, authenticated human
+  approval without activation, and byte-stable rerun hashes. Production policy
+  activation remains external.
+  **Phase 2 lock surface (#2820 / Integration 2.1):**
+  `tests/dq/hermes/test_phase2_allocation_contracts.py` (+
+  `phase2_e2e_fixtures.py`) pins Gate 2 composition across WP8–WP10 — H7/H8/H9
+  ownership, rank-gap independence of calibrated magnitude, final-book report
+  bind, H9 hash validation without report rebuild, byte-stable shadow artifacts,
+  production import fence vs challenger/replay, write-denied isolation checker,
+  and hard-failure visibility on shared-cash replay. Challenger selection and
+  live trading remain disabled.
+  **Phase 3 lock surface (#3019 / Integration 3.1):**
+  `tests/dq/hermes/test_phase3_research_contracts.py` (+
+  `phase3_e2e_fixtures.py`, extended `tests/dq/atlas/test_pipeline_simulation.py`)
+  pins Gate 3 composition across WP11–WP14 — one A0–A4/H1–H9 graph with no
+  planner node/service, H4 roster preservation under shadow attention routing,
+  immutable H5 bundles + H6 amendments (no broad live search), H6 two-round floor
+  + carry/failure provenance, blinded deterministic H5/H6/H7 contexts from one
+  pinned research-state version, byte-identical exact-version replay and evidence
+  bundle serialize/reload, and pre-call manifest → WP1 token reconciliation.
+  Rollout stays `off`/`shadow` only — no runtime policy promotion or second graph.
+  Glass-box persistence (#1945 / #2622): `digiquant.olympus.attention_plan_io`
+  publishes `document_key='attention-plan'` / `doc_type='Attention Plan'` with
+  refresh-reason labels + read-only profile pin. Daily wiring:
+  `attention_plan_graph.maybe_publish_attention_plan_shadow` runs inside Atlas
+  `publish_phase` (fail-soft) when triage decisions exist and
+  `OLYMPUS_PLANNER_MODE=shadow` (default; `off` skips). Migrations `077` (doc_type)
+  and `078` (category `planner`) register allow-list values. UI must not invent
+  rows without a published document.
   Per-artifact `resolve_edit_mode` (`skip` \| `edit` \| `full`) controls LLM spend;
   `edit` emits `DocumentPatch` ops merged via `digiquant.olympus.edit_mode`. The
   merge implements the RFC 6901 `-` append token (repeated `set /list/-` = sequential
@@ -1047,10 +1679,12 @@ must read these fields when present. The Olympus Performance view fills only mis
 fields with the same deterministic first/latest calculation over live `nav_history` and
 the benchmark closes inside that exact NAV window, and labels the result as a live-history
 or mixed fallback. Rows in
-`position_attribution` retain their own stored calculation window and are not presented
-as inception-to-date contribution. Its cumulative contribution chart instead applies each
-position snapshot's prior weight to the next interval's price return and overlays the exact
-NAV-rebased portfolio return.
+`current_book_lookback` (legacy alias view `position_attribution`) are a trailing-window
+diagnostic with an explicit lookback interval — not inception-to-date contribution and
+not realized daily P&L (#2598). The Performance cumulative contribution chart instead
+applies each position snapshot's prior weight to the next interval's price return and
+overlays the exact NAV-rebased portfolio return. Realized daily contribution is
+`daily_realized_attribution` (finalized `olympus_accounting_*` tip only).
 
 ##### Risk-metric scale contract (#1748, migration 058)
 
@@ -1144,9 +1778,13 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
 - Schemas under `digiquant/src/digiquant/olympus/hermes/templates/schemas/`. Loaded via
   `digiquant.olympus.hermes.schemas.load_schema`.
 - **H7** emits `PMDirectionMemo` (direction + conviction rank only — no weights).
-  **H8** (`phase7e_risk_sizing`) is the sole weight owner. **H9** (`commit_run`) is the
-  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append, and
-  the portfolio lineage ledger commit chain (see below).
+  Each roster row may carry a deterministic `ForecastReference` to the effective
+  forecast H7 saw (`hermes/models/pm_direction.py`); economics and identifiers are
+  never LLM-authored. **H8** (`phase7e_risk_sizing`) is the sole weight owner and
+  ignores forecast refs (direction/rank unchanged). **H9** (`commit_run`) is the
+  Hermes terminal: positions, nav, theses sync, brief publish, `decision_log` append,
+  the portfolio lineage ledger commit chain (see below), and fail-soft prospective
+  forecast-registry persistence (#2663).
 
 #### Risk-sizing layer (Pillar 2)
 
@@ -1154,15 +1792,16 @@ Implements the FinPos direction/sizing split: **H7** owns direction + conviction
 narrative; **H8** deterministic code owns sizing, caps, and risk.
 
 - `digiquant.olympus.hermes.sizing.size_portfolio(...)` — pure, I/O-free. Turns per-ticker
-  conviction + stance into final target weights: select (conv ≥ bar, buy/hold) → raw
-  weights (conviction-∝ × inverse-vol, or fractional-Kelly) → position caps → sector caps
-  → correlation de-dup → ex-ante vol-target (√(wᵀΣw), pure-Python) → drawdown-breaker scale
-  → round-DOWN to grid → cash residual. Every reduction is **reduce-only / cash-first**:
-  freed weight becomes cash, never redistributed up (re-breaching the cap). A pair with no
-  estimated correlation falls back to an **asset-class bucket** ρ (`_bucket_corr`: equity↔bond
-  ≈0, equity↔equity≈0.8; UNKNOWN class stays ρ=1.0 conservative) rather than full-correlation —
-  the #934 over-cashing fix. `SizingCaps.from_preferences` reads `config/portfolio.json`
-  constraints.
+  conviction + stance (or WP8.4 `calibrated_scores`) into final target weights: select →
+  raw weights → position caps → sector caps → correlation de-dup → ex-ante vol-target
+  (√(wᵀΣw), pure-Python) → drawdown-breaker scale → round-DOWN to grid → cash residual.
+  Raw-weight modes: **calibrated** (`reliability × max(0, μ) / σ_ε`, #2734),
+  conviction-∝ × inverse-vol, or fractional-Kelly (incumbent fallback only). Every
+  reduction is **reduce-only / cash-first**: freed weight becomes cash, never redistributed
+  up (re-breaching the cap). A pair with no estimated correlation falls back to an
+  **asset-class bucket** ρ (`_bucket_corr`: equity↔bond ≈0, equity↔equity≈0.8; UNKNOWN class
+  stays ρ=1.0 conservative) rather than full-correlation — the #934 over-cashing fix.
+  `SizingCaps.from_preferences` reads `config/portfolio.json` constraints.
 - `digiquant.olympus.hermes.sector_map` — buckets every holdable ticker for concentration
   control + exposure roll-ups, unifying GICS equity sectors (`config/sectors.yaml`) with the
   cross-asset sleeves (`config/asset_classes.yaml`: fixed-income / commodity / crypto / fx /
@@ -1170,13 +1809,20 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
   (true risk exposure beats research fan-out — e.g. USO is `commodity`, not Energy equity).
   `sector_bucket(t)` → fine-grained concentration slug; `asset_class(t)` → coarse class.
 - `digiquant.olympus.hermes.phases.phase7e_risk_sizing` — H8 enforcement node. Reads
-  `PMDirectionMemo` conviction ranks, per-ticker vol from `price_technicals`, and
-  `sector_map` buckets; calls `size_portfolio`; writes `phase_hermes.sized_book`.
-  Wired in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors.
-  Real pairwise correlations load from `price_history` via `get_return_correlations`
-  (look-ahead-guarded); a pair with no estimate uses the asset-class bucket fallback (#934).
-  The sized book passes through `turnover.apply_rebalancing_cadence`, which dispatches to
-  either `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
+  `PMDirectionMemo` (direction + ranks), assembles `AllocationInputBundle`, and on the
+  calibrated path feeds bundle scores into `size_portfolio` (rank→conviction unused).
+  Falls back to dense rank→conviction when mode is `incumbent` or calibrated coverage is
+  empty. Writes `phase_hermes.sized_book` with `allocation_input_bundle_hash` +
+  `h8_sizing_input_mode`. After the final control shell (carry / cadence / backstop /
+  grid / final caps), builds and attaches `phase_hermes.pre_trade_risk_report` via
+  `build_pretrade_risk_report_for_final_book` (WP9.3 / #2750) and stamps
+  `pre_trade_risk_report_hash` on the book; report omission is fail-soft. Per-ticker vol
+  from `price_technicals` and `sector_map` buckets still feed caps/vol-target. Wired
+  in-graph via `HermesGraphDeps.risk_sizing`. Fail-soft on data errors. Real pairwise
+  correlations load from `price_history` via `get_return_correlations` (look-ahead-guarded);
+  a pair with no estimate uses the asset-class bucket fallback (#934). The sized book
+  passes through `turnover.apply_rebalancing_cadence`, which dispatches to either
+  `apply_turnover_to_sized_book` (on-cadence: applies turnover, the no-trade band, and
   the minimum-hold override, #934) or `hold_drifted_book` (off-cadence: holds continuing
   positions at their drifted weight, still honoring an explicit PM exit, #955).
 - `digiquant.olympus.hermes.risk_controls` — the drawdown circuit breaker. Pure
@@ -1190,12 +1836,13 @@ narrative; **H8** deterministic code owns sizing, caps, and risk.
 
 #### H8 adjustment-event taxonomy (#2417)
 
-Explanation-only layer: every place H8 moves a ticker away from its raw requested value
-emits an in-memory `digiquant.olympus.hermes.sizing_events.SizingAdjustment` (frozen,
-`extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it computes —
-never persisted (no DB write, no `portfolio_ledger` interaction), never fed back into the
-weight math, and never reordering or renaming an existing control. `SizingAdjustmentType`
-enumerates all 12 causes and where each is emitted:
+Explanation-only at emission time: every place H8 moves a ticker away from its raw
+requested value emits an in-memory `digiquant.olympus.hermes.sizing_events.SizingAdjustment`
+(frozen, `extra="forbid"`, `unit: Literal["pct", "conviction"]`) alongside the weight it
+computes — never fed back into the weight math, and never reordering or renaming an
+existing control. Since #2768, H9 persists `unit="pct"` events as durable
+`TargetAdjustment` rows (migration 095); `unit="conviction"` stays in-memory only.
+`SizingAdjustmentType` enumerates all 12 causes and where each is emitted:
 
 | Type | Emitted by | Reduce-only? |
 |------|-----------|--------------|
@@ -1311,6 +1958,14 @@ assuming it is always present.
   Token/cost fields remain operator-only. Prompts, tool values/results, document bodies,
   credentials, PII-heavy values, model output, and reasoning are not columns. **Migration 066
   is human-gated and must not be applied to the live Supabase project without review.**
+- **WP1 join + null usage (#2763 / migration 086).** Glass-box events soft-stamp
+  `call_id` / `attempt_id` / `node_run_id` so Pipeline rows reconcile to
+  `olympus_provider_*` (Gate 3). **Authority for economics is 067**; 066 is the ordered
+  compatibility surface. Migration 086 makes `prompt_tokens` / `completion_tokens` /
+  `cached_tokens` / `cost_usd` nullable (no DEFAULT 0) so missing usage stays NULL —
+  digigraph `usage.record` and digillm `_record_usage` no longer zero-fill the event path.
+  The public view appends join keys only (still no tokens/cost). Soft stamps, not hard FKs:
+  067 quarantine may omit an attempt that glass-box still needs for ordering honesty.
 - `chain.run_atlas_then_hermes` wraps each sub-graph (`_safe_invoke_graph`) and each terminal
   phase (`_run_terminal_phase`) so a late crash is recorded as a `PhaseError` and the run still
   reaches publish + materialize + the diagnostics write with last-good state. LLM usage is
@@ -1511,9 +2166,12 @@ Conventions this writer fixes, each of which is easy to get backwards:
   row references one of its order ids, the symbol is dropped from the append: only fills alter
   realized quantity (invariant 9), and superseding an order that already traded would rewrite
   history.
-- **Requested equals approved, for now.** H8 applies its caps upstream inside `size_portfolio`,
-  so H9 never sees a distinct pre-cap number and Phase 0 writes no `TargetAdjustment` rows.
-  Recording the pre-cap target is a later task, not an omission in this one.
+- **Requested vs approved.** H8 publishes ``requested_pct`` and pct-unit
+  ``SizingAdjustment`` events on the sized book; H9 writes
+  ``requested_weight`` from the pre-cap request when present and appends
+  ``TargetAdjustment`` rows keyed to each ``RequestedTarget`` (#2768 / migration
+  095). When H8 emits no request map and no pct adjustments for a symbol,
+  requested equals approved (no durable delta).
 - **Prior weights come from Atlas preflight** (`state.config.preferences["current_weights"]`) and
   are simply absent on a first run, so every delta is measured against 0. A first commit being
   all `add` is correct, not a bug.
@@ -1590,7 +2248,10 @@ the grants would refuse anyway.
   the second sees the first's residual, not the pre-run book.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
-  row at all.
+  row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
+  via the public `marks: dict[str, float | Decimal]` signature) take the same decline —
+  `_rejection_reason` checks `is_finite()` before any comparison so the executor does not
+  raise (#2497).
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
 declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no
@@ -1607,32 +2268,134 @@ becomes a float — scaled as a float first, `0.07` lands on `7.000000000000001`
 069 has no NAV column, so a lot-derived portfolio weight is not computable from the ledger at
 all, and the book may be a different date than the run date.
 
-Cutover is a deliberate edit, **not** a property of the data (#2508). It was the latter first:
-the kill switch defaults *on* and the pipeline passed no ledger flag, so the morning job would
-have started trusting the ledger the day the ledger *writers* reached `main` with 069 applied.
-Two conditions, not one, and `main` meets only the first today: 069's file is there, while the
-writers described above are on `develop` and not yet promoted. That is unsafe at the boundary —
-order size is a weight delta against the legacy `positions` book while residuals are measured
-only from `portfolio_ledger_holding_lots`, which starts empty and has no backfill, so the first
-run would book EXIT for every trim of a held name and OPEN for every add, into rows 069 makes
-append-only. So `pipeline-digiquant-prices.yml` passes `--no-ledger`, and
-`tests/scripts/test_prices_cron_dst.py` pins it *present* while `--require-ledger` stays absent
-(it would be a daily red cron before 069/070 are applied). `backfill_position_events.py` passes
-it too: that script shells out to the same `execute_at_open.py`, so it is the second door onto
-the ledger path and an operator repair run would otherwise walk through it. Removing
-`--no-ledger` from **both** call sites is the cutover, and it must arrive with seeded lots — or with a ledger that declines when the lot table
-is empty and the prior book is not — and preferably with `--require-ledger` in the same edit, so
-a silent fallback to prose cannot hide the handover. Deleting the two prose builders is a
-further follow-up gated on prod reaching 070: they still carry the whole #1743 regression
-suite.
+Cutover is a deliberate edit, **not** a property of the data alone (#2508 → #2589). The kill
+switch defaults *on*. After #2589 the morning job and backfill run the ledger path with
+`--require-ledger`. Safety is the opening snapshot + cold-start decline:
+
+1. `ensure_legacy_opening_snapshot` (in `hermes/writers/opening_snapshot.py`, called from
+   `build_events_from_paper_fills` before `execute_pending_orders`) idempotently seeds open
+   lots from the prior `positions` book × `nav_history.nav` ÷ mark as one labeled
+   `policy_version_id=legacy_opening_snapshot` chain — commit → ADD/new_conviction →
+   quantity targets → executed order → paper fill (fee=0, slippage=0) → open lot. It does
+   not invent pre-cutover fill history beyond that single snapshot.
+2. If lots are still empty while the prior book has holdings,
+   `cold_start_requires_seed` / `build_events_from_paper_fills` returns `(None, reason)` and
+   `--require-ledger` exits 3 — it will not book OPEN/EXIT mislabels into append-only 069
+   rows, and prose cannot hide the handover.
+
+Ops can also run `digiquant/scripts/atlas/seed_ledger_opening_snapshot.py` (`--date` optional,
+`--dry-run` supported). Deleting the two prose builders remains a further follow-up gated on
+prod reaching 070.
+
+#### Compatibility projection labeling (#2422 / Task 2.5)
+
+`position_events` remains the Activity compatibility table existing readers use unmodified.
+Migration `071_olympus_position_events_book_source.sql` adds `book_source text NOT NULL
+DEFAULT 'legacy'` with `CHECK (book_source IN ('legacy', 'authoritative'))`. Historical rows
+keep the `legacy` label permanently (column default; no content rewrite). The morning
+executor stamps:
+
+- `authoritative` — ledger paper-fill projections (`build_events_from_paper_fills` +
+  `_record_ledger_events`, including HOLD continuity written under ledger authority)
+- `legacy` — every prose / digest / positions-book reconstruction path
+
+Curated views (security_invoker; no SELECT from private `portfolio_ledger_*`):
+
+- `olympus_position_events` — all rows with `book_source` explicit
+- `olympus_position_events_authoritative` — `WHERE book_source = 'authoritative'` only
+
+New consumers that require lineage must use the authoritative view (or filter). Legacy
+projection writers are retired only after holding_lots seed + `--no-ledger` removal + named
+readers pass retention checks — not as part of #2422.
 
 - **Tests**: `tests/dq/hermes/test_execution_io.py` (`TestResidualIsMeasured`,
-  `TestSoleAuthority`, plus rejection/idempotency/lot coverage) and
+  `TestSoleAuthority`, plus rejection/idempotency/lot coverage),
+  `tests/dq/hermes/test_opening_snapshot.py` (seed idempotency / cold-start), and
   `tests/dq/atlas/test_execute_at_open.py` (`TestBuildEventsFromPaperFills`,
   `TestBuildEventsFromPaperFillsDeclines`, `TestMainPrefersTheLedger` — the last proves the
   prose builders are never called when the ledger speaks, that HOLD continuity survives, and
   that both new exit codes are reachable). The atlas module imports the table names from the
   writers rather than restating them, so a rename breaks the test instead of drifting past it.
+
+#### Period accounting contracts, engine, and EOD finalizer (#2596/#2597)
+
+Closes OLY-REV-007 / OLY-REV-008 for the calculation and persistence boundary: exact-date
+target weights must not be applied across a full return interval. One event-boundary engine
+owns NAV, P&L, and daily contribution math from authoritative opening holdings/cash,
+fills/costs, and closing marks. Task 3.2 persists one coherent EOD period atomically enough
+that metrics/attribution job order cannot alter meaning.
+
+- **Models**: `digiquant/src/digiquant/olympus/accounting/models.py` — frozen/strict Pydantic
+  v2 contracts (`AccountingPolicy`, `PeriodAccountingInput`, `AccountingPeriod`, ticker
+  results, marks, fills, corporate actions). Every money field is `Decimal` with
+  `allow_inf_nan=False`.
+- **Engine**: `digiquant/src/digiquant/olympus/accounting/engine.py` — pure Decimal/Polars
+  `compute_period(...)` (no I/O, no pandas, no broker paths). Status is `final` only when
+  marks are complete and fresh and residual is inside the versioned tolerance; missing marks
+  → `incomplete`, stale marks / ignored corporate actions → `estimated`, residual /
+  negative quantity / benchmark boundary mismatch → `failed`. Exact same inputs reproduce
+  the same period `id` (`uuid5` over a canonical digest).
+- **Persistence**: `digiquant/src/digiquant/olympus/accounting/io.py` — service-role
+  `INSERT` only into `olympus_accounting_{periods,contributions,holdings}`. Deterministic
+  child PKs; exact retry is a no-op (or child repair). Restatement appends a superseding
+  period (`supersedes_id`); never in-place correction. `select_final_period` returns only a
+  complete head with `status=final` — provisional H9 `nav_history`/`positions` rows are
+  continuity data and are never selected as final. A crash after the period INSERT leaves
+  an incomplete child set that is not selectable as final until retry repairs it.
+- **Finalizer**: `digiquant/scripts/atlas/finalize_period_accounting.py` — assembles ledger
+  fills/lots + marks, runs the engine, persists, shadow-reconciles vs provisional H9 nav
+  day return. Flags: `--date`, `--dry-run` (no INSERT), `--shadow` (default persist +
+  reconcile). Mode also via `OLYMPUS_ACCOUNTING_FINALIZER` / `--mode` (`off` no-op). Cold
+  ledger declines with exit 3 (no partial final). Wired ahead of metrics in
+  `pipeline-atlas-metrics.yml` (`continue-on-error` while shadowing). Holding-lot reads
+  page via PostgREST `.range` (`_LOT_PAGE_SIZE=1000`) so closed-lot history cannot silently
+  truncate the opening book (#2776).
+- **Metrics cutover (dual-write)**: `refresh_performance_metrics.py` prefers a finalized
+  accounting period for `pnl_pct` and indexed `nav_history` compounding when one exists;
+  otherwise falls through to provisional H9 nav only. Never sums
+  `current_book_lookback` / legacy `position_attribution` into daily `pnl_pct` (#2598).
+  H9 keeps writing provisional continuity; public curated views are migration
+  `074_olympus_accounting_views.sql` (#2599) with follow-ups
+  `084_olympus_accounting_day_return_pct.sql` (#2779, equity-delta
+  `day_return_pct`) and `085_olympus_accounting_tip_children_complete.sql`
+  (#2780, tip/final views require `period_children_complete` parity):
+  `public_accounting_nav_history` (finalized preferred + labeled legacy),
+  `public_finalized_nav`, `public_accounting_period_status`,
+  `public_daily_realized_attribution`. Adapters: Olympus
+  `observability-queries` / `queries` and digiquant.io `useLivePortfolio`.
+  Rollback = repoint to `public_nav_history` / `nav_history`. Cutover only after
+  approved shadow interval (incl. one rebalance) with zero unexplained
+  reconciliation failures. Do not flip `OLYMPUS_ACCOUNTING_FINALIZER=on`
+  without that ops evidence.
+- **Lookback vs realized (#2598 / Task 3.3)**: migration `073_olympus_lookback_vs_realized.sql`
+  renames the physical diagnostic table to `current_book_lookback` (explicit
+  `window_*` / `lookback_days` / `contract` columns). `position_attribution` remains a
+  deprecated compatibility VIEW over that table (delete after readers migrate).
+  `daily_realized_attribution` is a `security_invoker` VIEW over the finalized accounting
+  tip only (`service_role` SELECT; public twin `public_daily_realized_attribution`). Writers:
+  `refresh_attribution.py` → `current_book_lookback`; accounting finalizer → periods/
+  contributions. Pure core: `compute_current_book_lookback` in `atlas/attribution.py`.
+- **Schema**: migration `072_olympus_period_accounting.sql` —
+  `olympus_accounting_{periods,contributions,holdings}`. **User-private** (vision brief):
+  RLS with zero policies; `PUBLIC`/`anon`/`authenticated` revoked; `service_role`
+  `SELECT, INSERT` only; append-only mutation triggers. Public curated projections are
+  Task 3.4 / migration 074 (never grant base tables).
+- **Identities** (when `status == final`):
+  `E1 = E0 + Σ NetPnL_i + CashPnL`;
+  `E1 = ClosingCash + Σ q_i,1 P_i,1`;
+  `Σ Contribution_i + CashContribution = (E1 − E0) / E0`.
+- **Tests**: `tests/dq/atlas/test_period_accounting.py`,
+  `tests/dq/atlas/test_migration_072.py`,
+  `tests/dq/atlas/test_finalize_period_accounting.py`,
+  `tests/dq/atlas/test_migration_073.py`,
+  `tests/dq/atlas/test_lookback_vs_realized.py`,
+  `tests/dq/atlas/test_migration_074.py`,
+  `tests/dq/atlas/test_migration_084.py`,
+  `tests/dq/atlas/test_migration_085.py`.
+- **Anti-goals**: target-snapshot ownership inference, float-only reconciliation,
+  current-book lookback as realized attribution, public base-table grants on accounting,
+  selecting provisional rows as final, in-place period correction,
+  combining finalized + legacy into one unlabeled value.
 
 ## digiquant Data Layer — Strategy Store + Shared Data (#1064)
 

@@ -31,6 +31,14 @@ describe('pipeline topology', () => {
     );
     expect(stateOnly).toEqual(['preflight', 'consolidate', 'thesis', 'screener']);
   });
+  it('inputs includes attention-plan glass-box leaf (#1945)', () => {
+    expect(stageById('inputs')!.subSteps.map((s) => s.id)).toEqual([
+      'preflight',
+      'attention-plan',
+    ]);
+    expect(stageById('inputs')!.subSteps.find((s) => s.id === 'attention-plan')!.conditionalArtifact)
+      .toBe(true);
+  });
   it('learning stage holds the on-demand beliefs fold (#1383)', () => {
     expect(stageById('learning')!.subSteps.map((s) => s.id)).toEqual(['beliefs']);
   });
