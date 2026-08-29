@@ -65,11 +65,13 @@ labelled as one.
    Do **not** leave `model` unset (inheritance tax under an expensive orchestrator).
    Do **not** call `@coderabbitai review` for this path — this *is* the review.
 
-   **Pass A — scope (cheap/fast):** one subagent with `model: sonnet` (or haiku if
-   the diff is tiny). Output: risk map, which lenses need a deep pass, files to skip.
+   **Pass A — scope (token-efficient, not fast mode):** one subagent with
+   `model: sonnet` (or haiku if the diff is tiny). In Cursor, use a cheaper
+   non-`*-fast` slug. Output: risk map, which lenses need a deep pass, files to skip.
 
-   **Pass B — deep (strong only where needed):** for each flagged lens, a fresh
-   subagent with `model: opus` and no knowledge of how the code was written:
+   **Pass B — deep (strong only where needed, not fast mode):** for each flagged
+   lens, a fresh subagent with `model: opus` (Cursor: stronger non-fast slug) and
+   no knowledge of how the code was written:
    - **correctness** — wrong output, unhandled state, off-by-one, async ordering
    - **claim accuracy** — every factual assertion about this repo checked against
      the source. This lens has caught more real defects here than any other: a

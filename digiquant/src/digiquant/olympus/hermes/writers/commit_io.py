@@ -311,6 +311,21 @@ def _enrich_positions(
             row["target_pct_gain"] = round(_ATR_TARGET_MULT * atr, 4)
 
 
+def _action_rationale_by_ticker(book: RebalancePayload | dict[str, Any]) -> dict[str, str]:
+    """Per-ticker rationale from H8 ``actions`` for ``positions`` booking (#2597)."""
+    out: dict[str, str] = {}
+    for action in book.get("actions") or []:
+        if not isinstance(action, dict):
+            continue
+        ticker = action.get("ticker")
+        if not isinstance(ticker, str) or not ticker.strip():
+            continue
+        rationale = str(action.get("rationale") or "").strip()
+        if rationale:
+            out[ticker.strip().upper()] = rationale
+    return out
+
+
 def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str, float]:
     """Normalize H8 ``recommended_portfolio`` into non-CASH positive weights."""
     recommended = book.get("recommended_portfolio") or []
@@ -448,6 +463,11 @@ def book_portfolio(
         }
         for t, w in weights.items()
     ]
+    rationale_by_ticker = _action_rationale_by_ticker(book)
+    for row in pos_rows:
+        rationale = rationale_by_ticker.get(str(row["ticker"]).strip().upper())
+        if rationale:
+            row["rationale"] = rationale
 
     prior_book = load_prior_book(
         client, run_date, include_risk_fields=_position_risk_fields_enabled()

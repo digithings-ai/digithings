@@ -221,7 +221,7 @@ def analyst_body_from_payload(payload: AnalystPayload) -> dict[str, Any]:
             "bias": _stance_to_bias(data["stance"]),
             "thesis_status": "ACTIVE",
             "recommended_weight_pct": None,
-            "rationale": data["thesis"][:2000],
+            "rationale": data["thesis"],
         },
     }
     if data.get("evidence") is not None:

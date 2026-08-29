@@ -1,7 +1,7 @@
 # digiquant Architecture
 
 **Version:** 0.1.x
-**Last updated:** 2026-03-29
+**Last updated:** 2026-08-27
 **Audience:** Engineers, reviewers, and agents working on or integrating with digiquant.
 
 ---
@@ -119,7 +119,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `models.py` | Pydantic v2 result models |
 | `constraints.py` | `satisfies_constraints()` filter |
 | `addm.py` | Rolling Sharpe Z-score drift detection |
-| `audit.py` | JSONL append-only audit log |
+| `audit.py` | Thin `audit_log` → `digibase.audit.emit_event` |
 | `mcp_server.py` | FastMCP server wrapping `service.py` |
 | `orchestrator_tools.py` | OpenAI-style tool manifest for digigraph |
 | `brokers/stubs.py` | IB, Alpaca, QuantConnect stubs (all `NotImplementedError`) |
@@ -569,11 +569,20 @@ The dispatch in `run_optimize()`:
 
 ### Audit JSONL Flow
 
-`audit.py` appends one JSON line per event to the file at `AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). Each event contains: `ts`, `event_type`, `agent_id`, `payload`, and optional `key_prefix`, `tenant`, `project_id`, `jti`, `path`.
+`digiquant.audit.audit_log` is a thin wrapper over `digibase.audit.emit_event`
+(CHR-151 / #1193). The digibase emitter appends one JSON line per event to
+`AUDIT_LOG_PATH` (default: `digiquant/results/audit/events.jsonl`). Each event
+matches the Pydantic `AuditEvent` schema: `ts`, `event_type`, `agent_id`,
+`payload`, and optional `key_prefix`, `tenant`, `project_id`, `jti`, `path`.
 
-Before writing, `audit_log()` redacts any payload key containing `password`, `api_key`, `token`, or `secret` (case-insensitive substring match). The file is opened in append mode on every call; there is no buffering or rotation mechanism.
+Before writing, `emit_event` redacts any payload key containing `password`,
+`api_key`, `token`, or `secret` (case-insensitive substring match, recursive into
+nested dicts/lists). The file is opened in append mode on every call; there is
+no buffering or rotation mechanism.
 
-Audit events are written explicitly in `server.py` after `run_backtest`, `run_optimize`, pipeline, and `v1_workflow`. The `run_export` synchronous endpoint does not write an audit event.
+Audit events are written explicitly in `server.py` after `run_backtest`,
+`run_optimize`, pipeline, and `v1_workflow`. The `run_export` synchronous
+endpoint does not write an audit event.
 
 ---
 
@@ -608,9 +617,18 @@ CORS is configured via the shared `digibase.cors.install_cors(app, service="digi
 
 ### Audit Log Secret Redaction
 
-The `audit_log()` function redacts payload keys containing `password`, `api_key`, `token`, or `secret`. This is a substring match, so it catches variations like `api_key_prefix` or `access_token`. However, secrets could leak through non-obvious keys (e.g., `bearer`, `credential`, `auth`) or through nested dicts (redaction only applies to the top-level `payload` dict, not recursively). The redaction list is hardcoded and cannot be extended without code changes.
+`digibase.audit.emit_event` (via `redact_mapping`) redacts payload keys
+containing `password`, `api_key`, `token`, or `secret`. This is a substring
+match, so it catches variations like `api_key_prefix` or `access_token`, and it
+recurses into nested dicts and lists. Secrets can still leak through
+non-obvious keys (e.g., `bearer`, `credential`, `auth`) or values under safe
+key names. The default redaction list is hardcoded; callers may pass an
+extended `redact=` tuple.
 
-The audit JSONL file is world-readable if default filesystem permissions apply. In Docker, the file is mounted at `./digiquant/results/audit` and shared with the digigraph and digiclaw containers. Access controls on this directory should be reviewed.
+The audit JSONL file is world-readable if default filesystem permissions apply.
+In Docker, the file is mounted at `./digiquant/results/audit` and shared with
+the digigraph and digiclaw containers. Access controls on this directory should
+be reviewed.
 
 ---
 
@@ -698,6 +716,35 @@ The digiclaw heartbeat container calls `GET /check_drift?strategy_id=…` on a s
 
 ## 10. Docker and MCP Composition
 
+### Component layers (service vs research sandbox)
+
+digiquant ships **two** Docker images. They must not be merged:
+
+```mermaid
+flowchart TB
+  subgraph callers["Callers"]
+    DG["digigraph / MCP clients"]
+    Atlas["Atlas agents — research / paper book"]
+  end
+
+  subgraph images["digiquant images"]
+    SVC["digiquant/Dockerfile<br/>HTTP :8001 + Nautilus pipeline"]
+    SBX["digiquant/Dockerfile.sandbox<br/>baked quant stack — no service"]
+  end
+
+  DG -->|"JWT / orchestrator"| SVC
+  Atlas -->|"docker run python -c / script<br/>(#396; execute_code later #397)"| SBX
+
+  SBX -.->|"never"| Live["live brokers / order venues"]
+```
+
+| Image | Dockerfile | Role |
+|-------|------------|------|
+| Service | `digiquant/Dockerfile` | FastAPI + `digiquant[nautilus]` on port 8001 |
+| Research sandbox (#396) | `digiquant/Dockerfile.sandbox` | Isolated Python env with TA / portfolio / risk packages baked in for Atlas agent code |
+
+The sandbox is paper-book / research only: no broker credentials, no live-order path, no Nautilus live engine. Free-data clients (`yfinance`, `pandas-datareader`) may use outbound HTTPS; do not point the image at trading venues. MCP `execute_code` wrappers that consume this image are tracked separately (#397).
+
 ### Docker Compose Service Definition
 
 The `digiquant` service in `docker-compose.yml`:
@@ -729,6 +776,26 @@ digiquant:
 The data volume is mounted **read-only** (`/app/data:ro`), preventing strategies from writing to the data directory. The results volume (`/app/results`) is writable, which is where exports and tearsheets land. The audit log is mounted into the digigraph and digiclaw containers at `./digiquant/results/audit`.
 
 The image always installs `digiquant[nautilus]` (NautilusTrader + Polars pipeline). It does **not** download upstream Nautilus test CSVs at build time — market samples for backtests are under `digiquant/data/` (compose-mounted). Optional Nautilus package fixtures for local unit tests: `python digiquant/scripts/fetch_nautilus_test_data.py`.
+
+### Atlas research sandbox image (#396)
+
+Build context is the `digiquant/` directory (not the monorepo root):
+
+```bash
+docker build -f digiquant/Dockerfile.sandbox -t digiquant-sandbox digiquant
+docker run --rm digiquant-sandbox \
+  python -c "import skfolio, riskfolio, pandas_ta, arch, alphalens"
+```
+
+Manifest: `digiquant/requirements.sandbox.txt`. Notable bake choices:
+
+- **TA-Lib:** `TA-Lib>=0.7` manylinux wheels bundle `libta-lib` — debian slim has no `libta-lib-dev`. Apt install of that package is documented as a historical/OS-dependent alternative in the Dockerfile header.
+- **`pandas_ta`:** `pandas-ta-classic` installs as `pandas_ta_classic`; a thin shim under `digiquant/sandbox/pandas_ta/` (on `PYTHONPATH=/opt/digiquant_sandbox`) restores `import pandas_ta`.
+- **pandas 2.x:** pinned `<3` so `alphalens-reloaded` / `pyfolio-reloaded` resolve; `vectorbt` is pinned to `1.0.0` (1.1 requires pandas 3) and `plotly>=5.18,<6` (vectorbt 1.0 templates still use `scattermapbox`).
+- **yfinance retries:** `yfinance_retry.download_with_retry` / `history_with_retry` are baked for Yahoo rate-limits.
+- **Size budget:** keep the image under 3GB; record the measured size from `docker images digiquant-sandbox` in the PR that lands or verifies the build. Verified locally at **1.59GB**.
+
+The sandbox runs as UID `10001` (`sandbox`). It does not install digiquant itself — agents import the baked third-party stack only.
 
 ### Environment Variables
 
@@ -792,7 +859,9 @@ IB, Alpaca, and QuantConnect adapters all raise `NotImplementedError`. Implement
 
 ### Sandboxed Strategy Execution
 
-There is no sandbox for strategy code. This gap is documented in `ARCHITECTURE.md` under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
+There is no sandbox for **Nautilus strategy** code inside the HTTP service process. That gap remains under "Isolation (custom strategy code)." Enabling user-supplied strategies without sandboxing exposes the server to arbitrary code execution.
+
+Separately, the **Atlas research sandbox image** (`Dockerfile.sandbox`, #396) isolates agent-written research Python (indicators, portfolio maths, tearsheets) from the service process. It does not yet replace strategy-code isolation for `run_backtest`; MCP `execute_code` that shells into the sandbox is #397.
 
 ### Persistent Run History
 
@@ -2179,7 +2248,10 @@ the grants would refuse anyway.
   the second sees the first's residual, not the pre-run book.
 - **A missing mark is a rejection, not a guessed price.** Symbols with no `price_history.open`
   row for the execution date get `data_unavailable` on the order head and no `position_events`
-  row at all.
+  row at all. Non-finite marks or quantities (`NaN` / `±Infinity`, including `float("nan")`
+  via the public `marks: dict[str, float | Decimal]` signature) take the same decline —
+  `_rejection_reason` checks `is_finite()` before any comparison so the executor does not
+  raise (#2497).
 
 `execute_at_open.py` tries the ledger first and reaches the prose builders only when it
 declines. `build_events_from_paper_fills` returns `(None, reason)` for "the ledger has no

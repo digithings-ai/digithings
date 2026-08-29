@@ -74,6 +74,8 @@ H8_SIZING_INPUT_MODE_INCUMBENT = "incumbent"
 _H8_SIZING_INPUT_MODES = frozenset(
     {H8_SIZING_INPUT_MODE_CALIBRATED, H8_SIZING_INPUT_MODE_INCUMBENT}
 )
+_SIZING_RATIONALE_FALLBACK = "Position weight set by deterministic risk sizing."
+_MAX_ACTION_RATIONALE_LEN = 2000
 
 
 @dataclass(frozen=True)
@@ -337,11 +339,69 @@ def _verb(current: float | None, target: float) -> str:
     return "hold"
 
 
+def _selection_rationale_by_ticker(
+    state: AtlasResearchState,
+    memo: PMDirectionMemo | None,
+) -> dict[str, str]:
+    """Per-ticker PM selection thesis for published rebalance actions (#2597).
+
+    Priority: H7 roster narrative → H4 focus-roster rationale → H6 conclusion → H5 thesis.
+    """
+    out: dict[str, str] = {}
+
+    if memo is not None:
+        for row in memo.roster:
+            narrative = str(row.narrative or "").strip()
+            if not narrative:
+                continue
+            out[row.ticker.strip().upper()] = narrative[:_MAX_ACTION_RATIONALE_LEN]
+
+    for entry in state.phase_hermes.focus_roster:
+        ticker = entry.ticker.strip().upper()
+        if ticker in out:
+            continue
+        rationale = str(entry.rationale or "").strip()
+        if rationale:
+            out[ticker] = rationale[:_MAX_ACTION_RATIONALE_LEN]
+
+    for ticker, summary in deliberation_summaries(state).items():
+        key = ticker.strip().upper()
+        if key in out:
+            continue
+        conclusion = str(summary.get("conclusion") or "").strip()
+        if conclusion:
+            out[key] = conclusion[:_MAX_ACTION_RATIONALE_LEN]
+
+    for ticker, payload in analyst_payloads(state).items():
+        key = ticker.strip().upper()
+        if key in out:
+            continue
+        thesis = str(payload.get("thesis") or "").strip()
+        if thesis:
+            out[key] = thesis[:_MAX_ACTION_RATIONALE_LEN]
+
+    return out
+
+
+def _published_action_rationale(
+    ticker: str,
+    selection_rationale_by_ticker: dict[str, str] | None,
+) -> str:
+    key = ticker.strip().upper()
+    lookup = {
+        k.strip().upper(): v.strip()
+        for k, v in (selection_rationale_by_ticker or {}).items()
+        if isinstance(k, str) and isinstance(v, str) and v.strip()
+    }
+    return lookup.get(key) or _SIZING_RATIONALE_FALLBACK
+
+
 def _rebuild_actions(
     original_actions: list[Any],
     pm_targets: dict[str, float],
     sized: dict[str, float],
     current_weights: dict[str, float] | None = None,
+    selection_rationale_by_ticker: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """Rebuild the advisory action list to match the SIZED book.
 
@@ -389,7 +449,10 @@ def _rebuild_actions(
                     "ticker": ticker,
                     "action": verb,
                     "target_pct": round(target, 4),
-                    "rationale": "Position weight set by deterministic risk sizing.",
+                    "rationale": _published_action_rationale(
+                        ticker,
+                        selection_rationale_by_ticker,
+                    ),
                 }
             )
     return out
@@ -641,6 +704,12 @@ def _build_sized_book(
 
     caps = SizingCaps.from_preferences(state.config.preferences)
     memo = state.phase_hermes.pm_direction_memo
+    memo_obj: PMDirectionMemo | None = None
+    if memo is not None:
+        memo_obj = (
+            memo if isinstance(memo, PMDirectionMemo) else PMDirectionMemo.model_validate(memo)
+        )
+    selection_rationale_by_ticker = _selection_rationale_by_ticker(state, memo_obj)
 
     try:
         breaker = breaker_scale_from_nav_history(
@@ -683,7 +752,13 @@ def _build_sized_book(
             )
 
             memo_obj = (
-                memo if isinstance(memo, PMDirectionMemo) else PMDirectionMemo.model_validate(memo)
+                memo_obj
+                if memo_obj is not None
+                else (
+                    memo
+                    if isinstance(memo, PMDirectionMemo)
+                    else PMDirectionMemo.model_validate(memo)
+                )
             )
             bundle_tickers = sorted(
                 entry.ticker for entry in memo_obj.roster if not _is_cash(entry.ticker)
@@ -833,7 +908,13 @@ def _build_sized_book(
         "recommended_portfolio": [
             {"ticker": ticker, "target_pct": round(weight, 4)} for ticker, weight in sized.items()
         ],
-        "actions": _rebuild_actions(original_actions, pm_targets, sized, current_weights),
+        "actions": _rebuild_actions(
+            original_actions,
+            pm_targets,
+            sized,
+            current_weights,
+            selection_rationale_by_ticker=selection_rationale_by_ticker,
+        ),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
         + f"Risk-sizing (H8): {result.explanation}{breaker_note}"
         f"{_unchallenged_note(unchallenged)}{mode_note}{bundle_note}",

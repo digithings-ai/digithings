@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import PageSkeleton from '@/components/page-skeleton';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { OlympusTearsheetView } from '@/components/tearsheet/OlympusTearsheetView';
 import { fetchOlympusTearsheet } from '@/lib/observability-queries';
@@ -33,7 +32,6 @@ export default function PerformancePage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <HouseIdentityBanner />
       <PortfolioSectionNav active="tearsheet" />
       {/* No py-* utilities here: .ts-page owns the vertical padding. Under the
           old unlayered sheet they were dead declarations; against the family

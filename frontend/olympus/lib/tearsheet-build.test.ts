@@ -75,8 +75,28 @@ const exitEvent = (date: string, ticker: string, realized: number): TableRow<'po
   created_at: null,
 });
 
+const trimEvent = (
+  date: string,
+  ticker: string,
+  price: number,
+  prevWeight: number,
+  residualWeight: number
+): TableRow<'position_events'> => ({
+  id: `${date}-${ticker}-trim`,
+  date,
+  ticker,
+  event: 'TRIM',
+  weight_pct: residualWeight,
+  prev_weight_pct: prevWeight,
+  cumulative_return_since_event_pct: null,
+  price,
+  thesis_id: null,
+  reason: null,
+  created_at: null,
+});
+
 describe('buildOlympusTearsheet', () => {
-  it('passes persisted headline returns through without deriving them from NAV', () => {
+  it('falls back to persisted headline returns when NAV history is too short to derive', () => {
     const result = buildOlympusTearsheet({
       nav: [{ date: '2026-05-01', nav: 999, cash_pct: 20, invested_pct: 80 }],
       positions: [position('2026-07-17', 'AAA', 20)],
@@ -112,7 +132,7 @@ describe('buildOlympusTearsheet', () => {
     expect(result.contributionSeries.map((point) => point.contributions.AAA)).toEqual([0, 2]);
   });
 
-  it('derives only missing cumulative returns from the exact live history window', () => {
+  it('prefers NAV-derived portfolio return over a conflicting persisted net_return_pct', () => {
     const result = buildOlympusTearsheet({
       nav: [
         { date: '2026-07-01', nav: 100, cash_pct: 20, invested_pct: 80 },
@@ -132,11 +152,56 @@ describe('buildOlympusTearsheet', () => {
       ],
     });
 
-    expect(result.netReturnPct).toBe(7);
+    expect(result.netReturnPct).toBe(6);
     expect(result.benchmarkReturnPct).toBe(2);
-    expect(result.relativeReturnPct).toBe(5);
+    expect(result.relativeReturnPct).toBe(4);
     expect(result.returnsSource).toBe('mixed');
     expect(result.metricsAsOf).toBe('2026-07-17');
+  });
+
+  it('never reports positive since-inception when the base-100 NAV index is under 100', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-06-23', nav: 100, cash_pct: 25, invested_pct: 75 },
+        { date: '2026-08-26', nav: 98.5, cash_pct: 25, invested_pct: 75 },
+      ],
+      positions: [],
+      metrics: {
+        ...metrics,
+        net_return_pct: 1.2, // stale/wrong persisted — must not win
+        relative_return_pct: 2,
+      },
+      attribution: [],
+      benchmarkPrices: [
+        { ticker: 'SPY', date: '2026-06-23', close: 500 },
+        { ticker: 'SPY', date: '2026-08-26', close: 490 },
+      ],
+    });
+
+    expect(result.currentNav).toBe(98.5);
+    expect(result.netReturnPct).toBeLessThan(0);
+    expect(result.netReturnPct).toBeCloseTo(-1.5, 6);
+  });
+
+  it('derives net return from filtered navSeries even when an early raw row is non-finite', () => {
+    const result = buildOlympusTearsheet({
+      nav: [
+        { date: '2026-07-01', nav: Number.NaN, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-02', nav: 100, cash_pct: 20, invested_pct: 80 },
+        { date: '2026-07-17', nav: 106, cash_pct: 20, invested_pct: 80 },
+      ],
+      positions: [],
+      metrics: {
+        ...metrics,
+        net_return_pct: 99,
+        benchmark_return_pct: null,
+        relative_return_pct: null,
+      },
+      attribution: [],
+    });
+
+    expect(result.netReturnPct).toBe(6);
+    expect(result.navSeries.map((p) => p.nav)).toEqual([100, 106]);
   });
 
   it('builds populated benchmark comparisons aligned to the NAV window', () => {
@@ -159,8 +224,9 @@ describe('buildOlympusTearsheet', () => {
     });
 
     expect(result.benchmarkTicker).toBe('SPY');
+    expect(result.netReturnPct).toBe(6);
     expect(result.benchmarkReturnPct).toBe(2);
-    expect(result.relativeReturnPct).toBe(10);
+    expect(result.relativeReturnPct).toBe(4);
     expect(result.benchmarkComparisons).toEqual([
       {
         ticker: 'SPY',
@@ -227,6 +293,81 @@ describe('buildOlympusTearsheet', () => {
     expect(result.historicalHoldings.map((row) => row.ticker)).toEqual(['OLD']);
     expect(result.historicalHoldings[0].attributionDate).toBe('2026-06-21');
     expect(result.historicalHoldings[0].realizedReturnPct).toBe(10);
+    expect(result.historicalHoldings[0].disposition).toBe('EXIT');
+    expect(result.historicalHoldings[0].weightPct).toBe(10);
+  });
+
+  it('includes TRIM fills for still-open names with realized % vs average entry', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [
+        position('2026-08-20', 'XLF', 20, 52, 50),
+        position('2026-08-27', 'XLF', 15, 55, 50),
+      ],
+      metrics,
+      attribution: [attribution('2026-08-27', 'XLF', 0.4)],
+      events: [trimEvent('2026-08-26', 'XLF', 54, 20, 15)],
+    });
+
+    expect(result.currentHoldings.map((row) => row.ticker)).toEqual(['XLF']);
+    expect(result.historicalHoldings).toHaveLength(1);
+    expect(result.historicalHoldings[0]).toMatchObject({
+      ticker: 'XLF',
+      disposition: 'TRIM',
+      weightPct: 5,
+      realizedReturnPct: 8,
+      attributionDate: '2026-08-26',
+    });
+  });
+
+  it('fails closed on realized % when average entry is missing', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [position('2026-08-27', 'XLF', 15, 55, null)],
+      metrics,
+      attribution: [],
+      events: [trimEvent('2026-08-26', 'XLF', 54, 20, 15)],
+    });
+
+    expect(result.historicalHoldings).toHaveLength(1);
+    expect(result.historicalHoldings[0].realizedReturnPct).toBeNull();
+    expect(result.historicalHoldings[0].disposition).toBe('TRIM');
+  });
+
+  it('lists each EXIT and TRIM event rather than one row per ticker', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [
+        position('2026-07-01', 'GLD', 10, 200, 180),
+        position('2026-08-01', 'GLD', 6, 210, 180),
+        position('2026-08-20', 'GLD', 0, 220, 180),
+      ],
+      metrics,
+      attribution: [],
+      events: [
+        trimEvent('2026-08-01', 'GLD', 210, 10, 6),
+        exitEvent('2026-08-20', 'GLD', 0),
+      ],
+    });
+
+    expect(result.historicalHoldings.map((row) => row.disposition)).toEqual(['EXIT', 'TRIM']);
+    expect(result.historicalHoldings[0].realizedReturnPct).toBeCloseTo((110 / 180 - 1) * 100, 5);
+    expect(result.historicalHoldings[1].realizedReturnPct).toBeCloseTo((210 / 180 - 1) * 100, 5);
+  });
+
+  it('ignores attribution-only ghosts with no EXIT/TRIM ledger evidence', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [position('2026-07-17', 'AAA', 20)],
+      metrics,
+      attribution: [
+        attribution('2026-07-17', 'AAA', 1),
+        attribution('2026-06-20', 'GHOST', -0.2),
+      ],
+      events: [],
+    });
+
+    expect(result.historicalHoldings).toEqual([]);
   });
 
   it('keeps contribution keys scoped to the latest current book', () => {
@@ -264,7 +405,77 @@ describe('buildOlympusTearsheet', () => {
       weightPct: 20,
       unrealizedReturnPct: null,
       realizedReturnPct: null,
-      attributionDate: null,
+      attributionDate: '2026-07-17',
     });
+  });
+
+  it('derives open unrealized from entry vs current_price when stored pct is null', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [position('2026-08-27', 'VGK', 20, 92.7, 90.99)],
+      metrics,
+      attribution: [],
+      events: [],
+    });
+
+    expect(result.currentHoldings[0]).toMatchObject({
+      ticker: 'VGK',
+      unrealizedReturnPct: expect.closeTo((92.7 / 90.99 - 1) * 100, 5),
+      attributionDate: '2026-08-27',
+    });
+  });
+
+  it('fills missing marks from holdingMarks (price_history) and stamps AS OF to the close date', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [position('2026-08-27', 'VGK', 20.0551, null, 90.99)],
+      metrics,
+      attribution: [attribution('2026-08-24', 'VGK', 1)],
+      events: [],
+      holdingMarks: [{ ticker: 'VGK', date: '2026-08-26', close: 92.7 }],
+    });
+
+    expect(result.currentHoldings[0]).toMatchObject({
+      ticker: 'VGK',
+      weightPct: 20.0551,
+      unrealizedReturnPct: expect.closeTo((92.7 / 90.99 - 1) * 100, 5),
+      // Mark provenance — not the lagging attribution window.
+      attributionDate: '2026-08-26',
+    });
+    expect(result.holdingsAsOf).toBe('2026-08-27');
+  });
+
+  it('fails closed on unrealized when entry exists but no mark is available', () => {
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [position('2026-08-27', 'VGK', 20, null, 90.99)],
+      metrics,
+      attribution: [attribution('2026-08-24', 'VGK', 1)],
+      events: [],
+      holdingMarks: [],
+    });
+
+    expect(result.currentHoldings[0].unrealizedReturnPct).toBeNull();
+    // Still prefer the live book date over attribution for AS OF.
+    expect(result.currentHoldings[0].attributionDate).toBe('2026-08-27');
+  });
+
+  it('prefers stored unrealized_pnl_pct over recomputing from marks', () => {
+    const marked = {
+      ...position('2026-08-25', 'VGK', 20, 93.19, 90.99),
+      unrealized_pnl_pct: 2.417848,
+      metrics_as_of: '2026-08-25',
+    };
+    const result = buildOlympusTearsheet({
+      nav: [],
+      positions: [marked],
+      metrics,
+      attribution: [],
+      events: [],
+      holdingMarks: [{ ticker: 'VGK', date: '2026-08-26', close: 99 }],
+    });
+
+    expect(result.currentHoldings[0].unrealizedReturnPct).toBeCloseTo(2.417848, 5);
+    expect(result.currentHoldings[0].attributionDate).toBe('2026-08-25');
   });
 });

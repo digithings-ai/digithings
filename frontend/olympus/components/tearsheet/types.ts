@@ -55,13 +55,20 @@ export interface TearsheetData {
   notes: string[];
 }
 
+export type RealizedDisposition = 'EXIT' | 'TRIM';
+
 export interface PerformanceHoldingRow {
   ticker: string;
   category: string | null;
+  /** Open book: current weight. Realized rows: sold weight (prev − residual). */
   weightPct: number | null;
   unrealizedReturnPct: number | null;
   realizedReturnPct: number | null;
   attributionDate: string | null;
+  /** Present on realized EXIT/TRIM event rows; null on open-book rows. */
+  disposition?: RealizedDisposition | null;
+  /** Stable id for multi-event rows (same ticker trimmed more than once). */
+  eventId?: string | null;
 }
 
 export interface PortfolioReturnPoint {

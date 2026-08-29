@@ -20,10 +20,20 @@ finance-tearsheet grammars directly in `app/globals.css`:
 
 The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
 return metrics, a base-zero portfolio path, current-book contribution, and
-open/closed position outcomes. Its command band uses the same compact as-of stamp
-as Holdings. Closed rows derive realized return from the persisted entry and exit
-marks; `position_events.cumulative_return_since_event_pct` is post-event drift and
-must not be presented as trade return. The separate attribution workspace
+open-position outcomes. Closed / trimmed fills live on **Ledger** (single source
+of truth) — the tearsheet links there instead of duplicating a Closed positions
+tab. Its command band uses the same compact as-of stamp as Holdings and shows one
+benchmark-relative headline (**Excess return** = Rp − Rb); Relative gain was a
+duplicate alias and was removed. Open-book **Unrealized** prefers stored `unrealized_pnl_pct` /
+`since_entry_return_pct`, else derives from `entry_price` vs `current_price`, and
+when the nightly metrics stamp is missing fills the mark from `price_history`
+(AS OF = that close date). Fail closed to `—` without basis or mark — never invent
+P&L. Ledger lists every `OPEN` / `ADD` / `EXIT` / `TRIM` fill with avg entry, fill
+price, and realized % vs average entry for sells (sold weight from
+`prev_weight_pct − weight_pct`). Fail closed without fill price or cost basis —
+never invent fills. `position_events.cumulative_return_since_event_pct` is
+post-event drift and must not be presented as trade return. The separate
+attribution workspace
 (`/portfolio/attribution`) defaults to a compact Decision effectiveness monitor,
 with Book attribution and Audit as sibling views. Headline metrics use direction-
 adjusted alpha over independently scored decisions: bearish calls negate stored raw
@@ -35,7 +45,7 @@ counts and position charts, but its allocation effect is included in headline ac
 so the decomposition reconciles to portfolio return minus benchmark return.
 Performance fetches the populated approved benchmark universe from `price_history`,
 aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark and
-active return when the comparison changes.
+excess return when the comparison changes.
 Olympus keeps its finance-tearsheet variants and shell print rules app-side at the
 bottom of `globals.css`.
 
@@ -75,10 +85,10 @@ compact digithings house ETF paper book banner linking to `/house` —
 Track B ProfileConfig DB lands; they are not editable Settings.
 
 **Portfolio sections:** Holdings · Theses · **Tearsheet** (`/portfolio/performance`) ·
-**Ledger** (position-event activity) · **Period** (`public_accounting_period_status`
-tip rows; empty / query-failure gaps stay honest; raw `olympus_accounting_*` bases
-remain service_role-only) · Attribution. Period chrome does not invent private
-accounting rows (#2652).
+**Ledger** (position-event activity) · Attribution. Legacy `/portfolio/period`
+redirects to Tearsheet (#3060). Accounting tip views (`public_accounting_period_status`)
+remain available to Tearsheet/Ledger; raw `olympus_accounting_*` bases stay
+service_role-only (#2652).
 
 Shared workspace gutters use `SUBPAGE_MAX` from
 `components/layout-constants.ts`. The constant intentionally lives outside
@@ -259,16 +269,17 @@ brief-only read of the anon-safe `atlas_run_health` view. It passes those truth
 contracts into `components/today/daily-brief-workspace.tsx`, which follows one
 fixed daily-reader sequence:
 
-1. **Situation** — market regime, digest headline, confidence, and research date.
-2. **Decision and system state** — the latest allocation decision and rationale
-   beside completed, degraded, failed, loading, or unavailable pipeline health.
-3. **Scoreboard** — percentage measures only: daily and since-inception returns,
-  aligned benchmark excess, max drawdown, volatility, and invested allocation.
-4. **Risk and debate** — ranked actionable signals, the leading tail-risk trigger,
-   the prevailing thesis, and digest context.
-5. **Book monitor** — the latest persisted position event plus one holdings ledger
-   ordered by absolute daily move. Holdings are not repeated elsewhere on the page.
-6. **Drill-ins** — direct links to Digest, Pipeline, Performance, Holdings, and Theses.
+1. **Situation** — attention headline and Research/Portfolio/Watch beats, each
+   deep-linked to the sourced detail (digest, ticker dossier, theses, ledger).
+2. **Decision and system state** — the latest allocation decision (dossier /
+   pm-rebalance) beside completed, degraded, failed, loading, or unavailable
+   pipeline health (Open → run date on Pipeline).
+3. **Scoreboard** — day and since-inception returns, aligned benchmark excess,
+  alpha, information ratio, and invested allocation (whole band → Tearsheet).
+4. **Risk and debate** — ranked actionable signals → digest; thesis name → thesis
+   detail when known.
+5. **Book monitor** — session ledger preview → Ledger; holdings tickers → dossiers.
+6. **Drill-ins** — Digest, Pipeline, Performance, Holdings, Ledger, Theses.
 
 The workspace adapts the digiweb `DashboardWorkspaceReference`: one command band,
 compact metrics, flat hairline ledgers, and no nested or decorative cards. The

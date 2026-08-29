@@ -137,6 +137,12 @@ public tip.
 rebalance session) has zero unexplained reconciliation failures. Do **not** enable
 `OLYMPUS_ACCOUNTING_FINALIZER=on` until ops/shadow evidence is approved.
 
+**Prod deploy invariant (#3029):** Olympus / digiquant.io readers already query
+`public_accounting_nav_history`. If that view is missing (`PGRST205`), Performance and
+the homepage live book fail closed with a typed contract error — they must **not** silently
+re-point to `public_nav_history` in the browser. Apply migrations **072–074** (and later
+084/085 replacements) on the core project before expecting NAV/statistics to render.
+
 ### ProfileConfig — migration 075 (#2609 / Track B)
 
 Private append-only versioned investment overlay pins for Olympus preflight. The

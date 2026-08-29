@@ -193,6 +193,73 @@ and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-di
 
 ---
 
+## Atlas research sandbox image (#396)
+
+`digiquant/Dockerfile.sandbox` is a **separate** image from the digiquant HTTP
+service (`digiquant/Dockerfile`). Atlas agents execute Python research / paper-book
+code inside it. The open-source quant stack is baked at **build time** — do not
+`pip install` inside agent runs.
+
+**Scope:** research sandbox only. No live trading, no broker credentials, no
+order paths. Optional outbound HTTPS for free data (Yahoo / FRED); never wire
+this image to live trading venues.
+
+### Build / run
+
+```bash
+# From repo root (context = digiquant/)
+docker build -f digiquant/Dockerfile.sandbox -t digiquant-sandbox digiquant
+
+# Or from digiquant/
+docker build -f Dockerfile.sandbox -t digiquant-sandbox .
+
+# Smoke — all named imports must succeed
+docker run --rm digiquant-sandbox \
+  python -c "import skfolio, riskfolio, pandas_ta, arch, alphalens"
+
+# Full package spot-check
+docker run --rm digiquant-sandbox python -c "
+import pandas_ta, talib, vectorbt
+import skfolio, pypfopt, riskfolio, cvxpy
+import empyrical, pyfolio, arch, statsmodels, alphalens
+import yfinance, pandas_datareader
+import polars, numpy, scipy, openpyxl, matplotlib
+print('sandbox imports ok')
+"
+
+# Agent pattern — run a one-liner or mounted script
+docker run --rm digiquant-sandbox python -c "import pandas_ta as ta; print(ta.__version__)"
+docker run --rm -v \"\$PWD:/work:ro\" -w /work digiquant-sandbox python my_research.py
+```
+
+Manifest: [`requirements.sandbox.txt`](requirements.sandbox.txt). Import notes:
+
+| Package | Import |
+|---------|--------|
+| `pandas-ta-classic` | `pandas_ta` (shim) or `pandas_ta_classic` |
+| `TA-Lib` | `talib` |
+| `riskfolio-lib` | `riskfolio` |
+| `alphalens-reloaded` | `alphalens` |
+| `empyrical-reloaded` / `pyfolio-reloaded` | `empyrical` / `pyfolio` |
+
+**TA-Lib:** modern wheels (`TA-Lib>=0.7`) bundle the C library — no
+`libta-lib-dev` on debian slim. Documented in the Dockerfile header.
+
+**yfinance:** Yahoo rate-limits without notice. Prefer
+`from yfinance_retry import download_with_retry` (baked at
+`/opt/digiquant_sandbox`, on `PYTHONPATH`) over bare `yfinance.download`.
+
+**Image size:** target < 3GB. Measure after a successful local/CI build with
+`docker images digiquant-sandbox` — do not invent a size figure.
+
+**Not in scope for #396:** `execute_code` / MCP wrappers (#397), skills library
+(#398). Those consume this image later.
+
+See [`ARCHITECTURE.md` § 10](ARCHITECTURE.md#10-docker-and-mcp-composition) for
+the sandbox layer in the component diagram.
+
+---
+
 ## More
 
 Extension patterns, anti-patterns, and integration boundaries live in [`ARCHITECTURE.md`](ARCHITECTURE.md). Update that doc when changing interfaces or behavior.
