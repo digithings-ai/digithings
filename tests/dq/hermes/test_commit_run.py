@@ -680,6 +680,38 @@ class TestCanonicalThesisIds:
         assert spy_row is not None
         assert spy_row.get("thesis_id") == "vehicle-spy"
 
+    def test_book_portfolio_persists_action_rationale_on_positions(self) -> None:
+        client = FakeSupabaseClient(
+            canned_reads={
+                "thesis_vehicles": [],
+                "nav_history": [],
+                "price_history": [],
+            }
+        )
+        state = _state(
+            sized_book={
+                "recommended_portfolio": [{"ticker": "SPY", "target_pct": 100.0}],
+                "actions": [
+                    {
+                        "ticker": "SPY",
+                        "action": "hold",
+                        "target_pct": 100.0,
+                        "rationale": "PM: maintain core US equity beta while energy sleeve scales.",
+                    }
+                ],
+                "notes": "H8 sized book",
+            }
+        )
+        node = build_commit_run_node(CommitRunDeps(client=client))
+        node(state)
+
+        positions_written = client.store.get("positions", [])
+        spy_row = next((r for r in positions_written if r.get("ticker") == "SPY"), None)
+        assert spy_row is not None
+        assert spy_row.get("rationale") == (
+            "PM: maintain core US equity beta while energy sleeve scales."
+        )
+
 
 class TestMemoUnaddressedHeldCarry:
     """#1649 — held names the H7 memo omits are carried, never dropped or blocked.

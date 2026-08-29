@@ -326,6 +326,10 @@ Consequences of `llm_failure`, all downstream of the flag:
   and the published `deliberation/{ticker}` document stop claiming one.
 - **Document.** `payloads.deliberation_summaries` publishes **no** `bear_thesis`; mirroring
   the bull side off the same `conclusion` produced two byte-identical theses.
+  Successful H6 chats publish the turns under both `transcript` (canonical) and `rounds`
+  (legacy alias). When a PM↔analyst transcript is present and no explicit theses exist,
+  `bull_thesis` / `bear_thesis` stay empty so the dashboard renders the chat instead of
+  two conclusion-mirrored cards.
 - **Sizing.** H8 caps the name's conviction at `SizingCaps.min_conviction`
   (`phase7e._cap_unchallenged_convictions`) — applied to **both** the memo and the legacy
   branch, since H7 writes a memo on every production run. Capping *at* the bar, not below

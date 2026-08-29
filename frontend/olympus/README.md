@@ -21,9 +21,17 @@ finance-tearsheet grammars directly in `app/globals.css`:
 The performance tear sheet (`/portfolio/performance`) renders persisted NAV and
 return metrics, a base-zero portfolio path, current-book contribution, and
 open/closed position outcomes. Its command band uses the same compact as-of stamp
-as Holdings. Closed rows derive realized return from the persisted entry and exit
-marks; `position_events.cumulative_return_since_event_pct` is post-event drift and
-must not be presented as trade return. The separate attribution workspace
+as Holdings. Open-book **Unrealized** prefers stored `unrealized_pnl_pct` /
+`since_entry_return_pct`, else derives from `entry_price` vs `current_price`, and
+when the nightly metrics stamp is missing fills the mark from `price_history`
+(AS OF = that close date). Fail closed to `—` without basis or mark — never invent
+P&L. Closed positions list every ledger `EXIT` and `TRIM` fill (including trims
+while the name is still open), with realized % vs average entry from
+`positions.entry_price` as of the fill date and sold weight from the event
+`prev_weight_pct − weight_pct`. Fail closed without fill price or cost basis —
+never invent fills. `position_events.cumulative_return_since_event_pct` is
+post-event drift and must not be presented as trade return. The separate
+attribution workspace
 (`/portfolio/attribution`) defaults to a compact Decision effectiveness monitor,
 with Book attribution and Audit as sibling views. Headline metrics use direction-
 adjusted alpha over independently scored decisions: bearish calls negate stored raw
@@ -75,10 +83,10 @@ compact digithings house ETF paper book banner linking to `/house` —
 Track B ProfileConfig DB lands; they are not editable Settings.
 
 **Portfolio sections:** Holdings · Theses · **Tearsheet** (`/portfolio/performance`) ·
-**Ledger** (position-event activity) · **Period** (`public_accounting_period_status`
-tip rows; empty / query-failure gaps stay honest; raw `olympus_accounting_*` bases
-remain service_role-only) · Attribution. Period chrome does not invent private
-accounting rows (#2652).
+**Ledger** (position-event activity) · Attribution. Legacy `/portfolio/period`
+redirects to Tearsheet (#3060). Accounting tip views (`public_accounting_period_status`)
+remain available to Tearsheet/Ledger; raw `olympus_accounting_*` bases stay
+service_role-only (#2652).
 
 Shared workspace gutters use `SUBPAGE_MAX` from
 `components/layout-constants.ts`. The constant intentionally lives outside

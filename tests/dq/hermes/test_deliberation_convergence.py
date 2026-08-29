@@ -333,6 +333,39 @@ class TestDeliberationFailureCarry:
         assert shaped["carry_reason"] == "fingerprint_skip"
         assert shaped["bear_thesis"] == "prior agreement"
 
+    def test_chat_transcript_publishes_without_mirrored_theses(self) -> None:
+        # H6 has no bull/bear fields — remapping both to conclusion made the document
+        # look two-sided while the real debate lived only under rounds/transcript.
+        state = _state()
+        state.phase_hermes.deliberation_summaries = {
+            "DBO": DeliberationSummary(
+                ticker="DBO",
+                converged=True,
+                conclusion="Pass — thesis completed, no position.",
+                net_stance="neutral",
+                conviction_delta=0,
+                transcript=[
+                    DeliberationTurn(
+                        role="pm",
+                        round_number=1,
+                        message="Conviction 0 on a non-held ticker is a non-call.",
+                    ),
+                    DeliberationTurn(
+                        role="analyst",
+                        round_number=1,
+                        message="Accepted. Recommend COMPLETED; no book add.",
+                    ),
+                ],
+            ).model_dump(mode="json")
+        }
+        shaped = deliberation_summaries(state)["DBO"]
+        assert shaped["rounds_count"] == 1
+        assert shaped["transcript"][0]["role"] == "pm"
+        assert shaped["rounds"][1]["role"] == "analyst"
+        assert shaped["bull_thesis"] == ""
+        assert shaped["bear_thesis"] == ""
+        assert shaped["conclusion"].startswith("Pass")
+
 
 @pytest.mark.unit
 class TestH6SelectionWiring:

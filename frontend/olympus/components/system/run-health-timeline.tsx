@@ -61,65 +61,86 @@ function buildAriaLabel(ep: RunEpisode): string {
   return parts.join(', ');
 }
 
-export function RunHealthTimeline({ diagnostics }: { diagnostics: AtlasRunDiagnostics[] }) {
-  const episodes = groupRunEpisodes(diagnostics);
-  if (!episodes.length) return null;
-
+function TimelineBody({ episodes }: { episodes: ReturnType<typeof groupRunEpisodes> }) {
   // Reverse to show chronological order (oldest left, newest right)
   const chronological = [...episodes].reverse();
   const oldest = chronological[0]?.runDate ?? '—';
   const newest = chronological[chronological.length - 1]?.runDate ?? '—';
 
   return (
+    <div className="space-y-3">
+      <div className="flex h-3 gap-px overflow-hidden rounded">
+        <TooltipProvider delay={200}>
+          {chronological.map((ep) => (
+            <Tooltip key={ep.key}>
+              <TooltipTrigger
+                render={
+                  <button
+                    type="button"
+                    aria-label={buildAriaLabel(ep)}
+                    className={`min-w-0 flex-1 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
+                  />
+                }
+              />
+              <TooltipContent side="bottom" className="max-w-xs font-mono text-xs">
+                {buildTooltipContent(ep)}
+              </TooltipContent>
+            </Tooltip>
+          ))}
+        </TooltipProvider>
+      </div>
+
+      <div className="flex justify-between font-mono text-[10px] uppercase tracking-wide text-ink-mute tabular-nums">
+        <span>{oldest}</span>
+        <span>{newest}</span>
+      </div>
+
+      <div className="flex gap-4 font-mono text-[10px] uppercase tracking-wide text-ink-soft">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-accent" aria-hidden />
+          <span>Successful</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-warn/70" aria-hidden />
+          <span>Recovered/Degraded</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-2 rounded-full bg-down" aria-hidden />
+          <span>Failed</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function RunHealthTimeline({
+  diagnostics,
+  compact = false,
+}: {
+  diagnostics: AtlasRunDiagnostics[];
+  /** Bare timeline for Brief — skips SectionCard chrome. */
+  compact?: boolean;
+}) {
+  const episodes = groupRunEpisodes(diagnostics);
+  if (!episodes.length) return null;
+
+  const body = <TimelineBody episodes={episodes} />;
+
+  if (compact) {
+    return (
+      <div data-testid="brief-run-health-timeline" className="space-y-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">Run health</p>
+        {body}
+      </div>
+    );
+  }
+
+  return (
     <SectionCard
       title="Run health"
       subtitle="Compact horizontal timeline — green for successful, orange for recovered/degraded, red for failed."
     >
-      <div className="space-y-3">
-        {/* Timeline bar */}
-        <div className="flex gap-px h-3 overflow-hidden rounded">
-          <TooltipProvider delay={200}>
-            {chronological.map((ep) => (
-              <Tooltip key={ep.key}>
-                <TooltipTrigger
-                  render={
-                    <button
-                      type="button"
-                      aria-label={buildAriaLabel(ep)}
-                      className={`flex-1 min-w-0 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
-                    />
-                  }
-                />
-                <TooltipContent side="bottom" className="font-mono text-xs max-w-xs">
-                  {buildTooltipContent(ep)}
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </TooltipProvider>
-        </div>
-
-        {/* Date endpoints */}
-        <div className="flex justify-between text-[10px] font-mono tabular-nums text-ink-mute uppercase tracking-wide">
-          <span>{oldest}</span>
-          <span>{newest}</span>
-        </div>
-
-        {/* Legend */}
-        <div className="flex gap-4 text-[10px] font-mono uppercase tracking-wide text-ink-soft">
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-accent" aria-hidden />
-            <span>Successful</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-warn/70" aria-hidden />
-            <span>Recovered/Degraded</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full bg-down" aria-hidden />
-            <span>Failed</span>
-          </div>
-        </div>
-      </div>
+      {body}
     </SectionCard>
   );
 }

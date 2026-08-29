@@ -403,6 +403,8 @@ export interface PipelineObservabilityBundle {
   risk_debate: Record<string, unknown> | null;
   /** Hermes `pm-rebalance` decision doc (actions carry per-ticker rationale), or null. */
   pm_rebalance: Record<string, unknown> | null;
+  /** Hermes H7 `pm-direction-memo` (roster[].narrative = PM thesis), or null. */
+  pm_direction_memo: Record<string, unknown> | null;
 }
 
 /** The complete data object returned by getFullDashboardData(). */

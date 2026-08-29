@@ -69,10 +69,37 @@ describe('buildBriefHighlight', () => {
     expect(highlight.beats).toHaveLength(3);
     expect(highlight.beats.map((b) => b.label)).toEqual(['Research', 'Portfolio', 'Watch']);
     expect(highlight.beats[0].text).toContain('Hold breadth above 65%');
-    expect(highlight.beats[1].text).toContain('Trim NVDA');
-    expect(highlight.beats[1].text).toContain('Also: Add XLF');
+    // Portfolio beat is action-only — thesis already leads in attention.
+    expect(highlight.beats[1].text).toBe('Trim NVDA (8.0% → 6.0%) Also: Add XLF (15.1% → 16.0%)');
+    expect(highlight.beats[1].text).not.toContain('Valuation stretched');
     expect(highlight.beats[2].text).toContain('Duration selloff');
     expect(highlight.beats.every((b) => b.available)).toBe(true);
+  });
+
+  it('keeps the long thesis only in attention — not in the portfolio beat', () => {
+    const thesis =
+      'Held at ~20%. ADX 26.1 confirms trend strength; trim into stretched financials.';
+    const highlight = buildBriefHighlight({
+      ...base,
+      actions: [
+        {
+          ticker: 'XLF',
+          current_pct: 22,
+          recommended_pct: 18,
+          action: 'TRIM',
+          rationale: thesis,
+        },
+      ],
+      actionables: [
+        { label: 'Hold breadth above 65%', priority: 1, rationale: 'Confirms participation.' },
+      ],
+      risks: [{ label: 'Duration selloff', trigger: '10Y above 4.80%', horizonHours: 48 }],
+    });
+
+    expect(highlight.attention).toBe(`Trim XLF — ${thesis}`);
+    expect(highlight.beats[1].text).toBe('Trim XLF (22.0% → 18.0%)');
+    expect(highlight.beats[1].text).not.toContain('ADX');
+    expect(highlight.beats[1].text).not.toContain(thesis);
   });
 
   it('falls back to research when the book is holding', () => {
@@ -110,5 +137,47 @@ describe('buildBriefHighlight', () => {
     expect(highlight.attention).toBe('Breadth improves while duration risk remains elevated.');
     expect(highlight.beats[0].text).toBe('Breadth improves while duration risk remains elevated.');
     expect(highlight.attention).not.toMatch(/%|bps|confidence/i);
+  });
+
+  it('never shows mechanical sizing boilerplate — action + ticker only', () => {
+    const highlight = buildBriefHighlight({
+      ...base,
+      actions: [
+        {
+          ticker: 'XLF',
+          current_pct: 12,
+          recommended_pct: 8,
+          action: 'TRIM',
+          rationale: 'Position weight set by deterministic risk sizing.',
+        },
+      ],
+      rationaleByTicker: {
+        XLF: 'Position weight set by deterministic risk sizing.',
+      },
+    });
+    expect(highlight.attention).toBe('Trim XLF (12.0% → 8.0%)');
+    expect(highlight.attention).not.toMatch(/deterministic risk sizing/i);
+    expect(highlight.beats[1].text).toBe('Trim XLF (12.0% → 8.0%)');
+  });
+
+  it('prefers a mapped PM thesis over mechanical action.rationale', () => {
+    const highlight = buildBriefHighlight({
+      ...base,
+      actions: [
+        {
+          ticker: 'XLF',
+          current_pct: 12,
+          recommended_pct: 8,
+          action: 'TRIM',
+          rationale: 'Position weight set by deterministic risk sizing.',
+        },
+      ],
+      rationaleByTicker: {
+        XLF: 'Financials still track the breadth recovery after the selloff.',
+      },
+    });
+    expect(highlight.attention).toBe(
+      'Trim XLF — Financials still track the breadth recovery after the selloff.'
+    );
   });
 });

@@ -56,7 +56,7 @@ class TickerDirection(BaseModel):
     ticker: str = Field()
     direction: Literal["long", "flat"]
     conviction_rank: int = Field(ge=1, description="Ordinal rank across roster; 1 = highest")
-    narrative: str | None = Field(default=None, max_length=2000)
+    narrative: str | None = None
     forecast_reference: ForecastReference | None = Field(
         default=None,
         description=(
@@ -81,7 +81,7 @@ class PMDirectionMemo(BaseModel):
     schema_version: str = "1.0"
     date: date
     roster: list[TickerDirection] = Field(default_factory=list)
-    memo: str | None = Field(default=None, max_length=8000)
+    memo: str | None = None
 
 
 def _parse_uuid(raw: object) -> UUID | None:

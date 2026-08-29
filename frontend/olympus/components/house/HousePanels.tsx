@@ -63,8 +63,7 @@ export function BookPanel() {
       <div>
         <h1 className="font-display text-xl font-normal tracking-tight text-ink">House book</h1>
         <p className="mt-1 max-w-2xl text-sm text-ink-soft">
-          {HOUSE_BOOK_IDENTITY.label} — inspect holdings, tearsheet, ledger activity, and period
-          chrome on Portfolio.
+          {HOUSE_BOOK_IDENTITY.label} — inspect holdings, tearsheet, and ledger activity on Portfolio.
         </p>
       </div>
       <ul className="space-y-2 text-sm">
@@ -81,11 +80,6 @@ export function BookPanel() {
         <li>
           <Link href="/portfolio/ledger" className="text-accent hover:underline">
             Ledger →
-          </Link>
-        </li>
-        <li>
-          <Link href="/portfolio/period" className="text-accent hover:underline">
-            Period →
           </Link>
         </li>
       </ul>

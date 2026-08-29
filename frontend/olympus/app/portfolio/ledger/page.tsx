@@ -1,7 +1,6 @@
 'use client';
 
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
-import HouseIdentityBanner from '@/components/house/HouseIdentityBanner';
 import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
 import PageSkeleton from '@/components/page-skeleton';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
@@ -27,7 +26,6 @@ export default function PortfolioLedgerPage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <HouseIdentityBanner />
       <PortfolioSectionNav active="ledger" />
       <div className={`${SUBPAGE_MAX} flex-1 space-y-4 py-4 md:py-5`}>
         <div>

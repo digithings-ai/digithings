@@ -1,4 +1,4 @@
-"""Unit tests for digiquant audit logging (Phase 3)."""
+"""Unit tests for digiquant audit logging (Phase 3 / CHR-151)."""
 
 from __future__ import annotations
 
@@ -7,13 +7,14 @@ import os
 from pathlib import Path
 
 import pytest
+from digibase.audit import AuditEvent
 
 from tests.dq.conftest import SKIP_NATIVE_CRASH
 
 
 @pytest.mark.unit
 def test_digiquant_audit_log_writes_jsonl_and_redacts(tmp_path: Path) -> None:
-    """audit_log appends one JSON line per call; redacts secret keys."""
+    """Migrated caller: digiquant.audit.audit_log emits digibase AuditEvent shape."""
     audit_path = tmp_path / "events.jsonl"
     os.environ["AUDIT_LOG_PATH"] = str(audit_path)
     try:
@@ -29,6 +30,9 @@ def test_digiquant_audit_log_writes_jsonl_and_redacts(tmp_path: Path) -> None:
         assert data["agent_id"] == "digiquant"
         assert data["payload"]["run_id"] == "x"
         assert data["payload"]["api_key"] == "[REDACTED]"
+        # CHR-151: wire line validates against digibase Pydantic schema.
+        AuditEvent.model_validate(data)
+        assert "secret" not in audit_path.read_text()
     finally:
         os.environ.pop("AUDIT_LOG_PATH", None)
 
