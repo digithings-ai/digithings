@@ -5,6 +5,9 @@ When ``get_return_correlations`` has no estimated rho for a pair (thin history),
 which over-stated ex-ante portfolio vol so vol-targeting systematically over-raised
 cash (the Jun-19 "BIL 30% only" symptom). These tests pin the asset-class bucket
 fallback (Carver "handcrafting" style) that replaces the rho=1.0 default.
+
+WP8.5 (#2738): calibrated-path corr-dedup + cash-first locks live in
+``test_allocation_invariants.py``.
 """
 
 from __future__ import annotations
@@ -45,6 +48,17 @@ def test_missing_pair_uses_buckets_not_full_correlation() -> None:
     vol = _portfolio_vol({"SPY": 0.5, "TLT": 0.5}, risk, None, SizingCaps())
     assert math.isclose(vol, math.sqrt(0.25 * 400 + 0.25 * 25), rel_tol=1e-6)
     assert vol < 12.5  # strictly less than the old full-correlation default
+
+
+def test_incumbent_bucket_correlations_match_golden_fixture() -> None:
+    """WP6.1 (#2687): freeze asset-class bucket fallback table."""
+    from tests.dq.hermes.incumbent_risk_fixtures import load_incumbent_risk_fixture
+
+    golden = load_incumbent_risk_fixture()["bucket_correlations"]
+    assert _bucket_corr("EQUITY", "FIXED_INCOME") == golden["equity_bond"]
+    assert _bucket_corr("EQUITY", "EQUITY") == golden["equity_equity"]
+    assert _bucket_corr("EQUITY", "CASH") == golden["equity_cash"]
+    assert _bucket_corr("EQUITY", "UNKNOWN") == golden["equity_unknown"]
 
 
 def test_equity_bond_book_invests_rather_than_over_cashing() -> None:

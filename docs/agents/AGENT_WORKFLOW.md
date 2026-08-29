@@ -91,7 +91,7 @@ make status              # list open agent-task issues
 make task ISSUE=N        # create worktree, implement, test, score, PR
 ```
 
-Always implement in the worktree (`make task` creates it at `.worktrees/task-N-slug/`). Stage all changes before the score step. If score fails twice, escalate.
+Always implement in the worktree (`make task` creates it at `.worktrees/task/N-slug/`). Stage all changes before the score step. If score fails twice, escalate.
 
 ---
 

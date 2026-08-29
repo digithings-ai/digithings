@@ -152,6 +152,18 @@ jobs:
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Same pool as the "Run Olympus research pipeline" step below (#1622) — the preflight
+          # must be tested under the same routing conditions the real run gets, not a stricter,
+          # unconfigured one. Applies to the initial request as well as the first empty-response
+          # retry (#2540) — digillm attaches fallback routing to the primary call, not just its
+          # self-heal retry, so a served model can differ from the requested one on the very
+          # first attempt. check_openrouter_function_tools() surfaces that substitution instead
+          # of hard-failing on it, since it's the same benign routing this step is here to permit.
+          # Note: this does NOT by itself fix #2374-style daily failures — the same failure
+          # recurred after this var was added (see #2517/#2520). The actual root cause was a
+          # fragile finite max_tokens cap on the connectivity ping (fixed by removing the cap
+          # entirely, not by adding more retry/fallback surface — see validate-providers.py).
+          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
         run: |
           uv run --frozen --no-sync python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
@@ -176,6 +188,10 @@ jobs:
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
           LANGSMITH_PROJECT: olympus-daily
+          # WP10.1 (#2758): post-H9 immutable shadow allocation JSON under artifacts/
+          # (uploaded below). Export is fail-soft; disable with OLYMPUS_SHADOW_ARTIFACT_MODE=off.
+          OLYMPUS_SHADOW_ARTIFACT_MODE: export
+          OLYMPUS_SHADOW_ARTIFACT_DIR: artifacts
         run: |
           mkdir -p artifacts
           set -o pipefail
@@ -213,6 +229,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: olympus-daily-${{ needs.resolve.outputs.refresh_scope }}-${{ needs.resolve.outputs.run_date }}
+          # Includes run.log and WP10.1 shadow-allocation-*.json when H9 completed.
           path: artifacts/
           retention-days: ${{ needs.resolve.outputs.refresh_scope == 'all' && 90 || 30 }}
 

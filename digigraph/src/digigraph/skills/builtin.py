@@ -1,4 +1,4 @@
-"""Register built-in skill metadata (search, sitaas_rag). Tool and skill registration is in orchestration.builtin."""
+"""Register built-in skill metadata (search, project_rag). Tool and skill registration is in orchestration.builtin."""
 
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ def _register_builtin_skills() -> None:
     )
     register_skill(
         Skill(
-            id="sitaas_rag",
-            name="Sitaas RAG",
+            id="project_rag",
+            name="Project RAG",
             description="Search plus delegate agents (visualization, analysis, data_prep, data_manipulation, data_engineer) and todo (plan) tool. When run_data_dir is set.",
             tool_names=[
                 "digisearch",

@@ -11,13 +11,9 @@ import { CATEGORICAL_SERIES } from '@/lib/chart-colors';
 export function PortfolioContributionChart({
   points,
   benchmark,
-  comparisons,
-  onBenchmarkChange,
 }: {
   points: ContributionReturnPoint[];
   benchmark: BenchmarkComparison | null;
-  comparisons: BenchmarkComparison[];
-  onBenchmarkChange: (ticker: string) => void;
 }) {
   const tickers = [...new Set(points.flatMap((point) => Object.keys(point.contributions)))];
   const colors = Object.fromEntries(
@@ -40,32 +36,15 @@ export function PortfolioContributionChart({
           </h2>
         </div>
         {/* No per-asset legend — it cannot scale with a long history. Per-asset
-            identification lives in the hover popup, color-coded per series. */}
+            identification lives in the hover popup, color-coded per series.
+            Benchmark selection lives in the page-global control above the
+            scoreboard — not inside this chart chrome. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[0.62rem] text-ink-mute" aria-label="Chart series">
           <span className="inline-flex items-center gap-1.5">
             <span className="h-0 w-5 border-t-2 border-accent" aria-hidden />
             Portfolio return
           </span>
-          {comparisons.length ? (
-            <label className="inline-flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="h-0 w-5 border-t border-dashed border-ink-soft" aria-hidden />
-                Benchmark
-              </span>
-              <select
-                aria-label="Comparison benchmark"
-                value={benchmark?.ticker ?? ''}
-                onChange={(event) => onBenchmarkChange(event.target.value)}
-                className="h-8 border border-hair bg-surface px-2 font-mono text-[0.68rem] text-ink outline-none focus:border-accent"
-              >
-                {comparisons.map((comparison) => (
-                  <option key={comparison.ticker} value={comparison.ticker}>
-                    {comparison.ticker}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : benchmark ? (
+          {benchmark ? (
             <span className="inline-flex items-center gap-1.5">
               <span className="h-0 w-5 border-t border-dashed border-ink-soft" aria-hidden />
               {benchmark.ticker}

@@ -39,7 +39,7 @@ describe('adjacentDates (newest-first list)', () => {
 });
 
 describe('PipelineDaySelector', () => {
-  it('presents the current run date as a labelled pager', () => {
+  it('presents the current run date as a DatePager capsule + calendar trigger', () => {
     const html = renderToStaticMarkup(
       createElement(PipelineDaySelector, {
         dates: ['2026-07-17', '2026-07-16'],
@@ -52,5 +52,8 @@ describe('PipelineDaySelector', () => {
     expect(html).toContain('Fri, Jul 17, 2026');
     expect(html).toContain('Previous day');
     expect(html).toContain('Next day');
+    expect(html).toContain('nb-pager--date');
+    expect(html).toContain('nb-pager-middle');
+    expect(html).toContain('aria-label="Pick run date"');
   });
 });

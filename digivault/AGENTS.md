@@ -21,6 +21,29 @@ FastAPI + MCP + CLI service layer. First consumer: the project documentation
 - [ ] `frontmatter.split(frontmatter.dump(fm, body)) == (fm, body)` still holds.
 - [ ] Wikilink rewrites skip code spans/blocks (use the helpers in `wikilinks.py`).
 - [ ] Service routes carry the right scope in `path_scopes.py` (read vs write).
+- [ ] New vault tools register in `tool_dispatch.py` only (see [Adding a vault tool](#adding-a-vault-tool)).
+
+## Adding a vault tool
+
+All digivault tool names and vault-local handlers live in `tool_dispatch.py`.
+Do **not** add a second `@mcp.tool` in `mcp_server.py` or a parallel if/elif in
+`server.orchestrator_invoke` — both surfaces already route through
+`dispatch_vault_tool` / `register_mcp_tools`.
+
+1. Add a `TOOL_VAULT_*` constant and put the name in `DISPATCH_TOOL_NAMES`
+   (and either `VAULT_TOOL_NAMES` or `RUNTIME_ONLY_TOOL_NAMES`).
+2. **Vault-local (filesystem / `Vault`):** implement a handler, add it to
+   `VAULT_HANDLERS`, and extend `register_mcp_tools` so MCP discovery stays equal
+   to `mcp_tool_names()`. `orchestrator_invoke` picks it up automatically.
+3. **Runtime-only (D1 / tenant / HTTPException):** implement the body in
+   `server.py`’s `orchestrator_invoke`, then `register_runtime_handler(name, …)`
+   so `dispatch_tool_names()` still equals `DISPATCH_TOOL_NAMES`.
+4. Add the OpenAI-style schema/description in `orchestrator_tools.build_orchestrator_tool_manifest`
+   (names are re-exported from `tool_dispatch` — do not redefine string literals).
+5. Add/extend tests in `tests/dv/test_tool_dispatch.py` (every tool name must
+   dispatch) and any server invoke tests the behaviour needs.
+6. Update this file and `ARCHITECTURE.md` (tool dispatch diagram) if the
+   vault-local vs runtime-only split changes.
 
 ## Non-negotiable rules
 
@@ -36,6 +59,7 @@ FastAPI + MCP + CLI service layer. First consumer: the project documentation
 - ❌ Returning dicts from `Vault` methods (use the models).
 - ❌ Regex-rewriting wikilinks without masking code regions (breaks examples in docs).
 - ❌ Adding standard Markdown link validation (the `[label]` + `(target)` inline form) here — that is `scripts/check_doc_links.py`'s job; digivault validates `[[wikilinks]]`.
+- ❌ Hand-registering `@mcp.tool` handlers in `mcp_server.py` or duplicating vault tool if/elif branches in `server.py` — use `tool_dispatch.py` (#1188).
 
 ## Test commands
 

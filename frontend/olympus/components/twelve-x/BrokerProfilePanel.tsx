@@ -164,7 +164,7 @@ export default function BrokerProfilePanel({
                     {v.conviction ? (
                       <span className="text-[11px] uppercase text-ink-mute">· {v.conviction}</span>
                     ) : null}
-                    <span className="ml-auto font-mono text-[10px] tabular-nums text-ink-mute">
+                    <span className="ml-auto min-w-0 shrink truncate font-mono text-[10px] tabular-nums text-ink-mute">
                       {asOf}
                     </span>
                   </div>

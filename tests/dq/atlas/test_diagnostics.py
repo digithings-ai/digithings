@@ -615,6 +615,55 @@ def test_write_row_without_event_capture_preserves_prior_trace() -> None:
     assert {row["sequence"] for row in client.store["olympus_run_events"]} == {1, 2}
 
 
+def test_write_row_preserves_null_usage_and_wp1_join_ids() -> None:
+    """Glass-box rows stay joinable to 067 and never invent zero economics (#2763)."""
+    client = FakeSupabaseClient()
+    state = _state(phase1={"macro": _today("macro")})
+    call_id = "11111111-1111-1111-1111-111111111111"
+    attempt_id = "22222222-2222-2222-2222-222222222222"
+    node_run_id = "33333333-3333-3333-3333-333333333333"
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="wp1-join",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot={
+            "events": [
+                {
+                    "sequence": 1,
+                    "kind": "model_call",
+                    "phase": "macro",
+                    "operation": "MacroReport",
+                    "document_key": "macro",
+                    "name": "openrouter/auto",
+                    "status": "ok",
+                    "duration_ms": 10,
+                    "retry_count": 0,
+                    "prompt_tokens": None,
+                    "completion_tokens": None,
+                    "cached_tokens": None,
+                    "cost_usd": None,
+                    "sources": 0,
+                    "input_summary": "Structured model request",
+                    "output_summary": "Model response returned",
+                    "call_id": call_id,
+                    "attempt_id": attempt_id,
+                    "node_run_id": node_run_id,
+                }
+            ]
+        },
+    )
+    row = client.store["olympus_run_events"][0]
+    assert row["prompt_tokens"] is None
+    assert row["completion_tokens"] is None
+    assert row["cached_tokens"] is None
+    assert row["cost_usd"] is None
+    assert row["call_id"] == call_id
+    assert row["attempt_id"] == attempt_id
+    assert row["node_run_id"] == node_run_id
+
+
 # --------------------------------------------------------------------------- cancelled status (#814)
 
 

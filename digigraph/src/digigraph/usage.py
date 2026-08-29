@@ -101,13 +101,18 @@ class RunCallEvent(BaseModel):
     status: Literal["ok", "error"]
     duration_ms: int | None = Field(default=None, ge=0)
     retry_count: int = Field(default=0, ge=0)
-    prompt_tokens: int = Field(default=0, ge=0)
-    completion_tokens: int = Field(default=0, ge=0)
-    cached_tokens: int = Field(default=0, ge=0)
-    cost_usd: float = Field(default=0.0, ge=0)
+    # Missing usage stays None — never fabricate 0 (#2763 / WP1 invariant 4).
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    cached_tokens: int | None = Field(default=None, ge=0)
+    cost_usd: float | None = Field(default=None, ge=0)
     sources: int = Field(default=0, ge=0)
     input_summary: str = Field(max_length=_SUMMARY_MAX)
     output_summary: str = Field(max_length=_SUMMARY_MAX)
+    # Soft stamps to WP1 ledger (067); economics authority remains provider attempts.
+    call_id: UUID | None = None
+    attempt_id: UUID | None = None
+    node_run_id: UUID | None = None
 
 
 _CALL_CONTEXT: ContextVar[CallContext] = ContextVar(
@@ -138,6 +143,25 @@ _LOGICAL_CALL_CONTEXT: ContextVar[LogicalCallContext | None] = ContextVar(
 
 def _bounded(value: str | None, limit: int) -> str | None:
     return value[:limit] if value is not None else None
+
+
+def _optional_nonnegative_int(value: int | None) -> int | None:
+    """Preserve None; coerce present values without inventing zero for missing usage."""
+    if value is None:
+        return None
+    return int(value)
+
+
+def _optional_nonnegative_float(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _optional_uuid(value: UUID | str | None) -> UUID | None:
+    if value is None:
+        return None
+    return value if isinstance(value, UUID) else UUID(str(value))
 
 
 @contextmanager
@@ -203,6 +227,31 @@ def logical_call_context(
         _LOGICAL_CALL_CONTEXT.reset(token)
 
 
+def detach_logical_call_context() -> None:
+    """Drop the inherited logical-call description in a fan-out worker.
+
+    :func:`logical_call_context` hands its :class:`ProviderCallContextHandle` to the
+    context var, and that handle is *mutable* — it carries ``last_call_id`` and a list of
+    deferred records. A parallel worker started from a ``contextvars.copy_context()``
+    snapshot (which is how digillm carries the request's BYOK credentials into its tool
+    pool) inherits the value by reference, so several workers would write ``last_call_id``
+    onto one shared handle and append into one shared deferred list — interleaving each
+    other's telemetry. digillm clears its own equivalent var in
+    ``detach_provider_call_context``; this is the same move one layer up, and
+    ``llm_client`` registers it as digillm's fan-out detach hook.
+
+    Token-free by necessity: a copied context carries values but no reset tokens, so there
+    is nothing to ``reset`` and nothing to restore — the worker's context dies with the
+    worker. Never call this on a caller's own context; it would silently unbind a live
+    :func:`logical_call_context` block.
+
+    ``_CALL_CONTEXT`` is deliberately left alone: its :class:`CallContext` is frozen and
+    holds no mutable state, so inheriting the node identity is safe and improves
+    attribution.
+    """
+    _LOGICAL_CALL_CONTEXT.set(None)
+
+
 def provider_call_metadata() -> tuple[UUID | None, LogicalCallContext | None]:
     """Return the current real node identity and optional logical-call description."""
     return _CALL_CONTEXT.get().node_run_id, _LOGICAL_CALL_CONTEXT.get()
@@ -258,14 +307,17 @@ def record(
     *,
     kind: str,
     model: str,
-    prompt_tokens: int = 0,
-    completion_tokens: int = 0,
-    cached_tokens: int = 0,
-    cost: float = 0.0,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    cached_tokens: int | None = None,
+    cost: float | None = None,
     sources: int = 0,
     ok: bool = True,
     duration_ms: int | None = None,
     retry_count: int = 0,
+    call_id: UUID | str | None = None,
+    attempt_id: UUID | str | None = None,
+    node_run_id: UUID | str | None = None,
     **_ignored: Any,
 ) -> None:
     """Record one LLM/search call. No-op unless capture is active.
@@ -273,8 +325,9 @@ def record(
     ``cached_tokens`` is the prompt-cache-hit portion of ``prompt_tokens`` (OpenRouter
     ``prompt_tokens_details.cached_tokens``) — surfaced so a run can show how much of the
     repeated shared-context prefix was billed at the cheaper cached rate. ``cost`` is the actual
-    USD charged for the call (OpenRouter ``usage.cost``, always present on its responses; 0.0 for
-    providers that don't report it) — summed into run-level spend for accurate cost telemetry.
+    USD charged when the provider reports it; ``None`` when unknown (never fabricate 0 on the
+    glass-box event path — WP1 / #2763). Aggregate run totals still treat missing as 0 for
+    diagnostics counters only. ``call_id`` / ``attempt_id`` soft-stamp the WP1 ledger (067).
     ``**_ignored`` keeps the observer forward-compatible with future digillm fields."""
     if not _ACTIVE:
         return
@@ -289,15 +342,23 @@ def record(
         if ok
         else "Model call failed"
     )
+    prompt = _optional_nonnegative_int(prompt_tokens)
+    completion = _optional_nonnegative_int(completion_tokens)
+    cached = _optional_nonnegative_int(cached_tokens)
+    cost_usd = _optional_nonnegative_float(cost)
+    stamped_call = _optional_uuid(call_id)
+    stamped_attempt = _optional_uuid(attempt_id)
+    stamped_node = _optional_uuid(node_run_id if node_run_id is not None else context.node_run_id)
     with _LOCK:
+        # Aggregate counters: missing usage contributes 0 to run totals (diagnostics only).
         _CALLS.append(
             {
                 "kind": kind,
                 "model": model,
-                "prompt_tokens": int(prompt_tokens or 0),
-                "completion_tokens": int(completion_tokens or 0),
-                "cached_tokens": int(cached_tokens or 0),
-                "cost": float(cost or 0.0),
+                "prompt_tokens": int(prompt or 0),
+                "completion_tokens": int(completion or 0),
+                "cached_tokens": int(cached or 0),
+                "cost": float(cost_usd or 0.0),
                 "sources": int(sources or 0),
                 "ok": bool(ok),
             }
@@ -313,10 +374,10 @@ def record(
                 status="ok" if ok else "error",
                 duration_ms=duration_ms,
                 retry_count=retry_count,
-                prompt_tokens=int(prompt_tokens or 0),
-                completion_tokens=int(completion_tokens or 0),
-                cached_tokens=int(cached_tokens or 0),
-                cost_usd=float(cost or 0.0),
+                prompt_tokens=prompt,
+                completion_tokens=completion,
+                cached_tokens=cached,
+                cost_usd=cost_usd,
                 sources=int(sources or 0),
                 input_summary=(
                     "Grounding search request"
@@ -324,6 +385,9 @@ def record(
                     else "Structured model request"
                 ),
                 output_summary=output_summary,
+                call_id=stamped_call,
+                attempt_id=stamped_attempt,
+                node_run_id=stamped_node,
             )
         )
 
@@ -581,6 +645,7 @@ def record_tool_call(
                 retry_count=retry_count,
                 input_summary=_bounded(_tool_input_summary(arguments), _SUMMARY_MAX) or "",
                 output_summary=_bounded(_tool_output_summary(result, ok), _SUMMARY_MAX) or "",
+                node_run_id=context.node_run_id,
             )
         )
 

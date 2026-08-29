@@ -1,4 +1,5 @@
 issue	phase	area	kind	priority	model
+2609	Phase 4 — Atlas on digigraph	digiquant	Task	P1	sonnet
 2	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 3	Phase 2 — Hardening	Cross-cutting	Epic	P0	sonnet
 4	Phase 2 — Hardening	digismith	Epic	P1	sonnet
@@ -11,20 +12,20 @@ issue	phase	area	kind	priority	model
 11	Phase 4 — Atlas on digigraph	Atlas	Epic	P2	sonnet
 12	Phase 5 — Atlas tiering	Atlas	Epic	P3	sonnet
 13	Phase 5 — Atlas tiering	Atlas	Epic	P3	sonnet
-14	SITAAS pilot	SITAAS	Epic	P1	sonnet
+14	Client Pilot	Client Pilot	Epic	P1	sonnet
 15	Phase 2 — Hardening	Cross-cutting	Chore	P2	sonnet
 16	Phase 2 — Hardening	Cross-cutting	Chore	P2	sonnet
 17	Phase 2 — Hardening	Cross-cutting	Task	P2	sonnet
 18	Phase 2 — Hardening	Cross-cutting	Chore	P1	sonnet
 19	Phase 2 — Hardening	Docs	Task	P0	sonnet
-20	Phase 2 — Hardening	SITAAS	Task	P1	sonnet
+20	Phase 2 — Hardening	Client Pilot	Task	P1	sonnet
 21	Phase 2 — Hardening	Cross-cutting	Task	P1	sonnet
 22	Phase 3 — Domain unification	Website	Task	P1	sonnet
 23	Phase 3 — Domain unification	digisearch	Feature	P1	sonnet
 24	Phase 3 — Domain unification	digichat	Feature	P1	sonnet
-25	SITAAS pilot	SITAAS	Task	P1	sonnet
-26	SITAAS pilot	SITAAS	Task	P1	sonnet
-27	SITAAS pilot	Docs	Chore	P2	sonnet
+25	Client Pilot	Client Pilot	Task	P1	sonnet
+26	Client Pilot	Client Pilot	Task	P1	sonnet
+27	Client Pilot	Docs	Chore	P2	sonnet
 28	Phase 5 — Atlas tiering	Atlas	Research	P3	sonnet
 29	Phase 3 — Domain unification	digichat	Research	P2	sonnet
 30	Phase 5 — Atlas tiering	Cross-cutting	Research	P3	sonnet
@@ -53,14 +54,14 @@ issue	phase	area	kind	priority	model
 101	Phase 3 — Domain unification	Website	Task	P2	sonnet
 103	Phase 3 — Domain unification	Docs	Chore	P2	sonnet
 105	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
-106	SITAAS pilot	digigraph	Feature	P1	sonnet
+106	Client Pilot	digigraph	Feature	P1	sonnet
 108	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
 109	Phase 2 — Hardening	Cross-cutting	Chore	P2	sonnet
-110	SITAAS pilot	digigraph	Feature	P1	sonnet
+110	Client Pilot	digigraph	Feature	P1	sonnet
 111	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
 121	Phase 2 — Hardening	Cross-cutting	Feature	P2	sonnet
 126	Phase 2 — Hardening	Cross-cutting	Chore	P1	sonnet
-145	SITAAS pilot	digichat	Feature	P2	sonnet
+145	Client Pilot	digichat	Feature	P2	sonnet
 171	Phase 3 — Domain unification	Cross-cutting	Feature	P1	sonnet
 172	Phase 3 — Domain unification	Cross-cutting	Feature	P1	sonnet
 173	Phase 3 — Domain unification	Cross-cutting	Feature	P2	sonnet
@@ -235,3 +236,25 @@ issue	phase	area	kind	priority	model
 2347	Phase 3 — Domain unification	digichat	Task	P2	sonnet
 2235	Phase 3 — Domain unification	Website	Task	P2	sonnet
 2375	Phase 3 — Domain unification	digigraph	Task	P2	sonnet
+2440	Phase 3 — Domain unification	digisearch	Task	P2	opus
+2415	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+2417	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+2420	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+2422	Phase 3 — Domain unification	digiquant	Task	P2	sonnet
+2436	Phase 3 — Domain unification	digisearch	Task	P2	sonnet
+2459	Phase 3 — Domain unification	Cross-cutting	Task	P2	sonnet
+2613	Phase 4 — Atlas on digigraph	Atlas	Task	P1	sonnet
+2616	Phase 4 — Atlas on digigraph	Atlas	Task	P1	sonnet
+2863	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2870	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2877	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2844	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2892	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2902	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2908	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2918	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2922	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2926	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2930	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2934	Phase 3 — Domain unification	digiquant	Task	P1	sonnet
+2938	Phase 3 — Domain unification	digiquant	Task	P1	sonnet

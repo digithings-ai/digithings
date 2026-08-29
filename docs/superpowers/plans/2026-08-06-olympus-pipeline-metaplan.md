@@ -1,8 +1,30 @@
 # Olympus Pipeline System Metaplan
 
-> **Date:** 2026-08-06
-> **Status:** Reviewed implementation program; no runtime change is authorized by this document
-> **Canonical review:** [Olympus pipeline review](../../reviews/2026-08-06-olympus-pipeline-review.md)
+> **Date:** 2026-08-06  
+> **Amended:** 2026-08-25 (additive product-intent / progress only — delivery sequence and gates preserved)  
+> **Status:** Reviewed implementation program; this document alone authorizes no runtime change (task issues still required)  
+> **Canonical review:** [Olympus pipeline review](../../reviews/2026-08-06-olympus-pipeline-review.md)  
+> **Product-shape addendum:** [Olympus vision realignment brief (2026-08-25)](2026-08-25-olympus-vision-realignment-brief.md)
+
+## Progress / Product intent (2026-08-25)
+
+**Facts (do not renumber WPs):**
+
+- **WP1** telemetry / call-attempt ledger — **done**.
+- **WP2** action/fill dual-write — **cutover closed** on develop (`#2594` `book_source` labeling, `#2595` `legacy_opening_snapshot` seed + prices cron `--require-ledger`). Residual `#2487` / `#2772` (ledger_io money-arithmetic test lock) **done**. Residual `#2768` (durable `TargetAdjustment` rows) is the remaining WP2 Gate-1 caveat tracked in code.
+- **WP3** reconciled period accounting — **coded** on develop (promote `#2603`); deep review / Gate 1 residual caveats still apply.
+- **`module/digiquant`** — synced with develop via #2587 (the earlier “273 commits stale” audit finding is **historical**; still never branch from a stale module ref — `make task` enforces current `origin/<base>`).
+
+**Product intent (additive; full detail in the vision brief):**
+
+- **House default run** is owned by **digithings**, **always runs**, and is **immutable** — no user profile may move, cancel, or replace it.
+- User profiles are **DB-backed** overlays (extra research requests and/or different preferences). Research/analysis for assets/themes stays in a **shared, tenant-agnostic corpus**; profiles do not fork the house run.
+- **Portfolio phase is user-private** (positions, fills, orders, NAV, mandate→book). Track A portfolio/ledger work is the privacy-boundary home for per-user books. Optional public portfolios + subscribe is **later** — do not preclude; do not build in v1.
+- Run **parallel tracks** without deleting later WPs: **A** trust/money (WP2→WP3) ∥ **B** research plumbing (ProfileConfig → WP12-class corpus → WP13 **shadow**) ∥ **C** glass-box (#1945; Pipeline = primary product surface; Brief = daily read). B/C may start **beside** WP2/WP3; they do **not** wait for WP8–10. Phase 0 accounting gates **stay**.
+- Planner sits before the research gate; it **cannot** expand H4 roster/cap or rewrite H7/H8 authority.
+- **Kairos / execution:** groundwork for Interactive Brokers API + Alpaca Trading API / MCP; default **paper** and/or **manual**; live-trading cutover remains human-gated (see § Kairos / execution groundwork below).
+
+This section amends product framing and schedule emphasis only. WP numbers, Gates 1–4, the authority matrix, H1–H9 ownership, and the target mermaid remain the program spine.
 
 ## Purpose, Reason, and Intent
 
@@ -18,7 +40,10 @@ an optimizer before those foundations would create confident but untestable resu
 **Intent:** Build evidence and accounting first; make forecasts/risk inputs honest second; change
 allocation only behind signal gates; reduce research spend only behind measured shadow evidence;
 and close learning through identical-input offline replay and human governance. Preserve one graph,
-H7/H8/H9 authority, existing risk controls, and no live-trading changes.
+H7/H8/H9 authority, existing risk controls, and no live-trading changes without an explicit human
+gate. **As of 2026-08-25:** product chrome and ownership (digithings house run, shared corpus vs
+private books, ProfileConfig DB, glass-box, Kairos groundwork) are clarified in the
+[vision brief](2026-08-25-olympus-vision-realignment-brief.md) without rewriting this delivery spine.
 
 ## Plan Index
 
@@ -58,9 +83,12 @@ symbol/path from a plan into an issue without confirming it against the then-cur
 16. Shadow/replay can recommend eligibility but cannot activate, promote, rollback, trade, or mutate
     production policy.
 17. No broker adapter, live-order path, or digikey/auth code is changed without its explicit human
-    gate and separate issue.
-18. UI work is limited to required reader-contract cutovers; broad frontend redesign remains outside
-    this program.
+    gate and separate issue. Research and plumbing groundwork for broker **connect** (paper/manual
+    first) may proceed under separate issues; **live cutover** stays gated.
+18. UI work in this program includes **reader-contract cutovers** and **glass-box surfaces** that make
+    WP1-attributed pipeline attempts inspectable (Pipeline as primary glass-box; Brief as daily read;
+    ledger/period inspectability on Portfolio — see #1945 and the 2026-08-25 vision brief). Broad
+    marketing / chrome redesign remains outside this program.
 
 ## End-to-End Target Pipeline
 
@@ -227,6 +255,10 @@ WP10 isolated allocation replay is a parallel branch from WP9 and joins the crit
 - WP13 follows WP11/WP12 and can run beside WP14 after its own prerequisites.
 - Within a package, schema/model work can be reviewed separately, but writer/read cutovers remain
   sequential.
+- **Pull-forward (2026-08-25):** **ProfileConfig (DB)** + **WP12-class shared corpus** + **WP13
+  shadow** (attention planner shadow only — not full Gate 3 enforcement) and **#1945 glass-box** may
+  start **beside WP2/WP3** on Tracks B∥C. Do **not** wait for WP8–10. Do **not** renumber or delete
+  later WPs; promotion out of shadow still obeys Gates below.
 
 ### Do Not Parallelize
 
@@ -259,6 +291,27 @@ WP10 isolated allocation replay is a parallel branch from WP9 and joins the crit
 
 The package order differs from phase numbering only to expose safe foundation parallelism: WP12/WP11
 may land before the production WP8 cutover. No dependent behavior is promoted out of order.
+
+**2026-08-25 clarification:** Delivery Sequence order above remains the **promotion** spine. Near-term
+scheduling may run Track A (WP2 residual → WP3) in parallel with early Track B/C groundwork
+(ProfileConfig, corpus pins, WP13 shadow, Pipeline glass-box) without collapsing H1–H9 or skipping
+Gate 1 before honest NAV / learning claims. See Progress / Product intent and the vision brief.
+
+## Kairos / execution groundwork (2026-08-25)
+
+Additive note only — not a Kairos redesign and not a new WP renumber.
+
+- **Default v1:** paper portfolios and/or **manual** trade execution after H9.
+- **Groundwork (research + plumbing OK):** Interactive Brokers **Web API** (account/portfolio read,
+  order submit via `/iserver/...`; paper/sim when linked account qualifies) and **Alpaca Trading API**
+  / **alpaca-py** (`TradingClient`, paper keys / `paper=True`) plus Alpaca’s **MCP Server** as the
+  current AI-facing Trading API surface. Short doc cites live in the
+  [vision brief §4 execution note](2026-08-25-olympus-vision-realignment-brief.md#execution-groundwork-note-official-docs-skim-2026-08-25).
+- **Human gate:** live-trading paths, broker adapters that place real capital, and digikey/auth
+  changes still require explicit human approval and separate issues (invariant 17). Groundwork must
+  not silently enable live cutover.
+- Users may later **connect** portfolios via these APIs for automated routing; until then paper/manual
+  remain the product default.
 
 ## State Machines
 
@@ -390,8 +443,9 @@ count where applicable.
 ## Issue and Branch Protocol
 
 1. Synchronize `module/digiquant` with current `develop` through the protected-branch PR workflow
-   before creating implementation branches. The audit found it 273 commits stale; never branch from
-   that stale state.
+   before creating implementation branches. The 2026-08-06 audit found it ~273 commits stale; **as of
+   #2587 the module branch was synced** — still never branch from a stale local/module ref
+   (`make task` cuts from current `origin/<base>`).
 2. Create one Project #1 issue per task using the task's full issue contract and canonical finding IDs.
 3. Use `make task ISSUE=<N>` to create `task/<N>-<slug>` from the correct, synchronized base.
 4. Read `digiquant/AGENTS.md` and `digiquant/ARCHITECTURE.md` immediately before the first component

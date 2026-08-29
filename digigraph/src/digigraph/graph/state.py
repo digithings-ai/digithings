@@ -72,3 +72,12 @@ class WorkflowState(TypedDict, total=False):
     # an empty subject claim) -- a client-supplied value never reaches graph state
     # unverified. See ARCHITECTURE.md §6.10.
     digi_subject: str | None
+    # Two-tier context compaction (#399). Lean event only — originals live in the
+    # session workspace. Must be declared or LangGraph drops the key (same pitfall
+    # as digisearch_index / response_language). Underscore prefix matches the
+    # CompactionMiddleware-style `_compaction_event` contract from the issue.
+    _compaction_event: dict[str, Any] | None
+    # Optional LLM-facing message list for multi-turn / Atlas research sessions.
+    # Compaction mutates the view handed to digillm; checkpoint callers that need
+    # the pre-compaction transcript should reload from workspace refs on the event.
+    llm_messages: list[dict[str, Any]]

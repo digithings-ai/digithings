@@ -47,14 +47,14 @@ class ChatCompletionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    model: str = Field("sitaas-rag", description="Model id (ignored; we use project config)")
+    model: str = Field("digigraph-rag", description="Model id (ignored; we use project config)")
     messages: list[ChatMessage] = Field(..., description="Conversation messages")
     stream: bool = Field(False, description="If true, return SSE stream")
     openwebui_format: bool = Field(
         False,
         description=(
             "If true, format tool blocks for Open WebUI (<details>, summary + tables). "
-            "Also enabled by X-Response-Format: openwebui. model=sitaas-rag alone does "
+            "Also enabled by X-Response-Format: openwebui. model=digigraph-rag alone does "
             "not enable this; opt out anytime via X-Suppress-Tool-Stream or "
             "X-Response-Format: plain|neutral|none|digichat."
         ),

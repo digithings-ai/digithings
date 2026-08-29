@@ -6,7 +6,7 @@ Per-phase segment outputs live in phase modules and slot into
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import (  # score:allow untyped any — dict shape typing below
     Annotated,
     Any,
@@ -15,7 +15,7 @@ from typing import (  # score:allow untyped any — dict shape typing below
 )
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 
 class SegmentSlotCollisionError(RuntimeError):
@@ -192,6 +192,21 @@ class AtlasConfigBundle(BaseModel):
     hedge_funds: list[str] = Field(default_factory=list)
     preferences: dict[str, Any] = Field(default_factory=dict)
     macro_series: list[str] = Field(default_factory=list)
+    # Track B (#2609): exact ProfileConfig pin. None → house default at preflight.
+    profile_config_version_id: str | None = Field(
+        default=None,
+        description=(
+            "Exact olympus_profile_config.id pin for this run. None selects the "
+            "digithings house default. Overlay pins fail closed when unresolved."
+        ),
+    )
+    profile_config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Resolved ProfileConfig dump after preflight pin. Authoritative for "
+            "overlay watchlist/themes/risk; never forks or cancels the house run."
+        ),
+    )
 
 
 class PriorContext(BaseModel):
@@ -347,6 +362,20 @@ class RebalancePayload(TypedDict, total=False):
     recommended_portfolio: list[TargetWeightRow]
     actions: list[RebalanceActionRow]
     notes: str
+    # Reason-coded H8 sizing adjustments (#2417) — mirrored into durable
+    # ``TargetAdjustment`` rows by H9 (#2768) when ``unit`` is ``pct``. Each row
+    # mirrors ``SizingAdjustment.model_dump()``. Absent/empty is valid (fully flat
+    # book, or sizing failed soft before any adjustment ran).
+    adjustments: list[dict[str, Any]]
+    # Pre-cap request weights in percent (#2768) — H8's ``SizingResult.requested_pct``.
+    # H9 writes these onto ``portfolio_ledger_requested_targets.requested_weight``
+    # when they differ from the approved book.
+    requested_pct: dict[str, float]
+    # WP8.4 (#2734): versioned raw-input mode and source bundle identity on every book.
+    h8_sizing_input_mode: str
+    allocation_input_bundle_hash: str
+    # WP9.3 (#2750): content hash of the attached PreTradeRiskReport (observational).
+    pre_trade_risk_report_hash: str
 
 
 class Phase9EvolutionPayload(TypedDict, total=False):
@@ -456,8 +485,50 @@ class PhaseHermesState(BaseModel):
     asset_analysts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
     )
+    # WP11.2: ticker → TickerEvidenceBundle dump (H5 base; published before provider).
+    ticker_evidence_bundles: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="ticker → TickerEvidenceBundle dump (H5 base; WP11.2)",
+    )
     deliberation_summaries: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
         default_factory=dict
+    )
+    # WP5.4 shadow calibration (observational; never feeds H8).
+    forecast_calibrations: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="calibration_id → ForecastCalibration dump (H6→H7 attach)",
+    )
+    calibrated_forecasts: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="ticker → CalibratedForecast dump (H6→H7 attach)",
+    )
+    # WP6.3 H8 risk audit snapshots (observational; never feeds size_portfolio in Phase 1).
+    risk_policy: dict[str, Any] | None = Field(
+        default=None,
+        description="Resolved RiskPolicy dump (H8 attach)",
+    )
+    covariance_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description="Resolved CovarianceSnapshot dump (H8 attach)",
+    )
+    # WP8.3/8.4 canonical H8 allocation input bundle (feeds calibrated raw weights when usable).
+    allocation_input_bundle: dict[str, Any] | None = Field(
+        default=None,
+        description="Validated AllocationInputBundle dump at H8 entry (WP8.3/8.4)",
+    )
+    # WP9.3 observational PreTradeRiskReport (built after final H8 controls; H9 persist in WP9.4).
+    pre_trade_risk_report: dict[str, Any] | None = Field(
+        default=None,
+        description="Validated PreTradeRiskReport dump after final H8 book (WP9.3)",
+    )
+    # WP7.3 observational cost/liquidity evidence (never feeds turnover in Phase 1).
+    liquidity_snapshots: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="snapshot_id → LiquiditySnapshot dump (H9 attach)",
+    )
+    action_cost_estimates: Annotated[dict[str, dict[str, Any]], _merge_right_wins_dict] = Field(
+        default_factory=dict,
+        description="order_intent_id → ActionCostEstimate dump (H9 attach)",
     )
     pm_direction_memo: Any | None = (
         None  # PMDirectionMemo JSON; typed in hermes.models.pm_direction
@@ -478,11 +549,45 @@ def _merge_phase_hermes(
     merged = left.model_copy(deep=True)
     if right.asset_analysts:
         merged.asset_analysts = {**merged.asset_analysts, **right.asset_analysts}
+    if right.ticker_evidence_bundles:
+        merged.ticker_evidence_bundles = {
+            **merged.ticker_evidence_bundles,
+            **right.ticker_evidence_bundles,
+        }
     if right.deliberation_summaries:
         merged.deliberation_summaries = {
             **merged.deliberation_summaries,
             **right.deliberation_summaries,
         }
+    if right.forecast_calibrations:
+        merged.forecast_calibrations = {
+            **merged.forecast_calibrations,
+            **right.forecast_calibrations,
+        }
+    if right.calibrated_forecasts:
+        merged.calibrated_forecasts = {
+            **merged.calibrated_forecasts,
+            **right.calibrated_forecasts,
+        }
+    if right.liquidity_snapshots:
+        merged.liquidity_snapshots = {
+            **merged.liquidity_snapshots,
+            **right.liquidity_snapshots,
+        }
+    if right.action_cost_estimates:
+        merged.action_cost_estimates = {
+            **merged.action_cost_estimates,
+            **right.action_cost_estimates,
+        }
+    for field in (
+        "risk_policy",
+        "covariance_snapshot",
+        "allocation_input_bundle",
+        "pre_trade_risk_report",
+    ):
+        val = getattr(right, field)
+        if val:
+            object.__setattr__(merged, field, val)
     for field in (
         "thesis_review",
         "market_thesis_exploration",
@@ -518,6 +623,82 @@ class AtlasResearchState(BaseModel):
     refresh_scope: RefreshScope = "none"
     run_date: date
     baseline_date: date | None = None
+    # WP4.1 (#2628): one UTC knowledge boundary per run. Optional only so legacy
+    # checkpoints deserialize; new readers must call
+    # ``digiquant.olympus.temporal.require_knowledge_cutoff_at`` (no ``now()`` fallback).
+    knowledge_cutoff_at: AwareDatetime | None = Field(
+        default=None,
+        description=(
+            "Timezone-aware UTC instant pinned before initial Atlas/Hermes state. "
+            "Registry reads require known_at <= this cutoff. Optional for legacy "
+            "checkpoints only — new readers fail closed when missing."
+        ),
+    )
+    # WP12.3 (#2863): one research-state pin per run/attempt. Optional request
+    # selects an exact version; otherwise preflight uses cutoff-bound as-of.
+    # Resume reuses the checkpointed dump — never re-select as ingestion continues.
+    requested_research_state_version_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional exact ResearchStateVersion.id for preflight. None → "
+            "select_state_as_of bound by knowledge_cutoff_at."
+        ),
+    )
+    research_state_pin: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Resolved ResearchStatePin dump after preflight. Authoritative root "
+            "state_version_id for the run/attempt; same-run children must name it parent."
+        ),
+    )
+    research_state_status: str | None = Field(
+        default=None,
+        description=(
+            "pinned | state_unavailable after preflight. Typed unavailable keeps "
+            "compatibility documents shadow-only until exact-state coverage."
+        ),
+    )
+    research_state_unavailable_reason: str | None = Field(
+        default=None,
+        description="Detail when research_state_status is state_unavailable.",
+    )
+    # WP14.3 (#2946): versioned WP3/WP5/WP9 refs for H7 decision context compile.
+    h7_prerequisite_snapshot: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "H7PrerequisiteSnapshot dump from preflight — accounting, forecast "
+            "outcomes, and pin linkage for H7 context compiler."
+        ),
+    )
+    # WP15.6 (#2975): exact structured lesson pin selected at preflight.
+    outcome_lesson_pin: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "OutcomeLessonPin dump after preflight maturation/compile. Authoritative "
+            "structured lesson for WP14 H5/H7 context — not decision_log prose."
+        ),
+    )
+    outcome_lesson_status: str | None = Field(
+        default=None,
+        description="pinned | lesson_unavailable | store_unavailable after preflight.",
+    )
+    outcome_lesson_unavailable_reason: str | None = Field(
+        default=None,
+        description="Detail when outcome_lesson_status is not pinned.",
+    )
+
+    @field_validator("knowledge_cutoff_at")
+    @classmethod
+    def _knowledge_cutoff_must_be_utc(cls, value: AwareDatetime | None) -> AwareDatetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("knowledge_cutoff_at must be timezone-aware UTC (naive rejected)")
+        if value.utcoffset() != timedelta(0):
+            raise ValueError(
+                "knowledge_cutoff_at must be timezone-aware UTC (non-UTC offset rejected)"
+            )
+        return value
 
     config: AtlasConfigBundle = Field(default_factory=AtlasConfigBundle)
     prior_context: PriorContext = Field(default_factory=PriorContext)
@@ -562,6 +743,11 @@ class AtlasResearchState(BaseModel):
     custom_prompt: str | None = None
 
     triage: DeltaTriageResult | None = None
+    # WP13.3 (#2926): deterministic research attention plan built at triage end.
+    # Stored as JSON-compatible dump; validate via research_attention helpers.
+    research_attention_plan: dict[str, Any] | None = None
+    # WP13.4 (#2930): post-H4 Hermes ticker attention plan — roster is already fixed.
+    hermes_research_attention_plan: dict[str, Any] | None = None
     # Per-ticker fractional pct_change between the two most-recent trading
     # days strictly before run_date. Populated by the triage phase on delta
     # runs (empty dict on baseline / monthly). Frozen-by-convention: the

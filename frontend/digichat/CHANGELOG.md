@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.2](https://github.com/digithings-ai/digithings/compare/digichat-v1.3.1...digichat-v1.3.2) (2026-08-21)
+
+
+### Bug Fixes
+
+* **byok:** kill a dead auth argument and a refusal that named the wrong model ([#2550](https://github.com/digithings-ai/digithings/issues/2550)) ([337ff56](https://github.com/digithings-ai/digithings/commit/337ff5673194d61748e264826173047dbf880822))
+* **byok:** strip the refusal example, and stop a parenthetical crashing startup ([#2568](https://github.com/digithings-ai/digithings/issues/2568)) ([98d7a49](https://github.com/digithings-ai/digithings/commit/98d7a496f8e233e007dd96e7948852bff55d7d60))
+
+## [1.3.1](https://github.com/digithings-ai/digithings/compare/digichat-v1.3.0...digichat-v1.3.1) (2026-08-20)
+
+
+### Bug Fixes
+
+* **digichat:** tell an embed visitor a BYOK refusal is fixable ([#2525](https://github.com/digithings-ai/digithings/issues/2525)) ([0e23a37](https://github.com/digithings-ai/digithings/commit/0e23a37390940f3a49a4c2108f77875dae59b329))
+* **digigraph:** close findings from the independent review of [#2427](https://github.com/digithings-ai/digithings/issues/2427) ([cc5accf](https://github.com/digithings-ai/digithings/commit/cc5accfe688d4d6ea13edd7552f727b11963d16b))
+* **digigraph:** correct the "same string" claim and cover the production trace path ([#2537](https://github.com/digithings-ai/digithings/issues/2537)) ([7f4ff15](https://github.com/digithings-ai/digithings/commit/7f4ff15624264a53a57187c3eb0491ba32ef40a3))
+* **digigraph:** refuse a bound BYOK key the deployment default would not spend ([#2503](https://github.com/digithings-ai/digithings/issues/2503)) ([dc0fd59](https://github.com/digithings-ai/digithings/commit/dc0fd59ee92acc94c09462d730e72006da77a79d))
+
 ## [1.3.0](https://github.com/digithings-ai/digithings/compare/digichat-v1.2.0...digichat-v1.3.0) (2026-08-15)
 
 
