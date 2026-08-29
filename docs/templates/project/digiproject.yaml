@@ -5,7 +5,7 @@
 # Full spec: docs/spec/project-spec-v1alpha1.md
 
 project:
-  name: my-project        # short identifier, e.g. "sitaas"
+  name: my-project        # short identifier, e.g. "client-pilot"
   description: ""         # human-readable description
   version: "0.1.0"        # SemVer
 
@@ -27,7 +27,7 @@ agents:
 
 # Checkpointer — controls LangGraph state persistence across HTTP requests.
 # When this file is present, DIGI_CHECKPOINTER defaults to "sqlite" so multi-turn
-# conversation state survives across requests (SITAAS / project mode).
+# conversation state survives across requests (client pilot / project mode).
 # Override by setting DIGI_CHECKPOINTER explicitly in the environment:
 #   DIGI_CHECKPOINTER=sqlite    (recommended: persists per-process, default when project active)
 #   DIGI_CHECKPOINTER=postgres  (recommended for production; set DIGI_CHECKPOINTER_POSTGRES_URI)

@@ -7,6 +7,7 @@ tests (module-global response/client caches would otherwise mask the mock).
 from __future__ import annotations
 
 import json
+import threading
 from typing import Any  # score:allow untyped any — fake OpenAI client dict shapes
 from unittest.mock import MagicMock, patch
 
@@ -304,6 +305,119 @@ def test_chat_completion_passes_model_as_given_no_prefix(monkeypatch: pytest.Mon
     assert kwargs["model"] == "gpt-4o-mini"  # used verbatim, no env substitution
 
 
+# ── Self-prefixed model ids: OpenRouter's auto-router ────────────────────────
+
+
+def test_wire_model_restores_a_self_prefixed_id() -> None:
+    """``openrouter/auto`` IS the model id, so stripping one prefix must not consume it.
+
+    Both accepted spellings have to land on the same wire id. Operators write the
+    doubled form (README, digigraph/ARCHITECTURE.md), but a BYOK caller cannot produce
+    it: ``byok_routable_model`` strips the provider's own prefix to a fixpoint and
+    re-applies exactly one, and that fixpoint is load-bearing for the middleware/resolver
+    agreement on a hostile header. So the single-prefix form is all BYOK can emit.
+    """
+    assert client_mod._wire_model("openrouter", "auto", "openrouter/auto") == "openrouter/auto"
+    assert (
+        client_mod._wire_model("openrouter", "openrouter/auto", "openrouter/openrouter/auto")
+        == "openrouter/auto"
+    )
+    # Controls. An ordinary id still loses exactly one prefix; the table is per-provider,
+    # so a same-named id under another provider is untouched; and the default client is
+    # handed the string verbatim.
+    assert (
+        client_mod._wire_model("openrouter", "openai/gpt-4o-mini", "openrouter/openai/gpt-4o-mini")
+        == "openai/gpt-4o-mini"
+    )
+    assert client_mod._wire_model("xai", "auto", "xai/auto") == "auto"
+    assert client_mod._wire_model(None, "gpt-4o-mini", "gpt-4o-mini") == "gpt-4o-mini"
+
+
+@pytest.mark.parametrize("model", ["openrouter/auto", "openrouter/openrouter/auto"])
+def test_completion_reaches_the_auto_router_from_either_spelling(
+    model: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: the BYOK spelling used to reach the wire as a bare ``auto``.
+
+    ``auto`` is not an OpenRouter model id, so the request failed at the provider — on the
+    user's own key. A BYOK user could not reach the auto-router at all.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion(model, [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["model"] == "openrouter/auto"
+
+
+def test_completion_still_strips_one_prefix_for_an_ordinary_openrouter_model(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Control for the test above — the vendor sub-slug must still lose the routing prefix."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion(
+            "openrouter/anthropic/claude-sonnet-4", [{"role": "user", "content": "hi"}]
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["model"] == "anthropic/claude-sonnet-4"
+
+
+def test_auto_router_pool_constraint_applies_to_the_single_prefix_spelling(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The #802 curated pool keys off ``endswith("/auto")`` on the *wire* model.
+
+    While the BYOK spelling collapsed to a bare ``auto`` that test was False, so the
+    capability guard silently did not apply to it either. Restoring the id restores the
+    guard — a BYOK auto-router request is now constrained exactly like an operator one.
+    """
+    monkeypatch.setenv("OPENROUTER_ALLOWED_MODELS", "a/x,b/y")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = _mock_response("ok")
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion("openrouter/auto", [{"role": "user", "content": "hi"}])
+    _, kwargs = fake_client.chat.completions.create.call_args
+    plugins = kwargs["extra_body"]["plugins"]
+    assert [p for p in plugins if p["id"] == "auto-router"] == [
+        {"id": "auto-router", "allowed_models": ["a/x", "b/y"]}
+    ]
+    # Control: a pinned model is not the auto-router, so the plugin must NOT be attached.
+    fake_client.chat.completions.create.reset_mock()
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.completion(
+            "openrouter/anthropic/claude-sonnet-4", [{"role": "user", "content": "hi"}]
+        )
+    _, pinned = fake_client.chat.completions.create.call_args
+    assert "plugins" not in (pinned.get("extra_body") or {})
+
+
+def test_streaming_path_reaches_the_auto_router_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_stream_completion_one_turn`` derives the wire model separately from ``completion``.
+
+    Same bug, second door: a BYOK chat request streams by default in digichat, so the
+    streaming derivation has to agree or the fix only covers half the traffic.
+    """
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.return_value = [_stream_chunk("hi")]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "openrouter/auto",
+            [{"role": "user", "content": "hi"}],
+            [],
+            execute_tool=lambda *_: "",
+            stream_deltas=True,
+        )
+    _, kwargs = fake_client.chat.completions.create.call_args
+    assert kwargs["stream"] is True
+    assert kwargs["model"] == "openrouter/auto"
+
+
 # ── Empty-response self-heal (#726, 1C) ──────────────────────────────────────
 
 
@@ -336,22 +450,22 @@ def test_openrouter_usage_cost_reads_typed_extra_and_missing() -> None:
     extra_only.cost = None
     extra_only.model_extra = {"cost": 0.009}
     assert client_mod._openrouter_usage_cost(extra_only) == pytest.approx(0.009)
-    # No usage / no cost / non-numeric → 0.0 (non-OpenRouter providers report no cost).
-    assert client_mod._openrouter_usage_cost(None) == 0.0
+    # No usage / no cost / non-numeric → None (never fabricate 0 — #2763 / WP1).
+    assert client_mod._openrouter_usage_cost(None) is None
     none_cost = MagicMock(spec=["cost", "model_extra"])
     none_cost.cost = None
     none_cost.model_extra = {}
-    assert client_mod._openrouter_usage_cost(none_cost) == 0.0
+    assert client_mod._openrouter_usage_cost(none_cost) is None
     bad = MagicMock(spec=["cost", "model_extra"])
     bad.cost = "free"
     bad.model_extra = None
-    assert client_mod._openrouter_usage_cost(bad) == 0.0
-    # Non-finite / negative cost must not poison run-level aggregation → clamped to 0.0.
+    assert client_mod._openrouter_usage_cost(bad) is None
+    # Non-finite / negative cost must not poison run-level aggregation → None.
     for bad_value in (float("nan"), float("inf"), -0.5, "nan", "inf"):
         nf = MagicMock(spec=["cost", "model_extra"])
         nf.cost = bad_value
         nf.model_extra = None
-        assert client_mod._openrouter_usage_cost(nf) == 0.0
+        assert client_mod._openrouter_usage_cost(nf) is None
 
 
 def test_with_openrouter_fallback_only_for_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -945,6 +1059,312 @@ def test_chat_completion_with_tools_parallel_branch() -> None:
     assert result_names == {"alpha", "beta"}
 
 
+def test_parallel_branch_carries_the_byok_override_into_each_worker() -> None:
+    """A parallel-safe tool must still see the caller's BYOK key.
+
+    A pool worker starts with an empty context, so without a copied one
+    :func:`digillm.get_byok` reads ``None`` inside the branch and any tool that
+    calls an LLM itself bills the *operator's* key while the caller's is bound.
+
+    The barrier forces both tools to be in flight at once, which is what
+    distinguishes a per-submit ``copy_context()`` from one shared Context: a
+    single Context cannot be entered by two threads and raises "is already
+    entered" in the second. Without the barrier the calls can serialize and a
+    shared-Context regression would pass unnoticed.
+    """
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    barrier = threading.Barrier(2, timeout=10)
+    seen: dict[str, tuple[str, str] | None] = {}
+
+    def execute_tool(name: str, args: dict) -> dict:
+        barrier.wait()
+        seen[name] = digillm.get_byok()
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    token = digillm.set_byok("sk-caller", "https://openrouter.ai/api/v1")
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            out = digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool,
+                parallel_safe_tools={"alpha", "beta"},
+            )
+    finally:
+        digillm.reset_byok(token)
+
+    assert out == "done"
+    expected = ("sk-caller", "https://openrouter.ai/api/v1")
+    assert seen == {"alpha": expected, "beta": expected}
+
+
+def test_parallel_branch_leaves_an_unbound_caller_unbound() -> None:
+    """Copying a context must not invent an override the caller never set."""
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    seen: dict[str, tuple[str, str] | None] = {}
+
+    def execute_tool(name: str, args: dict) -> dict:
+        seen[name] = digillm.get_byok()
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+        digillm.run_tools(
+            "gpt-4o-mini",
+            [{"role": "user", "content": "go"}],
+            tools,
+            execute_tool,
+            parallel_safe_tools={"alpha", "beta"},
+        )
+    assert seen == {"alpha": None, "beta": None}
+
+
+def test_parallel_branch_does_not_share_the_telemetry_handle() -> None:
+    """The copy carries credentials; it must not carry the mutable telemetry handle.
+
+    ``copy_context()`` propagates *references*, so a naive copy hands all N workers the
+    one :class:`ProviderCallContextHandle` the caller is holding -- and they all write
+    its ``last_call_id`` (leaving a later follow-up call parented on whichever sibling
+    finished last) and all append to the single deferred-record list that ``finalize``
+    tuples and clears. A worker that inherited an *empty* context read ``None`` here, so
+    ``None`` is the behaviour to hold: nesting fan-out calls under the parent's logical
+    call needs a per-worker handle and a join-time merge, which is a separate feature.
+
+    The barrier forces both workers to be in flight together, which is the only state in
+    which a shared handle is a race rather than merely wrong.
+    """
+    from uuid import uuid4
+
+    from digillm.telemetry import CallPurpose
+
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    barrier = threading.Barrier(2, timeout=10)
+    seen_metadata: dict[str, Any] = {}
+    seen_byok: dict[str, tuple[str, str] | None] = {}
+
+    def execute_tool(name: str, args: dict) -> dict:
+        barrier.wait()
+        seen_metadata[name] = client_mod._provider_call_metadata.get()
+        seen_byok[name] = digillm.get_byok()
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    token = digillm.set_byok("sk-caller", "https://openrouter.ai/api/v1")
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            with digillm.provider_call_context(
+                node_run_id=uuid4(),
+                purpose=CallPurpose.INITIAL_GENERATION,
+                no_artifact_reason=digillm.NoArtifactReason.CONSUMED_INLINE,
+            ) as handle:
+                digillm.run_tools(
+                    "gpt-4o-mini",
+                    [{"role": "user", "content": "go"}],
+                    tools,
+                    execute_tool,
+                    parallel_safe_tools={"alpha", "beta"},
+                )
+                # The caller keeps its own binding: the workers cleared their copies of
+                # the context, and a copy is a snapshot rather than a view.
+                still_bound = client_mod._provider_call_metadata.get()
+    finally:
+        digillm.reset_byok(token)
+
+    assert seen_metadata == {"alpha": None, "beta": None}
+    # ... and dropping the handle must not have dropped the credentials with it.
+    expected = ("sk-caller", "https://openrouter.ai/api/v1")
+    assert seen_byok == {"alpha": expected, "beta": expected}
+    assert still_bound is not None and still_bound.handle is handle
+
+
+def _two_tool_calls() -> tuple[Any, Any]:
+    """Two mock tool calls, which is what selects ``run_tools``' parallel branch."""
+    fn_a = MagicMock()
+    fn_a.name = "alpha"
+    fn_a.arguments = "{}"
+    tc_a = MagicMock()
+    tc_a.id = "a"
+    tc_a.function = fn_a
+    fn_b = MagicMock()
+    fn_b.name = "beta"
+    fn_b.arguments = "{}"
+    tc_b = MagicMock()
+    tc_b.id = "b"
+    tc_b.function = fn_b
+    return tc_a, tc_b
+
+
+def test_the_fan_out_runs_the_consumer_detach_hook() -> None:
+    """A consumer's own logical-call var has to be cleared per worker too.
+
+    :func:`detach_provider_call_context` clears *this* module's var, but a consumer that
+    layers its own logical-call ContextVar on top -- digigraph's
+    ``usage._LOGICAL_CALL_CONTEXT``, whose value holds the same mutable
+    :class:`ProviderCallContextHandle` -- would still hand every worker one shared handle
+    through the credential snapshot. digillm is a leaf library and cannot reach into a
+    consumer's module, so it calls back. Pinned here: the callback fires once per parallel
+    worker, and *not* on the serial path, which runs in the caller's own context and must
+    keep the binding it was given.
+    """
+    tc_a, tc_b = _two_tool_calls()
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+        _mock_response("", tool_calls=[tc_a]),
+        _mock_response("done"),
+    ]
+
+    lock = threading.Lock()
+    calls: list[str] = []
+
+    def hook() -> None:
+        with lock:
+            calls.append(threading.current_thread().name)
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    previous = client_mod._fan_out_detach_hook
+    digillm.set_fan_out_detach_hook(hook)
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                lambda name, args: {"content": name},
+                parallel_safe_tools={"alpha", "beta"},
+            )
+            parallel_calls = list(calls)
+            calls.clear()
+            # One tool call in the round: ``run_parallel`` is False, so the serial
+            # ``else`` branch runs ``execute_tool`` in this very context.
+            digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                lambda name, args: {"content": name},
+                parallel_safe_tools={"alpha", "beta"},
+            )
+            serial_calls = list(calls)
+    finally:
+        digillm.set_fan_out_detach_hook(previous)
+
+    assert len(parallel_calls) == 2, "the hook must run once per parallel worker"
+    assert serial_calls == [], "the serial branch owns the caller's context; do not unbind it"
+
+
+def test_a_broken_detach_hook_does_not_fail_the_tool_call() -> None:
+    """A consumer's callback is not allowed to break the fan-out.
+
+    Same terms as the usage and telemetry observers: registered process-wide, and a
+    raising hook degrades telemetry rather than the tool call itself.
+    """
+    tc_a, tc_b = _two_tool_calls()
+    fake_client = MagicMock()
+    fake_client.chat.completions.create.side_effect = [
+        _mock_response("", tool_calls=[tc_a, tc_b]),
+        _mock_response("done"),
+    ]
+
+    def hook() -> None:
+        raise RuntimeError("consumer hook is broken")
+
+    executed: set[str] = set()
+
+    def execute_tool(name: str, args: dict) -> dict:
+        executed.add(name)
+        return {"content": name}
+
+    tools = [
+        {"type": "function", "function": {"name": "alpha", "parameters": {}}},
+        {"type": "function", "function": {"name": "beta", "parameters": {}}},
+    ]
+    previous = client_mod._fan_out_detach_hook
+    digillm.set_fan_out_detach_hook(hook)
+    try:
+        with patch.object(client_mod, "get_client_for_model", return_value=fake_client):
+            out = digillm.run_tools(
+                "gpt-4o-mini",
+                [{"role": "user", "content": "go"}],
+                tools,
+                execute_tool,
+                parallel_safe_tools={"alpha", "beta"},
+            )
+    finally:
+        digillm.set_fan_out_detach_hook(previous)
+
+    assert out == "done"
+    assert executed == {"alpha", "beta"}
+
+
 # ── Streaming tool-calling loop (stream_deltas=True) ──────────────────────────
 
 
@@ -1323,11 +1743,30 @@ def test_create_with_retry_propagates_non_transient() -> None:
         client_mod._create_with_retry(fake_client, model="m", messages=[])
 
 
+def test_optional_nonnegative_int_rejects_bool_as_unavailable() -> None:
+    """``bool`` subclasses ``int``; False must stay unavailable, never measured zero (#1989)."""
+    assert client_mod._optional_nonnegative_int(False) is None
+    assert client_mod._optional_nonnegative_int(True) is None
+    assert client_mod._optional_nonnegative_int(None) is None
+    assert client_mod._optional_nonnegative_int(-1) is None
+    assert client_mod._optional_nonnegative_int(0) == 0
+    assert client_mod._optional_nonnegative_int(3) == 3
+
+
 def test_sdk_hidden_retries_remain_enabled_and_opaque() -> None:
-    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries."""
+    """Attempt telemetry observes SDK create calls, not the SDK's internal HTTP retries.
+
+    We deliberately omit ``max_retries`` so the SDK default applies. Pin that default to the
+    documented figure (``DEFAULT_MAX_RETRIES``) — otherwise the canary stays green while an
+    unbounded ``openai`` resolve silently retunes how many HTTP exchanges hide under one
+    attempt record (#1989).
+    """
+    from openai._constants import DEFAULT_MAX_RETRIES
+
     made = _capture_client_kwargs(digillm.get_client)
     assert len(made) == 1
     assert "max_retries" not in made[0]
+    assert DEFAULT_MAX_RETRIES == 2
 
 
 @pytest.mark.parametrize(

@@ -45,6 +45,7 @@ Beyond root `AGENTS.md`:
 | Path | Reason | Migration |
 |------|--------|-------------|
 | `digiquant/nautilus_runner.py` | Nautilus `BarDataWrangler` requires pandas | None — documented boundary |
+| `digiquant/olympus/replay/nautilus_portfolio.py` | Same BarDataWrangler boundary for shared-cash portfolio replay (#2784) | None — documented boundary |
 | `digiquant/tearsheet.py` | Nautilus `account_report` / `fills_report` are pandas DataFrames | Defer — Plotly quantstats bridge |
 | `digiquant/tearsheet_charts.py` | Plotly/quantstats expect pandas Series for rolling stats | Defer — same as tearsheet |
 | `digiquant/scripts/atlas/*.py` | Legacy ops: yfinance / pandas-ta / treasury XML (REM-058 allowlist) | Migrate per-script to Polars in [#579](https://github.com/digithings-ai/digithings/issues/579); `compute-technicals.py` Polars date fix (REM-009) |
@@ -52,6 +53,7 @@ Beyond root `AGENTS.md`:
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
+| `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` builds bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081) | None — documented boundary |
 
 - **No perf claims without results**: Never return Sharpe, PnL, or drawdown values from anywhere except a completed `BacktestResult` or `OptimizeResult`.
 - **Pipeline ordering is sacrosanct**: validate → backtest → optimize → export. Never skip validation. Never run optimize before backtest.
@@ -102,11 +104,72 @@ When touching `digiquant/src/digiquant/olympus/`:
      `DocumentPatch`, merge via `merge_document_patch`; `full` → `*-full.md` skill, full body.
    - Prior = `prior_published(run_date, document_key)` (latest `date < run_date`), not calendar
      yesterday only. Stale gap > `OLYMPUS_STALE_FULL_DAYS` (default 7) → `full`.
-5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
+   - Track B WP13-class shadow (#2616): `digiquant.olympus.attention_plan.plan_attention_shadow`
+     records `AttentionPlan` + refresh reasons beside incumbent modes (`off`/`shadow` only;
+     never actuates; cannot expand H4 or rewrite H7/H8).
+   - Track C glass-box (#1945 / #2622): `attention_plan_io` +
+     `attention_plan_graph.maybe_publish_attention_plan_shadow` (Atlas
+     `publish_phase`) upsert `attention-plan` on daily runs when triage ran and
+     `OLYMPUS_PLANNER_MODE` is `shadow` (default). Never fabricate UI rows without
+     a published document; never actuate (`enforce` absent).5. **Hermes extension pattern** (H1–H9): add phases via `build_hermes_phases_thesis`; wire
    `build_grounding` + phase blinding; H7 must not emit weights (`PMDirectionMemo` only); H8
    sizes; H9 `commit_run` is the Hermes terminal — do not add parallel `portfolio_materialize`
    or phase9 evolution on the daily path.
 6. Tests: `pytest tests/dq/olympus/ tests/dq/atlas/ tests/dq/hermes/ -m unit -v`
+
+---
+
+## SDCA Engine (#1080, #1081)
+
+`strategies/sdca/` is the asset-agnostic Strategic-DCA engine (composite risk →
+accumulation/distribution curve → daily backtest). See
+[`ARCHITECTURE.md` § SDCA Engine](ARCHITECTURE.md#sdca-engine-1080-1081) for
+the full module map.
+
+- **The core engine (`curve.py`, `composite_risk.py`, `risk_model.py`,
+  `valuation.py`, `backtest.py`) has zero NautilusTrader dependency.** Only
+  `nautilus_strategy.py` imports `nautilus_trader` — don't add a `nautilus_trader`
+  import to any other file in this package, or `strategies.sdca` stops being
+  importable without the `nautilus` extra.
+- **`SdcaStrategy` is not in `strategies/registry.py`**, the same as
+  `m2_liquidity`. Instantiate `SdcaStrategyConfig` directly — do not add a
+  `register()` call for it. Its `risk_path` (a parquet of precomputed
+  `date`/`risk`, built by calling `compute_composite_risk()` +
+  `valuation_z_score()` upstream) has no sensible static default, so
+  `get_strategy()`'s param-merge model doesn't fit.
+- **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
+  mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
+  reimplement it.** This is what keeps the Nautilus-run result and the
+  standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
+  silently diverging.
+
+### Adding a preset
+
+Presets are public, hand-authored `curve_nodes`/`long_only` personalities in
+`strategies/sdca/presets.json`, loaded via `strategies/sdca/presets.py`
+(`list_presets()`, `load_preset(name)`). To add one:
+
+1. Append an entry to `presets.json`: a 21-element `curve_nodes` array (one
+   value per risk node `0, 5, …, 100` — matches `curve.RISK_NODES`), a
+   `long_only` bool, and a `description` explaining the personality in plain
+   language (not tuned parameters — this is public, documented config, not an
+   optimizer output).
+2. If `long_only: true`, every `curve_nodes` value must be `>= 0` — a negative
+   node in a long-only preset is a contradiction the loader does not catch at
+   read time; `tests/dq/strategies/sdca/test_presets.py::test_long_only_preset_never_sells`
+   is what catches it.
+3. Run `pytest tests/dq/strategies/sdca/test_presets.py -v` — no code changes
+   needed for a well-formed entry, `presets.py` reads the file directly.
+
+### SDCA test commands
+
+```bash
+# Core engine + presets + Nautilus wrapper config/instantiation tests
+pytest -m unit -k "sdca" -v
+
+# Full Nautilus BacktestEngine parity test (gated: needs nautilus_trader installed)
+pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
+```
 
 ---
 
@@ -127,6 +190,73 @@ is a **GitHub org secret** (all repos write `core`) — **never commit values**.
 
 See [`ARCHITECTURE.md` § digiquant Data Layer](ARCHITECTURE.md#digiquant-data-layer--strategy-store--shared-data-1064)
 and [`docs/adr/0021-digiquant-supabase-project-topology.md`](../docs/adr/0021-digiquant-supabase-project-topology.md).
+
+---
+
+## Atlas research sandbox image (#396)
+
+`digiquant/Dockerfile.sandbox` is a **separate** image from the digiquant HTTP
+service (`digiquant/Dockerfile`). Atlas agents execute Python research / paper-book
+code inside it. The open-source quant stack is baked at **build time** — do not
+`pip install` inside agent runs.
+
+**Scope:** research sandbox only. No live trading, no broker credentials, no
+order paths. Optional outbound HTTPS for free data (Yahoo / FRED); never wire
+this image to live trading venues.
+
+### Build / run
+
+```bash
+# From repo root (context = digiquant/)
+docker build -f digiquant/Dockerfile.sandbox -t digiquant-sandbox digiquant
+
+# Or from digiquant/
+docker build -f Dockerfile.sandbox -t digiquant-sandbox .
+
+# Smoke — all named imports must succeed
+docker run --rm digiquant-sandbox \
+  python -c "import skfolio, riskfolio, pandas_ta, arch, alphalens"
+
+# Full package spot-check
+docker run --rm digiquant-sandbox python -c "
+import pandas_ta, talib, vectorbt
+import skfolio, pypfopt, riskfolio, cvxpy
+import empyrical, pyfolio, arch, statsmodels, alphalens
+import yfinance, pandas_datareader
+import polars, numpy, scipy, openpyxl, matplotlib
+print('sandbox imports ok')
+"
+
+# Agent pattern — run a one-liner or mounted script
+docker run --rm digiquant-sandbox python -c "import pandas_ta as ta; print(ta.__version__)"
+docker run --rm -v \"\$PWD:/work:ro\" -w /work digiquant-sandbox python my_research.py
+```
+
+Manifest: [`requirements.sandbox.txt`](requirements.sandbox.txt). Import notes:
+
+| Package | Import |
+|---------|--------|
+| `pandas-ta-classic` | `pandas_ta` (shim) or `pandas_ta_classic` |
+| `TA-Lib` | `talib` |
+| `riskfolio-lib` | `riskfolio` |
+| `alphalens-reloaded` | `alphalens` |
+| `empyrical-reloaded` / `pyfolio-reloaded` | `empyrical` / `pyfolio` |
+
+**TA-Lib:** modern wheels (`TA-Lib>=0.7`) bundle the C library — no
+`libta-lib-dev` on debian slim. Documented in the Dockerfile header.
+
+**yfinance:** Yahoo rate-limits without notice. Prefer
+`from yfinance_retry import download_with_retry` (baked at
+`/opt/digiquant_sandbox`, on `PYTHONPATH`) over bare `yfinance.download`.
+
+**Image size:** target < 3GB. Measure after a successful local/CI build with
+`docker images digiquant-sandbox` — do not invent a size figure.
+
+**Not in scope for #396:** `execute_code` / MCP wrappers (#397), skills library
+(#398). Those consume this image later.
+
+See [`ARCHITECTURE.md` § 10](ARCHITECTURE.md#10-docker-and-mcp-composition) for
+the sandbox layer in the component diagram.
 
 ---
 

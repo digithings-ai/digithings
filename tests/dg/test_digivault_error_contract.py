@@ -51,7 +51,14 @@ def test_digivault_no_prefix_error_strings_match_server_literals(
     search_resp = digivault_server.orchestrator_invoke(
         digivault_server.OrchestratorInvokeRequest(
             tool="digivault_search_notes",
-            arguments={"query": "jwt", "path_prefix": ""},
+            # No `path_prefix` key at all — which is exactly what digigraph sends
+            # when the corpus has no prefix (`args_eff["path_prefix"] =
+            # context.vault_path_prefix`, and corpus_routing coalesces an empty
+            # prefix to None). A literal `""` used to reach this branch too, but
+            # digivault now rejects a *present* prefix that normalizes to empty
+            # with a 400 before the D1 check (#2359), so `""` would test the
+            # parse-time guard rather than this no-prefix contract.
+            arguments={"query": "jwt"},
         ),
         _fake_request(),
     )

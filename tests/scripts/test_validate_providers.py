@@ -1,10 +1,12 @@
-"""Unit tests for the OpenRouter connectivity retry in scripts/atlas/validate-providers.py (#1633).
+"""Unit tests for OpenRouter connectivity check in scripts/atlas/validate-providers.py (#2374).
 
-Both the 2026-08-11 and 2026-08-12 daily olympus runs died at this single-shot, unretried
-``openrouter/auto`` ping returning an empty completion — even though the real digillm-routed
-checks in the same run (structured output, function tools, web search) passed cleanly, proving
-the pipeline itself was healthy and only this preflight ping was flaky. These tests pin the
-retry contract without touching OpenRouter.
+The 2026-08-11/12/15/18/19/20 daily olympus runs all died at this preflight ping: a bare,
+unconstrained ``openrouter/auto`` call made through a standalone OpenAI client with its own
+ad-hoc retry loop — bypassing every protection (empty-completion self-heal, provider fallback
+swap) that digillm gives every other call in the codebase, and pinging a model no real phase
+ever uses. The fix routes this ping through ``digillm.client.completion`` (same self-heal path
+production gets) and pins it to a known-good model instead of bare auto. These tests pin that
+contract without touching OpenRouter.
 """
 
 from __future__ import annotations
@@ -12,9 +14,10 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any  # score:allow untyped any — dynamically loaded module + fake SDK stand-ins
+from unittest.mock import patch
 
-import openai
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -38,102 +41,215 @@ def vp() -> Any:
 
 
 @pytest.fixture(autouse=True)
-def _no_sleep(monkeypatch: pytest.MonkeyPatch, vp: Any) -> list[float]:
-    """Retries sleep 5s each; capture delays so tests can assert on them, not wall time."""
-    delays: list[float] = []
-    monkeypatch.setattr(vp.time, "sleep", delays.append)
-    return delays
-
-
-@pytest.fixture(autouse=True)
 def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
 
-class _FakeCompletions:
-    """Minimal chat.completions stand-in that replays a scripted sequence of contents."""
-
-    def __init__(self, contents: list[str]) -> None:
-        self._contents = list(contents)
-        self.calls = 0
-        self.request_kwargs: list[dict[str, Any]] = []
-
-    def create(self, **kwargs: Any) -> Any:
-        self.calls += 1
-        self.request_kwargs.append(kwargs)
-        content = self._contents.pop(0)
-        message = type("Message", (), {"content": content})()
-        choice = type("Choice", (), {"message": message})()
-        return type("Completion", (), {"choices": [choice]})()
+def _fake_response(content: str | None) -> SimpleNamespace:
+    return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 
 
-class _FakeClient:
-    def __init__(self, contents: list[str]) -> None:
-        self.chat = type("Chat", (), {"completions": _FakeCompletions(contents)})()
+def test_default_model_is_pinned_not_bare_auto(vp: Any) -> None:
+    """The regression: the ping must pin to a known-good model, never bare openrouter/auto."""
+    assert vp._CONNECTIVITY_PING_MODEL == "openrouter/deepseek/deepseek-v4-flash"
 
 
-def _patch_client(monkeypatch: pytest.MonkeyPatch, contents: list[str]) -> _FakeClient:
-    client = _FakeClient(contents)
-    constructor_kwargs: dict[str, Any] = {}
+def test_success_routes_through_digillm_and_passes(vp: Any) -> None:
+    calls: list[dict[str, Any]] = []
 
-    def _fake_openai(**kwargs: Any) -> _FakeClient:
-        constructor_kwargs.update(kwargs)
-        return client
+    def fake_completion(model: str, messages: list[dict[str, str]], **kwargs: Any) -> Any:
+        calls.append({"model": model, "messages": messages, **kwargs})
+        return _fake_response("ok")
 
-    monkeypatch.setattr(openai, "OpenAI", _fake_openai)
-    client.constructor_kwargs = constructor_kwargs  # type: ignore[attr-defined]
-    return client
+    with patch("digillm.client.completion", side_effect=fake_completion):
+        assert vp.check_openrouter() is True
 
-
-def test_immediate_success_makes_one_call_no_retry(
-    monkeypatch: pytest.MonkeyPatch, vp: Any, _no_sleep: list[float]
-) -> None:
-    """No retry storm on the happy path."""
-    client = _patch_client(monkeypatch, ["ok"])
-    assert vp.check_openrouter("openrouter/auto") is True
-    assert client.chat.completions.calls == 1
-    assert _no_sleep == []
-
-
-def test_empty_then_success_retries_once(
-    monkeypatch: pytest.MonkeyPatch, vp: Any, _no_sleep: list[float]
-) -> None:
-    """A single empty completion is retried, not treated as a hard failure — the #1633 fix."""
-    client = _patch_client(monkeypatch, ["", "ok"])
-    assert vp.check_openrouter("openrouter/auto") is True
-    assert client.chat.completions.calls == 2
-    assert _no_sleep == [vp._OPENROUTER_PING_RETRY_DELAY]
-
-
-def test_persistent_empty_exhausts_retries_and_fails(
-    monkeypatch: pytest.MonkeyPatch, vp: Any, _no_sleep: list[float]
-) -> None:
-    """A genuinely dead provider still fails the preflight after a fixed, bounded retry budget."""
-    client = _patch_client(monkeypatch, ["", "", "", ""])
-    assert vp.check_openrouter("openrouter/auto") is False
-    assert vp._OPENROUTER_PING_RETRY_MAX == 3
-    assert client.chat.completions.calls == 4
-    assert _no_sleep == [vp._OPENROUTER_PING_RETRY_DELAY] * 3
-
-
-def test_client_is_bounded_and_does_not_stack_sdk_retries(
-    monkeypatch: pytest.MonkeyPatch, vp: Any
-) -> None:
-    """The client must own a fixed timeout and not stack the SDK's own retry-on-error on top of
-    our loop, or a single hung connection could blow well past the intended ~80s worst case."""
-    client = _patch_client(monkeypatch, ["ok"])
-    vp.check_openrouter("openrouter/auto")
-    assert client.constructor_kwargs["timeout"] == vp._OPENROUTER_PING_TIMEOUT  # type: ignore[attr-defined]
-    assert client.constructor_kwargs["max_retries"] == 0  # type: ignore[attr-defined]
-
-
-def test_request_targets_the_given_model_with_a_short_deterministic_prompt(
-    monkeypatch: pytest.MonkeyPatch, vp: Any
-) -> None:
-    """The ping must stay a cheap, deterministic 1-token check against the requested model."""
-    client = _patch_client(monkeypatch, ["ok"])
-    vp.check_openrouter("openrouter/some-model")
-    request = client.chat.completions.request_kwargs[0]
-    assert request["model"] == "openrouter/some-model"
+    assert len(calls) == 1
+    request = calls[0]
+    assert request["model"] == vp._CONNECTIVITY_PING_MODEL
     assert request["messages"] == [{"role": "user", "content": "Reply with the single word: ok"}]
     assert request["temperature"] == 0
+    assert "max_tokens" not in request
+
+
+def test_empty_completion_fails_after_digillm_self_heal(vp: Any) -> None:
+    """digillm owns the empty-retry self-heal now; a still-empty result is a hard failure here."""
+    with patch("digillm.client.completion", return_value=_fake_response("")):
+        assert vp.check_openrouter() is False
+
+
+def test_none_response_fails(vp: Any) -> None:
+    with patch("digillm.client.completion", return_value=None):
+        assert vp.check_openrouter() is False
+
+
+def test_exception_is_caught_and_reported_as_failure(vp: Any) -> None:
+    with patch("digillm.client.completion", side_effect=RuntimeError("boom")):
+        assert vp.check_openrouter() is False
+
+
+def test_missing_api_key_fails_without_calling_digillm(
+    vp: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    with patch("digillm.client.completion") as completion:
+        assert vp.check_openrouter() is False
+    completion.assert_not_called()
+
+
+def test_accepts_an_explicit_model_override(vp: Any) -> None:
+    """Callers (e.g. a future targeted diagnostic) can still ping a specific model."""
+    calls: list[dict[str, Any]] = []
+
+    def fake_completion(model: str, messages: list[dict[str, str]], **kwargs: Any) -> Any:
+        calls.append({"model": model, **kwargs})
+        return _fake_response("ok")
+
+    with patch("digillm.client.completion", side_effect=fake_completion):
+        assert vp.check_openrouter("openrouter/some-model") is True
+
+    assert calls[0]["model"] == "openrouter/some-model"
+
+
+def _fake_tier_config(models: list[str]) -> Any:
+    tier_cfg = SimpleNamespace(allowed_models={"phase": models})
+    return SimpleNamespace(tiers={"cheap": tier_cfg})
+
+
+def test_function_tools_pass_on_text_content(vp: Any) -> None:
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_pass_on_tool_calls_with_no_content(vp: Any) -> None:
+    """A tool-call-only response has no text content but isn't empty — must still PASS."""
+    response = SimpleNamespace(
+        choices=[
+            SimpleNamespace(message=SimpleNamespace(content=None, tool_calls=[SimpleNamespace()]))
+        ]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_fail_on_truly_empty_response(vp: Any) -> None:
+    """The regression this check exists for: resp is not None but carries no content or tool_calls."""
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="", tool_calls=None))]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/some-model"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is False
+
+
+def test_function_tools_pass_but_reports_substitution(vp: Any) -> None:
+    """OpenRouter fallback routing (#2540) attaches to the PRIMARY request, not just retries,
+    and can substitute a working pool member for reasons unrelated to tool-use capability
+    (e.g. transient provider load-shedding — the exact scenario OPENROUTER_FALLBACK_MODELS
+    exists to survive, and which the real pipeline run tolerates via the same env var). A
+    substitution must NOT hard-fail the preflight, but must be visible in the detail text.
+
+    Uses a real three-segment pool slug (``openrouter/deepseek/deepseek-v4-flash``, matching
+    config/olympus_models.yaml) rather than a two-segment stand-in: a two-segment fixture
+    can't distinguish a correct ``removeprefix("openrouter/")`` from a broken
+    ``model.split("/")[-1]``-style implementation, since both happen to agree on two segments.
+    """
+    response = SimpleNamespace(
+        model="anthropic/claude-sonnet-5",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "served by anthropic/claude-sonnet-5" in detail
+    assert "substitution" in detail.lower()
+
+
+def test_function_tools_reports_served_model_when_matching_requested(vp: Any) -> None:
+    """The requested three-segment pool model (bare, ``openrouter/`` stripped) actually served
+    the response — no substitution, and the served model is still surfaced for visibility."""
+    response = SimpleNamespace(
+        model="deepseek/deepseek-v4-flash",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "served by deepseek/deepseek-v4-flash" in detail
+    assert "substitution" not in detail.lower()
+
+
+def test_function_tools_pass_when_response_has_no_model_field(vp: Any) -> None:
+    """Back-compat: a response object without a ``.model`` attribute has nothing to compare
+    against, so substitution can't be detected — must not be treated as a mismatch."""
+    response = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))]
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["openrouter/deepseek/deepseek-v4-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+
+
+def test_function_tools_skips_substitution_check_for_non_openrouter_models(vp: Any) -> None:
+    """A latent false positive: without gating on the ``openrouter/`` prefix, a differently-
+    prefixed pool pin (e.g. a ``gemini/`` pin) would get a spurious substitution FAIL, since
+    digillm's ``_parse_provider_prefix`` strips only registered provider prefixes — not the
+    same thing a bare ``removeprefix("openrouter/")`` computes for a non-openrouter model."""
+    response = SimpleNamespace(
+        model="gemini-3.7-flash",
+        choices=[SimpleNamespace(message=SimpleNamespace(content="ok", tool_calls=None))],
+    )
+    with (
+        patch("digigraph.model_config.get_olympus_tier", return_value="cheap"),
+        patch(
+            "digigraph.model_config._load_olympus_models",
+            return_value=_fake_tier_config(["gemini/gemini-3.7-flash"]),
+        ),
+        patch("digillm.client.completion", return_value=response),
+    ):
+        assert vp.check_openrouter_function_tools() is True
+    detail = vp.results[-1][2]
+    assert "substitution" not in detail.lower()

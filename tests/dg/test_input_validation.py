@@ -66,7 +66,7 @@ class TestChatCompletionValidation:
         r = client.post(
             "/v1/chat/completions",
             json={
-                "model": "sitaas-rag",
+                "model": "digigraph-rag",
                 "messages": [{"role": "user", "content": "hi"}],
                 "evil_field": True,
             },

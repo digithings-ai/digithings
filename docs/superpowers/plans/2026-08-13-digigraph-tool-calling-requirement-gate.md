@@ -850,7 +850,7 @@ def test_chat_completions_threads_require_tool_calls_header(monkeypatch: pytest.
     client = TestClient(app)  # reuse this file's existing TestClient/app fixture setup
     resp = client.post(
         "/v1/chat/completions",
-        json={"model": "sitaas-rag", "messages": [{"role": "user", "content": "hi"}]},
+        json={"model": "digigraph-rag", "messages": [{"role": "user", "content": "hi"}]},
         headers={"X-Require-Tool-Calls": "1"},
     )
     assert resp.status_code == 200

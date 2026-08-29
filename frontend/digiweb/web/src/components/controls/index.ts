@@ -65,5 +65,10 @@ export {
   type PagerPageProps,
   type IconButtonProps,
 } from "./NavButtons";
+export {
+  DatePager,
+  formatDatePagerLabel,
+  type DatePagerProps,
+} from "./DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./TagsInput";
 export { SearchBar, type SearchBarProps } from "./SearchBar";

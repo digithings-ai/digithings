@@ -62,10 +62,12 @@ describe('SettingsContent', () => {
     expect(html).toContain('No pipeline runs yet');
   });
 
-  it('links Docs to /system, never /architecture', () => {
+  it('links Docs to /pipeline, never /architecture or /system', () => {
     const html = render();
-    expect(html).toContain('href="/system"');
+    expect(html).toContain('href="/pipeline"');
+    expect(html).toContain('Pipeline');
     expect(html).not.toContain('/architecture');
+    expect(html).not.toContain('href="/system"');
   });
 
   it('uses no off-palette fin-blue literals', () => {

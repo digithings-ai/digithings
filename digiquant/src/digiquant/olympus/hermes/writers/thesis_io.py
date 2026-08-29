@@ -442,8 +442,8 @@ def upsert_vehicle_thesis_from_analyst(
         name=f"{ticker} vehicle thesis",
         status="ACTIVE",
         vehicle=ticker,
-        invalidation=invalidation[:500] if invalidation else None,
-        notes=str(analyst_payload.get("thesis") or "")[:2000] or None,
+        invalidation=invalidation or None,
+        notes=str(analyst_payload.get("thesis") or "") or None,
         thesis_kind="vehicle",
         linked_market_thesis_id=link,
     )

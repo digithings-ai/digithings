@@ -22,6 +22,7 @@ from digiquant.olympus.atlas.state import ExcludedTicker, FocusRosterEntry
 from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.hermes.budget_controller import assess_budget
 from digiquant.olympus.hermes.candidates import select_focus_tickers
+from digiquant.olympus.hermes.research_attention import h4_phase_attention_update
 from digiquant.olympus.hermes.roster_cap import capped_tickers, configured_max_analysts
 from digiquant.olympus.hermes.state import HermesState
 
@@ -336,11 +337,13 @@ def _h4_node_factory(client: SupabaseClient | None):
             len(excluded),
             ", ".join(e.ticker for e in excluded),
         )
-        return {
+        phase_update = {
             "phase_hermes": state.phase_hermes.model_copy(
                 update={"focus_roster": roster, "focus_roster_excluded": excluded}
             ),
         }
+        planned = state.model_copy(update=phase_update)
+        return {**phase_update, **h4_phase_attention_update(planned)}
 
     return _h4_node
 

@@ -22,7 +22,6 @@ Fetch the CI output for the PR. Options:
 | **Format** | `ruff format`, `prettier` diff | `ruff format .` / `npx prettier --write .` |
 | **Broken links** | `make doc-check` failures | Fix or remove the dead markdown link |
 | **Unit tests** | `pytest` / `vitest` failures | Run the failing test locally; fix the code |
-| **PR linkage** | "Require Fixes" check fails | Add `Fixes #N` to PR body; create backing issue if needed |
 | **Scoring gate** | `make score` exits non-zero | Run `score-and-fix` skill |
 | **Docker / compose** | `make up` / service health failures | Check `docker compose logs <service>` |
 | **Other** | Anything else | Read the raw log; escalate if unclear |
@@ -47,17 +46,3 @@ git add <changed files>
 make score          # re-run gate if scoring was a bucket
 git push            # re-triggers CI
 ```
-
-## PR linkage failures
-
-The "Require Fixes" check fails when the PR branch doesn't match `task/N-*` AND the PR body has no `Fixes #N` / `Closes #N` / `Resolves #N`. Fix:
-
-1. Create a backing issue if none exists:
-   ```bash
-   gh issue create --title "[agent] <short description>" --label "agent-task"
-   ```
-2. Add to PR body:
-   ```
-   Closes #<N>
-   ```
-3. Push any trivial change (or amend + force-push) to re-trigger checks.

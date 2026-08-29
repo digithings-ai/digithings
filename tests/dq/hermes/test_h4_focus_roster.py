@@ -512,3 +512,35 @@ def test_h4_node_applies_adaptive_budget(monkeypatch: pytest.MonkeyPatch) -> Non
     out = node(state)
     roster = out["phase_hermes"].focus_roster
     assert len(roster) == 1  # adaptive budget=1 applied
+
+
+@pytest.mark.unit
+def test_h4_roster_identical_across_attention_modes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """WP13.4 (#2930): planner off/shadow/enforce must not mutate H4 roster."""
+    import json
+
+    from digiquant.olympus.atlas.research_attention import (
+        OLYMPUS_RESEARCH_ATTENTION_MODE_ENV,
+        reset_attention_stores,
+    )
+    from digiquant.olympus.hermes.phases import h4_opportunity_screener as h4
+
+    monkeypatch.setenv("HERMES_HELD_GATE", "off")
+    state = _make_min_hermes_state(watchlist=["AAA", "BBB", "SPY", "CCC"])
+    node = h4.build_h4_opportunity_screener(client=None).nodes[0].run
+    rosters: dict[str, str] = {}
+    for mode in ("off", "shadow", "enforce"):
+        monkeypatch.setenv(OLYMPUS_RESEARCH_ATTENTION_MODE_ENV, mode)
+        reset_attention_stores()
+        out = node(state.model_copy())
+        rosters[mode] = json.dumps(
+            [e.model_dump(mode="json") for e in out["phase_hermes"].focus_roster],
+            sort_keys=True,
+        )
+        excluded = json.dumps(
+            [e.model_dump(mode="json") for e in out["phase_hermes"].focus_roster_excluded],
+            sort_keys=True,
+        )
+        rosters[f"{mode}_excluded"] = excluded
+    assert rosters["off"] == rosters["shadow"] == rosters["enforce"]
+    assert rosters["off_excluded"] == rosters["shadow_excluded"] == rosters["enforce_excluded"]

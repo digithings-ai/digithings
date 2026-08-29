@@ -117,7 +117,7 @@ def get_checkpointer():
     The same instance is reused so thread state persists across requests.
 
     Env: DIGI_CHECKPOINTER=memory|sqlite|postgres. Unset defaults to **sqlite**
-    when a digiproject.yaml is active (SITAAS multi-turn mode) so conversation state
+    when a digiproject.yaml is active (project multi-turn mode) so conversation state
     survives across requests. Falls back to **memory** when no project config is present.
     Use ``none`` to compile without one (not recommended; breaks multi-turn / thread APIs).
 

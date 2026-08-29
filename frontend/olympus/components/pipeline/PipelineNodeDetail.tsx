@@ -2,12 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { Skeleton, SkeletonGroup } from '@digithings/web';
-import { BookOpen, ChevronsLeft, ChevronsRight, FileSearch, Maximize2, Minimize2, X } from 'lucide-react';
+import { BookOpen, FileSearch } from 'lucide-react';
 import { getLibraryDocumentById, type LibraryDocumentResult } from '@/lib/queries';
 import { pipelineNodeRunStatusLabel } from '@/lib/pipeline-layout';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
 import { PIPELINE_TOPOLOGY, pipelineNodeExplanation } from '@/lib/pipeline-topology';
 import LibraryDocumentBody from '@/components/library/LibraryDocumentBody';
+import DetailPanelHeaderActions, {
+  type DetailPanelSize,
+} from '@/components/DetailPanelHeaderActions';
 
 export interface PipelineNodeDetailProps {
   node?: LaidOutNode | null;
@@ -27,7 +30,7 @@ export default function PipelineNodeDetail({
   const [error, setError] = useState<string | null>(null);
   // Reader ergonomics (#1679): comfortable (default) / wide / full-screen. Desktop
   // only — the mobile docked pane keeps its height-based layout untouched.
-  const [size, setSize] = useState<'default' | 'wide' | 'full'>('default');
+  const [size, setSize] = useState<DetailPanelSize>('default');
   const explanation = node ? pipelineNodeExplanation(node.stageId, node.id) : null;
   const runStatus = node?.runStatus
     ?? (documentKey ? 'persisted-artifact' : node?.stateOnly ? 'state-only' : null);
@@ -98,35 +101,7 @@ export default function PipelineNodeDetail({
             </div>
           )}
         </div>
-        <div className="ml-3 flex flex-shrink-0 items-center gap-1.5">
-          {/* Reader-size toggles (#1679) — desktop only; mobile is already full-page */}
-          {size !== 'full' && (
-            <button
-              type="button"
-              aria-label={size === 'wide' ? 'Narrow panel' : 'Widen panel'}
-              onClick={() => setSize(size === 'wide' ? 'default' : 'wide')}
-              className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
-            >
-              {size === 'wide' ? <ChevronsRight size={14} /> : <ChevronsLeft size={14} />}
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label={size === 'full' ? 'Exit full screen' : 'Full screen'}
-            onClick={() => setSize(size === 'full' ? 'default' : 'full')}
-            className="hidden h-8 w-8 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:flex"
-          >
-            {size === 'full' ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
-          >
-            <X size={18} />
-          </button>
-        </div>
+        <DetailPanelHeaderActions size={size} onSizeChange={setSize} onClose={onClose} />
       </div>
 
       {/* Body */}

@@ -9,6 +9,7 @@ export type RawPositionEventLike = {
   price: number | string | null;
   thesis_id: string | null;
   reason: string | null;
+  id?: string | null;
 };
 
 function n(value: number | string | null): number | null {
@@ -32,5 +33,6 @@ export function normalizePositionEvent(row: RawPositionEventLike): DashboardPosi
     price: n(row.price),
     thesis_id: row.thesis_id ?? null,
     reason: row.reason ?? null,
+    id: row.id ?? null,
   };
 }
