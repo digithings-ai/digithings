@@ -2813,3 +2813,29 @@ anywhere in `brokers/contracts.py`, `brokers/base.py`, or `brokers/stubs.py` —
 here is named `submit_order`, `get_order`, `cancel_order`, or `list_fills`. Broker
 stub/protocol coverage lives entirely in `tests/dq/brokers/test_contracts.py` — the legacy
 `tests/dq/test_brokers.py` was deleted and its coverage folded in there.
+
+### IBKR adapter
+
+`digiquant/src/digiquant/brokers/ibkr.py` (K2) implements `BrokerAdapter` against IBKR's
+Client Portal Web API. **Read-first:** `get_account` / `get_positions` use
+`/portfolio/accounts`, paginated `/portfolio/{id}/positions/{page}`, `/summary`, and
+`/ledger` on the SSO/live-session layer and never call `/iserver/auth/ssodh/init`.
+`connect()` checks `/iserver/auth/status`; `keepalive()` is a single `POST /tickle` (no
+threads — the caller owns any tickle loop). Expired sessions get one transparent re-auth,
+then `BrokerAuthError`.
+
+Order submission is implemented but locked behind `DIGIQUANT_IBKR_ORDERS=1` (default off;
+`submit_order` raises `IbkrOrdersDisabledError`). When enabled, brokerage init uses
+`compete=false`, surfaces competing sessions as `SessionCompetingError` without kicking the
+user, resolves `conid` via `/iserver/secdef/search` (per-symbol cache), submits
+`POST /iserver/account/{id}/orders`, and walks the reply chain against
+`SUPPRESSIBLE_MESSAGE_IDS` (re-applied via `/iserver/questions/suppress` after every session
+init). Off-allowlist prompts → `BrokerOrderRejected(question_text)`.
+
+Pacing: monotonic-clock ≥5s spacing on `/portfolio/accounts`, `/iserver/orders`,
+`/iserver/trades` — violation raises `BrokerRateLimited` (no silent sleep). Money/qty parse
+as `Decimal`; logs carry response SHA-256 fingerprints only. Auth is an injected
+pre-authenticated `IbkrTransport` (no OAuth signing in-tree yet). Optional extra
+`brokers-ibkr = ["httpx>=0.27"]`. Operational notes: `digiquant/docs/brokers/IBKR-NOTES.md`.
+Broker exception classes currently live in `ibkr.py` pending K1 merge unification into
+`contracts.py`. Tests: `tests/dq/brokers/test_ibkr_adapter.py` (mocked transport only).

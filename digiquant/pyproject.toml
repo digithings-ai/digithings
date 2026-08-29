@@ -66,6 +66,10 @@ dev = ["digiquant[atlas]", "digiquant[indicators]", "digiquant[m2]"]
 # import (see #1705). Lift the bound only together with a migration to the 2.x API.
 mcp = ["mcp>=1.2,<2"]
 otel = ["digibase[otel]"]
+# K2 IBKR adapter: thin httpx transport factory (optional). The adapter itself imports
+# without this extra — construct IbkrAdapter with any injected IbkrTransport. OAuth 1.0a
+# signing is not in this extra; production auth lands with vendor onboarding.
+brokers-ibkr = ["httpx>=0.27"]
 
 [project.scripts]
 digiquant = "digiquant.cli:main"
