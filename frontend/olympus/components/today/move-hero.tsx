@@ -4,6 +4,7 @@ import type { RebalanceAction } from '@/lib/types';
 import { Badge } from '@/components/ui';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
+import { isActiveRebalanceAction } from '@/lib/rebalance-materiality';
 
 /**
  * The move-led hero — the single full-weight element of the Brief (landing) page.
@@ -95,10 +96,7 @@ export function MoveHero({
   nav,
 }: MoveHeroProps) {
   const accent = REGIME_ACCENT[regimeLabel] ?? REGIME_ACCENT.neutral;
-  const changeCount = actions.filter((a) => {
-    const k = (a.action || '').trim().toUpperCase();
-    return k !== 'HOLD' && !(k === 'EXIT' && (a.current_pct ?? 0) === 0);
-  }).length;
+  const changeCount = actions.filter(isActiveRebalanceAction).length;
   const moveStatus =
     changeCount === 0
       ? 'No rebalance today — holding the book'

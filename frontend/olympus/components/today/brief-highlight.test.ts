@@ -17,10 +17,11 @@ const base: BriefHighlightInput = {
 };
 
 describe('activeRebalanceActions', () => {
-  it('drops HOLD and zero-weight EXIT no-ops', () => {
+  it('drops HOLD, zero-weight EXIT, and 0.0pp ADD/TRIM noise', () => {
     const actions: RebalanceAction[] = [
       { ticker: 'SPY', current_pct: 50, recommended_pct: 50, action: 'HOLD' },
       { ticker: 'QQQ', current_pct: 0, recommended_pct: 0, action: 'EXIT' },
+      { ticker: 'IWM', current_pct: 10.04, recommended_pct: 10.01, action: 'TRIM' },
       { ticker: 'NVDA', current_pct: 8, recommended_pct: 6, action: 'TRIM' },
     ];
     expect(activeRebalanceActions(actions).map((a) => a.ticker)).toEqual(['NVDA']);

@@ -8,6 +8,7 @@ import { isMaterialBookEvent } from '@/lib/brief-book-event';
 import { resolvePmRationale } from '@/lib/pm-rationale';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { ledgerHref, tickerDossierHref } from '@/lib/portfolio-url-state';
+import { isActiveRebalanceAction } from '@/lib/rebalance-materiality';
 
 /**
  * Personal Morning Brief hero copy (variant B: research + portfolio dual beat).
@@ -67,12 +68,9 @@ function titleCaseAction(action: string): string {
   return kind.charAt(0) + kind.slice(1).toLowerCase();
 }
 
-/** Non-HOLD book moves (EXIT at 0% current weight is a no-op). */
+/** Non-HOLD book moves (EXIT at 0% current weight is a no-op; 0.0pp ADD/TRIM too). */
 export function activeRebalanceActions(actions: RebalanceAction[]): RebalanceAction[] {
-  return actions.filter((action) => {
-    const kind = (action.action || '').trim().toUpperCase();
-    return kind !== 'HOLD' && !(kind === 'EXIT' && (action.current_pct ?? 0) === 0);
-  });
+  return actions.filter(isActiveRebalanceAction);
 }
 
 function rationaleFor(

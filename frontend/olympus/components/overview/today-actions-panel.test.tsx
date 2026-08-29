@@ -33,6 +33,20 @@ describe('TodayActionsPanel', () => {
     expect(html).toContain('+6.5pp');
   });
 
+  it('collapses 0.0pp ADD/TRIM into the held section (#3080)', () => {
+    const html = render([
+      { ticker: 'SPY', current_pct: 10.04, recommended_pct: 10.01, action: 'TRIM' },
+      { ticker: 'NVDA', current_pct: 0, recommended_pct: 6.5, action: 'OPEN' },
+    ]);
+    expect(html).toContain('NVDA');
+    expect(html).toContain('OPEN');
+    // Only one countable change (OPEN); the micro TRIM is folded into "held".
+    expect(html).toContain('>1</span>');
+    expect(html).toMatch(/1 position held/);
+    // Held rows stay collapsed until expanded — ticker not in the static markup.
+    expect(html).not.toContain('TRIM');
+  });
+
   it('orders EXIT before ADD (decision-first sort)', () => {
     const html = render([
       { ticker: 'AAA', current_pct: 1, recommended_pct: 2, action: 'ADD' },

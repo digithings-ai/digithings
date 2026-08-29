@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, ArrowUpRight, XCircle, PlusCircle, ListChecks } from 'lucide-react';
 import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
 import { usablePmRationale } from '@/lib/pm-rationale';
+import { isActiveRebalanceAction, isMaterialRebalanceDelta } from '@/lib/rebalance-materiality';
 import type { RebalanceAction } from '@/lib/types';
 
 /**
@@ -65,6 +66,7 @@ function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string })
   const kind = kindOf(a.action);
   const { color, icon: Icon } = STYLE[kind];
   const delta = (a.recommended_pct ?? 0) - (a.current_pct ?? 0);
+  const showArrow = kind !== 'HOLD' || isMaterialRebalanceDelta(a);
   return (
     <div className="px-5 py-2.5 hover:bg-ink/[0.025] transition-colors">
       <div className="flex items-center justify-between gap-3">
@@ -85,14 +87,20 @@ function ActionRow({ a, rationale }: { a: RebalanceAction; rationale?: string })
           <span className="font-mono text-xs font-bold text-ink">{a.ticker}</span>
         </div>
         <div className="flex items-center gap-2 shrink-0 font-mono text-xs tabular-nums">
-          <span className="text-ink-mute">{(a.current_pct ?? 0).toFixed(1)}%</span>
-          <ArrowRight size={11} className="text-ink-mute/60" />
-          <span className="text-ink font-semibold">{(a.recommended_pct ?? 0).toFixed(1)}%</span>
-          {Math.abs(delta) >= 0.05 && (
-            <span className={delta > 0 ? 'text-up' : 'text-down'}>
-              {delta > 0 ? '+' : ''}
-              {delta.toFixed(1)}pp
-            </span>
+          {showArrow ? (
+            <>
+              <span className="text-ink-mute">{(a.current_pct ?? 0).toFixed(1)}%</span>
+              <ArrowRight size={11} className="text-ink-mute/60" />
+              <span className="text-ink font-semibold">{(a.recommended_pct ?? 0).toFixed(1)}%</span>
+              {Math.abs(delta) >= 0.05 && (
+                <span className={delta > 0 ? 'text-up' : 'text-down'}>
+                  {delta > 0 ? '+' : ''}
+                  {delta.toFixed(1)}pp
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-ink font-semibold">{(a.recommended_pct ?? a.current_pct ?? 0).toFixed(1)}%</span>
           )}
         </div>
       </div>
@@ -123,9 +131,12 @@ export function TodayActionsPanel({
   const { changes, holds, sizerRemoved } = useMemo(() => {
     const sorted = [...actions].sort((x, y) => ORDER[kindOf(x.action)] - ORDER[kindOf(y.action)]);
     return {
-      // Meaningful book-building actions: new, add, trim, exit (where current_pct > 0).
-      changes: sorted.filter((a) => kindOf(a.action) !== 'HOLD' && !isSizerRemoved(a)),
-      holds: sorted.filter((a) => kindOf(a.action) === 'HOLD'),
+      // Meaningful book-building actions — immaterial ADD/TRIM collapse with HOLDs (#3080).
+      changes: sorted.filter((a) => isActiveRebalanceAction(a) && !isSizerRemoved(a)),
+      holds: sorted.filter(
+        (a) =>
+          !isSizerRemoved(a) && (kindOf(a.action) === 'HOLD' || !isActiveRebalanceAction(a)),
+      ),
       // Sizer-rejected rows (target=0, never held) — shown collapsed so they don't crowd
       // the meaningful actions but are still accessible for inspection.
       sizerRemoved: sorted.filter((a) => isSizerRemoved(a)),

@@ -246,7 +246,11 @@ function useNowMs(intervalMs = CLOCK_TICK_MS): number {
  * that would read as a measured non-move.
  */
 function WeightChangeBadge({ deltaPp }: { deltaPp: number | null }) {
+  // Desk display: hide sub-0.05pp float noise and exact zeros. Do not claim
+  // "Added/Trimmed" — day-over-day weight change often is mark-to-market drift on a
+  // held name (#3080), not a PM decision.
   if (deltaPp === null || Math.abs(deltaPp) < 0.05) return null;
+  if (Number(deltaPp.toFixed(1)) === 0) return null;
   const up = deltaPp > 0;
   return (
     <span
@@ -254,7 +258,7 @@ function WeightChangeBadge({ deltaPp }: { deltaPp: number | null }) {
       // text-up/text-down: tokens.css reserves --up/--down for P&L semantics, and a position
       // getting bigger is not a gain. The sign carries the direction.
       className="mt-0.5 block font-mono text-[0.64rem] text-ink-soft"
-      title={`${up ? 'Added' : 'Trimmed'} ${Math.abs(deltaPp).toFixed(1)} percentage points since the previous book`}
+      title={`Weight ${up ? '+' : '−'}${Math.abs(deltaPp).toFixed(1)}pp vs the previous book (includes drift when held)`}
     >
       {up ? '+' : '−'}
       {Math.abs(deltaPp).toFixed(1)}pp
