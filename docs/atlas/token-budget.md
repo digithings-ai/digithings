@@ -8,7 +8,11 @@
 > pinned set, and `apply_olympus_openrouter_env()` (Hermes chain startup) sets
 > `OPENROUTER_ALLOWED_MODELS` + `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**
 > = cheapest Auto Router dial) from the active tier. Every LLM call and the web
-> grounding pre-pass (`openrouter:web_search`, Exa, ~$0.005/search) go through
+> grounding pre-pass (built-in provider search on `perplexity/sonar` or `:online`
+> models from `web_search_models` — billed per that model's page, not Exa; the
+> `openrouter:web_search` Exa server-tool path is **$0.007**/request for
+> auto/instant/fast modes per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search),
+> 10 results included, +$0.001/extra, but is unreachable from production pools) go through
 > `OPENROUTER_API_KEY`. **Frontier models are rejected** (`openai/*`,
 > `anthropic/*`, GPT-5.x, Claude Opus/Sonnet, o-series — see
 > `digigraph.model_config.is_flagship_openrouter_model`); phases pass **pinned**

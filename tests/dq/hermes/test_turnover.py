@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book
+from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book, clamp_no_trade_band
 
 pytestmark = pytest.mark.unit
 
@@ -89,3 +89,14 @@ def test_relative_band_allows_large_drift() -> None:
         run_date=date(2026, 6, 19),
     )
     assert sized["SPY"] == 40.0
+
+
+def test_post_control_clamp_holds_micro_delta_from_gross_scale() -> None:
+    """#3080 — FINAL_GROSS_SCALE can reintroduce immaterial deltas; re-clamp holds them."""
+    preferences = {"rebalance_threshold_pct": 3, "rebalance_rel_band_pct": 20}
+    current = {"SPY": 20.0, "TLT": 30.0}
+    # After proportional scale, SPY lands 0.5pp off drifted current — inside the 3pp band.
+    sized = {"SPY": 20.5, "TLT": 30.0}
+    out = clamp_no_trade_band(sized, current_weights=current, preferences=preferences)
+    assert out["SPY"] == 20.0
+    assert out["TLT"] == 30.0

@@ -19,7 +19,10 @@ from digiquant.olympus.atlas.state import (
 from digiquant.olympus.hermes.models.pm_direction import PMDirectionMemo, TickerDirection
 from digiquant.olympus.hermes.phases.h9_commit_run import CommitRunDeps, build_commit_run_node
 from digiquant.olympus.hermes.writers.commit_io import (
+    _NAV_INTERVAL_TICKER_BATCH,
+    _NAV_INTERVAL_WINDOW_DAYS,
     _canonical_thesis_ids,
+    _interval_price_returns,
     load_commit_manifests,
     resolve_prior_commit,
 )
@@ -1696,6 +1699,81 @@ class TestPriceReadRowCap:
     def test_batch_is_derived_from_the_lookback(self) -> None:
         """Widening the window must not silently reintroduce truncation."""
         worst_case = _CLOSE_TICKER_BATCH * (_CLOSE_LOOKBACK_DAYS + 1)
+        assert worst_case <= self.CAP, (
+            f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
+        )
+
+
+class TestIntervalPriceReturnsRowCap:
+    """Regression (#2484): interval NAV returns must not drop tickers under the row cap.
+
+    ``_interval_price_returns`` needs both ends of a padded interval window (up to
+    ``_NAV_INTERVAL_WINDOW_DAYS`` calendar days per ticker). A truncated ticker is
+    omitted from the returned dict and the caller treats a missing key as 0.0 — a
+    silent wrong NAV with no diagnostic.
+    """
+
+    CAP = 1000
+    RUN = date(2026, 6, 12)
+
+    def _capped_client(self, tickers: list[str]) -> FakeSupabaseClient:
+        anchor = self.RUN - timedelta(days=120)
+        floor = anchor - timedelta(days=7)
+        rows: list[dict[str, object]] = []
+        for index, ticker in enumerate(tickers):
+            begin_close = 100.0 + index
+            end_close = 110.0 + index
+            day = floor
+            while day < self.RUN:
+                iso = day.isoformat()
+                if iso <= anchor.isoformat():
+                    close = begin_close
+                elif day == self.RUN - timedelta(days=1):
+                    close = end_close
+                else:
+                    close = (begin_close + end_close) / 2.0
+                rows.append({"date": iso, "ticker": ticker, "close": close})
+                day += timedelta(days=1)
+        cap = self.CAP
+
+        class _Capped(FakeSupabaseClient):
+            def table(self, name: str):  # type: ignore[no-untyped-def]
+                query = super().table(name)
+                if name != "price_history":
+                    return query
+                inner = query.execute
+
+                def _execute():  # type: ignore[no-untyped-def]
+                    resp = inner()
+                    resp.data = list(resp.data or [])[:cap]
+                    return resp
+
+                query.execute = _execute  # type: ignore[method-assign]
+                return query
+
+        return _Capped(canned_reads={"price_history": rows})
+
+    def test_wide_universe_returns_every_ticker_under_the_row_cap(self) -> None:
+        tickers = [f"TK{index:03d}" for index in range(10)]
+        window_rows = _NAV_INTERVAL_WINDOW_DAYS + 1
+        assert len(tickers) * window_rows > self.CAP, "universe must exceed the cap"
+        returns = _interval_price_returns(
+            client=self._capped_client(tickers),
+            tickers=tuple(tickers),
+            start_date=self.RUN - timedelta(days=200),
+            run_date=self.RUN,
+        )
+        missing = sorted(set(tickers) - set(returns))
+        assert not missing, (
+            f"{len(missing)} ticker(s) lost to the row cap ({missing[:5]}...) — "
+            "a truncated read is treated as 0.0 return and silently wrong NAV"
+        )
+        for index, ticker in enumerate(tickers):
+            expected = (110.0 + index - (100.0 + index)) / (100.0 + index)
+            assert returns[ticker] == pytest.approx(expected)
+
+    def test_batch_is_derived_from_the_interval_window(self) -> None:
+        worst_case = _NAV_INTERVAL_TICKER_BATCH * (_NAV_INTERVAL_WINDOW_DAYS + 1)
         assert worst_case <= self.CAP, (
             f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
         )

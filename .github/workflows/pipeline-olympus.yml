@@ -145,6 +145,9 @@ jobs:
           "${ARGS[@]}" || echo "::warning::Fed rate-decision odds ingest failed (fail-soft) — pipeline continues"
 
       - name: Validate AI provider routing
+        # Hard ceiling for the whole preflight LLM probe block (#2531). A hung provider must
+        # fail this step cleanly, not burn the job's 240-minute timeout → cancelled.
+        timeout-minutes: 10
         env:
           CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -152,17 +155,14 @@ jobs:
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          # Same pool as the "Run Olympus research pipeline" step below (#1622) — the preflight
-          # must be tested under the same routing conditions the real run gets, not a stricter,
-          # unconfigured one. Applies to the initial request as well as the first empty-response
-          # retry (#2540) — digillm attaches fallback routing to the primary call, not just its
-          # self-heal retry, so a served model can differ from the requested one on the very
-          # first attempt. check_openrouter_function_tools() surfaces that substitution instead
-          # of hard-failing on it, since it's the same benign routing this step is here to permit.
-          # Note: this does NOT by itself fix #2374-style daily failures — the same failure
-          # recurred after this var was added (see #2517/#2520). The actual root cause was a
-          # fragile finite max_tokens cap on the connectivity ping (fixed by removing the cap
-          # entirely, not by adding more retry/fallback surface — see validate-providers.py).
+          # Per-attempt read timeout for digillm during preflight only (#2528/#2531). The real
+          # pipeline run step keeps digillm's 600s default.
+          DIGILLM_REQUEST_TIMEOUT_SECONDS: "20"
+          # Same pool as the "Run Olympus research pipeline" step below (#1622). OPENROUTER_ALLOWED_MODELS
+          # is applied in-process by validate-providers.py via apply_olympus_openrouter_env() — same
+          # as Hermes chain startup (#2532). Fallback routing applies to the initial request as well
+          # as empty-response retries (#2540); check_openrouter_function_tools() surfaces model
+          # substitution instead of hard-failing when it matches production tolerance.
           OPENROUTER_FALLBACK_MODELS: &olympus_openrouter_fallback_models "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
         run: |
           uv run --frozen --no-sync python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
@@ -176,12 +176,10 @@ jobs:
           SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          # #1622: empty-completion self-heal target. The phase-1/2 fan-out bursts all
-          # slugs that hash onto one model at the same provider simultaneously; when that
-          # provider load-sheds (empty 200s — 28 on 2026-07-20, ~57 on 2026-07-21), the
-          # empty-retry re-asks the SAME provider and the segment dies. With this set,
-          # digillm's first empty-retry adds models+route=fallback so OpenRouter swaps
-          # provider/model instead. Cheap→capable, all endpoint-gate-verified.
+          # #1622: provider-error fallback chain. digillm attaches models+route=fallback to
+          # every openrouter/ request when this is set (primary call, not only empty retries).
+          # That covers provider errors (5xx, rate limits, endpoint refusals) — not empty 200s
+          # with blank content (#2520). Cheap→capable, all endpoint-gate-verified.
           OPENROUTER_FALLBACK_MODELS: *olympus_openrouter_fallback_models
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
