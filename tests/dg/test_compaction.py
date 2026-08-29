@@ -97,12 +97,21 @@ class TestTier1Truncation:
         assert view[0]["content"].startswith("[truncated")
         assert refs
 
-    def test_wrap_execute_tool_for_tier1(self, workspace: Path) -> None:
+    def test_wrap_execute_tool_for_tier1_preserves_model_visible_content(
+        self, workspace: Path
+    ) -> None:
+        """Same-turn wrap must not stub content — digillm needs the payload to answer.
+
+        Regression: project-mode RAG with DIGI_RUN_DATA_DIR used to replace digisearch
+        JSON (>2 KB) with a workspace stub before digillm injected it, so the model
+        synthesized answers from stubs alone.
+        """
         cfg = CompactionConfig(tier1_truncation_kb=1)
         refs: list[str] = []
+        payload = "Z" * 2000
 
         def execute(_name: str, _args: dict) -> dict[str, str]:
-            return {"content": "Z" * 2000}
+            return {"content": payload, "rag_sources": []}
 
         wrapped = wrap_execute_tool_for_tier1(
             execute,
@@ -113,9 +122,22 @@ class TestTier1Truncation:
         )
         out = wrapped("digisearch", {"query": "x"})
         assert isinstance(out, dict)
-        assert out["content"].startswith("[truncated")
+        assert out["content"] == payload
         assert refs
-        assert load_workspace_json(refs[0])["content"] == "Z" * 2000
+        assert load_workspace_json(refs[0])["content"] == payload
+
+    def test_maybe_truncate_still_stubs_for_prior_turn_lists(self, workspace: Path) -> None:
+        """Prior-turn tier-1 truncation (apply_tier1 / maybe_truncate) still stubs."""
+        stub, ref = maybe_truncate_tool_payload(
+            "Z" * 2000,
+            config=CompactionConfig(tier1_truncation_kb=1),
+            session_id="prior",
+            msg_id="old_tool",
+            workspace=workspace / "prior" / "workspace",
+        )
+        assert stub.startswith("[truncated — full result in workspace/")
+        assert ref is not None
+        assert load_workspace_json(ref)["content"] == "Z" * 2000
 
 
 @pytest.mark.unit

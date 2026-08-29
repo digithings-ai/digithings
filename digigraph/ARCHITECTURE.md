@@ -754,8 +754,9 @@ Long research sessions (document RAG + Atlas `run_research_agent`) accumulate to
 **Integration (pre-LLM step, not a new graph node):**
 
 - `digigraph.compaction.compact_messages` — pure orchestrator (tier 1 then tier 2)
-- `graph/research.py` `_run_document_rag_path` — compacts `llm_messages` (+ current turn) before `run_tools`; wraps `execute_tool` with `wrap_execute_tool_for_tier1` so digillm's in-loop transcript never receives multi-MB payloads
+- `graph/research.py` `_run_document_rag_path` — compacts `llm_messages` (+ current turn) before `run_tools`
 - `graph/research_agent.py` — same pre-LLM compaction for Atlas/Hermes phase calls (retries re-compact)
+- Same-turn tool results are **not** stubbed at `execute_tool` time: digillm already caps injected tool text via `DIGI_TOOL_MESSAGE_MAX_CHARS` (default 12k) while keeping a usable prefix. Stubbing before inject hid digisearch hits from the model whenever `DIGI_RUN_DATA_DIR` was set (typical project RAG).
 
 **State contract:** `WorkflowState._compaction_event` holds a lean `CompactionEvent` dict (refs, counts, token deltas). `WorkflowState.llm_messages` holds the compacted LLM view for the next turn. Originals are **not** deleted from the session workspace — resume reloads them via the event's `tier1_refs` / `tier2_evicted_ref`. Checkpointer policy is unchanged (`DIGI_CHECKPOINTER=memory|sqlite|postgres`).
 
