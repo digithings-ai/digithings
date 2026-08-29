@@ -181,7 +181,7 @@ const { message } = await r.json();`,
         auth: "digigraph:chat (optional)",
         rateLimit: "10/min/IP",
         request: [
-          { name: "model", type: "string", description: 'Model id; default "sitaas-rag".' },
+          { name: "model", type: "string", description: 'Model id; default "digigraph-rag".' },
           { name: "messages", type: "{role,content}[]", required: true, description: "Chat messages." },
           { name: "stream", type: "boolean", description: "Stream tokens as SSE." },
         ],
@@ -190,14 +190,15 @@ const { message } = await r.json();`,
             lang: "bash",
             code: `curl -X POST $DIGIGRAPH_URL/v1/chat/completions \\
   ${BEARER("JWT")} -H "content-type: application/json" \\
-  -d '{"model":"sitaas-rag","messages":[{"role":"user","content":"hi"}]}'`,
+  -d '{"model":"digigraph-rag","messages":[{"role":"user","content":"hi"}]}'`,
           },
           {
             lang: "python",
-            code: `from openai import OpenAI
+            code: `import os
+from openai import OpenAI
 client = OpenAI(base_url=os.environ["DIGIGRAPH_URL"] + "/v1", api_key=os.environ["DIGI_JWT"])
 resp = client.chat.completions.create(
-    model="sitaas-rag",
+    model="digigraph-rag",
     messages=[{"role": "user", "content": "hi"}],
 )`,
           },

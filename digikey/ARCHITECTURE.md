@@ -14,7 +14,7 @@ The service has two responsibilities:
 
 1. **Opaque API key management.** External callers hold a `dgk_live_` prefixed secret. digikey stores only a bcrypt hash. The raw secret is shown once on creation and never retrievable again.
 
-2. **JWT issuance via token exchange.** A caller presents their opaque API key (or a BFF session credential) to `POST /v1/oauth/token`. digikey verifies the key, checks revocation, and returns a short-lived RS256 JWT that carries the caller's scopes, tenant context, and identity. Downstream services verify this JWT locally against the published JWKS — they never call digikey per-request.
+2. **JWT issuance via token exchange.** A caller presents their opaque API key (or a BFF session credential) to `POST /v1/oauth/token`. digikey verifies the key, checks revocation, and returns a short-lived RS256 JWT that carries the caller's scopes, tenant context, and identity. When a user profile pointer exists for a `bff_session` subject, the JWT also carries `profile_id` / `profile_version` (#308). Downstream services verify this JWT locally against the published JWKS — they never call digikey per-request.
 
 This architecture means digikey sits on the hot path for key exchange but is completely off the hot path for request verification. A JWKS cache in each consumer service means digikey can be down for minutes without affecting in-flight requests.
 
@@ -116,6 +116,20 @@ Middleware behaviour on each request:
 7. Check `scope_grants_required`. If insufficient: 403 `insufficient_scope`.
 8. Attach `DigiAuthContext` to `request.state.digi_auth`. Downstream handlers read tenant, scopes, and project context from there.
 
+**`tenant_slug` provenance (#2303).** If the verified JWT's own `tenant_slug` claim is
+empty, `jwt_context` falls back to the unsigned `X-Digi-Tenant` / `X-Digichat-Tenant`
+request header — this keeps routing/logging usable for legacy callers that predate
+per-tenant tokens, but it means `tenant_slug` alone does not prove the caller is
+authorized for that tenant. `DigiAuthContext.tenant_slug_verified` disambiguates: `True`
+only when `tenant_slug` came from the decoded JWT claim, `False` when it is empty or was
+filled from the header. **Any consumer using `tenant_slug` for real authorization (not
+just routing/logging) must check `tenant_slug_verified is True` first** — trusting
+`tenant_slug` alone lets a caller with an empty-tenant token pick any tenant via the
+header. Issuance refuses blank tenants after strip: CLI `--tenant`, `POST /v1/admin/keys`
+(Pydantic validator), `bff_session` token exchange, and `api_key` exchange of a row whose
+stored `tenant_slug` is blank. Whitespace-only strings are rejected the same way — they
+previously passed `min_length=1` then became `""` after `.strip()`.
+
 ---
 
 ## 4. Data Model
@@ -141,6 +155,23 @@ All tokens issued by digikey include these claims:
 | `project_id` | string? | Optional project scoping |
 | `project_config_ref` | string? | Optional project config reference |
 | `tenant_id` | string? | Optional tenant UUID (not currently populated by server) |
+| `profile_id` | string? | Optional user profile pointer (#308). Present only when a profile exists for the BFF subject. |
+| `profile_version` | int? | Monotonic profile revision (≥1). Always paired with `profile_id`; both omitted when no profile. |
+
+#### Profile claims contract (#308)
+
+`profile_id` and `profile_version` are **optional, pairwise** claims on `bff_session` JWTs:
+
+| Case | JWT payload | Downstream behaviour |
+|------|-------------|----------------------|
+| Profile exists for `subject` | Both claims present | Atlas / digigraph may key caches / personalization off these values without a second DB round-trip |
+| No profile yet | Both claims **absent** (not `null`) | Frontend may route the user to intake; digikey does not invent an intake flow |
+
+Rules:
+
+- Claims are looked up from `digikey_user_profile_pointers` at mint time (`grant_type=bff_session` only). `api_key` grants never carry them (machine principals, not users).
+- Updating a profile bumps `profile_version`; the next token exchange embeds the new value. Already-issued JWTs keep the old version until expiry (short TTL).
+- digikey stores only the **pointer** (id + version + subject). Full investment-profile / asset-preferences payload CRUD is [#307](https://github.com/digithings-ai/digithings/issues/307); this table is the interim identity seam until digistore (#172).
 
 ### API key storage (`digikey_api_keys` table)
 
@@ -159,6 +190,22 @@ All tokens issued by digikey include these claims:
 | `revoked_at` | `TIMESTAMPTZ` nullable | Set to revoke; checked on every exchange |
 
 Column type note: `scopes` uses `JSONB` on Postgres and `JSON` on SQLite via SQLAlchemy dialect variants (`db_schema.py:_json_type()`).
+
+### User profile pointers (`digikey_user_profile_pointers` table)
+
+Minimal identity seam for JWT profile claims (#308). Not the full profile body store (#307).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | `VARCHAR(36)` PK | UUID v4 — emitted as JWT `profile_id` |
+| `subject` | `VARCHAR(256)` UNIQUE INDEX | Bare BFF subject (no `bff:` prefix) |
+| `tenant_slug` | `VARCHAR(256)` INDEX | Tenant of the owning user |
+| `profile_version` | `INTEGER` NOT NULL | Starts at 1; bumps on each update |
+| `created_at` | `TIMESTAMPTZ` | Server-generated |
+| `updated_at` | `TIMESTAMPTZ` | Bumped with `profile_version` |
+| `deleted_at` | `TIMESTAMPTZ` nullable | Soft-delete; soft-deleted rows are ignored at mint |
+
+Library helpers: `digikey.profile_pointer.create_profile_pointer`, `bump_profile_version`, `get_profile_pointer`. Public HTTP CRUD for profile payloads lands with #307.
 
 ### Scope definitions
 

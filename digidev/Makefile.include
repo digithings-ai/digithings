@@ -56,7 +56,30 @@ status:
 # ── Hooks ─────────────────────────────────────────────────────────────────────
 
 # Install the pre-push git hook.
+#
+# Ask git where the hooks go — never the literal `.git/hooks`. Inside a linked
+# worktree `.git` is a file, so that path fails with "Not a directory", and
+# `--git-path hooks` both resolves to the shared common dir from a worktree and
+# honours core.hooksPath. Every worktree shares this one installed hook.
+#
+# The `|| exit 1` is load-bearing and `set -e` is no substitute: when rev-parse
+# fails it prints nothing, so `cd "$$(git rev-parse ...)"` degrades to `cd ""` —
+# a successful no-op that would install into ./hooks/ where git never looks, and
+# still exit 0. digidev scaffolds arbitrary directories, so "not a repo yet" is
+# a case that actually happens here.
+#
+# Unlike digithings' own scripts/install-hooks.sh, this installs the working
+# tree's copy — digidev scaffolds arbitrary repos, so there is no known-good
+# ref (origin/develop) it can assume exists here.
 hooks-install:
-	@install -m 755 scripts/hooks/pre-push.sh .git/hooks/pre-push
-	@echo "installed: .git/hooks/pre-push"
+	@set -e; \
+	if ! hooks_path="$$(git rev-parse --git-path hooks 2>/dev/null)" || [ -z "$$hooks_path" ]; then \
+		echo "hooks-install: not inside a git work tree — run 'git init' first." >&2; \
+		exit 1; \
+	fi; \
+	bash -n scripts/hooks/pre-push.sh; \
+	mkdir -p "$$hooks_path"; \
+	hooks_dir="$$(cd "$$hooks_path" && pwd)"; \
+	install -m 755 scripts/hooks/pre-push.sh "$$hooks_dir/pre-push"; \
+	echo "installed: $$hooks_dir/pre-push"
 

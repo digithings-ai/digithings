@@ -145,6 +145,59 @@ describe("POST /api/byok/test", () => {
     });
   });
 
+  // #2410 shipped both of these behaviours untested; the suite it cited as
+  // verification predates them and exercises neither.
+  describe("key redaction and empty-message fallback (#2410)", () => {
+    const GEMINI_KEY = "AIza+needs/encoding=";
+
+    it("redacts the percent-encoded key when an upstream error quotes the request URL", async () => {
+      // Gemini's key rides in the URL via encodeURIComponent, so a provider
+      // error echoing that URL carries the ENCODED key — a literal
+      // split(rawKey) misses it entirely.
+      const encoded = encodeURIComponent(GEMINI_KEY);
+      fetchMock.mockResolvedValueOnce(
+        jsonFetchResponse(
+          { error: { message: `bad request for models?key=${encoded}` } },
+          400,
+        ),
+      );
+
+      const res = await onRequestPost(
+        request({ "x-byok-key": GEMINI_KEY, "x-byok-provider": "gemini" }),
+      );
+
+      const body = (await res.json()) as { error: string };
+      expect(body.error).not.toContain(encoded);
+      expect(body.error).not.toContain(GEMINI_KEY);
+      expect(body.error).toBe("bad request for models?key=[redacted]");
+    });
+
+    it("falls back to the status text when the provider's error message is empty", async () => {
+      // sanitizeUpstreamError("") returns "" — not nullish — so a `??` here
+      // would ship {"ok":false,"error":""} instead of the HTTP-status text.
+      fetchMock.mockResolvedValueOnce(jsonFetchResponse({ error: { message: "" } }, 503));
+
+      const res = await onRequestPost(
+        request({ "x-byok-key": "sk-or-realkey", "x-byok-provider": "openrouter" }),
+      );
+
+      const body = await res.json();
+      expect(body).toEqual({ ok: false, error: "OpenRouter returned HTTP 503" });
+    });
+
+    it("falls back to 'Request failed' when a thrown error carries an empty message", async () => {
+      fetchMock.mockRejectedValueOnce(new Error(""));
+
+      const res = await onRequestPost(
+        request({ "x-byok-key": "sk-or-realkey", "x-byok-provider": "openrouter" }),
+      );
+
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body).toEqual({ ok: false, error: "Request failed" });
+    });
+  });
+
   describe("existing providers are unaffected", () => {
     it("still validates and dispatches anthropic keys as before", async () => {
       fetchMock.mockResolvedValueOnce(

@@ -4,11 +4,11 @@ Decomposition of [epic #3](https://github.com/digithings-ai/digithings/issues/3)
 
 ## Recap
 
-`digiproject.yaml` (v1alpha1) replaces the ad-hoc `projects/<name>/config.yaml` used by SITAAS. The schema covers project identity, agent selection, LLM mode, per-project paths (`run_data_dir`, `indexes_dir`), MCP exposure, and service URLs. Every field is optional and defaults produce a valid (minimal) deployment. The formal reference lives at [docs/spec/project-spec-v1alpha1.md](../spec/project-spec-v1alpha1.md); the loader is `digigraph/src/digigraph/project_config.py`.
+`digiproject.yaml` (v1alpha1) replaces the ad-hoc `projects/<name>/config.yaml` used by the client pilot. The schema covers project identity, agent selection, LLM mode, per-project paths (`run_data_dir`, `indexes_dir`), MCP exposure, and service URLs. Every field is optional and defaults produce a valid (minimal) deployment. The formal reference lives at [docs/spec/project-spec-v1alpha1.md](../spec/project-spec-v1alpha1.md); the loader is `digigraph/src/digigraph/project_config.py`.
 
 ## Shipped
 
-- **PR #55** — `docs(spec): write project-spec-v1alpha1.md`. Landed the formal reference: YAML schema, equivalent JSON Schema (draft 2020-12), env-var contract table, enable/disable matrix, versioning policy, SITAAS reference config.
+- **PR #55** — `docs(spec): write project-spec-v1alpha1.md`. Landed the formal reference: YAML schema, equivalent JSON Schema (draft 2020-12), env-var contract table, enable/disable matrix, versioning policy, client pilot reference config.
 - **PR #56** — `refactor(digigraph): backward-compat loader for digiproject.yaml migration`. Added `_resolve_config_path()` with priority order (`digiproject.yaml` → `config/digiproject.yaml` → `config/digi_project.yaml`) and deprecation warnings when the legacy `config.yaml` path is still in use.
 - **PR #57** — `feat(docs): create project template starter`. Landed `docs/templates/project/` (minimal `digiproject.yaml`, `docker-compose.yml`, `.env.example`, README quickstart) so a new project can be bootstrapped by copying the directory into the gitignored `projects/` tree.
 

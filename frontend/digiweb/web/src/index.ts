@@ -162,6 +162,11 @@ export {
   type PagerPageProps,
   type IconButtonProps,
 } from "./components/controls/NavButtons";
+export {
+  DatePager,
+  formatDatePagerLabel,
+  type DatePagerProps,
+} from "./components/controls/DatePager";
 export { TagsInput, TagChip, type TagsInputProps, type TagChipProps } from "./components/controls/TagsInput";
 export { SearchBar, type SearchBarProps } from "./components/controls/SearchBar";
 
@@ -303,6 +308,17 @@ export {
   toneClass,
   dailyReturnsFromEquity,
   annualizedVolPct,
+  computeLivePerformanceKpis,
+  computeLiveVsMarkPct,
+  dayReturnAnchorNav,
+  derivePriceAsOfDate,
+  inceptionSignAgreesWithBase100,
+  informationRatioFromDaily,
+  olsBeta,
+  overlappingDailyReturns,
+  relativeMetricsFromReturnSeries,
+  sinceInceptionPctFromNav,
+  MIN_OVERLAP_DAYS,
   TEARSHEET_DEMO,
   type CandlestickChartProps,
   type TimeSeriesProps,
@@ -327,6 +343,11 @@ export {
   type TearsheetOhlcBar,
   type TearsheetTrade,
   type TradeReturnBar,
+  type LiveKpiPosition,
+  type LiveKpiNavPoint,
+  type LiveKpiBenchmarkPoint,
+  type LivePerformanceKpis,
+  type LivePerformanceKpisInput,
 } from "./components/finance-tearsheet";
 
 export { modules, edges, moduleById, type ModuleNode, type StackItem, type Tier } from "./data/modules";

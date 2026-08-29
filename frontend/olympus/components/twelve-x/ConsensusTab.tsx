@@ -20,7 +20,13 @@ import {
   currencyColor,
 } from '@/lib/twelve-x/consensus-bar';
 import { useChartColors, withAlpha } from '@/lib/chart-colors';
-import type { ConsensusDeltaSet, FxBriefRow, FxConsensusDivergence, FxConsensusSnapshotRow, IntelligenceWhy } from '@/lib/twelve-x/types';
+import type {
+  ConsensusDeltaSet,
+  FxBriefRow,
+  FxConsensusDivergence,
+  FxConsensusSnapshotRow,
+  IntelligenceWhy,
+} from '@/lib/twelve-x/types';
 import { deriveConsensusRows, type ConsensusCurrencyRow } from '@/lib/twelve-x/consensus-view';
 import { ConsensusDataTable } from './ConsensusDataTable';
 import CurrencyDrilldownPanel from './CurrencyDrilldownPanel';

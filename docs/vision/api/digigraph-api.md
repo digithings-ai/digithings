@@ -140,21 +140,22 @@ OpenAI-compatible chat. Set stream:true for SSE (events: tool_call, content, don
 auth: digigraph:chat (optional) · rate: 10/min/IP
 
 Request:
-- `model` (string): Model id; default "sitaas-rag".
+- `model` (string): Model id; default "digigraph-rag".
 - `messages` ({role,content}[]) — required: Chat messages.
 - `stream` (boolean): Stream tokens as SSE.
 
 ```bash
 curl -X POST $DIGIGRAPH_URL/v1/chat/completions \
   -H "Authorization: Bearer $JWT" -H "content-type: application/json" \
-  -d '{"model":"sitaas-rag","messages":[{"role":"user","content":"hi"}]}'
+  -d '{"model":"digigraph-rag","messages":[{"role":"user","content":"hi"}]}'
 ```
 
 ```python
+import os
 from openai import OpenAI
 client = OpenAI(base_url=os.environ["DIGIGRAPH_URL"] + "/v1", api_key=os.environ["DIGI_JWT"])
 resp = client.chat.completions.create(
-    model="sitaas-rag",
+    model="digigraph-rag",
     messages=[{"role": "user", "content": "hi"}],
 )
 ```

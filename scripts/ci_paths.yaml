@@ -193,6 +193,10 @@ nautilus_smoke:
   - tests/dq/test_strategies.py
   - tests/dq/test_tearsheet_isolation.py
   - tests/dq/test_v1_jobs.py
+  - tests/dq/strategies/sdca/test_nautilus_strategy.py
+  - tests/dq/replay/test_nautilus_portfolio.py
+  - tests/dq/replay/test_worker.py
+  - digiquant/src/digiquant/olympus/replay/**
   - .github/workflows/test-nautilus.yml
 
 atlas_graph:
@@ -208,6 +212,10 @@ atlas_graph:
   - digiquant/src/digiquant/olympus/edit_mode/**
   - digiquant/src/digiquant/olympus/hermes/**
   - digiquant/src/digiquant/olympus/learning/**
+  - digiquant/src/digiquant/olympus/replay/walk_forward.py
+  - tests/dq/replay/test_walk_forward.py
+  - tests/dq/replay/phase4_e2e_fixtures.py
+  - tests/dq/replay/test_phase4_end_to_end.py
   - tests/dq/hermes/**
   - tests/dq/learning/**
   - .github/workflows/test-atlas-graph.yml
@@ -271,6 +279,16 @@ ruff_and_scripts:
   # coverage, and the failure is silent by construction — the check simply stops firing.
   - .github/workflows/deploy-digithings-cloudflare.yml
   - .github/workflows/deploy-digiquant-cloudflare.yml
+  # tests/scripts/test_workflow_environment_concurrency.py is different in kind from the
+  # entries above: it asserts an invariant over EVERY workflow (an `environment`-gated job may
+  # not sit in a queueing concurrency group — #2541), so naming files one at a time cannot
+  # cover it. The next workflow to grow an `environment:` would be born outside the filter, and
+  # reverting `cancel-in-progress: true` on sync-architecture-vault.yml alone would skip this
+  # lane entirely and reintroduce the defect fully green. A repo-wide invariant needs a
+  # repo-wide trigger. This subsumes the seven named workflow globs above; those are kept
+  # because each records which test consumes that file and why `tests/**` is not enough —
+  # rationale worth keeping next to the path it explains.
+  - .github/workflows/**
 
 # Repo-wide actionlint. Deliberately the whole directory: before this filter the
 # only actionlint in CI was a job inside test-atlas-graph.yml pinned to
