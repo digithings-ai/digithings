@@ -166,7 +166,7 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
           title={event.event_kind.replace('_', ' ')}
           className={`flex h-8 w-8 items-center justify-center rounded-md border ${
             event.status === 'error'
-              ? 'border-down/30 text-down'
+              ? 'border-danger/30 text-danger'
               : needsAttention
                 ? 'border-warn/30 text-warn'
                 : 'border-hair text-accent'
@@ -187,7 +187,7 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {event.status === 'error' ? (
-            <span className="font-mono text-[0.62rem] font-semibold uppercase text-down">Error</span>
+            <span className="font-mono text-[0.62rem] font-semibold uppercase text-danger">Error</span>
           ) : event.retry_count > 0 ? (
             <span className="font-mono text-[0.62rem] font-semibold uppercase text-warn">
               {event.retry_count} {event.retry_count === 1 ? 'retry' : 'retries'}
