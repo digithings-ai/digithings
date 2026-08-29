@@ -3,13 +3,17 @@
 /**
  * Live performance KPIs for the Brief scoreboard — same computation path as
  * digiquant.io landing ({@link computeLivePerformanceKpis} in @digithings/web).
+ *
+ * Relative metrics (excess / alpha / IR) require a NAV-aligned SPY (default)
+ * price series from the dashboard benchmarks map. Fail closed when the series
+ * is missing or overlap is shorter than {@link MIN_OVERLAP_DAYS}.
  */
 import { useEffect, useMemo, useState } from 'react';
 import {
   computeLivePerformanceKpis,
   type LivePerformanceKpis,
 } from '@digithings/web';
-import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
+import { pickBriefBenchmarkTicker } from '@/lib/benchmark-tickers';
 import { useLivePrices } from '@/lib/hooks/use-live-prices';
 import { isQuoteFresh, quoteAgeMs, type LiveQuoteMap } from '@/lib/live-valuation';
 import type { BenchmarkHistoryMap, NavChartPoint, Position } from '@/lib/types';
@@ -28,13 +32,6 @@ function useNowMs(intervalMs = CLOCK_TICK_MS): number {
     return () => clearInterval(id);
   }, [intervalMs]);
   return nowMs;
-}
-
-function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
-  for (const t of DASHBOARD_BENCHMARK_TICKERS) {
-    if (benchmarks[t]?.history?.length) return t;
-  }
-  return null;
 }
 
 function positionIsLive(ticker: string, quotes: LiveQuoteMap, nowMs: number): boolean {
@@ -68,7 +65,7 @@ export function useLiveBriefKpis(
 
   return useMemo(() => {
     if (!navHistory.length || !positions.length) return null;
-    const benchTicker = benchmarks ? pickBenchmarkTicker(benchmarks) : null;
+    const benchTicker = benchmarks ? pickBriefBenchmarkTicker(benchmarks) : null;
     const benchmarkHistory =
       benchTicker && benchmarks?.[benchTicker]?.history
         ? benchmarks[benchTicker].history.map((p) => ({ date: p.date, price: p.price }))
