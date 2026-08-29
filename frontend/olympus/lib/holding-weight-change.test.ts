@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { formatHoldingWeightChange, holdingWeightChange } from './holding-weight-change';
+import { formatHoldingWeightChange, holdingWeightChange, holdingWeightDeltaPp } from './holding-weight-change';
 
 /**
  * The owner's rule (#1850): show +/- for an add or a trim, but a brand-new or fully-removed
@@ -86,6 +86,16 @@ describe('holdingWeightChange', () => {
   });
 });
 
+describe('holdingWeightDeltaPp', () => {
+  it('returns null for MTM drift when there was no material book event (#3080)', () => {
+    expect(holdingWeightDeltaPp(15.16, 15.14, { hasMaterialBookEvent: false })).toBeNull();
+  });
+
+  it('keeps a material trim when the ledger recorded a decision', () => {
+    expect(holdingWeightDeltaPp(5.0, 9.8616, { hasMaterialBookEvent: true })).toBeCloseTo(-4.8616, 4);
+  });
+});
+
 /**
  * The call site, asserted on source shape.
  *
@@ -109,8 +119,8 @@ describe('the queries.ts call site', () => {
     return src.slice(start, start + 400);
   };
 
-  it('derives weight_delta through holdingWeightChange rather than inline arithmetic', () => {
-    expect(weightDeltaBlock()).toContain('holdingWeightChange(');
+  it('derives weight_delta through holdingWeightDeltaPp rather than inline arithmetic', () => {
+    expect(weightDeltaBlock()).toContain('holdingWeightDeltaPp(');
   });
 
   it('does not coalesce a missing prior weight to zero', () => {

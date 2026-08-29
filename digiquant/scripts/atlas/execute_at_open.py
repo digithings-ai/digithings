@@ -457,6 +457,10 @@ def build_events_from_paper_fills(
     """
     _ensure_importable()
     try:
+        from digiquant.olympus.hermes.models.position_event import (
+            PositionEventKind,
+            PositionEventRow,
+        )
         from digiquant.olympus.hermes.writers.execution_io import (
             approved_weights,
             execute_pending_orders,
@@ -560,9 +564,9 @@ def build_events_from_paper_fills(
         # is an EXIT and a sell to anything else is a TRIM. No weight diff and no epsilon
         # threshold is involved — that ladder is what made EXIT unreachable in #1743.
         if fill.is_sell:
-            event = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
+            event_kind: PositionEventKind = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
         else:
-            event = "OPEN" if fill.prior_quantity <= 0 else "ADD"
+            event_kind = "OPEN" if fill.prior_quantity <= 0 else "ADD"
 
         weight = approved.get(fill.symbol)
         # approved_weight is a 0..1 fraction; position_events.weight_pct is in percent.
@@ -571,28 +575,27 @@ def build_events_from_paper_fills(
         # and 0.29 comes out 28.999999999999996. Writing those into a numeric column would
         # make ordinary weights look like rounding artefacts.
         weight_pct = float(weight * 100) if weight is not None else None
-        events.append(
-            {
-                "date": execution_d,
-                "ticker": fill.symbol,
-                "event": event,
-                "weight_pct": weight_pct,
-                # Display-only, and not from the ledger: migration 069 records no NAV, so
-                # the prior weight cannot be derived from the lots. It is read from the
-                # last committed `positions` book purely so the UI can show a delta, and
-                # the reason string below says so rather than implying the ledger holds it.
-                "prev_weight_pct": prior_weights.get(fill.symbol),
-                "price": float(fill.price),
-                "reason": (
-                    f"{event} — filled {fill.quantity} share(s) at {fill.price} from order "
-                    f"intent {fill.order_intent_id} (portfolio ledger paper execution "
-                    f"{fill.execution_id}, decision run_date {run_d}). Prior weight shown "
-                    f"from the {prior_book_d or 'unavailable'} positions book, for display only."
-                ),
-                "thesis_id": None,
-                "book_source": BOOK_SOURCE_AUTHORITATIVE,
-            }
+        row = PositionEventRow(
+            date=execution_d,
+            ticker=fill.symbol,
+            event=event_kind,
+            weight_pct=weight_pct,
+            # Display-only, and not from the ledger: migration 069 records no NAV, so
+            # the prior weight cannot be derived from the lots. It is read from the
+            # last committed `positions` book purely so the UI can show a delta, and
+            # the reason string below says so rather than implying the ledger holds it.
+            prev_weight_pct=prior_weights.get(fill.symbol),
+            price=float(fill.price),
+            reason=(
+                f"{event_kind} — filled {fill.quantity} share(s) at {fill.price} from order "
+                f"intent {fill.order_intent_id} (portfolio ledger paper execution "
+                f"{fill.execution_id}, decision run_date {run_d}). Prior weight shown "
+                f"from the {prior_book_d or 'unavailable'} positions book, for display only."
+            ),
+            thesis_id=None,
+            book_source=BOOK_SOURCE_AUTHORITATIVE,
         )
+        events.append(row.to_postgrest_row())
     return events, ""
 
 

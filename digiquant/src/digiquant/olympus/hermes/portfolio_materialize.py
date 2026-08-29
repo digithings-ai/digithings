@@ -412,11 +412,12 @@ def _latest_values(
 
     We only need each ticker's *most recent* value, so the query is bounded to a short
     ``lookback_days`` window — enough to clear weekends/holidays and find the latest daily
-    row (``price_history`` / ``price_technicals`` are daily: ≤1 row/ticker/day). The page
-    limit is tied to that window (``N × (lookback_days + 1)``) so it can never truncate a
-    ticker still inside the window — the "crowding" failure mode this guards against. Fail-
-    soft: a read error or missing value yields no entry for that ticker (the caller leaves
-    the field unset rather than crashing the book); a partial resolve is logged.
+    row (``price_history`` / ``price_technicals`` are daily: ≤1 row/ticker/day).
+    ``.order("date", desc=True)`` ensures truncation drops the *oldest* rows, so every
+    ticker still resolves from the leading page — not because the requested ``.limit`` can
+    exceed PostgREST's server-side row cap. Fail-soft: a read error or missing value yields
+    no entry for that ticker (the caller leaves the field unset rather than crashing the
+    book); a partial resolve is logged.
     """
     if not tickers:
         return {}
