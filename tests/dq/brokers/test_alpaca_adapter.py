@@ -153,7 +153,10 @@ class TestHappyPaths:
         )
         assert ack.status is BrokerOrderStatus.SUBMITTED
         order_req = client.submit_order.call_args.args[0]
-        assert str(order_req.limit_price) in {"150.25", "150.2500"} or float(order_req.limit_price) == 150.25
+        assert (
+            str(order_req.limit_price) in {"150.25", "150.2500"}
+            or float(order_req.limit_price) == 150.25
+        )
 
     def test_cancel_order(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
         adapter.cancel_order("ord-1")
@@ -286,7 +289,9 @@ class TestErrorMapping:
         assert client.get_account.call_count == 3
         assert len(sleeps) == 2
 
-    def test_other_status_maps_to_transport(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+    def test_other_status_maps_to_transport(
+        self, adapter: AlpacaAdapter, client: MagicMock
+    ) -> None:
         client.get_account.side_effect = self._api_error(500, message="boom")
         with pytest.raises(BrokerTransportError):
             adapter.get_account()
@@ -335,8 +340,8 @@ class TestLazyImportWithoutAlpacaPy:
 
         def _blocked(
             name: str,
-            globals: dict[str, object] | None = None,  # noqa: A002
-            locals: dict[str, object] | None = None,  # noqa: A002
+            globals: dict[str, object] | None = None,
+            locals: dict[str, object] | None = None,
             fromlist: tuple[str, ...] = (),
             level: int = 0,
         ) -> object:

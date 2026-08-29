@@ -329,7 +329,9 @@ class AlpacaAdapter:
         orders = self._call(self._client.get_orders, filter=filter_req)
         fills: list[BrokerFill] = []
         for order in orders:
-            filled_qty = _decimal(order.filled_qty) if order.filled_qty is not None else Decimal("0")
+            filled_qty = (
+                _decimal(order.filled_qty) if order.filled_qty is not None else Decimal("0")
+            )
             if filled_qty <= 0:
                 continue
             if order.filled_avg_price is None:
@@ -368,9 +370,7 @@ class AlpacaAdapter:
             and _AlpacaOrderSide is not None
             and _AlpacaTimeInForce is not None
         )
-        side = (
-            _AlpacaOrderSide.BUY if req.side is OrderSide.BUY else _AlpacaOrderSide.SELL
-        )
+        side = _AlpacaOrderSide.BUY if req.side is OrderSide.BUY else _AlpacaOrderSide.SELL
         tif = _AlpacaTimeInForce(req.time_in_force.value)
         # Pass qty/notional as strings so the SDK boundary does not start from a float literal.
         qty = str(req.quantity) if req.quantity is not None else None
@@ -408,7 +408,9 @@ class AlpacaAdapter:
         return self._order_to_ack(order)
 
     def _order_to_ack(self, order: object) -> BrokerOrderAck:
-        submitted_at = _as_utc(getattr(order, "submitted_at", None) or getattr(order, "created_at", None))
+        submitted_at = _as_utc(
+            getattr(order, "submitted_at", None) or getattr(order, "created_at", None)
+        )
         return BrokerOrderAck(
             external_order_id=str(order.id),
             status=_map_status(order.status),
