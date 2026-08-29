@@ -262,6 +262,9 @@ Each issue should cite this brief + the vision brief + `MIGRATION-ROADMAP-DIGITH
 
 ---
 
+> **Update (2026-08-29, same day):** D1–D7 below are now **locked** — with payments (Stripe per ADR-0004) and external-venue bookkeeping added — in the
+> [Kairos + tenancy implementation spec](../specs/2026-08-29-kairos-tenancy-implementation-spec.md), which also carries the per-WP executable detail and the Alpaca/IBKR API ground truth. That spec supersedes this section.
+
 ## 6. Decisions to lock next session
 
 | # | Question | Recommendation |
