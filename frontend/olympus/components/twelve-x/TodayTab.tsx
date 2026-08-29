@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import type {
   FxConfluenceSnapshotRow,
@@ -139,47 +139,40 @@ export default function TodayTab({
                 tabIndex={0}
               >
                 {/*
-                  One gap source for the whole list. Date headers and cards share
-                  the same flex gap so cross-date rows do not pick up stacked
-                  space-y + heading margin + inner gap (the intermittent "huge
-                  gap between cards" on mobile when briefs span multiple dates).
+                  Flat gap-2 list (date on each card). Avoids interstitial date
+                  headers that stacked with space-y/mb and made multi-date rails
+                  look intermittently sparse on mobile.
                 */}
                 <ul className="flex flex-col gap-2">
-                  {briefDateGroups.map(({ dateKey, dateBriefs }) => (
-                    <Fragment key={dateKey}>
-                      <li className="shrink-0">
-                        <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-wide text-ink-soft">
-                          {dateKey}
-                        </h3>
-                      </li>
-                      {dateBriefs.map((b, n) => (
-                        <li key={`${b.source_file}-${b.run_date}-${n}`} className="shrink-0">
-                          <button
-                            type="button"
-                            className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
-                            onClick={() => openBrief(b.source_file, b.run_date)}
-                          >
-                            <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
-                              <span className="min-w-0 truncate font-semibold text-ink-soft">
-                                {b.broker_name ?? 'Unknown desk'}
-                              </span>
-                              {b.trader_relevance ? (
-                                <span className="shrink-0 uppercase">· {b.trader_relevance}</span>
-                              ) : null}
-                            </div>
-                            <p className="mt-1 truncate text-sm font-medium text-ink">
-                              {b.document_title ?? b.source_file}
-                            </p>
-                            {b.central_thesis ? (
-                              <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
-                                {b.central_thesis}
-                              </p>
+                  {briefDateGroups.map(({ dateKey, dateBriefs }) =>
+                    dateBriefs.map((b, n) => (
+                      <li key={`${b.source_file}-${b.run_date}-${n}`} className="shrink-0">
+                        <button
+                          type="button"
+                          className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
+                          onClick={() => openBrief(b.source_file, b.run_date)}
+                        >
+                          <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
+                            <span className="min-w-0 truncate font-semibold text-ink-soft">
+                              {b.broker_name ?? 'Unknown desk'}
+                            </span>
+                            {b.trader_relevance ? (
+                              <span className="shrink-0 uppercase">· {b.trader_relevance}</span>
                             ) : null}
-                          </button>
-                        </li>
-                      ))}
-                    </Fragment>
-                  ))}
+                            <span className="ml-auto shrink-0 font-mono tabular-nums">{dateKey}</span>
+                          </div>
+                          <p className="mt-1 truncate text-sm font-medium text-ink">
+                            {b.document_title ?? b.source_file}
+                          </p>
+                          {b.central_thesis ? (
+                            <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
+                              {b.central_thesis}
+                            </p>
+                          ) : null}
+                        </button>
+                      </li>
+                    )),
+                  )}
                 </ul>
               </div>
             )}
