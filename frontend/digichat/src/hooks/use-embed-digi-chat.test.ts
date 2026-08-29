@@ -442,3 +442,42 @@ describe("useEmbedDigiChat prepareSendMessagesRequest — X-Digi-Language", () =
     unmount();
   });
 });
+
+describe("useEmbedDigiChat prepareSendMessagesRequest — X-BYOK-Model (#2490)", () => {
+  // The embed widget used to gate this header on byokRequiresModel(provider),
+  // so a visitor who pasted an OpenAI key and picked a model had the model
+  // dropped on the floor. digigraph then answered on its own default — an
+  // `openrouter/…` model on the shipped release config — leaving the visitor's
+  // key bound, shown as active, and never billed. The provider flag says
+  // whether a model is *mandatory*; it never said to discard a chosen one.
+  it("forwards a chosen model for a provider whose model is optional", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({
+      byokKey: "sk-test",
+      byokProvider: "openai",
+      byokModel: "gpt-4o-mini",
+    });
+    expect(headers.get("X-BYOK-Key")).toBe("sk-test");
+    expect(headers.get("X-BYOK-Provider")).toBe("openai");
+    expect(headers.get("X-BYOK-Model")).toBe("gpt-4o-mini");
+  });
+
+  it("omits X-BYOK-Model when the model is blank or whitespace", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({
+      byokKey: "sk-test",
+      byokProvider: "openai",
+      byokModel: "   ",
+    });
+    expect(headers.get("X-BYOK-Key")).toBe("sk-test");
+    expect(headers.has("X-BYOK-Model")).toBe(false);
+  });
+
+  it("sends no X-BYOK-* header at all without a key", async () => {
+    const { headers } = await callPrepareSendMessagesRequest({
+      byokProvider: "openai",
+      byokModel: "gpt-4o-mini",
+    });
+    expect(headers.has("X-BYOK-Key")).toBe(false);
+    expect(headers.has("X-BYOK-Provider")).toBe(false);
+    expect(headers.has("X-BYOK-Model")).toBe(false);
+  });
+});

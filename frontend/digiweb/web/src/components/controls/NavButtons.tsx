@@ -12,11 +12,12 @@
  *   and "accent" (olympus's shipped look — sans font-medium cells,
  *   transparent track, accent/20 wash + accent text on the selection).
  * - Pager: prev/next with disabled edge states (nb-page-edge) around a
- *   middle slot — numbered PagerPage cells (aria-current="page") or any
- *   label (olympus PipelineDaySelector keeps its date label between the
- *   chevrons). Two dresses: "reference" (default, per-cell bordered) and
- *   "capsule" (olympus's shipped look — one bordered term-bg capsule with
- *   borderless chevrons, mono tabular label, disabled edges at 30%).
+ *   fixed middle column (nb-pager-middle) — numbered PagerPage cells
+ *   (aria-current="page") or any label. Date capsules use DatePager so
+ *   arrows stay pinned while the label opens a calendar. Two dresses:
+ *   "reference" (default, per-cell bordered) and "capsule" (olympus's
+ *   shipped look — one bordered term-bg capsule with borderless chevrons,
+ *   mono tabular label, disabled edges at 30%).
  * - IconButton: the borderless 2rem glyph button (nb-icon); aria-label is
  *   required — the child is a bare svg.
  *
@@ -127,7 +128,9 @@ export function Pager({
       >
         {prevLabel}
       </button>
-      {children}
+      {/* Fixed middle column so capsule arrows stay pinned at the ends while
+          the label width varies (date strings, page counts, …). */}
+      <div className="nb-pager-middle">{children}</div>
       <button
         type="button"
         className="nb-page-edge"

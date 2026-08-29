@@ -1,85 +1,85 @@
 {
-  "generatedAt": "2026-08-11T16:47:39Z",
+  "generatedAt": "2026-08-24T07:15:49Z",
   "windowDays": 30,
-  "commits": 735,
+  "commits": 940,
   "features": [
     {
-      "scope": "ci",
-      "summary": "auto-deploy digichat Cloudflare Container on version bump",
-      "pr": 2200,
-      "date": "2026-08-11T13:12:28Z"
+      "scope": "olympus",
+      "summary": "trade idea continuity, levels ladder, formatting",
+      "pr": 2574,
+      "date": "2026-08-21T17:35:10Z"
     },
     {
-      "scope": null,
-      "summary": "content-aware chunking + digivault segmentation",
-      "pr": 2193,
-      "date": "2026-08-11T05:20:29Z"
+      "scope": "digiquant",
+      "summary": "wrap SDCA engine as NautilusTrader strategy",
+      "pr": 1081,
+      "date": "2026-08-20T22:32:46Z"
     },
     {
-      "scope": "digichat",
-      "summary": "Foundry adapter prepends response-language directive",
-      "pr": 2103,
-      "date": "2026-08-10T19:40:01Z"
+      "scope": "digiquant",
+      "summary": "add SDCA core engine (composite-risk + accum/dist curve + backtest)",
+      "pr": 2519,
+      "date": "2026-08-20T13:47:08Z"
     },
     {
-      "scope": "infra",
-      "summary": "Profile A stack Container + local bundle compose",
-      "pr": 2083,
-      "date": "2026-08-10T15:39:45Z"
+      "scope": "digiquant",
+      "summary": "book paper fills from the order ledger at the open",
+      "pr": 2489,
+      "date": "2026-08-19T22:29:27Z"
     },
     {
-      "scope": "digichat",
-      "summary": "Cloudflare Containers host \u2014 digithings + OCC on one Node",
-      "pr": 2074,
-      "date": "2026-08-10T13:24:15Z"
+      "scope": "digiquant",
+      "summary": "make H9 append the authoritative commit chain",
+      "pr": 2482,
+      "date": "2026-08-19T16:06:51Z"
     },
     {
-      "scope": "website",
-      "summary": "public product docs + OpenAPI explorer on digithings.ai",
-      "pr": 2059,
-      "date": "2026-08-10T03:18:36Z"
+      "scope": "digiquant",
+      "summary": "add append-only portfolio lineage ledger schema",
+      "pr": 2432,
+      "date": "2026-08-17T19:24:40Z"
     }
   ],
-  "pullsMerged": 445,
-  "issuesClosed": 473,
-  "issuesOpen": 15,
+  "pullsMerged": 546,
+  "issuesClosed": 605,
+  "issuesOpen": 6,
   "branch": "main",
   "latestRelease": {
-    "tag": "digichat-v1.1.0",
-    "name": "digichat: v1.1.0",
-    "publishedAt": "2026-08-11T13:53:06Z",
-    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.1.0"
+    "tag": "digichat-v1.3.1",
+    "name": "digichat: v1.3.1",
+    "publishedAt": "2026-08-21T00:49:33Z",
+    "url": "https://github.com/digithings-ai/digithings/releases/tag/digichat-v1.3.1"
   },
   "modules": {
     "digigraph": {
       "path": "digigraph",
-      "lastCommit": "2026-08-11T02:33:07Z",
+      "lastCommit": "2026-08-21T13:00:39Z",
       "files": 137,
-      "lines": 16572
+      "lines": 18563
     },
     "digiquant": {
       "path": "digiquant",
-      "lastCommit": "2026-08-10T23:38:35Z",
-      "files": 491,
-      "lines": 79455
+      "lastCommit": "2026-08-21T13:07:14Z",
+      "files": 506,
+      "lines": 84598
     },
     "digisearch": {
       "path": "digisearch",
-      "lastCommit": "2026-08-11T05:20:29Z",
-      "files": 86,
-      "lines": 8052
+      "lastCommit": "2026-08-13T02:57:00Z",
+      "files": 89,
+      "lines": 8722
     },
     "digichat": {
       "path": "frontend/digichat",
-      "lastCommit": "2026-08-11T03:08:00Z",
-      "files": 202,
-      "lines": 23531
+      "lastCommit": "2026-08-21T13:00:39Z",
+      "files": 217,
+      "lines": 27149
     },
     "digikey": {
       "path": "digikey",
-      "lastCommit": "2026-08-11T02:02:53Z",
+      "lastCommit": "2026-08-19T07:45:48Z",
       "files": 24,
-      "lines": 2367
+      "lines": 2392
     },
     "digismith": {
       "path": "digismith",
@@ -101,9 +101,9 @@
     },
     "digivault": {
       "path": "digivault",
-      "lastCommit": "2026-08-11T01:30:43Z",
-      "files": 16,
-      "lines": 1972
+      "lastCommit": "2026-08-15T17:11:14Z",
+      "files": 20,
+      "lines": 3811
     }
   }
 }

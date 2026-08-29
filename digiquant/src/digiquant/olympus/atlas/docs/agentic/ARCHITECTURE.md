@@ -28,7 +28,7 @@
 |-------|------|-------------------|
 | **Research (Track A)** | Daily research with edit-mode — publish **`digest`** and segment research to Supabase | [`recurring-scheduled-run.md`](../cowork/tasks/recurring-scheduled-run.md), `python -m digiquant.olympus.hermes.chain --cadence daily` |
 | **Portfolio (Track B)** | Thesis-first Hermes H1–H9 → `commit_run` | Same chain entry point (unified daily graph) |
-| **Review & improvement** | `preflight_reflect` on due `decision_log` rows; beliefs on-demand | `--refresh-scope beliefs` |
+| **Review & improvement** | `preflight_reflect` on due `decision_log` rows + matured typed forecast outcomes (`forecast_outcomes`, WP5.2); beliefs on-demand | `--refresh-scope beliefs` |
 
 **Superseded cadence (historical only):** separate weekly baseline / weekday delta / month-end
 synthesis workflows — replaced by one daily graph + `resolve_edit_mode` per artifact ([#930](https://github.com/digithings-ai/digithings/issues/930)).
@@ -110,7 +110,26 @@ Before any phase executes, the agent performs a structured context load:
    longer the only path to price/macro data (they were never invoked under
    `tool_choice="auto"`). Fail-soft: a data-layer error logs a warning and
    phases run without injected values.
-6. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
+6. **Pin research state (#2863 / WP12.3)** — when a `ResearchStateStore` is
+   wired, preflight selects one exact `ResearchStatePin` (optional explicit
+   `requested_research_state_version_id`, else cutoff-bound `select_state_as_of`
+   + `pin_state_for_run`) onto `AtlasResearchState.research_state_pin`. Resume
+   reuses the run/attempt pin; typed `state_unavailable` keeps compatibility
+   documents shadow-only. Never re-select / `load_latest` after the pin.
+6b. **Ticker evidence bundles (#2844 / WP11.1–WP11.5)** — typed H5
+   `TickerEvidenceBundle` + append-only H6 `MissingFactRequest` /
+   `EvidenceBundleAmendment` contracts (`research_retrieval` models +
+   in-memory `EvidenceBundleStore` with `dump_snapshot`/`from_snapshot` for
+   checkpoint reload; private migrations `090`/`091`; SQL IO adapter later).
+   One immutable base per run/ticker; amendments must link one base and one
+   request. WP11.2 builds the H5 base before the provider call; WP11.3–11.4
+   wire deterministic H6 selection + bounded missing-fact supplements; WP11.5
+   (`simulated_pipeline` + `TestDurableH5H6LineageRoundTrip`) proves bases and
+   amendments survive store serialize/reload across the H5→H6 boundary.
+   Optional `HermesGraphDeps.evidence_bundle_store`; default graph leaves it
+   unwired; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` gates append when injected.
+
+7. **Announce**: `"Context loaded. Starting Phase 1 of 9."`
 
 ---
 
