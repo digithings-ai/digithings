@@ -1,5 +1,5 @@
 /**
- * Chart-spec discriminator for SITAAS (and other research) responses that
+ * Chart-spec discriminator for research responses that
  * embed an ECharts option object inside a JSON code block.
  *
  * Agreed wire format: a fenced ```json code block whose content parses to

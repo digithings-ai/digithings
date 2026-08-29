@@ -22,7 +22,6 @@ Fetch the CI output for the PR. Options:
 | **Format** | `ruff format`, `prettier` diff | `ruff format .` / `npx prettier --write .` |
 | **Broken links** | `make doc-check` failures | Fix or remove the dead markdown link |
 | **Unit tests** | `pytest` / `vitest` failures | Run the failing test locally; fix the code |
-| **PR linkage** | "Require Fixes" check fails | Add `Fixes #N` to PR body; create backing issue if needed |
 | **Scoring gate** | `make score` exits non-zero | Run `score-and-fix` skill |
 | **Docker / compose** | `make up` / service health failures | Check `docker compose logs <service>` |
 | **Other** | Anything else | Read the raw log; escalate if unclear |
@@ -47,19 +46,3 @@ git add <changed files>
 make score          # re-run gate if scoring was a bucket
 git push            # re-triggers CI
 ```
-
-## PR linkage failures
-
-The "Require Fixes" check fails only when **none** of the gate's bypasses apply. In the order `.github/workflows/ci-pr-hygiene.yml` tests them: a promotion PR (head `develop` → base `main`, from this repo); a `module/*` head; a `docs/*` or `chore/*` head; a `task/<N>-*` head; or a `Fixes/Closes/Resolves #N` keyword in the PR body **or title**.
-
-So a red `Require Fixes` means the head is something else — typically `feat/<slug>`, `fix/<slug>`, or an agent namespace like `claude/<slug>` — with no keyword. Fix:
-
-1. Create a backing issue if none exists:
-   ```bash
-   gh issue create --title "[agent] <short description>" --label "agent-task"
-   ```
-2. Add to PR body:
-   ```
-   Closes #<N>
-   ```
-3. Push any trivial change (or amend + force-push) to re-trigger checks.

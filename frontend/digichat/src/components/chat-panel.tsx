@@ -30,7 +30,7 @@ import { EChartsCard } from "@/components/echarts-card";
 import { parseChartEnvelope } from "@/lib/chart-spec";
 import { p } from "@/lib/base-path";
 import { ACTIVITY_PART_TYPE, messageActivities } from "@/lib/chat-activity";
-import { byokRequiresModel, useBYOKKey } from "@/hooks/use-byok-key";
+import { useBYOKKey } from "@/hooks/use-byok-key";
 import { cn } from "@/lib/utils";
 import { ChatActivities } from "@digithings/digichat-ui";
 import { ChatMarkdown, type CodeBlockOverride } from "@digithings/web";
@@ -192,7 +192,14 @@ export function ChatPanel({
           if (byokKey) {
             h.set("X-BYOK-Key", byokKey);
             h.set("X-BYOK-Provider", byokProvider);
-            if (byokRequiresModel(byokProvider) && byokModel.trim()) {
+            // Send whenever the user set one, including for providers whose
+            // catalog entry says requiresModel:false. openai is the only such
+            // provider, and gating the header on that flag meant an openai user
+            // who picked a model had it dropped here — digigraph then answered on
+            // *its* default, which on the shipped config is an OpenRouter model
+            // billed to the operator (#2490). byok-ping already sends it on the
+            // same condition; the send path now matches the path that validated it.
+            if (byokModel.trim()) {
               h.set("X-BYOK-Model", byokModel.trim());
             }
           }

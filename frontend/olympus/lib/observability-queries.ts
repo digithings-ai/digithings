@@ -7,14 +7,18 @@
  * so the main Morning Read bundle stays lean; these fire only when their consumer mounts.
  *
  * Attribution and recommendation quality now live on Portfolio Attribution; per-position
- * risk remains on Holdings. System reads run telemetry from `atlas_run_health` — the curated projection
- * that bypasses the base-table RLS on `atlas_run_diagnostics` (migration 033). Spend
- * telemetry (cost, tokens, error_summary, breakdown) is intentionally excluded from the
- * view; economics tiles render "—" on the public anon-key dashboard.
+ * risk remains on Holdings. Pipeline + Brief read run telemetry from `atlas_run_health` —
+ * the curated projection that bypasses the base-table RLS on `atlas_run_diagnostics`
+ * (migration 033). Spend telemetry (cost, tokens, error_summary, breakdown) is intentionally
+ * excluded from the view; economics tiles render "—" on the public anon-key dashboard.
  *
- * Every query is FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
+ * Most queries are FAIL-SOFT: a missing/forbidden source (e.g. an empty book) resolves to an
  * empty result rather than throwing, so consumers render a clean empty state instead of an
  * error wall.
+ *
+ * Exception — accounting NAV (#2599 / #3029): `fetchOlympusTearsheet` FAILS CLOSED when
+ * `public_accounting_nav_history` errors. Swallowing that into an empty series looked like
+ * a healthy empty book and hid unapplied migrations 072–074.
  */
 
 import { supabase, isSupabaseConfigured } from './supabase';
@@ -28,6 +32,18 @@ import type {
 } from '@/components/tearsheet/types';
 import type { ContributionReturnPoint } from '@digithings/web';
 import { DASHBOARD_BENCHMARK_TICKERS } from './benchmark-tickers';
+import {
+  ACCOUNTING_NAV_VIEW,
+  AccountingNavContractError,
+  accountingNavToHistoryShape,
+  type AccountingNavRow,
+} from './accounting-views';
+import {
+  averageEntryAsOf,
+  realizedReturnVsAverageEntry,
+  roundPct,
+  soldWeightPct,
+} from './position-event-economics';
 
 const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
@@ -207,38 +223,102 @@ function latestAttributionByTicker(
   return latest;
 }
 
-function toHoldingRow(
+function finitePositive(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+/** Desk unrealized % vs average entry — fail closed without basis or mark. */
+function unrealizedReturnPctFromPosition(
+  position: TableRow<'positions'> | null
+): number | null {
+  if (!position) return null;
+  const stored = position.unrealized_pnl_pct ?? position.since_entry_return_pct ?? null;
+  if (stored != null && Number.isFinite(stored)) return roundPct(stored);
+  const entry = finitePositive(position.entry_price);
+  const mark = finitePositive(position.current_price);
+  if (entry == null || mark == null) return null;
+  return roundPct((mark / entry - 1) * 100);
+}
+
+/** Latest positive close per ticker (marks sorted newest-first or any order). */
+function latestCloseByTicker(
+  marks: Array<{ ticker: string; date: string; close: number }>
+): Map<string, { date: string; close: number }> {
+  const latest = new Map<string, { date: string; close: number }>();
+  for (const row of [...marks].sort((a, b) => b.date.localeCompare(a.date))) {
+    const ticker = row.ticker.toUpperCase();
+    const close = finitePositive(row.close);
+    if (!close || latest.has(ticker)) continue;
+    latest.set(ticker, { date: row.date, close });
+  }
+  return latest;
+}
+
+/**
+ * When the nightly metrics refresh did not stamp `current_price` /
+ * `unrealized_pnl_pct` (sync-only book rows), fill the mark from `price_history`
+ * so open-book unrealized can derive from entry vs close. Never invent a mark.
+ */
+function applyHoldingMarks(
+  position: TableRow<'positions'>,
+  marksByTicker: Map<string, { date: string; close: number }>
+): TableRow<'positions'> {
+  if (
+    (position.unrealized_pnl_pct != null && Number.isFinite(position.unrealized_pnl_pct)) ||
+    (position.since_entry_return_pct != null && Number.isFinite(position.since_entry_return_pct))
+  ) {
+    return position;
+  }
+  if (finitePositive(position.current_price) != null) return position;
+  const mark = marksByTicker.get(position.ticker.toUpperCase());
+  if (!mark) return position;
+  return {
+    ...position,
+    current_price: mark.close,
+    // Provenance of the close actually used — matches refresh_performance_metrics (#1833).
+    metrics_as_of: mark.date,
+  };
+}
+
+function toOpenHoldingRow(
   ticker: string,
   position: TableRow<'positions'> | null,
-  attribution: TableRow<'position_attribution'> | null,
-  exit: TableRow<'position_events'> | null = null,
-  isClosed = false
+  attribution: TableRow<'position_attribution'> | null
 ): PerformanceHoldingRow {
-  const entryPrice = position?.entry_price;
-  const exitPrice = exit?.price ?? position?.current_price;
-  const realizedReturnPct =
-    isClosed && entryPrice != null && entryPrice > 0 && exitPrice != null && exitPrice > 0
-      ? roundPct((exitPrice / entryPrice - 1) * 100)
-      : null;
   return {
     ticker,
     category:
       attribution?.sector_bucket ?? position?.sector_bucket ?? position?.category ?? null,
-    weightPct: attribution?.weight_pct ?? position?.weight_pct ?? null,
-    unrealizedReturnPct:
-      position?.unrealized_pnl_pct ?? position?.since_entry_return_pct ?? null,
-    realizedReturnPct,
-    attributionDate:
-      exit?.date ??
-      attribution?.date ??
-      position?.metrics_as_of ??
-      (isClosed ? position?.date : null) ??
-      null,
+    weightPct: position?.weight_pct ?? attribution?.weight_pct ?? null,
+    unrealizedReturnPct: unrealizedReturnPctFromPosition(position),
+    realizedReturnPct: null,
+    // Prefer the position mark date over attribution — attribution can lag the live book.
+    attributionDate: position?.metrics_as_of ?? position?.date ?? attribution?.date ?? null,
+    disposition: null,
+    eventId: null,
   };
 }
 
-function roundPct(value: number): number {
-  return Math.round(value * 1_000_000) / 1_000_000;
+function toRealizedHoldingRow(
+  event: TableRow<'position_events'>,
+  averageEntry: number | null,
+  attribution: TableRow<'position_attribution'> | null,
+  position: TableRow<'positions'> | null
+): PerformanceHoldingRow {
+  const disposition: PerformanceHoldingRow['disposition'] =
+    event.event === 'TRIM' ? 'TRIM' : 'EXIT';
+  return {
+    ticker: event.ticker.toUpperCase(),
+    category:
+      attribution?.sector_bucket ?? position?.sector_bucket ?? position?.category ?? null,
+    weightPct: soldWeightPct(event),
+    unrealizedReturnPct: null,
+    realizedReturnPct: realizedReturnVsAverageEntry(event.price, averageEntry),
+    attributionDate: event.date,
+    disposition,
+    eventId: event.id,
+  };
 }
 
 function periodReturnPct(values: number[]): number | null {
@@ -376,17 +456,6 @@ function buildPositionContributionSeries(
   }));
 }
 
-function latestExitByTicker(
-  events: TableRow<'position_events'>[]
-): Map<string, TableRow<'position_events'>> {
-  const latest = new Map<string, TableRow<'position_events'>>();
-  for (const event of [...events].sort((a, b) => b.date.localeCompare(a.date))) {
-    const ticker = event.ticker.toUpperCase();
-    if (event.event === 'EXIT' && !latest.has(ticker)) latest.set(ticker, event);
-  }
-  return latest;
-}
-
 function latestPositionByTicker(
   positions: TableRow<'positions'>[]
 ): Map<string, TableRow<'positions'>> {
@@ -398,6 +467,13 @@ function latestPositionByTicker(
   return latest;
 }
 
+/** Ledger sells only — EXIT (full) and TRIM (partial). One row per fill event. */
+function realizedSellEvents(
+  events: TableRow<'position_events'>[]
+): TableRow<'position_events'>[] {
+  return events.filter((event) => event.event === 'EXIT' || event.event === 'TRIM');
+}
+
 export function buildOlympusTearsheet(args: {
   nav: TableRow<'nav_history'>[];
   positions: TableRow<'positions'>[];
@@ -405,16 +481,18 @@ export function buildOlympusTearsheet(args: {
   attribution: TableRow<'position_attribution'>[];
   events?: TableRow<'position_events'>[];
   benchmarkPrices?: Array<{ ticker?: string; date: string; close: number }>;
+  /** Latest closes for open-book tickers when positions rows lack marks. */
+  holdingMarks?: Array<{ ticker: string; date: string; close: number }>;
 }): OlympusTearsheet {
   const navAsc = [...args.nav].sort((a, b) => a.date.localeCompare(b.date));
   const inceptionDate = navAsc[0]?.date ?? null;
   const navSeries = buildPortfolioReturnSeries(navAsc);
   const currentSnapshot = latestDateRows(args.positions);
-  const currentPositions = currentSnapshot.rows.filter(
-    (position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0
-  );
+  const marksByTicker = latestCloseByTicker(args.holdingMarks ?? []);
+  const currentPositions = currentSnapshot.rows
+    .filter((position) => position.ticker.toUpperCase() !== 'CASH' && position.weight_pct > 0)
+    .map((position) => applyHoldingMarks(position, marksByTicker));
   const attributionByTicker = latestAttributionByTicker(args.attribution);
-  const exitByTicker = latestExitByTicker(args.events ?? []);
   const latestPosition = latestPositionByTicker(args.positions);
   const latestAttribution = latestDateRows(args.attribution);
   const currentTickers = new Set(
@@ -427,33 +505,36 @@ export function buildOlympusTearsheet(args: {
   );
   const currentHoldings = [...currentTickers]
     .map((ticker) =>
-      toHoldingRow(
+      toOpenHoldingRow(
         ticker,
         positionByTicker.get(ticker) ?? null,
         attributionByTicker.get(ticker) ?? null
       )
     )
     .sort((a, b) => (b.weightPct ?? 0) - (a.weightPct ?? 0));
-  const historicalTickers = new Set([
-    ...[...attributionByTicker.keys()].filter((ticker) => !currentTickers.has(ticker)),
-    ...[...exitByTicker.keys()].filter((ticker) => !currentTickers.has(ticker)),
-  ]);
-  const historicalHoldings = [...historicalTickers]
-    .map((ticker) =>
-      toHoldingRow(
-        ticker,
-        latestPosition.get(ticker) ?? null,
+  // Realized section = ledger EXIT + TRIM fills (including trims while still held).
+  // Do not synthesize closed rows from attribution ghosts — that invented P&L without fills.
+  const historicalHoldings = realizedSellEvents(args.events ?? [])
+    .map((event) => {
+      const ticker = event.ticker.toUpperCase();
+      return toRealizedHoldingRow(
+        event,
+        averageEntryAsOf(args.positions, ticker, event.date),
         attributionByTicker.get(ticker) ?? null,
-        exitByTicker.get(ticker) ?? null,
-        true
-      )
-    )
+        latestPosition.get(ticker) ?? null
+      );
+    })
     .sort(
       (a, b) =>
         (b.attributionDate ?? '').localeCompare(a.attributionDate ?? '') ||
+        a.ticker.localeCompare(b.ticker) ||
         Math.abs(b.realizedReturnPct ?? 0) - Math.abs(a.realizedReturnPct ?? 0)
     );
-  const derivedNetReturnPct = periodReturnPct(navAsc.map((row) => row.nav));
+  // Accounting NAV series is the single source of truth for since-inception %.
+  // Prefer derived over persisted metrics so a stale/wrong net_return_pct cannot
+  // show a positive portfolio return while the base-100 index sits under 100.
+  // Use filtered navSeries (same finite/positive gate as return charts), not raw navAsc.
+  const derivedNetReturnPct = periodReturnPct(navSeries.map((row) => row.nav));
   const persistedBenchmarkTicker = args.metrics?.benchmark_ticker ?? 'SPY';
   const benchmarkComparisons = buildBenchmarkComparisons(
     navSeries,
@@ -465,25 +546,20 @@ export function buildOlympusTearsheet(args: {
     benchmarkComparisons.find((comparison) => comparison.ticker === persistedBenchmarkTicker) ??
     benchmarkComparisons[0];
   const derivedBenchmarkReturnPct = defaultComparison?.returnPct ?? null;
-  const netReturnPct = args.metrics?.net_return_pct ?? derivedNetReturnPct;
+  const netReturnPct = derivedNetReturnPct ?? args.metrics?.net_return_pct ?? null;
   const benchmarkReturnPct =
-    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct;
+    derivedBenchmarkReturnPct ?? args.metrics?.benchmark_return_pct ?? null;
   const relativeReturnPct =
-    defaultComparison && netReturnPct != null && benchmarkReturnPct != null
+    netReturnPct != null && benchmarkReturnPct != null
       ? roundPct(netReturnPct - benchmarkReturnPct)
-      : args.metrics?.relative_return_pct ??
-        (netReturnPct != null && benchmarkReturnPct != null
-          ? roundPct(netReturnPct - benchmarkReturnPct)
-          : null);
+      : args.metrics?.relative_return_pct ?? null;
   const persistedUsed = [
     args.metrics?.net_return_pct,
     args.metrics?.benchmark_return_pct,
     args.metrics?.relative_return_pct,
   ].some((value) => value != null);
-  const derivedUsed =
-    (args.metrics?.net_return_pct == null && derivedNetReturnPct != null) ||
-    (args.metrics?.benchmark_return_pct == null && derivedBenchmarkReturnPct != null) ||
-    (args.metrics?.relative_return_pct == null && relativeReturnPct != null);
+  // Derived wins for portfolio return whenever the NAV series can produce one.
+  const derivedUsed = derivedNetReturnPct != null || derivedBenchmarkReturnPct != null;
   const returnsSource = persistedUsed
     ? derivedUsed
       ? 'mixed'
@@ -529,10 +605,20 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
       events: [],
     });
   }
-  const [navRes, positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
-    safeSelect<TableRow<'nav_history'>>('nav_history', (sb) =>
-      sb.from('nav_history').select('*').order('date', { ascending: true }).limit(PERFORMANCE_HISTORY_LIMIT)
-    ),
+  // NAV: curated accounting series (#2599). Fail closed on query error (#3029) —
+  // never build an empty tearsheet that looks like a healthy empty book.
+  // Query directly (not via safeSelect) so the PostgREST error is preserved.
+  const navQuery = await supabase
+    .from(ACCOUNTING_NAV_VIEW)
+    .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
+    .order('date', { ascending: true })
+    .limit(PERFORMANCE_HISTORY_LIMIT);
+  if (navQuery.error) {
+    throw new AccountingNavContractError(navQuery.error);
+  }
+  const navRows = (navQuery.data ?? []) as AccountingNavRow[];
+
+  const [positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
       sb
         .from('positions')
@@ -543,6 +629,8 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
     safeSelect<TableRow<'portfolio_metrics'>>('portfolio_metrics', (sb) =>
       sb.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1)
     ),
+    // Book attribution tab stays on current-book lookback (diagnostic). Realized daily
+    // contribution is public_daily_realized_attribution — do not mix into this series.
     safeSelect<TableRow<'position_attribution'>>('position_attribution', (sb) =>
       sb
         .from('position_attribution')
@@ -554,35 +642,68 @@ export async function fetchOlympusTearsheet(): Promise<OlympusTearsheet> {
       sb
         .from('position_events')
         .select('*')
-        .eq('event', 'EXIT')
+        // EXIT = full close; TRIM = partial sell — both are realized vs average entry.
+        .in('event', ['EXIT', 'TRIM'])
         .order('date', { ascending: false })
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
   ]);
-    const navWindow = [...navRes.rows]
-      .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
-      .sort((left, right) => left.date.localeCompare(right.date));
-    const benchmarkRes =
-      navWindow.length >= 2
-        ? await safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
-            'benchmark price_history',
-            (sb) =>
-              sb
-                .from('price_history')
-                .select('ticker,date,close')
-                .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
-                .gte('date', navWindow[0].date)
-                .lte('date', navWindow.at(-1)!.date)
-                .order('date', { ascending: true })
-                .limit(PERFORMANCE_HISTORY_LIMIT)
-          )
-        : { rows: [], ok: true };
+  const navHistory: TableRow<'nav_history'>[] = navRows.map((row) => {
+    const shaped = accountingNavToHistoryShape(row);
+    return {
+      date: shaped.date,
+      nav: shaped.nav,
+      cash_pct: shaped.cash_pct,
+      invested_pct: shaped.invested_pct,
+    };
+  });
+  const navWindow = [...navHistory]
+    .filter((row) => Number.isFinite(row.nav) && row.nav > 0)
+    .sort((left, right) => left.date.localeCompare(right.date));
+  const currentBook = latestDateRows(positionsRes.rows);
+  const openTickers = [
+    ...new Set(
+      currentBook.rows
+        .filter((row) => row.ticker.toUpperCase() !== 'CASH' && row.weight_pct > 0)
+        .map((row) => row.ticker.toUpperCase())
+    ),
+  ];
+  const [benchmarkRes, holdingMarksRes] = await Promise.all([
+    navWindow.length >= 2
+      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
+          'benchmark price_history',
+          (sb) =>
+            sb
+              .from('price_history')
+              .select('ticker,date,close')
+              .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
+              .gte('date', navWindow[0].date)
+              .lte('date', navWindow.at(-1)!.date)
+              .order('date', { ascending: true })
+              .limit(PERFORMANCE_HISTORY_LIMIT)
+        )
+      : Promise.resolve({ rows: [], ok: true as const }),
+    openTickers.length
+      ? safeSelect<Pick<TableRow<'price_history'>, 'ticker' | 'date' | 'close'>>(
+          'holding mark price_history',
+          (sb) =>
+            sb
+              .from('price_history')
+              .select('ticker,date,close')
+              .in('ticker', openTickers)
+              .order('date', { ascending: false })
+              // One recent window per open name is enough to resolve a close mark.
+              .limit(Math.max(openTickers.length * 40, 200))
+        )
+      : Promise.resolve({ rows: [], ok: true as const }),
+  ]);
   return buildOlympusTearsheet({
-    nav: navRes.rows,
+    nav: navHistory,
     positions: positionsRes.rows,
     metrics: metricsRes.rows[0] ?? null,
     attribution: attributionRes.rows,
     events: eventsRes.rows,
     benchmarkPrices: benchmarkRes.rows,
+    holdingMarks: holdingMarksRes.rows,
   });
 }

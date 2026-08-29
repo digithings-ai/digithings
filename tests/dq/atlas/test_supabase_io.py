@@ -50,11 +50,13 @@ class _FakeQuery:
     store: dict[str, list[dict[str, Any]]]
     canned: list[dict[str, Any]] = field(default_factory=list)
     _upsert_row: dict[str, Any] | list[dict[str, Any]] | None = None
+    _insert_rows: list[dict[str, Any]] | None = None
     _update_row: dict[str, Any] | None = None
     _delete: bool = False
     _filters: list[tuple[str, str, Any]] = field(default_factory=list)
     _order: tuple[str, bool] | None = None
     _limit: int | None = None
+    _range: tuple[int, int] | None = None
 
     def select(self, _cols: str) -> "_FakeQuery":
         return self
@@ -94,6 +96,21 @@ class _FakeQuery:
         self._limit = n
         return self
 
+    def range(self, start: int, end: int) -> "_FakeQuery":
+        # PostgREST ``.range`` is inclusive on both ends (0-indexed).
+        self._range = (start, end)
+        return self
+
+    def insert(self, row: dict[str, Any] | list[dict[str, Any]]) -> "_FakeQuery":
+        # PostgREST ``insert()``. Deliberately does **not** stamp ``_on_conflict``
+        # the way ``upsert`` below does: the portfolio-ledger tables (migration 069)
+        # grant service_role SELECT + INSERT only and are append-only by trigger, so
+        # a writer that reaches for ``upsert`` on one of them is a bug. Keeping the
+        # two paths distinguishable in ``store`` is what lets a test assert which
+        # verb the writer actually used.
+        self._insert_rows = [dict(r) for r in row] if isinstance(row, list) else [dict(row)]
+        return self
+
     def upsert(
         self,
         row: dict[str, Any] | list[dict[str, Any]],
@@ -128,6 +145,9 @@ class _FakeQuery:
         )
 
     def execute(self) -> _FakeResponse:
+        if self._insert_rows is not None:
+            self.store.setdefault(self.table_name, []).extend(self._insert_rows)
+            return _FakeResponse(data=[dict(row) for row in self._insert_rows])
         if self._upsert_row is not None:
             rows = self._upsert_row if isinstance(self._upsert_row, list) else [self._upsert_row]
             self.store.setdefault(self.table_name, []).extend(rows)
@@ -152,6 +172,9 @@ class _FakeQuery:
         if self._order is not None:
             col, desc = self._order
             rows.sort(key=lambda r: r.get(col, ""), reverse=desc)
+        if self._range is not None:
+            start, end = self._range
+            rows = rows[start : end + 1]
         if self._limit is not None:
             rows = rows[: self._limit]
         return _FakeResponse(data=rows)

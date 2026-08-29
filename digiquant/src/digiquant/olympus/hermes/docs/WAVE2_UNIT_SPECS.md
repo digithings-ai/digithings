@@ -1,16 +1,16 @@
 # Wave 2 Unit Specs — Hermes implementation
 
 > **Superseded for implementation:** [#930](https://github.com/digithings-ai/digithings/issues/930) shipped H1–H9.
-> **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
+> **Canonical spec:** [`docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md`](../../../../../../docs/superpowers/specs/2026-06-20-olympus-daily-thesis-design.md) §13.2.
 > **Live topology:** [`ARCHITECTURE.md`](ARCHITECTURE.md). H-path name mapping: W2-C/D/E/F/G → H1/H2/H3/H5/H6/H7; H8 = `phase7e_risk_sizing`; H9 = `h9_commit_run`.
 
 > **Historical note:** This document described the planned Wave 2 Hermes expansion before thesis-first
 > cutover. Retained for forensics and unit-ID cross-reference only.
 
 > **Parent spec:** [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md).
-> **Parent plan:** [`docs/plans/atlas-full-migration-wave1.md`](../../../../docs/plans/atlas-full-migration-wave1.md) §"Wave 2 preview".
+> **Parent plan:** [`docs/plans/atlas-full-migration-wave1.md`](../../../../../../docs/plans/atlas-full-migration-wave1.md) §"Wave 2 preview".
 > **Prereqs:** Wave 1 units W1-A-PLAN (this spec), W1-B (migration 024). W1-D and W1-E are independent.
-> **Branch convention:** each unit branches `module/digiquant-atlas` → `task/w2X-<slug>`; PR back into `module/digiquant-atlas`.
+> **Branch convention (archival):** each unit *was* to branch `module/digiquant-atlas` → `task/w2X-<slug>` and PR back into `module/digiquant-atlas`. Do not branch from it: it held no unique work and may no longer exist. Current routing is in [`BRANCHING.md`](../../../../../../BRANCHING.md).
 
 Each unit below is ready to copy-paste into an agent prompt (set the branch, read the two parent docs, execute).
 
@@ -371,7 +371,7 @@ Every Wave 2 unit prompt should include:
 
 1. Read [`HERMES_SUBGRAPH.md`](HERMES_SUBGRAPH.md) and your unit's section in this file.
 2. Read the skill file(s) your phase loads.
-3. Follow the `task/<slug>` branch convention; PR target is `module/digiquant-atlas`.
+3. Follow the `task/<slug>` branch convention. (Archival: the PR target was `module/digiquant-atlas`, now dormant — see [`BRANCHING.md`](../../../../../../BRANCHING.md) for current routing.)
 4. Tests pass: `pytest tests/dq/atlas -m unit -v`.
 5. `make doc-check` passes (no link regressions).
 6. `make score` passes the 4-dim gate.

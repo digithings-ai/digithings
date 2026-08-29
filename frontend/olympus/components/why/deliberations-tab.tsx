@@ -211,8 +211,18 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
                 : 'text-ink-mute';
           const bull = s(p.bull_thesis).trim();
           const bear = s(p.bear_thesis).trim();
+          const conclusion = s(p.conclusion).trim();
           const delta = s(p.conviction_delta).trim();
           const sign = delta && !delta.startsWith('-') && delta !== '0' ? `+${delta}` : delta;
+          const thesesMirrored =
+            Boolean(conclusion) &&
+            (!bull || bull === conclusion) &&
+            (!bear || bear === conclusion) &&
+            (Boolean(bull) || Boolean(bear));
+          const showBullBear = Boolean(bull || bear) && !thesesMirrored && bull !== bear;
+          const blurb = showBullBear
+            ? null
+            : conclusion || bull || bear || 'PM ↔ Analyst deliberation';
 
           return (
             <div key={d.ticker} className="px-5 py-4 space-y-3">
@@ -221,20 +231,26 @@ export function DeliberationsPanel({ docs }: { docs: PipelineTickerDoc[] }) {
                 {stance ? <span className={`text-xs font-medium capitalize ${stanceColor}`}>{stance}</span> : null}
                 {delta ? <span className="text-xs text-ink-mute">conviction Δ {sign}</span> : null}
               </div>
-              <div className="grid md:grid-cols-2 gap-3 text-xs text-ink-soft leading-relaxed">
-                {bull ? (
-                  <div>
-                    <p className="mb-1 text-xs font-semibold uppercase text-accent">Bull</p>
-                    <p>{cleanMemoProse(bull)}</p>
-                  </div>
-                ) : null}
-                {bear ? (
-                  <div>
-                    <p className="mb-1 text-xs font-semibold uppercase text-warn">Bear</p>
-                    <p>{cleanMemoProse(bear)}</p>
-                  </div>
-                ) : null}
-              </div>
+              {showBullBear ? (
+                <div className="grid md:grid-cols-2 gap-3 text-xs text-ink-soft leading-relaxed">
+                  {bull ? (
+                    <div>
+                      <p className="mb-1 text-xs font-semibold uppercase text-accent">Bull</p>
+                      <p>{cleanMemoProse(bull)}</p>
+                    </div>
+                  ) : null}
+                  {bear ? (
+                    <div>
+                      <p className="mb-1 text-xs font-semibold uppercase text-warn">Bear</p>
+                      <p>{cleanMemoProse(bear)}</p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : blurb ? (
+                <p className="text-xs text-ink-soft leading-relaxed line-clamp-4">
+                  {cleanMemoProse(blurb)}
+                </p>
+              ) : null}
             </div>
           );
         })}

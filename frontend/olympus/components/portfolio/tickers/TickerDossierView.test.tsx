@@ -372,7 +372,7 @@ describe('TickerDossierView — ticker lifecycle', () => {
     expect(html).toContain('Portfolio position');
     expect(html).toContain('Position history');
     expect(html).toContain('Measured outcome');
-    expect(html).toContain('Latest attribution');
+    expect(html).toContain('Latest current-book lookback (diagnostic)');
     expect(html).toContain('analysis-history');
     expect(html).toContain('Energy scarcity');
     expect(html).toContain('Express persistent energy scarcity.');

@@ -1,7 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { Pager } from '@digithings/web';
+import { DatePager } from '@digithings/web';
 
 export interface PipelineDaySelectorProps {
   /** Available run dates, newest first (PipelineClient sorts descending). */
@@ -29,40 +28,35 @@ export function adjacentDates(
 }
 
 /**
- * Rides the promoted @digithings/web Pager (dress="capsule" — olympus's
- * shipped one-capsule look) since #1548; the temporal direction semantics
- * stay in `adjacentDates` above.
+ * Pipeline run-date control — same DatePager capsule + calendar as BriefsIndex
+ * (shared @digithings/web). Discrete `allowedDates` so the calendar only lands
+ * on days that have a run.
  */
 export default function PipelineDaySelector({ dates, value, onChange }: PipelineDaySelectorProps) {
   const { prev, next } = adjacentDates(dates, value);
+  const minDate = dates.length ? dates[dates.length - 1] : undefined;
+  const maxDate = dates.length ? dates[0] : undefined;
 
   return (
     <div className="flex items-center justify-between gap-3 lg:justify-end">
       <span className="font-mono text-xs font-medium uppercase text-ink-mute">
         Run date
       </span>
-      <Pager
-        dress="capsule"
-        prevLabel={<ChevronLeft size={14} aria-hidden />}
-        nextLabel={<ChevronRight size={14} aria-hidden />}
+      <DatePager
+        value={value}
+        onChange={onChange}
+        min={minDate}
+        max={maxDate}
+        allowedDates={dates}
         prevAriaLabel="Previous day"
         nextAriaLabel="Next day"
+        labelAriaLabel="Pick run date"
         prevDisabled={!prev}
         nextDisabled={!next}
         onPrev={() => prev && onChange(prev)}
         onNext={() => next && onChange(next)}
-      >
-        <span className="whitespace-nowrap text-ink">{formatDate(value)}</span>
-      </Pager>
+        disabled={dates.length === 0}
+      />
     </div>
   );
-}
-
-function formatDate(iso: string): string {
-  try {
-    const d = new Date(iso + 'T12:00:00Z');
-    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-  } catch {
-    return iso;
-  }
 }
