@@ -133,6 +133,108 @@ def build_digiquant_pipeline_delegate_tool() -> dict[str, Any]:
     }
 
 
+def build_olympus_run_policy_replay_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "olympus_run_policy_replay",
+            "description": (
+                "Register a policy replay run against a stored pair. Returns summary "
+                "IDs/status only. Never activates or promotes production policy."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "pair_content_hash": {
+                        "type": "string",
+                        "description": "64-hex content hash of a stored ReplayPairSpec",
+                    },
+                    "run_id": {
+                        "type": "string",
+                        "description": "Optional stable run id (generated if omitted)",
+                    },
+                },
+                "required": ["pair_content_hash"],
+            },
+        },
+    }
+
+
+def build_olympus_get_policy_replay_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "olympus_get_policy_replay",
+            "description": "Fetch a policy replay run summary by run_id (fail closed if unknown).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "run_id": {"type": "string"},
+                },
+                "required": ["run_id"],
+            },
+        },
+    }
+
+
+def build_olympus_get_policy_comparison_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "olympus_get_policy_comparison",
+            "description": (
+                "Fetch a policy comparison summary (artifact IDs and status only — "
+                "no confidential evidence)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comparison_id": {"type": "string"},
+                },
+                "required": ["comparison_id"],
+            },
+        },
+    }
+
+
+def build_olympus_evaluate_policy_gate_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "olympus_evaluate_policy_gate",
+            "description": (
+                "Evaluate immutable human-authored gate criteria against a comparison. "
+                "Returns eligibility for human review only — never activates policy."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "comparison_id": {"type": "string"},
+                    "criteria_version_id": {"type": "string"},
+                },
+                "required": ["comparison_id", "criteria_version_id"],
+            },
+        },
+    }
+
+
+def build_olympus_get_policy_gate_evaluation_tool() -> dict[str, Any]:
+    return {
+        "type": "function",
+        "function": {
+            "name": "olympus_get_policy_gate_evaluation",
+            "description": "Fetch a gate-evaluation summary by evaluation_id (fail closed if unknown).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "evaluation_id": {"type": "string"},
+                },
+                "required": ["evaluation_id"],
+            },
+        },
+    }
+
+
 def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
     """Return the full digiquant orchestrator tool surface."""
     return [
@@ -142,4 +244,9 @@ def build_orchestrator_tool_manifest() -> list[dict[str, Any]]:
         build_digiquant_run_export_tool(),
         build_digiquant_run_pipeline_tool(),
         build_digiquant_pipeline_delegate_tool(),
+        build_olympus_run_policy_replay_tool(),
+        build_olympus_get_policy_replay_tool(),
+        build_olympus_get_policy_comparison_tool(),
+        build_olympus_evaluate_policy_gate_tool(),
+        build_olympus_get_policy_gate_evaluation_tool(),
     ]

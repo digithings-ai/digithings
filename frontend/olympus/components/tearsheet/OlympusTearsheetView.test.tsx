@@ -59,6 +59,8 @@ const sample: OlympusTearsheet = {
       unrealizedReturnPct: null,
       realizedReturnPct: -2,
       attributionDate: '2026-06-20',
+      disposition: 'EXIT',
+      eventId: 'old-exit',
     },
   ],
 };
@@ -68,18 +70,38 @@ function html(data: OlympusTearsheet = sample) {
 }
 
 describe('OlympusTearsheetView', () => {
-  it('prioritizes NAV, persisted portfolio return, and active return', () => {
+  it('leads with percentage returns — single excess metric, no relative-gain duplicate', () => {
     const out = html();
-    expect(out).toContain('>NAV index<');
+    expect(out).not.toContain('>NAV index<');
     expect(out).toContain('Portfolio return');
-    expect(out).toContain('Active return');
-    expect(out).toContain('112.50');
+    expect(out).toContain('Excess return');
+    expect(out).not.toContain('Relative gain');
     expect(out).toContain('12.50%');
     expect(out).toContain('4.25%');
-    expect(out).toContain('Benchmark return');
+    expect(out).toContain('SPY return');
     expect(out).toContain('8.25%');
     expect(out).toContain('>period<');
     expect(out).toContain('2026-05-01–2026-07-17');
+    expect(out).toContain('paper NAV index 112.50');
+  });
+
+  it('keeps the benchmark control outside the chart (page-global)', () => {
+    const out = html();
+    expect(out).toContain('data-testid="global-benchmark-control"');
+    expect(out).toContain('aria-label="Comparison benchmark"');
+    expect(out).toContain('<option value="SPY" selected="">SPY</option>');
+    expect(out).toContain('<option value="QQQ">QQQ</option>');
+    const chartStart = out.indexOf('data-testid="portfolio-contribution-chart"');
+    const chartBlock = out.slice(chartStart);
+    expect(chartBlock).not.toContain('<select');
+  });
+
+  it('renders insight band for alpha and information ratio', () => {
+    const out = html();
+    expect(out).toContain('data-testid="performance-insight-band"');
+    expect(out).toContain('>Alpha<');
+    expect(out).toContain('Information ratio');
+    expect(out).toContain('daily excess');
   });
 
   it('renders one additive contribution and exact portfolio-return chart', () => {
@@ -100,12 +122,16 @@ describe('OlympusTearsheetView', () => {
     expect(out).not.toContain('>Download PDF<');
   });
 
-  it('offers open and closed position performance as tabs', () => {
+  it('shows open positions and routes closed activity to Ledger', () => {
     const out = html();
     expect(out).toContain('Open positions');
-    expect(out).toContain('Closed positions');
-    expect(out).toContain('role="tablist"');
-    expect(out).toContain('role="tabpanel"');
+    expect(out).toContain('data-testid="open-positions-panel"');
+    expect(out).not.toContain('Closed positions');
+    expect(out).not.toContain('role="tablist"');
+    expect(out).toContain('data-testid="ledger-doorway"');
+    expect(out).toContain('data-testid="ledger-doorway-link"');
+    expect(out).toContain('href="/portfolio/ledger"');
+    expect(out).toContain('1 recorded exit or trim');
   });
 
   it('shows current persisted holding performance without decision diagnostics', () => {
@@ -146,9 +172,11 @@ describe('OlympusTearsheetView', () => {
       navSeries: [],
       contributionSeries: [],
       currentHoldings: [],
+      historicalHoldings: [],
     });
     expect(out).toContain('awaiting persisted metrics');
     expect(out).toContain('No open position performance is stored yet.');
+    expect(out).toContain('No recorded exits or trims');
   });
 });
 
@@ -161,7 +189,6 @@ describe('headline vs realized presentation (#1664)', () => {
     expect(out).toContain('data-region="stamp"');
     expect(out).not.toContain('persisted metrics');
     expect(out).not.toContain('marks the open book · incl. unrealized');
-    expect(out).not.toContain('vs SPY');
   });
 
   it('offers populated benchmark assets with SPY selected by default', () => {
@@ -171,13 +198,15 @@ describe('headline vs realized presentation (#1664)', () => {
     expect(out).toContain('<option value="QQQ">QQQ</option>');
   });
 
-  it('realized exits summarize below the band in the small mono strip', () => {
+  it('does not duplicate realized fills on the tearsheet — Ledger is SSOT', () => {
     const out = html();
-    expect(out).toContain('data-testid="realized-summary"');
-    expect(out).toContain('Realized · closed positions');
-    expect(out).toContain('win rate');
+    expect(out).not.toContain('data-testid="realized-summary"');
+    expect(out).not.toContain('Realized · closed positions');
+    expect(out).toContain('activity lives on Ledger');
   });
+});
 
+describe('contribution chart presentation', () => {
   it('contribution chart has no per-asset legend — popup carries the identification', () => {
     const out = html();
     expect(out).toContain('Return contribution');

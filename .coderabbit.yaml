@@ -35,9 +35,11 @@
 # and these are added. Regex is supported and the values are matched as regex,
 # hence the `.*` forms rather than globs.
 #
-# Note this only restores the AUTOMATIC net. `ci-review-coverage.yml` remains
-# satisfiable by a `reviewed:agent` label plus an in-session findings comment,
-# and `@coderabbitai review` still forces a review on any PR.
+# Note this only restores the AUTOMATIC net. `ci-review-coverage.yml` treats a
+# completed CodeRabbit review (submitted review, finished walkthrough, or check
+# success — not a skip / rate-limit / failure notice) as a review loop, the
+# same as Bugbot or an in-session `/review`. `@coderabbitai review` still
+# forces a review on any PR.
 #
 # To check which layer supplied a given setting, comment `@coderabbitai
 # configuration` on any PR — the resolved YAML is annotated with its source.

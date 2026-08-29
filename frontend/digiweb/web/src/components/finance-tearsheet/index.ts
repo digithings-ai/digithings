@@ -65,4 +65,22 @@ export {
 } from "./types";
 export { fmtCompact, fmtPct, fmtMoney, fmtNum, toneClass } from "./format";
 export { dailyReturnsFromEquity, annualizedVolPct } from "./stats";
+export {
+  computeLivePerformanceKpis,
+  computeLiveVsMarkPct,
+  dayReturnAnchorNav,
+  derivePriceAsOfDate,
+  inceptionSignAgreesWithBase100,
+  informationRatioFromDaily,
+  olsBeta,
+  overlappingDailyReturns,
+  relativeMetricsFromReturnSeries,
+  sinceInceptionPctFromNav,
+  MIN_OVERLAP_DAYS,
+  type LiveKpiPosition,
+  type LiveKpiNavPoint,
+  type LiveKpiBenchmarkPoint,
+  type LivePerformanceKpis,
+  type LivePerformanceKpisInput,
+} from "./live-performance-kpis";
 export { TEARSHEET_DEMO } from "./demo-data";

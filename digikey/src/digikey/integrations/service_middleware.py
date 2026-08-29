@@ -102,6 +102,9 @@ def jwt_context(
         )
     ctx = claims_to_context(claims, bearer_token=raw_bearer)
     ctx.caller_service = (request.headers.get("X-Digi-Caller") or "").strip() or None
+    # tenant_slug_verified was already set from the JWT claim above (claims_to_context)
+    # and is deliberately NOT set here — a header-filled tenant_slug must stay
+    # unverified so downstream authorization checks can tell the two apart (#2303).
     if not ctx.tenant_slug and (tn := _tenant_headers(request)):
         ctx.tenant_slug = tn
     return ctx

@@ -206,12 +206,44 @@ describe('TodayTab layout (Task 2.2)', () => {
   });
 
 
-  it('height-matches the desktop consensus and broker-brief panels', () => {
+  it('stacks digest → trade ideas → consensus on the left with a wider briefs rail', () => {
     const html = render();
-    expect(html).toContain('items-start');
-    expect(html).not.toContain('lg:h-[36.5rem]');
+    expect(html).toContain('today-main');
+    expect(html).toContain('lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]');
+    // Digest precedes trade ideas heading in markup (left stack order).
+    const digestIdx = html.indexOf('Digest brief');
+    const ideasIdx = html.indexOf('Today’s trade ideas');
+    const consensusIdx = html.indexOf('Consensus');
+    expect(digestIdx).toBeGreaterThan(0);
+    expect(ideasIdx).toBeGreaterThan(digestIdx);
+    expect(consensusIdx).toBeGreaterThan(ideasIdx);
+    // Briefs rail still height-matches the left stack on desktop;
+    // mobile keeps a nested-scroll max-height.
     expect(html).toContain('lg:relative lg:self-stretch');
     expect(html).toContain('lg:absolute lg:inset-0');
+    expect(html).toContain('max-h-[32rem]');
+    expect(html).toContain('lg:max-h-none');
+    // Single gap source — flat card list (date stamped on each card, no
+    // interstitial headers that stacked space-y + mb + nested gap).
+    expect(html).toContain('flex flex-col gap-2');
+    expect(html).not.toContain('space-y-3');
+    expect(html).not.toContain('mb-2 font-mono text-[10.5px]');
+  });
+
+  it('keeps even card spacing when briefs span multiple report dates', () => {
+    const html = render();
+    // Fixture spans two dates (06-22 and 06-21). Markup must use one gap-2
+    // list with dates on cards — no per-date heading wrappers.
+    const scrollerStart = html.indexOf('aria-label="Broker brief cards"');
+    expect(scrollerStart).toBeGreaterThan(0);
+    const scrollerChunk = html.slice(scrollerStart, scrollerStart + 3500);
+    expect(scrollerChunk).toContain('flex flex-col gap-2');
+    expect(scrollerChunk.match(/<ul /g)?.length ?? 0).toBe(1);
+    expect(scrollerChunk).not.toContain('space-y-');
+    expect(scrollerChunk).not.toContain('<h3');
+    // Dates remain visible as per-card stamps (newest group still first).
+    expect(scrollerChunk).toContain('2026-06-22');
+    expect(scrollerChunk).toContain('2026-06-21');
   });
 
   it('groups broker briefs by effective date (report_date ?? run_date) newest-first', () => {

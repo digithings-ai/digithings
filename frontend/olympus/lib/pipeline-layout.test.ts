@@ -148,6 +148,51 @@ describe('layoutPipeline', () => {
     expect(beliefs?.runStatus).toBe('not-run');
   });
 
+  it('attention-plan is conditional until published (#1945)', () => {
+    const day: PipelineDayData = {
+      runRecorded: true,
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['macro']),
+      artifacts: [],
+    };
+    const missing = layoutPipeline(day, {
+      expandedStages: new Set(['inputs']),
+      expandedFanouts: new Set(),
+    });
+    expect(missing.nodes.find((n) => n.id === 'inputs:attention-plan')?.runStatus).toBe('not-run');
+
+    const present = layoutPipeline(
+      {
+        ...day,
+        presentKeys: new Set(['macro', 'attention-plan']),
+      },
+      {
+        expandedStages: new Set(['inputs']),
+        expandedFanouts: new Set(),
+      },
+    );
+    const node = present.nodes.find((n) => n.id === 'inputs:attention-plan');
+    expect(node?.documentKey).toBe('attention-plan');
+    expect(node?.runStatus).toBe('persisted-artifact');
+  });
+
+  it('collapsed day does not paint Hermes/Learning stages as stage-overview', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: {},
+      fanoutKeys: {},
+      presentKeys: new Set(['macro']),
+      artifacts: [],
+    };
+    const l = layoutPipeline(day, collapsed);
+    const byId = (id: string) => l.nodes.find((n) => n.id === id);
+    expect(byId('inputs')?.runStatus).toBe('stage-overview');
+    expect(byId('research')?.runStatus).toBe('stage-overview');
+    expect(byId('selection')?.runStatus).toBe('not-run');
+    expect(byId('decision')?.runStatus).toBe('not-run');
+    expect(byId('learning')?.runStatus).toBe('not-run');
+  });
+
   it('#1259: digest node resolves via digest-delta on a delta day (no plain `digest` key)', () => {
     const day: PipelineDayData = {
       fanoutCounts: {},

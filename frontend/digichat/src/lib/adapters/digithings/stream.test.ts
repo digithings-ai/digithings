@@ -5,6 +5,8 @@ import {
   digigraphErrorToEmbedPayload,
 } from "./stream";
 import {
+  BYOK_MODEL_REMEDIABLE_MESSAGE,
+  formatEmbedChatError,
   parseEmbedChatError,
   shouldSuggestByokOnEmbedError,
 } from "@/lib/embed-chat-error";
@@ -29,7 +31,6 @@ it("does not stream the upstream error body to the browser", async () => {
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -70,7 +71,6 @@ it("never emits data-digigraphTrace on the authenticated path", async () => {
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -100,7 +100,6 @@ it("posts the full multi-turn history to digigraph chat completions", async () =
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
 
@@ -146,7 +145,6 @@ it("suppresses both parts on the embed path with activityDetail off", async () =
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "off",
   });
   const body = await new Response(res.body).text();
@@ -193,7 +191,6 @@ it("emits the activity span but not the legacy part on the embed path with activ
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -242,7 +239,6 @@ it("emits rich retrieve activity for rag_sources on the gated path", async () =>
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -293,7 +289,6 @@ it("surfaces delta.digigraph_error as a stream error for BYOK handoff", async ()
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "off",
   });
   const body = await new Response(res.body).text();
@@ -345,7 +340,6 @@ it("strips Open WebUI tool dumps from streamed answer text", async () => {
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -379,7 +373,6 @@ it("splits narration from the final answer into separate text parts on round_bou
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -428,7 +421,6 @@ it("keeps a single unbroken text part when no round_boundary ever fires", async 
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
   const body = await new Response(res.body).text();
@@ -456,7 +448,6 @@ it("opts digigraph out of Open WebUI format on the dogfood stream path", async (
     digigraphBaseUrl: "https://digigraph.internal",
     upstreamHeaders: {},
     responseHeaders: {},
-    upstreamBearer: "tok",
     activityDetail: "full",
   });
 
@@ -465,4 +456,145 @@ it("opts digigraph out of Open WebUI format on the dogfood stream path", async (
   const headers = new Headers(init.headers);
   expect(headers.get("X-Suppress-Tool-Stream")).toBe("1");
   expect(headers.get("X-Response-Format")).toBe("plain");
+});
+
+// `upstreamHeaders` is the only thing that decides which key digigraph bills, so
+// pin it. Every other fixture here passes `upstreamHeaders: {}`, which is not what
+// route.ts sends: it always builds the Authorization entry itself. This asserts the
+// production shape -- and it is why the adapter carries no Authorization line of its
+// own to be overridden.
+it("sends the Authorization supplied in upstreamHeaders", async () => {
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response("data: [DONE]\n\n", {
+      status: 200,
+      headers: { "content-type": "text/event-stream" },
+    })
+  );
+
+  await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: { Authorization: "Bearer from-upstream-headers" },
+    responseHeaders: {},
+    activityDetail: "full",
+  });
+
+  const init = fetchSpy.mock.calls[0]?.[1] as RequestInit;
+  expect(new Headers(init.headers).get("Authorization")).toBe("Bearer from-upstream-headers");
+});
+
+const errorTextFrom = (body: string): string | undefined =>
+  body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => line.slice(6))
+    .map((raw) => {
+      try {
+        return JSON.parse(raw) as { type?: string; errorText?: string };
+      } catch {
+        return null;
+      }
+    })
+    .find((chunk) => chunk?.type === "error")?.errorText;
+
+const streamFor400 = async (upstreamBody: string) => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(upstreamBody, { status: 400, statusText: "Bad Request" }),
+  );
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+  const res = await createDigigraphTraceStreamResponse({
+    messages: [userMessage("hi")],
+    digigraphBaseUrl: "https://digigraph.internal",
+    upstreamHeaders: {},
+    responseHeaders: {},
+    activityDetail: "off",
+  });
+  return { body: await new Response(res.body).text(), errorLog };
+};
+
+// A BYOK key bound with no model is refused by digigraph with a 400 whose code
+// the frontend already knows how to act on. Swallowing it left the visitor at
+// "the assistant is unavailable" with nothing to do (#2515).
+it("relays an allowlisted BYOK refusal code out of a 400 body", async () => {
+  // digibase's json_error_response nests the code under `error`.
+  const { body } = await streamFor400(
+    JSON.stringify({
+      error: {
+        code: "byok_default_model_provider_mismatch",
+        message: "This deployment's default model is served by openrouter, not openai.",
+        request_id: "req-1",
+        service: "digigraph",
+      },
+    }),
+  );
+
+  expect(body).toContain("byok_default_model_provider_mismatch");
+  const errorText = errorTextFrom(body);
+  const parsed = parseEmbedChatError(new Error(errorText));
+  expect(parsed?.code).toBe("byok_default_model_provider_mismatch");
+  expect(formatEmbedChatError(new Error(errorText))).toBe(BYOK_MODEL_REMEDIABLE_MESSAGE);
+  expect(
+    shouldSuggestByokOnEmbedError({
+      // free_then_byok deliberately, not byok_only: the byok_only/operator branch
+      // (embed-chat-error.ts:151) returns true for *any* non-empty code, so naming it
+      // here would describe a path that ignores the allowlist entirely. free_then_byok
+      // is the branch that consults it (:148) and the policy digithings.ai actually
+      // runs. Note what this line does NOT do: it expects true, so it cannot catch the
+      // allowlist being *loosened* — dropping the code is caught above, by the relay
+      // itself refusing and `body` no longer containing it.
+      llmAccess: "free_then_byok",
+      showByok: true,
+      errorCode: parsed?.code,
+    }),
+  ).toBe(true);
+});
+
+// Only the code crosses the boundary. digigraph's message for this refusal
+// f-strings the caller's own X-BYOK-Provider header into its text, and a 400
+// body carries a request_id and service name besides.
+it("relays the code without any of the upstream body", async () => {
+  const { body } = await streamFor400(
+    JSON.stringify({
+      error: {
+        code: "byok_model_required",
+        message: "openrouter requires an explicit model at db.internal:5432",
+        request_id: "req-2",
+        service: "digigraph",
+      },
+    }),
+  );
+
+  expect(body).toContain("byok_model_required");
+  expect(body).not.toContain("db.internal");
+  expect(body).not.toContain("req-2");
+  expect(body).not.toContain("requires an explicit model");
+  expect(body).not.toContain('"service"');
+});
+
+// A flat {code} body is accepted too — not every handler goes through digibase.
+it("accepts a flat error envelope", async () => {
+  const { body } = await streamFor400(JSON.stringify({ code: "byok_model_required" }));
+  expect(errorTextFrom(body)).toContain("byok_model_required");
+});
+
+// The allowlist is the point: a code with no frontend copy would render as raw
+// JSON, which is worse than the generic message.
+it("still swallows an error code that is not on the allowlist", async () => {
+  const { body, errorLog } = await streamFor400(
+    JSON.stringify({
+      error: { code: "thread_error", message: "Traceback: connect to db.internal:5432" },
+    }),
+  );
+
+  expect(body).not.toContain("thread_error");
+  expect(body).not.toContain("db.internal");
+  expect(body).toMatch(/unavailable|try again/i);
+  expect(errorLog).toHaveBeenCalled();
+});
+
+it("still swallows a body that is not JSON", async () => {
+  const { body } = await streamFor400("<html>502 Bad Gateway from nginx/1.25</html>");
+  expect(body).not.toContain("nginx");
+  expect(body).toMatch(/unavailable|try again/i);
 });

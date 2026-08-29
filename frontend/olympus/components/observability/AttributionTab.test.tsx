@@ -40,7 +40,7 @@ function render(
 describe('AttributionTab — empty state', () => {
   it('renders the empty state when no rows are provided', () => {
     const html = render([]);
-    expect(html).toContain('No attribution rows yet');
+    expect(html).toContain('No current-book lookback rows yet');
   });
 });
 

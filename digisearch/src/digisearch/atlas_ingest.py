@@ -16,12 +16,13 @@ from dataclasses import dataclass, field
 from datetime import date as DateType
 from typing import Any, Mapping, Protocol
 
+from digisearch.chunking.factory import get_document_chunker
 from digisearch.core.evidence_metadata import (
     merge_document_metadata_into_chunks,
     normalize_metadata_for_chroma,
 )
 from digisearch.core.models import Document
-from digisearch.ingestion.chunkers.recursive import RecursiveChunker
+from digisearch.ingestion.chunkers.base import Chunker
 from digisearch.search._stub import _stub_index, add_chunks
 
 logger = logging.getLogger(__name__)
@@ -170,7 +171,7 @@ def ingest_atlas_payload(
     row: Mapping[str, Any],
     *,
     index_name: str | None = None,
-    chunker: RecursiveChunker | None = None,
+    chunker: Chunker | None = None,
 ) -> IndexedDocument:
     """Index one Atlas ``documents`` row into digisearch (pure function).
 
@@ -186,10 +187,11 @@ def ingest_atlas_payload(
         :data:`ATLAS_INDEX_NAME` (``"atlas"`` unless the
         ``DIGISEARCH_ATLAS_INDEX`` env override is set).
     chunker:
-        Optional chunker override for tests. Defaults to ``RecursiveChunker()``
-        (``DEFAULT_CHUNK_CHARS``/``DEFAULT_CHUNK_OVERLAP``). Atlas rows are flat
-        research payloads with no structural segments, so this path deliberately
-        does not use the ``SegmentAwareChunker`` that ``POST /ingest`` wraps.
+        Optional chunker override for tests. Defaults to the document chunker
+        selected by ``DIGISEARCH_CHUNKER`` (Chonkie semantic). Atlas rows are
+        flat research payloads with no structural segments, so this path
+        deliberately does not use the ``SegmentAwareChunker`` that
+        ``POST /ingest`` wraps.
 
     Returns
     -------
@@ -210,7 +212,7 @@ def ingest_atlas_payload(
 
     date_iso = str(date_value)[:10]
     target_index = (index_name or ATLAS_INDEX_NAME).strip() or ATLAS_INDEX_NAME
-    used_chunker = chunker or RecursiveChunker()
+    used_chunker = chunker or get_document_chunker()
 
     doc_id = _stable_doc_id(row)
     metadata = _extract_atlas_metadata(row)

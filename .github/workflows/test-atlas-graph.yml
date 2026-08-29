@@ -41,9 +41,13 @@ jobs:
             digiquant/src/digiquant/olympus/atlas \
             digiquant/src/digiquant/olympus/hermes \
             digiquant/src/digiquant/olympus/learning \
+            digiquant/src/digiquant/olympus/replay/walk_forward.py \
             tests/dq/atlas \
             tests/dq/hermes \
-            tests/dq/learning
+            tests/dq/learning \
+            tests/dq/replay/test_walk_forward.py \
+            tests/dq/replay/phase4_e2e_fixtures.py \
+            tests/dq/replay/test_phase4_end_to_end.py
 
       - name: Ruff format check
         run: |
@@ -51,11 +55,15 @@ jobs:
             digiquant/src/digiquant/olympus/atlas \
             digiquant/src/digiquant/olympus/hermes \
             digiquant/src/digiquant/olympus/learning \
+            digiquant/src/digiquant/olympus/replay/walk_forward.py \
             tests/dq/atlas \
             tests/dq/hermes \
-            tests/dq/learning
+            tests/dq/learning \
+            tests/dq/replay/test_walk_forward.py \
+            tests/dq/replay/phase4_e2e_fixtures.py \
+            tests/dq/replay/test_phase4_end_to_end.py
 
       - name: Pytest
         run: |
           uv run --frozen --no-sync pytest -m unit \
-            tests/dq/atlas/ tests/dq/hermes/ tests/dq/learning/ -v --tb=short
+            tests/dq/atlas/ tests/dq/hermes/ tests/dq/learning/ tests/dq/replay/test_walk_forward.py tests/dq/replay/test_phase4_end_to_end.py -v --tb=short

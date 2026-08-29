@@ -426,10 +426,20 @@ def recompute_technicals_cmd(
     help="Path to macro_series.yaml.",
 )
 @click.option("--backfill", is_flag=True, help="Full historical backfill (slow).")
+@click.option(
+    "--latest-only",
+    is_flag=True,
+    help="Yahoo only: upsert its newest daily candle per FX leg (intraday refresh).",
+)
 @click.option("--dry-run", is_flag=True)
 @click.option("--supabase", is_flag=True)
 def fetch_macro_cmd(
-    sources: str, manifest: Path, backfill: bool, dry_run: bool, supabase: bool
+    sources: str,
+    manifest: Path,
+    backfill: bool,
+    latest_only: bool,
+    dry_run: bool,
+    supabase: bool,
 ) -> None:
     """Ingest macro series (FRED + Yahoo FX) into macro_series_observations."""
     import concurrent.futures
@@ -446,6 +456,8 @@ def fetch_macro_cmd(
     )
 
     sources_set = {s.strip() for s in sources.split(",") if s.strip()}
+    if backfill and latest_only:
+        raise click.UsageError("--backfill and --latest-only are mutually exclusive")
     mani = MacroManifest.from_yaml(manifest)
 
     # Validate FRED creds up-front so --dry-run'd FRED fails fast before the
@@ -470,7 +482,10 @@ def fetch_macro_cmd(
         # previously read from the Frankfurter manifest field; Frankfurter was removed
         # as a source (#328) so the start date is inlined as the constant it always was.
         yh_start = _YAHOO_FX_BACKFILL_START if backfill else None
-        tasks["yahoo"] = lambda: fetch_fx_yahoo(start=yh_start)
+        tasks["yahoo"] = lambda: fetch_fx_yahoo(
+            start=yh_start,
+            latest_only=latest_only,
+        )
     if "fedprob" in sources_set:
         # Free prediction-market Fed rate-decision odds (Kalshi + Polymarket); daily snapshot,
         # fail-soft per source. No backfill (point-in-time odds). See fed_probabilities.py.

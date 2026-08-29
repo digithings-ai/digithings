@@ -9,7 +9,7 @@ import { fetchOlympusTearsheet } from '@/lib/observability-queries';
 import type { OlympusTearsheet } from '@/components/tearsheet/types';
 
 /**
- * Performance — persisted cumulative returns and stored holding-attribution
+ * Tearsheet — persisted cumulative returns and stored holding-attribution
  * windows. The screen does not recalculate headline metrics from raw NAV.
  */
 export default function PerformancePage() {
@@ -32,7 +32,7 @@ export default function PerformancePage() {
 
   return (
     <div className="flex min-h-full flex-col">
-      <PortfolioSectionNav active="performance" />
+      <PortfolioSectionNav active="tearsheet" />
       {/* No py-* utilities here: .ts-page owns the vertical padding. Under the
           old unlayered sheet they were dead declarations; against the family
           sheet's @layer components defaults they would win and shrink the

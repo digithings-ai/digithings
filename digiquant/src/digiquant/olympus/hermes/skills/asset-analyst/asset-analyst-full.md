@@ -12,7 +12,15 @@ Produce a complete unified ``AnalystPayload`` for the ticker in ``phase_inputs``
 Required fields: evidence (itemized — see below), conviction_score (−5..+5; recomputed
 by the system from ``evidence``, so itemize honestly), stance, thesis, risks,
 fundamentals, technicals, headwinds, tailwinds, bull_case, bear_case, price_targets
-(or null), expectations, sources.
+(or null), expectations, sources, and **forecast** (typed ``ForecastTerms`` — required
+on every full analysis).
+
+``forecast`` block (do not invent IDs/timestamps; the system materializes identity):
+horizon_sessions and half_life_sessions (positive trading-session counts), ordered
+bear_return ≤ base_return ≤ bull_return (fractions, not percent), bear/base/bull
+probabilities that sum exactly to 1, thesis_valid_probability, raw_uncertainty
+(low|medium|high), evidence_ids / counter_evidence_ids, assumptions,
+invalidation_rules. Never derive these from conviction_score or price_targets.
 
 ``evidence`` block: independent_confirming_signals (0–5 signal FAMILIES with concrete
 cited evidence: technicals / fundamentals / flows / macro / sentiment),

@@ -18,7 +18,7 @@ The core value proposition: a declarative project spec — config file plus inde
 **Three customer shapes:**
 
 1. **Independent researcher or quant** — personal toolkit for strategy development, research synthesis, and portfolio management. Low barrier; deploy locally or via managed hosting.
-2. **Consultancy client (SITAAS pattern)** — config plus index plus API key produces a deployed, client-facing product in hours. The first pilot is SITAAS, deployed with Microsoft SSO and domain-specific RAG over internal documents.
+2. **Consultancy client (client pilot pattern)** — config plus index plus API key produces a deployed, client-facing product in hours. The first pilot is the client pilot, deployed with Microsoft SSO and domain-specific RAG over internal documents.
 3. **Developer** — open-core modules to build and extend. Proprietary agents and skills available as paid add-ons.
 
 ## The problem it solves
@@ -48,7 +48,7 @@ LangGraph-based workflow engine with a supervisor node, research and analysis su
 NautilusTrader-backed strategy engine with backtest and optimisation nodes wired into digigraph. Connects to OpenBB for market data. Atlas (research), Hermes (portfolio), and Kairos (strategy execution) are in active development as sub-graph modules.
 
 ### digisearch — RAG and retrieval pipeline
-Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the SITAAS internal document search deployment.
+Document ingestion, chunking, embedding, and hybrid vector/keyword search. Pluggable backends. Powers the client pilot's internal document search deployment.
 
 ### digichat — chat interface and BFF
 Next.js production chat UI (`frontend/digichat`) — BYOK (bring-your-own-key) flow, model selector, Auth.js authentication, Drizzle ORM, adaptive UI scoped by access level. Not deployed publicly yet; the digithings.ai demo still runs a separate bespoke widget pending the gateway cutover ([ADR-0018](../adr/0018-digichat-path-routing.md), epic [#1248](https://github.com/digithings-ai/digithings/issues/1248)).
@@ -84,7 +84,7 @@ Human-facing dashboard (`frontend/olympus`) for the digiquant sub-graph trio —
 - **Atlas** running daily research cycles autonomously — parallel, batched, prompt-cached, fully integrated as a digigraph sub-graph
 - **Hermes** maintaining live portfolio allocations with deliberation sub-graph and human approval gate before any execution
 - **Kairos** enabling chat-based strategy development through digichat — a quant researcher's interactive strategy workbench
-- **SITAAS** fully deployed with Microsoft SSO, proper domain RAG, and a client-facing chat interface
+- **Client pilot** fully deployed with Microsoft SSO, proper domain RAG, and a client-facing chat interface
 - **digilink** formalised as a module — MCP adapter generation from OpenAPI specs, CLI wrapper auto-generation, desktop AI app connector library (Claude Desktop, Cursor, Windsurf)
 - **digistore** shipping as a unified storage abstraction with Supabase, SQLite, and S3/MinIO backends behind a single interface
 - **Graphiti graph memory** integrated into digigraph for persistent, structured knowledge across sessions
