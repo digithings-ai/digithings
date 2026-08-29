@@ -2741,3 +2741,78 @@ Contributors are pure, fail-soft (an exception is logged and swallowed), may not
 existing key, and run **once per run** inside `_segment_counts`. Note the split:
 `_segment_totals` is the pure counter used by `atlas_research_produced`, which the chain calls
 *mid-run* to gate Hermes — contributors must never see that half-populated state.
+
+## Kairos execution contracts
+
+`digiquant/src/digiquant/brokers/contracts.py` (K0, part of the Olympus Kairos/tenancy
+program — see `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md`
+§4-K0) defines the typed venue/order/position surface every `BrokerAdapter` implementation
+exchanges with a venue, replacing the previous ad hoc positional `submit_order(symbol,
+side, quantity, order_type)` call. This work package is **contracts and typing only**: no
+HTTP client, no broker SDK, no database access, and no venue router — a later work package
+(K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
+
+### Vocabulary and models
+
+- `ExecutionVenue` (`StrEnum`): `paper_internal`, `alpaca_paper`, `ibkr_paper`,
+  `alpaca_live`, `ibkr_live`. The `*_live` members exist so the vocabulary is complete for
+  K4's venue-resolution policy; nothing in the codebase today constructs a resolver that
+  reaches either one, and K4's spec binds `resolve_venue` raising on any `*_live` value as
+  a test-pinned invariant.
+- `BrokerOrderStatus` (`StrEnum`): `submitted`, `accepted`, `partially_filled`, `filled`,
+  `canceled`, `rejected`, `expired`.
+- `OrderSide` (`StrEnum`): `buy`, `sell`. `TimeInForce` (`StrEnum`): `day`, `gtc`, `opg`,
+  `ioc`. `OrderType` (`StrEnum`): `market`, `limit` — v1 scope only; stop/stop-limit are
+  deferred to whichever work package's behavior spec first needs them.
+- `BrokerOrderRequest`: `client_order_id`, `symbol`, `side`, `quantity` XOR `notional`
+  (exactly one, mirroring `RequestedTarget`'s weight/quantity XOR in
+  `hermes/models/portfolio_ledger.py`), `order_type`, `limit_price` (required iff
+  `order_type` is `limit`, forbidden otherwise), `time_in_force`.
+- `BrokerOrderAck`: `external_order_id`, `status`, `submitted_at` (UTC), `raw_sha256` — a
+  SHA-256 hex fingerprint of the venue's raw response, never the payload itself.
+- `BrokerFill`: `external_fill_id`, `symbol`, strictly-positive `quantity`/`price`,
+  optional non-negative `fee`, `executed_at` (UTC). "No fill happened" is the absence of a
+  row, never a zero-valued one — same invariant as `PaperExecution`.
+- `BrokerPosition`: `symbol`, signed `quantity` (long positive, short negative),
+  non-negative `avg_entry_price`, signed `market_value`/`unrealized_pl`.
+- `BrokerAccountSnapshot`: `account_id`, signed `equity`/`cash`, non-negative
+  `buying_power`, 3-letter uppercase `currency`, `as_of` (UTC).
+
+All money/quantity fields are `Decimal` (`allow_inf_nan=False`), never `float`. Every
+model is frozen with `extra="forbid"` (`BrokerContractModel`, mirroring
+`PortfolioLedgerModel`), and every UTC-only datetime field is rejected if naive or offset
+by anything other than +00:00 via a locally reimplemented `_reject_non_utc` (mirrors
+`portfolio_ledger._reject_non_utc`; not imported, since that helper is private to its
+module). `symbol` and `currency` fields are stripped and uppercased by a `mode="before"`
+field validator before length/pattern validation runs.
+
+### Widened `BrokerAdapter` protocol
+
+`digiquant/src/digiquant/brokers/base.py`'s `runtime_checkable` `BrokerAdapter` `Protocol`
+gained `get_account() -> BrokerAccountSnapshot`, `get_positions() -> list[BrokerPosition]`,
+`get_order(external_order_id) -> BrokerOrderAck`, `cancel_order(external_order_id) ->
+None`, and `list_fills(since: datetime) -> list[BrokerFill]`, alongside the existing
+`name`/`connect`/`disconnect`. `submit_order` changed shape from the legacy positional
+`submit_order(symbol, side, quantity, order_type) -> str` to `submit_order(req:
+BrokerOrderRequest) -> BrokerOrderAck` — the legacy signature is deliberately not part of
+this protocol.
+
+All three stubs in `brokers/stubs.py` (`IBAdapterStub`, `AlpacaAdapterStub`,
+`QuantConnectAdapterStub`) were migrated to the widened surface; every method still raises
+`NotImplementedError`, so `isinstance(<stub>(), BrokerAdapter)` holds without any of them
+doing real work. `digiquant/brokers/__init__.py` re-exports the contracts alongside the
+protocol and stubs.
+
+### Scope and anti-goals
+
+No I/O, no database, no new runtime dependency, and no live-order-routing path anywhere in
+this module — `ExecutionVenue` defines `*_live` members but nothing routes to them. This
+work package's pre-push hook enforces a small set of forbidden method-name tokens for any
+order-submission code (see `scripts/hooks/pre-push.sh`); none of those tokens appear
+anywhere in `brokers/contracts.py`, `brokers/base.py`, or `brokers/stubs.py` — every method
+here is named `submit_order`, `get_order`, `cancel_order`, or `list_fills`.
+`tests/dq/test_brokers.py` (pre-existing, out of scope for this work package's file list)
+still calls the legacy positional `submit_order(symbol, side, quantity)` shape and will
+fail once run outside its own narrow marker selection — a follow-up work package should
+migrate or retire it alongside K1/K4 landing, rather than this contracts-only change
+touching a file outside its listed scope.
