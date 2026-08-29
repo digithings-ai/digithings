@@ -24,6 +24,7 @@ from digiquant.brokers.ibkr import (
     BrokerAuthError,
     BrokerOrderRejected,
     BrokerRateLimited,
+    BrokerTransportError,
     IbkrAdapter,
     IbkrHttpResponse,
     IbkrOrdersDisabledError,
@@ -424,11 +425,11 @@ class TestOrderReplyChain:
             "/iserver/account/DU123456/orders",
             _resp([prompt]),
         )
-        with pytest.raises(BrokerOrderRejected) as exc_info:
+        with pytest.raises(BrokerOrderRejected):
             adapter.submit_order(_order_req())
-        assert "Unusual risk" in (exc_info.value.question_text or "")
-        # Must not have confirmed the off-allowlist prompt.
+        # Whole-array classification rejects offlist before any reply POST.
         assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+        assert transport.saw_ssodh()  # session opened for the submit attempt
 
     def test_competing_session_surfaces_without_kick(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("DIGIQUANT_IBKR_ORDERS", "1")
@@ -582,3 +583,202 @@ class TestPacingMarkersDerived:
         # Every PACED_PATH_MARKERS entry is reachable via _pace_key.
         for marker in PACED_PATH_MARKERS:
             assert _pace_key(marker) == marker
+
+
+_ALLOW_PROMPT = {
+    "id": "r-allow",
+    "message": ["Price percentage constraint"],
+    "messageIds": ["o163"],
+}
+_OFF_PROMPT = {
+    "id": "r-off",
+    "message": ["Unusual risk"],
+    "messageIds": ["o9999-not-on-list"],
+}
+_ACK = {"order_id": "ord-1", "order_status": "Submitted"}
+_ACK_OTHER = {"order_id": "ord-2", "order_status": "Submitted"}
+
+
+class TestWholeArrayReplyClassification:
+    """Deep-pass #2: classify every list entry before any reply POST."""
+
+    def test_prompt_then_ack_mixed_rejects_without_reply_post(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        response = _resp([_ALLOW_PROMPT, _ACK])
+        with pytest.raises(BrokerOrderRejected, match="mixes prompt"):
+            adapter._resolve_order_reply_chain(response)
+        assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+
+    def test_ack_then_offlist_prompt_rejects_without_reply_post(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        response = _resp([_ACK, _OFF_PROMPT])
+        with pytest.raises(BrokerOrderRejected):
+            adapter._resolve_order_reply_chain(response)
+        assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+
+    def test_allowlisted_then_offlist_rejects_without_confirming_first(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        # Would previously confirm r-allow and ignore the offlist sibling.
+        transport.enqueue(
+            "POST",
+            "/iserver/reply/r-allow",
+            _resp([_ACK]),
+        )
+        response = _resp([_ALLOW_PROMPT, _OFF_PROMPT])
+        with pytest.raises(BrokerOrderRejected, match="off allowlist|empty messageIds|multiple"):
+            adapter._resolve_order_reply_chain(response)
+        assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+
+    def test_empty_message_and_empty_message_ids_rejects(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        empty = {"id": "empty", "message": [], "messageIds": []}
+        transport.enqueue("POST", "/iserver/reply/empty", _resp([_ACK]))
+        response = _resp([empty])
+        with pytest.raises(BrokerOrderRejected):
+            adapter._resolve_order_reply_chain(response)
+        assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+
+    def test_dual_distinct_order_ids_reject(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        response = _resp([_ACK, _ACK_OTHER])
+        with pytest.raises(BrokerOrderRejected, match="multiple distinct order ids"):
+            adapter._resolve_order_reply_chain(response)
+
+    def test_multiple_allowlisted_prompts_unsupported(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        second = {
+            "id": "r-allow-2",
+            "message": ["Missing market data"],
+            "messageIds": ["o354"],
+        }
+        response = _resp([_ALLOW_PROMPT, second])
+        with pytest.raises(BrokerOrderRejected, match="multi-reply unsupported"):
+            adapter._resolve_order_reply_chain(response)
+        assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+
+
+class TestBrokerageSessionCoupling:
+    """Session is active only after init AND suppression both succeed; re-auth clears it."""
+
+    def test_suppress_500_not_sticky(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DIGIQUANT_IBKR_ORDERS", "1")
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        transport.enqueue(
+            "POST",
+            "/iserver/auth/ssodh/init",
+            _resp({"authenticated": True, "competing": False}),
+        )
+        transport.enqueue(
+            "POST",
+            "/iserver/questions/suppress",
+            _resp({"error": "fail"}, status=500),
+        )
+        with pytest.raises(BrokerTransportError):
+            adapter._ensure_brokerage_session()
+        assert adapter.brokerage_session_active is False
+        # Next attempt must re-run both init and suppress (not skip).
+        transport.enqueue(
+            "POST",
+            "/iserver/auth/ssodh/init",
+            _resp({"authenticated": True, "competing": False}),
+        )
+        transport.enqueue(
+            "POST",
+            "/iserver/questions/suppress",
+            _resp({"status": "submitted"}),
+        )
+        adapter._ensure_brokerage_session()
+        assert adapter.brokerage_session_active is True
+        assert sum(1 for p in transport.paths_seen() if "ssodh/init" in p) == 2
+        assert sum(1 for p in transport.paths_seen() if "questions/suppress" in p) == 2
+
+    def test_reauth_clears_brokerage_and_reapplies_suppress(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("DIGIQUANT_IBKR_ORDERS", "1")
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        transport.enqueue(
+            "POST",
+            "/iserver/auth/ssodh/init",
+            _resp({"authenticated": True, "competing": False}),
+        )
+        transport.enqueue(
+            "POST",
+            "/iserver/questions/suppress",
+            _resp({"status": "submitted"}),
+        )
+        adapter._ensure_brokerage_session()
+        assert adapter.brokerage_session_active is True
+        assert sum(1 for p in transport.paths_seen() if "questions/suppress" in p) == 1
+
+        adapter._reauth_hook = lambda: None
+        transport.enqueue(
+            "GET",
+            "/iserver/account/order/status/ord-x",
+            _resp({"error": "not authenticated"}, status=401),
+            _resp({"order_id": "ord-x", "order_status": "Submitted"}),
+        )
+        adapter.get_order("ord-x")
+        assert adapter.brokerage_session_active is False
+
+        # Next order-lifecycle call must re-init + re-suppress.
+        transport.enqueue(
+            "POST",
+            "/iserver/auth/ssodh/init",
+            _resp({"authenticated": True, "competing": False}),
+        )
+        transport.enqueue(
+            "POST",
+            "/iserver/questions/suppress",
+            _resp({"status": "submitted"}),
+        )
+        transport.enqueue(
+            "GET",
+            "/iserver/account/order/status/ord-y",
+            _resp({"order_id": "ord-y", "order_status": "Submitted"}),
+        )
+        adapter.get_order("ord-y")
+        assert adapter.brokerage_session_active is True
+        assert sum(1 for p in transport.paths_seen() if "ssodh/init" in p) == 2
+        assert sum(1 for p in transport.paths_seen() if "questions/suppress" in p) == 2
+
+    def test_reauth_retry_does_not_recharge_pacing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("DIGIQUANT_IBKR_ORDERS", "1")
+        transport = MockTransport()
+        clock = FakeClock(start=0.0)
+        adapter = _connected_adapter(transport, clock=clock)
+        adapter._reauth_hook = lambda: None
+        transport.enqueue(
+            "POST",
+            "/iserver/auth/ssodh/init",
+            _resp({"authenticated": True, "competing": False}),
+        )
+        transport.enqueue(
+            "POST",
+            "/iserver/questions/suppress",
+            _resp({"status": "submitted"}),
+        )
+        transport.enqueue(
+            "GET",
+            "/iserver/secdef/search",
+            _resp([{"conid": 265598, "symbol": "AAPL"}]),
+        )
+        transport.enqueue(
+            "POST",
+            "/iserver/account/DU123456/orders",
+            _resp({"error": "not authenticated"}, status=401),
+            _resp([{"order_id": "ord-paced", "order_status": "Submitted"}]),
+        )
+        ack = adapter.submit_order(_order_req())
+        assert ack.external_order_id == "ord-paced"
+        # Same-instant retry must not raise BrokerRateLimited.
+        order_posts = [c for c in transport.calls if c[1].endswith("/orders") and c[0] == "POST"]
+        assert len(order_posts) == 2

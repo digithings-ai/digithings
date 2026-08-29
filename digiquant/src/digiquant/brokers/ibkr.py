@@ -488,12 +488,13 @@ class IbkrAdapter:
         if response.status_code in {401, 403} or self._looks_like_session_expiry(response):
             if allow_reauth and not _reauth_attempted:
                 self._transparent_reauth()
+                # In-flight retry must not re-charge the pacing bucket (same logical call).
                 return self._call(
                     method,
                     path,
                     json_body=json_body,
                     params=params,
-                    pace=pace,
+                    pace=False,
                     allow_reauth=False,
                     _reauth_attempted=True,
                 )
@@ -514,7 +515,13 @@ class IbkrAdapter:
         return False
 
     def _transparent_reauth(self) -> None:
-        """One transparent re-auth attempt (hook or re-connect); failures → BrokerAuthError."""
+        """One transparent re-auth attempt (hook or re-connect); failures → BrokerAuthError.
+
+        Always clears `_brokerage_session`: a live-session re-auth does not preserve the
+        brokerage session, and suppressions must be re-applied after every subsequent
+        `ssodh/init` (spec §7).
+        """
+        self._brokerage_session = False
         if self._reauth_hook is not None:
             try:
                 self._reauth_hook()
@@ -593,8 +600,9 @@ class IbkrAdapter:
         authenticated = body.get("authenticated", True)
         if authenticated is False:
             raise BrokerAuthError("IBKR brokerage session init failed (authenticated=false)")
-        self._brokerage_session = True
+        # Session is active only after init AND suppression both succeed.
         self._apply_question_suppression()
+        self._brokerage_session = True
 
     def _apply_question_suppression(self) -> None:
         """Re-apply the suppressible-message allowlist after every session init."""
@@ -649,35 +657,110 @@ class IbkrAdapter:
     def _resolve_order_reply_chain(self, response: IbkrHttpResponse) -> BrokerOrderAck:
         """Walk reply/confirmation prompts; only allowlisted messageIds may be confirmed.
 
-        Fail-closed: a body is a final ack only when it carries `order_id`/`orderId` and
-        lacks every reply-prompt marker. Bare `id`, partial prompts, or any other
-        ambiguous shape raises `BrokerOrderRejected` with the response fingerprint
-        (never the raw body) in the message.
+        Fail-closed whole-array classification (IBKR returns a *list* of question/ack
+        objects): every entry is classified before any reply POST. Mixed prompt+ack,
+        any off-allowlist/empty-ids prompt, >1 distinct order id, or >1 allowlisted
+        prompt → `BrokerOrderRejected` with the response fingerprint (never the body).
+        Multi-reply walkers are out of scope for v1.
         """
         current = response
         # Bound the chain so a runaway venue cannot loop forever.
         for _ in range(20):
-            body = current.body
-            candidate: Mapping[str, object] | None = None
-            if isinstance(body, list) and body and isinstance(body[0], Mapping):
-                candidate = body[0]
-            elif isinstance(body, Mapping):
-                candidate = body
-            if candidate is None:
+            entries = self._order_response_entries(current.body)
+            if entries is None:
                 break
-            kind = self._classify_order_response_body(candidate)
-            if kind == "prompt":
-                current = self._handle_reply_prompt(candidate)
+            decision = self._classify_order_response_array(entries, fingerprint=current.fingerprint)
+            if decision[0] == "prompt":
+                current = self._handle_reply_prompt(decision[1])
                 continue
-            if kind == "ack":
-                return self._ack_from_order_body(candidate, current.fingerprint)
-            raise BrokerOrderRejected(
-                f"IBKR order reply chain ambiguous body (sha256={current.fingerprint})"
-            )
+            if decision[0] == "ack":
+                return self._ack_from_order_body(decision[1], current.fingerprint)
+            raise BrokerOrderRejected(decision[1])
         raise BrokerOrderRejected(
             "IBKR order reply chain ended without an acknowledgement "
             f"(sha256={current.fingerprint})"
         )
+
+    @staticmethod
+    def _order_response_entries(body: object) -> list[Mapping[str, object]] | None:
+        """Normalize a reply-chain body to a list of object entries, or None if empty/unusable."""
+        if isinstance(body, Mapping):
+            return [body]
+        if isinstance(body, list):
+            if not body:
+                return None
+            entries = [row for row in body if isinstance(row, Mapping)]
+            return entries or None
+        return None
+
+    @staticmethod
+    def _extract_prompt_message_ids(prompt: Mapping[str, object]) -> list[str]:
+        raw = prompt.get("messageIds") or prompt.get("message_ids") or []
+        if not isinstance(raw, list):
+            return [str(raw)]
+        return [str(item) for item in raw]
+
+    @classmethod
+    def _prompt_ids_empty_or_off_allowlist(cls, prompt: Mapping[str, object]) -> bool:
+        ids = cls._extract_prompt_message_ids(prompt)
+        return (not ids) or any(mid not in SUPPRESSIBLE_MESSAGE_IDS for mid in ids)
+
+    def _classify_order_response_array(
+        self,
+        entries: list[Mapping[str, object]],
+        *,
+        fingerprint: str,
+    ) -> tuple[str, Mapping[str, object] | str]:
+        """Classify a full IBKR order-response list.
+
+        Returns ``("prompt", entry)``, ``("ack", entry)``, or ``("reject", message)``.
+        Never issues a reply POST — callers confirm only after a clean single-prompt
+        decision.
+        """
+        kinds = [self._classify_order_response_body(entry) for entry in entries]
+        fp = f"sha256={fingerprint}"
+
+        if any(kind == "ambiguous" for kind in kinds):
+            return ("reject", f"IBKR order reply chain ambiguous body ({fp})")
+
+        # Off-allowlist / empty-ids prompts abort before any confirmation POST.
+        for entry, kind in zip(entries, kinds, strict=True):
+            if kind == "prompt" and self._prompt_ids_empty_or_off_allowlist(entry):
+                return (
+                    "reject",
+                    f"IBKR order reply off allowlist or empty messageIds ({fp})",
+                )
+
+        n_prompt = sum(1 for kind in kinds if kind == "prompt")
+        n_ack = sum(1 for kind in kinds if kind == "ack")
+        order_ids = {
+            str(entry.get("order_id") or entry.get("orderId") or "")
+            for entry, kind in zip(entries, kinds, strict=True)
+            if kind == "ack"
+        }
+        order_ids.discard("")
+
+        if n_prompt and n_ack:
+            return (
+                "reject",
+                f"IBKR order reply mixes prompt and acknowledgement ({fp})",
+            )
+        if len(order_ids) > 1:
+            return (
+                "reject",
+                f"IBKR order reply has multiple distinct order ids "
+                f"(bracket/OCA unsupported in v1) ({fp})",
+            )
+        if n_prompt > 1:
+            return (
+                "reject",
+                f"IBKR order reply has multiple prompts; multi-reply unsupported ({fp})",
+            )
+        if n_prompt == 1:
+            return ("prompt", entries[kinds.index("prompt")])
+        if n_ack >= 1:
+            return ("ack", entries[kinds.index("ack")])
+        return ("reject", f"IBKR order reply chain ambiguous body ({fp})")
 
     @staticmethod
     def _classify_order_response_body(body: Mapping[str, object]) -> str:
@@ -700,10 +783,7 @@ class IbkrAdapter:
         return "ambiguous"
 
     def _handle_reply_prompt(self, prompt: Mapping[str, object]) -> IbkrHttpResponse:
-        message_ids = prompt.get("messageIds") or prompt.get("message_ids") or []
-        if not isinstance(message_ids, list):
-            message_ids = [message_ids]
-        ids = [str(m) for m in message_ids]
+        ids = self._extract_prompt_message_ids(prompt)
         question_text = ""
         raw_message = prompt.get("message")
         if isinstance(raw_message, list):
@@ -711,11 +791,12 @@ class IbkrAdapter:
         else:
             question_text = str(raw_message or "")
         off_allowlist = [mid for mid in ids if mid not in SUPPRESSIBLE_MESSAGE_IDS]
-        if off_allowlist or (not ids and question_text):
-            # Any question off the allowlist aborts — never confirm unknown prompts.
+        # Empty messageIds must not auto-confirm (fail closed).
+        if off_allowlist or not ids:
             raise BrokerOrderRejected(
-                question_text or f"IBKR reply off allowlist: {off_allowlist}",
-                question_text=question_text or f"off-allowlist ids={off_allowlist}",
+                question_text or f"IBKR reply off allowlist: {off_allowlist or 'empty messageIds'}",
+                question_text=question_text
+                or f"off-allowlist ids={off_allowlist or 'empty messageIds'}",
             )
         reply_id = str(prompt.get("id") or "")
         if not reply_id:
