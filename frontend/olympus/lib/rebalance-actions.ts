@@ -51,3 +51,27 @@ export function buildRebalanceActions(
   }
   return out;
 }
+
+/** Desk display precision for rebalance weight moves (1 decimal pp). */
+const DESK_PP_DECIMALS = 1;
+
+/** Signed target − current in pp, or null when it rounds to 0.0pp at desk precision. */
+export function rebalanceDeltaPp(action: RebalanceAction): number | null {
+  const from = action.current_pct ?? 0;
+  const to = action.recommended_pct ?? 0;
+  const delta = to - from;
+  if (!Number.isFinite(delta)) return null;
+  if (Number(delta.toFixed(DESK_PP_DECIMALS)) === 0) return null;
+  return delta;
+}
+
+/** Non-HOLD book moves that are material at desk display precision (#3080). */
+export function isMaterialRebalanceAction(action: RebalanceAction): boolean {
+  const kind = (action.action || '').trim().toUpperCase();
+  if (kind === 'HOLD') return false;
+  if (kind === 'EXIT' && (action.current_pct ?? 0) === 0) return false;
+  if (kind === 'ADD' || kind === 'TRIM' || kind === 'INCREASE' || kind === 'DECREASE') {
+    return rebalanceDeltaPp(action) !== null;
+  }
+  return true;
+}
