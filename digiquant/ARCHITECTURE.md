@@ -2810,9 +2810,6 @@ this module — `ExecutionVenue` defines `*_live` members but nothing routes to 
 work package's pre-push hook enforces a small set of forbidden method-name tokens for any
 order-submission code (see `scripts/hooks/pre-push.sh`); none of those tokens appear
 anywhere in `brokers/contracts.py`, `brokers/base.py`, or `brokers/stubs.py` — every method
-here is named `submit_order`, `get_order`, `cancel_order`, or `list_fills`.
-`tests/dq/test_brokers.py` (pre-existing, out of scope for this work package's file list)
-still calls the legacy positional `submit_order(symbol, side, quantity)` shape and will
-fail once run outside its own narrow marker selection — a follow-up work package should
-migrate or retire it alongside K1/K4 landing, rather than this contracts-only change
-touching a file outside its listed scope.
+here is named `submit_order`, `get_order`, `cancel_order`, or `list_fills`. Broker
+stub/protocol coverage lives entirely in `tests/dq/brokers/test_contracts.py` — the legacy
+`tests/dq/test_brokers.py` was deleted and its coverage folded in there.
