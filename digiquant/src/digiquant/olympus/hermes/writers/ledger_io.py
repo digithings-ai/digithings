@@ -56,6 +56,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 )
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
+from digiquant.olympus.hermes.turnover import no_trade_band_pp
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,11 @@ def _prior_weights(state: AtlasResearchState) -> dict[str, float]:
 
 
 def _decision(
-    *, symbol: str, prior_pct: float, target_pct: float
+    *,
+    symbol: str,
+    prior_pct: float,
+    target_pct: float,
+    preferences: Mapping[str, Any] | None = None,
 ) -> tuple[DecisionAction, DecisionReason]:
     """Classify one symbol's weight move into the closed action/reason vocabulary.
 
@@ -276,6 +281,13 @@ def _decision(
         # "conviction_reduced" and "thesis_invalidated" are all meaningless for it.
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     delta = target_pct - prior_pct
+    if (
+        preferences is not None
+        and prior_pct > 0
+        and target_pct > 0
+        and abs(delta) < no_trade_band_pp(prior_pct, dict(preferences))
+    ):
+        return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if abs(delta) < _WEIGHT_EPSILON:
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if delta > 0:
@@ -447,7 +459,12 @@ def append_commit_chain(
             requested_pct=h8_requested,
             pct_adjustments=symbol_adjustments,
         )
-        action, reason = _decision(symbol=symbol, prior_pct=prior_pct, target_pct=target_pct)
+        action, reason = _decision(
+            symbol=symbol,
+            prior_pct=prior_pct,
+            target_pct=target_pct,
+            preferences=state.config.preferences,
+        )
 
         intent = DecisionIntent(
             id=uuid4(),

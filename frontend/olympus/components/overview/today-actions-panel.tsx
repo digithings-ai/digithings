@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { ArrowRight, ArrowDownRight, ArrowUpRight, XCircle, PlusCircle, ListChecks } from 'lucide-react';
 import { EVENT_COLORS, withAlpha } from '@/lib/chart-colors';
 import { usablePmRationale } from '@/lib/pm-rationale';
+import { isMaterialRebalanceAction } from '@/lib/rebalance-actions';
 import type { RebalanceAction } from '@/lib/types';
 
 /**
@@ -124,7 +125,7 @@ export function TodayActionsPanel({
     const sorted = [...actions].sort((x, y) => ORDER[kindOf(x.action)] - ORDER[kindOf(y.action)]);
     return {
       // Meaningful book-building actions: new, add, trim, exit (where current_pct > 0).
-      changes: sorted.filter((a) => kindOf(a.action) !== 'HOLD' && !isSizerRemoved(a)),
+      changes: sorted.filter((a) => isMaterialRebalanceAction(a)),
       holds: sorted.filter((a) => kindOf(a.action) === 'HOLD'),
       // Sizer-rejected rows (target=0, never held) — shown collapsed so they don't crowd
       // the meaningful actions but are still accessible for inspection.
