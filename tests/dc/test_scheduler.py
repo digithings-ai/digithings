@@ -292,7 +292,8 @@ def test_cron_matches_dom_or_dow_when_both_constrained() -> None:
 
 @pytest.mark.unit
 def test_next_cron_time_accepts_naive_datetime_as_utc() -> None:
-    after = datetime(2026, 8, 27, 12, 0)  # naive → treated as UTC
+    # Intentionally naive: production path treats tz-less datetimes as UTC.
+    after = datetime(2026, 8, 27, 12, 0)  # noqa: DTZ001
     nxt = next_cron_time("0 13 * * *", after=after)
     assert nxt == datetime(2026, 8, 27, 13, 0, tzinfo=timezone.utc)
 
