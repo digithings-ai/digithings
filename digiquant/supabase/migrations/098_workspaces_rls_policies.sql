@@ -39,18 +39,21 @@
 --      olympus_accounting_periods, olympus_accounting_contributions,
 --      olympus_accounting_holdings, olympus_profile_config.
 --
--- Every policy uses the same shape: an authenticated user may SELECT a row if their
--- `auth.uid()` is a member of that row's `workspace_id` (via `workspace_members`), OR
--- the row belongs to the system workspace (shared, tenant-agnostic — e.g. the
--- `olympus_profile_config` house-default overlay every workspace reads). The system-
--- workspace branch is a `TODO(T5)`: today it grants ANY authenticated user read access
--- to system-workspace rows with no `plan_tier` gate; T5's policy pass adds the tier
--- CHECK this decision explicitly defers (T0 briefing binding behavior #4: "system
--- workspace research readable per tier — the tier CHECK itself lands in T5's policy
--- pass"). For `positions`/`portfolio_ledger_*`/`olympus_accounting_*` no system-
--- workspace row will ever exist (Groups A/B backfill only to `house`, a `type='user'`
--- workspace), so the branch is inert there today; it is only load-bearing for
--- `olympus_profile_config`'s house-default row.
+-- Every private-book policy (positions / NAV / ledger / accounting) is
+-- own-workspace-only: an authenticated user may SELECT a row iff their
+-- `auth.uid()` is a member of that row's `workspace_id` via `workspace_members`.
+-- The system-workspace OR branch is deliberately ABSENT from those policies — a
+-- future mis-stamped system-workspace row on the house book must not become
+-- readable by every authenticated user. The system-workspace OR branch appears
+-- ONLY on:
+--   * `workspaces` (`OR type = 'system'`) — every tenant needs to resolve the
+--     shared system workspace row;
+--   * `olympus_profile_config` (`OR workspace_id = <system>`) — the house-default
+--     overlay was backfilled to the system workspace in 097 and every tenant
+--     reads it.
+-- Both system-branch sites carry a `TODO(T5)` marker: today they grant ANY
+-- authenticated user read access with no `plan_tier` gate; T5's policy pass adds
+-- the tier CHECK this decision explicitly defers (T0 briefing binding behavior #4).
 --
 -- `service_role` is untouched throughout — it already bypasses RLS entirely and keeps
 -- its existing SELECT/INSERT grants from migrations 069/072/075/096. Nothing in this
@@ -147,7 +150,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.positions
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.position_events;
@@ -155,7 +157,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.position_events
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.nav_history;
@@ -163,7 +164,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.nav_history
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 DROP POLICY IF EXISTS "authenticated_select_own_workspace" ON public.portfolio_metrics;
@@ -171,7 +171,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_metrics
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 -- ============================================================================
@@ -184,7 +183,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_co
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.portfolio_ledger_decision_intents TO authenticated;
@@ -193,7 +191,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_de
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.portfolio_ledger_requested_targets TO authenticated;
@@ -202,7 +199,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_re
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.portfolio_ledger_target_adjustments TO authenticated;
@@ -211,7 +207,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_ta
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.portfolio_ledger_approved_targets TO authenticated;
@@ -220,7 +215,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_ap
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.portfolio_ledger_order_intents TO authenticated;
@@ -229,7 +223,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_or
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.portfolio_ledger_paper_executions TO authenticated;
@@ -238,7 +231,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_pa
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.portfolio_ledger_holding_lots TO authenticated;
@@ -247,7 +239,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.portfolio_ledger_ho
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 -- ============================================================================
@@ -260,7 +251,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.olympus_accounting_
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.olympus_accounting_contributions TO authenticated;
@@ -269,7 +259,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.olympus_accounting_
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 GRANT SELECT ON public.olympus_accounting_holdings TO authenticated;
@@ -278,7 +267,6 @@ CREATE POLICY "authenticated_select_own_workspace" ON public.olympus_accounting_
     FOR SELECT TO authenticated
     USING (
         workspace_id IN (SELECT workspace_id FROM public.workspace_members WHERE user_id = auth.uid())
-        OR workspace_id = '1105372f-4109-5815-be5a-21091ccfc8ad'::uuid -- system; TODO(T5): tier gate
     );
 
 -- ============================================================================

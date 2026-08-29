@@ -28,16 +28,23 @@
 --     workspace exists. Their `ON CONFLICT` arbiter DOES need updating to the widened
 --     key once this migration ships to a live database — that is exactly the P6 follow
 --     -up work, called out here so it is not lost.
---   * UNIQUE constraints widen per roadmap P2b. Every constraint this migration
---     changes (enumerate for reviewers / T0 acceptance):
---       DROP positions_date_ticker_key
---         → ADD uq_positions_workspace_date_ticker UNIQUE (workspace_id, date, ticker)
---       DROP position_events_date_ticker_key
---         → ADD uq_position_events_workspace_date_ticker UNIQUE (workspace_id, date, ticker)
---       DROP nav_history_pkey
---         → ADD nav_history_pkey PRIMARY KEY (workspace_id, date)
---       DROP portfolio_metrics_date_key
---         → ADD uq_portfolio_metrics_workspace_date UNIQUE (workspace_id, date)
+--   * UNIQUE constraints: ADD the widened `(workspace_id, …)` keys ALONGSIDE the
+--     legacy single-tenant arbiters — do NOT drop the legacy keys in this WP.
+--     Live daily-pipeline writers (`refresh_performance_metrics.py`,
+--     `sync_positions_from_rebalance.py`, `update_tearsheet.py`, …) still upsert with
+--     `on_conflict="date"` / `"date,ticker"`; dropping those arbiters would raise
+--     Postgres 42P10 on the next metrics job. `UNIQUE(date)` / `UNIQUE(date, ticker)`
+--     stays correct while only the house workspace writes. Roadmap P6 drops the
+--     legacy keys after every writer is patched to the widened arbiter.
+--     Every constraint this migration ADDS (enumerate for reviewers / T0 acceptance):
+--       KEEP positions_date_ticker_key
+--         + ADD uq_positions_workspace_date_ticker UNIQUE (workspace_id, date, ticker)
+--       KEEP position_events_date_ticker_key
+--         + ADD uq_position_events_workspace_date_ticker UNIQUE (workspace_id, date, ticker)
+--       KEEP nav_history_pkey PRIMARY KEY (date)
+--         + ADD uq_nav_history_workspace_date UNIQUE (workspace_id, date)
+--       KEEP portfolio_metrics_date_key
+--         + ADD uq_portfolio_metrics_workspace_date UNIQUE (workspace_id, date)
 --     Plus new FK `fk_<table>_workspace` on every table that gains the column.
 --
 -- Group B — private, service-role-only, fully-patched-in-this-PR tables
@@ -104,7 +111,7 @@ DO $$ BEGIN
         FOREIGN KEY (workspace_id) REFERENCES public.workspaces (id);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-ALTER TABLE public.positions DROP CONSTRAINT IF EXISTS positions_date_ticker_key;
+-- Legacy UNIQUE(date, ticker) kept for live writers (P6 drops it) — see header.
 DO $$ BEGIN
     ALTER TABLE public.positions
         ADD CONSTRAINT uq_positions_workspace_date_ticker
@@ -126,7 +133,7 @@ DO $$ BEGIN
         FOREIGN KEY (workspace_id) REFERENCES public.workspaces (id);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-ALTER TABLE public.position_events DROP CONSTRAINT IF EXISTS position_events_date_ticker_key;
+-- Legacy UNIQUE(date, ticker) kept for live writers (P6 drops it) — see header.
 DO $$ BEGIN
     ALTER TABLE public.position_events
         ADD CONSTRAINT uq_position_events_workspace_date_ticker
@@ -148,13 +155,12 @@ DO $$ BEGIN
         FOREIGN KEY (workspace_id) REFERENCES public.workspaces (id);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
--- nav_history's original migration-001 PK is `date` alone (no surrogate id column) —
--- widening it means dropping and rebuilding the PRIMARY KEY itself, not a separate
--- UNIQUE constraint.
-ALTER TABLE public.nav_history DROP CONSTRAINT IF EXISTS nav_history_pkey;
+-- Legacy PK (date) kept for live writers (P6 drops/rebuilds it) — see header.
+-- Add the widened UNIQUE beside it rather than replacing the PK.
 DO $$ BEGIN
     ALTER TABLE public.nav_history
-        ADD CONSTRAINT nav_history_pkey PRIMARY KEY (workspace_id, date);
+        ADD CONSTRAINT uq_nav_history_workspace_date
+        UNIQUE (workspace_id, date);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
@@ -170,7 +176,7 @@ DO $$ BEGIN
         FOREIGN KEY (workspace_id) REFERENCES public.workspaces (id);
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
-ALTER TABLE public.portfolio_metrics DROP CONSTRAINT IF EXISTS portfolio_metrics_date_key;
+-- Legacy UNIQUE(date) kept for live writers (P6 drops it) — see header.
 DO $$ BEGIN
     ALTER TABLE public.portfolio_metrics
         ADD CONSTRAINT uq_portfolio_metrics_workspace_date

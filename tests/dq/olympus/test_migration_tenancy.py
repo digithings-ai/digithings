@@ -31,27 +31,23 @@ M098 = MIGRATIONS_DIR / "098_workspaces_rls_policies.sql"
 
 SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
-# Constraint changes this WP is allowed to make (097 header + body must agree).
-WIDENED_UNIQUES = (
-    (
-        "positions_date_ticker_key",
-        "uq_positions_workspace_date_ticker",
-        "workspace_id, date, ticker",
-    ),
-    (
-        "position_events_date_ticker_key",
-        "uq_position_events_workspace_date_ticker",
-        "workspace_id, date, ticker",
-    ),
-    ("nav_history_pkey", "nav_history_pkey", "workspace_id, date"),
-    (
-        "portfolio_metrics_date_key",
-        "uq_portfolio_metrics_workspace_date",
-        "workspace_id, date",
-    ),
+# Constraint ADDs this WP makes (097 header + body must agree).
+# Legacy keys are KEPT alongside; P6 drops them after writers are patched.
+ADDED_WIDENED_UNIQUES = (
+    ("uq_positions_workspace_date_ticker", "workspace_id, date, ticker"),
+    ("uq_position_events_workspace_date_ticker", "workspace_id, date, ticker"),
+    ("uq_nav_history_workspace_date", "workspace_id, date"),
+    ("uq_portfolio_metrics_workspace_date", "workspace_id, date"),
 )
 
-PRIVATE_SET_TABLES = (
+LEGACY_KEYS_KEPT = (
+    "positions_date_ticker_key",
+    "position_events_date_ticker_key",
+    "nav_history_pkey",
+    "portfolio_metrics_date_key",
+)
+
+PRIVATE_BOOK_TABLES = (
     "positions",
     "position_events",
     "nav_history",
@@ -67,6 +63,10 @@ PRIVATE_SET_TABLES = (
     "olympus_accounting_periods",
     "olympus_accounting_contributions",
     "olympus_accounting_holdings",
+)
+
+PRIVATE_SET_TABLES = (
+    *PRIVATE_BOOK_TABLES,
     "olympus_profile_config",
 )
 
@@ -129,12 +129,19 @@ def sql_098(raw_098: str) -> str:
     return _strip_comments(raw_098)
 
 
-def test_migration_numbers_are_096_097_098_only() -> None:
-    """099 is reserved by sibling K3 (`broker_connections`); T0 must not claim it."""
+def test_migration_numbers_are_096_097_098_only(sql_096: str, sql_097: str, sql_098: str) -> None:
+    """T0 allocates 096–098; must not CREATE a 099_* migration (K3 owns 099)."""
     assert sorted(MIGRATIONS_DIR.glob("096_*.sql")) == [M096]
     assert sorted(MIGRATIONS_DIR.glob("097_*.sql")) == [M097]
     assert sorted(MIGRATIONS_DIR.glob("098_*.sql")) == [M098]
-    assert list(MIGRATIONS_DIR.glob("099_*.sql")) == []
+    # Sibling K3 may land 099 on its own branch; assert T0 SQL never creates it.
+    for sql in (sql_096, sql_097, sql_098):
+        assert not re.search(r"\b099_", sql), "T0 must not reference migration 099"
+        assert not re.search(
+            r"CREATE\s+TABLE\s+[^;]*broker_connections",
+            sql,
+            re.IGNORECASE,
+        )
     numbers = sorted(
         int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("[0-9][0-9][0-9]_*.sql")
     )
@@ -195,12 +202,12 @@ def test_096_exactly_one_system_workspace_partial_unique(sql_096: str) -> None:
     )
 
 
-def test_096_seeds_system_and_house_idempotently(sql_096: str, raw_096: str) -> None:
-    """Seeds must be runnable twice: ON CONFLICT (id) DO NOTHING on both inserts.
+def test_096_seed_inserts_are_structurally_idempotent(sql_096: str, raw_096: str) -> None:
+    """Structural idempotency: every seed INSERT uses ON CONFLICT (id) DO NOTHING.
 
-    Structural stand-in for applying the migration twice against a live database —
-    the acceptance criterion is satisfied by asserting the idempotency clause is
-    present on every seed INSERT (and that the literal ids match tenancy.py).
+    A live "apply twice" check needs a throwaway Postgres; this WP only asserts the
+    SQL shape that makes a second apply a no-op (plus literal id/slug parity with
+    tenancy.py).
     """
     system = system_workspace_row()
     house = house_workspace_row()
@@ -218,12 +225,11 @@ def test_096_seeds_system_and_house_idempotently(sql_096: str, raw_096: str) -> 
     for stmt in inserts:
         assert re.search(r"ON\s+CONFLICT\s*\(\s*id\s*\)\s*DO\s+NOTHING", stmt, re.IGNORECASE)
 
-    # Header + body both claim re-run safety; a second copy of the same INSERT block
-    # must still parse as ON CONFLICT DO NOTHING (the "run twice" structural check).
+    # Doubling the INSERT block still carries ON CONFLICT DO NOTHING on every copy —
+    # structural stand-in for a second apply, without requiring a live database.
     doubled = "\n".join(inserts + inserts)
     assert doubled.count("ON CONFLICT") == 4
     assert "DO NOTHING" in doubled.upper()
-    # Raw file must state the seeds are idempotent so reviewers see the contract.
     assert "idempotent" in raw_096.lower()
 
 
@@ -336,40 +342,36 @@ def test_097_profile_config_house_row_maps_to_system_workspace(sql_097: str) -> 
     )
 
 
-def test_097_every_widened_unique_is_enumerated(sql_097: str, raw_097: str) -> None:
-    """Every constraint this migration changes must appear in both header and body."""
-    header_must_mention = (
+def test_097_adds_widened_uniques_alongside_legacy_keys(sql_097: str, raw_097: str) -> None:
+    """097 ADDs widened UNIQUEs; must NOT DROP legacy arbiters (live writers still use them)."""
+    for token in (
         "uq_positions_workspace_date_ticker",
         "uq_position_events_workspace_date_ticker",
-        "nav_history",
+        "uq_nav_history_workspace_date",
         "uq_portfolio_metrics_workspace_date",
-    )
-    for token in header_must_mention:
-        assert token in raw_097, f"097 header must enumerate constraint change involving {token}"
+        "P6",
+    ):
+        assert token in raw_097, f"097 header must mention {token}"
 
-    for old_name, new_name, cols in WIDENED_UNIQUES:
-        if old_name == "nav_history_pkey":
-            assert re.search(
-                r"DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+nav_history_pkey",
-                sql_097,
-                re.IGNORECASE,
-            )
-            assert re.search(
-                r"PRIMARY\s+KEY\s*\(\s*workspace_id\s*,\s*date\s*\)",
-                sql_097,
-                re.IGNORECASE,
-            )
-        else:
-            assert re.search(
-                rf"DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+{old_name}",
-                sql_097,
-                re.IGNORECASE,
-            ), old_name
-            assert re.search(
-                rf"ADD\s+CONSTRAINT\s+{new_name}\s+UNIQUE\s*\(\s*{re.escape(cols)}\s*\)",
-                sql_097,
-                re.IGNORECASE,
-            ), new_name
+    for new_name, cols in ADDED_WIDENED_UNIQUES:
+        assert re.search(
+            rf"ADD\s+CONSTRAINT\s+{new_name}\s+UNIQUE\s*\(\s*{re.escape(cols)}\s*\)",
+            sql_097,
+            re.IGNORECASE,
+        ), new_name
+
+    # Legacy keys must not be dropped in this WP.
+    for legacy in LEGACY_KEYS_KEPT:
+        assert not re.search(
+            rf"DROP\s+CONSTRAINT\s+IF\s+EXISTS\s+{legacy}\b",
+            sql_097,
+            re.IGNORECASE,
+        ), f"must keep legacy arbiter {legacy} until P6"
+    assert not re.search(
+        r"PRIMARY\s+KEY\s*\(\s*workspace_id\s*,\s*date\s*\)",
+        sql_097,
+        re.IGNORECASE,
+    ), "nav_history PK must stay (date); widened UNIQUE is added beside it"
 
 
 def test_097_skips_k_track_with_header_comment(raw_097: str, sql_097: str) -> None:
@@ -423,6 +425,39 @@ def test_098_adds_authenticated_select_policies(sql_098: str) -> None:
 
 def test_098_todo_t5_tier_gate_marker_present(raw_098: str) -> None:
     assert "TODO(T5)" in raw_098
+
+
+def test_098_private_book_policies_have_no_system_workspace_or(
+    sql_098: str,
+) -> None:
+    """Private-book SELECT policies are own-workspace only — no system OR branch."""
+    system_id = "1105372f-4109-5815-be5a-21091ccfc8ad"
+    for table in PRIVATE_BOOK_TABLES:
+        match = re.search(
+            rf'CREATE\s+POLICY\s+"authenticated_select_own_workspace"\s+'
+            rf"ON\s+public\.{table}\b\s+FOR\s+SELECT\s+TO\s+authenticated\s+"
+            rf"USING\s*\((.*?)\);",
+            sql_098,
+            re.IGNORECASE | re.DOTALL,
+        )
+        assert match, f"missing policy for {table}"
+        body = match.group(1)
+        assert system_id not in body, f"{table} must not OR system workspace"
+        assert "workspace_members" in body
+
+    # System branch retained only on workspaces + olympus_profile_config.
+    assert re.search(
+        r'CREATE\s+POLICY\s+"authenticated_select_own_workspace"\s+'
+        r"ON\s+public\.workspaces\b[\s\S]*?OR\s+type\s*=\s*'system'",
+        sql_098,
+        re.IGNORECASE,
+    )
+    assert re.search(
+        rf'CREATE\s+POLICY\s+"authenticated_select_own_workspace"\s+'
+        rf"ON\s+public\.olympus_profile_config\b[\s\S]*?{system_id}",
+        sql_098,
+        re.IGNORECASE,
+    )
 
 
 def test_no_anon_policy_touched(sql_098: str, raw_098: str) -> None:
