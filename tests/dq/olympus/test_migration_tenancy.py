@@ -12,7 +12,6 @@ import re
 from pathlib import Path
 
 import pytest
-
 from digiquant.olympus.tenancy import (
     house_workspace_id,
     house_workspace_row,
@@ -32,7 +31,11 @@ SELF_WRAP_REGEX = re.compile(r"(^|[\s])begin[\s]*;", re.IGNORECASE)
 
 # Constraint changes this WP is allowed to make (097 header + body must agree).
 WIDENED_UNIQUES = (
-    ("positions_date_ticker_key", "uq_positions_workspace_date_ticker", "workspace_id, date, ticker"),
+    (
+        "positions_date_ticker_key",
+        "uq_positions_workspace_date_ticker",
+        "workspace_id, date, ticker",
+    ),
     (
         "position_events_date_ticker_key",
         "uq_position_events_workspace_date_ticker",

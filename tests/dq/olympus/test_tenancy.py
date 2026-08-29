@@ -6,8 +6,6 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
-from pydantic import ValidationError
-
 from digiquant.olympus.tenancy import (
     HOUSE_WORKSPACE_SLUG,
     SYSTEM_WORKSPACE_SLUG,
@@ -23,6 +21,7 @@ from digiquant.olympus.tenancy import (
     system_workspace_row,
     workspace_id_for_slug,
 )
+from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
 

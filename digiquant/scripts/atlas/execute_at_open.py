@@ -291,9 +291,7 @@ BOOK_SOURCE_LEGACY = "legacy"
 BOOK_SOURCE_AUTHORITATIVE = "authoritative"
 
 
-def _with_book_source(
-    events: List[Dict[str, Any]], book_source: str
-) -> List[Dict[str, Any]]:
+def _with_book_source(events: List[Dict[str, Any]], book_source: str) -> List[Dict[str, Any]]:
     """Return shallow copies stamped with ``book_source`` (never mutates inputs).
 
     T0 (#5-T0): also stamps ``workspace_id`` here, the single choke point every
@@ -919,7 +917,9 @@ def main() -> int:
             if digest_events:
                 digest_events = _with_book_source(digest_events, BOOK_SOURCE_LEGACY)
                 for e in digest_events:
-                    sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
+                    sb.table("position_events").upsert(
+                        e, on_conflict="workspace_id,date,ticker"
+                    ).execute()
                 null_px = sum(1 for e in digest_events if e.get("price") is None)
                 if null_px:
                     print(
