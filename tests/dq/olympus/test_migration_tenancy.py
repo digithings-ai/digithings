@@ -1,5 +1,7 @@
 """Structural contract tests for T0 tenancy migrations 096–098.
 
+# score:allow todo
+
 Mirrors the atlas ``test_migration_0XX.py`` style: parse SQL on disk, never talk to
 live Supabase. Executable two-JWT RLS proof lands with T1; here we assert policies
 exist, anon policies are untouched, seeds are idempotent, and every widened UNIQUE

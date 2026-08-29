@@ -39,7 +39,7 @@ THRESHOLDS = {
 }
 
 # File-level opt-out: add ``# score:allow <rule>`` near the top of a file.
-# Rules: pandas, pd., bare exec(), subprocess, blocking sleep, untyped any
+# Rules: pandas, pd., bare exec(), subprocess, blocking sleep, untyped any, todo
 #
 # Legacy path-prefix suppressions — prefer file pragmas for new allowlists.
 SCORE_PATH_SUPPRESSIONS: tuple[tuple[str, str], ...] = (
@@ -291,6 +291,8 @@ def _description_rule_key(description: str) -> str | None:
         return "blocking sleep"
     if "untyped any" in lower:
         return "untyped any"
+    if "unresolved todo" in lower or "todo/fixme" in lower:
+        return "todo"
     return None
 
 

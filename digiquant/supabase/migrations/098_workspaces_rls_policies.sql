@@ -1,5 +1,9 @@
 -- 098_workspaces_rls_policies.sql
 --
+-- # score:allow todo
+-- Intentional TODO(T5) markers required by T0 binding behavior #4 (tier CHECK in
+-- research policies lands in T5's policy pass; do not remove).
+--
 -- T0 (Kairos + tenancy program, spec §5-T0 / roadmap P2c) — Wave 3 multi-tenant schema,
 -- part 3 of 3: new `authenticated` RLS policies. Requires 096 (workspaces table + seeds)
 -- and 097 (workspace_id on the private set) to have run first.

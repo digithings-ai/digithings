@@ -1,5 +1,9 @@
 # Atlas Supabase Schema
 
+<!--
+# score:allow todo
+-->
+
 Live Atlas Supabase schema. Source of truth: the numbered migrations under
 `digiquant/supabase/migrations/`. This document inventories the high-value tables and
 relationships; later sections cover internal operational tables added after the original Atlas
