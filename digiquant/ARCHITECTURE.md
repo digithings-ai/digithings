@@ -2813,3 +2813,29 @@ anywhere in `brokers/contracts.py`, `brokers/base.py`, or `brokers/stubs.py` —
 here is named `submit_order`, `get_order`, `cancel_order`, or `list_fills`. Broker
 stub/protocol coverage lives entirely in `tests/dq/brokers/test_contracts.py` — the legacy
 `tests/dq/test_brokers.py` was deleted and its coverage folded in there.
+
+### Alpaca adapter
+
+`digiquant/src/digiquant/brokers/alpaca.py` (K1) is the first real `BrokerAdapter`
+implementation: Alpaca Trading API **paper only**, via the optional
+`digiquant[brokers-alpaca]` extra (`alpaca-py>=0.40,<1` — capped to the current major
+because a broker SDK is a behavior-critical boundary). Auth is a tagged union
+`ApiKeyAuth | OAuthAuth`; construction always passes `paper=True` to `TradingClient`, and
+any non-`paper` `env` raises `LiveVenueNotAuthorizedError` (no live override in this
+program yet).
+
+Binding behavior: every submit sets Alpaca `client_order_id` from
+`BrokerOrderRequest.client_order_id` and, on transport failure, recovers via
+`get_order_by_client_id` before any retry; notional or fractional qty requires
+`time_in_force=day` (local `BrokerOrderRejected`, no HTTP); `extended_hours` is never
+sent; HTTP errors map to the shared exception family in `contracts.py`
+(`BrokerAuthError` / `BrokerOrderRejected` / `BrokerRateLimited` / `BrokerTransportError`);
+money/qty parse with `Decimal(str(...))`; logs carry a 6-char sha256 fingerprint +
+`X-Request-ID`, never secrets. Fills are derived from closed-order
+`filled_qty`/`filled_avg_price` via REST polling (no activities helper / websocket in v1).
+
+The package imports without the extra (`brokers/__init__.py` lazy-exports `AlpacaAdapter`;
+`alpaca.py` guards the SDK import). Mocked unit tests live in
+`tests/dq/brokers/test_alpaca_adapter.py`; live paper smoke is
+`tests/dq/brokers/test_alpaca_integration.py` behind the `alpaca_paper` marker + env keys
+(excluded from CI).

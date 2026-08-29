@@ -1,0 +1,362 @@
+"""Mocked unit tests for the Alpaca paper adapter (K1).
+
+Every test mocks ``TradingClient`` / transport — no live HTTP. Covers happy-path
+submit/cancel/positions/account, each mapped error class, the local TIF guard
+(notional/fractional ⇒ DAY, no HTTP), idempotent recovery after submit transport
+failure, and package import without ``alpaca-py``.
+"""
+
+from __future__ import annotations
+
+import builtins
+import importlib
+import sys
+from datetime import UTC, datetime
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+from digiquant.brokers.alpaca import AlpacaAdapter, ApiKeyAuth, OAuthAuth
+from digiquant.brokers.base import BrokerAdapter
+from digiquant.brokers.contracts import (
+    BrokerAuthError,
+    BrokerOrderRejected,
+    BrokerOrderRequest,
+    BrokerOrderStatus,
+    BrokerRateLimited,
+    BrokerTransportError,
+    LiveVenueNotAuthorizedError,
+    OrderSide,
+    OrderType,
+    TimeInForce,
+)
+
+pytestmark = pytest.mark.unit
+
+
+def _ts() -> datetime:
+    return datetime(2026, 8, 29, 15, 30, tzinfo=UTC)
+
+
+def _fake_order(**overrides: object) -> SimpleNamespace:
+    base: dict[str, object] = dict(
+        id="ord-1",
+        client_order_id="intent-1",
+        status="accepted",
+        submitted_at=_ts(),
+        created_at=_ts(),
+        updated_at=_ts(),
+        filled_at=None,
+        symbol="AAPL",
+        filled_qty="0",
+        filled_avg_price=None,
+    )
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def _make_request(**overrides: object) -> BrokerOrderRequest:
+    fields: dict[str, object] = dict(
+        client_order_id="intent-1",
+        symbol="AAPL",
+        side=OrderSide.BUY,
+        quantity=Decimal("10"),
+        time_in_force=TimeInForce.DAY,
+    )
+    fields.update(overrides)
+    return BrokerOrderRequest(**fields)
+
+
+@pytest.fixture
+def client() -> MagicMock:
+    return MagicMock(name="TradingClient")
+
+
+@pytest.fixture
+def adapter(monkeypatch: pytest.MonkeyPatch, client: MagicMock) -> AlpacaAdapter:
+    import digiquant.brokers.alpaca as alpaca_mod
+
+    if alpaca_mod._MarketOrderRequest is None:
+        pytest.skip("alpaca-py not installed — install digiquant[brokers-alpaca] for unit mocks")
+    monkeypatch.setattr(
+        "digiquant.brokers.alpaca._TradingClient",
+        MagicMock(return_value=client),
+    )
+    return AlpacaAdapter(auth=ApiKeyAuth(key_id="PK_TEST", secret="SK_TEST"))
+
+
+class TestConstruction:
+    def test_paper_true_with_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ctor = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("digiquant.brokers.alpaca._TradingClient", ctor)
+        import digiquant.brokers.alpaca as alpaca_mod
+
+        if alpaca_mod._MarketOrderRequest is None:
+            pytest.skip("alpaca-py not installed")
+        AlpacaAdapter(auth=ApiKeyAuth(key_id="PK", secret="SK"))
+        ctor.assert_called_once()
+        kwargs = ctor.call_args.kwargs
+        assert kwargs["paper"] is True
+        assert kwargs["api_key"] == "PK"
+        assert kwargs["secret_key"] == "SK"
+        assert "oauth_token" not in kwargs
+
+    def test_paper_true_with_oauth(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        ctor = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("digiquant.brokers.alpaca._TradingClient", ctor)
+        import digiquant.brokers.alpaca as alpaca_mod
+
+        if alpaca_mod._MarketOrderRequest is None:
+            pytest.skip("alpaca-py not installed")
+        AlpacaAdapter(auth=OAuthAuth(access_token="tok_abc"))
+        kwargs = ctor.call_args.kwargs
+        assert kwargs["paper"] is True
+        assert kwargs["oauth_token"] == "tok_abc"
+
+    def test_live_env_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "digiquant.brokers.alpaca._TradingClient",
+            MagicMock(return_value=MagicMock()),
+        )
+        import digiquant.brokers.alpaca as alpaca_mod
+
+        if alpaca_mod._MarketOrderRequest is None:
+            # Guard still runs before SDK check when env != paper.
+            pass
+        with pytest.raises(LiveVenueNotAuthorizedError):
+            AlpacaAdapter(auth=ApiKeyAuth(key_id="PK", secret="SK"), env="live")  # type: ignore[arg-type]
+
+    def test_protocol_conformance(self, adapter: AlpacaAdapter) -> None:
+        assert isinstance(adapter, BrokerAdapter)
+        assert adapter.name == "alpaca"
+
+
+class TestHappyPaths:
+    def test_submit_market_order(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.submit_order.return_value = _fake_order()
+        ack = adapter.submit_order(_make_request())
+        assert ack.external_order_id == "ord-1"
+        assert ack.status is BrokerOrderStatus.ACCEPTED
+        assert len(ack.raw_sha256) == 64
+        order_req = client.submit_order.call_args.args[0]
+        assert order_req.client_order_id == "intent-1"
+        assert order_req.extended_hours is None
+
+    def test_submit_limit_order(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.submit_order.return_value = _fake_order(status="new")
+        ack = adapter.submit_order(
+            _make_request(
+                order_type=OrderType.LIMIT,
+                limit_price=Decimal("150.25"),
+            )
+        )
+        assert ack.status is BrokerOrderStatus.SUBMITTED
+        order_req = client.submit_order.call_args.args[0]
+        assert str(order_req.limit_price) in {"150.25", "150.2500"} or float(order_req.limit_price) == 150.25
+
+    def test_cancel_order(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        adapter.cancel_order("ord-1")
+        client.cancel_order_by_id.assert_called_once_with("ord-1")
+
+    def test_get_positions_signs_short(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.get_all_positions.return_value = [
+            SimpleNamespace(
+                symbol="AAPL",
+                qty="10",
+                side="long",
+                avg_entry_price="100.00",
+                market_value="1050.00",
+                unrealized_pl="50.00",
+            ),
+            SimpleNamespace(
+                symbol="TSLA",
+                qty="2",
+                side="short",
+                avg_entry_price="200.00",
+                market_value="-400.00",
+                unrealized_pl="-10.00",
+            ),
+        ]
+        positions = adapter.get_positions()
+        assert positions[0].quantity == Decimal("10")
+        assert positions[1].quantity == Decimal("-2")
+        assert positions[0].avg_entry_price == Decimal("100.00")
+
+    def test_get_account(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.get_account.return_value = SimpleNamespace(
+            id="acct-1",
+            equity="100000.50",
+            cash="25000.00",
+            buying_power="50000.00",
+            currency="usd",
+        )
+        snap = adapter.get_account()
+        assert snap.account_id == "acct-1"
+        assert snap.equity == Decimal("100000.50")
+        assert snap.currency == "USD"
+        assert snap.as_of.tzinfo is not None
+
+    def test_list_fills_from_closed_orders(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.get_orders.return_value = [
+            _fake_order(
+                id="fill-1",
+                filled_qty="3",
+                filled_avg_price="150.10",
+                filled_at=_ts(),
+                status="filled",
+            ),
+            _fake_order(id="empty", filled_qty="0", filled_avg_price=None),
+        ]
+        fills = adapter.list_fills(since=_ts())
+        assert len(fills) == 1
+        assert fills[0].external_fill_id == "fill-1"
+        assert fills[0].quantity == Decimal("3")
+        assert fills[0].price == Decimal("150.10")
+
+
+class TestLocalTifGuard:
+    def test_notional_gtc_rejected_without_http(
+        self, adapter: AlpacaAdapter, client: MagicMock
+    ) -> None:
+        req = _make_request(
+            quantity=None,
+            notional=Decimal("100.00"),
+            time_in_force=TimeInForce.GTC,
+        )
+        with pytest.raises(BrokerOrderRejected, match="fractional/notional requires day TIF") as ei:
+            adapter.submit_order(req)
+        assert ei.value.code == "local_tif_guard"
+        client.submit_order.assert_not_called()
+
+    def test_fractional_qty_gtc_rejected_without_http(
+        self, adapter: AlpacaAdapter, client: MagicMock
+    ) -> None:
+        req = _make_request(quantity=Decimal("1.5"), time_in_force=TimeInForce.GTC)
+        with pytest.raises(BrokerOrderRejected, match="fractional/notional requires day TIF"):
+            adapter.submit_order(req)
+        client.submit_order.assert_not_called()
+
+
+class TestErrorMapping:
+    def _api_error(self, status: int, code: int = 42210000, message: str = "bad") -> Exception:
+        from alpaca.common.exceptions import APIError
+
+        http = MagicMock()
+        http.response.status_code = status
+        http.response.headers = {"X-Request-ID": "req-abc"}
+        return APIError(f'{{"code":{code},"message":"{message}"}}', http_error=http)
+
+    def test_401_maps_to_auth(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.get_account.side_effect = self._api_error(401, message="unauthorized")
+        with pytest.raises(BrokerAuthError):
+            adapter.get_account()
+
+    def test_403_maps_to_auth(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.get_account.side_effect = self._api_error(403, message="forbidden")
+        with pytest.raises(BrokerAuthError):
+            adapter.get_account()
+
+    def test_422_maps_to_rejected(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.submit_order.side_effect = self._api_error(422, code=42210000, message="invalid qty")
+        with pytest.raises(BrokerOrderRejected) as ei:
+            adapter.submit_order(_make_request())
+        assert ei.value.code == "42210000"
+        assert "invalid qty" in ei.value.message
+
+    def test_429_retries_then_raises(
+        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sleeps: list[float] = []
+        monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", sleeps.append)
+        monkeypatch.setattr("digiquant.brokers.alpaca.random.uniform", lambda _a, _b: 0.0)
+        err = self._api_error(429, message="slow down")
+        err.response.headers["Retry-After"] = "1.5"  # type: ignore[attr-defined]
+        # Rebuild with Retry-After on the mock response
+        from alpaca.common.exceptions import APIError
+
+        http = MagicMock()
+        http.response.status_code = 429
+        http.response.headers = {"Retry-After": "1.5", "X-Request-ID": "r1"}
+        err = APIError('{"code":42910000,"message":"slow down"}', http_error=http)
+        client.get_account.side_effect = err
+        with pytest.raises(BrokerRateLimited) as ei:
+            adapter.get_account()
+        assert ei.value.retry_after == 1.5
+        assert client.get_account.call_count == 3
+        assert len(sleeps) == 2
+
+    def test_other_status_maps_to_transport(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.get_account.side_effect = self._api_error(500, message="boom")
+        with pytest.raises(BrokerTransportError):
+            adapter.get_account()
+
+
+class TestIdempotentRecovery:
+    def test_transport_failure_recovers_via_client_order_id(
+        self, adapter: AlpacaAdapter, client: MagicMock
+    ) -> None:
+        client.submit_order.side_effect = ConnectionError("connection reset")
+        client.get_order_by_client_id.return_value = _fake_order(id="ord-recovered")
+        ack = adapter.submit_order(_make_request())
+        assert ack.external_order_id == "ord-recovered"
+        client.get_order_by_client_id.assert_called_once_with("intent-1")
+        # No second submit — recovery found the order.
+        assert client.submit_order.call_count == 1
+
+    def test_transport_failure_retries_when_client_id_misses(
+        self, adapter: AlpacaAdapter, client: MagicMock
+    ) -> None:
+        order = _fake_order(id="ord-retry")
+        client.submit_order.side_effect = [ConnectionError("timeout"), order]
+        client.get_order_by_client_id.side_effect = BrokerTransportError("404")
+        ack = adapter.submit_order(_make_request())
+        assert ack.external_order_id == "ord-retry"
+        assert client.submit_order.call_count == 2
+
+
+class TestLazyImportWithoutAlpacaPy:
+    def test_brokers_package_imports(self) -> None:
+        import digiquant.brokers as brokers
+
+        assert hasattr(brokers, "BrokerAdapter")
+        assert hasattr(brokers, "BrokerOrderRequest")
+
+    def test_alpaca_module_loads_when_sdk_import_blocked(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """sys.modules / __import__ patching — proves import works without alpaca-py.
+
+        Strategy: block ``alpaca*`` imports, drop the cached adapter module, reload.
+        Construction must then raise ImportError pointing at the brokers-alpaca extra.
+        Restores a clean module before leaving so later tests still see the real SDK.
+        """
+        real_import = builtins.__import__
+
+        def _blocked(
+            name: str,
+            globals: dict[str, object] | None = None,  # noqa: A002
+            locals: dict[str, object] | None = None,  # noqa: A002
+            fromlist: tuple[str, ...] = (),
+            level: int = 0,
+        ) -> object:
+            if name == "alpaca" or name.startswith("alpaca."):
+                raise ImportError("simulated missing alpaca-py")
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", _blocked)
+        for key in list(sys.modules):
+            if key == "digiquant.brokers.alpaca" or key == "alpaca" or key.startswith("alpaca."):
+                del sys.modules[key]
+
+        try:
+            mod = importlib.import_module("digiquant.brokers.alpaca")
+            assert mod._TradingClient is None
+            with pytest.raises(ImportError, match=r"digiquant\[brokers-alpaca\]"):
+                mod.AlpacaAdapter(auth=mod.ApiKeyAuth(key_id="k", secret="s"))
+        finally:
+            monkeypatch.undo()
+            for key in list(sys.modules):
+                if key == "digiquant.brokers.alpaca":
+                    del sys.modules[key]
+            importlib.import_module("digiquant.brokers.alpaca")
