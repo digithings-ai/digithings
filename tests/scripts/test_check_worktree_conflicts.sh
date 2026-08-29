@@ -169,13 +169,13 @@ run_check() {
 mkdir -p "$SCRATCH/home"
 install_gh_stub "$SCRATCH/bin" short
 
-# No .worktrees yet — advisory must stay quiet and exit 0.
+# No linked worktrees yet — advisory must stay quiet and exit 0.
 set +e
 out="$(run_check 42)"
 rc=$?
 set -e
-assert_eq "exit 0 with no worktrees dir" "$rc" "0"
-assert_ok "reports nothing to compare" contains "$out" "No .worktrees/ directory"
+assert_eq "exit 0 with no worktrees" "$rc" "0"
+assert_ok "reports nothing to compare" contains "$out" "No linked task worktrees found"
 
 # Nested worktree for another issue that edits digigraph — must WARN.
 git -C "$WORK" branch task/99-other develop --quiet
@@ -245,6 +245,21 @@ out="$(run_check 42)"
 set -e
 assert_ok "large issue body still infers digigraph glob" contains "$out" "digigraph/**"
 assert_ok "large body still surfaces nested overlap" contains "$out" "task/99-other"
+
+# Non-task branch prefix (chore/) must be discovered via git worktree list.
+git -C "$WORK" branch chore/55-docs develop --quiet
+mkdir -p "$WORK/.worktrees/chore"
+git -C "$WORK" worktree add --quiet "$WORK/.worktrees/chore/55-docs" chore/55-docs
+echo "chore" >>"$WORK/.worktrees/chore/55-docs/digigraph/src/base.py"
+git -C "$WORK/.worktrees/chore/55-docs" add digigraph/src/base.py
+git -C "$WORK/.worktrees/chore/55-docs" -c user.email=test@example.com -c user.name=test \
+  commit --quiet -m "chore digigraph change"
+
+set +e
+out="$(run_check 42)"
+set -e
+assert_ok "chore/ prefixed worktree is discovered" contains "$out" "chore/55-docs"
+assert_ok "chore worktree path appears in warning" contains "$out" ".worktrees/chore/55-docs"
 
 # Missing issue arg: usage on stderr, exit 0 (non-blocking advisory).
 set +e

@@ -5,22 +5,19 @@
 #   scripts/check-worktree-conflicts.sh ISSUE_NUMBER
 #
 # Reads the GitHub issue title/body to infer a component glob (e.g. "digigraph/**"),
-# then checks each active `.worktrees/task/N-slug/` (and legacy `.worktrees/task-N-slug/`)
-# checkout to see if any changed files overlap. Prints a warning table when overlaps
-# are found. Always exits 0 (warning only, not blocking).
+# then checks each linked git worktree checkout to see if any changed files overlap.
+# Prints a warning table when overlaps are found. Always exits 0 (warning only).
 #
 # Requires: git (gh CLI optional — gracefully skips when unavailable)
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 cd "$REPO_ROOT"
 
 ISSUE="${1:-}"
 [[ -z "$ISSUE" ]] && { echo "Usage: scripts/check-worktree-conflicts.sh ISSUE_NUMBER" >&2; exit 0; }
 ISSUE="${ISSUE#\#}"
-
-WORKTREES_DIR="${REPO_ROOT}/.worktrees"
 
 COMPONENTS="digigraph digiquant digisearch digismith digiclaw digibase digivault digikey digichat"
 
@@ -71,6 +68,39 @@ matches_any_glob() {
   return 1
 }
 
+# Return 0 when this worktree belongs to the issue we are about to create.
+is_current_issue_worktree() {
+  local wt_dir="$1"
+  local wt_branch="$2"
+  local wt_name
+  wt_name="$(basename "$wt_dir")"
+
+  # worktree_task.sh: branch task/N-slug at .worktrees/task/N-slug/
+  if [[ "$wt_branch" == "task/${ISSUE}-"* ]]; then
+    return 0
+  fi
+  # Nested basename is N-slug; legacy flat layout is task-N-slug.
+  if [[ "$wt_name" == "${ISSUE}-"* || "$wt_name" == "task-${ISSUE}-"* ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# Collect linked worktree paths via git (authoritative; cannot drift on layout).
+collect_worktree_dirs() {
+  local wt_path wt_real
+  while IFS= read -r line; do
+    [[ "$line" == worktree\ * ]] || continue
+    wt_path="${line#worktree }"
+    wt_real="$(cd "$wt_path" && pwd -P)"
+    # Never treat the main repository checkout as a task worktree.
+    if [[ "$wt_real" == "$REPO_ROOT" ]]; then
+      continue
+    fi
+    printf '%s\n' "$wt_real"
+  done < <(git worktree list --porcelain)
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 header "Worktree conflict check for issue #${ISSUE}"
@@ -89,38 +119,30 @@ set +f
 echo "Issue:  #${ISSUE}"
 echo "Globs:  ${GLOBS[*]}"
 
-# No worktrees directory — nothing to check
-if [[ ! -d "$WORKTREES_DIR" ]]; then
-  echo "No .worktrees/ directory found — nothing to compare."
+FOUND_CONFLICT=false
+CONFLICT_ROWS=""
+
+wt_dirs=()
+while IFS= read -r wt_dir; do
+  [[ -n "$wt_dir" ]] && wt_dirs+=("$wt_dir")
+done < <(collect_worktree_dirs)
+
+if ((${#wt_dirs[@]} == 0)); then
+  echo "No linked task worktrees found — nothing to compare."
   echo ""
   exit 0
 fi
 
-FOUND_CONFLICT=false
-CONFLICT_ROWS=""
-
-# Worktrees live at `.worktrees/task/N-slug/` (see scripts/worktree_task.sh). A
-# one-level `$WORKTREES_DIR/*/` walk only sees the `task/` directory itself and
-# never the per-issue checkouts underneath — so after the nested layout landed
-# (#2569) this advisory went silent. Also accept the older flat
-# `.worktrees/task-N-slug/` shape so a leftover worktree still shows up.
-shopt -s nullglob
-wt_dirs=("$WORKTREES_DIR"/task/*/ "$WORKTREES_DIR"/task-*/)
-shopt -u nullglob
-
 for wt_dir in "${wt_dirs[@]}"; do
   [[ -d "$wt_dir" ]] || continue
-
-  # Skip the worktree for *this* issue. Nested basenames are `N-slug`; flat
-  # legacy basenames are `task-N-slug`.
-  wt_name="$(basename "$wt_dir")"
-  if [[ "$wt_name" == "${ISSUE}-"* || "$wt_name" == "task-${ISSUE}-"* ]]; then
-    continue
-  fi
 
   # Get the branch name from the worktree
   wt_branch="$(git -C "$wt_dir" branch --show-current 2>/dev/null || echo "(detached)")"
   [[ -z "$wt_branch" ]] && wt_branch="(detached)"
+
+  if is_current_issue_worktree "$wt_dir" "$wt_branch"; then
+    continue
+  fi
 
   # Get changed files in this worktree vs origin/develop
   changed_files="$(git -C "$wt_dir" diff origin/develop...HEAD --name-only 2>/dev/null || true)"
