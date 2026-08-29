@@ -414,7 +414,7 @@ export default function DigestDocumentView({
   if (error && !context) {
     return (
       <div className="space-y-3">
-        <p className="text-down text-xs">{error}</p>
+        <p className="text-danger text-xs">{error}</p>
         <div className="prose prose-invert max-w-none text-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
         </div>
@@ -520,7 +520,7 @@ export default function DigestDocumentView({
     return (
       <div className="space-y-3">
         {toolbar}
-        <p className="text-down text-xs">{error}</p>
+        <p className="text-danger text-xs">{error}</p>
         <div className="prose prose-invert max-w-none text-sm">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{fallbackMarkdown}</ReactMarkdown>
         </div>
