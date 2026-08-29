@@ -1,5 +1,14 @@
 # Auto-stub scripts/project_fields.tsv when relevant labels are applied to an issue.
 #
+# PAUSED (2026-08-21): stub-tsv + stub-tsv-phase require vars.STUB_TSV_ENABLED == 'true'
+# (unset/empty → jobs skip). Avoid bare `if: false` — actionlint rejects constant if-conds.
+# They opened one bot/stub-tsv-<N> PR per labeled issue and cluttered the queue.
+# TSV rows for CLI-created issues still come from create_issue.sh; Project #1
+# field sync still runs via set_project_fields.sh / board workflows. Reap job
+# stays on so closing leftover stub PRs still deletes their branches.
+# Follow-up: replace PR stubs with direct board writes (see backlog-reshape
+# workflow audit § TSV-based project-field stubbing).
+#
 # Job 1 (stub-tsv): fires on `issues.labeled` when `agent-task` is applied.
 #   Infers phase/area/kind/priority/model from existing labels and opens a PR
 #   that appends a row to project_fields.tsv.
@@ -8,13 +17,20 @@
 #   to an issue that is NOT labeled `housekeeping`. Opens the same kind of stub PR.
 #   Skips if the issue already has `agent-task` (job 1 covers that case).
 #
-# Both jobs skip if the issue number is already in project_fields.tsv.
+# Job 3 (reap-stub-branch): fires on `pull_request.closed` (merged or closed
+#   unmerged) for any `bot/stub-tsv-<N>` head branch and deletes it via the API.
+#   Never fires while the PR is open. Idempotent — a branch already gone is not
+#   an error. See #2465.
+#
+# Both stub jobs skip if the issue number is already in project_fields.tsv.
 # See set_project_fields.sh for field-name conventions (exact em-dash strings required).
 name: "Project: stub fields TSV"
 
 on:
   issues:
     types: [labeled]
+  pull_request:
+    types: [closed]
 
 concurrency:
   group: auto-stub-tsv
@@ -27,7 +43,9 @@ permissions:
 jobs:
   stub-tsv:
     name: Append inferred row to project_fields.tsv
-    if: github.event.label.name == 'agent-task'
+    # Paused: do not open bot/stub-tsv-* PRs unless repo var STUB_TSV_ENABLED=true.
+    # Original: github.event.label.name == 'agent-task'
+    if: vars.STUB_TSV_ENABLED == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -101,11 +119,39 @@ jobs:
           labels: "phase-0"
           add-paths: scripts/project_fields.tsv
 
+  reap-stub-branch:
+    name: Delete stub-tsv branch after its PR closes
+    if: startsWith(github.event.pull_request.head.ref, 'bot/stub-tsv-')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete branch (idempotent)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # Passed via env, never interpolated into the script body, so an
+          # attacker-controlled fork branch name can't inject shell commands
+          # (see security-guidance plugin note on github.event.pull_request.head.ref).
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if ! [[ "$BRANCH" =~ ^bot/stub-tsv-[0-9]+$ ]]; then
+            echo "'$BRANCH' doesn't match bot/stub-tsv-<N> exactly — refusing to touch it."
+            exit 0
+          fi
+          if gh api "repos/${REPO}/git/refs/heads/${BRANCH}" &>/dev/null; then
+            gh api -X DELETE "repos/${REPO}/git/refs/heads/${BRANCH}"
+            echo "Deleted ${BRANCH}"
+          else
+            echo "${BRANCH} already gone — nothing to do."
+          fi
+
   stub-tsv-phase:
     name: Append inferred row for non-agent-task phase-labeled issues
+    # Paused: require STUB_TSV_ENABLED=true. Original condition kept below for restore.
     # Fire when a phase-N or client-pilot label is applied, but NOT for agent-task (job 1 covers that)
     # and NOT for housekeeping issues (those are exempt from project-field requirements).
     if: |
+      vars.STUB_TSV_ENABLED == 'true' &&
       github.event.label.name != 'agent-task' &&
       github.event.label.name != 'housekeeping' &&
       (

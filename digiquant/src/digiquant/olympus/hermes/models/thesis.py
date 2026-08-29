@@ -48,7 +48,7 @@ class ThesisProposal(BaseModel):
     existing_thesis_id: constr(max_length=32) | None = None  # type: ignore[valid-type]
     title: constr(max_length=200)  # type: ignore[valid-type]
     direction: str
-    statement: constr(max_length=4000)  # type: ignore[valid-type]
+    statement: str = Field(min_length=1)
     validation_criteria: list[str] = Field(min_length=1)
     invalidation_criteria: list[str] = Field(min_length=1)
     headwinds: list[str] = Field(default_factory=list)

@@ -718,6 +718,9 @@ def write_row(
             "sources": event.get("sources"),
             "input_summary": event.get("input_summary"),
             "output_summary": event.get("output_summary"),
+            "call_id": event.get("call_id"),
+            "attempt_id": event.get("attempt_id"),
+            "node_run_id": event.get("node_run_id"),
         }
         for event in events
         if (

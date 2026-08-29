@@ -89,11 +89,18 @@ jobs:
 
           ORPHAN_COUNT=0
           while IFS=$'\t' read -r num title; do
-            if ! echo "$ALL_PROJECT_NUMS" | grep -q "^${num}$"; then
+            # Not -q: under `set -o pipefail` (set above) -q exits at the first
+            # match, echo takes SIGPIPE and the pipeline reports 141, so a project
+            # list past the 64KB pipe buffer would read as no match -- and this one
+            # fails OPEN, posting a spurious "orphaned" comment on a tracked issue.
+            # 11 boards x --limit 500 is ~27KB today; raising either shrinks that
+            # margin. Redirecting instead lets grep drain stdin.
+            if ! echo "$ALL_PROJECT_NUMS" | grep "^${num}$" >/dev/null; then
               echo "Orphaned: #${num} -- ${title}"
               ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
 
-              if ! echo "$ALREADY_WARNED" | grep -q "^${num}$"; then
+              # Not -q, for the same pipefail/SIGPIPE reason as above.
+              if ! echo "$ALREADY_WARNED" | grep "^${num}$" >/dev/null; then
                 gh issue comment "$num" --repo "$REPO" --body-file /tmp/orphan-comment.md
                 echo "  -> Commented on #${num}"
               else

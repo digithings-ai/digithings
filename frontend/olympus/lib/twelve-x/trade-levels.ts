@@ -25,6 +25,14 @@ const MONTH_ABBREV = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'S
 
 const COMPUTED_REF_RE = /^computed:vol(\d+)@(\d{4}-\d{2}-\d{2})\|k=([^|]+)\|rr=/;
 
+/** Provenances that keep broker-presented precision (trim zeros only). */
+const PRESENTED_PRECISION: ReadonlySet<FxLevelProvenance> = new Set([
+  'broker_quoted',
+  'pmt_bank_trade',
+  'pmt_seasonality_target',
+  'pmt_position_cluster',
+]);
+
 function isProvenance(value: unknown): value is FxLevelProvenance {
   return typeof value === 'string' && (PROVENANCES as readonly string[]).includes(value);
 }
@@ -181,17 +189,57 @@ export function provenanceChipLabel(level: FxTradeLevel): string {
   }
 }
 
-/** Trim trailing zeros for display while preserving significant decimals. */
-export function formatLevelValue(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed.includes('.')) return trimmed;
-  return trimmed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+/** Pair-reasonable decimals for computed levels (JPY crosses ~3, majors ~5). */
+export function pairPriceDecimals(pair: string): number {
+  const p = pair.trim().toUpperCase();
+  if (p.includes('JPY')) return 3;
+  return 5;
 }
+
+function trimTrailingZeros(value: string): string {
+  if (!value.includes('.')) return value;
+  return value.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
+/**
+ * Format a level for display.
+ * Broker-presented: keep precision, trim junk trailing zeros.
+ * Computed (with pair): round to pair-reasonable decimals, then trim zeros.
+ */
+export function formatLevelValue(
+  value: string,
+  pair?: string,
+  provenance?: FxLevelProvenance,
+): string {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+
+  const keepPresented =
+    !provenance || PRESENTED_PRECISION.has(provenance) || !pair || !pair.trim();
+
+  if (keepPresented) {
+    return trimTrailingZeros(trimmed);
+  }
+
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return trimTrailingZeros(trimmed);
+  const decimals = pairPriceDecimals(pair);
+  return trimTrailingZeros(n.toFixed(decimals));
+}
+
+/** R:R display — one decimal. */
+export function formatRiskReward(rr: number): string {
+  if (!Number.isFinite(rr)) return String(rr);
+  return (Math.round(rr * 10) / 10).toFixed(1);
+}
+
+export type IdeaDetailLevelRole = 'entry' | 'stop' | 'target';
 
 export interface IdeaDetailLevelRow {
   label: string;
   value: string;
   chip: string;
+  role: IdeaDetailLevelRole;
 }
 
 export interface IdeaDetailEvidenceRow {
@@ -203,14 +251,16 @@ export interface IdeaDetailEvidenceRow {
 export interface IdeaDetailModel {
   status: FxTradeLevels['status'] | null;
   riskReward: number | null;
+  riskRewardLabel: string | null;
   levelRows: IdeaDetailLevelRow[];
   evidenceRows: IdeaDetailEvidenceRow[];
 }
 
-function entryLevelRow(
+function formatEntryValue(
   entry_low: FxTradeLevel | null,
   entry_high: FxTradeLevel | null,
-): IdeaDetailLevelRow | null {
+  pair: string,
+): { value: string; chip: string } | null {
   if (!entry_low && !entry_high) return null;
 
   if (entry_low && entry_high) {
@@ -218,8 +268,7 @@ function entryLevelRow(
     const chipHigh = provenanceChipLabel(entry_high);
     const chip = chipLow === chipHigh ? chipLow : `${chipLow} · ${chipHigh}`;
     return {
-      label: 'Entry',
-      value: `${formatLevelValue(entry_low.value)}–${formatLevelValue(entry_high.value)}`,
+      value: `${formatLevelValue(entry_low.value, pair, entry_low.provenance)}–${formatLevelValue(entry_high.value, pair, entry_high.provenance)}`,
       chip,
     };
   }
@@ -227,37 +276,75 @@ function entryLevelRow(
   const level = entry_low ?? entry_high;
   if (!level) return null;
   return {
-    label: 'Entry',
-    value: formatLevelValue(level.value),
+    value: formatLevelValue(level.value, pair, level.provenance),
     chip: provenanceChipLabel(level),
   };
+}
+
+function isLongDirection(direction: string): boolean {
+  const d = direction.trim().toLowerCase();
+  return d.includes('long') || d.includes('bull');
+}
+
+/**
+ * Build ladder rows in price-descending visual order:
+ * long → Target, Entry, Stop; short → Stop, Entry, Target.
+ * Semantic colors stay role-based (target accent, stop warn) regardless of order.
+ */
+function buildLadderRows(
+  tradeLevels: FxTradeLevels,
+  pair: string,
+  direction: string,
+): IdeaDetailLevelRow[] {
+  const entry = formatEntryValue(tradeLevels.entry_low, tradeLevels.entry_high, pair);
+  const entryRow: IdeaDetailLevelRow | null = entry
+    ? { label: 'Entry', value: entry.value, chip: entry.chip, role: 'entry' }
+    : null;
+
+  const stopRow: IdeaDetailLevelRow | null = tradeLevels.stop
+    ? {
+        label: 'Stop',
+        value: formatLevelValue(tradeLevels.stop.value, pair, tradeLevels.stop.provenance),
+        chip: provenanceChipLabel(tradeLevels.stop),
+        role: 'stop',
+      }
+    : null;
+
+  // Multi-target ladder: price-descending for display (labels follow display order).
+  const targetsByPriceDesc = [...tradeLevels.targets].sort((a, b) => {
+    const na = Number(a.value);
+    const nb = Number(b.value);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return nb - na;
+    return 0;
+  });
+  const targetRows: IdeaDetailLevelRow[] = targetsByPriceDesc.map((target, index) => ({
+    label: index === 0 ? 'Target' : `Target ${index + 1}`,
+    value: formatLevelValue(target.value, pair, target.provenance),
+    chip: provenanceChipLabel(target),
+    role: 'target',
+  }));
+
+  const long = isLongDirection(direction);
+  const rows: IdeaDetailLevelRow[] = [];
+  if (long) {
+    rows.push(...targetRows);
+    if (entryRow) rows.push(entryRow);
+    if (stopRow) rows.push(stopRow);
+  } else {
+    if (stopRow) rows.push(stopRow);
+    if (entryRow) rows.push(entryRow);
+    rows.push(...targetRows);
+  }
+  return rows;
 }
 
 /** Pure view-model for IdeaDetail levels + evidence blocks. */
 export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
   const tradeLevels = parseTradeLevels(idea.trade_levels);
-  const levelRows: IdeaDetailLevelRow[] = [];
-
-  if (hasTradeLevels(tradeLevels)) {
-    const entry = entryLevelRow(tradeLevels!.entry_low, tradeLevels!.entry_high);
-    if (entry) levelRows.push(entry);
-
-    if (tradeLevels!.stop) {
-      levelRows.push({
-        label: 'Stop',
-        value: formatLevelValue(tradeLevels!.stop.value),
-        chip: provenanceChipLabel(tradeLevels!.stop),
-      });
-    }
-
-    tradeLevels!.targets.forEach((target, index) => {
-      levelRows.push({
-        label: index === 0 ? 'Target' : `Target ${index + 1}`,
-        value: formatLevelValue(target.value),
-        chip: provenanceChipLabel(target),
-      });
-    });
-  }
+  const levelRows =
+    hasTradeLevels(tradeLevels) && tradeLevels
+      ? buildLadderRows(tradeLevels, idea.pair, idea.direction)
+      : [];
 
   const evidenceRows = parseEvidence(idea.evidence).map((row) => ({
     statement: row.statement,
@@ -265,9 +352,12 @@ export function buildIdeaDetailModel(idea: FxTradeIdeaRow): IdeaDetailModel {
     className: evidenceStanceClass(row.stance),
   }));
 
+  const riskReward = tradeLevels?.risk_reward ?? null;
+
   return {
     status: tradeLevels?.status ?? null,
-    riskReward: tradeLevels?.risk_reward ?? null,
+    riskReward,
+    riskRewardLabel: riskReward != null ? formatRiskReward(riskReward) : null,
     levelRows,
     evidenceRows,
   };

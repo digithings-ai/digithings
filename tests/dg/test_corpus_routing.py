@@ -40,6 +40,46 @@ def test_initial_graph_state_carries_corpus_overrides() -> None:
     assert state["research_system_prompt_override"] == "OCC prompt"
 
 
+def test_initial_graph_state_clears_corpus_overrides_when_none() -> None:
+    """Unmapped-tenant clears from server.py must reach checkpointed state.
+
+    Omitting the keys when None left the prior turn's digisearch_index sticky under
+    LangGraph last-write-wins — cross-tenant corpus bleed on a reused session_id
+    (digichat embeds share subject embed:anonymous across tenants).
+    """
+    state = _initial_graph_state(WorkflowRequest(prompt="hi"), "wf-corpus-clear")
+    assert "digisearch_index" in state
+    assert state["digisearch_index"] is None
+    assert "vault_path_prefix" in state
+    assert state["vault_path_prefix"] is None
+    assert "research_system_prompt_override" in state
+    assert state["research_system_prompt_override"] is None
+    assert "digi_subject" in state
+    assert state["digi_subject"] is None
+
+
+def test_langgraph_clears_sticky_digisearch_index_on_none() -> None:
+    """Two-turn checkpoint merge: occ_help then explicit None must clear the index."""
+    from langgraph.checkpoint.memory import MemorySaver
+    from langgraph.graph import END, START, StateGraph
+
+    seen: list[str | None] = []
+
+    def _capture(state: WorkflowState) -> dict:
+        seen.append(state.get("digisearch_index"))
+        return {}
+
+    builder: StateGraph[WorkflowState] = StateGraph(WorkflowState)
+    builder.add_node("capture", _capture)
+    builder.add_edge(START, "capture")
+    builder.add_edge("capture", END)
+    graph = builder.compile(checkpointer=MemorySaver())
+    config = {"configurable": {"thread_id": "sticky-corpus-1"}}
+    graph.invoke({"prompt": "t1", "digisearch_index": "occ_help"}, config=config)
+    graph.invoke({"prompt": "t2", "digisearch_index": None}, config=config)
+    assert seen == ["occ_help", None]
+
+
 def test_langgraph_preserves_corpus_keys_through_invoke() -> None:
     """Regression: StateGraph(WorkflowState) must not strip digisearch_index."""
     from langgraph.graph import END, START, StateGraph

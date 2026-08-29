@@ -69,7 +69,19 @@ jobs:
 
           changed_files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
 
-          if echo "$changed_files" | grep -qE '^(frontend/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)'; then
+          # grep is deliberately not -q, and stdout is redirected instead: under
+          # `set -o pipefail`, -q exits at the first match, the writer takes SIGPIPE
+          # and the pipeline reports 141, so a large changed-file list reads as NO
+          # match. The exact threshold is grep-version-dependent -- measured ~56KB
+          # on GNU grep 3.11 and ~131KB on 3.8 -- so it can sit below the 64KB pipe
+          # buffer. This step runs under the implicit `bash -e {0}` (no pipefail),
+          # so -q would be correct today, and pipefail is not the house style here
+          # either (34 of 232 run: steps set it). But $BEFORE spans a whole
+          # develop->main promotion, and the largest on main is 76,083 bytes /
+          # 1,724 paths (#832, 2026-06-18, predating this gate; 26,657 is the max
+          # since it existed) -- past every threshold above. Draining
+          # stdin means the gate cannot silently invert if pipefail is added later.
+          if echo "$changed_files" | grep -E '^(frontend/digichat-cloudflare/|Dockerfile\.digichat-cloudflare$)' >/dev/null; then
             echo "Container wrapper itself changed -- deploying."
             echo "deploy=true" >> "$GITHUB_OUTPUT"
             exit 0

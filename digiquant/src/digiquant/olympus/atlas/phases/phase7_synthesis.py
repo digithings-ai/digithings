@@ -20,6 +20,13 @@ from digiquant.olympus.atlas.phases._node_factory import (
     _edit_phase_inputs,
     _shared_context,
 )
+from digiquant.olympus.atlas.research_attention import (
+    apply_digest_metric_patch,
+    artifact_target_key,
+    research_attention_enforce_path,
+    resolve_attention_plan_for_node,
+    resolve_research_attention_rollout_mode,
+)
 from digiquant.olympus.atlas.segments import SegmentReport
 from digiquant.olympus.atlas.skills import load_skill, load_skill_edit
 from digiquant.olympus.atlas.state import (
@@ -35,6 +42,7 @@ from digiquant.olympus.edit_mode.content_identity import (
 from digiquant.olympus.edit_mode.models import TriageSignal
 from digiquant.olympus.edit_mode.prior import PriorPublished
 from digiquant.olympus.edit_mode.resolve import resolve_edit_mode
+from digiquant.olympus.research_retrieval.planner import AttentionRolloutMode
 
 logger = logging.getLogger(__name__)
 
@@ -562,6 +570,25 @@ def _carry_prior_digest_or_raise(
 
 def _synthesis_node(state: AtlasResearchState) -> dict[str, Any]:
     document_key = _digest_document_key(state)
+    rollout = resolve_research_attention_rollout_mode()
+    if rollout is not AttentionRolloutMode.OFF and not state.custom_prompt:
+        resolve_attention_plan_for_node(state)
+    target_key = artifact_target_key("digest", document_key)
+    enforce_path = research_attention_enforce_path(state, target_key=target_key)
+    if enforce_path == "carry":
+        prior = _DigestPriorLoader(state, document_key).load(
+            ("digest", document_key), state.run_date
+        )
+        if prior is not None and _prior_is_valid_digest(prior):
+            return {"phase7_digest": _carry_prior_digest(state, prior)}
+    if enforce_path == "metric_patch":
+        prior = _DigestPriorLoader(state, document_key).load(
+            ("digest", document_key), state.run_date
+        )
+        if prior is not None and _prior_is_valid_digest(prior):
+            return {
+                "phase7_digest": _finalize_digest(state, apply_digest_metric_patch(state, prior))
+            }
     mode = resolve_edit_mode(
         artifact_key=("digest", document_key),
         run_date=state.run_date,

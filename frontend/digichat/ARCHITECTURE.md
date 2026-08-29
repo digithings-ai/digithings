@@ -1,7 +1,7 @@
 # digichat — Architecture
 
-> **Scope:** Production Next.js 16 BFF + React 19 chat UI at `digichat/`.
-> The legacy zero-dependency demo at `website/digichat/` is out of scope.
+> **Scope:** Production Next.js 16 BFF + React 19 chat UI at `frontend/digichat/`.
+> Marketing parent is `frontend/digithings-web` `/chat` → iframe `/embed` (not the deleted `frontend/website/`).
 
 ---
 
@@ -444,6 +444,16 @@ the visitor activates a validated key, the failed turn is retried with existing
 Anthropic, Gemini, x.ai (model required for all non-OpenAI providers).
 Provider list is defined by `config/byok-providers.json`.
 
+A non-2xx digigraph reply is **not** relayed to an embed visitor: the body is
+logged server-side and the stream carries a generic "unavailable right now",
+because a 500 body can hold stack traces, internal hostnames and prompt echoes.
+The one exception is a refusal the visitor can act on — `relayableUpstreamCode`
+in `lib/adapters/digithings/stream.ts` passes through the *code* alone, and only
+for codes in `BYOK_MODEL_REMEDIABLE_CODES`, so the BYOK sequence opens instead
+of the turn dead-ending. The upstream `message` is never relayed on that path:
+digigraph's text for `byok_default_model_provider_mismatch` reflects the
+caller's own `X-BYOK-Provider` header back at them.
+
 ### BYOK (bring-your-own-key) — session-only, inline terminal flow
 
 Visitor API keys are **session memory only** (`useBYOKKey` React state). The
@@ -490,18 +500,28 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
    across the whole flow for these three providers.
 5. On success, key is held in-memory for this tab session and sent as
    `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` on subsequent `/api/chat`
-   requests only. Whether `X-BYOK-Model` is sent at all is driven by
-   `byokRequiresModel(provider)`, defined once in the framework-neutral
+   requests only. `X-BYOK-Model` is sent whenever the user chose a model —
+   every send path (`chat-panel.tsx`, `use-embed-digi-chat.ts`,
+   `api/chat/route.ts`'s upstream forward, and `byok-ping.ts`) forwards a
+   non-blank model unconditionally, for every provider. It used to be gated
+   on `byokRequiresModel(provider)`, which dropped the model an OpenAI user
+   had explicitly picked; digigraph then answered on its own tier default,
+   an `openrouter/…` slug billed to the operator (#2490). `byokRequiresModel`
+   governs whether a model is **mandatory**, never whether a chosen one is
+   forwarded, and it is still what `api/chat/route.ts` asks before returning
+   400 `byok_model_required`. It is defined once in the framework-neutral
    `src/lib/byok-providers.ts` (no `"use client"` directive, so both React
    client code and Next.js server Route Handlers can import it) and
-   re-exported by `use-byok-key.ts` for its own callers. Every client call
-   site defers to that one predicate (never a hand-maintained per-provider
-   list) — `chat-panel.tsx`, `embed/embed-client.tsx`,
-   `byok-settings-panel.tsx` — and so does `api/chat/route.ts`'s
-   `byokNeedsModel` gate, which now calls `byokRequiresModel(byokProvider)`
-   directly in place of its old 5-provider OR-chain, so a 6th `requiresModel`
-   provider can't silently omit its model header there the way `xai` once
-   did (#2351). `api/byok/test/route.ts` also imports this module —
+   re-exported by `use-byok-key.ts` for its own callers. Every call site that
+   asks the *mandatory* question defers to that one predicate (never a
+   hand-maintained per-provider list): `byok-cli-flow.tsx` (which offers a
+   blank "" model option and refuses a blank custom slug accordingly, and is
+   the single flow component that `chat-panel.tsx`, `embed/embed-client.tsx`
+   and `byok-settings-panel.tsx` all host), `use-byok-key.ts`'s
+   `validateBYOKModel`, and `api/chat/route.ts`'s `byokNeedsModel` gate,
+   which calls `byokRequiresModel(byokProvider)` directly in place of its old
+   5-provider OR-chain, so a 6th `requiresModel` provider can't silently skip
+   its 400 there the way `xai` once did (#2351). `api/byok/test/route.ts` also imports this module —
    `readByokProvider` replaces its old `readProvider` (which fell through to
    `"openai"` for any unrecognized value) and `byokKeyPrefixError` replaces
    its five hand-written prefix `if`-blocks. That route's own `needsModel`
@@ -509,7 +529,7 @@ UX is a stepwise terminal sequence rendered **inline in the chat transcript**
    all) is deliberately its own hand-written check — `provider === "xai"`
    only (#2347) — and is **not** derived from `byokRequiresModel`. The two
    guard different things: `byokRequiresModel(provider)` governs whether a
-   model header must be forwarded on the real `/api/chat` request;
+   model is required before the real `/api/chat` request is accepted;
    `needsModel` here governs only whether the *validation ping* needs a
    model before it can run at all. They diverge on purpose — none of
    `testOpenAIKey`, `testAnthropicKey`, `testGeminiKey`, or
@@ -557,17 +577,28 @@ rate-limited on both the embed-IP path and the authenticated/session path
 the provider using digichat's own egress, so the authenticated path needs a
 ceiling too, not just the anonymous-embed one.
 
-`config/byok-providers.json`'s `keyPrefix`/`fallbackModels` fields are read by
-no runtime code (only `id`/`baseUrl`/`requiresModel` feed
-`digigraph/src/digigraph/llm_auth.py`'s loader) but are checked for parity
-against `src/lib/byok-providers.ts`'s own catalog (`BYOK_PROVIDER_LIST`,
-`byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`) by two test
-files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,
+`config/byok-providers.json`'s `keyPrefix` field is read by no runtime code, and
+`fallbackModels` is read only by `digigraph/src/digigraph/llm_auth.py` (whose loader
+takes `id`/`baseUrl`/`requiresModel` plus the first `fallbackModels` entry, used as
+the remediation example in `byok_default_model_refusal`). Each is pinned to a
+different in-app copy: `keyPrefix` against `src/lib/byok-providers.ts`'s own catalog
+(`BYOK_PROVIDER_LIST`, `byokRequiresModel`, `byokKeyPrefixError`, `readByokProvider`)
+by two test files — `use-byok-key.catalog-parity.test.ts` (the client hook's re-exports,
 plus its own `byokModelPresets`) and its sibling
 `hooks/byok-providers.catalog-parity.test.ts`
 (the shared module itself, which is what `api/chat/route.ts` and
 `api/byok/test/route.ts` import directly) — so either copy drifting from the
-catalog fails a test instead of drifting silently. `api/byok/test/route.ts`
+catalog fails a test instead of drifting silently. `fallbackModels` has no
+counterpart in `byok-providers.ts`, which carries no model list; its in-app copy is
+`use-byok-key.ts`'s `byokModelPresets`, pinned by the first of those two files. That
+is what keeps digigraph's refusal naming a model this UI actually offers. **One
+surface of that drift class is still unguarded:** the same file's
+`byokModelPlaceholder` is a second hardcoded switch that reproduces every
+provider's `fallbackModels[0]` and renders it in its own `(e.g. …)` sentence
+(`use-byok-key.ts:237`) — the same shape digigraph's refusal produces. All five
+values agree with the catalog today, but nothing pins them: its only assertion is
+`expect(byokModelPlaceholder("xai")).toBeTruthy()`. Pin it to the catalog the way
+`byokModelPresets` is pinned rather than adding a third copy. `api/byok/test/route.ts`
 also calls `readByokProvider` from that same module: an `X-BYOK-Provider`
 value naming no known provider gets an explicit
 `400 Unknown BYOK provider: "…"` response instead of being silently treated

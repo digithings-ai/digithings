@@ -128,6 +128,151 @@ def test_handle_digisearch_research_delegate_overwrites_model_supplied_index_nam
     assert call_args.kwargs["default_index_name"] == "digithings_docs"
 
 
+# ---------------------------------------------------------------------------
+# _merged_digisearch_filters — every digisearch path (search / fetch_all /
+# research_delegate) funnels workflow + per-call filters through this helper.
+# Wrong merge silently drops workflow research_filters or evidence_tier
+# preference, so retrieval constraints never reach digisearch.
+# ---------------------------------------------------------------------------
+
+
+def test_merged_digisearch_filters_returns_none_when_empty() -> None:
+    from digigraph.orchestration.builtin import _merged_digisearch_filters
+
+    assert _merged_digisearch_filters(_ctx(state={}), {}) is None
+    assert _merged_digisearch_filters(_ctx(state={"research_filters": []}), {}) is None
+    assert _merged_digisearch_filters(_ctx(state={"evidence_tier_preference": []}), {}) is None
+
+
+def test_merged_digisearch_filters_combines_workflow_args_and_evidence_tier() -> None:
+    """Order is workflow filters, then tool-arg filters, then evidence_tier `in`."""
+    from digigraph.orchestration.builtin import _merged_digisearch_filters
+
+    wf = {"field": "region", "op": "eq", "value": "EU"}
+    arg = {"field": "year", "op": "eq", "value": 2024}
+    ctx = _ctx(
+        state={
+            "research_filters": [wf, "skip-me", None],
+            "evidence_tier_preference": ["peer_reviewed", "working_paper"],
+        }
+    )
+    merged = _merged_digisearch_filters(ctx, {"filters": [arg, 42]})
+    assert merged == [
+        wf,
+        arg,
+        {
+            "field": "evidence_tier",
+            "op": "in",
+            "value": ["peer_reviewed", "working_paper"],
+        },
+    ]
+
+
+def test_merged_digisearch_filters_ignores_non_list_state_and_args() -> None:
+    """Garbage shapes must not raise or inject a broken filter list."""
+    from digigraph.orchestration.builtin import _merged_digisearch_filters
+
+    ctx = _ctx(state={"research_filters": {"field": "x"}, "evidence_tier_preference": "peer"})
+    assert _merged_digisearch_filters(ctx, {"filters": {"field": "y"}}) is None
+
+
+def test_handle_digisearch_forwards_merged_filters_to_invoke() -> None:
+    """Handler must put the merged list on args_eff['filters'] before invoke.
+
+    A regression that builds the merge but never assigns it would leave
+    workflow research_filters / evidence_tier preference on the floor while
+    unit tests of the helper alone still pass.
+    """
+    from digigraph.orchestration.builtin import _handle_digisearch
+
+    wf = {"field": "sourceType", "op": "eq", "value": "doc"}
+    arg = {"field": "itemType", "op": "eq", "value": "page"}
+    ctx = _ctx(
+        state={
+            "research_filters": [wf],
+            "evidence_tier_preference": ["peer_reviewed"],
+        }
+    )
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        return_value={"ok": True, "data": {"results": [], "total": 0}},
+    ) as mock_invoke:
+        _handle_digisearch({"query": "q", "filters": [arg]}, ctx)
+
+    forwarded = mock_invoke.call_args.args[2]["filters"]
+    assert forwarded == [
+        wf,
+        arg,
+        {"field": "evidence_tier", "op": "in", "value": ["peer_reviewed"]},
+    ]
+
+
+def test_handle_digisearch_omits_filters_key_when_merge_empty() -> None:
+    """No filters in state/args → do not invent an empty filters key for digisearch."""
+    from digigraph.orchestration.builtin import _handle_digisearch
+
+    ctx = _ctx(state={})
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        return_value={"ok": True, "data": {"results": [], "total": 0}},
+    ) as mock_invoke:
+        _handle_digisearch({"query": "q"}, ctx)
+
+    assert "filters" not in mock_invoke.call_args.args[2]
+
+
+def test_handle_digisearch_fetch_all_clamps_max_results_to_project_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Orchestrator-side clamp: a model-supplied max_results above the project
+    limit must not reach digisearch (resource bound / DoS surface)."""
+    from digigraph.orchestration.builtin import _handle_digisearch_fetch_all
+
+    monkeypatch.setenv("DIGI_MAX_ROWS_PER_FETCH", "100")
+    ctx = _ctx()
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        return_value={"ok": True, "data": {"results": [], "total": 0}},
+    ) as mock_invoke:
+        _handle_digisearch_fetch_all({"query": "q", "max_results": 50_000}, ctx)
+
+    assert mock_invoke.call_args.args[2]["max_results"] == 100
+
+
+def test_handle_digisearch_fetch_all_defaults_max_results_to_project_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the model omits max_results, the project cap is still applied."""
+    from digigraph.orchestration.builtin import _handle_digisearch_fetch_all
+
+    monkeypatch.setenv("DIGI_MAX_ROWS_PER_FETCH", "75")
+    ctx = _ctx()
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        return_value={"ok": True, "data": {"results": [], "total": 0}},
+    ) as mock_invoke:
+        _handle_digisearch_fetch_all({"query": "q"}, ctx)
+
+    assert mock_invoke.call_args.args[2]["max_results"] == 75
+
+
+def test_handle_digisearch_fetch_all_keeps_max_results_at_or_below_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Values already within the cap must not be raised or rewritten."""
+    from digigraph.orchestration.builtin import _handle_digisearch_fetch_all
+
+    monkeypatch.setenv("DIGI_MAX_ROWS_PER_FETCH", "100")
+    ctx = _ctx()
+    with patch(
+        "digigraph.orchestration.builtin.invoke_digisearch_tool",
+        return_value={"ok": True, "data": {"results": [], "total": 0}},
+    ) as mock_invoke:
+        _handle_digisearch_fetch_all({"query": "q", "max_results": 40}, ctx)
+
+    assert mock_invoke.call_args.args[2]["max_results"] == 40
+
+
 @pytest.mark.unit
 def test_search_payload_keeps_metadata_addressable_as_json() -> None:
     """#2306: metadata must reach the model as an object, not a Python repr.

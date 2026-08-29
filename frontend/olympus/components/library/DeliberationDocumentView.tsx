@@ -40,14 +40,83 @@ function normalizeRounds(raw: unknown[]): Round[] {
 }
 
 // ── DebateSummary types (automated pipeline) ─────────────────────────────
-// { ticker, rounds: [{round_number, bull_argument, bear_argument}],
-//   bull_thesis, bear_thesis, net_stance: 'bullish'|'neutral'|'bearish',
-//   conviction_delta: int }
+// Legacy bull/bear: { rounds: [{round_number, bull_argument, bear_argument}], … }
+// H6 PM↔analyst: { transcript|rounds: [{role, round_number, message}], conclusion, … }
 type DebateRound = {
   round_number?: number;
   bull_argument?: string;
   bear_argument?: string;
 };
+
+type ChatTurn = {
+  role?: string;
+  round_number?: number;
+  message?: string;
+};
+
+/** True when a row is an H6 PM↔analyst transcript turn (not a bull/bear debate round). */
+export function isPmAnalystChatTurn(row: unknown): row is ChatTurn {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
+  const o = row as Record<string, unknown>;
+  if (typeof o.message !== 'string' || o.message.trim() === '') return false;
+  const role = typeof o.role === 'string' ? o.role.trim().toLowerCase() : '';
+  return role === 'pm' || role === 'analyst';
+}
+
+/** True when a row is a legacy bull/bear argument pair (not an H6 chat turn). */
+export function isBullBearDebateRound(row: unknown): row is DebateRound {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
+  if (isPmAnalystChatTurn(row)) return false;
+  const o = row as Record<string, unknown>;
+  const bull = typeof o.bull_argument === 'string' ? o.bull_argument.trim() : '';
+  const bear = typeof o.bear_argument === 'string' ? o.bear_argument.trim() : '';
+  return bull !== '' || bear !== '';
+}
+
+/**
+ * Prefer `payload.transcript`; fall back to chat-shaped rows in `payload.rounds`.
+ * Publish historically remapped H6 transcript → `rounds` without a `transcript` key.
+ */
+export function extractPmAnalystTranscript(
+  payload: Record<string, unknown> | null | undefined,
+): ChatTurn[] {
+  if (!payload) return [];
+  const fromTranscript = Array.isArray(payload.transcript)
+    ? (payload.transcript as unknown[]).filter(isPmAnalystChatTurn)
+    : [];
+  if (fromTranscript.length > 0) return fromTranscript;
+  const fromRounds = Array.isArray(payload.rounds)
+    ? (payload.rounds as unknown[]).filter(isPmAnalystChatTurn)
+    : [];
+  return fromRounds;
+}
+
+/**
+ * Hide bull/bear cards when publish fell both sides back to the same conclusion
+ * (H6 has no real bull_thesis/bear_thesis — only a PM↔analyst transcript).
+ */
+export function shouldShowDistinctTheses(opts: {
+  bullThesis: string;
+  bearThesis: string;
+  conclusion: string;
+}): boolean {
+  const { bullThesis, bearThesis, conclusion } = opts;
+  if (!bullThesis && !bearThesis) return false;
+  if (bullThesis && bearThesis && bullThesis === bearThesis) return false;
+  if (conclusion) {
+    const bullIsConclusion = !bullThesis || bullThesis === conclusion;
+    const bearIsConclusion = !bearThesis || bearThesis === conclusion;
+    if (bullIsConclusion && bearIsConclusion) return false;
+  }
+  return true;
+}
+
+function roleLabel(role: string | undefined): string {
+  const r = (role ?? '').trim().toLowerCase();
+  if (r === 'pm') return 'PM';
+  if (r === 'analyst') return 'Analyst';
+  return role?.trim() || 'Participant';
+}
 
 /** Colour class keyed on net_stance value */
 function stanceClass(stance: string | undefined): string {
@@ -88,54 +157,56 @@ export default function DeliberationDocumentView({
       : '';
   const isRiskDebateShape = aggressiveCase !== '' || conservativeCase !== '' || keyTension !== '';
 
-  // ── DebateSummary shape detection ─────────────────────────────────────
-  // The automated pipeline writes the DebateSummary fields directly onto the
-  // payload object (not nested under payload.body).
+  // ── H6 chat transcript (preferred) + legacy bull/bear rounds ──────────
+  const transcript = extractPmAnalystTranscript(payload);
   const debateRounds: DebateRound[] = Array.isArray(payload?.rounds)
-    ? (payload.rounds as DebateRound[]).filter(
-        (r) =>
-          r &&
-          typeof r === 'object' &&
-          // Bull/bear rounds have bull_argument or bear_argument; legacy rounds have label/sections
-          (r.bull_argument !== undefined || r.bear_argument !== undefined || r.round_number !== undefined),
-      )
+    ? (payload.rounds as unknown[]).filter(isBullBearDebateRound)
     : [];
+
   const bullThesis =
-    payload?.bull_thesis != null && typeof payload.bull_thesis === 'string' ? payload.bull_thesis.trim() : '';
+    payload?.bull_thesis != null && typeof payload.bull_thesis === 'string'
+      ? payload.bull_thesis.trim()
+      : '';
   const bearThesis =
-    payload?.bear_thesis != null && typeof payload.bear_thesis === 'string' ? payload.bear_thesis.trim() : '';
+    payload?.bear_thesis != null && typeof payload.bear_thesis === 'string'
+      ? payload.bear_thesis.trim()
+      : '';
   const netStance =
-    payload?.net_stance != null && typeof payload.net_stance === 'string' ? payload.net_stance.trim() : '';
+    payload?.net_stance != null && typeof payload.net_stance === 'string'
+      ? payload.net_stance.trim()
+      : '';
   const convictionDelta =
     payload?.conviction_delta != null ? Number(payload.conviction_delta) : null;
   const debateTicker =
-    payload?.ticker != null && typeof payload.ticker === 'string' ? payload.ticker.trim() : '';
+    payload?.ticker != null && typeof payload.ticker === 'string'
+      ? payload.ticker.trim()
+      : '';
 
-  // ── H6 DeliberationSummary fields (#1679) ─────────────────────────────
-  // PM↔analyst deliberations carry {transcript:[{role,round_number,message}],
-  // conclusion, converged, carried, escalated, cap_reason} — none of which the
-  // bull/bear branch rendered, so H6 docs lost their transcript entirely.
   const conclusion =
     payload?.conclusion != null && typeof payload.conclusion === 'string'
       ? payload.conclusion.trim()
       : '';
   const carried = payload?.carried === true;
   const escalated = payload?.escalated === true;
+  const carryReason =
+    payload?.carry_reason != null && typeof payload.carry_reason === 'string'
+      ? payload.carry_reason.trim()
+      : '';
   const capReason =
     payload?.cap_reason != null && typeof payload.cap_reason === 'string'
       ? payload.cap_reason.trim()
       : '';
   const converged = typeof payload?.converged === 'boolean' ? payload.converged : null;
-  const transcript: { role?: string; round_number?: number; message?: string }[] = Array.isArray(
-    payload?.transcript,
-  )
-    ? (payload.transcript as { role?: string; round_number?: number; message?: string }[]).filter(
-        (turn) => turn && typeof turn.message === 'string' && turn.message.trim() !== '',
-      )
-    : [];
+
+  const showThesisCards = shouldShowDistinctTheses({
+    bullThesis,
+    bearThesis,
+    conclusion,
+  });
 
   const isDebateShape =
     debateRounds.length > 0 ||
+    showThesisCards ||
     bullThesis !== '' ||
     bearThesis !== '' ||
     netStance !== '' ||
@@ -148,8 +219,12 @@ export default function DeliberationDocumentView({
       ? (payload.body as Record<string, unknown>)
       : null;
 
-  const finalDecisions = Array.isArray(body?.final_decisions) ? (body.final_decisions as FinalRow[]) : [];
-  const legacyRounds = Array.isArray(body?.rounds) ? normalizeRounds(body.rounds as unknown[]) : [];
+  const finalDecisions = Array.isArray(body?.final_decisions)
+    ? (body.final_decisions as FinalRow[])
+    : [];
+  const legacyRounds = Array.isArray(body?.rounds)
+    ? normalizeRounds(body.rounds as unknown[])
+    : [];
   // trigger_summary may be a string (legacy) or array of strings (canonical)
   const triggerSummary = Array.isArray(body?.trigger_summary)
     ? (body.trigger_summary as string[]).filter(Boolean)
@@ -159,9 +234,7 @@ export default function DeliberationDocumentView({
 
   // ── Fallback ────────────────────────────────────────────────────────────
   if (!isRiskDebateShape && !isDebateShape && (!body || (!finalDecisions.length && !legacyRounds.length))) {
-    return (
-      <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
-    );
+    return <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>;
   }
 
   // ── RiskDebateSummary rendering (risk-debate doc) ─────────────────────
@@ -201,10 +274,10 @@ export default function DeliberationDocumentView({
     );
   }
 
-  // ── DebateSummary rendering ──────────────────────────────────────────────
+  // ── DebateSummary / H6 deliberation rendering ───────────────────────────
   if (isDebateShape) {
     return (
-      <div className="space-y-8 text-sm">
+      <div className="space-y-8 text-sm" data-testid="deliberation-document-view">
         {/* Header: ticker + net stance */}
         {(debateTicker || netStance) && (
           <div className="flex items-center gap-4 flex-wrap">
@@ -225,17 +298,22 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
-        {/* H6 state badges (#1679): carried / converged / max_rounds escalation */}
+        {/* H6 state badges: carried / converged / max_rounds escalation */}
         {(carried || escalated || converged != null) && (
           <div className="flex flex-wrap items-center gap-2">
             {carried && (
               <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
-                carried from prior run
+                carried{carryReason ? ` · ${carryReason}` : ' from prior run'}
               </span>
             )}
             {converged === true && !carried && (
               <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-up">
                 converged
+              </span>
+            )}
+            {converged === false && !carried && (
+              <span className="rounded border border-hair px-2 py-0.5 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+                not converged
               </span>
             )}
             {escalated && (
@@ -246,7 +324,44 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
-        {/* H6 conclusion — the deliberation's final read */}
+        {/* PM ↔ analyst chat — primary surface for H6 */}
+        {transcript.length > 0 ? (
+          <div data-testid="deliberation-chat">
+            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-3">
+              Deliberation
+            </h3>
+            <ol className="space-y-3">
+              {transcript.map((turn, i) => {
+                const isPm = (turn.role ?? '').toLowerCase() === 'pm';
+                return (
+                  <li
+                    key={i}
+                    className={`rounded-lg border border-hair p-4 ${
+                      isPm ? 'bg-term-bg/60' : 'bg-term-bg/30'
+                    }`}
+                    data-role={isPm ? 'pm' : 'analyst'}
+                  >
+                    <p className="mb-1.5 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
+                      <span className={isPm ? 'text-accent' : 'text-ink-soft'}>
+                        {roleLabel(turn.role)}
+                      </span>
+                      <span aria-hidden>·</span>
+                      <span>Round {turn.round_number ?? '?'}</span>
+                    </p>
+                    <SafeMarkdown>{cleanMemoProse(turn.message ?? '')}</SafeMarkdown>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : carried ? (
+          <p className="text-ink-mute text-xs" data-testid="deliberation-no-chat">
+            No debate turns this run — stance carried from a prior deliberation
+            {carryReason ? ` (${carryReason})` : ''}.
+          </p>
+        ) : null}
+
+        {/* Conclusion — after the chat so the meeting reads first */}
         {conclusion && (
           <div>
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
@@ -256,8 +371,8 @@ export default function DeliberationDocumentView({
           </div>
         )}
 
-        {/* Bull / Bear thesis side-by-side */}
-        {(bullThesis || bearThesis) ? (
+        {/* Distinct bull/bear theses only (never conclusion mirrors) */}
+        {showThesisCards ? (
           <div className="grid gap-4 md:grid-cols-2">
             {bullThesis ? (
               <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
@@ -274,7 +389,7 @@ export default function DeliberationDocumentView({
           </div>
         ) : null}
 
-        {/* Per-round bull/bear exchange */}
+        {/* Legacy per-round bull/bear exchange (pre-H6 DebateSummary) */}
         {debateRounds.length > 0 ? (
           <div>
             <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
@@ -287,28 +402,6 @@ export default function DeliberationDocumentView({
             </div>
           </div>
         ) : null}
-
-        {/* PM ↔ analyst transcript, grouped by round (#1679) */}
-        {transcript.length > 0 && (
-          <div>
-            <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-2">
-              Deliberation transcript
-            </h3>
-            <ol className="space-y-3">
-              {transcript.map((turn, i) => (
-                <li key={i} className="rounded-lg border border-hair bg-term-bg/40 p-4">
-                  <p className="mb-1.5 flex items-center gap-2 font-mono text-[0.6rem] uppercase tracking-[0.08em] text-ink-mute">
-                    <span>Round {turn.round_number ?? '?'}</span>
-                    <span className={turn.role === 'pm' ? 'text-accent' : 'text-ink-soft'}>
-                      {turn.role === 'pm' ? 'PM challenge' : 'Analyst response'}
-                    </span>
-                  </p>
-                  <SafeMarkdown>{cleanMemoProse(turn.message ?? '')}</SafeMarkdown>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
       </div>
     );
   }

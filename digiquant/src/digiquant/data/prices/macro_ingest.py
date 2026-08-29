@@ -402,6 +402,7 @@ def fetch_fx_yahoo(
     start: str | None = None,
     end: str | None = None,
     symbols: dict[str, dict[str, str]] | None = None,
+    latest_only: bool = False,
 ) -> list[MacroObservation]:
     """Fetch daily FX closes from Yahoo Finance.
 
@@ -418,7 +419,21 @@ def fetch_fx_yahoo(
     if not yahoo_to_series:
         return []
     payload = _yahoo_fx_download(list(yahoo_to_series.keys()), start=start, end=end)
-    return yahoo_fx_payload_to_rows(payload, yahoo_to_series)
+    rows = yahoo_fx_payload_to_rows(payload, yahoo_to_series)
+    if not latest_only:
+        return rows
+
+    # The frequent refresh only needs Yahoo's newest daily candle per USD leg.
+    # During the FX day that candle is a moving "last", not a settled close.
+    # Its obs_date is still today, so the existing core PK intentionally
+    # overwrites the same row on every refresh.
+    latest: dict[str, MacroObservation] = {}
+    for row in rows:
+        series_id = str(row["series_id"])
+        current = latest.get(series_id)
+        if current is None or str(row["obs_date"]) > str(current["obs_date"]):
+            latest[series_id] = row
+    return list(latest.values())
 
 
 def dedupe_observation_rows(rows: list[MacroObservation]) -> list[MacroObservation]:

@@ -1,10 +1,11 @@
 name: "Pipeline: digiquant prices"
 
 # Scheduled price + technicals ingest via the migrated digiquant.data.prices
-# package (issue #149, Wave 1 Unit E). Three separate jobs:
+# package (issue #149, Wave 1 Unit E). Four separate jobs:
 #
 #   * intraday  — every 15 min across the US cash session (13:00–21:45 UTC; see DST note)
 #   * at-open   — position_events at the 09:30 ET open (13:35 + 14:35 UTC, one gated out)
+#   * fx-refresh — latest Yahoo daily FX candle every 2h through the FX week
 #   * eod-macro — once per weekday at 21:25 UTC, after the close in both ET offsets,
 #                 and because FRED is day-delayed.
 #
@@ -60,6 +61,11 @@ on:
     # duplicate, while the missing upper cutoff tolerates GitHub delivery lag.
     - cron: '35 13 * * MON-FRI'
     - cron: '35 14 * * MON-FRI'
+    # Current Yahoo FX daily candle. Minute 17 avoids the 15-minute equity
+    # quote pulls and top-of-hour GitHub congestion. Sunday 22:17 UTC catches
+    # the FX-week open; Monday-Friday refreshes every two hours.
+    - cron: '17 */2 * * MON-FRI'
+    - cron: '17 22 * * SUN'
   workflow_dispatch:
     inputs:
       mode:
@@ -67,7 +73,7 @@ on:
         required: true
         default: 'intraday'
         type: choice
-        options: [intraday, eod-macro, at-open]
+        options: [intraday, eod-macro, at-open, fx-refresh]
 
 permissions:
   contents: read
@@ -171,6 +177,37 @@ jobs:
               });
             }
 
+  fx-refresh:
+    name: Refresh current Yahoo FX daily mids
+    if: |
+      github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'fx-refresh' ||
+      github.event_name == 'schedule' && github.event.schedule == '17 */2 * * MON-FRI' ||
+      github.event_name == 'schedule' && github.event.schedule == '17 22 * * SUN'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: digiquant-fx-refresh
+      cancel-in-progress: false
+    env:
+      CORE_SUPABASE_URL: ${{ secrets.CORE_SUPABASE_URL || secrets.SUPABASE_URL }}
+      CORE_SUPABASE_SERVICE_KEY: ${{ secrets.CORE_SUPABASE_SERVICE_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install from lockfile
+        run: uv sync --frozen --package digiquant --extra prices
+      - name: Upsert Yahoo's newest daily FX candle
+        run: |
+          uv run --frozen --no-sync python -m digiquant prices fetch-macro \
+            --sources yahoo \
+            --manifest digiquant/src/digiquant/olympus/atlas/config/macro_series.yaml \
+            --latest-only \
+            --supabase
+
   at-open-clock:
     name: DST gate for the at-open job
     # Both at-open crons reach this job; exactly one is season-correct on any given
@@ -234,8 +271,13 @@ jobs:
       - name: Install from lockfile
         run: uv sync --frozen --package digiquant --extra prices
       - name: execute_at_open.py (prior-trading-day rebalance)
+        # `#2589` cutover: `ensure_legacy_opening_snapshot` auto-seeds open lots from the
+        # prior `positions` book (one labeled `legacy_opening_snapshot` chain) when lots are
+        # empty, and declines if the book still has holdings after that — so residuals never
+        # invent OPEN/EXIT into append-only 069 rows. `--require-ledger` turns a decline into
+        # exit 3 instead of silently falling back to prose.
         run: |
-          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance
+          uv run --frozen --no-sync python digiquant/scripts/atlas/execute_at_open.py --prior-trading-day-rebalance --require-ledger
 
   eod-macro:
     name: EOD macro ingest

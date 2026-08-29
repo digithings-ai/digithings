@@ -11,6 +11,7 @@ from digigraph.orchestration.registry import ToolContext, execute, get_tools
 from digigraph.project_config import DigiProjectConfig
 from digigraph.tool_policy import (
     allowed_tool_names_for_workflow,
+    frozen_from_state_list,
     require_tool_calls_for_workflow,
     state_list_from_frozen,
 )
@@ -136,6 +137,51 @@ def test_policy_env_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_state_list_from_frozen() -> None:
     assert state_list_from_frozen(None) is None
     assert state_list_from_frozen(frozenset({"b", "a"})) == ["a", "b"]
+    assert state_list_from_frozen(frozenset()) == []
+
+
+@pytest.mark.unit
+def test_frozen_from_state_list_distinguishes_none_from_empty() -> None:
+    """Empty allowlist is deny-all; missing allowlist is unrestricted.
+
+    Regression: ``frozenset(raw) if raw else None`` treated ``[]`` as
+    unrestricted and opened every tool despite the documented deny-all contract
+    (WorkflowRequest.allowed_tools=[], ARCHITECTURE § tool allowlist).
+    """
+    assert frozen_from_state_list(None) is None
+    assert frozen_from_state_list([]) == frozenset()
+    assert frozen_from_state_list(["digisearch", "digivault"]) == frozenset(
+        {"digisearch", "digivault"}
+    )
+
+
+@pytest.mark.unit
+def test_empty_allowlist_round_trip_stays_deny_all() -> None:
+    """Policy → state list → research deserialize must not reopen tools."""
+    req = WorkflowRequest(prompt="hi", allowed_tools=[])
+    frozen = allowed_tool_names_for_workflow(req)
+    assert frozen == frozenset()
+    serialized = state_list_from_frozen(frozen)
+    assert serialized == []
+    assert frozen_from_state_list(serialized) == frozenset()
+
+
+@pytest.mark.unit
+def test_execute_denies_all_tools_under_empty_allowlist() -> None:
+    ctx = ToolContext(
+        session_id="s",
+        run_data_dir=None,
+        index_name="default",
+        index_config={},
+        state={},
+        allowed_tool_names=frozenset(),
+    )
+    with patch("digigraph.audit.audit_log") as audit_mock:
+        out = execute("digisearch", {"query": "x"}, ctx)
+    audit_mock.assert_called_once()
+    assert audit_mock.call_args[0][0] == "tool_denied"
+    assert isinstance(out, dict)
+    assert out.get("error") == "tool_not_allowed"
 
 
 @pytest.mark.unit
@@ -165,6 +211,19 @@ def test_require_tool_calls_env_fallback(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("DIGI_REQUIRE_TOOL_CALLS", "1")
     cfg = DigiProjectConfig({"agents": {}})
     req = WorkflowRequest(prompt="hi")
+    assert require_tool_calls_for_workflow(req, cfg=cfg) is True
+
+
+@pytest.mark.unit
+def test_require_tool_calls_env_true_wins_even_if_request_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Env floor mirrors project floor: request-level False cannot opt out of
+    DIGI_REQUIRE_TOOL_CALLS. Project=True+request=False is covered above; this
+    pins the env half of the same OR-floor contract."""
+    monkeypatch.setenv("DIGI_REQUIRE_TOOL_CALLS", "1")
+    cfg = DigiProjectConfig({"agents": {}})
+    req = WorkflowRequest(prompt="hi", require_tool_calls=False)
     assert require_tool_calls_for_workflow(req, cfg=cfg) is True
 
 
