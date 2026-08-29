@@ -163,7 +163,7 @@ jobs:
           # as Hermes chain startup (#2532). Fallback routing applies to the initial request as well
           # as empty-response retries (#2540); check_openrouter_function_tools() surfaces model
           # substitution instead of hard-failing when it matches production tolerance.
-          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
+          OPENROUTER_FALLBACK_MODELS: &olympus_openrouter_fallback_models "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
         run: |
           uv run --frozen --no-sync python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
@@ -180,7 +180,7 @@ jobs:
           # every openrouter/ request when this is set (primary call, not only empty retries).
           # That covers provider errors (5xx, rate limits, endpoint refusals) — not empty 200s
           # with blank content (#2520). Cheap→capable, all endpoint-gate-verified.
-          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
+          OPENROUTER_FALLBACK_MODELS: *olympus_openrouter_fallback_models
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
