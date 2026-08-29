@@ -48,6 +48,11 @@ _MANIFEST_SEQ_FIELD = "commit_seq"
 # unbounded ``price_history`` scan.
 _NAV_INTERVAL_PAD_DAYS = 7
 _NAV_MAX_INTERVAL_DAYS = 120
+# Worst-case ``price_history`` window for ``_interval_price_returns``: the interval is
+# capped at ``_NAV_MAX_INTERVAL_DAYS`` and the fetch floor is padded below the anchor.
+_NAV_INTERVAL_WINDOW_DAYS = _NAV_MAX_INTERVAL_DAYS + _NAV_INTERVAL_PAD_DAYS
+_NAV_INTERVAL_ROW_BUDGET = 900
+_NAV_INTERVAL_TICKER_BATCH = max(1, _NAV_INTERVAL_ROW_BUDGET // (_NAV_INTERVAL_WINDOW_DAYS + 1))
 
 
 def _position_risk_fields_enabled() -> bool:
@@ -163,32 +168,32 @@ def _interval_price_returns(
         )
 
     floor = (anchor - timedelta(days=_NAV_INTERVAL_PAD_DAYS)).isoformat()
-    resp = (
-        client.table("price_history")
-        .select("date, ticker, close")
-        .in_("ticker", list(tickers))
-        .gte("date", floor)
-        .lt("date", run_date.isoformat())
-        .execute()
-    )
-
     anchor_str = anchor.isoformat()
+    ordered = sorted(tickers)
     # Per ticker keep the latest close at-or-before the anchor (interval start) and
     # the latest close strictly before run_date (interval end). Small categorical
-    # data — a handful of tickers over weeks of dates — so no dataframe, matching
-    # the ``query_price_deltas`` precedent.
+    # data — batched so a full window for every ticker fits under PostgREST's cap.
     begin: dict[str, tuple[str, float]] = {}
     end: dict[str, tuple[str, float]] = {}
-    for row in getattr(resp, "data", None) or []:
-        ticker = row.get("ticker")
-        row_date = row.get("date")
-        close = _opt_float(row.get("close"))
-        if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
-            continue
-        if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
-            begin[ticker] = (row_date, close)
-        if row_date > end.get(ticker, ("", 0.0))[0]:
-            end[ticker] = (row_date, close)
+    for start in range(0, len(ordered), _NAV_INTERVAL_TICKER_BATCH):
+        resp = (
+            client.table("price_history")
+            .select("date, ticker, close")
+            .in_("ticker", ordered[start : start + _NAV_INTERVAL_TICKER_BATCH])
+            .gte("date", floor)
+            .lt("date", run_date.isoformat())
+            .execute()
+        )
+        for row in getattr(resp, "data", None) or []:
+            ticker = row.get("ticker")
+            row_date = row.get("date")
+            close = _opt_float(row.get("close"))
+            if not isinstance(ticker, str) or not isinstance(row_date, str) or close is None:
+                continue
+            if row_date <= anchor_str and row_date > begin.get(ticker, ("", 0.0))[0]:
+                begin[ticker] = (row_date, close)
+            if row_date > end.get(ticker, ("", 0.0))[0]:
+                end[ticker] = (row_date, close)
 
     returns: dict[str, float] = {}
     for ticker, (begin_date, begin_close) in begin.items():
@@ -236,6 +241,13 @@ def _latest_values(
     *,
     lookback_days: int = 14,
 ) -> dict[str, float]:
+    """``{ticker: value_col}`` from the latest row ≤ run_date per ticker (look-ahead-guarded).
+
+    We only need each ticker's *most recent* value inside a short ``lookback_days``
+    window. ``.order("date", desc=True)`` ensures truncation drops the *oldest* rows,
+    so every ticker still resolves from the leading page — not because the requested
+    ``.limit`` can exceed PostgREST's server-side row cap. Fail-soft on read errors.
+    """
     if not tickers:
         return {}
     since = (run_date - timedelta(days=lookback_days)).isoformat()

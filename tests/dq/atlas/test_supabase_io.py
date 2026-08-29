@@ -10,8 +10,10 @@ from typing import Any  # score:allow untyped any — used for fake-client paylo
 
 import pytest
 from digiquant.olympus.atlas.supabase_io import (
+    _DEFAULT_PRICE_LOOKBACK_DAYS,
     SupabaseConfig,
     SupabaseNotConfiguredError,
+    _price_delta_ticker_batch,
     load_active_theses_rows,
     load_portfolio_performance_snapshot,
     load_prior_analyst_summaries,
@@ -765,6 +767,72 @@ class TestQueryPriceDeltas:
         )
         assert "QQQ" not in out
         assert "SPY" in out
+
+
+@pytest.mark.unit
+class TestQueryPriceDeltasRowCap:
+    """Regression (#2484): triage price deltas must not drop tickers under the row cap.
+
+    ``query_price_deltas`` fetches up to ``lookback_days`` calendar rows per ticker.
+    Supabase truncates an unbounded PostgREST response at 1000 rows; a truncated
+    ticker is silently dropped and the rule engine treats a missing key as no signal.
+    """
+
+    CAP = 1000
+    LOOKBACK = _DEFAULT_PRICE_LOOKBACK_DAYS
+
+    def _capped_client(self, tickers: list[str]) -> FakeSupabaseClient:
+        run_date = date(2026, 4, 27)
+        rows = [
+            {
+                "date": (run_date - timedelta(days=offset)).isoformat(),
+                "ticker": ticker,
+                "close": 100.0 + index + (0.5 if offset == 1 else 0.0),
+            }
+            for index, ticker in enumerate(tickers)
+            for offset in range(1, self.LOOKBACK + 2)
+        ]
+        cap = self.CAP
+
+        class _Capped(FakeSupabaseClient):
+            def table(self, name: str):  # type: ignore[no-untyped-def]
+                query = super().table(name)
+                if name != "price_history":
+                    return query
+                inner = query.execute
+
+                def _execute():  # type: ignore[no-untyped-def]
+                    resp = inner()
+                    resp.data = list(resp.data or [])[:cap]
+                    return resp
+
+                query.execute = _execute  # type: ignore[method-assign]
+                return query
+
+        return _Capped(canned_reads={"price_history": rows})
+
+    def test_wide_universe_is_fully_priced_under_the_row_cap(self) -> None:
+        tickers = [f"TK{index:03d}" for index in range(80)]
+        assert len(tickers) * (self.LOOKBACK + 1) > self.CAP, "universe must exceed the cap"
+        client = self._capped_client(tickers)
+        out = query_price_deltas(
+            client=client,
+            tickers=tuple(tickers),
+            run_date=date(2026, 4, 27),
+            lookback_days=self.LOOKBACK,
+        )
+        missing = sorted(set(tickers) - set(out))
+        assert not missing, (
+            f"{len(missing)} ticker(s) lost to the row cap ({missing[:5]}...) — "
+            "a truncated read is reported as no signal"
+        )
+
+    def test_batch_is_derived_from_the_lookback(self) -> None:
+        batch = _price_delta_ticker_batch(self.LOOKBACK)
+        worst_case = batch * (self.LOOKBACK + 1)
+        assert worst_case <= self.CAP, (
+            f"a full batch can return {worst_case} rows, over the {self.CAP} cap"
+        )
 
 
 @pytest.mark.unit
