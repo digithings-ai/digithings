@@ -19,7 +19,7 @@ describe('LockedSurface', () => {
     expect(html).toContain('House weights, NAV, tearsheet, ledger, and attribution unlock on Baseline.');
     expect(html).toContain('href="/settings#billing"');
     expect(html).toContain('Upgrade in Settings → Billing');
-    // No fin-green / fin-red / exclamation drama
+    // No money-tone / alarm vocabulary in the locked chrome
     expect(html).not.toContain('text-up');
     expect(html).not.toContain('text-down');
     expect(html).not.toContain('!');

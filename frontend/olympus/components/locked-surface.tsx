@@ -36,7 +36,7 @@ export interface LockedSurfaceProps {
 
 /**
  * Calm locked-state card for tier-gated panels.
- * Tokens: existing `--accent` + muted ink only — no fin-green/red, no exclamation marks.
+ * Tokens: existing `--accent` + muted ink only — no money-tone utilities, no exclamation marks.
  * Upgrade CTA → Settings → Billing (`/settings#billing`).
  */
 export function LockedSurface({
