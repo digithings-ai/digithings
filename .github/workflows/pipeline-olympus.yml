@@ -163,7 +163,7 @@ jobs:
           # recurred after this var was added (see #2517/#2520). The actual root cause was a
           # fragile finite max_tokens cap on the connectivity ping (fixed by removing the cap
           # entirely, not by adding more retry/fallback surface — see validate-providers.py).
-          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
+          OPENROUTER_FALLBACK_MODELS: &olympus_openrouter_fallback_models "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
         run: |
           uv run --frozen --no-sync python digiquant/scripts/atlas/validate-providers.py --skip-dry-run
 
@@ -182,7 +182,7 @@ jobs:
           # empty-retry re-asks the SAME provider and the segment dies. With this set,
           # digillm's first empty-retry adds models+route=fallback so OpenRouter swaps
           # provider/model instead. Cheap→capable, all endpoint-gate-verified.
-          OPENROUTER_FALLBACK_MODELS: "deepseek/deepseek-v4-flash,deepseek/deepseek-v4-pro,meta-llama/llama-4-maverick"
+          OPENROUTER_FALLBACK_MODELS: *olympus_openrouter_fallback_models
           DRY_RUN: ${{ inputs.dry_run }}
           DIGI_CHECKPOINTER_POSTGRES_URI: ${{ secrets.DIGI_CHECKPOINTER_POSTGRES_URI }}
           RESUME_RUN_ID: ${{ inputs.resume_run_id }}
