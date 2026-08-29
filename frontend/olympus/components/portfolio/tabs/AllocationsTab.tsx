@@ -24,10 +24,15 @@ export default function AllocationsTab(props: {
   sleeveData: Array<Record<string, number | string>>;
   sleeveKeys: string[];
   formatSleeveKey: (k: string) => string;
+  /** Authoritative invested % from portfolio_metrics / NAV when known. */
+  investedPct?: number | null;
 }) {
-  const { lastUpdated, positions } = props;
+  const { lastUpdated, positions, investedPct } = props;
 
-  const reconciliation = useMemo(() => reconcileBook(positions), [positions]);
+  const reconciliation = useMemo(
+    () => reconcileBook(positions, { investedPct }),
+    [positions, investedPct]
+  );
   const positionCount = reconciliation.rows.length;
 
   return (
@@ -40,11 +45,6 @@ export default function AllocationsTab(props: {
         asOfDate={lastUpdated}
         positionCount={positionCount}
       />
-      <div className="flex items-center justify-between gap-3 border-x border-b border-hair px-4 py-2 md:px-6">
-        <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-          book monitor
-        </span>
-      </div>
       <div data-region="workspace" className="min-h-0 min-w-0 flex-1">
         <section data-region="ledger" className="h-full min-h-0 min-w-0">
           <AllocationsPositionsTable reconciliation={reconciliation} />

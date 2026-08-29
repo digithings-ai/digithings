@@ -3,9 +3,11 @@ import {
   VALID_PORTFOLIO_TABS,
   canonicalizeLegacyPortfolioSearch,
   canonicalizeLegacyThesesSearch,
+  ledgerHref,
   mapPortfolioTabFromUrl,
   searchParamsFromHref,
   thesisDetailHref,
+  tickerDossierHref,
 } from './portfolio-url-state';
 
 describe('portfolio-url-state', () => {
@@ -98,5 +100,13 @@ describe('portfolio-url-state', () => {
       kind: 'query',
       href: '/portfolio',
     });
+  });
+
+  it('builds ticker dossier and ledger hrefs', () => {
+    expect(tickerDossierHref('gld')).toBe('/portfolio/tickers?ticker=GLD');
+    expect(ledgerHref()).toBe('/portfolio/ledger');
+    expect(ledgerHref({ date: '2026-08-20', ticker: 'gld' })).toBe(
+      '/portfolio/ledger?date=2026-08-20&ticker=GLD'
+    );
   });
 });

@@ -52,6 +52,7 @@ import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
 import { buildInstrumentLookup, resolveInstrumentIdentity } from './instrument-metadata';
 import { normalizePositionEvent } from './position-events';
+import { ledgerEventEconomics } from './position-event-economics';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
 
@@ -639,6 +640,7 @@ async function paginatedFetch<TRow>(
 
 type PositionEventRowPick = Pick<
   TableRow<'position_events'>,
+  | 'id'
   | 'date'
   | 'ticker'
   | 'event'
@@ -655,7 +657,7 @@ async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]
     async (offset, pageSize) => {
       const { data, error } = await supabase!
         .from('position_events')
-        .select('date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
+        .select('id,date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
         .order('date', { ascending: false })
         .range(offset, offset + pageSize - 1);
       return { data, error };
@@ -840,10 +842,25 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const metrics: TableRow<'portfolio_metrics'> =
     metricsRes.error || !metricsRow ? ({} as TableRow<'portfolio_metrics'>) : metricsRow;
 
+  const entryMarks = allPositions.map((p) => ({
+    date: p.date,
+    ticker: p.ticker,
+    entry_price: p.entry_price != null ? Number(p.entry_price) : null,
+  }));
+
   const position_events: DashboardPositionEvent[] = (
     eventsRaw as TableRow<'position_events'>[]
   )
-    .map((e) => normalizePositionEvent(e))
+    .map((e) => {
+      const normalized = normalizePositionEvent(e);
+      const economics = ledgerEventEconomics(normalized, entryMarks);
+      return {
+        ...normalized,
+        avg_entry_price: economics.avgEntryPrice,
+        sold_weight_pct: economics.soldWeightPct,
+        realized_return_pct: economics.realizedReturnPct,
+      };
+    })
     .sort((a, b) => b.date.localeCompare(a.date) || a.ticker.localeCompare(b.ticker));
 
   const server_portfolio_metrics: ServerPortfolioMetrics | null =

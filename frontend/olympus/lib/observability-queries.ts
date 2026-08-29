@@ -38,6 +38,12 @@ import {
   accountingNavToHistoryShape,
   type AccountingNavRow,
 } from './accounting-views';
+import {
+  averageEntryAsOf,
+  realizedReturnVsAverageEntry,
+  roundPct,
+  soldWeightPct,
+} from './position-event-economics';
 
 const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
@@ -275,47 +281,6 @@ function applyHoldingMarks(
   };
 }
 
-/**
- * Average entry as of a realized event date: latest `positions.entry_price` on or
- * before that date. Sells do not change average cost; do not invent from marks.
- */
-function averageEntryAsOf(
-  positions: TableRow<'positions'>[],
-  ticker: string,
-  asOfDate: string
-): number | null {
-  const key = ticker.toUpperCase();
-  let best: TableRow<'positions'> | null = null;
-  for (const row of positions) {
-    if (row.ticker.toUpperCase() !== key) continue;
-    if (row.date > asOfDate) continue;
-    if (finitePositive(row.entry_price) == null) continue;
-    if (!best || row.date.localeCompare(best.date) > 0) best = row;
-  }
-  return finitePositive(best?.entry_price);
-}
-
-function soldWeightPct(event: TableRow<'position_events'>): number | null {
-  const prev = event.prev_weight_pct;
-  const residual = event.weight_pct;
-  if (prev != null && Number.isFinite(prev) && residual != null && Number.isFinite(residual)) {
-    const sold = prev - residual;
-    return Number.isFinite(sold) ? roundPct(sold) : null;
-  }
-  if (event.event === 'EXIT' && prev != null && Number.isFinite(prev)) return roundPct(prev);
-  return null;
-}
-
-function realizedReturnVsAverageEntry(
-  exitPrice: number | null | undefined,
-  averageEntry: number | null
-): number | null {
-  const sell = finitePositive(exitPrice);
-  const entry = finitePositive(averageEntry);
-  if (sell == null || entry == null) return null;
-  return roundPct((sell / entry - 1) * 100);
-}
-
 function toOpenHoldingRow(
   ticker: string,
   position: TableRow<'positions'> | null,
@@ -354,10 +319,6 @@ function toRealizedHoldingRow(
     disposition,
     eventId: event.id,
   };
-}
-
-function roundPct(value: number): number {
-  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function periodReturnPct(values: number[]): number | null {

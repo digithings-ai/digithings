@@ -8,6 +8,7 @@ import {
   BookOpen,
   ChartNoAxesCombined,
   GitBranch,
+  ListOrdered,
   Shield,
   Wallet,
 } from 'lucide-react';
@@ -24,6 +25,10 @@ import { buildPipelineHref } from '@/lib/pipeline-links';
 import { AsOfBadge, formatAsOf } from '@/components/shared/as-of-badge';
 import { formatBriefWeightChange } from '@/lib/brief-book-event';
 import { usablePmRationale } from '@/lib/pm-rationale';
+import {
+  thesisDetailHref,
+  tickerDossierHref,
+} from '@/lib/portfolio-url-state';
 import {
   BriefPipelineHealth,
   type BriefRunHealth,
@@ -53,6 +58,31 @@ function BriefCardLink({
       aria-label={ariaLabel}
       data-testid={testId}
       className={`block transition-colors hover:bg-ink/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent ${className ?? ''}`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function ClaimLink({
+  href,
+  children,
+  className,
+  testId,
+}: {
+  href: string | null | undefined;
+  children: ReactNode;
+  className?: string;
+  testId?: string;
+}) {
+  if (!href) {
+    return <span className={className} data-testid={testId}>{children}</span>;
+  }
+  return (
+    <Link
+      href={href}
+      data-testid={testId}
+      className={`transition-colors hover:text-accent ${className ?? ''}`}
     >
       {children}
     </Link>
@@ -175,10 +205,11 @@ function statusDot(status: string): string {
 }
 
 const DESTINATIONS = [
-  { label: 'Digest', href: null, icon: BookOpen },
+  { label: 'Digest', href: null as string | null, icon: BookOpen },
   { label: 'Pipeline', href: '/pipeline', icon: GitBranch },
   { label: 'Performance', href: '/portfolio/performance', icon: ChartNoAxesCombined },
   { label: 'Holdings', href: '/portfolio', icon: Wallet },
+  { label: 'Ledger', href: '/portfolio/ledger', icon: ListOrdered },
   { label: 'Theses', href: '/portfolio?tab=theses', icon: Shield },
 ] as const;
 
@@ -219,12 +250,19 @@ export function DailyBriefWorkspace({
     risks,
     contextBullets,
     latestEvent: highlightEvent,
+    digestDate,
   });
   const latestThesis = theses[0] ?? null;
   const latestRisk = risks[0] ?? null;
   const latestContext = contextBullets[0] ?? null;
   const digestHref = buildPipelineHref({ date: digestDate, stage: 'synthesis', node: 'digest' });
-  const thesesHref = '/portfolio?tab=theses';
+  const thesesHref = latestThesis?.id
+    ? thesisDetailHref(latestThesis.id)
+    : '/portfolio?tab=theses';
+  const decisionHref =
+    decision.active[0] != null
+      ? tickerDossierHref(decision.active[0].ticker)
+      : buildPipelineHref({ date: digestDate, stage: 'selection', node: 'pm-rebalance' });
 
   // Book-monitor scroll-edge cue (full-UI-suite critique, P2; refined per
   // CodeRabbit on PR #2287): only shown while the table genuinely overflows
@@ -290,12 +328,13 @@ export function DailyBriefWorkspace({
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
               Your update · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
             </p>
-            <h1
-              data-testid="brief-attention"
+            <ClaimLink
+              href={highlight.attentionHref}
+              testId="brief-attention"
               className="mt-2 line-clamp-6 max-w-4xl font-display text-2xl leading-tight text-ink sm:line-clamp-none sm:text-3xl xl:text-4xl"
             >
               {highlight.attention}
-            </h1>
+            </ClaimLink>
             <ul
               data-testid="brief-beats"
               className="mt-5 max-w-3xl space-y-2.5"
@@ -306,22 +345,29 @@ export function DailyBriefWorkspace({
                   <span className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
                     {beat.label}
                   </span>
-                  <span className={beat.available ? 'text-ink-soft' : 'text-ink-mute'}>
+                  <ClaimLink
+                    href={beat.href}
+                    className={beat.available ? 'text-ink-soft' : 'text-ink-mute'}
+                  >
                     {beat.text}
-                  </span>
+                  </ClaimLink>
                 </li>
               ))}
             </ul>
           </div>
 
           <div className="grid grid-cols-1 divide-y divide-hair sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-1 lg:divide-x-0 lg:divide-y">
-            <div className="px-5 py-4 sm:px-6">
+            <ClaimLink
+              href={decisionHref}
+              testId="brief-decision-link"
+              className="block px-5 py-4 sm:px-6"
+            >
               <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
                 Latest decision
               </p>
               <p className="mt-1 text-lg font-semibold text-ink">{decision.label}</p>
               <p className="mt-0.5 text-xs text-ink-soft">{decision.detail}</p>
-            </div>
+            </ClaimLink>
             <BriefPipelineHealth runHealth={runHealth} diagnostics={runDiagnostics} />
           </div>
         </div>
@@ -412,7 +458,13 @@ export function DailyBriefWorkspace({
               {latestThesis ? (
                 <div className="flex items-start gap-2">
                   <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${statusDot(latestThesis.status ?? '')}`} />
-                  <p className="text-sm text-ink">{latestThesis.name}</p>
+                  <ClaimLink
+                    href={thesesHref}
+                    className="text-sm text-ink"
+                    testId="brief-thesis-link"
+                  >
+                    {latestThesis.name}
+                  </ClaimLink>
                 </div>
               ) : (
                 <p className="text-sm text-ink-mute">No active thesis was published.</p>
@@ -480,12 +532,22 @@ export function DailyBriefWorkspace({
             )}
           </BriefCardLink>
 
-          <BriefCardLink
-            href="/portfolio"
-            aria-label="Open portfolio holdings"
-            data-testid="brief-holdings-link"
-            className="relative block py-2 lg:pl-5"
+          <div
+            data-testid="brief-holdings-panel"
+            className="relative py-2 lg:pl-5"
           >
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+                Holdings
+              </p>
+              <Link
+                href="/portfolio"
+                className="text-[10px] font-medium text-accent hover:underline"
+                data-testid="brief-holdings-link"
+              >
+                Open book
+              </Link>
+            </div>
             <div ref={bookScrollRef} className="overflow-x-auto">
               {held.length === 0 ? (
                 <p className="py-3 text-sm text-ink-mute">No positions held; the book is all cash.</p>
@@ -497,11 +559,6 @@ export function DailyBriefWorkspace({
                         <th className="py-2 pr-3 font-bold">Holding</th>
                         <th className="px-3 py-2 text-right font-bold">Weight</th>
                         <th className="px-3 py-2 text-right font-bold">Change</th>
-                        {/* pr-4, not pl-3 alone (CodeRabbit, PR #2287): the fade
-                            below sits flush against this column's own right
-                            edge, so its values need clearance to stay legible
-                            under it rather than running all the way to the
-                            most-opaque part of the gradient. */}
                         <th className="py-2 pl-3 pr-4 text-right font-bold">Day</th>
                       </tr>
                     </thead>
@@ -512,7 +569,12 @@ export function DailyBriefWorkspace({
                         return (
                           <tr key={position.ticker} className="text-xs">
                             <td className="py-2.5 pr-3">
-                              <span className="font-mono font-bold text-ink">{position.ticker}</span>
+                              <Link
+                                href={tickerDossierHref(position.ticker)}
+                                className="font-mono font-bold text-ink hover:text-accent hover:underline"
+                              >
+                                {position.ticker}
+                              </Link>
                               <span className="ml-2 text-ink-mute">{position.name}</span>
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono tabular-nums text-ink">
@@ -529,16 +591,6 @@ export function DailyBriefWorkspace({
                       })}
                     </tbody>
                   </table>
-                  {/* Scroll-edge cue (full-UI-suite critique, P2; refined per
-                      CodeRabbit on PR #2287): the table's min-w-[34rem] (544px)
-                      forces horizontal scroll on any viewport under ~560px --
-                      every phone -- with nothing previously signaling the
-                      Change/Day columns run off-screen. Shown only while
-                      showBookFade is true (genuinely overflowing AND not
-                      already scrolled to the end, tracked above), so it never
-                      sits over content once there is nothing left to reveal --
-                      and the Day column's own pr-4 keeps its values clear of
-                      the fade's most-opaque edge on the trip there. */}
                   {showBookFade ? (
                     <div
                       aria-hidden="true"
@@ -548,11 +600,11 @@ export function DailyBriefWorkspace({
                 </>
               )}
             </div>
-          </BriefCardLink>
+          </div>
         </div>
       </section>
 
-      <nav aria-label="Brief drill-ins" className="grid grid-cols-2 divide-x divide-y divide-hair sm:grid-cols-5 sm:divide-y-0">
+      <nav aria-label="Brief drill-ins" className="grid grid-cols-2 divide-x divide-y divide-hair sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
         {DESTINATIONS.map(({ label, href, icon: Icon }) => (
           <Link
             key={label}

@@ -6,6 +6,8 @@ import type {
 } from '@/lib/types';
 import { isMaterialBookEvent } from '@/lib/brief-book-event';
 import { resolvePmRationale } from '@/lib/pm-rationale';
+import { buildPipelineHref } from '@/lib/pipeline-links';
+import { ledgerHref, tickerDossierHref } from '@/lib/portfolio-url-state';
 
 /**
  * Personal Morning Brief hero copy (variant B: research + portfolio dual beat).
@@ -22,11 +24,15 @@ export interface BriefBeat {
   text: string;
   /** False when the beat is an honest empty / degraded stand-in. */
   available: boolean;
+  /** Sourced detail destination when the beat is available. */
+  href?: string | null;
 }
 
 export interface BriefHighlight {
   /** Single glance sentence — most material finding or book action. */
   attention: string;
+  /** Primary deep link for the attention claim. */
+  attentionHref: string | null;
   /** Up to three beats: Research · Portfolio · Watch. */
   beats: BriefBeat[];
   /** True when at least one real pipeline artifact contributed copy. */
@@ -41,6 +47,8 @@ export interface BriefHighlightInput {
   risks: RiskItem[];
   contextBullets: string[];
   latestEvent: DashboardPositionEvent | null;
+  /** Digest / research date for pipeline deep links. */
+  digestDate?: string | null;
 }
 
 const MAX_LINE = 140;
@@ -116,14 +124,23 @@ function materialLatestEvent(
   return event;
 }
 
+function digestHref(date: string | null | undefined): string {
+  return buildPipelineHref({ date: date ?? null, stage: 'synthesis', node: 'digest' });
+}
+
+function rebalanceHref(date: string | null | undefined): string {
+  return buildPipelineHref({ date: date ?? null, stage: 'selection', node: 'pm-rebalance' });
+}
+
 function researchLine(input: BriefHighlightInput): BriefBeat {
+  const href = digestHref(input.digestDate);
   const top = input.actionables[0];
   if (top?.label?.trim()) {
     const rationale = top.rationale?.trim();
     const text = rationale
       ? clip(`${top.label.trim()} — ${rationale}`)
       : clip(top.label.trim());
-    return { kind: 'research', label: 'Research', text, available: true };
+    return { kind: 'research', label: 'Research', text, available: true, href };
   }
   if (input.headline?.trim()) {
     return {
@@ -131,6 +148,7 @@ function researchLine(input: BriefHighlightInput): BriefBeat {
       label: 'Research',
       text: clip(input.headline.trim()),
       available: true,
+      href,
     };
   }
   const context = input.contextBullets.find((b) => b.trim());
@@ -140,6 +158,7 @@ function researchLine(input: BriefHighlightInput): BriefBeat {
       label: 'Research',
       text: clip(context.trim()),
       available: true,
+      href,
     };
   }
   return {
@@ -147,17 +166,18 @@ function researchLine(input: BriefHighlightInput): BriefBeat {
     label: 'Research',
     text: 'No research highlight was published for this run.',
     available: false,
+    href: null,
   };
 }
 
 function portfolioLine(input: BriefHighlightInput): BriefBeat {
   const active = activeRebalanceActions(input.actions);
   if (active.length > 0) {
-    // Attention already owns the full thesis for the lead move — beats list
-    // stays action-only so the same essay is not pasted twice.
-    const first = portfolioActionChip(active[0]);
+    const lead = active[0];
+    const href = tickerDossierHref(lead.ticker);
+    const first = portfolioActionChip(lead);
     if (active.length === 1) {
-      return { kind: 'portfolio', label: 'Portfolio', text: first, available: true };
+      return { kind: 'portfolio', label: 'Portfolio', text: first, available: true, href };
     }
     const rest = active
       .slice(1, 3)
@@ -168,6 +188,7 @@ function portfolioLine(input: BriefHighlightInput): BriefBeat {
       label: 'Portfolio',
       text: clip(`${first} Also: ${rest}`),
       available: true,
+      href,
     };
   }
   if (input.latestEvent && isMaterialBookEvent(input.latestEvent)) {
@@ -176,6 +197,10 @@ function portfolioLine(input: BriefHighlightInput): BriefBeat {
       label: 'Portfolio',
       text: eventLine(input.latestEvent),
       available: true,
+      href: ledgerHref({
+        date: input.latestEvent.date,
+        ticker: input.latestEvent.ticker,
+      }),
     };
   }
   if (input.actions.length > 0) {
@@ -184,6 +209,7 @@ function portfolioLine(input: BriefHighlightInput): BriefBeat {
       label: 'Portfolio',
       text: 'Holding the book — no allocation change recommended.',
       available: true,
+      href: rebalanceHref(input.digestDate),
     };
   }
   return {
@@ -191,17 +217,19 @@ function portfolioLine(input: BriefHighlightInput): BriefBeat {
     label: 'Portfolio',
     text: 'No portfolio decision was published for this run.',
     available: false,
+    href: null,
   };
 }
 
 function watchLine(input: BriefHighlightInput): BriefBeat {
+  const thesesHref = '/portfolio?tab=theses';
   const risk = input.risks[0];
   if (risk?.label?.trim()) {
     const trigger = risk.trigger?.trim();
     const text = trigger
       ? clip(`${risk.label.trim()} — watch ${trigger}`)
       : clip(risk.label.trim());
-    return { kind: 'watch', label: 'Watch', text, available: true };
+    return { kind: 'watch', label: 'Watch', text, available: true, href: thesesHref };
   }
   const second = input.actionables[1];
   if (second?.label?.trim()) {
@@ -210,16 +238,17 @@ function watchLine(input: BriefHighlightInput): BriefBeat {
       label: 'Watch',
       text: clip(second.label.trim()),
       available: true,
+      href: digestHref(input.digestDate),
     };
   }
   const context = input.contextBullets.find((b) => b.trim());
   if (context && input.actionables[0]?.label?.trim()) {
-    // Prefer context as watch when research already claimed the top actionable.
     return {
       kind: 'watch',
       label: 'Watch',
       text: clip(context.trim()),
       available: true,
+      href: digestHref(input.digestDate),
     };
   }
   return {
@@ -227,33 +256,46 @@ function watchLine(input: BriefHighlightInput): BriefBeat {
     label: 'Watch',
     text: 'No watch item was published for this run.',
     available: false,
+    href: null,
   };
 }
 
-function attentionSentence(input: BriefHighlightInput): string {
+function attentionSentence(input: BriefHighlightInput): { text: string; href: string | null } {
   const active = activeRebalanceActions(input.actions);
   if (active.length > 0) {
-    return portfolioMoveLine(active[0], input.rationaleByTicker);
+    return {
+      text: portfolioMoveLine(active[0], input.rationaleByTicker),
+      href: tickerDossierHref(active[0].ticker),
+    };
   }
   const top = input.actionables[0];
   if (top?.label?.trim()) {
     const rationale = top.rationale?.trim();
-    return rationale
-      ? clip(`${top.label.trim()} — ${rationale}`)
-      : clip(top.label.trim());
+    return {
+      text: rationale
+        ? clip(`${top.label.trim()} — ${rationale}`)
+        : clip(top.label.trim()),
+      href: digestHref(input.digestDate),
+    };
   }
   if (input.headline?.trim()) {
-    return clip(input.headline.trim());
+    return { text: clip(input.headline.trim()), href: digestHref(input.digestDate) };
   }
   const latestMaterial = materialLatestEvent(input.latestEvent);
   if (latestMaterial) {
-    return eventLine(latestMaterial);
+    return {
+      text: eventLine(latestMaterial),
+      href: ledgerHref({ date: latestMaterial.date, ticker: latestMaterial.ticker }),
+    };
   }
   const risk = input.risks[0];
   if (risk?.label?.trim()) {
-    return clip(`Watch ${risk.label.trim()}`);
+    return {
+      text: clip(`Watch ${risk.label.trim()}`),
+      href: '/portfolio?tab=theses',
+    };
   }
-  return 'Nothing material was published for this run yet.';
+  return { text: 'Nothing material was published for this run yet.', href: null };
 }
 
 /**
@@ -263,8 +305,10 @@ function attentionSentence(input: BriefHighlightInput): string {
 export function buildBriefHighlight(input: BriefHighlightInput): BriefHighlight {
   const beats = [researchLine(input), portfolioLine(input), watchLine(input)];
   const hasPipelineSignal = beats.some((b) => b.available) || Boolean(input.headline?.trim());
+  const attention = attentionSentence(input);
   return {
-    attention: attentionSentence(input),
+    attention: attention.text,
+    attentionHref: attention.href,
     beats,
     hasPipelineSignal,
   };

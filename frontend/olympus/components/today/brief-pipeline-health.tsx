@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
 import type { AtlasRunDiagnostics } from '@/lib/types';
+import { buildPipelineHref } from '@/lib/pipeline-links';
 import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-episodes';
 import {
   buildWeekDaySlots,
@@ -272,7 +273,11 @@ export function BriefPipelineHealth({
           Pipeline health
         </p>
         <Link
-          href="/pipeline"
+          href={
+            runHealth?.runDate
+              ? buildPipelineHref({ date: runHealth.runDate })
+              : '/pipeline'
+          }
           className="inline-flex items-center gap-1 text-[10px] font-medium text-accent hover:underline"
           aria-label="Open pipeline"
         >

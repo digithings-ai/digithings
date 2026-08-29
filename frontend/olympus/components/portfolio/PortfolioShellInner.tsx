@@ -206,6 +206,7 @@ export default function PortfolioShellInner() {
           <AllocationsTab
             lastUpdated={lastUpdated}
             positions={positions}
+            investedPct={metrics?.total_invested ?? data?.server_portfolio_metrics?.invested_pct ?? null}
             decisions={decisions}
             positionHistory={positionHistory}
             thesisById={thesisById}
