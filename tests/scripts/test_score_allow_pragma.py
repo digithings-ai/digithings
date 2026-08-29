@@ -94,3 +94,19 @@ def test_notimplementederror_pragma_does_not_suppress_pandas(target_path):
         if f.file == TARGET_FILE and "pandas" in f.description.lower()
     ]
     assert len(findings) == 1
+
+
+def test_notimplementederror_emdash_reason_on_pragma_line_is_no_op(target_path):
+    target_path.write_text(
+        "# score:allow notimplementederror stub — reason\n"
+        "def stub():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    results = score.scan(_unified_diff(["    raise NotImplementedError"]))
+    findings = [
+        f
+        for f in results["accuracy"].findings
+        if f.file == TARGET_FILE and "notimplementederror" in f.description.lower()
+    ]
+    assert len(findings) == 1
