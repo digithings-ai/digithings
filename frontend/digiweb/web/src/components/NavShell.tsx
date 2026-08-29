@@ -447,6 +447,20 @@ export function NavShell({
   // (.nav-shell.is-hidden:focus-within), not here — a transformed-offscreen
   // element is still in tab order, so no JS is needed for that path.
   //
+  // REVEAL_DELAY requires the cursor to *dwell* in HOT_ZONE for a beat
+  // before revealing, rather than firing the instant it crosses the line.
+  // A "hover" surface has no reserved top padding by design (it overlays on
+  // reveal instead of pushing content down), so a consumer's own top-of-
+  // viewport content can end up only a few px below HOT_ZONE — e.g.
+  // digithings-web's /chat, /chat/occ, whose iframed header (incl. the
+  // language selector) sits ~12-28px down. Without a delay, simply moving
+  // the cursor *toward* that control — not toward the bar at all — grazes
+  // HOT_ZONE en route and reveals the bar over the very control the user
+  // was reaching for. A fast pass-through clears the zone before the timer
+  // fires; only a genuine paused hover at
+  // the top edge reveals it. Mirrors the existing close-delay debounce
+  // pattern below (150ms) rather than inventing a new timing idiom.
+  //
   // is-scrolled rides along with the reveal (not just is-hidden): in scroll
   // mode that class is what gives the bar its blurred backdrop once there's
   // page content to read it over, gated on actually having scrolled past
@@ -459,21 +473,52 @@ export function NavShell({
     if (!nav || autoHide !== "hover") return;
     const HOT_ZONE = 24;
     const RELEASE_ZONE = nav.getBoundingClientRect().height + 64;
+    const REVEAL_DELAY = 120;
     nav.classList.add("is-hidden");
     let revealed = false;
+    let revealTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearRevealTimer = () => {
+      if (revealTimer == null) return;
+      clearTimeout(revealTimer);
+      revealTimer = null;
+    };
     const onMove = (e: MouseEvent) => {
       if (!revealed && e.clientY <= HOT_ZONE) {
-        revealed = true;
-        nav.classList.remove("is-hidden");
-        nav.classList.add("is-scrolled");
-      } else if (revealed && e.clientY > RELEASE_ZONE) {
+        if (revealTimer == null) {
+          revealTimer = setTimeout(() => {
+            revealTimer = null;
+            revealed = true;
+            nav.classList.remove("is-hidden");
+            nav.classList.add("is-scrolled");
+          }, REVEAL_DELAY);
+        }
+      } else if (!revealed) {
+        clearRevealTimer();
+      } else if (e.clientY > RELEASE_ZONE) {
         revealed = false;
         nav.classList.add("is-hidden");
         nav.classList.remove("is-scrolled");
       }
     };
+    // A pending reveal timer only gets cancelled by a later mousemove landing
+    // outside HOT_ZONE — but a fast flick off the *top* edge (toward browser
+    // chrome, another display, alt-tab) leaves the viewport entirely, so no
+    // further mousemove ever fires there to cancel it. Without this, the bar
+    // still reveals 120ms later even though the cursor is no longer anywhere
+    // near it, defeating the dwell delay via the one path it doesn't cover.
+    // documentElement (not window) is what actually receives "left the
+    // viewport": mouseleave doesn't bubble, and it's the html element's
+    // geometry — filling the viewport — that the pointer exits.
+    const onLeaveViewport = () => {
+      if (!revealed) clearRevealTimer();
+    };
     window.addEventListener("mousemove", onMove, { passive: true });
-    return () => window.removeEventListener("mousemove", onMove);
+    document.documentElement.addEventListener("mouseleave", onLeaveViewport);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      document.documentElement.removeEventListener("mouseleave", onLeaveViewport);
+      clearRevealTimer();
+    };
   }, [autoHide]);
 
   // Reference-counted (see useBodyScrollLock) so this coordinates safely

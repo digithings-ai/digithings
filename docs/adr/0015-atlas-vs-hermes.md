@@ -21,7 +21,7 @@ module, the package `digiquant.olympus.atlas` ended up doing two distinct jobs:
 
 These are different concerns with different cadence, different reviewers, and
 different consumers. Research output (the daily digest) is useful on its
-own — SITAAS-style users want it without the analysis layer. Analysis is
+own — client-pilot-style users want it without the analysis layer. Analysis is
 useless without research, but it should evolve independently: swap analysts,
 add risk personalities, change the PM algorithm, all without touching
 research code. Today they share a state object, a graph, and a skill tree,
@@ -111,7 +111,7 @@ Operator full refresh: `--refresh-scope all` — not a separate graph.
 - Clear architectural boundary at the digest contract.
 - Hermes can swap analysts / add risk personalities / change the PM
   algorithm without touching Atlas.
-- SITAAS-style consumers can install / depend on research without pulling
+- Client-pilot-style consumers can install / depend on research without pulling
   the analysis stack.
 - Test scope splits cleanly: `tests/dq/atlas/` and `tests/dq/hermes/`,
   each gated by their own conftest on monorepo-deps availability.
@@ -127,7 +127,7 @@ Operator full refresh: `--refresh-scope all` — not a separate graph.
   documented in the migration ticket.
 - Some cross-cutting code (state types) duplicates a bit. Worth the
   decoupling.
-- Future "Atlas-only" SITAAS deployment must still pip-install `digiquant`
+- Future "Atlas-only" client-pilot deployment must still pip-install `digiquant`
   to get the digest contract — not a separate package. Acceptable, since
   `digiquant.olympus.atlas.snapshot` is import-light by design (no LangGraph, no
   supabase).

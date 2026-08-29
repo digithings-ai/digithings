@@ -2,23 +2,30 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 import os
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from enum import StrEnum
 from typing import (
     Any,  # score:allow untyped any — scored-lint suppression: heterogeneous graph / dict shapes
 )
+from uuid import UUID
 
 from digiquant.olympus.atlas.decision_log import persist_pending
+from digiquant.olympus.atlas.pretrade_risk_registry import (
+    PreTradeRiskRegistryConflict,
+    PreTradeRiskRegistryWriteResult,
+    persist_pretrade_risk_report,
+    pretrade_risk_report_id,
+)
 from digiquant.olympus.atlas.state import AtlasResearchState, PublishedArtifact, RebalancePayload
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     load_prior_book,
     publish_document,
 )
+from digiquant.olympus.hermes.allocation_contracts import PreTradeRiskReport
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
@@ -28,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 _SEED_NAV = 100.0
 _RISK_FIELDS_ENV = "OLYMPUS_POSITION_RISK_FIELDS"
+_PRETRADE_RISK_MODE_ENV = "OLYMPUS_PRETRADE_RISK_MODE"
 _ATR_STOP_MULT = 2.0
 _ATR_TARGET_MULT = 3.0
 _CONVICTION_FLOOR, _CONVICTION_CAP = -5.0, 5.0
@@ -303,6 +311,21 @@ def _enrich_positions(
             row["target_pct_gain"] = round(_ATR_TARGET_MULT * atr, 4)
 
 
+def _action_rationale_by_ticker(book: RebalancePayload | dict[str, Any]) -> dict[str, str]:
+    """Per-ticker rationale from H8 ``actions`` for ``positions`` booking (#2597)."""
+    out: dict[str, str] = {}
+    for action in book.get("actions") or []:
+        if not isinstance(action, dict):
+            continue
+        ticker = action.get("ticker")
+        if not isinstance(ticker, str) or not ticker.strip():
+            continue
+        rationale = str(action.get("rationale") or "").strip()
+        if rationale:
+            out[ticker.strip().upper()] = rationale
+    return out
+
+
 def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str, float]:
     """Normalize H8 ``recommended_portfolio`` into non-CASH positive weights."""
     recommended = book.get("recommended_portfolio") or []
@@ -327,9 +350,9 @@ def weights_from_sized_book(book: RebalancePayload | dict[str, Any]) -> dict[str
 
 def weights_fingerprint(weights: dict[str, float]) -> str:
     """Stable hash for idempotency comparisons."""
-    canonical = {k: round(v, 4) for k, v in sorted(weights.items())}
-    blob = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(blob.encode()).hexdigest()
+    from digiquant.olympus.hermes.allocation_hashes import weights_fingerprint as _weights_fp
+
+    return _weights_fp(weights)
 
 
 def _canonical_thesis_ids(
@@ -440,6 +463,11 @@ def book_portfolio(
         }
         for t, w in weights.items()
     ]
+    rationale_by_ticker = _action_rationale_by_ticker(book)
+    for row in pos_rows:
+        rationale = rationale_by_ticker.get(str(row["ticker"]).strip().upper())
+        if rationale:
+            row["rationale"] = rationale
 
     prior_book = load_prior_book(
         client, run_date, include_risk_fields=_position_risk_fields_enabled()
@@ -621,12 +649,18 @@ def publish_portfolio_brief(
     state: AtlasResearchState,
     book: RebalancePayload | dict[str, Any],
 ) -> PublishedArtifact:
-    """Publish operator brief — weights from H8 ``sized_book`` only."""
+    """Publish operator brief — weights from H8 ``sized_book`` only.
+
+    ``adjustments`` and ``requested_pct`` are excluded from the document payload:
+    H9 persists them on the portfolio ledger (#2768); carrying them into the
+    ``pm-rebalance`` document would duplicate lineage without a reader contract.
+    """
     date_str = state.run_date.isoformat()
+    payload = {k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}}
     return publish_document(
         client=client,
         document_key="pm-rebalance",
-        payload=dict(book),
+        payload=payload,
         doc_type="Rebalance Decision",
         run_type=state.run_type,
         title=f"PM Rebalance {date_str}",
@@ -805,12 +839,205 @@ def coherence_errors(state: AtlasResearchState, weights: dict[str, float]) -> li
     return errors
 
 
+class PreTradeRiskMode(StrEnum):
+    """Rollout knob for H9 PreTradeRiskReport hash validation (#2754 / WP9.4).
+
+    ``off`` — skip validation and persistence.
+    ``shadow`` — validate + persist when present; never block the book (default).
+    ``enforce`` — missing/unknown/mismatch rejects the commit before booking.
+    """
+
+    OFF = "off"
+    SHADOW = "shadow"
+    ENFORCE = "enforce"
+
+
+@dataclass(frozen=True)
+class PreTradeRiskValidation:
+    """Outcome of H9 report identity checks — never recomputes metrics."""
+
+    ok: bool
+    mode: PreTradeRiskMode
+    reason: str | None = None
+    report: PreTradeRiskReport | None = None
+    report_id: str | None = None
+
+
+def resolve_pretrade_risk_mode() -> PreTradeRiskMode:
+    """Read ``OLYMPUS_PRETRADE_RISK_MODE``; unknown values fall back to shadow."""
+    raw = os.environ.get(_PRETRADE_RISK_MODE_ENV, PreTradeRiskMode.SHADOW.value).strip().lower()
+    try:
+        return PreTradeRiskMode(raw)
+    except ValueError:
+        logger.warning(
+            "invalid %s=%r; using shadow (allowed: off|shadow|enforce)",
+            _PRETRADE_RISK_MODE_ENV,
+            raw,
+        )
+        return PreTradeRiskMode.SHADOW
+
+
+def validate_pretrade_risk_report(
+    state: AtlasResearchState,
+    weights: dict[str, float],
+    *,
+    mode: PreTradeRiskMode | None = None,
+) -> PreTradeRiskValidation:
+    """Validate attached PreTradeRiskReport identity against the book H9 will commit.
+
+    Checks presence, Pydantic parse (unknown/corrupt), recomputed content hash via
+    the contract validator, final-book fingerprint vs ``weights``, optional sized-book
+    stamp, and optional allocation-bundle hash. Never calls report builders.
+    """
+    effective = mode if mode is not None else resolve_pretrade_risk_mode()
+    if effective is PreTradeRiskMode.OFF:
+        return PreTradeRiskValidation(ok=True, mode=effective, reason="mode_off")
+
+    raw = state.phase_hermes.pre_trade_risk_report
+    if raw is None:
+        return PreTradeRiskValidation(
+            ok=False,
+            mode=effective,
+            reason="missing_pre_trade_risk_report",
+        )
+    if not isinstance(raw, dict):
+        return PreTradeRiskValidation(
+            ok=False,
+            mode=effective,
+            reason="unknown_pre_trade_risk_report",
+        )
+
+    try:
+        report = PreTradeRiskReport.model_validate(raw)
+    except Exception as exc:
+        return PreTradeRiskValidation(
+            ok=False,
+            mode=effective,
+            reason=f"unknown_pre_trade_risk_report:{type(exc).__name__}",
+        )
+
+    book_fp = weights_fingerprint(weights)
+    if report.final_book_weights_fingerprint != book_fp:
+        return PreTradeRiskValidation(
+            ok=False,
+            mode=effective,
+            reason="final_book_weights_fingerprint_mismatch",
+            report=report,
+        )
+
+    book = state.phase_hermes.sized_book or {}
+    stamped = book.get("pre_trade_risk_report_hash")
+    if stamped is not None and str(stamped) != report.report_content_hash:
+        return PreTradeRiskValidation(
+            ok=False,
+            mode=effective,
+            reason="pre_trade_risk_report_hash_mismatch",
+            report=report,
+        )
+
+    bundle_raw = state.phase_hermes.allocation_input_bundle
+    if isinstance(bundle_raw, dict):
+        bundle_hash = bundle_raw.get("bundle_content_hash")
+        if bundle_hash and str(bundle_hash) != report.allocation_input_bundle_hash:
+            return PreTradeRiskValidation(
+                ok=False,
+                mode=effective,
+                reason="allocation_input_bundle_hash_mismatch",
+                report=report,
+            )
+    book_bundle = book.get("allocation_input_bundle_hash")
+    if book_bundle and str(book_bundle) != report.allocation_input_bundle_hash:
+        return PreTradeRiskValidation(
+            ok=False,
+            mode=effective,
+            reason="allocation_input_bundle_hash_mismatch",
+            report=report,
+        )
+
+    report_id = str(pretrade_risk_report_id(content_hash=report.report_content_hash))
+    return PreTradeRiskValidation(
+        ok=True,
+        mode=effective,
+        report=report,
+        report_id=report_id,
+    )
+
+
+def persist_validated_pretrade_risk_report(
+    *,
+    client: SupabaseClient,
+    validation: PreTradeRiskValidation,
+    source_run_id: str,
+    ledger_commit_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Append-only persist after successful validation. Manifest status fields only."""
+    if validation.mode is PreTradeRiskMode.OFF:
+        return {
+            "pretrade_risk_registry_status": "skipped",
+            "pretrade_risk_registry_reason": "mode_off",
+            "pretrade_risk_registry_reports_written": 0,
+            "pretrade_risk_registry_reports_skipped": 0,
+        }
+    if not validation.ok or validation.report is None:
+        status = "rejected" if validation.mode is PreTradeRiskMode.ENFORCE else "shadow_invalid"
+        return {
+            "pretrade_risk_registry_status": status,
+            "pretrade_risk_registry_reason": validation.reason,
+            "pretrade_risk_registry_reports_written": 0,
+            "pretrade_risk_registry_reports_skipped": 0,
+        }
+    try:
+        result: PreTradeRiskRegistryWriteResult = persist_pretrade_risk_report(
+            client=client,
+            report=validation.report,
+            source_run_id=source_run_id,
+            ledger_commit_id=ledger_commit_id,
+        )
+    except PreTradeRiskRegistryConflict as exc:
+        return {
+            "pretrade_risk_registry_status": "conflict",
+            "pretrade_risk_registry_reason": str(exc)[:300],
+            "pretrade_risk_registry_reports_written": 0,
+            "pretrade_risk_registry_reports_skipped": 0,
+            "pretrade_risk_registry_conflicts": [str(exc)[:200]],
+            "pretrade_risk_report_id": validation.report_id,
+            "pretrade_risk_report_hash": validation.report.report_content_hash,
+        }
+    except Exception as exc:
+        logger.warning(
+            "h9 pretrade risk registry degraded (%s: %s)",
+            type(exc).__name__,
+            exc,
+        )
+        return {
+            "pretrade_risk_registry_status": "degraded",
+            "pretrade_risk_registry_reason": f"{type(exc).__name__}: {exc}"[:300],
+            "pretrade_risk_registry_reports_written": 0,
+            "pretrade_risk_registry_reports_skipped": 0,
+            "pretrade_risk_report_id": validation.report_id,
+            "pretrade_risk_report_hash": validation.report.report_content_hash,
+        }
+    status = "ok" if result.ok else "degraded"
+    return {
+        "pretrade_risk_registry_status": status,
+        "pretrade_risk_registry_reason": result.degraded_reason,
+        "pretrade_risk_registry_reports_written": result.reports_written,
+        "pretrade_risk_registry_reports_skipped": result.reports_skipped,
+        "pretrade_risk_registry_conflicts": list(result.conflicts),
+        "pretrade_risk_report_id": result.report_id or validation.report_id,
+        "pretrade_risk_report_hash": result.report_content_hash
+        or validation.report.report_content_hash,
+    }
+
+
 def persist_decision_log(*, client: SupabaseClient, state: AtlasResearchState) -> int:
     return persist_pending(client=client, state=state)
 
 
 __all__ = [
     "BookedPortfolio",
+    "PreTradeRiskMode",
+    "PreTradeRiskValidation",
     "book_portfolio",
     "carried_held_tickers",
     "coherence_errors",
@@ -820,8 +1047,11 @@ __all__ = [
     "manifest_commit_seq",
     "manifest_document_key",
     "persist_decision_log",
+    "persist_validated_pretrade_risk_report",
     "publish_hermes_documents",
     "publish_portfolio_brief",
+    "resolve_pretrade_risk_mode",
+    "validate_pretrade_risk_report",
     "resolve_prior_commit",
     "save_commit_manifest",
     "weights_fingerprint",

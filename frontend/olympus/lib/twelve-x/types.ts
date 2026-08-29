@@ -419,6 +419,62 @@ export interface FxTradeIdeaRow {
 }
 
 /**
+ * `fx_idea_eval` — successor-clock idea direction vs D-1 closes.
+ * Lifecycle rows use horizon_days=0; legacy horizon rows are not fetched.
+ */
+export interface FxIdeaEvalRow {
+  run_date: string;
+  rank: number;
+  horizon_days: number;
+  pair: string;
+  direction: string;
+  status: 'open' | 'resolved' | 'missing_rates' | string;
+  entry_date: string | null;
+  exit_date: string | null;
+  entry_fix: number | null;
+  exit_fix: number | null;
+  /** Legacy alias of hold_return on lifecycle rows. */
+  ret: number | null;
+  hold_return: number | null;
+  sigma_entry: number | null;
+  /** Legacy alias of directional_win on lifecycle rows. */
+  hit: boolean | null;
+  directional_win: boolean | null;
+  significant_hit: boolean | null;
+  n_sessions: number;
+  as_of: string;
+}
+
+/**
+ * `fx_consensus_eval` — consensus jump stats + currency 5d accuracy.
+ * PRIMARY KEY (run_date, currency, timeframe, weighted). anon-readable.
+ */
+export interface FxConsensusEvalRow {
+  run_date: string;
+  currency: string;
+  timeframe: string;
+  weighted: boolean;
+  score: number;
+  tilt: number;
+  agreement: number;
+  n_brokers: number;
+  n_brokers_prev: number | null;
+  delta_score: number | null;
+  delta_tilt: number | null;
+  delta_agreement: number | null;
+  delta_score_pred: number | null;
+  clip_flag: boolean | null;
+  sign_flip: boolean | null;
+  abs_delta_score: number | null;
+  accuracy_status: 'open' | 'scored' | 'missing_rates' | 'n/a' | string;
+  currency_ret_5d: number | null;
+  sigma_entry: number | null;
+  hit_5d: boolean | null;
+  significant_hit_5d: boolean | null;
+  as_of: string;
+}
+
+/**
  * Assembled twelve-x consensus × PMT Smart Bias join for one G10 currency (P5).
  * Produced only by `assembleConsensusDivergence` / `getConsensusDivergence` — never
  * as a standalone smart-bias row (spec D6).

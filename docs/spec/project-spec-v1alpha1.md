@@ -1,7 +1,7 @@
 # DigiProject Spec — v1alpha1
 
 **Status:** Draft  
-**Reference implementation:** `projects/sitaas/` (gitignored; canonical local copy)
+**Reference implementation:** `projects/client-pilot/` (gitignored; canonical local copy)
 
 ---
 
@@ -32,7 +32,7 @@ digigraph loads the project config from:
 # All fields are optional; defaults shown in comments.
 
 project:
-  name: string            # Short identifier, e.g. "sitaas" (default: "default")
+  name: string            # Short identifier, e.g. "client-pilot" (default: "default")
   description: string     # Human-readable description (default: "")
   version: string         # SemVer, e.g. "0.1.0" (default: "0.0.0")
 
@@ -67,7 +67,7 @@ agents:
 
 run_data_dir: string      # Absolute path to session dataset storage (default: null — disables digistore).
                           # In Docker: mount a named volume here (e.g. /data/run).
-                          # When set, enables the sitaas_rag skill:
+                          # When set, enables the project_rag skill:
                           #   digistore_list, digistore_profile, visualization_agent,
                           #   analysis_agent, data_prep_agent, data_manipulation_agent,
                           #   data_engineer_agent (+ DIGI_ALLOW_CODE_EXEC=1 for data_engineer).
@@ -230,13 +230,13 @@ destination.
 
 ---
 
-## Reference: SITAAS v1alpha1
+## Reference: Client Pilot v1alpha1
 
 ```yaml
-# projects/sitaas/config.yaml (gitignored — local only)
+# projects/client-pilot/config.yaml (gitignored — local only)
 project:
-  name: sitas
-  description: "Sitaas: orchestration agent with digisearch document context."
+  name: client-pilot
+  description: "Client pilot: orchestration agent with digisearch document context."
   version: "0.1.0"
 
 agents:
@@ -264,4 +264,4 @@ This config activates:
 - Multi-index discovery (via `indexes_dir`)
 - MCP server
 
-See `digigraph/AGENTS.md` → SITAAS / Project-Mode Capabilities for the full tool set table.
+See `digigraph/AGENTS.md` → Project-Mode Capabilities for the full tool set table.

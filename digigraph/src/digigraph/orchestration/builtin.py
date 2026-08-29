@@ -1231,7 +1231,7 @@ def _register_tools() -> None:
         )
 
 
-def _sitaas_rag_tool_names() -> list[str]:
+def _project_rag_tool_names() -> list[str]:
     names = [
         "digisearch",
         "digisearch_fetch_all",
@@ -1256,8 +1256,8 @@ def _register_skills() -> None:
         when=lambda ctx: _digisearch_available(ctx),
     )
     register_skill(
-        "sitaas_rag",
-        _sitaas_rag_tool_names(),
+        "project_rag",
+        _project_rag_tool_names(),
         when=lambda ctx: ctx.has_run_data_dir,
     )
     register_skill(

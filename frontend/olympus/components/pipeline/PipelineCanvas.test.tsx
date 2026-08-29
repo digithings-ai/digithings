@@ -31,11 +31,16 @@ import PipelineCanvas, {
   focusRectForTarget,
   mobileWalkthroughScrollTarget,
   movePipelineWalkthrough,
+  planWalkthroughSelection,
+  walkthroughModeFromViewport,
   walkthroughNavigationTarget,
 } from './PipelineCanvas';
 import type { PipelineDayData } from '@/lib/pipeline-graph-data';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 import type { LaidOutNode } from '@/lib/pipeline-layout';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const emptyDay: PipelineDayData = {
   fanoutCounts: {},
@@ -86,7 +91,8 @@ describe('PipelineCanvas', () => {
 
     expect(html).toContain('Previous pipeline section');
     expect(html).toContain('Next pipeline section');
-    expect(html).toContain('1 of 23');
+    // +1 vs pre-#1945 baseline: Inputs Attention plan leaf
+    expect(html).toContain('1 of 24');
     expect(buildPipelineWalkthrough(emptyDay).map((node) => node.label)).toContain('Risk sizing');
   });
 
@@ -99,7 +105,7 @@ describe('PipelineCanvas', () => {
     };
     const nodes = buildPipelineWalkthrough(day);
 
-    expect(nodes).toHaveLength(24);
+    expect(nodes).toHaveLength(25);
     expect(nodes.find((node) => node.documentKey === 'alt-onchain-positioning')).toBeDefined();
     expect(nodes.some((node) => node.label === 'Alt-data 2')).toBe(false);
   });
@@ -120,7 +126,7 @@ describe('PipelineCanvas', () => {
 
     expect(html).toContain('Previous pipeline section');
     expect(html).toContain('Next pipeline section');
-    expect(html).toContain('1 of 23');
+    expect(html).toContain('1 of 24');
     expect(html).toContain('Preflight / market data');
     expect(html).toContain('md:hidden');
     expect(html).toContain('fixed inset-x-0 bottom-0');
@@ -132,9 +138,9 @@ describe('PipelineCanvas', () => {
   });
 
   it('clamps full walkthrough keyboard navigation at both ends', () => {
-    expect(movePipelineWalkthrough(0, -1, 23)).toBe(0);
-    expect(movePipelineWalkthrough(0, 1, 23)).toBe(1);
-    expect(movePipelineWalkthrough(22, 1, 23)).toBe(22);
+    expect(movePipelineWalkthrough(0, -1, 24)).toBe(0);
+    expect(movePipelineWalkthrough(0, 1, 24)).toBe(1);
+    expect(movePipelineWalkthrough(23, 1, 24)).toBe(23);
   });
 
   it('opens the selected walkthrough stop during desktop arrow traversal', () => {
@@ -155,6 +161,77 @@ describe('PipelineCanvas', () => {
       node: nodes[1],
       openDetail: false,
     });
+  });
+
+  it('maps md+ viewports to desktop open and narrower viewports to mobile no-open', () => {
+    expect(walkthroughModeFromViewport(true)).toBe('desktop');
+    expect(walkthroughModeFromViewport(false)).toBe('mobile');
+  });
+
+  it('desktop walkthrough steps expand the stop and open detail', () => {
+    const nodes = buildPipelineWalkthrough(emptyDay);
+    const target = walkthroughNavigationTarget(nodes, 0, 1, 'desktop');
+    expect(target).not.toBeNull();
+    const plan = planWalkthroughSelection(target!.node, target!.openDetail);
+
+    expect(plan.activateDetail).toBe(true);
+    expect([...plan.expansion.expandedStages]).toEqual([target!.node.stageId]);
+    expect(plan.focusTarget).toEqual(
+      target!.node.kind === 'stage'
+        ? { kind: 'stage', stageId: target!.node.stageId }
+        : { kind: 'node', nodeId: target!.node.id },
+    );
+  });
+
+  it('mobile walkthrough steps expand the stop without opening detail', () => {
+    const nodes = buildPipelineWalkthrough(emptyDay);
+    const leaf = nodes.find((node) => node.kind === 'substep' && !node.id.includes('alt-data'));
+    expect(leaf).toBeDefined();
+    const index = nodes.indexOf(leaf!);
+    const target = walkthroughNavigationTarget(nodes, Math.max(0, index - 1), 1, 'mobile');
+    expect(target).not.toBeNull();
+    const plan = planWalkthroughSelection(target!.node, target!.openDetail);
+
+    expect(plan.activateDetail).toBe(false);
+    expect(plan.expansion.expandedStages.has(target!.node.stageId)).toBe(true);
+  });
+
+  it('expands fan-out parents on both desktop and mobile without changing open/no-open', () => {
+    const day: PipelineDayData = {
+      fanoutCounts: { 'alt-data': 1 },
+      fanoutKeys: { 'alt-data': ['alt-onchain-positioning'] },
+      presentKeys: new Set(['alt-onchain-positioning']),
+      artifacts: [],
+    };
+    const nodes = buildPipelineWalkthrough(day);
+    const fanoutParent = nodes.find((node) => node.id === 'research:alt-data');
+    expect(fanoutParent).toBeDefined();
+
+    const desktop = planWalkthroughSelection(fanoutParent!, true);
+    const mobile = planWalkthroughSelection(fanoutParent!, false);
+
+    expect(desktop.activateDetail).toBe(true);
+    expect(mobile.activateDetail).toBe(false);
+    expect([...desktop.expansion.expandedFanouts]).toEqual(['research:alt-data']);
+    expect([...mobile.expansion.expandedFanouts]).toEqual(['research:alt-data']);
+    expect(desktop.focusTarget).toEqual({ kind: 'fanout', nodeId: 'research:alt-data' });
+    expect(mobile.focusTarget).toEqual({ kind: 'fanout', nodeId: 'research:alt-data' });
+  });
+
+  it('wires desktop toolbar to open-mode walkthrough and mobile dock to no-open', () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'PipelineCanvas.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain("onClick={() => walkPipeline(-1, 'desktop')}");
+    expect(source).toContain("onClick={() => walkPipeline(1, 'desktop')}");
+    expect(source).toContain("onClick={() => walkPipeline(-1, 'mobile')}");
+    expect(source).toContain("onClick={() => walkPipeline(1, 'mobile')}");
+    // Explicit Open control still activates detail on the current stop.
+    expect(source).toContain(
+      '&& selectWalkthroughNode(activeWalkthroughNode, resolvedWalkthroughIndex)}',
+    );
   });
 
   it('synchronizes a selected node or artifact with the walkthrough', () => {

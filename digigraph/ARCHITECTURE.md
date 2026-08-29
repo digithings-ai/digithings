@@ -30,6 +30,7 @@ The following is built and functional as of this architecture review (March 2026
 | FastAPI HTTP app | Built | `server.py` |
 | LangGraph `StateGraph[WorkflowState]` | Built | `graph/graph.py`, `graph/state.py` |
 | Research subgraph (LLM + tool loop) | Built | `graph/research.py`, `graph/research_subgraph.py` |
+| Two-tier context compaction | Built | `compaction.py` (wired from `graph/research.py`, `graph/research_agent.py`) |
 | Research brief builder | Built | `graph/research_brief.py`, `research_brief_models.py` |
 | Backtest node (digiquant jobs + fallback) | Built | `graph/nodes.py` |
 | Optimize node | Built | `graph/nodes.py` |
@@ -70,7 +71,7 @@ The following is built and functional as of this architecture review (March 2026
 | `GET` | `/health` | None | Unlimited | Legacy health check (back-compat; prefer `/healthz`) |
 | `GET` | `/healthz` | None | Unlimited | Liveness probe — returns `{"ok": true}`; see AGENTS.md "Liveness vs status" |
 | `POST` | `/workflow` | digikey JWT (optional) | 10 req/min/IP | digiclaw custom skill; body: `WorkflowRequest` |
-| `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `sitaas-rag` |
+| `GET` | `/v1/models` | digikey JWT (optional) | 30 req/min/IP | OpenAI model list; returns `digigraph-rag` |
 | `GET` | `/v1/model-info` | digikey JWT (optional) | 30 req/min/IP | Current model + mode |
 | `POST` | `/v1/chat/completions` | digikey JWT (optional) | 10 req/min/IP | OpenAI chat completions; body: `ChatCompletionRequest`; supports `stream: true` |
 | `GET` | `/v1/debug/input_messages` | digikey JWT | 30 req/min/IP | Last N request summaries; **requires `DIGI_ENABLE_DEBUG_ENDPOINTS=1`** |
@@ -106,7 +107,7 @@ The MCP server uses FastAPI's `TestClient` internally for `chat` and `thread_sta
 
 When `stream: true` in `POST /v1/chat/completions`:
 
-1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:245`).
+1. A background `threading.Thread` runs `run_digigraph_workflow_streaming` with a `Queue` as the event sink (`workflow.py:340`). The target is wrapped in `contextvars.copy_context().run(...)` taken at spawn, because a bare `Thread` starts with an **empty** context: without the copy every per-request `ContextVar` — including all three BYOK bindings `push_byok_header` sets (`llm_auth.py`) — reads as its default inside the worker, so a streaming BYOK request was answered on the operator's key and the operator's model while the user's key was shown as active. The copy is taken in the generator frame, which still holds the bindings; the worker has no `Request` to re-read them from. Because the copy outlives the request — the thread is neither daemonic nor joined, and `byok_header_context`'s `finally` runs `pop_byok` as soon as streaming starts, resetting the *parent's* vars only — the worker calls `clear_byok_bindings()` in its own `finally`, so the user's key does not stay resident in a context copy after the request it came from is gone. (Distinct from the `ThreadPoolExecutor` note in §4.0 — same root cause, different subsystem, and Olympus passes labels explicitly instead.)
 2. The HTTP response is a `StreamingResponse` whose generator consumes the queue and yields SSE chunks.
 3. Event types produced by the workflow thread:
    - `tool_call` / `tool_result` — formatted with the stream formatter (neutral or Open WebUI `<details>` style)
@@ -119,7 +120,7 @@ When `stream: true` in `POST /v1/chat/completions`:
      (with `stream_deltas`, content deltas were already emitted; without streaming,
      `round_boundary` is the only callback that exposes that narration).
    - `done` — terminates the generator loop
-4. If the client disconnects mid-stream, the generator raises an exception; the background thread continues running until it completes naturally. There is no cancellation token or thread interrupt mechanism — see Section 6 (Security Analysis).
+4. If the client disconnects mid-stream, the generator sets the `threading.Event` it passed the worker (`server.py`, on both `GeneratorExit` and the generator's `finally`). The worker polls it between graph nodes, and — since the event queue is bounded and the generator stops draining it on disconnect — every event the worker emits goes through `workflow._emit_event`, which drops the event rather than blocking once the event is set. Without that, a full queue would wedge the worker *inside* a node forever, so the bound below would not hold at all. Overshoot is therefore bounded by one node — not zero, since there is still no interrupt injected into a node already in flight. See §6.6.
 
 ---
 
@@ -131,7 +132,12 @@ When `stream: true` in `POST /v1/chat/completions`:
 telemetry buffer for an Olympus process. `digillm` contributes terminal model/search events;
 `graph/research_agent.py` times actual tool execution. `call_context(node_run_id, phase, operation,
 document_key)` labels model/search calls, while the tool wrapper also passes display labels
-explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers.
+explicitly because `ContextVar` state does not propagate into `ThreadPoolExecutor` workers
+on its own. That is a property of the pool, not of Olympus: the two pools on the *credential*
+path (§8.4, `planning/executor.py` and `digillm.run_tools`) submit through
+`contextvars.copy_context().run(...)` instead, which is the alternative to threading the value
+through by hand. Olympus keeps the explicit labels — passing a display string is cheaper than
+a context copy and does not silently widen what a worker inherits.
 
 `RunCallEvent` is a frozen Pydantic v2 model. It stores fixed labels, status, duration, retries,
 usage totals, source count, and code-generated shape summaries. All public text is length-bounded.
@@ -248,12 +254,14 @@ real node executions rather than compiled graph nodes.
 | `error` | `str \| None` | Terminal error; stops further node execution |
 | `stored_datasets` | `dict[str, dict]` | Ref → profile map (survives across turns via checkpointer) |
 | `workflow_profile` | `str` | Active profile (`full_stack`, `research_rag`, `quant_backtest`, `plan_execute`) |
-| `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. |
-| `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map) |
-| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map |
+| `digisearch_index` | `str \| None` | Per-request digisearch index override (`X-Digi-Corpus-Index` / tenant map). **Must** be declared — LangGraph drops undeclared keys. `_initial_graph_state` writes this (and `vault_path_prefix` / `research_system_prompt_override` / `digi_subject`) **unconditionally including `None`**, so a map-driven clear for an unmapped tenant actually clears checkpointed state instead of leaving the prior turn's corpus sticky. |
+| `vault_path_prefix` | `str \| None` | Per-request digivault path prefix (`X-Digi-Vault-Prefix` / tenant map); same unconditional-None write as `digisearch_index`. |
+| `research_system_prompt_override` | `str \| None` | Optional research system prompt from tenant corpus map; same unconditional-None write as `digisearch_index`. |
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. See `digigraph.languages`. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
 | `supervisor_route` | `str \| None` | Next route chosen by supervisor |
+| `_compaction_event` | `dict \| None` | Lean two-tier compaction event (#399); originals in session workspace. **Must** be declared — LangGraph drops undeclared keys. |
+| `llm_messages` | `list[dict] \| None` | Compacted LLM-facing transcript for multi-turn research; optional |
 
 ### 4.2 WorkflowRequest (`models.py`)
 
@@ -310,10 +318,10 @@ OpenAI-compatible body for `POST /v1/chat/completions`:
 
 | Field | Type | Notes |
 |-------|------|-------|
-| `model` | `str` | Default `"sitaas-rag"`; not used for routing (LiteLLM handles it) |
+| `model` | `str` | Default `"digigraph-rag"`; not used for routing (LiteLLM handles it) |
 | `messages` | `list[ChatMessage]` | Role + content; content coerced from AI SDK part lists. Flattened into the workflow `prompt` via `chat_prompt.messages_to_workflow_prompt` — **full user+assistant history** (multi-turn), not user-only |
 | `stream` | `bool` | SSE streaming |
-| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=sitaas-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
+| `openwebui_format` | `bool` | Open WebUI `<details>` tool blocks. Enabled only by this field or `X-Response-Format: openwebui` — **not** by `model=digigraph-rag`. Opt out via `X-Suppress-Tool-Stream` or `X-Response-Format: plain\|neutral\|none\|digichat` |
 | `session_id` | `str \| None` | Conversation isolation |
 | `allowed_tools` | `list[str] \| None` | Tool allowlist for this request |
 | `require_tool_calls` | `bool \| None` | Also accepted via `X-Require-Tool-Calls` header; floor semantics, see 4.1/4.2 |
@@ -340,7 +348,7 @@ digigraph/src/digigraph/
 ├── digistore.py                 Session-scoped named dataset store (filesystem JSON)
 ├── run_storage.py               Lower-level session path helpers, search result writer
 ├── mcp_server.py                FastMCP server exposing workflow, chat, thread_state, tool lists
-├── audit.py                     JSONL audit log writer (workflow_start, workflow_end, tool_denied)
+├── audit.py                     Thin audit_log → digibase.audit.emit_event (workflow_start/end, tool_denied)
 ├── trace_events.py              TraceEventV1, RagSourceItem, rag_sources_from_results
 ├── tool_policy.py               Allowed tool name resolution (request → project config → env)
 ├── trading_profile.py           optimization_constraints_dict_from_profile
@@ -417,7 +425,7 @@ Three-layer structure:
 
 1. **Primitives** (`tools/`): stateless callables not exposed to the LLM directly.
 2. **Orchestrator tools** (`orchestration/`): `(name, schema, handler, tags)`. Schema may be a static dict or a `SchemaFactory(context) -> dict` for context-dependent schemas (e.g. digisearch tools fetched from the vertical manifest). Registered once at module import via `_register_tools()` at the bottom of `builtin.py`.
-3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `sitaas_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
+3. **Skills** (`orchestration/registry.py`): named bundles of tool names with a `when(context) -> bool` predicate. The `search` skill activates only when `DIGISEARCH_URL` is set. The `project_rag` skill activates only when `run_data_dir` is set. The `digivault` skill (`digivault_search_notes` and `digivault_get_note`, the locate-then-load pair) activates only when `DIGIVAULT_URL` is set.
 
 The registry is a module-level dict (`_tools`, `_skills` in `registry.py`). It is global to the process — all requests share the same registry. `register_tool` raises `ValueError` on duplicate names, so plugins loaded via `load_entrypoint_tools()` must use unique names.
 
@@ -440,14 +448,14 @@ Process-wide singleton via `get_checkpointer()` in `graph/graph.py:108`:
 
 | `DIGI_CHECKPOINTER` value | Backend | Notes |
 |--------------------------|---------|-------|
-| unset + project active | `SqliteSaver` | **Default when `digiproject.yaml` is present** (SITAAS / project mode); survives restarts |
+| unset + project active | `SqliteSaver` | **Default when `digiproject.yaml` is present** (project mode); survives restarts |
 | unset + no project | `MemorySaver` (in-process dict) | Default standalone mode; lost on restart |
 | `memory` | `MemorySaver` (in-process dict) | Explicit; lost on restart |
 | `sqlite` | `SqliteSaver` | File path via `DIGI_CHECKPOINTER_SQLITE_URI` |
 | `postgres` | `PostgresSaver` | Connection string via `DIGI_CHECKPOINTER_POSTGRES_URI` |
 | `none` / `off` / `0` / `false` | None (no checkpointing) | Breaks multi-turn and thread APIs |
 
-**Project-mode default (SITAAS):** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
+**Project-mode default:** When `get_checkpointer()` is called and `DIGI_CHECKPOINTER` is unset, the function probes for an active project config via `_resolve_config_path()`. If a `digiproject.yaml` is found, it defaults to `sqlite` so multi-turn conversation state persists across HTTP requests. The env var always takes precedence over this auto-detection.
 
 #### 5.5.1 High availability (multi-replica) — REM-099
 
@@ -516,7 +524,7 @@ HTTP request (stream=true)
         ▼
 _stream_completions_progressive (server.py generator)
         │
-        ├── spawns Thread → run_digigraph_workflow_streaming(req, event_queue)
+        ├── spawns Thread(ctx.run) → run_digigraph_workflow_streaming(req, event_queue)
         │                           │
         │                           ├── defines stream_callback(event_type, data) closure
         │                           │     (content/tool_call/round_boundary/tool_result handling)
@@ -577,6 +585,8 @@ Three sources merged in `tool_policy.py`:
 When an allowlist is active, `execute()` in `registry.py:106` rejects denied tools with an audit log entry (`tool_denied` event). The schema-level filter in `get_tools()` also removes denied tools from the LLM context, preventing the model from attempting to call them.
 
 An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. `None` means unrestricted.
+`research_node` deserializes via `tool_policy.frozen_from_state_list` so an empty list is never
+coerced to unrestricted by a falsy check.
 
 #### 6.2.1 Tool Choice Requirement
 
@@ -608,7 +618,7 @@ degrades today.
 
 ### 6.3 Code Execution Gate
 
-`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `sitaas_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
+`policy.code_execution_allowed()` gates **execution**, not tool registration. `data_engineer_agent` is always registered in `orchestration/builtin.py` but `execute_python_on_datasets()` in `tools/analytics/execute_python.py` returns an error when `DIGI_ALLOW_CODE_EXEC` is unset. The `project_rag` skill only exposes the tool when `run_data_dir` is set; callers still need `DIGI_ALLOW_CODE_EXEC=1` for code to run.
 
 ### 6.4 Thread State Access
 
@@ -622,7 +632,11 @@ degrades today.
 
 ### 6.6 Streaming Cancellation Gap
 
-When a client disconnects from an SSE stream, the background thread (`run_digigraph_workflow_streaming`) continues executing until it completes or errors. There is no cancellation mechanism — no `threading.Event`, no exception injection into the thread. Under high load, many orphaned workflow threads can accumulate, each holding LLM connections and potentially making outbound HTTP calls to digisearch and digiquant. The `Queue.get()` in `_stream_completions_progressive` will eventually raise a `GeneratorExit` exception (when the generator is garbage-collected), which surfaces as a logged exception in the generator but does not stop the background thread.
+When a client disconnects from an SSE stream, the background thread (`run_digigraph_workflow_streaming`) continues executing until it completes or errors. A cooperative `threading.Event` does bound this: `_stream_completions_progressive` sets it on `GeneratorExit` (raised into the generator at its `yield` when the client goes away) and again in its `finally`, and the worker checks it between graph nodes.
+
+Two things are needed for that bound to be real, and only the first is obvious. The generator stops draining the queue as soon as the event is set, and the queue is bounded (`maxsize=256`) — so the worker's *writes* have to be cancellation-aware too, or the very first `put` onto a full queue blocks on a reader that will never return. That blocks inside a node, so the between-nodes poll is never reached, the thread is neither daemonic nor joined, and its `finally` — which clears the request's BYOK credentials from the thread's context copy — never runs. `workflow._emit_event` closes that: it polls with a timeout and drops the event once the event is set, so a disconnect ends the worker at its next node boundary instead of leaking a thread holding a user's API key for the lifetime of the process.
+
+What is still missing is preemption — no exception is injected into a node already running, so a single long LLM call or tool round runs to completion after the client is gone. Under load, workflow threads can therefore still accumulate for up to one node each, each holding LLM connections and potentially making outbound HTTP calls to digisearch and digiquant.
 
 ### 6.7 Rate Limiter Trust Boundary
 
@@ -709,9 +723,16 @@ This provides meaningful speedup for repeated identical prompts (e.g. heartbeat 
 
 Four modes — **`llm_mode` is access/cost policy, not a product catalog**: `free` (resolved model must be free-tier: OpenRouter `:free` or local Ollama), `test` (minimal), `medium` (balanced), `best` (largest). The project config YAML `agents.llm_mode` overrides `DIGI_LLM_MODE`. **Actual model id** comes from (in order) `agents.llm` → `DIGI_LLM_PROVIDER`/`DIGI_LLM_MODEL` → LiteLLM alias / deploy config — **not** a shared `model_modes.yaml` `free:` pin (OpenRouter free roster rotates). `llm_mode: free` without an explicit pin raises a clear error (`set agents.llm or DIGI_LLM_MODEL`); non-`:free` (non-Ollama) pins are refused. Having `OPENROUTER_API_KEY` set alone does **not** auto-swap digigraph chat onto paid Olympus models — Olympus/Atlas use `get_model_for_phase()`.
 
-**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic, x.ai. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`. This allowlist (`_BYOK_BASE_URLS` / `BYOK_ROUTABLE_PROVIDERS` / `BYOK_MODEL_REQUIRED_PROVIDERS`) is no longer a hand-edited Python dict — it loads from `config/byok-providers.json` once at import time, and a missing or malformed catalog raises there, crashing the process at startup rather than silently 400ing every BYOK request. Path resolution honors `DIGI_CONFIG_PATH` when set (falling back to a `__file__`-relative repo path otherwise), and the same catalog file is vendored into `infra/digichat-release/config/byok-providers.json` so the Cloudflare stack image and the Profile A self-host compose target — which bake/mount `infra/digichat-release/config` rather than the repo-root `config/` — get it too; a test (`TestByokCatalogVendoredCopy`) pins the two copies as parsed-JSON-equal (not byte-for-byte — a whitespace reformat of either file would still pass) so they cannot silently diverge in content.
+**BYOK spend path** (`llm_auth.py`): user keys via `X-BYOK-Key` / `X-BYOK-Provider` / `X-BYOK-Model` are spent only for routable providers — OpenAI, OpenRouter, Gemini, Anthropic, x.ai. Anthropic uses Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1`) with the **user's** key (never operator fallthrough). Non-OpenAI BYOK requires `X-BYOK-Model`. This allowlist (`_BYOK_BASE_URLS` / `BYOK_ROUTABLE_PROVIDERS` / `BYOK_MODEL_REQUIRED_PROVIDERS`, plus `_BYOK_MODEL_EXAMPLES` — `_load_byok_catalog` returns three of the four and derives `BYOK_ROUTABLE_PROVIDERS` from the first) is no longer a hand-edited Python dict — it loads from `config/byok-providers.json` once at import time, and a missing or malformed catalog raises there, crashing the process at startup rather than silently 400ing every BYOK request. **One field is exempt from fail-loud, deliberately:** each entry's optional `fallbackModels` is read for exactly one purpose — the `(e.g. …)` parenthetical in `byok_default_model_refusal` — so a bad value there cannot break routing, and `_clean_examples` strips it, drops what it cannot use, warns, and carries on. Fail-loud is there to stop a broken catalog from 400ing every request; escalating a cosmetic parenthetical to a startup crash buys nothing and would newly break an operator catalog carrying `fallbackModels: null`, which imported fine while the key was an untyped extra. It strips because this value is quoted verbatim into user-facing copy — as the entry `id`s are by `byok_provider_unsupported`, but those `_id_non_empty` already strips. Do not "harden" it into a raise — `test_a_malformed_example_list_does_not_crash_startup` pins the tolerance and `test_example_is_stripped_before_it_reaches_user_facing_copy` the strip. Path resolution honors `DIGI_CONFIG_PATH` when set (falling back to a `__file__`-relative repo path otherwise), and the same catalog file is vendored into `infra/digichat-release/config/byok-providers.json` so the Cloudflare stack image and the Profile A self-host compose target — which bake/mount `infra/digichat-release/config` rather than the repo-root `config/` — get it too; a test (`TestByokCatalogVendoredCopy`) pins the two copies as parsed-JSON-equal (not byte-for-byte — a whitespace reformat of either file would still pass) so they cannot silently diverge in content.
 
 `config/byok-providers.json` is the source of truth for the BYOK allowlist **specifically** — i.e. which providers a user-supplied key is actually routed to and spent on. It is not a general provider-base-URL registry for the monorepo: `digillm`'s own `_EXTERNAL_PROVIDERS` table (`digillm/src/digillm/client.py`) is a deliberately separate table serving a different, non-BYOK concern — routing on the *operator's* keys — and `digillm` is a standalone installable library that must not reach for repo-root config. The two tables are not kept in lockstep and are not expected to be: `_EXTERNAL_PROVIDERS` has no `openai` entry at all (operator OpenAI calls don't go through this table), and its `anthropic` base URL still carries a trailing slash that the BYOK catalog deliberately dropped — harmless on both sides, since `digillm/src/digillm/client.py`'s own base-URL comparison strips trailing slashes and the OpenAI-compatible client normalizes it internally regardless — but proof the two lists already diverge in fields where it happens not to matter. Do not "fix" `_EXTERNAL_PROVIDERS` to import from the BYOK catalog.
+**`X-BYOK-Model` cannot redirect the bill.** The three headers are independent strings from the caller, so a request could declare `X-BYOK-Provider: openai`, paste a real OpenAI key, and pass `X-BYOK-Model: gemini/gemini-2.5-flash`. Every *registered* provider's slug is re-prefixed to itself before routing and so cannot carry a foreign prefix, but `openai` is deliberately absent from `_EXTERNAL_PROVIDERS` (its canonical slug is bare), so an `openai/`-declared request was the one shape where a foreign prefix survived all the way to `digillm`, which then built a Gemini client on the **operator's** `GEMINI_API_KEY`. The user's key was accepted, shown as active, and never spent. Two predicates in `llm_auth.py` close it: `byok_routable_model(provider, model)` returns the exact slug that will be routed (it strips the provider's own prefix to a **fixpoint**, so applying it twice never doubles a prefix *and* the verdict cannot depend on how many self-prefixes a caller stacked — that invariance is what keeps the middleware, which reads the raw header, and `_apply_byok_model_override`, which reads the once-stripped slug, from disagreeing at prefix depth two), and `byok_model_routes_elsewhere(provider, model)` is true when that routable form leads with a *registered* provider other than the declared one. The rule is a post-condition on the routable form, not prefix equality, because OpenRouter's shipped `anthropic/claude-sonnet-4` vendor sub-slug is legitimate — `openrouter` is registered, so its slug becomes `openrouter/anthropic/…` and the head stays `openrouter`. Membership is read from `digillm`'s registry via `is_registered_provider`, not the BYOK catalog, because the registry is what decides which env-keyed client gets built; `openai`'s absence from it falls out of the rule rather than being special-cased. A mismatch is refused at the middleware with HTTP 400 `byok_model_provider_mismatch` rather than silently answered on the wrong credential, and `_apply_byok_model_override` independently discards a foreign slug so the invariant holds for any caller that reaches the resolver without passing the middleware. Discarding means falling through to the *no-header* branch, not returning the operator-resolved model: those were the same thing until the omission case below gave the no-header branch a refusal of its own, and returning the resolved model here would have routed around it. The warning names the provider only — the model slug is contractually never logged (see `_byok_model_override`).
+
+**No `X-BYOK-Model` is not consent to bill the operator.** The rule above governs a model the caller *named*; omitting the header is the other half of the same invariant. With a key bound and no model, `get_model_for_mode()` used to hand back this deployment's tier default unchanged — and on the shipped release config (`infra/digichat-release/config/model_modes.yaml`) every tier is an `openrouter/…` slug, so the answer was billed to the operator's `OPENROUTER_API_KEY` while the user's key sat bound and displayed as active. That is the same mis-billing as a foreign `X-BYOK-Model`, arrived at by saying nothing (#2490). The refusal is `byok_default_model_provider_mismatch` (HTTP 400) at the middleware and a `ValueError` from `_apply_byok_model_override` for in-process callers — the phase-model path in particular never meets the middleware. It is a **refusal, not a substitution**: digigraph does not pick some default `gpt-4o-mini` on the caller's behalf, because silently choosing a model the user did not choose is the same class of surprise as silently choosing a key. The remediation the message advertises is to send `X-BYOK-Model`.
+
+The operator default is tested **un-normalized**, which is why `byok_operator_model_routes_elsewhere` exists alongside `byok_model_routes_elsewhere` rather than the latter being reused. The caller-facing predicate first runs the slug through `byok_routable_model`, which re-prefixes it to the declared provider — correct for a header the user sent, and fatal here: normalizing `gemini/gemini-2.5-flash` under a declared `openrouter` yields `openrouter/gemini/…`, whose head is `openrouter` by construction, so the verdict would be unconditionally `False` for every registered provider. Both entry points share one core rule (`_routes_to_another_provider`); only the normalization differs. `operator_default_model()` resolves the deployment default with **no** BYOK override applied, so the middleware's question does not depend on middleware ordering. It does not fail open — it *raises* when the default cannot be resolved at all (e.g. `llm_mode: free` with no pin). The fail-**open** is one level up, in the middleware helper `_byok_default_routes_elsewhere` (`server.py`), which catches `_LLM_PROBE_ERRORS` and returns `False`, because a *server* misconfiguration must not turn into a 400 blaming the caller's key. That catch is not partial: both of `operator_default_model`'s raise sites raise `ValueError` (`_FREE_MODE_MODEL_REQUIRED` and `_refuse_paid_in_free_mode`), which is in `_LLM_PROBE_ERRORS`. Nothing escapes through that open failure, by two mechanisms rather than one. On the mode path, `get_model_for_mode` evaluates `operator_default_model()` as the *argument* to `_apply_byok_model_override`, so a failure that recurs re-raises before the resolver is entered — the request fails rather than being billed — while a transient one (`_LLM_PROBE_ERRORS` is wider than the free-mode `ValueError`) lets the resolver judge the same string. On the phase path, `get_model_for_phase` never calls `operator_default_model` at all: the resolver is handed a `phase_models` override or a capability model, not the default judged here, and refuses on that. Either way the refusal — or the failure — lands on whatever the request would actually have been billed for.
+
+digichat forwards `X-BYOK-Model` from all four of its send paths (`chat-panel.tsx`, `use-embed-digi-chat.ts`, the `/api/chat` BFF, and `byok-ping.ts`) whenever the user chose a model — including for providers whose catalog entry sets `requiresModel: false`. That flag decides whether a model is *mandatory*, never whether a chosen one is forwarded; three of the four used to gate the header on it and so dropped an OpenAI user's chosen model on the floor.
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
@@ -721,9 +742,44 @@ CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effecti
 
 Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
+### 8.3.1 Two-tier context compaction (#399)
+
+Long research sessions (document RAG + Atlas `run_research_agent`) accumulate tool results that would otherwise blow past the model context window. digigraph applies **non-destructive** two-tier compaction modelled on LangAlpha's `CompactionMiddleware`:
+
+| Tier | When | What happens |
+|------|------|----------------|
+| **1 — Truncation** | Tool result outside the last `keep_recent_messages` exceeds `tier1_truncation_kb` (default 2 KB) | Original written to `{run_data_dir}/{session}/workspace/tool_results/msg_<id>.json`; LLM sees `[truncated — full result in workspace/tool_results/msg_<id>.json]` |
+| **2 — Summarisation** | Estimated tokens (chars/4) exceed `token_threshold` (default 80 000) | Oldest messages (excluding the recent window and prior summaries) are offloaded to `workspace/compaction/evicted_<event_id>.json`, summarised with `summary_model` (config default `digi/fast` via `digigraph.llm_client.completion_text`), and replaced by a tagged HumanMessage containing `[COMPACTION_SUMMARY]` so later passes do not re-summarise it |
+
+**Integration (pre-LLM step, not a new graph node):**
+
+- `digigraph.compaction.compact_messages` — pure orchestrator (tier 1 then tier 2)
+- `graph/research.py` `_run_document_rag_path` — compacts `llm_messages` (+ current turn) before `run_tools`; wraps `execute_tool` with `wrap_execute_tool_for_tier1` so digillm's in-loop transcript never receives multi-MB payloads
+- `graph/research_agent.py` — same pre-LLM compaction for Atlas/Hermes phase calls (retries re-compact)
+
+**State contract:** `WorkflowState._compaction_event` holds a lean `CompactionEvent` dict (refs, counts, token deltas). `WorkflowState.llm_messages` holds the compacted LLM view for the next turn. Originals are **not** deleted from the session workspace — resume reloads them via the event's `tier1_refs` / `tier2_evicted_ref`. Checkpointer policy is unchanged (`DIGI_CHECKPOINTER=memory|sqlite|postgres`).
+
+**Config** (`CompactionConfig` / env):
+
+| Field / env | Default | Notes |
+|-------------|---------|-------|
+| `enabled` / `DIGI_COMPACTION_ENABLED` | `true` | Master switch |
+| `token_threshold` / `DIGI_COMPACTION_TOKEN_THRESHOLD` | `80000` | Tier-2 trigger |
+| `keep_recent_messages` / `DIGI_COMPACTION_KEEP_RECENT` | `10` | Intact recent window |
+| `tier1_truncation_kb` / `DIGI_COMPACTION_TIER1_KB` | `2` | Tool-result size floor |
+| `summary_model` / `DIGI_COMPACTION_SUMMARY_MODEL` | `digi/fast` | Resolved through `llm_client` / `resolve_request_model` |
+
 ### 8.4 Parallel Tool Execution
 
 When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor` inside `digillm.run_tools` (the `parallel_safe` set is computed from the registry in `llm_client.py` and passed through). Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
+
+Every submission — here and in `planning/executor.py`'s layer fan-out — goes through a **freshly copied context** (`contextvars.copy_context().run(...)`). A pool worker starts with an empty context, and these tools are the delegate agents: each one runs its *own* LLM completion, so without the copy a BYOK request spends the operator's key inside the fan-out while the user's is bound on the calling thread. Unlike the streaming worker in §3.3 this hop is on the non-streaming path too. The copy must be per submit: one shared `Context` cannot be entered by two threads at once and raises `RuntimeError: cannot enter context ... is already entered` in the second — `test_parallel_branch_carries_the_byok_override_into_each_worker` uses a `threading.Barrier` to force the overlap that makes that regression visible.
+
+A copy propagates *references*, so the same submission must **not** carry the logical-call telemetry handle: all N workers would hold the one mutable `ProviderCallContextHandle` the caller holds and race its `last_call_id` and deferred-record list. That handle is bound in **two** context vars, and clearing one is not enough — `digillm`'s own `_provider_call_metadata`, and `usage._LOGICAL_CALL_CONTEXT`, which digigraph layers on top and which stores the same object inside its frozen `LogicalCallContext`. So both fan-out sites drop both: `digillm.detach_provider_call_context()` and `usage.detach_logical_call_context()`, inside the worker before any work — propagate credentials, not the mutable handle.
+
+The two sites reach the second clear differently. `digillm.run_tools` owns its own pool, so `llm_client` registers `usage.detach_logical_call_context` once via `digillm.set_fan_out_detach_hook` — a consumer callback in the same idiom as the usage and telemetry observers registered beside it, because a leaf library cannot import into its consumer to clear a var it does not own. `planning/executor.py` submits to its own pool, where that hook never fires, so `_run_step_in_fan_out` calls both functions directly — behind a guard, because they run *outside* `_run_step`'s handler and `run_plan` reads `future.result()` bare, so an unguarded `ImportError` on the worker-local imports would discard the whole layer where the single-step branch degrades to one error string. Skipping the detach costs nothing there: the module that binds the handle is the module that failed to import, so no bound handle is left to share. A detach that *itself* raises still propagates.
+
+Both clears are token-free by necessity: a copied context carries values but no reset tokens. `_CALL_CONTEXT` is deliberately left **inherited** — its `CallContext` is frozen and holds no mutable state, so the node identity crossing the boundary costs nothing and improves attribution. The single-step path in `planning/executor.py` deliberately skips the wrapper entirely: it runs in the caller's own context rather than a copy of it, so unbinding the handle would lose the caller's deferred records; `test_the_pool_does_not_share_the_telemetry_handle` fails if that path is routed through the wrapper.
 
 ### 8.5 SSE Streaming for Time-to-First-Token
 
@@ -796,7 +852,7 @@ Streaming via the background thread + queue delivers tool call blocks to the cli
 - digillm's `get_client()` (used by digigraph via `llm_client`) creates an `OpenAI` instance pointed at `OPENAI_API_BASE` (default: `http://litellm:4000/v1` in Docker).
 - All LLM calls (research, brief builder, synthesis) go through LiteLLM, which routes to Ollama, OpenAI, or other configured providers.
 - Model selection: `get_model_for_mode()` returns the model ID from `config/model_modes.yaml` for the current mode. LiteLLM translates provider-prefixed IDs (e.g. `ollama/qwen3:8b`) to the target provider's expected format.
-- **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. Atlas/Hermes phases all use `openrouter/openrouter/auto` (OpenRouter Auto Router); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
+- **Model routing:** callers must pass a concrete model string resolved via `config/model_modes.yaml`. The `digi/fast`, `digi/balanced`, `digi/best`, `digi/multimodal` named routes have been removed. Atlas/Hermes phases route on **pinned** per-capability models from `config/olympus_models.yaml` (`openrouter/openrouter/auto` — OpenRouter Auto Router — is reserved for the OpenRouter diagnostic scripts (`digiquant/scripts/atlas/openrouter_diagnose.py` and the preflight's structured-output probe), not phase routing and not grounding — `get_grounding_model()` resolves a web-search-capable model from the active tier's pools; see `digiquant/src/digiquant/olympus/atlas/docs/RUNBOOK.md` "OpenRouter model tiers"); set `OPENROUTER_API_KEY`. See `.env.example` and `config/model_modes.yaml`.
 - Caching: LiteLLM supports Redis-backed semantic caching when `REDIS_URL` is set (Compose profile: `litellm-cache`).
 
 ### 9.7 digivault
@@ -848,7 +904,7 @@ digigraph:
 | `OPENAI_API_KEY` | (from `.env`) | API key for LLM proxy (fallback to `LITELLM_PROXY_API_KEY`) |
 | `LITELLM_PROXY_API_KEY` | (from `.env`) | LiteLLM bearer; overrides `OPENAI_API_KEY` for proxy calls |
 | `DIGI_LLM_MODE` | `test` | LLM model tier: `test` / `medium` / `best` |
-| `DIGI_CONFIG_PATH` | `/app/config` | Directory containing `model_modes.yaml` **and** `byok-providers.json` — a mount missing `byok-providers.json` crashes digigraph at startup (`_load_byok_catalog` fails loud, by design; see the BYOK spend path note above); a mount missing `model_modes.yaml` does **not** crash — `_load_model_modes()` silently falls back to a hardcoded default model instead, so supply both regardless |
+| `DIGI_CONFIG_PATH` | `/app/config` | Directory containing `model_modes.yaml` **and** `byok-providers.json` — a mount missing `byok-providers.json` crashes digigraph at startup (`_load_byok_catalog` fails loud, by design; see the BYOK spend path note above) — as does one whose entries carry a bad `id`, `baseUrl` or `requiresModel`, **but not** a bad `fallbackModels`, the one cosmetic field, which is cleaned and warned about instead; a mount missing `model_modes.yaml` does **not** crash — `_load_model_modes()` silently falls back to a hardcoded default model instead, so supply both regardless |
 | `DIGI_PROJECT_CONFIG` | (empty) | Path to project YAML (optional) |
 | `DIGI_CHECKPOINTER` | `sqlite` when project active, else `memory` | Checkpointer backend: `memory` / `sqlite` / `postgres` / `none` |
 | `DIGI_CHECKPOINTER_SQLITE_URI` | `~/.digigraph/checkpoints.sqlite` | SQLite file path |
@@ -856,7 +912,7 @@ digigraph:
 | `DIGIQUANT_URL` | `http://127.0.0.1:8001` when unset | digiquant base URL. Explicit empty string disables backtest routing (Profile A). |
 | `DIGIQUANT_DATA_DIR` | `/app/data` | Path to CSV files for backtests (required only when digiquant is enabled) |
 | `DIGISEARCH_INDEX` | `default` | Default vector index name |
-| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). When unset (single-tenant), those headers may still select corpus. |
+| `DIGI_TENANT_CORPUS_MAP` | (empty) | Optional JSON map of tenant slug → `{digisearchIndex, vaultPathPrefix, researchSystemPrompt}` for multi-tenant corpus isolation (OCC). When non-empty, the map is **authoritative** for the authenticated tenant — client headers `X-Digi-Corpus-Index` / `X-Digi-Vault-Prefix` and body `digisearch_index` / `vault_path_prefix` cannot select another tenant's corpus (digisearch has no server-side tenant→index bind). Unmapped / empty-tenant requests clear those fields to `None` on the request **and** in `_initial_graph_state` so LangGraph checkpoints do not keep a prior turn's index sticky on a reused `session_id`. When unset (single-tenant), those headers may still select corpus. **Unset ≠ broken:** a set-but-unusable value (invalid JSON, non-object top level, or every entry individually dropped) raises `TenantCorpusMapError` → HTTP 503 — same fail-closed contract as digivault `tenant_scope` — and never silently re-enables client corpus selection. Slug keys are lowercased on parse so `OCC` matches digivault's keys. |
 | `DIGI_ENABLE_DEBUG_ENDPOINTS` | `0` | Enable `/test_llm` and `/v1/debug/*` |
 | `DIGI_ENABLE_THREAD_API` | `0` | Enable `/threads/*` and `/files/*` |
 | `DIGI_SUPERVISOR` | (empty) | Enable supervisor node: `1` / `true` |
@@ -867,10 +923,15 @@ digigraph:
 | `DIGI_REQUIRE_TOOL_CALLS` | (empty) | Force `tool_choice="required"` deployment-wide: `1`/`true` |
 | `DIGI_REQUIRE_TOOL_CALLS_RATE_LIMIT_MAX` | `3` | Per-IP req/min budget for requests opting into `require_tool_calls=true` (see §3.1) |
 | `DIGI_ALLOW_CODE_EXEC` | (empty) | Enable `data_engineer_agent` code execution: `1` / `true` |
-| `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `sitaas_rag` skill |
+| `DIGI_RUN_DATA_DIR` | (empty) | Session dataset storage; enables `project_rag` skill |
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |
 | `DIGI_CORS_ORIGINS` / `DIGIGRAPH_CORS_ORIGINS` | (empty) | CORS allowlist — applied via shared `digibase.cors.install_cors`. `DIGI_ALLOWED_ORIGINS` still honored as legacy fallback. See `SECURITY.md` §"CORS policy". |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | `12000` | Max chars per tool result message to LLM |
+| `DIGI_COMPACTION_ENABLED` | `1` | Two-tier context compaction master switch (#399) |
+| `DIGI_COMPACTION_TOKEN_THRESHOLD` | `80000` | Tier-2 summarisation trigger (approx tokens) |
+| `DIGI_COMPACTION_KEEP_RECENT` | `10` | Messages kept intact at the tail |
+| `DIGI_COMPACTION_TIER1_KB` | `2` | Truncate tool results above this size (KB) |
+| `DIGI_COMPACTION_SUMMARY_MODEL` | `digi/fast` | Model for tier-2 summaries (via `llm_client`) |
 | `DIGI_LLM_CACHE_TTL_SECONDS` | `3600` | LLM response cache TTL |
 | `DIGI_INTERRUPT_AFTER_RESEARCH` | (empty) | Interrupt graph after research for HITL: `1` |
 | `DIGI_REQUIRE_TRADING_PROFILE` | (empty) | Require `trading_profile` for backtest: `1` |

@@ -9,6 +9,14 @@ another tenant's corpus. digivault already enforces the vault half server-side
 (``enforce_tenant_path_prefix``); digisearch has no equivalent bind, so digigraph
 must not forward an attacker-chosen index. Used so digithings.ai/chat and
 /chat/occ share one digigraph process without corpus bleed.
+
+**Unset is not the same as broken.** digivault's ``tenant_scope`` already fails
+closed (``TenantCorpusMapError`` → HTTP 503) when the env var is set but
+unusable. digigraph must do the same: a broken map used to parse to ``{}`` and
+re-enable client corpus selection — the exact CWE-639 bypass ``#2366`` closed
+for a *valid* map. Invalid JSON, a non-object top level, or a map whose every
+entry is individually dropped therefore raises ``TenantCorpusMapError`` here
+too, never silently "map unset."
 """
 
 from __future__ import annotations
@@ -23,11 +31,17 @@ from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
+_ENV_VAR = "DIGI_TENANT_CORPUS_MAP"
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _INDEX = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$")
 _HEADER_CORPUS_INDEX = "x-digi-corpus-index"
 _HEADER_VAULT_PREFIX = "x-digi-vault-prefix"
 _HEADER_TENANT = "x-digi-tenant"
+
+
+class TenantCorpusMapError(RuntimeError):
+    """``DIGI_TENANT_CORPUS_MAP`` is set but unusable — never silently treated as
+    "unset" (which would re-enable client corpus headers without telling anyone)."""
 
 
 class TenantCorpusOverride(BaseModel):
@@ -49,43 +63,62 @@ def _normalize_prefix(raw: str) -> str:
 
 
 def _parse_map(raw: str | None) -> dict[str, TenantCorpusOverride]:
-    if not raw or not raw.strip():
+    """Parse the corpus map JSON.
+
+    Genuinely unset / empty → ``{}`` (single-tenant; headers may select corpus).
+    Set but unusable (bad JSON, non-object, or every entry dropped) →
+    ``TenantCorpusMapError`` — same discipline as digivault ``tenant_scope``.
+    """
+    text = (raw if raw is not None else "").strip()
+    if not text:
         return {}
     try:
-        data = json.loads(raw)
+        data = json.loads(text)
     except json.JSONDecodeError as exc:
-        logger.warning("DIGI_TENANT_CORPUS_MAP is not valid JSON: %s", exc)
-        return {}
+        raise TenantCorpusMapError(f"{_ENV_VAR} is not valid JSON: {exc}") from exc
     if not isinstance(data, dict):
-        logger.warning("DIGI_TENANT_CORPUS_MAP must be a JSON object keyed by tenant slug")
-        return {}
+        raise TenantCorpusMapError(f"{_ENV_VAR} must be a JSON object keyed by tenant slug")
     out: dict[str, TenantCorpusOverride] = {}
     for slug, value in data.items():
-        if not isinstance(slug, str) or not _SLUG.match(slug):
-            logger.warning("DIGI_TENANT_CORPUS_MAP: skip invalid slug %r", slug)
+        # Lowercase before the slug regex so ``OCC`` matches digivault's
+        # ``slug.strip().lower()`` keys and does not empty the whole map.
+        if not isinstance(slug, str):
+            logger.warning("%s: skip invalid slug %r", _ENV_VAR, slug)
+            continue
+        normalized_slug = slug.strip().lower()
+        if not _SLUG.match(normalized_slug):
+            logger.warning("%s: skip invalid slug %r", _ENV_VAR, slug)
             continue
         if not isinstance(value, dict):
-            logger.warning("DIGI_TENANT_CORPUS_MAP[%s]: entry must be an object", slug)
+            logger.warning("%s[%s]: entry must be an object", _ENV_VAR, normalized_slug)
             continue
         idx = value.get("digisearchIndex") or value.get("digisearch_index")
         prefix = value.get("vaultPathPrefix") or value.get("vault_path_prefix")
         prompt = value.get("researchSystemPrompt") or value.get("research_system_prompt")
         try:
-            out[slug] = TenantCorpusOverride(
+            out[normalized_slug] = TenantCorpusOverride(
                 digisearch_index=str(idx).strip() if idx else None,
                 vault_path_prefix=_normalize_prefix(str(prefix)) if prefix else None,
                 research_system_prompt=str(prompt).strip() if prompt else None,
             )
         except Exception as exc:
-            logger.warning("DIGI_TENANT_CORPUS_MAP[%s]: %s", slug, exc)
+            logger.warning("%s[%s]: %s", _ENV_VAR, normalized_slug, exc)
+    if not out:
+        raise TenantCorpusMapError(
+            f"{_ENV_VAR} is set but produced no usable tenant corpus mappings"
+        )
     return out
 
 
 def load_tenant_corpus_map(
     raw: str | None = None,
 ) -> dict[str, TenantCorpusOverride]:
-    """Parse ``DIGI_TENANT_CORPUS_MAP`` (or provided raw JSON)."""
-    return _parse_map(raw if raw is not None else os.environ.get("DIGI_TENANT_CORPUS_MAP"))
+    """Parse ``DIGI_TENANT_CORPUS_MAP`` (or provided raw JSON).
+
+    Returns ``{}`` only when the map is genuinely unset/empty. A set-but-broken
+    value raises ``TenantCorpusMapError`` (callers surface HTTP 503).
+    """
+    return _parse_map(raw if raw is not None else os.environ.get(_ENV_VAR))
 
 
 def _header(headers: Any, name: str) -> str | None:
@@ -116,6 +149,9 @@ def resolve_corpus_override(
       override (callers must not fall through to a client-supplied index).
     * When the map is unset (single-tenant), headers may still select index /
       prefix — the historical digichat embed path for deployments without a map.
+    * A set-but-broken env map raises ``TenantCorpusMapError`` from
+      ``load_tenant_corpus_map`` (never treated as unset). Callers that pass an
+      explicit *corpus_map* own that contract themselves.
     """
     hdr_index = _header(headers, _HEADER_CORPUS_INDEX)
     hdr_prefix = _header(headers, _HEADER_VAULT_PREFIX)

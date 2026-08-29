@@ -2,7 +2,12 @@
 
 ## Purpose
 
-digiclaw is the heartbeat, audit, and gateway layer of digithings. Today it ships two implemented concerns: a single-shot **heartbeat runner** that pings digigraph and digiquant health endpoints and logs results, and an **append-only JSONL audit log** consumed by every service in the stack. The OpenClaw gateway (Slack/Discord/Telegram adapters, session manager, WebSocket control plane) is deferred to a future phase.
+digiclaw is the heartbeat, audit, and gateway layer of digithings. Today it ships three
+implemented concerns: a single-shot **heartbeat runner** that pings digigraph and digiquant
+health endpoints and logs results, an **append-only JSONL audit log** consumed by every
+service in the stack, and an **agent scheduler** (cron + continuous + lifecycle) with
+durable state. The OpenClaw gateway (Slack/Discord/Telegram adapters, session manager,
+WebSocket control plane) is deferred to a future phase.
 
 ---
 
@@ -39,7 +44,13 @@ Beyond root `AGENTS.md`:
 - **Redaction is not optional**: The four key patterns (`password`, `api_key`, `token`, `secret`) must always be redacted before writing. Never bypass redaction in a "fast path."
 - **ADDM is auth-gated**: `/check_drift` requires a digikey bearer from `digikey_bearer_token()`. Without it the heartbeat logs `drift_check_skipped` — not a logic stub. Drift can fire when Sharpe history exists (≥3 observations).
 - **No HTTP server without scope**: digiclaw has no REST API of its own. Do not add one without a Phase 2 task that covers auth, loopback binding, and scope enforcement.
-- **Heartbeat is single-shot**: `python -m digiclaw` runs one cycle and exits. The Docker loop (`while true; do python -m digiclaw; sleep 1800; done`) is external. Do not add a daemon loop inside the Python module.
+- **Heartbeat is single-shot**: `python -m digiclaw` / `digiclaw heartbeat` runs one cycle
+  and exits. The Docker loop (`while true; do python -m digiclaw; sleep 1800; done`) is
+  external. Do not add a daemon loop inside the heartbeat runner.
+- **Scheduler is separate from heartbeat**: `digiclaw schedule …` owns agent lifecycle
+  (start/stop/pause/resume) and next-run persistence. Continuous mode is expressed as
+  `interval_seconds` between isolated ticks — supervisors call `digiclaw schedule tick`
+  (or invoke `Scheduler.tick()`). Do not merge the scheduler daemon into `heartbeat_runner`.
 - **AUDIT_SINK_URL is best-effort**: Any exception from the remote POST must be caught and swallowed. Never let audit sink failures propagate to the caller.
 - **No channel adapters**: Do not add Slack, Discord, Telegram, or WhatsApp integration. That is OpenClaw scope, Phase 2+.
 
@@ -51,8 +62,11 @@ Beyond root `AGENTS.md`:
 # Unit tests (no stack required)
 pytest tests/ -m unit -k "digiclaw" -v
 
+# Scheduler / cron tests
+pytest tests/dc/test_scheduler.py -v
+
 # Single test file
-pytest tests/digiclaw/test_audit.py -v
+pytest tests/dc/test_audit.py -v
 
 # Full unit suite
 make test-unit
@@ -63,6 +77,10 @@ ruff check digiclaw/ && ruff format --check digiclaw/
 # Manual heartbeat run (requires stack up)
 make up
 python -m digiclaw
+# or: digiclaw heartbeat
+
+# Schedule status (loads digiclaw/agents/*.yaml)
+digiclaw schedule status
 
 # Inspect audit log
 cat digiquant/results/audit/events.jsonl | head -20

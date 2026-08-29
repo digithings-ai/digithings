@@ -1,10 +1,12 @@
 import { renderDigestMarkdownFromSnapshot, type DigestSnapshot } from './render-digest-from-snapshot';
 import {
+  isAttentionPlanPayload,
   isDebateSummaryPayload,
   isMasterDigestPayload,
   isRebalancePayload,
   isRiskDebatePayload,
   isSegmentReportPayload,
+  renderAttentionPlanMarkdown,
   renderDebateSummaryMarkdown,
   renderMasterDigestMarkdown,
   renderRebalanceMarkdown,
@@ -65,6 +67,7 @@ export function renderDocumentMarkdownFromPayload(payload: unknown, documentKey?
   if (isRiskDebatePayload(p)) return renderRiskDebateMarkdown(p);
   if (isDebateSummaryPayload(p)) return renderDebateSummaryMarkdown(p);
   if (isSegmentReportPayload(p)) return renderSegmentReportMarkdown(p);
+  if (isAttentionPlanPayload(p, documentKey)) return renderAttentionPlanMarkdown(p);
 
   // Infer doc_type from document_key when it is missing (legacy/transitional payloads).
   let docType = s(p.doc_type);

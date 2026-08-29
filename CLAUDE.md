@@ -82,38 +82,23 @@ app builds, the digithings deploy build-check. (See #1310.)
 
 ## Review coverage (the gate before production)
 
-PR review runs on **Cursor Bugbot, invoked by hand** — comment `bugbot run` (or
-`cursor review`) once a diff is final, and again only if scope changes mid-PR.
-Never at PR open, and never per push: Bugbot went usage-based in June 2026 at
-roughly $1.00–$1.50 a run, so a review on every push is a real monthly cost. The
-Copilot request job was removed from `ci.yml` when that subscription lapsed
-(#1894) — it had been reporting success while attaching no reviewer.
+**Org policy (all digithings-ai repos):** [docs/agents/CODE_REVIEW_POLICY.md](docs/agents/CODE_REVIEW_POLICY.md).
+Default is **in-session** review on a fresh-context subagent (`/review <N>`). Metered
+bots are optional; do not burn their quota on small follow-up commits.
 
-**CodeRabbit reviews automatically, but only on branches it is told about.** It
-auto-reviews the default branch (`develop`) plus whatever `base_branches` lists
-in [`.coderabbit.yaml`](.coderabbit.yaml) — currently `main`, `module/*` and
-`release/*`. Before that file existed it reviewed **only** `develop`, and said so
-only in a small "Review skipped" comment, so two classes of PR were silently
-unreviewed: every two-hop task PR (`task/<N>-slug` → `module/<component>`), which
-is precisely where this section argues review belongs, and every promotion PR
-into `main` (verified on #2231, #2232, #2242 — skip notice, zero reviews).
+**Cursor Bugbot** (when available) is the primary *external* option — comment
+`bugbot run` (or `cursor review`) once a diff is final, and again only if scope
+changes mid-PR. Never at PR open, and never per push: Bugbot went usage-based in
+June 2026 at roughly $1.00–$1.50 a run ([Cursor Bugbot](https://cursor.com/docs/bugbot)).
+The Copilot request job was removed from `ci.yml` when that subscription lapsed
+(#1894). Usage-limit `neutral` is not a review — run `/review` instead.
 
-So, in practice:
-
-| PR | automatic CodeRabbit review? |
-|----|------------------------------|
-| anything → `develop` | yes (default branch) |
-| `task/<N>-slug` → `module/<component>` | yes, via `.coderabbit.yaml` |
-| `develop` → `main` (promotion) | yes, via `.coderabbit.yaml` |
-| anything → an unlisted base | **no** — force it with `@coderabbitai review` |
-
-`@coderabbitai review` forces a review on any PR regardless, and
-`@coderabbitai configuration` prints the resolved config annotated with which
-layer supplied each setting — use it rather than guessing, since an organization
-Global Override outranks the repo file. A **passing CodeRabbit status check is
-not the same as an approving review**: it can sit alongside a blocking
-`CHANGES_REQUESTED`, so check `gh pr view --json reviewDecision`, not just checks,
-before merging.
+**CodeRabbit is optional / sunset.** While it still runs, it auto-reviews only
+bases listed in [`.coderabbit.yaml`](.coderabbit.yaml) (`develop` default plus
+`main`, `module/*`, `release/*`). Do **not** `@coderabbitai review` for CI nits,
+docs, or one-line fixes. Re-request **only** when a prior **major** finding was
+fixed and needs verification. A green CodeRabbit status check is not an approving
+review — check `gh pr view --json reviewDecision` / open threads before merge.
 
 Reviewing the *promotion* is the wrong moment: a promotion diff is an accumulation
 of already-merged work (PR #1877 was 52 files, 12k lines), so it is the priciest
@@ -121,23 +106,24 @@ review Cursor will quote and the least actionable, since a finding needs a fresh
 task PR plus another promotion. So `ci-review-coverage.yml` asserts the cheaper
 invariant on every PR into `main` — **each commit in the range was reviewed at its
 own task PR** — via `scripts/check_review_coverage.py`. Merge commits and bot-authored
-commits are exempt by nature; every other commit clears it five ways, strongest
-first:
+commits are exempt by nature; every other commit clears it, strongest first:
 
 | hatch | claim | self-grantable? |
 |-------|-------|-----------------|
 | `Cursor Bugbot` concluded **success** | a machine reviewed it | **no** |
 | an **APPROVED** review | someone else read it | no |
-| label **`reviewed:agent`** + a findings comment | an in-session review ran | yes, but it costs a real review — the label without the comment is refused |
+| a completed **agent-tool review** (CodeRabbit, Claude `/code-review`, Copilot, …) | a PR-review bot finished a pass, not a skip/rate-limit/failure notice | no |
+| label **`reviewed:agent`** + a findings comment | an in-session review ran in a **fresh-context** subagent or new session | yes, but it costs a real review — the label without the comment is refused |
 | label **`reviewed:owner`** | "I read this myself" | yes — so the verdict names who applied it and when |
 | label **`risk:low`** | "this did not warrant a review" | yes |
 
-**When Bugbot is unavailable, review in-session — do not skip.** Bugbot reports
-`neutral` on a usage-limit skip, and that is not a review. Run `/review <N>`
-instead: it fans out over independent lenses in **fresh-context subagents** (the
-session that wrote the code must not review its own work), verifies each finding
-with a command, puts it through a refuter, then posts the surviving findings as a PR
-comment opening with `<!-- in-session-review -->` and applies `reviewed:agent`.
+**When Bugbot / CodeRabbit are unavailable or out of quota, review in-session —
+do not skip.** Bugbot `neutral` is not a review. Run `/review <N>`: tiered
+fresh-context subagents (token-efficient scope pass, then strong model only on
+flagged areas — see CODE_REVIEW_POLICY.md and `agents/sources/commands/review.md`).
+Author session must not review its own work. Verify each finding with a command,
+refute, then post survivors as a PR comment opening with
+`<!-- in-session-review -->` and apply `reviewed:agent`.
 
 Every line here is written by a coding agent, so an agent reviewing it is not weaker
 in kind than Bugbot — which is also an agent. What matters is that the reviewer did
@@ -147,15 +133,15 @@ label, and **refuses `reviewed:agent` when the findings are missing**. Fix what 
 review finds on the same branch before merge; that is the whole reason review
 belongs at the task PR and not at the promotion.
 
-`reviewed:owner` exists because the gate's own first run had no honest hatch: a
+`reviewed:owner` exists because of a hole the gate's own first run exposed: a
 solo maintainer cannot self-approve, Bugbot was out of quota, and the only
 remaining option was to label a blocking CI change `risk:low`. **Never use
 `risk:low` to mean `reviewed:owner`** — "I read it" and "it needed no reading" are
 different claims, and collapsing them destroys the only signal worth having. With
-one account holding write access, the three label hatches are accountability records
+one account holding write access, the label hatches are accountability records
 rather than enforcement — though `reviewed:agent` at least cannot be claimed without
-posting a review. A completed Bugbot run is the only hatch nobody can grant
-themselves.
+posting a review. Bugbot, CodeRabbit, and Claude reviews are the hatches nobody
+can grant themselves.
 
 Note what is deliberately *not* done: `Cursor Bugbot` is **not** a required status
 check on `main`. It reports `neutral` on a usage-limit skip and a required check
@@ -171,6 +157,11 @@ and on whether behaviour or a public factual claim changed.
 
 ## Model & subagent policy
 
+**General rule:** pick the **best model for the job**, prefer the **token-efficient**
+choice that still clears the bar, and **do not use fast mode** (no `*-fast` /
+speed-optimized Cursor slugs). Quality of fit first; cost second; latency never
+overrides either.
+
 Unpinned subagents inherit the orchestrator's model — an unset `model:` under an
 Opus/Fable session silently runs every subagent at that price. Every subagent
 under `agents/sources/subagents/` already pins one; keep doing it:
@@ -179,7 +170,8 @@ under `agents/sources/subagents/` already pins one; keep doing it:
 |------|-------|----------|
 | Routing, dispatch, dictation cleanup, small/mechanical verification | haiku, or sonnet when the check has any real complexity — pick by task, not by habit | `component-router`, `dictation-normalizer`, a lint/type-check triage pass |
 | Implementation, spec-writing (the heavy lifting) | sonnet | `spec-writer`, `test-first-implementer` |
-| Review, security audit, architecture judgment — reasoning, big-picture opinion, reflection | opus | the `/review` in-session lenses, `pr-review-toolkit` plugin agents |
+| Review **scope** pass — map diff, list risk areas, skip clean files | haiku or sonnet (Claude); token-efficient Cursor model (not `*-fast`) | `/review` first pass |
+| Review **deep** pass / security / architecture — only on flagged areas | opus (Claude); stronger Cursor model or dedicated review agent (not `*-fast`) | `/review` deep lenses, security paths |
 | Ad-hoc design/architecture consult ("advisor" role — a second opinion outside a formal review, a judge-panel comparison of approaches) | opus for anything hard-to-reverse or architecturally significant; sonnet default otherwise | a `Plan`/`Explore` agent, an `AskUserQuestion` decision point with real trade-offs, a "which approach is better" comparison |
 
 There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in
@@ -196,9 +188,9 @@ the table above.** `pr-review-toolkit`'s six agents split: `code-reviewer` and
 silently ride whatever the session is on, same as an unpinned custom subagent
 would. The `/review` command's lens fan-out has no subagent file to pin at all
 (it dispatches ad hoc via the `Agent` tool at runtime), so its instructions
-explicitly say to pass `model: opus` on each dispatch rather than leaving it
-implicit — check `agents/sources/commands/review.md` before assuming that still
-holds if the command changes. Don't assume a plugin or ad-hoc dispatch is
+explicitly tier models: sonnet/haiku for the scope pass, `model: opus` only on
+flagged deep lenses — check `agents/sources/commands/review.md` before assuming
+every lens still runs at opus. Don't assume a plugin or ad-hoc dispatch is
 pinned just because a custom subagent would be; verify the specific agent file.
 
 **Advisors get the same treatment as review, not the implementation default.**
@@ -291,18 +283,21 @@ Use `make task ISSUE=N` to create a `task/N-slug` branch from the right module b
 
 Task branches for these PR into `develop` directly. The two-hop model applies to the remaining backend modules (`module/digiquant`, `module/digikey`, `module/digigraph`, etc.).
 
-**Sync the module branch with develop *before* you branch off it.** Module branches drift behind `develop` fast because we iterate on develop constantly — and a task branch cut from a stale module branch edits dead code. (Real incident, 2026-06-17: `module/digiquant` was ~2 months / ~400 commits behind, predating the `apps/digiquant-atlas → digiquant/src/digiquant/olympus` migration; backend PRs cut from it touched files that no longer exist on develop.) `make task ISSUE=N` does **not** sync for you — check first:
+**A task branch must be cut from a current base.** Module branches drift behind `develop` fast because we iterate on develop constantly — and a task branch cut from a stale module branch edits dead code. (Real incident, 2026-06-17: `module/digiquant` was ~2 months / ~400 commits behind, predating the `apps/digiquant-atlas → digiquant/src/digiquant/olympus` migration; backend PRs cut from it touched files that no longer exist on develop.) The same hazard applied to the one-hop components until 2026-08-20: `scripts/worktree_task.sh` fetched the base branch only when no *local* ref of that name existed, and `refs/heads/develop` always exists, so `make task` handed out worktrees cut from whatever stale local `develop` you last pulled — one was measured 50 commits behind `origin/develop` (#2547).
 
-```bash
-git fetch origin
-git rev-list --count origin/module/<component>..origin/develop   # 0 = current; >0 = stale, sync before branching
-```
+`make task ISSUE=N` now enforces this itself, so there is no manual pre-flight check to remember:
+
+- it runs `git fetch origin` first, then branches from `refs/remotes/origin/<base>` — never from the local branch of the same name;
+- if the resolved base is a `module/*` branch behind `origin/develop`, it prints the behind-count and **refuses**, with the `gh pr create` recipe for syncing it (below);
+- `WORKTREE_TASK_OFFLINE=1` skips the fetch and `WORKTREE_TASK_ALLOW_STALE_MODULE=1` downgrades the refusal to a warning. Both are loud, and both exist so this is a detour rather than a dead end.
+
+`tests/scripts/test_worktree_task_base_ref.py` pins that behaviour, deriving its one-hop and two-hop fixtures from `project_routing.json` rather than hard-coding a component.
 
 Don't re-run the full review pipeline at every hop — see [AGENT_WORKFLOW.md §9](docs/agents/AGENT_WORKFLOW.md) for which stage gets the full review vs. a diff-scoped check.
 
 Module branches are guarded by the `module-branch-protection` ruleset: **no force-push, no deletion, PR required (0 approvals)**. So you cannot `git push --force` to refresh a stale module branch. To sync one, open a normal PR into `base=module/<component>` — either `head=develop`, or a `chore/sync-*` branch whose tree equals develop (a `-s ours` merge with the index reset to develop's tree preserves the module branch's prior history) — and merge it (no approval needed).
 
-Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, and `<handle>/<slug>` for a named human contributor.
+Branch names must match the taxonomy in [BRANCHING.md](BRANCHING.md), enforced by the `scripts/hooks/pre-push.sh` hook (`make hooks-install`): `main`, `develop`, `module/<component>`, `release/vX.Y.Z`, `task/<N>-slug`, `{feat,fix,docs,chore}/<slug>`, `{claude,codex,cursor,copilot}/<slug>` for agent-driven work outside the task system, `bot/<slug>` for branches the workflows push, and `<handle>/<slug>` for a named human contributor.
 
 **Issue linkage is a convention, not a CI gate.** Prefer a `task/<N>-slug` branch (created by `make task ISSUE=N`, implicitly linking to issue #N), or a `Fixes #N` / `Closes #N` / `Resolves #N` line in the PR body for anything else, so shipped work traces back to the backlog. Nothing in CI enforces this — a `check-linkage` job used to run on every PR, but it was never a required status check on `main` or `develop`, so a failure never blocked a merge; it just produced rework when a PR had to be re-edited to satisfy it, and merged unchanged when it wasn't. Removed 2026-08; see [docs/adr/0024-drop-pr-linkage-enforcement.md](docs/adr/0024-drop-pr-linkage-enforcement.md) for the audit and the full historical bypass logic. `ci-review-coverage.yml`'s "every commit reaching main was reviewed" check is unrelated and still required — that one asserts review happened, not that an issue is linked.
 

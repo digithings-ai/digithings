@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from typing import (  # scored-lint suppression: heterogeneous graph / dict shapes
+    Annotated,
     Any,
     Literal,
 )
 
 from pydantic import BaseModel, Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
+
+from digiquant.olympus.hermes.models.forecast import ForecastAssessment, ForecastTerms
 
 
 class EvidenceAssessment(BaseModel):
@@ -133,3 +137,21 @@ class AnalystPayload(BaseModel):
     price_targets: dict[str, Any] | None = None
     expectations: str = Field(default="")
     fingerprint_news_hash: str = Field(default="")
+    # Optional WP4.2 typed economics (#2637). Never derived from conviction_score
+    # or price_targets — materializers (Task 4.3+) must populate explicitly.
+    forecast: ForecastTerms | None = Field(
+        default=None,
+        description=(
+            "Typed ForecastTerms when present. Legacy conviction_score / price_targets "
+            "remain for compatibility and must not synthesize this field."
+        ),
+    )
+    # Deterministic WP4.3 materializer output (#2649). Excluded from LLM JSON schema
+    # so the model cannot invent identity / provenance fields.
+    forecast_assessment: Annotated[ForecastAssessment | None, SkipJsonSchema()] = Field(
+        default=None,
+        description=(
+            "Immutable ForecastAssessment produced by H5 materialization. "
+            "Never LLM-authored; SkipJsonSchema keeps it out of the provider schema."
+        ),
+    )

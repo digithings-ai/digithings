@@ -204,7 +204,7 @@ Tier routing defaults (when not explicitly labelled):
 | `make new-task` | Interactive issue creator |
 | `make commit MSG="..."` | Validated conventional commit |
 | `make pr` | Open PR with template pre-filled |
-| `make hooks-install` | Install `.git/hooks/pre-push` |
+| `make hooks-install` | Install the pre-push hook (shared by all worktrees) |
 
 ---
 
