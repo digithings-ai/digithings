@@ -6,6 +6,7 @@ read path never opens ssodh; orders flag default-off; pacing raises; reply allow
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -27,6 +28,8 @@ from digiquant.brokers.ibkr import (
     IbkrHttpResponse,
     IbkrOrdersDisabledError,
     SessionCompetingError,
+    _decimal_wire,
+    _pace_key,
     encode_json_bytes,
     orders_enabled,
 )
@@ -133,6 +136,31 @@ class TestOrdersFlag:
         adapter = _connected_adapter(transport)
         with pytest.raises(IbkrOrdersDisabledError):
             adapter.submit_order(_order_req())
+        assert not transport.saw_ssodh()
+
+    def test_get_order_raises_when_flag_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DIGIQUANT_IBKR_ORDERS", raising=False)
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        with pytest.raises(IbkrOrdersDisabledError):
+            adapter.get_order("ord-1")
+        assert not transport.saw_ssodh()
+        assert not any("ssodh" in p or "suppress" in p for p in transport.paths_seen())
+
+    def test_cancel_order_raises_when_flag_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DIGIQUANT_IBKR_ORDERS", raising=False)
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        with pytest.raises(IbkrOrdersDisabledError):
+            adapter.cancel_order("ord-1")
+        assert not transport.saw_ssodh()
+
+    def test_list_fills_raises_when_flag_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("DIGIQUANT_IBKR_ORDERS", raising=False)
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        with pytest.raises(IbkrOrdersDisabledError):
+            adapter.list_fills(datetime(2026, 1, 1, tzinfo=UTC))
         assert not transport.saw_ssodh()
 
     def test_flag_on_allows_order_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -486,3 +514,71 @@ class TestDecimalAndFingerprint:
         assert isinstance(snap.equity, Decimal)
         assert snap.equity == Decimal("12345.67")
         assert snap.cash == Decimal("100.1")
+
+    def test_order_payload_serializes_high_precision_decimal_as_string(self) -> None:
+        """High-precision Decimal must round-trip into the payload string losslessly.
+
+        `float(Decimal("10.123456789012345678901234"))` silently becomes
+        `10.123456789012346`; the wire form must stay a fixed-point string.
+        """
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        precise = Decimal("10.123456789012345678901234")
+        # Prove float would lose digits — the bug this test pins.
+        assert Decimal(str(float(precise))) != precise
+        req = _order_req(quantity=precise, order_type=OrderType.LIMIT, limit_price=precise)
+        payload = adapter._build_order_payload(req, account_id="DU1", conid=265598)
+        order = payload["orders"][0]
+        assert isinstance(order, dict)
+        assert order["quantity"] == "10.123456789012345678901234"
+        assert order["price"] == "10.123456789012345678901234"
+        assert isinstance(order["quantity"], str)
+        assert Decimal(str(order["quantity"])) == precise
+        # Exponent-form Decimals also become fixed-point strings (no "E").
+        assert "E" not in _decimal_wire(Decimal("1E+2"))
+        assert _decimal_wire(Decimal("1E+2")) == "100"
+
+
+class TestReplyChainFailClosed:
+    def test_malformed_id_only_body_rejects(self) -> None:
+        """Reviewer reproduction: `[{"id": "reply-empty"}]` must not fabricate an ack."""
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        body = [{"id": "reply-empty"}]
+        response = _resp(body)
+        with pytest.raises(BrokerOrderRejected, match=response.fingerprint) as exc_info:
+            adapter._resolve_order_reply_chain(response)
+        assert response.fingerprint in str(exc_info.value)
+        assert "reply-empty" not in str(exc_info.value)  # fingerprint only, not body
+
+    def test_prompt_with_only_message_rejects(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        body = [{"id": "reply-1", "message": ["Confirm something"]}]
+        response = _resp(body)
+        with pytest.raises(BrokerOrderRejected, match=response.fingerprint):
+            adapter._resolve_order_reply_chain(response)
+        assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+
+    def test_prompt_with_only_message_ids_rejects(self) -> None:
+        transport = MockTransport()
+        adapter = _connected_adapter(transport)
+        body = [{"id": "reply-2", "messageIds": ["o163"]}]
+        response = _resp(body)
+        with pytest.raises(BrokerOrderRejected, match=response.fingerprint):
+            adapter._resolve_order_reply_chain(response)
+        assert not any("/iserver/reply/" in p for p in transport.paths_seen())
+
+
+class TestPacingMarkersDerived:
+    def test_pace_key_derived_from_exported_markers(self) -> None:
+        assert _pace_key("/portfolio/accounts") == "/portfolio/accounts"
+        assert _pace_key("/iserver/orders") == "/iserver/orders"
+        assert _pace_key("/iserver/account/DU1/orders") == "/iserver/orders"
+        assert _pace_key("/iserver/account/trades") == "/iserver/trades"
+        assert _pace_key("/iserver/trades") == "/iserver/trades"
+        assert _pace_key("/tickle") is None
+        assert _pace_key("/iserver/questions/suppress") is None
+        # Every PACED_PATH_MARKERS entry is reachable via _pace_key.
+        for marker in PACED_PATH_MARKERS:
+            assert _pace_key(marker) == marker

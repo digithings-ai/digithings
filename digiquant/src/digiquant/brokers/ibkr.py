@@ -179,17 +179,41 @@ def _fingerprint_log(path: str, response: IbkrHttpResponse) -> None:
 def _pace_key(path: str) -> str | None:
     """Return the pacing bucket for a path, or None if unpaced.
 
-    Spec §7 names `/portfolio/accounts`, `/iserver/orders`, `/iserver/trades`. IBKR's
-    concrete order/trade URLs nest under `/iserver/account/.../orders|trades`, so we
-    match those families rather than an exact suffix alone.
+    Derived from `PACED_PATH_MARKERS` (single source of truth). Spec §7 names those
+    markers; IBKR's concrete order/trade URLs nest under `/iserver/account/.../orders|
+    trades`, so a marker matches when it appears in `path` or — for `/iserver/<leaf>`
+    markers — when `/iserver/` and `/<leaf>` both appear (nested family match).
     """
-    if "/portfolio/accounts" in path:
-        return "/portfolio/accounts"
-    if "/iserver/" in path and "/orders" in path:
-        return "/iserver/orders"
-    if "/iserver/" in path and "/trades" in path:
-        return "/iserver/trades"
+    for marker in PACED_PATH_MARKERS:
+        if marker in path:
+            return marker
+        if marker.startswith("/iserver/") and "/iserver/" in path:
+            leaf = marker.rsplit("/", 1)[-1]
+            if leaf and f"/{leaf}" in path:
+                return marker
     return None
+
+
+# Reply-prompt shaped keys. Presence of any of these without a clear order_id/orderId
+# means the body is a confirmation prompt (or a malformed prompt) — never a final ack.
+_REPLY_PROMPT_MARKERS: frozenset[str] = frozenset(
+    {"message", "messageIds", "message_ids", "isSuppressed"}
+)
+
+
+def _decimal_wire(value: Decimal) -> str:
+    """Serialize a Decimal for IBKR order JSON as a fixed-point decimal string.
+
+    IBKR CPAPI accepts quantity / cashQty / price as JSON numbers or numeric strings.
+    We always emit normalized fixed-point strings via `format(d.normalize(), "f")`:
+    - `normalize()` drops trailing zeros after the radix point;
+    - `"f"` forces fixed-point (no exponent), so `Decimal("1E+2")` becomes `"100"`
+      rather than `"1E+2"`.
+
+    Passing through `float(...)` is forbidden — binary float silently truncates
+    high-precision Decimals (e.g. 24 fractional digits → ~15).
+    """
+    return format(value.normalize(), "f")
 
 
 def _map_order_status(raw: object) -> BrokerOrderStatus:
@@ -334,11 +358,7 @@ class IbkrAdapter:
         return positions
 
     def submit_order(self, req: BrokerOrderRequest) -> BrokerOrderAck:
-        if not orders_enabled():
-            raise IbkrOrdersDisabledError(
-                f"IBKR order path disabled; set {ORDERS_ENV}=1 to enable "
-                "(default off — read-first adapter)"
-            )
+        self._require_orders_enabled()
         self._require_connected()
         self._ensure_brokerage_session()
         account_id = self._resolve_account_id()
@@ -354,6 +374,7 @@ class IbkrAdapter:
         return self._resolve_order_reply_chain(response)
 
     def get_order(self, external_order_id: str) -> BrokerOrderAck:
+        self._require_orders_enabled()
         self._require_connected()
         self._ensure_brokerage_session()
         response = self._call(
@@ -374,6 +395,7 @@ class IbkrAdapter:
         )
 
     def cancel_order(self, external_order_id: str) -> None:
+        self._require_orders_enabled()
         self._require_connected()
         self._ensure_brokerage_session()
         account_id = self._resolve_account_id()
@@ -385,6 +407,7 @@ class IbkrAdapter:
         )
 
     def list_fills(self, since: datetime) -> list[BrokerFill]:
+        self._require_orders_enabled()
         self._require_connected()
         self._ensure_brokerage_session()
         if since.tzinfo is None or since.utcoffset() != timedelta(0):
@@ -426,6 +449,14 @@ class IbkrAdapter:
     def _require_connected(self) -> None:
         if not self._connected:
             raise BrokerAuthError("IbkrAdapter.connect() has not been called")
+
+    def _require_orders_enabled(self) -> None:
+        """Gate every order-lifecycle method; brokerage session must not open when off."""
+        if not orders_enabled():
+            raise IbkrOrdersDisabledError(
+                f"IBKR order path disabled; set {ORDERS_ENV}=1 to enable "
+                "(default off — read-first adapter)"
+            )
 
     def _call(
         self,
@@ -608,38 +639,65 @@ class IbkrAdapter:
             "cOID": req.client_order_id,
         }
         if req.quantity is not None:
-            order["quantity"] = float(req.quantity)  # IBKR JSON wire; value from Decimal
+            order["quantity"] = _decimal_wire(req.quantity)
         if req.notional is not None:
-            order["cashQty"] = float(req.notional)
+            order["cashQty"] = _decimal_wire(req.notional)
         if req.limit_price is not None:
-            order["price"] = float(req.limit_price)
+            order["price"] = _decimal_wire(req.limit_price)
         return {"orders": [order]}
 
     def _resolve_order_reply_chain(self, response: IbkrHttpResponse) -> BrokerOrderAck:
-        """Walk reply/confirmation prompts; only allowlisted messageIds may be confirmed."""
+        """Walk reply/confirmation prompts; only allowlisted messageIds may be confirmed.
+
+        Fail-closed: a body is a final ack only when it carries `order_id`/`orderId` and
+        lacks every reply-prompt marker. Bare `id`, partial prompts, or any other
+        ambiguous shape raises `BrokerOrderRejected` with the response fingerprint
+        (never the raw body) in the message.
+        """
         current = response
         # Bound the chain so a runaway venue cannot loop forever.
         for _ in range(20):
             body = current.body
-            # Direct ack shapes: list of order objects with order_id
-            if isinstance(body, list) and body:
-                first = body[0]
-                if isinstance(first, Mapping) and (
-                    "order_id" in first or "orderId" in first or "id" in first
-                ):
-                    # Reply prompt objects carry "message" + "messageIds" and an "id" reply id.
-                    if "message" in first and "messageIds" in first:
-                        current = self._handle_reply_prompt(first)
-                        continue
-                    return self._ack_from_order_body(first, current.fingerprint)
-            if isinstance(body, Mapping):
-                if "message" in body and "messageIds" in body:
-                    current = self._handle_reply_prompt(body)
-                    continue
-                if "order_id" in body or "orderId" in body:
-                    return self._ack_from_order_body(body, current.fingerprint)
-            break
-        raise BrokerOrderRejected("IBKR order reply chain ended without an acknowledgement")
+            candidate: Mapping[str, object] | None = None
+            if isinstance(body, list) and body and isinstance(body[0], Mapping):
+                candidate = body[0]
+            elif isinstance(body, Mapping):
+                candidate = body
+            if candidate is None:
+                break
+            kind = self._classify_order_response_body(candidate)
+            if kind == "prompt":
+                current = self._handle_reply_prompt(candidate)
+                continue
+            if kind == "ack":
+                return self._ack_from_order_body(candidate, current.fingerprint)
+            raise BrokerOrderRejected(
+                f"IBKR order reply chain ambiguous body (sha256={current.fingerprint})"
+            )
+        raise BrokerOrderRejected(
+            "IBKR order reply chain ended without an acknowledgement "
+            f"(sha256={current.fingerprint})"
+        )
+
+    @staticmethod
+    def _classify_order_response_body(body: Mapping[str, object]) -> str:
+        """Return 'prompt', 'ack', or 'ambiguous' for one order-response object."""
+        has_prompt_marker = any(key in body for key in _REPLY_PROMPT_MARKERS)
+        has_order_id = bool(body.get("order_id") or body.get("orderId"))
+        has_full_prompt = (
+            "message" in body
+            and ("messageIds" in body or "message_ids" in body)
+            and bool(body.get("id"))
+        )
+        if has_full_prompt:
+            return "prompt"
+        if has_prompt_marker:
+            # Partial prompt (message-only, messageIds-only, isSuppressed-only, …).
+            return "ambiguous"
+        if has_order_id:
+            return "ack"
+        # Bare `id` (reply-shaped) or empty object — never fabricate an ack.
+        return "ambiguous"
 
     def _handle_reply_prompt(self, prompt: Mapping[str, object]) -> IbkrHttpResponse:
         message_ids = prompt.get("messageIds") or prompt.get("message_ids") or []
@@ -674,9 +732,12 @@ class IbkrAdapter:
         )
 
     def _ack_from_order_body(self, body: Mapping[str, object], fingerprint: str) -> BrokerOrderAck:
-        external_id = str(body.get("order_id") or body.get("orderId") or body.get("id") or "")
+        # Plausible order ids are order_id / orderId only — never bare `id` (reply UUID).
+        external_id = str(body.get("order_id") or body.get("orderId") or "")
         if not external_id:
-            raise BrokerOrderRejected("IBKR order acknowledgement missing order id")
+            raise BrokerOrderRejected(
+                f"IBKR order acknowledgement missing order id (sha256={fingerprint})"
+            )
         status = _map_order_status(body.get("order_status") or body.get("status") or "submitted")
         return BrokerOrderAck(
             external_order_id=external_id,
