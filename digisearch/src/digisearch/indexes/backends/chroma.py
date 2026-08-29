@@ -63,7 +63,7 @@ class ChromaBackend(DigiIndex):
         if len(embeddings) != len(chunks):
             embeddings = None
         metadatas = [
-            {"doc_id": c.doc_id, **normalize_metadata_for_chroma(c.metadata)} for c in chunks
+            {**normalize_metadata_for_chroma(c.metadata), "doc_id": c.doc_id} for c in chunks
         ]
         try:
             if embeddings:
