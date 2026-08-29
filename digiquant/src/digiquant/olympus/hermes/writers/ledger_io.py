@@ -57,6 +57,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 from digiquant.olympus.hermes.turnover import no_trade_band_pp
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -117,10 +118,19 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
     resolvable global is what lets a test simulate a mid-chain failure, and keeping
     the verb literally ``insert`` here is what keeps ``upsert`` — which the
     append-only trigger would reject in production — out of this module entirely.
+
+    T0 (#5-T0): ``workspace_id`` is NOT NULL as of migration 097 with no column
+    DEFAULT (every writer reaching these tables is expected to stamp it explicitly —
+    see migration 097's header). H9 is single-tenant today, so this one gate stamps
+    the house workspace on every row that does not already carry one, which covers
+    every caller (``append_commit_chain`` here, plus ``opening_snapshot`` and
+    ``execution_io`` which both route through this same function).
     """
     if not rows:
         return
-    client.table(table).insert(rows).execute()
+    house_id = str(house_workspace_id())
+    stamped = [{"workspace_id": house_id, **row} for row in rows]
+    client.table(table).insert(stamped).execute()
 
 
 def _is_cash(ticker: Any) -> bool:
