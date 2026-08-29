@@ -7,7 +7,6 @@ read path never opens ssodh; orders flag default-off; pacing raises; reply allow
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any
 
 import pytest
 from digiquant.brokers.base import BrokerAdapter
@@ -35,7 +34,7 @@ from digiquant.brokers.ibkr import (
 pytestmark = pytest.mark.unit
 
 
-def _resp(body: Any, status: int = 200) -> IbkrHttpResponse:
+def _resp(body: object, status: int = 200) -> IbkrHttpResponse:
     raw = encode_json_bytes(body)
     return IbkrHttpResponse(status_code=status, body=body, raw_bytes=raw)
 
@@ -44,7 +43,7 @@ class MockTransport:
     """Records every request; returns scripted responses by (method, path) or path prefix."""
 
     def __init__(self) -> None:
-        self.calls: list[tuple[str, str, Any, Any]] = []
+        self.calls: list[tuple[str, str, object, object]] = []
         self._queue: dict[str, list[IbkrHttpResponse]] = {}
         self._defaults: dict[str, IbkrHttpResponse] = {}
 
@@ -60,8 +59,8 @@ class MockTransport:
         method: str,
         path: str,
         *,
-        json_body: Any = None,
-        params: Any = None,
+        json_body: object = None,
+        params: object = None,
     ) -> IbkrHttpResponse:
         self.calls.append((method.upper(), path, json_body, params))
         key = f"{method.upper()} {path}"

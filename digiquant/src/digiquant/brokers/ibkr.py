@@ -19,10 +19,10 @@ import json
 import logging
 import os
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from digiquant.brokers.contracts import (
     BrokerAccountSnapshot,
@@ -121,7 +121,7 @@ class IbkrTransport(Protocol):
         method: str,
         path: str,
         *,
-        json_body: Mapping[str, Any] | Sequence[Any] | None = None,
+        json_body: Mapping[str, object] | Sequence[object] | None = None,
         params: Mapping[str, str] | None = None,
     ) -> IbkrHttpResponse:
         """Perform one HTTP call. `path` is CPAPI-relative (e.g. `/tickle`)."""
@@ -133,7 +133,7 @@ class IbkrHttpResponse:
 
     __slots__ = ("status_code", "body", "raw_bytes")
 
-    def __init__(self, status_code: int, body: Any, raw_bytes: bytes) -> None:
+    def __init__(self, status_code: int, body: object, raw_bytes: bytes) -> None:
         self.status_code = status_code
         self.body = body
         self.raw_bytes = raw_bytes
@@ -234,8 +234,8 @@ class IbkrAdapter:
         transport: IbkrTransport,
         *,
         account_id: str | None = None,
-        clock: Any | None = None,
-        sleep: Any | None = None,
+        clock: Callable[[], float] | None = None,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self._transport = transport
         self._account_id = account_id
@@ -247,7 +247,7 @@ class IbkrAdapter:
         # Injectable for deterministic pacing tests; defaults to time.monotonic / time.sleep.
         self._clock = clock if clock is not None else time.monotonic
         self._sleep = sleep if sleep is not None else time.sleep
-        self._reauth_hook: Any | None = None  # set by tests / future auth layer
+        self._reauth_hook: Callable[[], None] | None = None  # set by tests / future auth layer
 
     @property
     def session_competing(self) -> bool:
@@ -279,7 +279,7 @@ class IbkrAdapter:
         self._brokerage_session = False
         self._session_competing = False
 
-    def keepalive(self) -> Mapping[str, Any]:
+    def keepalive(self) -> Mapping[str, object]:
         """Single `POST /tickle`. Caller owns any periodic loop — no threads here."""
         self._require_connected()
         response = self._call("POST", _TICKLE_PATH, pace=False, allow_reauth=True)
@@ -432,7 +432,7 @@ class IbkrAdapter:
         method: str,
         path: str,
         *,
-        json_body: Mapping[str, Any] | Sequence[Any] | None = None,
+        json_body: Mapping[str, object] | Sequence[object] | None = None,
         params: Mapping[str, str] | None = None,
         pace: bool,
         allow_reauth: bool,
@@ -598,8 +598,8 @@ class IbkrAdapter:
 
     def _build_order_payload(
         self, req: BrokerOrderRequest, *, account_id: str, conid: int
-    ) -> dict[str, Any]:
-        order: dict[str, Any] = {
+    ) -> dict[str, object]:
+        order: dict[str, object] = {
             "acctId": account_id,
             "conid": conid,
             "side": "BUY" if req.side is OrderSide.BUY else "SELL",
@@ -641,7 +641,7 @@ class IbkrAdapter:
             break
         raise BrokerOrderRejected("IBKR order reply chain ended without an acknowledgement")
 
-    def _handle_reply_prompt(self, prompt: Mapping[str, Any]) -> IbkrHttpResponse:
+    def _handle_reply_prompt(self, prompt: Mapping[str, object]) -> IbkrHttpResponse:
         message_ids = prompt.get("messageIds") or prompt.get("message_ids") or []
         if not isinstance(message_ids, list):
             message_ids = [message_ids]
@@ -673,7 +673,7 @@ class IbkrAdapter:
             allow_reauth=False,
         )
 
-    def _ack_from_order_body(self, body: Mapping[str, Any], fingerprint: str) -> BrokerOrderAck:
+    def _ack_from_order_body(self, body: Mapping[str, object], fingerprint: str) -> BrokerOrderAck:
         external_id = str(body.get("order_id") or body.get("orderId") or body.get("id") or "")
         if not external_id:
             raise BrokerOrderRejected("IBKR order acknowledgement missing order id")
@@ -739,7 +739,7 @@ class IbkrAdapter:
             as_of=datetime.now(tz=UTC),
         )
 
-    def _parse_position(self, row: Mapping[str, Any]) -> BrokerPosition:
+    def _parse_position(self, row: Mapping[str, object]) -> BrokerPosition:
         symbol = str(row.get("ticker") or row.get("symbol") or row.get("contractDesc") or "")
         qty = _as_decimal(row.get("position") or row.get("quantity") or 0, field="quantity")
         avg = _as_decimal(row.get("avgCost") or row.get("avg_entry_price") or 0, field="avg")
@@ -774,7 +774,7 @@ class IbkrAdapter:
         return datetime.now(tz=UTC)
 
 
-def encode_json_bytes(payload: Any) -> bytes:
+def encode_json_bytes(payload: object) -> bytes:
     """Helper for mock transports / fingerprint tests."""
     return json.dumps(payload, separators=(",", ":"), default=str).encode()
 
