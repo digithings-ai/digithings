@@ -36,11 +36,96 @@ on-demand (`refresh_scope=beliefs` or backlog > `OLYMPUS_BELIEFS_BACKLOG`).
 | **H2** | `hermes/thesis/market-exploration` | `phases/h2_market_thesis_exploration.py` | `edit` exploration doc | market thesis proposals |
 | **H3** | `hermes/thesis/vehicle-map` | `phases/h3_thesis_vehicle_map.py` | `full`/`edit` | `thesis_vehicles` |
 | **H4** | `hermes/thesis/opportunity-screener` | `phases/h4_opportunity_screener.py` | deterministic | focus roster (held + mapped + unlinked), capped by a **regime-adaptive budget** |
-| **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` |
-| **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph | `deliberation_transcript` + summary |
+| **H5** | `hermes/portfolio/asset-analyst` (×N) | `phases/h5_asset_analyst.py` | `skip`/`edit`/`full` per ticker | unified `AnalystPayload` + WP11.2 `ticker_evidence_bundles` (base build before provider; cite on new forecasts; optional `HermesGraphDeps.evidence_bundle_store` append when injected; `OLYMPUS_EVIDENCE_BUNDLE_WRITER=off` kill switch) |
+| **H6** | `hermes/portfolio/deliberation` (×N) | `phases/h6_deliberation.py` | cyclic PM↔analyst sub-graph; WP11.3 `H6Selection` (`OLYMPUS_H6_SELECTION_MODE`); WP11.4 bounded missing-fact amendment via shared `evidence_bundle_store` | `deliberation_transcript` + summary (+ amendment/carry provenance) |
 | **H7** | `hermes/portfolio/pm-direction` | `phases/h7_pm_direction.py` | `edit` prior memo | `PMDirectionMemo` — **no weights** |
 | **H8** | `hermes/portfolio/risk-sizing` | `phases/phase7e_risk_sizing.py` | no LLM | `phase_hermes.sized_book` (sole weight owner) |
 | **H9** | `hermes/portfolio/commit-run` | `phases/h9_commit_run.py` | no LLM | positions, nav, brief, `decision_log` |
+
+**Pre-trade risk report (#2742 / WP9.1, #2746 / WP9.2, #2750 / WP9.3):** `hermes/allocation_contracts.py`
+defines frozen `PreTradeRiskReport` (metric leaves with provenance or typed
+unavailability; binding constraints / altered / rejected targets). SHA-256 helpers
+live in `hermes/allocation_hashes.py`. Deterministic builders in
+`hermes/pretrade_risk.py` populate variance/MRC/CRC, concentration, turnover,
+cost/liquidity, and forecast-quality leaves from exact WP6 covariance + caller-
+supplied vols and WP7 observational scalars — never re-estimating inputs or
+mutating weights. H8 attaches the report to `phase_hermes.pre_trade_risk_report`
+(and stamps `pre_trade_risk_report_hash` on the sized book) **only after** the
+final control shell (carry → cadence → backstop → grid → final caps); report
+identity equals the final book fingerprint (same extractor as H9:
+`commit_io.weights_from_sized_book`). Fail-soft omission does not change
+the sized book. H9 (`commit_run`) validates report identity under
+`OLYMPUS_PRETRADE_RISK_MODE` (`off`|`shadow`|`enforce`; default `shadow`) and
+append-only persists hash-bound rows to `olympus_pretrade_risk_reports`
+(migration `083`, via `atlas/pretrade_risk_registry.py` +
+`commit_io.validate_pretrade_risk_report` /
+`persist_validated_pretrade_risk_report`). Enforce rejects missing/unknown/
+fingerprint or bundle-hash mismatch before booking; shadow records status
+without blocking (covered by unit tests; #2824). H9 never recomputes the report.
+
+**Shadow allocation artifact (#2758 / WP10.1):** `hermes/shadow_artifact.py` defines
+frozen `ShadowAllocationArtifact` — exact `AllocationInputBundle`, incumbent final
+book weights, `PreTradeRiskReport`, and minimal H9 commit metadata with a SHA-256
+`artifact_content_hash`. Canonical JSON bytes are written via temp + `os.replace`
+under `OLYMPUS_SHADOW_ARTIFACT_DIR` (default `artifacts/`). Mode
+`OLYMPUS_SHADOW_ARTIFACT_MODE` (`off`|`export`; default `export`). Chain calls
+`maybe_export_shadow_allocation_artifact` after Hermes returns (fail-soft; never
+reruns or mutates H8/H9). The module must not import challenger optimizer, replay,
+or broker surfaces. `pipeline-olympus.yml` uploads `shadow-allocation-*.json` with
+other run artifacts.
+
+**Write-denied allocation shadow workflow (#2762 / WP10.2):**
+`.github/workflows/pipeline-olympus-allocation-shadow.yml` consumes WP10.1 artifacts
+only. It declares `permissions: contents: read` + `actions: read`, never
+`secrets: inherit`, and never production Supabase / provider / broker /
+checkpointer secrets. Producer trust is gated to workflow
+`Pipeline: Olympus research` on `main`.
+`digiquant/scripts/atlas/check_allocation_shadow_isolation.py` statically rejects
+forbidden imports (Supabase, H9 commit I/O, network clients, live Nautilus,
+brokers), write permissions, secret references, untrusted source/branch/schema/hash,
+and non-file sinks; results are written as a local JSON report artifact only.
+Disable the workflow to roll back; the production Hermes graph is unaffected.
+
+**Solver-free robust challenger (#2770 / WP10.3):** `hermes/shadow_optimizer.py`
+evaluates the robust objective
+\(J(w)=\hat\mu^\top w-\kappa\|D_\mu w\|_2-\frac{\lambda}{2}w^\top\Sigma w-C(w-w_0)-\gamma\|w-w_0\|_1\)
+via deterministic coordinate search (one grid quantum donor→receiver, including
+`CASH`). Shared feasibility checks enforce caps/grid/authorization; accept only
+objective improvement above epsilon; bounded iterations; byte-identical digests.
+Abstains on missing covariance/cost bindings, degraded calibrated inputs, or an
+infeasible seed. Shadow-only — never imported by `chain.py`, H8, or H9; no
+SciPy/CVXPY; no production runtime flag.
+
+**Shared-cash Nautilus portfolio replay (#2784 / WP10.4):** `olympus/replay/`
+(`models.py`, `nautilus_portfolio.py`, `worker.py`) replays synchronized target
+books in one Nautilus account with shared cash and real fills/costs. Spawned
+workers use JSON request/result I/O; child crash/timeout is typed inconclusive
+with no fallback. Never calls `_run_multi_symbol_backtest`; never a production
+booking path.
+
+**Paired shadow comparison evidence (#2799 / WP10.5):**
+`olympus/replay/allocation_comparison.py` compares incumbent vs challenger
+WP10.4 arms under an identical observed manifest (data/cost/execution hashes).
+Versioned criteria live in `replay/shadow_criteria/v1.json` (no activation hook).
+CLI `compare_allocation_shadow.py` freezes criteria first, then writes an
+immutable file-only `AllocationComparisonReport`. Hard constraints remain
+visible when return is stronger; unavailable/inconclusive metrics are explicit.
+Never wired into production H8/H9; no auto-promotion or config write.
+
+**Phase 2 lock surface (#2820 / Integration 2.1):**
+`tests/dq/hermes/test_phase2_allocation_contracts.py` and
+`phase2_e2e_fixtures.py` lock Gate 2 composition for WP8–WP10 (calibrated H8,
+PreTradeRiskReport identity, shadow isolation + comparison) without enabling
+challenger selection or changing Hermes graph topology.
+
+**Phase 3 lock surface (#3019 / Integration 3.1):**
+`tests/dq/hermes/test_phase3_research_contracts.py` and
+`phase3_e2e_fixtures.py` lock Gate 3 composition for WP11–WP14 (immutable
+evidence bundles/amendments, pinned research state, shadow attention planner,
+blinded role contexts, H6 selection round floor, telemetry reconciliation)
+without planner graph nodes or enforce-mode promotion. Pipeline simulation
+(`tests/dq/atlas/test_pipeline_simulation.py`) extends the WP11.5 durable
+H5/H6 lineage round-trip with graph-level planner-node guards.
 
 ### H2 market-thesis identity
 
@@ -146,7 +231,11 @@ the pipeline's whole observed lifetime.
 
 H7 emits direction + ordinal conviction rank + narrative only — never `target_pct`,
 `weight`, or `recommended_portfolio`. Schema: `PMDirectionMemo` / `TickerDirection`
-(see spec §11.2). H8 maps memo + feasibility constraints → sized weights.
+(see spec §11.2). WP4.5 (#2660) adds `ForecastReference` per roster row, bound after
+the LLM (and after fail-soft prior carry) from current effective-forecast lineage —
+never from model-supplied IDs; missing lineage is explicit degraded (null IDs +
+reason). H8 maps memo + feasibility constraints → sized weights; direction/rank
+semantics are unchanged.
 
 ---
 
@@ -157,20 +246,79 @@ Per-ticker cyclic sub-graph (not a single LLM call):
 - `h6_pm_challenge` — PM challenges analyst doc; may emit `converged=true`
 - `h6_analyst_response` — analyst responds or revises stance
 
-Termination when either side sets `converged=true` (no product round cap; infra timeouts
-only). On fingerprint quiet (#925): `skip` — carry prior deliberation summary into H7;
-fresh `deliberation_transcript` row only when the loop runs.
+Termination when either side sets `converged=true` after the min-rounds floor
+(default 2; infra timeouts / max-rounds cap only for early exit). On fingerprint
+quiet (#925): `skip` — carry prior deliberation summary into H7; fresh
+`deliberation_transcript` row only when the loop runs.
+
+### Deterministic selection — WP11.3 (#2902)
+
+`research_retrieval/planner.py` emits typed `H6Selection` (one primary reason,
+decision features, provider/round budget) from structured features after H5:
+decision-boundary, conflict, uncertainty, invalidation-risk, material weight, or
+exploration → `select`; otherwise `low_value_carry`. Modes via
+`OLYMPUS_H6_SELECTION_MODE`:
+
+| Mode | Behavior |
+|---|---|
+| `shadow` (default) | Record selection; run **full incumbent** H6 (fingerprint skip still applies) |
+| `enforce` | Actuate: low-value carries with **zero** provider calls; selected runs skip fingerprint short-circuit so success meets the two-round floor |
+| `off` | No actuation; incumbent H6 with `incumbent_fallback` provenance |
+
+Planner failure falls back to full incumbent H6 (typed `incumbent_fallback`), never
+an unrecorded skip. `weight_pct` / materiality features are selection-only and must
+not enter provider prompts. Does not replace H4 roster/exploration ownership.
+WP11.4+ (durable lineage round trip) still open — WP11 incomplete.
+
+### Research attention after H4 — WP13.4 (#2930)
+
+After H4 materializes `focus_roster`, `hermes/research_attention.py` invokes
+`plan_research_attention` over ticker targets only (helper at H4 end — not a graph
+node). Modes reuse `OLYMPUS_RESEARCH_ATTENTION_MODE=off|shadow|enforce` (default
+`shadow`). The planner cannot mutate roster width/order or consume the exploration
+floor; H4 output is byte-identical across modes.
+
+| Phase | Enforced behavior |
+|---|---|
+| H5 | `carry` → skip provider; `metric_patch` → deterministic structured patch; `deep_refresh` → force full; `challenge`/`section_patch` → incumbent edit path |
+| H6 | Re-route after H5 features: `challenge` runs deliberation; other modes carry with `attention_carry` |
+
+Plan persists to `hermes_research_attention_plan` + shared `AttentionStore`.
+Coexists with WP11.3 `H6Selection` — attention enforce takes precedence when both
+apply. Rollback: `off`/`shadow`.
+
+### Role context compiler — WP14.1 (#2938)
+
+`research_retrieval/context.py` compiles deterministic role capsules from one exact
+pinned research-state version. `ContextCapsule` / `ContextManifest` record included
+entity IDs, content hashes, byte/token budgets, and typed omission reasons under
+per-role allowlists. H5 delta-evidence policy, H6 bundle/amendment-only evidence,
+and H7 attention-decision sections are enforced at compile time — not yet wired
+into provider calls (WP14.2–14.4). Prose is never authoritative over structured
+state.
+
+### Bounded missing-fact amendment — WP11.4 (#2908)
+
+H6 no longer runs generic ``live_search`` web grounding. When the PM names exactly
+one missing fact via ``MissingFactProposal`` on ``DeliberationPmTurn``, Hermes may
+attempt a single targeted ``query_research`` fetch (blinded by ``source_kind``) and
+append ``MissingFactRequest`` + ``EvidenceBundleAmendment`` through
+``research_retrieval/h6_amendment.py``. Policy cap: one amendment per base bundle;
+invalid/exhausted/failed attempts record ``evidence_amendment_outcome`` /
+``evidence_amendment_failure_reason`` on ``DeliberationSummary`` and continue with
+the immutable H5 base — never broad re-grounding.
 
 ### Carry provenance — `carry_reason` (#1742)
 
-`DeliberationSummary.carried` is set by **two** unrelated paths, and until #1742 they were
-indistinguishable: on 2026-07-31, 31 crashed debates and 4 intentional skips published the
-same `carried=true, converged=true`. `carry_reason` names which one happened:
+`DeliberationSummary.carried` is set by **multiple** unrelated paths.
+`carry_reason` names which one happened:
 
 | `carry_reason` | Path | `converged` | Meaning |
 |---|---|---|---|
 | `fingerprint_skip` | quiet ticker (#925) | `true` | a real prior debate still stands |
 | `llm_failure` | fail-soft catch (#1665) | **`false`** | no PM challenge ever ran |
+| `low_value_carry` | WP11.3 enforce selection (#2902) | `true` | deterministic skip; zero provider calls |
+| `attention_carry` | WP13.4 enforce attention (#2930) | `true` | post-H5 re-route skipped H6; zero provider calls |
 
 Consequences of `llm_failure`, all downstream of the flag:
 
@@ -178,6 +326,10 @@ Consequences of `llm_failure`, all downstream of the flag:
   and the published `deliberation/{ticker}` document stop claiming one.
 - **Document.** `payloads.deliberation_summaries` publishes **no** `bear_thesis`; mirroring
   the bull side off the same `conclusion` produced two byte-identical theses.
+  Successful H6 chats publish the turns under both `transcript` (canonical) and `rounds`
+  (legacy alias). When a PM↔analyst transcript is present and no explicit theses exist,
+  `bull_thesis` / `bear_thesis` stay empty so the dashboard renders the chat instead of
+  two conclusion-mirrored cards.
 - **Sizing.** H8 caps the name's conviction at `SizingCaps.min_conviction`
   (`phase7e._cap_unchallenged_convictions`) — applied to **both** the memo and the legacy
   branch, since H7 writes a memo on every production run. Capping *at* the bar, not below

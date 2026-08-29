@@ -25,13 +25,11 @@ official state. That is a narrower claim than "the only writer of these tables":
 what the portfolio *is*, and it neither writes nor rewrites the book.
 
 Since #2418 these models are **no longer dark**: ``hermes/writers/ledger_io.py`` appends
-the first five links of the chain from every H9 run that actually commits, unless the
-``OLYMPUS_PORTFOLIO_LEDGER`` kill switch is off (see ``digiquant/ARCHITECTURE.md``), and
-``execution_io.py`` appends the last two. Two exceptions are worth naming, because "no
-rows" does not mean "broken": a run that short-circuits as ``status="noop"`` returns
-before the append, and ``TargetAdjustment`` has no producer at all in Phase 0 — H8
-applies its caps upstream inside ``size_portfolio``, so H9 never sees a distinct pre-cap
-number to record. Producers therefore exist for seven of the eight.
+the first five links of the chain (including ``TargetAdjustment`` since #2768) from
+every H9 run that actually commits, unless the ``OLYMPUS_PORTFOLIO_LEDGER`` kill switch
+is off (see ``digiquant/ARCHITECTURE.md``), and ``execution_io.py`` appends the last two.
+A run that short-circuits as ``status="noop"`` returns before the append — "no rows" on
+that path is intentional, not a missing producer.
 
 They are also **read back** now, which they were not before #2420:
 ``digiquant/scripts/atlas/execute_at_open.py`` walks the chain forward from
@@ -135,20 +133,18 @@ class TargetAdjustmentType(StrEnum):
     values and remain for backward compatibility with existing persisted rows
     and tests. The remaining members are the 12 canonical H8 adjustment reasons
     defined by ``hermes.sizing_events.SizingAdjustmentType`` (#2417), added here
-    as an additive superset so a persisted ``TargetAdjustment`` row can one day
-    carry the same fine-grained reason an in-memory ``SizingAdjustment`` event
-    carries, without a breaking rename of the coarse legacy values.
+    as an additive superset so a persisted ``TargetAdjustment`` row can carry the
+    same fine-grained reason an in-memory ``SizingAdjustment`` event carries,
+    without a breaking rename of the coarse legacy values.
+
+    Migration 095 widened the ``adjustment_type`` CHECK on
+    ``portfolio_ledger_target_adjustments`` to this full vocabulary; H9
+    (``ledger_io.append_commit_chain``, #2768) is the producer.
 
     This enum and ``SizingAdjustmentType`` are deliberately kept as two separate
     types rather than unified into one: this one governs a persisted,
-    append-only ledger row (constrained further by the ``adjustment_type``
-    CHECK in migration 069, which still only allows the 3 legacy values — no
-    code path constructs a persisted row with one of the 12 new values yet, so
-    widening that CHECK is deferred until a real writer exists), while
-    ``SizingAdjustmentType`` governs an in-memory, never-persisted explanation
-    object returned alongside H8's sized book. Importing one into the other
-    would couple the persisted ledger to the live sizing pipeline's
-    vocabulary for no present benefit.
+    append-only ledger row, while ``SizingAdjustmentType`` governs the in-memory
+    explanation object returned alongside H8's sized book.
     """
 
     CAP = "cap"
@@ -156,8 +152,8 @@ class TargetAdjustmentType(StrEnum):
     CARRY = "carry"
 
     # The 12 canonical H8 adjustment reasons (#2417), mirrored from
-    # ``hermes.sizing_events.SizingAdjustmentType``. Not yet CHECK-constrained
-    # at the database layer — see class docstring.
+    # ``hermes.sizing_events.SizingAdjustmentType``. CHECK-constrained by
+    # migration 095 (069 originally allowed only cap/rounding/carry).
     CONVICTION_FLOOR = "conviction_floor"
     SINGLE_NAME_CAP = "single_name_cap"
     SECTOR_CAP = "sector_cap"

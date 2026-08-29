@@ -392,31 +392,13 @@ def test_at_open_fills_the_prior_days_rebalance(workflow: dict) -> None:
     assert "--prior-trading-day-rebalance" in _at_open_command(workflow)
 
 
-def test_at_open_defers_the_ledger_cutover(workflow: dict) -> None:
-    """The cutover is held off deliberately, because data alone gets it wrong (#2508).
+def test_at_open_requires_the_ledger_after_opening_snapshot_cutover(workflow: dict) -> None:
+    """After #2589 the cron trusts the ledger path with an explicit require flag.
 
-    This job used to carry neither ledger flag, on the theory that cutover should be a
-    property of the data: the kill switch defaults *on*, so the morning run would start
-    using the ledger the day migration 069 landed and no edit here would be needed.
-
-    That theory is unsafe at the boundary, because the two books disagree exactly once.
-    Order size is a weight delta against the legacy ``positions`` book
-    (``ledger_io.py`` ``_shares(delta_pct=target_pct - prior_pct, ...)``, with ``prior_pct``
-    reaching it via Atlas preflight's ``load_prior_book``), while event naming measures
-    residuals only from ``portfolio_ledger_holding_lots`` — a table whose sole writer is
-    ``execution_io`` itself and which nothing backfills. On the first post-069 run the
-    ledger would therefore size real sells against shares it cannot see, booking EXIT for
-    every trim of a held name and OPEN for every add: the #1743 mislabelling class, reached
-    through cold start instead of the weight-diff ladder. 069 makes those rows append-only,
-    so it would not be repairable in place.
-
-    So ``--no-ledger`` is pinned *present*. Removing it is the deliberate cutover edit, and
-    it must come with seeded lots (or a ledger that declines when the lot table is empty
-    while the prior book is not). ``--require-ledger`` stays absent until then — it turns a
-    decline into exit 3, which is correct after the cutover and a daily red cron before it —
-    and at cutover it is the better flag to adopt, so a silent fall back to prose cannot
-    hide the handover.
+    ``ensure_legacy_opening_snapshot`` seeds (or cold-start-declines) before fills, so
+    ``--no-ledger`` is gone and ``--require-ledger`` is pinned *present*: a decline becomes
+    exit 3 instead of a silent prose fallback that could hide a failed handover.
     """
     command = _at_open_command(workflow)
-    assert "--no-ledger" in command
-    assert "--require-ledger" not in command
+    assert "--no-ledger" not in command
+    assert "--require-ledger" in command

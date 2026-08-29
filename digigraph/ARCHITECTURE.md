@@ -30,6 +30,7 @@ The following is built and functional as of this architecture review (March 2026
 | FastAPI HTTP app | Built | `server.py` |
 | LangGraph `StateGraph[WorkflowState]` | Built | `graph/graph.py`, `graph/state.py` |
 | Research subgraph (LLM + tool loop) | Built | `graph/research.py`, `graph/research_subgraph.py` |
+| Two-tier context compaction | Built | `compaction.py` (wired from `graph/research.py`, `graph/research_agent.py`) |
 | Research brief builder | Built | `graph/research_brief.py`, `research_brief_models.py` |
 | Backtest node (digiquant jobs + fallback) | Built | `graph/nodes.py` |
 | Optimize node | Built | `graph/nodes.py` |
@@ -259,6 +260,8 @@ real node executions rather than compiled graph nodes.
 | `response_language` | `str \| None` | Per-request response-language code (`X-Digi-Language`). **Must** be declared — LangGraph drops undeclared keys. See `digigraph.languages`. |
 | `supervisor_depth_remaining` | `int` | Depth budget for supervisor loop |
 | `supervisor_route` | `str \| None` | Next route chosen by supervisor |
+| `_compaction_event` | `dict \| None` | Lean two-tier compaction event (#399); originals in session workspace. **Must** be declared — LangGraph drops undeclared keys. |
+| `llm_messages` | `list[dict] \| None` | Compacted LLM-facing transcript for multi-turn research; optional |
 
 ### 4.2 WorkflowRequest (`models.py`)
 
@@ -345,7 +348,7 @@ digigraph/src/digigraph/
 ├── digistore.py                 Session-scoped named dataset store (filesystem JSON)
 ├── run_storage.py               Lower-level session path helpers, search result writer
 ├── mcp_server.py                FastMCP server exposing workflow, chat, thread_state, tool lists
-├── audit.py                     JSONL audit log writer (workflow_start, workflow_end, tool_denied)
+├── audit.py                     Thin audit_log → digibase.audit.emit_event (workflow_start/end, tool_denied)
 ├── trace_events.py              TraceEventV1, RagSourceItem, rag_sources_from_results
 ├── tool_policy.py               Allowed tool name resolution (request → project config → env)
 ├── trading_profile.py           optimization_constraints_dict_from_profile
@@ -582,6 +585,8 @@ Three sources merged in `tool_policy.py`:
 When an allowlist is active, `execute()` in `registry.py:106` rejects denied tools with an audit log entry (`tool_denied` event). The schema-level filter in `get_tools()` also removes denied tools from the LLM context, preventing the model from attempting to call them.
 
 An allowlist of `[]` (empty list) blocks all tools, forcing research-only mode. `None` means unrestricted.
+`research_node` deserializes via `tool_policy.frozen_from_state_list` so an empty list is never
+coerced to unrestricted by a falsy check.
 
 #### 6.2.1 Tool Choice Requirement
 
@@ -741,6 +746,33 @@ CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effecti
 
 Search results from digisearch are written to `{run_data_dir}/{session_id}/datasets/` as JSON files. Only a compact preview (5 rows × 300 chars) is injected into the LLM context (`_search_payload_for_llm` in `builtin.py:58`). The full dataset is referenced by `dataset_ref` and loaded on demand by agent runners. This implements the "≥70% token reduction vs naive prompts" target from the architecture principles.
 
+### 8.3.1 Two-tier context compaction (#399)
+
+Long research sessions (document RAG + Atlas `run_research_agent`) accumulate tool results that would otherwise blow past the model context window. digigraph applies **non-destructive** two-tier compaction modelled on LangAlpha's `CompactionMiddleware`:
+
+| Tier | When | What happens |
+|------|------|----------------|
+| **1 — Truncation** | Tool result outside the last `keep_recent_messages` exceeds `tier1_truncation_kb` (default 2 KB) | Original written to `{run_data_dir}/{session}/workspace/tool_results/msg_<id>.json`; LLM sees `[truncated — full result in workspace/tool_results/msg_<id>.json]` |
+| **2 — Summarisation** | Estimated tokens (chars/4) exceed `token_threshold` (default 80 000) | Oldest messages (excluding the recent window and prior summaries) are offloaded to `workspace/compaction/evicted_<event_id>.json`, summarised with `summary_model` (config default `digi/fast` via `digigraph.llm_client.completion_text`), and replaced by a tagged HumanMessage containing `[COMPACTION_SUMMARY]` so later passes do not re-summarise it |
+
+**Integration (pre-LLM step, not a new graph node):**
+
+- `digigraph.compaction.compact_messages` — pure orchestrator (tier 1 then tier 2)
+- `graph/research.py` `_run_document_rag_path` — compacts `llm_messages` (+ current turn) before `run_tools`; wraps `execute_tool` with `wrap_execute_tool_for_tier1` so digillm's in-loop transcript never receives multi-MB payloads
+- `graph/research_agent.py` — same pre-LLM compaction for Atlas/Hermes phase calls (retries re-compact)
+
+**State contract:** `WorkflowState._compaction_event` holds a lean `CompactionEvent` dict (refs, counts, token deltas). `WorkflowState.llm_messages` holds the compacted LLM view for the next turn. Originals are **not** deleted from the session workspace — resume reloads them via the event's `tier1_refs` / `tier2_evicted_ref`. Checkpointer policy is unchanged (`DIGI_CHECKPOINTER=memory|sqlite|postgres`).
+
+**Config** (`CompactionConfig` / env):
+
+| Field / env | Default | Notes |
+|-------------|---------|-------|
+| `enabled` / `DIGI_COMPACTION_ENABLED` | `true` | Master switch |
+| `token_threshold` / `DIGI_COMPACTION_TOKEN_THRESHOLD` | `80000` | Tier-2 trigger |
+| `keep_recent_messages` / `DIGI_COMPACTION_KEEP_RECENT` | `10` | Intact recent window |
+| `tier1_truncation_kb` / `DIGI_COMPACTION_TIER1_KB` | `2` | Tool-result size floor |
+| `summary_model` / `DIGI_COMPACTION_SUMMARY_MODEL` | `digi/fast` | Resolved through `llm_client` / `resolve_request_model` |
+
 ### 8.4 Parallel Tool Execution
 
 When the LLM returns multiple tool calls in one turn and all tools are tagged `parallel_safe` (currently: `visualization_agent`, `analysis_agent`, `data_prep_agent`, `data_manipulation_agent`, `data_engineer_agent`, delegate tools), they are dispatched in parallel via `ThreadPoolExecutor` inside `digillm.run_tools` (the `parallel_safe` set is computed from the registry in `llm_client.py` and passed through). Tool results are appended to the conversation in original order. This reduces multi-tool latency from O(n×tool_time) to O(max_tool_time).
@@ -899,6 +931,11 @@ digigraph:
 | `DIGI_DISABLE_RATE_LIMIT` | (empty) | Disable rate limiting for tests/dev |
 | `DIGI_CORS_ORIGINS` / `DIGIGRAPH_CORS_ORIGINS` | (empty) | CORS allowlist — applied via shared `digibase.cors.install_cors`. `DIGI_ALLOWED_ORIGINS` still honored as legacy fallback. See `SECURITY.md` §"CORS policy". |
 | `DIGI_TOOL_MESSAGE_MAX_CHARS` | `12000` | Max chars per tool result message to LLM |
+| `DIGI_COMPACTION_ENABLED` | `1` | Two-tier context compaction master switch (#399) |
+| `DIGI_COMPACTION_TOKEN_THRESHOLD` | `80000` | Tier-2 summarisation trigger (approx tokens) |
+| `DIGI_COMPACTION_KEEP_RECENT` | `10` | Messages kept intact at the tail |
+| `DIGI_COMPACTION_TIER1_KB` | `2` | Truncate tool results above this size (KB) |
+| `DIGI_COMPACTION_SUMMARY_MODEL` | `digi/fast` | Model for tier-2 summaries (via `llm_client`) |
 | `DIGI_LLM_CACHE_TTL_SECONDS` | `3600` | LLM response cache TTL |
 | `DIGI_INTERRUPT_AFTER_RESEARCH` | (empty) | Interrupt graph after research for HITL: `1` |
 | `DIGI_REQUIRE_TRADING_PROFILE` | (empty) | Require `trading_profile` for backtest: `1` |

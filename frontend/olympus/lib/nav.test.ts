@@ -1,15 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { NAV, isDbExempt } from './nav';
 
 describe('NAV', () => {
-  it('is the 5-destination owner spine, in order (FX Hub permanent since #1664)', () => {
-    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/twelve-x', '/system']);
-    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Hub', 'System']);
-    expect(NAV.find((n) => n.href === '/twelve-x')?.demoted).toBeUndefined();
+  it('is the 4-destination owner spine + FX Hub (System removed)', () => {
+    expect(NAV.map((n) => n.href)).toEqual(['/', '/portfolio', '/pipeline', '/twelve-x']);
+    expect(NAV.map((n) => n.label)).toEqual(['Brief', 'Portfolio', 'Pipeline', 'FX Hub']);
+    expect(NAV.find((n) => n.href === '/system')).toBeUndefined();
   });
 
-  it('demotes only System', () => {
-    expect(NAV.filter((n) => n.demoted).map((n) => n.href)).toEqual(['/system']);
+  it('has no demoted footnote items', () => {
+    expect(NAV.filter((n) => n.demoted)).toEqual([]);
   });
 
   it('gives every item a renderable icon', () => {
@@ -28,6 +28,8 @@ describe('isDbExempt', () => {
     expect(isDbExempt('/research')).toBe(true);
     expect(isDbExempt('/strategy')).toBe(true);
     expect(isDbExempt('/portfolio/theses')).toBe(true);
+    // House chrome declares corpus/profile contracts; sample keys fail soft (#2643)
+    expect(isDbExempt('/house')).toBe(true);
     // twelve-x gates itself on its own research feed, not the main backend (#1664)
     expect(isDbExempt('/twelve-x')).toBe(true);
   });

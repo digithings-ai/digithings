@@ -25,7 +25,7 @@ rules:
   - "Score ≥8 Security, ≥8 Quality, ≥7 Optimization, ≥9 Accuracy before PR"
   - "Never touch live-trading paths without explicit human approval"
   - "Digi product/module names are always lowercase in prose and docs (digithings, digichat, digivault, digigraph, …) — never DigiThings, DigiChat, Digichat, DigiVault. Code identifiers (DigiChatSession, DigiAuthMiddleware) keep language casing."
-  - "Code review: prefer in-session fresh-context review (docs/agents/CODE_REVIEW_POLICY.md). Do not @coderabbitai review for small follow-ups; CodeRabbit is optional/sunset. Tier reviews — cheap scope pass, then strong model only on flagged areas."
+  - "Code review: prefer in-session fresh-context review (docs/agents/CODE_REVIEW_POLICY.md). Do not @coderabbitai review for small follow-ups; CodeRabbit is optional/sunset. Tier reviews — token-efficient scope pass, then strong model only on flagged areas. Do not use fast-mode Cursor model slugs (e.g. *-fast) for review or advisors."
 
 scoring_thresholds:
   security: 8

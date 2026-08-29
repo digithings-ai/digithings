@@ -16,8 +16,16 @@ import type {
   PipelineRunEvent,
   PipelineTraceResult,
 } from '@/lib/pipeline-trace';
-
-const TRACE_PAGE_SIZE = 100;
+import {
+  TRACE_UI_PAGE_SIZE,
+  classifyTraceStageEmpty,
+  filterPipelineTraceByStage,
+  nextTracePageLimit,
+  paginatePipelineTraceEvents,
+  pipelineStageFilters,
+  traceStageLabel,
+  type TraceStageFilter,
+} from '@/lib/pipeline-trace-stage';
 
 type KindFilter = 'all' | PipelineRunEvent['event_kind'];
 type AttentionFilter = 'all' | 'issues';
@@ -45,9 +53,10 @@ export function filterPipelineTraceEvents(
   query: string,
   kind: KindFilter,
   attention: AttentionFilter,
+  stage: TraceStageFilter = 'all',
 ): PipelineRunEvent[] {
   const normalizedQuery = query.trim().toLowerCase();
-  return events.filter((event) => {
+  return filterPipelineTraceByStage(events, stage).filter((event) => {
     if (kind !== 'all' && event.event_kind !== kind) return false;
     if (attention === 'issues' && event.status !== 'error' && event.retry_count === 0) {
       return false;
@@ -157,7 +166,7 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
           title={event.event_kind.replace('_', ' ')}
           className={`flex h-8 w-8 items-center justify-center rounded-md border ${
             event.status === 'error'
-              ? 'border-down/30 text-down'
+              ? 'border-danger/30 text-danger'
               : needsAttention
                 ? 'border-warn/30 text-warn'
                 : 'border-hair text-accent'
@@ -178,7 +187,7 @@ function TraceEvent({ event }: { event: PipelineRunEvent }) {
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {event.status === 'error' ? (
-            <span className="font-mono text-[0.62rem] font-semibold uppercase text-down">Error</span>
+            <span className="font-mono text-[0.62rem] font-semibold uppercase text-danger">Error</span>
           ) : event.retry_count > 0 ? (
             <span className="font-mono text-[0.62rem] font-semibold uppercase text-warn">
               {event.retry_count} {event.retry_count === 1 ? 'retry' : 'retries'}
@@ -235,20 +244,22 @@ export function PipelineTraceView({
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<KindFilter>('all');
   const [attention, setAttention] = useState<AttentionFilter>('all');
-  const [pagination, setPagination] = useState({ key: '', limit: TRACE_PAGE_SIZE });
+  const [stage, setStage] = useState<TraceStageFilter>('all');
+  const [pagination, setPagination] = useState({ key: '', limit: TRACE_UI_PAGE_SIZE });
   const deferredQuery = useDeferredValue(query);
   const events = result.events;
   const filtered = useMemo(
-    () => filterPipelineTraceEvents(events, deferredQuery, kind, attention),
-    [attention, deferredQuery, events, kind],
+    () => filterPipelineTraceEvents(events, deferredQuery, kind, attention, stage),
+    [attention, deferredQuery, events, kind, stage],
   );
-  const filterKey = `${deferredQuery.trim().toLowerCase()}|${kind}|${attention}`;
-  const visibleLimit = pagination.key === filterKey ? pagination.limit : TRACE_PAGE_SIZE;
-  const visibleEvents = filtered.slice(0, visibleLimit);
+  const filterKey = `${deferredQuery.trim().toLowerCase()}|${kind}|${attention}|${stage}`;
+  const visibleLimit = pagination.key === filterKey ? pagination.limit : TRACE_UI_PAGE_SIZE;
+  const visibleEvents = paginatePipelineTraceEvents(filtered, visibleLimit);
   const groups = useMemo(() => groupPipelineTraceEvents(visibleEvents), [visibleEvents]);
   const errors = events.filter((event) => event.status === 'error').length;
   const retries = events.reduce((total, event) => total + event.retry_count, 0);
   const remaining = Math.max(0, filtered.length - visibleEvents.length);
+  const stageEmpty = classifyTraceStageEmpty(stage, events.length);
 
   return (
     <aside
@@ -262,6 +273,7 @@ export function PipelineTraceView({
             {events.length} calls · {date}
             {retries > 0 ? ` · ${retries} retries` : ''}
             {errors > 0 ? ` · ${errors} errors` : ''}
+            {stage !== 'all' ? ` · ${traceStageLabel(stage)}` : ''}
           </p>
         </div>
         <button
@@ -294,6 +306,26 @@ export function PipelineTraceView({
                 className="h-10 w-full rounded-lg border border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-mute/70 focus:border-accent"
               />
             </label>
+            <div
+              className="flex flex-wrap gap-1"
+              aria-label="Pipeline stage filter"
+            >
+              {pipelineStageFilters().map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={stage === value}
+                  onClick={() => setStage(value)}
+                  className={`h-8 rounded-md border px-2.5 font-mono text-[0.62rem] transition-colors ${
+                    stage === value
+                      ? 'border-accent/40 bg-accent/10 text-accent'
+                      : 'border-hair text-ink-mute hover:text-ink'
+                  }`}
+                >
+                  {value === 'all' ? 'All stages' : traceStageLabel(value)}
+                </button>
+              ))}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="inline-flex rounded-lg border border-hair bg-surface p-0.5" aria-label="Call type filter">
                 {([
@@ -371,6 +403,17 @@ export function PipelineTraceView({
                   ))}
                 </section>
               ))
+            ) : stageEmpty === 'typed-gap' && stage !== 'all' ? (
+              <div className="py-8 text-center">
+                <AlertTriangle size={20} aria-hidden className="mx-auto mb-3 text-warn" />
+                <p className="text-sm text-ink" role="status">
+                  No call telemetry for {traceStageLabel(stage)}
+                </p>
+                <p className="mx-auto mt-2 max-w-md text-xs leading-relaxed text-ink-mute">
+                  This stage is a typed persistence gap: the graph does not emit model, search, or
+                  tool call rows for it. Call trace will not invent operations here.
+                </p>
+              </div>
             ) : (
               <p className="py-8 text-center text-sm text-ink-mute">
                 No calls match the current filters.
@@ -381,10 +424,15 @@ export function PipelineTraceView({
               <div className="flex justify-center border-t border-hair pt-4">
                 <button
                   type="button"
-                  onClick={() => setPagination({ key: filterKey, limit: visibleLimit + TRACE_PAGE_SIZE })}
+                  onClick={() =>
+                    setPagination({
+                      key: filterKey,
+                      limit: nextTracePageLimit(visibleLimit, filtered.length),
+                    })
+                  }
                   className="h-9 rounded-lg border border-hair px-4 font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent"
                 >
-                  Load {Math.min(TRACE_PAGE_SIZE, remaining)} more · {remaining} remaining
+                  Load {Math.min(TRACE_UI_PAGE_SIZE, remaining)} more · {remaining} remaining
                 </button>
               </div>
             ) : null}

@@ -39,11 +39,6 @@ from digiquant.olympus.hermes.payloads import analyst_payloads
 
 logger = logging.getLogger(__name__)
 
-# Upper bound on the ``thesis`` column written to ``decision_log`` — Pydantic
-# ``AnalystPayload.thesis`` allows up to 1200, so truncate explicitly rather
-# than letting Postgres ``text`` store a longer value.
-THESIS_MAX_CHARS = 800
-
 # Trading-day window over which alpha is computed. Override per run via
 # ``state.config.preferences['holding_days']``.
 DEFAULT_HOLDING_DAYS = 5
@@ -59,12 +54,11 @@ class ReflectorOutput(BaseModel):
     reflection: str = Field(min_length=1)
 
 
-def _truncate_thesis(thesis: str | None) -> str:
-    """Trim ``thesis`` to ``THESIS_MAX_CHARS``; ``None`` becomes ``""`` so
-    the DB write never stores ``NULL`` for missing analyst output."""
+def _thesis_text(thesis: str | None) -> str:
+    """Normalize thesis for DB write; ``None`` becomes ``""`` (never NULL)."""
     if not thesis:
         return ""
-    return thesis[:THESIS_MAX_CHARS]
+    return thesis
 
 
 def persist_pending(
@@ -110,7 +104,7 @@ def persist_pending(
             "ticker": ticker,
             "stance": stance,
             "conviction": _coerce_int(payload.get("conviction_score")),
-            "thesis": _truncate_thesis(payload.get("thesis")),
+            "thesis": _thesis_text(payload.get("thesis")),
             "benchmark": DEFAULT_BENCHMARK,
             "holding_days": holding_days,
             "status": "pending",
@@ -354,7 +348,6 @@ __all__ = [
     "DEFAULT_BENCHMARK",
     "DEFAULT_HOLDING_DAYS",
     "ReflectorOutput",
-    "THESIS_MAX_CHARS",
     "fetch_recent_lessons",
     "persist_pending",
     "resolve_pending",

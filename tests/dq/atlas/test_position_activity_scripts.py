@@ -94,24 +94,12 @@ def test_market_open_gate_treats_naive_replay_timestamp_as_utc() -> None:
     )
 
 
-def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
-    """Every `execute_at_open.py` subprocess in the backfill carries `--no-ledger` (#2508).
+def test_backfill_requires_the_ledger_like_the_cron_does() -> None:
+    """Every `execute_at_open.py` subprocess in the backfill carries `--require-ledger` (#2589).
 
-    `pipeline-digiquant-prices.yml` passing the flag only closes the *scheduled* door onto the
-    ledger path. This script shells out to the same writer, so an operator repair run is the
-    other way in — and the failure it would cause is unrepairable: with
-    `portfolio_ledger_holding_lots` still empty, order size is a weight delta against the legacy
-    `positions` book while residuals come only from the lot table, so every trim of a held name
-    books EXIT and every add books OPEN, into rows migration 069 makes append-only.
-
-    Asserted over the AST rather than by matching source text, so a reordered argument list is
-    still covered. Every `subprocess.run` in the file is accounted for, and the partition must be
-    exhaustive: a new call site naming neither known script fails as unclassified rather than
-    escaping a substring match, and one whose argv is not a literal list — hoisted into a
-    variable, or handed over as `args=` — fails as opaque rather than going unseen. The dry-run
-    prints are asserted alongside the real calls, because the printed command is what an operator
-    reads before trusting a repair run. Deleting the flag from every call site at once is the
-    cutover; this test is what makes that deliberate rather than incidental.
+    Matches `pipeline-digiquant-prices.yml`: opening-snapshot seed + cold-start decline keep
+    empty lots from inventing OPEN/EXIT; requiring the ledger prevents a silent prose
+    fallback. Asserted over the AST rather than source text.
     """
     source = (_SCRIPT_DIR / "backfill_position_events.py").read_text()
     tree = ast.parse(source)
@@ -153,15 +141,15 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
 
     assert not unclassified, (
         f"unclassified subprocess call site(s): {unclassified}; if this invokes execute_at_open.py "
-        "it must carry --no-ledger, and this test must be taught to see it"
+        "it must carry --require-ledger, and this test must be taught to see it"
     )
     assert len(invocations) == 2, (
         f"expected 2 literal-argv execute_at_open invocations, found {len(invocations)}; "
         "a call site was added, removed, or hoisted out of a literal list"
     )
     for argv in invocations:
-        assert "'--no-ledger'" in argv, f"invocation missing --no-ledger: {argv}"
-        assert "'--require-ledger'" not in argv, f"invocation must not require the ledger: {argv}"
+        assert "'--require-ledger'" in argv, f"invocation missing --require-ledger: {argv}"
+        assert "'--no-ledger'" not in argv, f"invocation must not defer with --no-ledger: {argv}"
 
     # The dry-run branch prints the command instead of running it, so it escapes the walk above.
     # An operator reads that line to decide whether the real run is safe; if it drifts from the
@@ -180,7 +168,5 @@ def test_backfill_defers_the_ledger_cutover_like_the_cron_does() -> None:
         f"expected 2 dry-run previews of execute_at_open, found {len(previews)}"
     )
     for preview in previews:
-        assert "--no-ledger" in preview, f"dry-run preview missing --no-ledger: {preview}"
-        assert "--require-ledger" not in preview, (
-            f"dry-run preview must not require the ledger: {preview}"
-        )
+        assert "--require-ledger" in preview, f"dry-run preview missing --require-ledger: {preview}"
+        assert "--no-ledger" not in preview, f"dry-run preview must not defer: {preview}"

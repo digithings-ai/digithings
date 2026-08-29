@@ -121,7 +121,7 @@ export function SettingsPanel() {
 
         <div className="acct-danger">
           <div>
-            <p className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-down">danger zone</p>
+            <p className="font-mono text-[0.62rem] uppercase tracking-[0.08em] text-danger">danger zone</p>
             <p className="acct-setting-desc">
               Deletes every strategy, backtest, and API key in this workspace. No undo.
             </p>

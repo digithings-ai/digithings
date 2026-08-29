@@ -7,11 +7,13 @@ vi.mock('next/link', () => ({ default: (p: { children?: unknown }) => p.children
 import PortfolioSectionNav from './PortfolioSectionNav';
 
 describe('PortfolioSectionNav', () => {
-  it('shows the four book sections', () => {
+  it('shows Tearsheet | Ledger plus Holdings / Theses / Attribution (no Period)', () => {
     const html = renderToStaticMarkup(createElement(PortfolioSectionNav, { active: 'holdings' as const }));
-    for (const label of ['Holdings', 'Theses', 'Performance', 'Attribution']) {
+    for (const label of ['Holdings', 'Theses', 'Tearsheet', 'Ledger', 'Attribution']) {
       expect(html).toContain(label);
     }
+    expect(html).not.toContain('Period');
+    expect(html).not.toContain('Performance');
   });
 
   it('drops the legacy Allocations / Activity / Intelligence sections', () => {

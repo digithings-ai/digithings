@@ -23,9 +23,9 @@ export interface SettingsContentProps {
   onNavigate?: () => void;
 }
 
-function systemActive(pathname: string): boolean {
+function pipelineActive(pathname: string): boolean {
   const path = normalizePathname(pathname);
-  return path === '/system' || path.startsWith('/system/');
+  return path === '/pipeline' || path.startsWith('/pipeline/');
 }
 
 function settingsActive(pathname: string): boolean {
@@ -44,7 +44,7 @@ export function SettingsContent({
 }: SettingsContentProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useAtlasTheme();
-  const sys = systemActive(pathname);
+  const pipe = pipelineActive(pathname);
   const settings = settingsActive(pathname);
 
   return (
@@ -140,14 +140,14 @@ export function SettingsContent({
             </button>
           ) : null}
           <Link
-            href="/system"
+            href="/pipeline"
             onClick={onNavigate}
             className={`flex items-center gap-2 px-3 py-2 text-xs font-medium transition-colors ${
-              sys ? 'text-accent' : 'text-ink-soft hover:bg-ink/[0.04] hover:text-ink'
+              pipe ? 'text-accent' : 'text-ink-soft hover:bg-ink/[0.04] hover:text-ink'
             }`}
           >
             <Database size={14} className="shrink-0" aria-hidden />
-            <span>How it works</span>
+            <span>Pipeline</span>
           </Link>
         </div>
         {!settings ? (
