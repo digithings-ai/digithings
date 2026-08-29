@@ -78,8 +78,10 @@ export type LedgerEventEconomics = {
 };
 
 /**
- * Compact economics for one ledger row. OPEN/ADD report fill as entry and leave
- * realized null; TRIM/EXIT compute realized vs average entry when both exist.
+ * Compact economics for one ledger row. TRIM/EXIT compute realized vs average
+ * entry when both exist. OPEN/ADD prefer positions.entry_price as of the event
+ * date (fail closed to fill when no mark exists) — never label fill as average
+ * cost when the book already carries a basis.
  */
 export function ledgerEventEconomics(
   event: SellableEvent & { ticker: string; date: string },
@@ -87,15 +89,15 @@ export function ledgerEventEconomics(
 ): LedgerEventEconomics {
   const fillPrice = finitePositive(event.price);
   const isSell = event.event === 'TRIM' || event.event === 'EXIT';
+  const avgEntryPrice = averageEntryAsOf(positions, event.ticker, event.date);
   if (!isSell) {
     return {
-      avgEntryPrice: fillPrice,
+      avgEntryPrice: avgEntryPrice ?? fillPrice,
       fillPrice,
       soldWeightPct: null,
       realizedReturnPct: null,
     };
   }
-  const avgEntryPrice = averageEntryAsOf(positions, event.ticker, event.date);
   return {
     avgEntryPrice,
     fillPrice,

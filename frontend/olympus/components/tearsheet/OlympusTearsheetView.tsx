@@ -129,15 +129,15 @@ function OpenHoldingsPanel({ rows }: { rows: PerformanceHoldingRow[] }) {
  * positions tearsheet tab so realized fills are not duplicated.
  */
 function LedgerDoorway({ sellCount }: { sellCount: number }) {
+  const noun =
+    sellCount === 1 ? '1 recorded exit or trim' : `${sellCount} recorded exits & trims`;
   return (
     <div
       data-testid="ledger-doorway"
       className="flex flex-wrap items-center justify-between gap-3 border-x border-b border-hair bg-surface px-5 py-2.5 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
     >
       <span>
-        {sellCount > 0
-          ? `${sellCount} recorded exit${sellCount === 1 ? '' : 's'} & trim${sellCount === 1 ? '' : 's'}`
-          : 'No recorded exits or trims'}
+        {sellCount > 0 ? noun : 'No recorded exits or trims'}
         {' · '}activity lives on Ledger
       </span>
       <Link
@@ -152,7 +152,7 @@ function LedgerDoorway({ sellCount }: { sellCount: number }) {
 }
 
 export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
-  const [printing, setPrinting] = useState(false);
+  const [, setPrinting] = useState(false);
   const [benchmarkTicker, setBenchmarkTicker] = useState(
     data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
       data.benchmarkTicker
@@ -177,9 +177,6 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
       ? `${data.inceptionDate}–${data.metricsAsOf}`
       : null;
   const sellCount = data.historicalHoldings.length;
-
-  // Keep printing unused-var silence when PDF path still mounts open book only.
-  void printing;
 
   return (
     <div className="ts-print-root space-y-0">

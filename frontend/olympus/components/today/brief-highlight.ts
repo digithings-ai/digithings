@@ -197,10 +197,7 @@ function portfolioLine(input: BriefHighlightInput): BriefBeat {
       label: 'Portfolio',
       text: eventLine(input.latestEvent),
       available: true,
-      href: ledgerHref({
-        date: input.latestEvent.date,
-        ticker: input.latestEvent.ticker,
-      }),
+      href: ledgerHref(),
     };
   }
   if (input.actions.length > 0) {
@@ -285,7 +282,7 @@ function attentionSentence(input: BriefHighlightInput): { text: string; href: st
   if (latestMaterial) {
     return {
       text: eventLine(latestMaterial),
-      href: ledgerHref({ date: latestMaterial.date, ticker: latestMaterial.ticker }),
+      href: ledgerHref(),
     };
   }
   const risk = input.risks[0];

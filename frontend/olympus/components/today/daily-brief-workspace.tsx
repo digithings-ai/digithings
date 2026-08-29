@@ -328,13 +328,15 @@ export function DailyBriefWorkspace({
             <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
               Your update · {digestDate ? formatAsOf(digestDate) : 'awaiting next run'}
             </p>
-            <ClaimLink
-              href={highlight.attentionHref}
-              testId="brief-attention"
-              className="mt-2 line-clamp-6 max-w-4xl font-display text-2xl leading-tight text-ink sm:line-clamp-none sm:text-3xl xl:text-4xl"
-            >
-              {highlight.attention}
-            </ClaimLink>
+            <h1 className="mt-2 max-w-4xl font-display text-2xl leading-tight text-ink sm:text-3xl xl:text-4xl">
+              <ClaimLink
+                href={highlight.attentionHref}
+                testId="brief-attention"
+                className="line-clamp-6 sm:line-clamp-none"
+              >
+                {highlight.attention}
+              </ClaimLink>
+            </h1>
             <ul
               data-testid="brief-beats"
               className="mt-5 max-w-3xl space-y-2.5"
@@ -424,16 +426,26 @@ export function DailyBriefWorkspace({
           )}
         </BriefCardLink>
 
-        <BriefCardLink
-          href={thesesHref}
-          aria-label="Open portfolio theses"
-          data-testid="brief-risk-thesis-link"
+        <div
+          data-testid="brief-risk-thesis"
           className="px-5 py-5 sm:px-7"
         >
-          <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
-            Risk and debate
-          </p>
-          <h2 className="mt-0.5 text-lg font-semibold text-ink">What could break the view</h2>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-ink-mute">
+                Risk and debate
+              </p>
+              <h2 className="mt-0.5 text-lg font-semibold text-ink">What could break the view</h2>
+            </div>
+            <Link
+              href={thesesHref}
+              className="text-[10px] font-medium text-accent hover:underline"
+              data-testid="brief-risk-thesis-link"
+              aria-label="Open portfolio theses"
+            >
+              Open theses
+            </Link>
+          </div>
           <div className="mt-4 divide-y divide-hair/70 border-y border-hair">
             <div className="grid grid-cols-[5.5rem_1fr] gap-3 py-3">
               <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-warn">
@@ -479,7 +491,7 @@ export function DailyBriefWorkspace({
               </p>
             </div>
           </div>
-        </BriefCardLink>
+        </div>
       </section>
 
       <section data-brief-section="book" className="border-b border-hair px-5 py-5 sm:px-7">

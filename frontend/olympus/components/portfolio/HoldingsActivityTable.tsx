@@ -157,6 +157,7 @@ export default function HoldingsActivityTable({ events }: { events: DashboardPos
                           href={tickerDossierHref(event.ticker)}
                           className="font-semibold text-ink hover:text-accent hover:underline"
                           onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
                         >
                           {event.ticker}
                         </Link>

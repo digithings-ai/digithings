@@ -707,7 +707,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     pmRebalanceRes,
   ] = await Promise.all([
     supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
-    supabase.from('positions').select('*').order('date', { ascending: false }).limit(1000),
+    supabase.from('positions').select('*').order('date', { ascending: false }).limit(5000),
     supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
     // Curated NAV (#2599): finalized tips + labeled legacy. Rollback → nav_history / public_nav_history.
@@ -905,10 +905,11 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     return d.toISOString().slice(0, 10);
   })();
   const benchMin = navDatesAsc[0] ?? benchFallbackMin;
-  const benchMax =
-    navDatesAsc.length > 0
-      ? navDatesAsc[navDatesAsc.length - 1]!
-      : new Date().toISOString().slice(0, 10);
+  // Upper bound is the later of last NAV and today so live marks past book
+  // persistence still have overlapping benchmark closes for excess/alpha/IR.
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const lastNav = navDatesAsc.length > 0 ? navDatesAsc[navDatesAsc.length - 1]! : todayUtc;
+  const benchMax = lastNav > todayUtc ? lastNav : todayUtc;
   const benchmarks: BenchmarkHistoryMap = await fetchComparablePriceHistory(
     [...DASHBOARD_BENCHMARK_TICKERS],
     benchMin,

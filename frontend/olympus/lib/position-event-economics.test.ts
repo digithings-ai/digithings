@@ -59,7 +59,7 @@ describe('position-event-economics', () => {
     expect(economics.realizedReturnPct).toBeCloseTo((199.5 / 190 - 1) * 100, 5);
   });
 
-  it('does not invent realized for OPEN/ADD', () => {
+  it('does not invent realized for OPEN/ADD and prefers book entry when known', () => {
     const economics = ledgerEventEconomics(
       {
         date: '2026-06-01',
@@ -74,6 +74,23 @@ describe('position-event-economics', () => {
     expect(economics.avgEntryPrice).toBe(180);
     expect(economics.fillPrice).toBe(180);
     expect(economics.soldWeightPct).toBeNull();
+    expect(economics.realizedReturnPct).toBeNull();
+  });
+
+  it('uses positions.entry_price for ADD when fill differs from carried basis', () => {
+    const economics = ledgerEventEconomics(
+      {
+        date: '2026-07-15',
+        ticker: 'GLD',
+        event: 'ADD',
+        prev_weight_pct: 5,
+        weight_pct: 10,
+        price: 250,
+      },
+      marks
+    );
+    expect(economics.avgEntryPrice).toBe(190);
+    expect(economics.fillPrice).toBe(250);
     expect(economics.realizedReturnPct).toBeNull();
   });
 });

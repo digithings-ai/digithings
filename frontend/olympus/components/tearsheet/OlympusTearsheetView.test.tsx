@@ -131,7 +131,7 @@ describe('OlympusTearsheetView', () => {
     expect(out).toContain('data-testid="ledger-doorway"');
     expect(out).toContain('data-testid="ledger-doorway-link"');
     expect(out).toContain('href="/portfolio/ledger"');
-    expect(out).toContain('1 recorded exit');
+    expect(out).toContain('1 recorded exit or trim');
   });
 
   it('shows current persisted holding performance without decision diagnostics', () => {

@@ -274,9 +274,8 @@ fixed daily-reader sequence:
 2. **Decision and system state** — the latest allocation decision (dossier /
    pm-rebalance) beside completed, degraded, failed, loading, or unavailable
    pipeline health (Open → run date on Pipeline).
-3. **Scoreboard** — percentage measures only: daily and since-inception returns,
-  aligned benchmark excess, alpha, information ratio, and invested allocation
-  (whole band → Tearsheet).
+3. **Scoreboard** — day and since-inception returns, aligned benchmark excess,
+  alpha, information ratio, and invested allocation (whole band → Tearsheet).
 4. **Risk and debate** — ranked actionable signals → digest; thesis name → thesis
    detail when known.
 5. **Book monitor** — session ledger preview → Ledger; holdings tickers → dossiers.
