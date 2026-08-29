@@ -282,15 +282,24 @@ def test_097_adds_workspace_id_to_every_private_set_table(sql_097: str) -> None:
 
 def test_097_backfill_order_null_then_fill_then_not_null(sql_097: str) -> None:
     """Binding: NULLable first, backfill, then SET NOT NULL — one migration, explicit steps."""
-    # Spot-check positions (Group A) and portfolio_ledger_commits (Group B).
     for table in ("positions", "portfolio_ledger_commits"):
-        add_pos = sql_097.upper().find(f"ALTER TABLE PUBLIC.{table.upper()} ADD COLUMN")
-        update_pos = sql_097.upper().find(f"UPDATE PUBLIC.{table.upper()} SET WORKSPACE_ID")
-        not_null_pos = sql_097.upper().find(
-            f"ALTER TABLE PUBLIC.{table.upper()} ALTER COLUMN WORKSPACE_ID SET NOT NULL"
+        add_m = re.search(
+            rf"ALTER\s+TABLE\s+public\.{table}\s+ADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\s+workspace_id",
+            sql_097,
+            re.IGNORECASE,
         )
-        assert add_pos != -1 and update_pos != -1 and not_null_pos != -1, table
-        assert add_pos < update_pos < not_null_pos, f"{table} step order wrong"
+        update_m = re.search(
+            rf"UPDATE\s+public\.{table}\s+SET\s+workspace_id\s*=",
+            sql_097,
+            re.IGNORECASE,
+        )
+        not_null_m = re.search(
+            rf"ALTER\s+TABLE\s+public\.{table}\s+ALTER\s+COLUMN\s+workspace_id\s+SET\s+NOT\s+NULL",
+            sql_097,
+            re.IGNORECASE,
+        )
+        assert add_m and update_m and not_null_m, table
+        assert add_m.start() < update_m.start() < not_null_m.start(), f"{table} step order wrong"
 
 
 def test_097_group_a_has_house_default_group_b_does_not(sql_097: str) -> None:
@@ -423,5 +432,6 @@ def test_no_anon_policy_touched(sql_098: str, raw_098: str) -> None:
 
 
 def test_098_two_jwt_test_plan_documented(raw_098: str) -> None:
-    assert "Two-JWT" in raw_098 or "two-JWT" in raw_098 or "two JWT" in raw_098.lower()
-    assert "workspace A" in raw_098.lower() or "workspaces A and B" in raw_098.lower()
+    lowered = raw_098.lower()
+    assert "two-jwt" in lowered or "two jwt" in lowered
+    assert "workspaces a and b" in lowered or "workspace a" in lowered
