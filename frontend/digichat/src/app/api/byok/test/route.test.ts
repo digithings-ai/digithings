@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "./route";
 import { mockAuthCtx, unauthorizedResponse } from "@/test/route-auth-mock";
@@ -319,6 +321,18 @@ describe("POST /api/byok/test", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toContain("Model is required");
+    // `toContain("Model is required")` alone is why a wrong example survived
+    // here: the branch is x.ai-only, yet the message named `openai/gpt-4o-mini`,
+    // a slug x.ai serves none of — so it was wrong 100% of the times it showed.
+    // Pin the example to x.ai's own catalog entry, not just the sentence.
+    const example = /\(e\.g\. (.+?)\)/.exec(body.error as string)?.[1];
+    expect(example).toBeTruthy();
+    const catalog = JSON.parse(
+      readFileSync(join(__dirname, "../../../../../../../config/byok-providers.json"), "utf-8")
+    ) as { id: string; fallbackModels?: string[] }[];
+    const xaiModels = catalog.find((e) => e.id === "xai")?.fallbackModels ?? [];
+    expect(xaiModels.length).toBeGreaterThan(0);
+    expect(xaiModels).toContain(example);
   });
 
   it("returns the full model list for a valid OpenAI key, not just the first id", async () => {

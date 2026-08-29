@@ -4,6 +4,9 @@
 1.0 above the soft drawdown, a linear ramp to ``1 − max_reduction`` at the hard
 drawdown. It only ever reduces (never levers up). ``breaker_scale_from_nav_history``
 reads the recent ``nav_history`` window (look-ahead-guarded) and is fail-soft.
+
+WP8.5 (#2738): breaker composition with the calibrated control shell is locked in
+``test_allocation_invariants.py``.
 """
 
 from __future__ import annotations
@@ -134,6 +137,20 @@ def test_reader_look_ahead_guard_excludes_future_nav() -> None:
     state = breaker_scale_from_nav_history(client, AS_OF, config=_CFG)
     assert state.current_nav == pytest.approx(100.0)
     assert state.scale == 1.0
+
+
+def test_incumbent_breaker_defaults_and_ramp_match_golden_fixture() -> None:
+    """WP6.1 (#2687): freeze drawdown breaker thresholds and ramp curve."""
+    from tests.dq.hermes.incumbent_risk_fixtures import (
+        dataclass_matches_fixture,
+        load_incumbent_risk_fixture,
+    )
+
+    golden = load_incumbent_risk_fixture()
+    assert dataclass_matches_fixture(BreakerConfig(), golden["policy_defaults"]["breaker_config"])
+    mid = compute_breaker_scale([100.0, 86.0], config=_CFG)
+    assert mid.scale == golden["breaker_scales"]["mid_ramp"]["scale"]
+    assert mid.drawdown_pct == golden["breaker_scales"]["mid_ramp"]["drawdown_pct"]
 
 
 def test_reader_is_fail_soft_on_error() -> None:

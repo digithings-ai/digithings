@@ -47,7 +47,9 @@ Document source
 ParserRegistry (PDF / DOCX / HTML / Markdown / CSV / plain text)
   │ + OCR fallback (Tesseract / Azure DI / AWS Textract)
   ▼
-Chunker (Fixed / Recursive / Sentence / Sliding / Semantic)
+ChunkerBackend (Chonkie Semantic default / Token / legacy Recursive·Fixed)
+  │ via DIGISEARCH_CHUNKER or per-index ``chunker``
+  │ + SegmentAwareChunker wrapper on POST /ingest
   │ + sidecar YAML metadata merge
   ▼
 EmbeddingCache → BatchEmbedder → EmbeddingProvider
@@ -108,7 +110,7 @@ As of the March 2026 codebase snapshot, the following modules are implemented an
 | Backend router + stub | Implemented | `search/_stub.py` |
 | `ParserRegistry` + PDF/DOCX/HTML/MD/CSV/text parsers | Implemented | `ingestion/` |
 | OCR providers (Tesseract, Azure DI) | Implemented | `ingestion/ocr/` |
-| Chunkers: Fixed, Recursive, Sentence, Sliding, Semantic | Implemented | `ingestion/chunkers/` |
+| Chunkers: Chonkie Semantic (default) + Token via `ChunkerBackend`; legacy Fixed/Recursive/Sentence/Sliding/Semantic | Implemented | `chunking/`, `ingestion/chunkers/` |
 | `FastAPI` server | Implemented | `server.py` |
 | MCP server (`FastMCP`) | Implemented | `mcp_server.py` |
 | CLI (Typer) | Implemented | `cli.py` |
@@ -181,7 +183,9 @@ Request:  IngestRequest { source: str, index_name: str, doc_type: str?, metadata
 Response: IngestResponse { doc_id, chunks_created, index_name, status }
 ```
 
-Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (`SegmentAwareChunker`, falling back to `RecursiveChunker` when the parser found no segments — see §4 Segmentation) → merge doc metadata into chunks → add to backend.
+Ingest pipeline: parse → detect sidecar YAML → merge metadata (sidecar first, then request body) → chunk (`SegmentAwareChunker` over the selected `ChunkerBackend`, default Chonkie Semantic; falls through to the inner backend when the parser found no segments — see §4 Segmentation) → merge doc metadata into chunks → add to backend.
+
+Chunker selection (no code change): `DIGISEARCH_CHUNKER=semantic|token|recursive|fixed`, or per-index YAML `chunker:` via `DigiSearchConfig`.
 
 **Critical gap:** `source` is a **filesystem path** on the server. The caller must ensure the path is accessible from inside the container. There is no URL-based ingest in the production path.
 
@@ -452,12 +456,20 @@ digisearch/src/digisearch/
 │       ├── query_expansion.py # QueryExpander
 │       └── hyde.py            # HyDE (Hypothetical Document Embeddings)
 │
+├── chunking/                  # ChunkerBackend Protocol + Chonkie wrappers + factory
+│   ├── backend.py             # ChunkerBackend Protocol (chunk(text) -> list[Chunk])
+│   ├── chonkie_semantic.py    # ChonkieSemanticChunker (default for long docs)
+│   ├── chonkie_token.py       # ChonkieTokenChunker (short news/alerts)
+│   ├── document_adapter.py    # BackendDocumentChunker (text backend → Document Chunker)
+│   └── factory.py             # DIGISEARCH_CHUNKER / per-index selection
+│
 ├── ingestion/
 │   ├── base.py                # Parser ABC
 │   ├── registry.py            # ParserRegistry (extension/MIME detection)
 │   ├── parsers/               # pdf, docx, html, markdown, csv, plaintext
 │   ├── ocr/                   # base, tesseract, azure_di
-│   └── chunkers/              # base, fixed, recursive, sentence, sliding_window, semantic
+│   └── chunkers/              # legacy: base, fixed, recursive, sentence, sliding_window, semantic
+│                              # + segment_aware wrapper used by POST /ingest
 │
 ├── agent/
 │   ├── pipeline.py            # LangGraph: plan → retrieve → aggregate
@@ -512,7 +524,7 @@ core needs. The HTTP/MCP/CLI service stack and the parser deps are extras:
 |-------|------|-----------|
 | _(base)_ | `polars`, `pydantic`, `pyyaml`, `httpx`, `digibase` | core models/config/client, parser import chain |
 | `[server]` | `fastapi`, `uvicorn[standard]`, `mcp`, `typer`, `digikey`, `python-json-logger` | `server.py`, `mcp_server.py`, `cli.py`, `digisearch.logging`, digikey auth middleware |
-| `[ingestion]` | `beautifulsoup4`, `python-docx`, `pdfplumber`, `chardet` | functional parsers (html/docx/pdf/plaintext); `polars` for the CSV parser is already in base |
+| `[ingestion]` | `beautifulsoup4`, `python-docx`, `pdfplumber`, `chardet`, `chonkie[semantic]` | functional parsers (html/docx/pdf/plaintext) + Chonkie Semantic/Token chunkers; `polars` for the CSV parser is already in base |
 | `[chroma]` | `chromadb` | Chroma backend |
 | `[azure]` | `azure-search-documents`, `azure-core` | Azure AI Search backend |
 | `[embedding]` | `openai` | OpenAI embedder |
@@ -796,15 +808,17 @@ Hit rate degrades when:
 
 ### Chunking strategy impact on retrieval quality
 
-The default `RecursiveChunker(chunk_size=2000, chunk_overlap=250)` (character-based, ≈512 tokens at ~4 chars/token — see `DEFAULT_CHUNK_CHARS`/`DEFAULT_CHUNK_OVERLAP` in `ingestion/chunkers/recursive.py`) is a safe general-purpose default. Impact considerations:
+The default ingest chunker is **Chonkie SemanticChunker** (`DIGISEARCH_CHUNKER=semantic`), selected via `digisearch.chunking.factory.get_ingest_chunker`. It groups sentences by embedding similarity (optional skip-window merge ≈ legacy SDPM) so financial reasoning context survives chunk boundaries. Legacy `RecursiveChunker(chunk_size=2000, chunk_overlap=250)` remains available as `DIGISEARCH_CHUNKER=recursive` for rollbacks and characterization tests.
+
+Impact considerations:
 
 - **Too small (< 128 tokens):** chunks lose context; recall suffers on paraphrase queries
 - **Too large (> 1024 tokens):** chunks dilute relevance scores; precision suffers
-- **Zero overlap:** boundary queries that span chunks miss evidence
-- **Sentence chunker for dense financial text:** preserves semantic units better than fixed splits, but spaCy/NLTK add latency
-- **Semantic chunker:** embedding-based boundary detection increases ingest cost ~2x
+- **Zero overlap (token chunker):** boundary queries that span chunks miss evidence
+- **Token chunker (`DIGISEARCH_CHUNKER=token`):** fast fixed windows — prefer for short news/alerts
+- **Semantic chunker (default):** embedding-based boundary detection; first call may download the potion Model2Vec weights; ingest cost higher than recursive/token
 
-For SEC filings (EDGAR corpus), recursive chunking with headers preserved (`RecursiveChunker` respects Markdown/heading delimiters) works well for 10-K structured text.
+For SEC filings (EDGAR corpus) and research/earnings transcripts, keep the semantic default. Use `token` for brief wires where semantic similarity adds little value.
 
 ### Reranker latency tradeoff
 

@@ -188,35 +188,39 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
     Hashes only again (count still 44) for #2330's CodeRabbit body follow-up:
     the production-inventory paragraph now documents the D1_ACCOUNT_ID /
     D1_API_TOKEN credential fallback chain — fixture prose only.
+    Re-recorded at count 46 for CHR-88 / #403 (Chonkie chunking docs + module
+    map in ARCHITECTURE.md) — fixture prose only; RecursiveChunker unchanged.
     """
     arch_path = Path(__file__).resolve().parents[2] / "digisearch" / "ARCHITECTURE.md"
     content = arch_path.read_text(encoding="utf-8")
     doc = Document(id="arch", content=content, source=str(arch_path), doc_type="md")
     chunks = RecursiveChunker().chunk(doc)
 
-    assert len(chunks) == 44
+    assert len(chunks) == 46
     assert all(len(c.content) <= 2000 for c in chunks)
     hashes = [hashlib.sha256(c.content.encode()).hexdigest()[:16] for c in chunks]
     assert hashes == [
         "2a6c63aff18cb155",
-        "7a5ae94e970d3e1e",
-        "b0ee551252e0eaad",
+        "05ee1579bfb41def",
+        "657dd9b7e8689cb3",
         "dbbea9505a0aa65e",
-        "a7a0007c9aec8d7c",
+        "2e3197f02d87ecc8",
         "5c44b3a1c81aaae0",
-        "25c5737630eaedf6",
-        "415f566722403afb",
-        "28e404859ca4cd4e",
-        "bee5fa38b170d902",
+        "bfb4594d4666aba2",
+        "33d2f55bb06380b5",
+        "912f5c5541f4c2ea",
+        "25d821be8951a9d6",
+        "fc372c3eb08daea4",
         "16584e006bbec980",
         "5c929ad2654944ce",
         "80578aa2dbbb641d",
         "1f9fe54a7f6c6f25",
         "941a8a3c77732354",
-        "3adbe61bdd01cb82",
+        "3f839068d9b0bad1",
+        "d27956f583c6cd8c",
         "819ebadc3320ecc2",
-        "09b95dddeb54c404",
-        "ae0fa675eb628fe7",
+        "5a207132fd65bced",
+        "8d9cefe0c746a4da",
         "b56e3e5173fa2b82",
         "e04f2c804b4baa0c",
         "2ec8256cb4695f07",
@@ -227,11 +231,11 @@ def test_real_markdown_file_chunking_matches_recorded_fingerprint() -> None:
         "f2687d4521d1e069",
         "112fe01c18768a54",
         "cdf4f0c7a56c56e7",
-        "0a11a1bc22b44bfa",
-        "7ef582ec2be6842c",
-        "7f35e89d259828fa",
-        "58cc26905caa4f5c",
-        "c3c62657cd6e0f50",
+        "8200c214c753f6dd",
+        "cb634adc42cb989f",
+        "be08ae708ef1595a",
+        "2093dd287bc13660",
+        "05c34cda6e56fd63",
         "dccc3e4f6ff514e6",
         "1bc8e963fdd4c124",
         "17b58004ca6d9f7b",

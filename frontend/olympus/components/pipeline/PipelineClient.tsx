@@ -9,12 +9,17 @@ import { PIPELINE_TOPOLOGY } from '@/lib/pipeline-topology';
 import type { PipelineStageId } from '@/lib/pipeline-topology';
 import type { ExpansionState, LaidOutNode } from '@/lib/pipeline-layout';
 import type { PipelineStage } from '@/lib/pipeline-links';
-import { parsePipelineParams, resolvePresentDigestKey } from '@/lib/pipeline-links';
+import {
+  parsePipelineParams,
+  resolvePresentDigestKey,
+  stageForDocumentKey,
+} from '@/lib/pipeline-links';
 import PipelineDaySelector from './PipelineDaySelector';
 import PipelineCanvas from './PipelineCanvas';
 import PipelineNodeDetail from './PipelineNodeDetail';
 import PipelineArtifactLedger from './PipelineArtifactLedger';
 import PipelineTraceLedger from './PipelineTraceLedger';
+import PipelineRunHealth from './PipelineRunHealth';
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -34,7 +39,10 @@ function buildInitialExpansion(
   stage: PipelineStage | undefined,
   node: string | undefined,
 ): ExpansionState {
-  const expandedStages = new Set<PipelineStageId>(stage ? [stage] : []);
+  // Prefer an explicit ?stage=; otherwise infer from ?node= so ledger-only and
+  // topology-leaf deep links still expand the owning stage (#2627).
+  const resolvedStage = stage ?? (node ? stageForDocumentKey(node) ?? undefined : undefined);
+  const expandedStages = new Set<PipelineStageId>(resolvedStage ? [resolvedStage] : []);
   const expandedFanouts = new Set<string>();
 
   // Deep-link straight to a fan-out branch (e.g. ?node=analyst/QQQ): expand the owning
@@ -248,6 +256,8 @@ export default function PipelineClient() {
           onChange={handleDateChange}
         />
       </header>
+
+      <PipelineRunHealth date={selectedDate} />
 
       <div
         data-testid="pipeline-workflow"

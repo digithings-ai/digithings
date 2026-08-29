@@ -24,6 +24,7 @@ type DigestData = { run_date: string; summary: string; key_themes: string[]; doc
 export default function TodayTab({
   digest,
   tradeIdeas,
+  tradeIdeaHistory = [],
   confluence,
   briefs,
   events,
@@ -33,6 +34,7 @@ export default function TodayTab({
 }: {
   digest: DigestData;
   tradeIdeas: FxTradeIdeaRow[];
+  tradeIdeaHistory?: Pick<FxTradeIdeaRow, 'run_date' | 'pair' | 'direction' | 'as_of'>[];
   confluence: FxConfluenceSnapshotRow[];
   briefs: FxBriefRow[];
   events: FxEconomicCalendarRow[];
@@ -62,6 +64,20 @@ export default function TodayTab({
     return eventLocalDateKey({ event_datetime_utc: new Date().toISOString(), event_date: '' });
   }, [events]);
 
+  const briefDateGroups = useMemo(() => {
+    // Group briefs by effective date (report_date ?? run_date), newest first.
+    const grouped = new Map<string, FxBriefRow[]>();
+    briefs.forEach((b) => {
+      const effDate = b.report_date ?? b.run_date;
+      if (!grouped.has(effDate)) grouped.set(effDate, []);
+      grouped.get(effDate)!.push(b);
+    });
+    return Array.from(grouped.keys())
+      .sort()
+      .reverse()
+      .map((dateKey) => ({ dateKey, dateBriefs: grouped.get(dateKey)! }));
+  }, [briefs]);
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3 px-1">
@@ -83,24 +99,21 @@ export default function TodayTab({
         </p>
       ) : null}
 
-      {/* Above the fold: trade ideas + digest brief co-lead */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <TradeIdeasPanel
-          ideas={tradeIdeas}
-          confluence={confluence}
-          highlightRanks={highlightRanks}
-        />
-        <DigestBrief digest={digest} />
-      </div>
-
-      {/* Mid row: consensus-average chart (wider) + broker briefs, height-matched. */}
-      <div className="today-mid grid grid-cols-1 items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
-        <div className="flex min-w-0 flex-col">
+      {/* Left stack (digest → ideas → consensus) + wider briefs rail, height-matched. */}
+      <div className="today-main grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <DigestBrief digest={digest} />
+          <TradeIdeasPanel
+            ideas={tradeIdeas}
+            ideaHistory={tradeIdeaHistory}
+            confluence={confluence}
+            highlightRanks={highlightRanks}
+          />
           <TodayConsensusChart series={series} />
         </div>
 
         <div className="min-w-0 lg:relative lg:self-stretch">
-          <section className="glass-card flex min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0">
+          <section className="glass-card flex max-h-[32rem] min-h-[28rem] min-w-0 flex-col overflow-hidden p-4 lg:absolute lg:inset-0 lg:max-h-none lg:min-h-0">
             <header className="mb-3 flex shrink-0 items-baseline gap-2">
               <TwelveXSectionHeading>Broker briefs</TwelveXSectionHeading>
               <span className="ml-auto font-mono text-[10px] text-ink-mute">
@@ -121,59 +134,46 @@ export default function TodayTab({
               <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
             ) : (
               <div
-                className="flex max-h-[32rem] min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain pr-1 lg:max-h-none lg:flex-1"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
                 aria-label="Broker brief cards"
                 tabIndex={0}
               >
-              {(() => {
-                // Group briefs by effective date (report_date ?? run_date), newest first.
-                const grouped = new Map<string, typeof briefs>();
-                briefs.forEach((b) => {
-                  const effDate = b.report_date ?? b.run_date;
-                  if (!grouped.has(effDate)) grouped.set(effDate, []);
-                  grouped.get(effDate)!.push(b);
-                });
-                const sortedDates = Array.from(grouped.keys()).sort().reverse();
-
-                return sortedDates.map((dateKey) => {
-                  const dateBriefs = grouped.get(dateKey)!;
-                  return (
-                    <div key={dateKey} className="flex flex-col gap-2">
-                      <h3 className="text-[10.5px] font-semibold uppercase tracking-wide text-ink-soft">
-                        {dateKey}
-                      </h3>
-                      <ul className="flex flex-col gap-2">
-                        {dateBriefs.map((b, n) => (
-                          <li key={`${b.source_file}-${b.run_date}-${n}`}>
-                            <button
-                              type="button"
-                              className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
-                              onClick={() => openBrief(b.source_file, b.run_date)}
-                            >
-                              <div className="flex items-center gap-2 text-[11px] text-ink-mute">
-                                <span className="font-semibold text-ink-soft">
-                                  {b.broker_name ?? 'Unknown desk'}
-                                </span>
-                                {b.trader_relevance ? (
-                                  <span className="uppercase">· {b.trader_relevance}</span>
-                                ) : null}
-                              </div>
-                              <p className="mt-1 truncate text-sm font-medium text-ink">
-                                {b.document_title ?? b.source_file}
-                              </p>
-                              {b.central_thesis ? (
-                                <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
-                                  {b.central_thesis}
-                                </p>
-                              ) : null}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  );
-                });
-              })()}
+                {/*
+                  Flat gap-2 list (date on each card). Avoids interstitial date
+                  headers that stacked with space-y/mb and made multi-date rails
+                  look intermittently sparse on mobile.
+                */}
+                <ul className="flex flex-col gap-2">
+                  {briefDateGroups.map(({ dateKey, dateBriefs }) =>
+                    dateBriefs.map((b, n) => (
+                      <li key={`${b.source_file}-${b.run_date}-${n}`} className="shrink-0">
+                        <button
+                          type="button"
+                          className="w-full rounded-lg border border-hair bg-term-bg p-3 text-left transition-colors hover:border-accent/50"
+                          onClick={() => openBrief(b.source_file, b.run_date)}
+                        >
+                          <div className="flex min-w-0 items-center gap-2 text-[11px] text-ink-mute">
+                            <span className="min-w-0 truncate font-semibold text-ink-soft">
+                              {b.broker_name ?? 'Unknown desk'}
+                            </span>
+                            {b.trader_relevance ? (
+                              <span className="shrink-0 uppercase">· {b.trader_relevance}</span>
+                            ) : null}
+                            <span className="ml-auto shrink-0 font-mono tabular-nums">{dateKey}</span>
+                          </div>
+                          <p className="mt-1 truncate text-sm font-medium text-ink">
+                            {b.document_title ?? b.source_file}
+                          </p>
+                          {b.central_thesis ? (
+                            <p className="mt-1 line-clamp-2 text-xs text-ink-soft">
+                              {b.central_thesis}
+                            </p>
+                          ) : null}
+                        </button>
+                      </li>
+                    )),
+                  )}
+                </ul>
               </div>
             )}
           </section>
