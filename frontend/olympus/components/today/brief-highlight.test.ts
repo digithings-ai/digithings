@@ -25,6 +25,14 @@ describe('activeRebalanceActions', () => {
     ];
     expect(activeRebalanceActions(actions).map((a) => a.ticker)).toEqual(['NVDA']);
   });
+
+  it('drops zero-pp ADD/TRIM noise (#3080)', () => {
+    const actions: RebalanceAction[] = [
+      { ticker: 'XLF', current_pct: 15.14, recommended_pct: 15.16, action: 'ADD' },
+      { ticker: 'SPY', current_pct: 50, recommended_pct: 50, action: 'HOLD' },
+    ];
+    expect(activeRebalanceActions(actions)).toEqual([]);
+  });
 });
 
 describe('buildBriefHighlight', () => {
