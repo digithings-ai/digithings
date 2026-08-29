@@ -1,5 +1,8 @@
 """Regression tests for score:allow pragma keys in scripts/score.py."""
 
+# score:allow notimplementederror stub, pandas
+# test fixtures embed synthetic anti-pattern diffs by design
+
 from __future__ import annotations
 
 import importlib.util
