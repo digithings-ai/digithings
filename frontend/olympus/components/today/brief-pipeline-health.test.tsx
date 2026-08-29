@@ -144,9 +144,61 @@ describe('BriefPipelineHealth', () => {
         runHealth,
         diagnostics: [diag()],
         initialWeekStart: '2026-08-24',
+        now: new Date('2026-09-03T12:00:00Z'), // later week so Next stays enabled
       })
     );
     expect(html).toMatch(/aria-label="Previous week"/);
     expect(html).toMatch(/aria-label="Next week"/);
+    expect(html).toMatch(/aria-label="Next week"[^>]*aria-disabled="false"/);
+    expect(html).not.toMatch(/aria-label="Next week"[^>]*aria-disabled="true"/);
+  });
+
+  it('disables next-week when the pager is already on the current week', () => {
+    const html = renderToStaticMarkup(
+      createElement(BriefPipelineHealth, {
+        runHealth,
+        diagnostics: [diag()],
+        initialWeekStart: '2026-08-24',
+        now: new Date('2026-08-27T15:00:00Z'),
+      })
+    );
+    expect(html).toMatch(/aria-label="Next week"[^>]*aria-disabled="true"/);
+    expect(html).toMatch(/aria-label="Next week"[^>]*\sdisabled(?:=|\s|>)/);
+    expect(html).toContain('Aug 24–30');
+  });
+
+  it('clamps a future initialWeekStart down to the current week', () => {
+    const html = renderToStaticMarkup(
+      createElement(BriefPipelineHealth, {
+        runHealth,
+        diagnostics: [diag()],
+        initialWeekStart: '2026-09-07',
+        now: new Date('2026-08-27T15:00:00Z'),
+      })
+    );
+    expect(html).toContain('Aug 24–30');
+    expect(html).not.toContain('Sep 7');
+  });
+
+  it('uses matching box-border pill chrome for empty and filled day slots', () => {
+    const html = renderToStaticMarkup(
+      createElement(BriefPipelineHealth, {
+        runHealth,
+        diagnostics: [
+          diag({ run_date: '2026-08-25', created_at: '2026-08-25T10:00:00Z' }),
+        ],
+        initialWeekStart: '2026-08-24',
+        now: new Date('2026-08-27T15:00:00Z'),
+      })
+    );
+    // Shared layout classes keep dashed empty pills aligned with filled ones
+    expect(html).toMatch(
+      /data-testid="week-day-empty-2026-08-24"[^>]*box-border[^>]*block[^>]*h-2\.5[^>]*w-full[^>]*border/
+    );
+    expect(html).toMatch(
+      /data-testid="week-day-2026-08-25"[^>]*box-border[^>]*block[^>]*h-2\.5[^>]*w-full[^>]*border/
+    );
+    expect(html).toContain('border-transparent');
+    expect(html).toContain('border-dashed');
   });
 });
