@@ -223,9 +223,24 @@ describe('TodayTab layout (Task 2.2)', () => {
     expect(html).toContain('lg:absolute lg:inset-0');
     expect(html).toContain('max-h-[32rem]');
     expect(html).toContain('lg:max-h-none');
-    // Single gap source on the card list — date groups use space-y, not nested gap-2 wrappers.
-    expect(html).toContain('space-y-3');
-    expect(html).not.toContain('flex flex-col gap-2"><h3');
+    // Single gap source on the card list — date headers and cards share one
+    // flex gap-2 stream (no space-y + heading mb + nested ul gap stacking).
+    expect(html).toContain('flex flex-col gap-2');
+    expect(html).not.toContain('space-y-3');
+    expect(html).not.toContain('mb-2 font-mono text-[10.5px]');
+  });
+
+  it('keeps even card spacing when briefs span multiple report dates', () => {
+    const html = render();
+    // Fixture spans two dates (06-22 and 06-21). Markup must still use one
+    // gap-2 list rather than per-date wrappers that stack margins.
+    const scrollerStart = html.indexOf('aria-label="Broker brief cards"');
+    expect(scrollerStart).toBeGreaterThan(0);
+    const scrollerChunk = html.slice(scrollerStart, scrollerStart + 2500);
+    expect(scrollerChunk).toContain('flex flex-col gap-2');
+    // No nested per-date ul — only the outer shared list.
+    expect(scrollerChunk.match(/<ul /g)?.length ?? 0).toBe(1);
+    expect(scrollerChunk).not.toContain('space-y-');
   });
 
   it('groups broker briefs by effective date (report_date ?? run_date) newest-first', () => {

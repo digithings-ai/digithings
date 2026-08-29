@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { CalendarClock } from 'lucide-react';
 import type {
   FxConfluenceSnapshotRow,
@@ -134,16 +134,24 @@ export default function TodayTab({
               <p className="text-sm text-ink-mute">No research briefs for today yet.</p>
             ) : (
               <div
-                className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
                 aria-label="Broker brief cards"
                 tabIndex={0}
               >
-                {briefDateGroups.map(({ dateKey, dateBriefs }) => (
-                  <div key={dateKey}>
-                    <h3 className="mb-2 font-mono text-[10.5px] font-semibold uppercase tracking-wide text-ink-soft">
-                      {dateKey}
-                    </h3>
-                    <ul className="flex flex-col gap-2">
+                {/*
+                  One gap source for the whole list. Date headers and cards share
+                  the same flex gap so cross-date rows do not pick up stacked
+                  space-y + heading margin + inner gap (the intermittent "huge
+                  gap between cards" on mobile when briefs span multiple dates).
+                */}
+                <ul className="flex flex-col gap-2">
+                  {briefDateGroups.map(({ dateKey, dateBriefs }) => (
+                    <Fragment key={dateKey}>
+                      <li className="shrink-0">
+                        <h3 className="font-mono text-[10.5px] font-semibold uppercase tracking-wide text-ink-soft">
+                          {dateKey}
+                        </h3>
+                      </li>
                       {dateBriefs.map((b, n) => (
                         <li key={`${b.source_file}-${b.run_date}-${n}`} className="shrink-0">
                           <button
@@ -170,9 +178,9 @@ export default function TodayTab({
                           </button>
                         </li>
                       ))}
-                    </ul>
-                  </div>
-                ))}
+                    </Fragment>
+                  ))}
+                </ul>
               </div>
             )}
           </section>
