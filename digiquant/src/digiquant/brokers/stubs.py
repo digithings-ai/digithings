@@ -6,6 +6,11 @@ full surface (`get_account`, `get_positions`, `submit_order(req)`, `get_order`,
 every method still raises `NotImplementedError`. No I/O happens anywhere in this module.
 """
 
+# score:allow notimplementederror stub
+# Phase 2 broker adapters are deliberately unimplemented; a human gate is
+# required before any real order-submission code lands (see
+# digiquant/AGENTS.md § "Human gate on live trading").
+
 from __future__ import annotations
 
 from datetime import datetime

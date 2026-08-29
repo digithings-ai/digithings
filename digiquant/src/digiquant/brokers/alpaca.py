@@ -35,6 +35,7 @@ from digiquant.brokers.contracts import (
     BrokerError,
     BrokerFill,
     BrokerOrderAck,
+    BrokerOrderNotFound,
     BrokerOrderRejected,
     BrokerOrderRequest,
     BrokerOrderStatus,
@@ -76,6 +77,8 @@ _ALPACA_EXTRA_HINT = (
 )
 
 _MAX_RATE_LIMIT_TRIES = 3
+# Submit attempts (initial + retries). Every retry is gated on a confirmed 404.
+_MAX_SUBMIT_TRIES = 3
 _FRACTIONAL_EPS = Decimal("0.00000001")
 
 # Alpaca Order.status → BrokerOrderStatus. Unknown values fall through to SUBMITTED + warn.
@@ -142,6 +145,21 @@ def _is_fractional(quantity: Decimal) -> bool:
 def _ensure_sdk() -> None:
     if _TradingClient is None:
         raise ImportError(_ALPACA_EXTRA_HINT)
+
+
+def _api_error_message(exc: Exception) -> str:
+    """Read ``APIError.message`` without leaking ``json.loads`` failures on non-JSON bodies."""
+    try:
+        return str(exc.message)  # type: ignore[attr-defined]
+    except Exception:
+        return str(exc)
+
+
+def _api_error_code(exc: Exception) -> str | None:
+    try:
+        return str(exc.code)  # type: ignore[attr-defined]
+    except Exception:
+        return None
 
 
 def _map_status(raw: object) -> BrokerOrderStatus:
@@ -283,28 +301,74 @@ class AlpacaAdapter:
         return out
 
     def submit_order(self, req: BrokerOrderRequest) -> BrokerOrderAck:
+        """Submit with idempotent retry across transport and rate-limit failures.
+
+        Invariant: a submit is never retried (by any exception path) without first
+        consulting ``get_order_by_client_id``. Only a confirmed 404
+        (``BrokerOrderNotFound``) authorizes a resubmit; any other lookup failure
+        propagates without calling submit again. On 429, the sequence is
+        lookup → sleep → **lookup again** → resubmit so a late-indexed order is
+        found before the second submit. ``_submit_once`` disables ``_call``'s
+        internal 429 loop so every retry decision lives here.
+        """
         self._validate_local_tif(req)
-        try:
-            return self._submit_once(req)
-        except BrokerTransportError as exc:
-            # Idempotency: a transport failure may have landed the fill — recover first.
-            recovered = self._recover_by_client_id(req.client_order_id)
-            if recovered is not None:
-                logger.info(
-                    "submit transport failure recovered via client_order_id=%s "
-                    "fingerprint=%s request_id=%s",
-                    req.client_order_id,
-                    self._auth_fingerprint,
-                    _request_id_from_error(exc),
-                )
-                return recovered
-            logger.warning(
-                "submit transport failure; retrying once after miss on client_order_id=%s "
-                "fingerprint=%s",
-                req.client_order_id,
-                self._auth_fingerprint,
-            )
-            return self._submit_once(req)
+        last_retryable: BrokerTransportError | BrokerRateLimited | None = None
+        for attempt in range(_MAX_SUBMIT_TRIES):
+            try:
+                return self._submit_once(req)
+            except (BrokerTransportError, BrokerRateLimited) as exc:
+                last_retryable = exc
+                # Lookup BEFORE any retry (and before giving up after exhaustion).
+                recovered = self._recover_by_client_id(req.client_order_id)
+                if recovered is not None:
+                    logger.info(
+                        "submit failure recovered via client_order_id=%s "
+                        "fingerprint=%s attempt=%d error=%s",
+                        req.client_order_id,
+                        self._auth_fingerprint,
+                        attempt + 1,
+                        type(exc).__name__,
+                    )
+                    return recovered
+                # Confirmed 404 — a resubmit is authorized if attempts remain.
+                if attempt + 1 >= _MAX_SUBMIT_TRIES:
+                    break
+                if isinstance(exc, BrokerRateLimited):
+                    delay = exc.retry_after if exc.retry_after is not None else (2**attempt)
+                    delay = float(delay) + random.uniform(0, 0.25)
+                    logger.warning(
+                        "submit 429 after confirmed miss; sleeping %.2fs "
+                        "attempt=%d/%d fingerprint=%s client_order_id=%s",
+                        delay,
+                        attempt + 1,
+                        _MAX_SUBMIT_TRIES,
+                        self._auth_fingerprint,
+                        req.client_order_id,
+                    )
+                    time.sleep(delay)
+                    # Re-check after backoff — the venue may have indexed the order.
+                    recovered = self._recover_by_client_id(req.client_order_id)
+                    if recovered is not None:
+                        logger.info(
+                            "submit 429 recovered post-backoff via client_order_id=%s "
+                            "fingerprint=%s attempt=%d",
+                            req.client_order_id,
+                            self._auth_fingerprint,
+                            attempt + 1,
+                        )
+                        return recovered
+                else:
+                    logger.warning(
+                        "submit transport failure after confirmed miss; retrying "
+                        "attempt=%d/%d fingerprint=%s client_order_id=%s",
+                        attempt + 1,
+                        _MAX_SUBMIT_TRIES,
+                        self._auth_fingerprint,
+                        req.client_order_id,
+                    )
+                continue
+        assert last_retryable is not None
+        raise last_retryable
 
     def get_order(self, external_order_id: str) -> BrokerOrderAck:
         order = self._call(self._client.get_order_by_id, external_order_id)
@@ -390,20 +454,21 @@ class AlpacaAdapter:
         return _LimitOrderRequest(**common, limit_price=str(req.limit_price))
 
     def _submit_once(self, req: BrokerOrderRequest) -> BrokerOrderAck:
+        # No internal 429 retry — submit_order owns every retry after a client-id lookup.
         order_req = self._build_order_request(req)
-        order = self._call(self._client.submit_order, order_req)
+        order = self._call(self._client.submit_order, order_req, retry_on_rate_limit=False)
         return self._order_to_ack(order)
 
     def _recover_by_client_id(self, client_order_id: str) -> BrokerOrderAck | None:
+        """Return an ack if the venue already has this client_order_id.
+
+        ``None`` means a confirmed 404 (safe to resubmit). Any other failure —
+        auth, rate-limit exhaustion, transport, 5xx — propagates so the caller
+        never blindly resubmits.
+        """
         try:
             order = self._call(self._client.get_order_by_client_id, client_order_id)
-        except BrokerOrderRejected:
-            return None
-        except BrokerAuthError:
-            raise
-        except BrokerTransportError:
-            return None
-        except BrokerError:
+        except BrokerOrderNotFound:
             return None
         return self._order_to_ack(order)
 
@@ -418,16 +483,32 @@ class AlpacaAdapter:
             raw_sha256=_order_raw_sha256(order),
         )
 
-    def _call(self, fn: object, *args: object, **kwargs: object) -> object:
-        """Invoke an SDK method with 429 backoff (max 3 tries + jitter) and error mapping."""
+    def _call(
+        self,
+        fn: object,
+        *args: object,
+        retry_on_rate_limit: bool = True,
+        **kwargs: object,
+    ) -> object:
+        """Invoke an SDK method with optional 429 backoff (max 3 tries + jitter).
+
+        Pass ``retry_on_rate_limit=False`` for submit: the submit path must consult
+        ``get_order_by_client_id`` before any retry (see ``submit_order``).
+        Idempotent reads (account/positions/lookup) keep the internal 429 loop.
+        """
         assert callable(fn)
         last_rate: BrokerRateLimited | None = None
-        for attempt in range(_MAX_RATE_LIMIT_TRIES):
+        tries = _MAX_RATE_LIMIT_TRIES if retry_on_rate_limit else 1
+        for attempt in range(tries):
             try:
                 return fn(*args, **kwargs)
             except Exception as exc:
                 mapped = self._map_exception(exc)
-                if isinstance(mapped, BrokerRateLimited) and attempt + 1 < _MAX_RATE_LIMIT_TRIES:
+                if (
+                    retry_on_rate_limit
+                    and isinstance(mapped, BrokerRateLimited)
+                    and attempt + 1 < tries
+                ):
                     last_rate = mapped
                     delay = mapped.retry_after if mapped.retry_after is not None else (2**attempt)
                     delay = float(delay) + random.uniform(0, 0.25)
@@ -435,7 +516,7 @@ class AlpacaAdapter:
                         "Alpaca 429; sleeping %.2fs attempt=%d/%d fingerprint=%s request_id=%s",
                         delay,
                         attempt + 1,
-                        _MAX_RATE_LIMIT_TRIES,
+                        tries,
                         self._auth_fingerprint,
                         _request_id_from_error(exc),
                     )
@@ -456,18 +537,11 @@ class AlpacaAdapter:
                 request_id,
             )
             if status in (401, 403):
-                return BrokerAuthError(str(getattr(exc, "message", exc)))
+                return BrokerAuthError(_api_error_message(exc))
+            if status == 404:
+                return BrokerOrderNotFound(_api_error_message(exc))
             if status == 422:
-                code: str | None
-                try:
-                    code = str(exc.code)
-                except Exception:
-                    code = None
-                try:
-                    message = str(exc.message)
-                except Exception:
-                    message = str(exc)
-                return BrokerOrderRejected(message, code=code)
+                return BrokerOrderRejected(_api_error_message(exc), code=_api_error_code(exc))
             if status == 429:
                 return BrokerRateLimited(retry_after=_retry_after_seconds(exc))
             return BrokerTransportError(str(exc))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildRebalanceActions } from './rebalance-actions';
+import { buildRebalanceActions, isMaterialRebalanceAction } from './rebalance-actions';
 
 /**
  * #1850 — position-size changes rendered "0.0% → 0.0%" on the dashboard.
@@ -7,6 +7,46 @@ import { buildRebalanceActions } from './rebalance-actions';
  * The fixtures below are the REAL 2026-08-04 production payload and book weights, because the
  * bug was invisible to any invented fixture that happened to include a `current_pct` key.
  */
+describe('isMaterialRebalanceAction', () => {
+  it('collapses ADD/TRIM that round to 0.0pp at desk precision (#3080)', () => {
+    expect(
+      isMaterialRebalanceAction({
+        ticker: 'XLF',
+        current_pct: 15.14,
+        recommended_pct: 15.16,
+        action: 'ADD',
+      }),
+    ).toBe(false);
+    expect(
+      isMaterialRebalanceAction({
+        ticker: 'XLV',
+        current_pct: 9.86,
+        recommended_pct: 9.861,
+        action: 'TRIM',
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps material moves and genuine opens', () => {
+    expect(
+      isMaterialRebalanceAction({
+        ticker: 'NVDA',
+        current_pct: 8,
+        recommended_pct: 6,
+        action: 'TRIM',
+      }),
+    ).toBe(true);
+    expect(
+      isMaterialRebalanceAction({
+        ticker: 'IJR',
+        current_pct: 0,
+        recommended_pct: 6,
+        action: 'OPEN',
+      }),
+    ).toBe(true);
+  });
+});
+
 describe('buildRebalanceActions', () => {
   // Exactly the shape the live pm-rebalance document carries: no current_pct anywhere.
   const LIVE_ACTIONS = [
