@@ -221,6 +221,7 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Pipeline');
     expect(html).toContain('Performance');
     expect(html).toContain('Holdings');
+    expect(html).toContain('Ledger');
     expect(html).toContain('Theses');
     expect(html).toContain('data-testid="daily-brief-workspace"');
     expect(html).toContain('line-clamp-6');
@@ -236,7 +237,7 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Ledger');
   });
 
-  it('wires brief sections to one destination each', () => {
+  it('wires brief sections and claims to sourced destinations', () => {
     const html = renderToStaticMarkup(
       <DailyBriefWorkspace {...populatedProps} />
     );
@@ -245,10 +246,12 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('href="/portfolio/performance"');
     expect(html).toContain('data-testid="brief-signals-link"');
     expect(html).toContain('data-testid="brief-risk-thesis-link"');
-    expect(html).toContain('href="/portfolio?tab=theses"');
     expect(html).toContain('data-testid="brief-ledger-link"');
     expect(html).toContain('href="/portfolio/ledger"');
     expect(html).toContain('data-testid="brief-holdings-link"');
+    expect(html).toContain('data-testid="brief-decision-link"');
+    expect(html).toContain('href="/portfolio/tickers?ticker=NVDA"');
+    expect(html).toContain('data-testid="brief-attention"');
   });
 
   it('shows the portfolio thesis once in the hero — not again in beats or latest decision', () => {

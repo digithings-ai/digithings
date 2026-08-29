@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useLiveBriefKpis } from '@/lib/hooks/use-live-brief-kpis';
 import type { AtlasRunDiagnostics, BenchmarkHistoryMap, NavChartPoint } from '@/lib/types';
-import { DASHBOARD_BENCHMARK_TICKERS } from '@/lib/benchmark-tickers';
+import {
+  DEFAULT_BRIEF_BENCHMARK_TICKER,
+  pickBriefBenchmarkTicker,
+} from '@/lib/benchmark-tickers';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { EmptyState } from '@digithings/web';
@@ -17,23 +20,16 @@ import { selectBriefLedgerDayEvents } from '@/lib/brief-book-event';
 import { buildDisplayRationaleByTicker } from '@/lib/pm-rationale';
 // ─── Benchmark blurb (kept from the prior overview; pure, honest window) ────────
 
-function pickBenchmarkTicker(benchmarks: BenchmarkHistoryMap): string | null {
-  for (const t of DASHBOARD_BENCHMARK_TICKERS) {
-    if (benchmarks[t]?.history?.length) return t;
-  }
-  return null;
-}
-
 /**
  * Portfolio vs benchmark over the aligned return window (first portfolio point →
  * last portfolio point, clipped to available benchmark history). `startDate` keeps the label
- * honest ("since {date}", not a dishonest "inception").
+ * honest ("since {date}", not a dishonest "inception"). Defaults to SPY when present.
  */
 function inceptionVsBenchmark(
   snaps: NavChartPoint[],
   benchmarks: BenchmarkHistoryMap
 ): { ticker: string; portPct: number; benchPct: number; excessPct: number; startDate: string } | null {
-  const ticker = pickBenchmarkTicker(benchmarks);
+  const ticker = pickBriefBenchmarkTicker(benchmarks);
   if (!ticker || snaps.length < 2) return null;
   const hist = benchmarks[ticker]?.history;
   if (!hist?.length) return null;
@@ -178,7 +174,8 @@ export default function OverviewPage() {
     : null);
   const priceAsOf = liveKpis?.priceAsOfDate ?? bookAsOf;
   // Percentage returns only — never lead with the base-100 NAV index.
-  // Prefer the shared live KPI path; fall back to snapshot ratio (same formula).
+  // Prefer the shared live KPI path (same SSOT as digiquant landing / Performance
+  // relative helpers); fall back to snapshot ratio for inception only.
   const initialPortfolioValue = performanceHistoryResolved.length
     ? performanceHistoryResolved[0].nav
     : null;
@@ -194,8 +191,13 @@ export default function OverviewPage() {
     ? performanceHistoryResolved[0].date
     : null);
   const dailyRet = liveKpis?.dayReturnPct ?? null;
+  // Excess / alpha / IR: live KPI SSOT first; excess may fall back to the honest
+  // endpoint blurb. Alpha/IR stay fail-closed (need ≥20d overlap) — never invent.
   const excessPct = liveKpis?.excessReturnPct ?? benchmarkBlurb?.excessPct ?? null;
-  const benchTicker = liveKpis?.benchmarkTicker ?? benchmarkBlurb?.ticker ?? null;
+  const benchTicker =
+    liveKpis?.benchmarkTicker ??
+    benchmarkBlurb?.ticker ??
+    (excessPct != null ? DEFAULT_BRIEF_BENCHMARK_TICKER : null);
 
   return (
     <div className={`${SUBPAGE_MAX} py-4 md:py-7`}>
