@@ -223,6 +223,9 @@ report = vault.lint()           # -> LintReport(ok, note_count, issues)
   only the OpenAI manifest. Runtime-only tools (`digivault_search_notes`,
   `digivault_get_note`) claim into the same table from `server.py` so
   `dispatch_tool_names() == DISPATCH_TOOL_NAMES` after the HTTP app loads.
+  MCP `digivault_search_tag` projects a slim JSON **array** of
+  `{name, title, rel_path}` (pre-#3041 contract); orchestrator invoke keeps the
+  shared handler’s `{"notes": [...]}` envelope.
 
   ```
   digigraph / MCP client
