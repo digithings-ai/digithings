@@ -249,6 +249,52 @@ class BrokerAccountSnapshot(BrokerContractModel):
         return self
 
 
+# --- Broker exception family (K1; shared with K2) ---------------------------------
+# Appended for the Alpaca paper adapter (K1) and reused by IBKR (K2). Do not reorder
+# the models above; new exception types only land below this banner.
+
+
+class BrokerError(Exception):
+    """Base for every broker-adapter failure a caller is expected to handle."""
+
+
+class BrokerAuthError(BrokerError):
+    """Venue rejected credentials (HTTP 401/403)."""
+
+
+class BrokerOrderRejected(BrokerError):
+    """Venue (or local pre-submit guard) rejected the order (HTTP 422 or local rule)."""
+
+    def __init__(self, message: str, code: str | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
+class BrokerRateLimited(BrokerError):
+    """Venue rate-limited the call (HTTP 429); ``retry_after`` is seconds when known."""
+
+    def __init__(self, retry_after: float | None = None) -> None:
+        super().__init__(f"broker rate limited; retry_after={retry_after!r}")
+        self.retry_after = retry_after
+
+
+class BrokerTransportError(BrokerError):
+    """Network / non-mapped HTTP failure talking to the venue."""
+
+
+class BrokerOrderNotFound(BrokerError):
+    """Venue reports no order for the given id (HTTP 404).
+
+    The only lookup outcome that authorizes a submit resubmit: any other failure
+    must propagate without calling submit again.
+    """
+
+
+class LiveVenueNotAuthorizedError(BrokerError):
+    """Construction or routing attempted a live venue that this program forbids."""
+
+
 __all__ = [
     "BrokerAccountSnapshot",
     "BrokerContractModel",
@@ -270,4 +316,12 @@ __all__ = [
     "SignedQuantity",
     "Symbol",
     "TimeInForce",
+    # K1 exception family (appended; do not reorder entries above)
+    "BrokerAuthError",
+    "BrokerError",
+    "BrokerOrderNotFound",
+    "BrokerOrderRejected",
+    "BrokerRateLimited",
+    "BrokerTransportError",
+    "LiveVenueNotAuthorizedError",
 ]
