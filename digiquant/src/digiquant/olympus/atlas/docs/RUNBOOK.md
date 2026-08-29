@@ -237,8 +237,11 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 
 Target: **< $1/day** in xAI usage *without reducing capability* — trim
 redundancy and misallocated effort, never research breadth or freshness.
-Agentic searches dominate cost (~$0.005 per server-side tool invocation — one
-`web_search` pre-pass spawns dozens), tokens are second.
+Agentic searches dominate cost (built-in provider search on the tier's
+`web_search_models` pins — typically `perplexity/sonar` or `:online` variants,
+billed per that model's page; the `openrouter:web_search` Exa server tool is
+**$0.007**/request per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search)
+but unreachable from production pools), tokens are second.
 
 Capability-preserving reductions in place:
 
@@ -333,12 +336,16 @@ the pipeline run step and the preflight-validation step — see the table below.
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
 | **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — set in Olympus CI on the pipeline run step since #1622 and on the preflight-validation step since #2512, so the preflight's digillm-routed checks self-heal the same way (#2374) |
-| **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; model comes from `get_grounding_model()`, which picks from the tier's `web_search_models` pool — when that resolves to nothing the grounding pre-pass is skipped, never substituted |
+| **`openrouter:web_search`** | `tools` on grounding pre-pass (unreachable from production — see below) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra); production grounding uses built-in search on `perplexity/sonar` or `:online` models from `get_grounding_model()` / `web_search_models` — billed per that model's page |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
 Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
 
-**Web grounding** uses OpenRouter's `openrouter:web_search` server tool, with the model resolved by `get_grounding_model()`.
+**Web grounding** resolves via `get_grounding_model()` from the tier's `web_search_models`
+pool. Every production pool entry is `perplexity/sonar` or an `:online` variant, so
+digillm uses built-in provider search — not the `openrouter:web_search` Exa server tool
+(which remains the path for non-`:online`/non-Perplexity models and is what check 4 in
+`validate-providers.py` exercises).
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
