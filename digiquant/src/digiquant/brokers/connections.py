@@ -273,7 +273,9 @@ def _rows(response: object) -> list[dict[str, Any]]:
     if data is None:
         return []
     if not isinstance(data, list):
-        raise ConnectionStoreError(f"expected a list of {TABLE_NAME} rows, got {type(data).__name__}")
+        raise ConnectionStoreError(
+            f"expected a list of {TABLE_NAME} rows, got {type(data).__name__}"
+        )
     return [row for row in data if isinstance(row, dict)]
 
 
@@ -433,9 +435,7 @@ def mark_connection_used(
 ) -> None:
     """Stamp ``last_used_at``. One of the three columns the migration lets us UPDATE."""
     stamp = (used_at or datetime.now(tz=UTC)).astimezone(UTC).isoformat()
-    client.table(TABLE_NAME).update({"last_used_at": stamp}).eq(
-        "id", str(connection_id)
-    ).execute()
+    client.table(TABLE_NAME).update({"last_used_at": stamp}).eq("id", str(connection_id)).execute()
 
 
 def revoke_connection(
