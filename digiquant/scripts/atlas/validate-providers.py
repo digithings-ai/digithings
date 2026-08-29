@@ -7,7 +7,7 @@ Checks (in order):
   2. OpenRouter connectivity (short ping via digillm, pinned to a known-good model)
      Note: phases route on PINNED per-capability models from config/olympus_models.yaml
      (see RUNBOOK.md "OpenRouter model tiers") — bare openrouter/auto is exercised
-     deliberately in checks 3/3b/4 below, not as the connectivity probe.
+     deliberately in check 3 below, not as the connectivity probe.
   3. OpenRouter structured-output routing (real digillm json_schema call)
   3b. OpenRouter function tools — each active-tier phase model accepts the query_data
      tool (guards the ``:online`` "No endpoints found that support tool use" regression)
@@ -254,7 +254,7 @@ def check_openrouter_structured() -> bool:
             f"{elapsed:.1f}s — model={served}, cost=${snap.get('cost_usd', 0.0):.4f}",
         )
     except Exception as exc:
-        # 4xx like the 404 "No models match … model restrictions") must report a clean FAIL,
+        # A 4xx like the 404 "No models match … model restrictions" must report a clean FAIL,
         # not crash the preflight with a traceback. Catching broadly is correct for a probe.
         return check(
             "Structured-output ping (openrouter/auto)",
@@ -355,7 +355,7 @@ def check_openrouter_function_tools() -> bool:
                 check(f"tools accepted: {model}", has_output, detail)
                 all_ok = all_ok and has_output
             except Exception as exc:
-                # is exactly the regression we are guarding; report a clean FAIL per-model.
+                # A tool-use 404 is exactly the regression we are guarding; report a clean FAIL per model.
                 check(f"tools accepted: {model}", False, f"{type(exc).__name__}: {exc}")
                 all_ok = False
         return all_ok
