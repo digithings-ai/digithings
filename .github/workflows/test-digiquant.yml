@@ -18,9 +18,10 @@ name: "Test: digiquant"
 #
 # So the lane pins its own extras instead of subtracting from everything, which
 # also keeps the historical set exact rather than approximately right:
-# `[dev,visualization]` transitively brings atlas, indicators and m2 (via dev)
-# but not prices, data, optimize, mcp, otel or nautilus. digibase and digikey
-# arrive as declared dependencies of digiquant.
+# `[dev,visualization,brokers-alpaca]` transitively brings atlas, indicators and m2
+# (via dev) plus the optional Alpaca paper SDK for `tests/dq/brokers/`, but not
+# prices, data, optimize, mcp, otel or nautilus. digibase and digikey arrive as
+# declared dependencies of digiquant.
 #
 # Verified equivalent: "491 passed, 18 skipped, 64 deselected" on develop under
 # pip (run 30503444075), and exactly 491/18/64 from the lock. For contrast,
@@ -51,8 +52,12 @@ jobs:
 
       # --frozen fails if uv.lock is stale rather than silently re-resolving.
       # Deliberately NOT --all-packages --all-extras — see the header.
+      # brokers-alpaca is explicit (not via --all-extras) so tests/dq/brokers/
+      # unit tests run against alpaca-py without pulling nautilus (#42).
       - name: Install from lockfile (excludes nautilus — see header, #42)
-        run: uv sync --frozen --package digiquant --extra dev --extra visualization
+        run: >-
+          uv sync --frozen --package digiquant
+          --extra dev --extra visualization --extra brokers-alpaca
 
       - name: Ruff
         run: uv run --frozen --no-sync ruff check digiquant/src

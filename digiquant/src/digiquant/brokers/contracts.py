@@ -283,6 +283,14 @@ class BrokerTransportError(BrokerError):
     """Network / non-mapped HTTP failure talking to the venue."""
 
 
+class BrokerOrderNotFound(BrokerError):
+    """Venue reports no order for the given id (HTTP 404).
+
+    The only lookup outcome that authorizes a submit resubmit: any other failure
+    must propagate without calling submit again.
+    """
+
+
 class LiveVenueNotAuthorizedError(BrokerError):
     """Construction or routing attempted a live venue that this program forbids."""
 
@@ -311,6 +319,7 @@ __all__ = [
     # K1 exception family (appended; do not reorder entries above)
     "BrokerAuthError",
     "BrokerError",
+    "BrokerOrderNotFound",
     "BrokerOrderRejected",
     "BrokerRateLimited",
     "BrokerTransportError",

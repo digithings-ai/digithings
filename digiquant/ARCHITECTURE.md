@@ -2825,12 +2825,14 @@ any non-`paper` `env` raises `LiveVenueNotAuthorizedError` (no live override in 
 program yet).
 
 Binding behavior: every submit sets Alpaca `client_order_id` from
-`BrokerOrderRequest.client_order_id` and, on transport failure, recovers via
-`get_order_by_client_id` before any retry; notional or fractional qty requires
-`time_in_force=day` (local `BrokerOrderRejected`, no HTTP); `extended_hours` is never
-sent; HTTP errors map to the shared exception family in `contracts.py`
-(`BrokerAuthError` / `BrokerOrderRejected` / `BrokerRateLimited` / `BrokerTransportError`);
-money/qty parse with `Decimal(str(...))`; logs carry a 6-char sha256 fingerprint +
+`BrokerOrderRequest.client_order_id` and, on transport **or** rate-limit failure,
+recovers via `get_order_by_client_id` before any retry — only a confirmed HTTP 404
+(`BrokerOrderNotFound`) authorizes a resubmit; any other lookup failure propagates.
+Notional or fractional qty requires `time_in_force=day` (local `BrokerOrderRejected`,
+no HTTP); `extended_hours` is never sent; HTTP errors map to the shared exception
+family in `contracts.py` (`BrokerAuthError` / `BrokerOrderNotFound` /
+`BrokerOrderRejected` / `BrokerRateLimited` / `BrokerTransportError`); money/qty
+parse with `Decimal(str(...))`; logs carry a 6-char sha256 fingerprint +
 `X-Request-ID`, never secrets. Fills are derived from closed-order
 `filled_qty`/`filled_avg_price` via REST polling (no activities helper / websocket in v1).
 

@@ -21,6 +21,7 @@ from digiquant.brokers.alpaca import AlpacaAdapter, ApiKeyAuth, OAuthAuth
 from digiquant.brokers.base import BrokerAdapter
 from digiquant.brokers.contracts import (
     BrokerAuthError,
+    BrokerOrderNotFound,
     BrokerOrderRejected,
     BrokerOrderRequest,
     BrokerOrderStatus,
@@ -260,6 +261,18 @@ class TestErrorMapping:
         with pytest.raises(BrokerAuthError):
             adapter.get_account()
 
+    def test_401_non_json_body_does_not_leak_json_error(
+        self, adapter: AlpacaAdapter, client: MagicMock
+    ) -> None:
+        from alpaca.common.exceptions import APIError
+
+        http = MagicMock()
+        http.response.status_code = 401
+        http.response.headers = {}
+        client.get_account.side_effect = APIError("not-json-body", http_error=http)
+        with pytest.raises(BrokerAuthError):
+            adapter.get_account()
+
     def test_422_maps_to_rejected(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
         client.submit_order.side_effect = self._api_error(422, code=42210000, message="invalid qty")
         with pytest.raises(BrokerOrderRejected) as ei:
@@ -273,9 +286,6 @@ class TestErrorMapping:
         sleeps: list[float] = []
         monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", sleeps.append)
         monkeypatch.setattr("digiquant.brokers.alpaca.random.uniform", lambda _a, _b: 0.0)
-        err = self._api_error(429, message="slow down")
-        err.response.headers["Retry-After"] = "1.5"  # type: ignore[attr-defined]
-        # Rebuild with Retry-After on the mock response
         from alpaca.common.exceptions import APIError
 
         http = MagicMock()
@@ -296,8 +306,22 @@ class TestErrorMapping:
         with pytest.raises(BrokerTransportError):
             adapter.get_account()
 
+    def test_404_maps_to_order_not_found(self, adapter: AlpacaAdapter, client: MagicMock) -> None:
+        client.get_order_by_client_id.side_effect = self._api_error(404, message="missing")
+        with pytest.raises(BrokerOrderNotFound):
+            adapter._call(client.get_order_by_client_id, "intent-1")
+
 
 class TestIdempotentRecovery:
+    def _api_error(self, status: int, message: str = "err") -> Exception:
+        from alpaca.common.exceptions import APIError
+
+        http = MagicMock()
+        http.response.status_code = status
+        http.response.headers = {"Retry-After": "0"} if status == 429 else {}
+        body = f'{{"code":{status},"message":"{message}"}}'
+        return APIError(body, http_error=http)
+
     def test_transport_failure_recovers_via_client_order_id(
         self, adapter: AlpacaAdapter, client: MagicMock
     ) -> None:
@@ -309,15 +333,56 @@ class TestIdempotentRecovery:
         # No second submit — recovery found the order.
         assert client.submit_order.call_count == 1
 
-    def test_transport_failure_retries_when_client_id_misses(
+    def test_transport_failure_retries_when_client_id_404(
         self, adapter: AlpacaAdapter, client: MagicMock
     ) -> None:
         order = _fake_order(id="ord-retry")
         client.submit_order.side_effect = [ConnectionError("timeout"), order]
-        client.get_order_by_client_id.side_effect = BrokerTransportError("404")
+        client.get_order_by_client_id.side_effect = self._api_error(404, message="not found")
         ack = adapter.submit_order(_make_request())
         assert ack.external_order_id == "ord-retry"
         assert client.submit_order.call_count == 2
+        assert client.get_order_by_client_id.call_count == 1
+
+    def test_submit_429_consults_client_id_before_each_retry(
+        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """429 on submit must never resubmit without a confirmed 404 lookup first."""
+        sleeps: list[float] = []
+        monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", sleeps.append)
+        monkeypatch.setattr("digiquant.brokers.alpaca.random.uniform", lambda _a, _b: 0.0)
+        client.submit_order.side_effect = self._api_error(429, message="slow")
+        client.get_order_by_client_id.side_effect = self._api_error(404, message="missing")
+        with pytest.raises(BrokerRateLimited):
+            adapter.submit_order(_make_request())
+        # Three submit attempts; each failure triggers a lookup before retry/raise.
+        assert client.submit_order.call_count == 3
+        assert client.get_order_by_client_id.call_count == 3
+        assert all(
+            call.args == ("intent-1",) for call in client.get_order_by_client_id.call_args_list
+        )
+
+    def test_submit_429_recovers_without_duplicate_submit(
+        self, adapter: AlpacaAdapter, client: MagicMock, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("digiquant.brokers.alpaca.time.sleep", lambda _s: None)
+        client.submit_order.side_effect = self._api_error(429, message="slow")
+        client.get_order_by_client_id.return_value = _fake_order(id="ord-from-429")
+        ack = adapter.submit_order(_make_request())
+        assert ack.external_order_id == "ord-from-429"
+        assert client.submit_order.call_count == 1
+        assert client.get_order_by_client_id.call_count == 1
+
+    def test_recovery_lookup_500_does_not_resubmit(
+        self, adapter: AlpacaAdapter, client: MagicMock
+    ) -> None:
+        """Non-404 lookup failure through real ``_map_exception`` must not resubmit."""
+        client.submit_order.side_effect = ConnectionError("boom")
+        client.get_order_by_client_id.side_effect = self._api_error(500, message="upstream")
+        with pytest.raises(BrokerTransportError):
+            adapter.submit_order(_make_request())
+        assert client.submit_order.call_count == 1
+        assert client.get_order_by_client_id.call_count == 1
 
 
 class TestLazyImportWithoutAlpacaPy:
