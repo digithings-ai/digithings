@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from queue import Queue
+from queue import Full, Queue
 from threading import Event
 from typing import Any
 
@@ -297,6 +297,46 @@ def _stream_update_summary(update: dict[str, Any]) -> dict[str, Any]:
     return summary
 
 
+# How long a single blocking attempt to hand an event to the SSE consumer may wait
+# before ``_emit_event`` re-checks cancellation. Small enough that a disconnect is
+# noticed promptly, large enough that a healthy-but-slow consumer still gets
+# backpressure rather than a spin.
+_EMIT_POLL_SECONDS = 0.1
+
+
+def _emit_event(
+    event_queue: Queue,
+    cancel_event: Event | None,
+    item: tuple[str, Any],
+) -> None:
+    """Hand one streaming event to the SSE consumer, giving up if it has gone away.
+
+    ``event_queue`` is deliberately bounded (``maxsize=256`` in ``server.py``) so a fast
+    graph cannot outrun a slow client -- but the consumer stops draining the instant
+    ``cancel_event`` is set: a client disconnect raises ``GeneratorExit`` into
+    ``_stream_completions_progressive``, which sets the event and breaks out of its
+    ``get`` loop without emptying the queue. A plain blocking ``put`` on a full queue
+    then waits for a reader that will never arrive, and it waits *inside* a graph node,
+    so the worker never reaches the cancellation poll between nodes (the ``graph.stream``
+    loop below) and never runs its ``finally``. That ``finally`` is where the request's
+    BYOK credentials are cleared from this thread's context copy (``server.py``,
+    ``clear_byok_bindings``), so the hang would strand a user's API key in a leaked
+    non-daemon thread for the lifetime of the process -- not for the bounded "one more
+    node" this module used to claim.
+
+    So poll rather than block, and once nobody is listening, drop the event instead of
+    waiting to deliver it to no one.
+    """
+    while True:
+        if cancel_event is not None and cancel_event.is_set():
+            return
+        try:
+            event_queue.put(item, timeout=_EMIT_POLL_SECONDS)
+            return
+        except Full:
+            continue
+
+
 def run_digigraph_workflow_streaming(
     req: WorkflowRequest,
     event_queue: Queue,
@@ -321,8 +361,15 @@ def run_digigraph_workflow_streaming(
         "session_id": req.session_id,
     }
 
+    def emit(item: tuple[str, Any]) -> None:
+        _emit_event(event_queue, cancel_event, item)
+
     def stream_callback(event_type: str, data: Any) -> None:
         nonlocal content_streamed
+        if cancel_event is not None and cancel_event.is_set():
+            # The consumer is gone, so every emit below would be dropped anyway
+            # (see :func:`_emit_event`) -- skip building the trace payloads too.
+            return
         if event_type == "content" and data:
             raw = (
                 data if isinstance(data, str) else (data.get("delta") or data.get("content") or "")
@@ -337,7 +384,7 @@ def run_digigraph_workflow_streaming(
                 task = args.get("task") if isinstance(args.get("task"), str) else None
                 body = (code or task or "").strip()
                 if body:
-                    event_queue.put(
+                    emit(
                         (
                             "trace",
                             TraceEventV1(
@@ -363,7 +410,7 @@ def run_digigraph_workflow_streaming(
             # sets this): "content" itself is the visible answer channel and cannot
             # double as this signal without a consumer misreading narration as the
             # answer, which is precisely the bug this closes.
-            event_queue.put(
+            emit(
                 (
                     "trace",
                     TraceEventV1(
@@ -401,7 +448,7 @@ def run_digigraph_workflow_streaming(
                 rag_payload["query"] = data["query"]
             if "hit_count" in data:
                 rag_payload["hit_count"] = data["hit_count"]
-            event_queue.put(
+            emit(
                 (
                     "trace",
                     TraceEventV1(
@@ -413,7 +460,7 @@ def run_digigraph_workflow_streaming(
                     ).model_dump(),
                 )
             )
-        event_queue.put((event_type, data))
+        emit((event_type, data))
 
     dg_audit_log(
         "workflow_start",
@@ -439,7 +486,7 @@ def run_digigraph_workflow_streaming(
             subgraphs=True,
         ):
             if cancel_event is not None and cancel_event.is_set():
-                event_queue.put(("done", None))
+                emit(("done", None))
                 return
             if part["type"] == "custom":
                 # "custom" parts are NOT filtered by ns: research_node and
@@ -462,7 +509,7 @@ def run_digigraph_workflow_streaming(
                 # trace events; this does not affect the "custom" branch above.
                 continue
             update = part["data"]
-            event_queue.put(
+            emit(
                 (
                     "trace",
                     TraceEventV1(
@@ -490,8 +537,8 @@ def run_digigraph_workflow_streaming(
             },
             **_audit_digi_kwargs(req),
         )
-        event_queue.put(("content", f"Error: {e!s}"))
-        event_queue.put(("done", None))
+        emit(("content", f"Error: {e!s}"))
+        emit(("done", None))
         return
 
     dg_audit_log(
@@ -504,19 +551,19 @@ def run_digigraph_workflow_streaming(
     if error:
         err_code = final.get("error_code")
         if err_code:
-            event_queue.put(
+            emit(
                 (
                     "error",
                     {"code": str(err_code), "message": str(error)},
                 )
             )
-        event_queue.put(("content", f"Error: {error}"))
-        event_queue.put(("done", None))
+        emit(("content", f"Error: {error}"))
+        emit(("done", None))
         return
 
     research_response = final.get("research_response")
     if research_response and not content_streamed:
-        event_queue.put(("content", str(research_response)))
+        emit(("content", str(research_response)))
     elif not research_response and not content_streamed:
         strategy = final.get("strategy_name")
         symbols = final.get("symbols", [])
@@ -531,5 +578,5 @@ def run_digigraph_workflow_streaming(
                 f"on {backtest.get('symbols', [])}. "
                 f"Return: {backtest.get('total_return_pct', 0):.2f}%."
             )
-        event_queue.put(("content", fallback))
-    event_queue.put(("done", None))
+        emit(("content", fallback))
+    emit(("done", None))

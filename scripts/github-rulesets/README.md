@@ -29,13 +29,14 @@ Those two arms are the only difference; anything else diverging is a bug.
 git ls-remote --heads origin | sed 's|.*refs/heads/||'
 ```
 
-One class fails the taxonomy today: `release-please--branches--*--components--*`,
-which `release-please-digichat.yml` and `release-please-digiskills.yml` push on
-their own fixed naming scheme. A server-side rule would block the release PRs;
-the client hook never sees them, because Actions push through the API.
+`release-please--branches--(develop|module/<component>)--components--<component>`
+is an arm of the pattern (#2557) — the same refs `release-please-digichat.yml`
+and `release-please-digiskills.yml` already push. Admitting them lets a
+maintainer push a follow-up fix onto the bot's branch without `--no-verify`.
+Targets other than `develop` / `module/*` (e.g. `main`) stay rejected.
 
-`bot/*` is **not** in that class — `bot/[a-z0-9-]+` is an arm of the pattern, so
-the refs `project-stub-fields.yml`, `agent-backlog-snapshot.yml` and
+`bot/*` is the same class — `bot/[a-z0-9-]+` is an arm of the pattern, so the
+refs `project-stub-fields.yml`, `agent-backlog-snapshot.yml` and
 `pipeline-provider-review.yml` push are legal on the way in. They were only ever
 a cleanup backlog (#2465, now closed; 5 heads remain), never a rejection risk.
 

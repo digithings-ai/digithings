@@ -5,9 +5,10 @@ import argparse
 import json
 import os
 import sys
-from datetime import date as dt_date, datetime, timedelta
+from datetime import date as dt_date, datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
     from supabase import create_client  # type: ignore
@@ -33,6 +34,21 @@ def _sb():
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
+
+
+def _is_calendar_date(raw: str) -> bool:
+    """True when `raw` is a plain ISO calendar date — `YYYY-MM-DD` and nothing more.
+
+    Strictly narrower than :func:`_trading_day_only`, which parses with
+    `datetime.fromisoformat` and so accepts `2026-08-19T09:35:00` as a Wednesday. That
+    string then reaches `date.fromisoformat` downstream, which rejects it — so the loose
+    gate would wave through a value nothing after it can use.
+    """
+    try:
+        dt_date.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def _trading_day_only(d: str) -> bool:
@@ -181,7 +197,9 @@ def _rebalance_table_nonempty(payload: Dict[str, Any]) -> bool:
     return isinstance(table, list) and len(table) > 0
 
 
-def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
+def resolve_rebalance_payload_fallback(
+    sb, execution_d: str
+) -> tuple[Optional[str], Optional[Dict[str, Any]]]:
     """
     When no rebalance_decision row exists for documents.date == execution day, find the PM
     artifact used for that session: walk backward along prior trading days (Fri decision → Mon
@@ -190,7 +208,11 @@ def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[s
     d = execution_d
     for _ in range(25):
         p = _rebalance_payload_for_date(sb, d)
-        if isinstance(p, dict) and p.get("doc_type") == "rebalance_decision" and _rebalance_table_nonempty(p):
+        if (
+            isinstance(p, dict)
+            and p.get("doc_type") == "rebalance_decision"
+            and _rebalance_table_nonempty(p)
+        ):
             return d, p
         pd = _prior_trading_date(d)
         if not pd or pd == d:
@@ -213,7 +235,11 @@ def resolve_rebalance_payload_fallback(sb, execution_d: str) -> tuple[Optional[s
         seen.add(ad)
         ds = ad.isoformat()
         p = _rebalance_payload_for_date(sb, ds)
-        if isinstance(p, dict) and p.get("doc_type") == "rebalance_decision" and _rebalance_table_nonempty(p):
+        if (
+            isinstance(p, dict)
+            and p.get("doc_type") == "rebalance_decision"
+            and _rebalance_table_nonempty(p)
+        ):
             return ds, p
     return None, None
 
@@ -242,6 +268,24 @@ def _prior_position_weight(sb, prior_date: Optional[str], ticker: str) -> Option
     if not rows:
         return None
     return _parse_pct(rows[0].get("weight_pct"))
+
+
+# Compatibility projection labels (#2422 / Task 2.5). Historical prose rows stay
+# ``legacy`` permanently; ledger paper-fill projections stamp ``authoritative``.
+BOOK_SOURCE_LEGACY = "legacy"
+BOOK_SOURCE_AUTHORITATIVE = "authoritative"
+
+
+def _with_book_source(
+    events: List[Dict[str, Any]], book_source: str
+) -> List[Dict[str, Any]]:
+    """Return shallow copies stamped with ``book_source`` (never mutates inputs)."""
+    out: List[Dict[str, Any]] = []
+    for event in events:
+        row = dict(event)
+        row["book_source"] = book_source
+        out.append(row)
+    return out
 
 
 def _hold_events_for_positions_not_in_rebalance(
@@ -298,6 +342,258 @@ def _hold_events_for_positions_not_in_rebalance(
             }
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# The authoritative path (Task 2.4, #2420)
+#
+# Everything below this block reconstructs the day's events from prose — the digest
+# snapshot or the mutable `positions` book — and disagrees with itself when the two
+# disagree. This block instead reads what the portfolio actually did from the
+# migration-069 ledger: one row per fill, written by the process that filled it, from the
+# order it filled.
+#
+# The prose builders are deliberately still here. Production's migration tail is 065, so
+# the ledger tables do not yet exist there and the ledger is the fallback's fallback until
+# 069/070 are applied and H9 has written a commit row. They also carry the whole #1743
+# regression suite (the incident where the weight-diff ladder made EXIT unreachable and
+# classified every survivor as an OPEN). Removing them is a post-cutover follow-up, gated
+# on production reaching 070 — not part of this change. `--require-ledger` is the lever
+# that makes a silent fallback fatal once that is true.
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _ensure_importable() -> None:
+    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
+    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
+        path = str(_REPO_ROOT / rel)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
+    """Declared opens for `tickers` on `d`, in one batched read, as `Decimal`.
+
+    The executor needs a mark per symbol before it will fill anything, and the symbol list
+    comes from the ledger itself (`pending_symbols`). One `in_` read rather than the
+    per-ticker `_fetch_open` loop the legacy paths use: the set is bounded by the day's
+    pending orders (~30), and a row-per-symbol round trip is the shape #2484 exists to
+    stop adding to. Tickers with no row, a null open, or a non-finite one are simply
+    absent — the executor rejects those orders `data_unavailable` rather than filling at
+    a guessed price.
+
+    `Decimal(str(raw))`, never `float(raw)`: this mark becomes a fill price and then a
+    lot's cost basis, and the ledger's whole numeric contract is that money never passes
+    through binary floating point. Every other path in this file returns floats because
+    `position_events` is a display table; this one feeds the record of what was bought.
+    """
+    if not tickers:
+        return {}
+    res = (
+        sb.table("price_history")
+        .select("ticker,open")
+        .in_("ticker", sorted(set(tickers)))
+        .eq("date", d)
+        .execute()
+    )
+    marks: Dict[str, Decimal] = {}
+    for row in getattr(res, "data", None) or []:
+        if not isinstance(row, dict):
+            continue
+        ticker = row.get("ticker")
+        raw = row.get("open")
+        if not ticker or raw is None:
+            continue
+        try:
+            price = Decimal(str(raw))
+        except (TypeError, ValueError, InvalidOperation):
+            continue
+        # `is_finite()` first, and not merely for tidiness. `price_history.open` is a bare
+        # `numeric` with no CHECK, and Postgres `numeric` stores `NaN` and `Infinity`, both
+        # of which `Decimal(str(raw))` parses happily. `Decimal("NaN") > 0` *raises*
+        # `InvalidOperation`, and this call sits outside the decline contract — so a single
+        # poisoned row would take down the morning job rather than skipping one symbol.
+        # `Decimal("Infinity") > 0` is worse for being quiet here: it clears the gate,
+        # becomes a mark, and dies later inside `PaperExecution`, whose `PositivePrice` sets
+        # `allow_inf_nan=False`. Neither is a declared price, so both take the same exit as
+        # a null: absent from `marks`, and `data_unavailable` on the ledger.
+        if price.is_finite() and price > 0:
+            marks[str(ticker).upper()] = price
+    return marks
+
+
+def build_events_from_paper_fills(
+    sb,
+    run_d: str,
+    execution_d: str,
+    now: Optional[datetime] = None,
+) -> Tuple[Optional[List[Dict[str, Any]]], str]:
+    """Book the ledger's pending orders and project the fills into `position_events`.
+
+    `run_d` is the decision date (the date H9 committed a chain for) and `execution_d` the
+    morning the fills happen — normally the next trading day, which is why the two are
+    separate.
+
+    Two different "nothing" answers, and the caller must not conflate them:
+
+    * ``(None, reason)`` — **the ledger declined to speak.** The kill switch is off, no
+      commit exists for `run_d`, a ledger read raised (the tables are not there yet), or
+      a date argument is not a calendar date. Falling back to a prose reconstruction is
+      legitimate. `reason` names which one it was, because each implies a different
+      operator action.
+    * ``([], "")`` — **the ledger spoke and nothing traded.** A quiet day. HOLD continuity
+      rows still belong on the book, but reconstructing events from prose would be
+      inventing activity the authority says did not happen.
+
+    Only the read-only probe is guarded. The `execute_pending_orders` call below is
+    deliberately left bare: it *writes*, and a half-written fill must fail loudly rather
+    than degrade into a prose reconstruction that silently disagrees with the rows already
+    on the record. The probe is a sufficient existence test because migration 069 creates
+    all eight ledger tables in one transaction — either they are all there or none are —
+    and it touches two of them (`commits` via `ledger_is_authoritative`, `order_intents`
+    via `pending_symbols`).
+    """
+    _ensure_importable()
+    try:
+        from digiquant.olympus.hermes.writers.execution_io import (
+            approved_weights,
+            execute_pending_orders,
+            ledger_is_authoritative,
+            pending_symbols,
+        )
+        from digiquant.olympus.hermes.writers.ledger_io import ledger_enabled
+        from digiquant.olympus.hermes.writers.opening_snapshot import (
+            COLD_START_DECLINE,
+            cold_start_requires_seed,
+            ensure_legacy_opening_snapshot,
+        )
+    except ImportError as exc:
+        return None, f"the digiquant package is not importable from this script ({exc})"
+
+    if not ledger_enabled():
+        return None, "the OLYMPUS_PORTFOLIO_LEDGER kill switch is off"
+
+    # Parsed here, inside the decline contract, rather than at the first use below. This
+    # function's promise to its caller is `(None, reason)` on every way the ledger can
+    # fail to speak, and a hand-typed `--rebalance-date` is one of those ways: an
+    # unguarded parse would raise out of a function documented never to, taking the prose
+    # fallback down with it. `main` rejects a malformed date up front with exit 2, so
+    # reaching this branch means a programmatic caller, which still deserves the contract.
+    try:
+        run_date = dt_date.fromisoformat(run_d)
+        execution_date = dt_date.fromisoformat(execution_d)
+    except (TypeError, ValueError) as exc:
+        return None, f"a date argument is not an ISO-8601 calendar date ({exc})"
+    stamp = now or datetime.now(timezone.utc)
+
+    try:
+        authoritative = ledger_is_authoritative(client=sb, run_date=run_date)
+        symbols = pending_symbols(client=sb, run_date=run_date)
+        approved = approved_weights(client=sb, run_date=run_date)
+    except Exception as exc:  # a missing ledger table is the pre-cutover state, not a bug
+        return None, f"a portfolio-ledger read failed, so the tables are likely absent ({exc})"
+
+    if not authoritative:
+        return None, f"no portfolio_ledger_commits row for run_date={run_d}"
+
+    # Cold-start / opening snapshot (#2589): empty lots + non-empty prior book must not
+    # reach execute_pending_orders (residuals would invent OPEN/EXIT). Auto-ensure once;
+    # if still cold after, decline so --require-ledger exits 3 instead of mislabeling.
+    prior_book_d = _prior_book_date(sb, execution_d)
+    prior_book_date = None
+    if prior_book_d:
+        try:
+            prior_book_date = dt_date.fromisoformat(prior_book_d)
+        except ValueError:
+            prior_book_date = None
+    try:
+        if prior_book_date is not None and cold_start_requires_seed(
+            client=sb, book_date=prior_book_date
+        ):
+            ok, seed_reason = ensure_legacy_opening_snapshot(sb, prior_book_date, now=stamp)
+            if not ok:
+                return None, seed_reason
+            if cold_start_requires_seed(client=sb, book_date=prior_book_date):
+                return None, COLD_START_DECLINE
+    except Exception as exc:
+        return None, f"a portfolio-ledger cold-start probe failed ({exc})"
+
+    result = execute_pending_orders(
+        client=sb,
+        run_date=run_date,
+        executed_date=execution_date,
+        marks=_open_marks(sb, symbols, execution_d),
+        now=stamp,
+    )
+    if not result.authoritative:
+        # execute_pending_orders re-checks the switch and the commit row itself. Reaching
+        # here means one of them changed between the probe and the call.
+        return None, "the ledger stopped being authoritative between the probe and the write"
+
+    for rejection in result.rejections:
+        print(
+            f"⛔ {rejection.symbol}: order not filled ({rejection.reason}) — recorded as "
+            f"rejected on the ledger, no position_events row written."
+        )
+    if result.already_booked:
+        print(
+            f"↩️  {len(result.already_booked)} order(s) were already filled on a previous run "
+            f"({', '.join(result.already_booked)}) — fills are immutable, nothing re-booked."
+        )
+    if result.rejections and not result.fills:
+        # Without this line the run ends on `_record_ledger_events`' "booked no fills"
+        # summary, which reads as a quiet day. The ledger had orders and refused every
+        # one of them — a different situation, and the only one of the two worth paging on.
+        print(
+            f"⚠️  the ledger was authoritative for run_date={run_d} and rejected all "
+            f"{len(result.rejections)} order(s) — this was not a quiet day."
+        )
+
+    prior_weights = _book_weights(sb, prior_book_d)
+
+    events: List[Dict[str, Any]] = []
+    for fill in result.fills:
+        # The event name comes from the *position*, not from the decision's label: a buy
+        # into nothing is an OPEN and a buy on top of something is an ADD; a sell to zero
+        # is an EXIT and a sell to anything else is a TRIM. No weight diff and no epsilon
+        # threshold is involved — that ladder is what made EXIT unreachable in #1743.
+        if fill.is_sell:
+            event = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
+        else:
+            event = "OPEN" if fill.prior_quantity <= 0 else "ADD"
+
+        weight = approved.get(fill.symbol)
+        # approved_weight is a 0..1 fraction; position_events.weight_pct is in percent.
+        # The ×100 happens in Decimal and only then becomes a float, because binary floats
+        # do not survive the scaling: float(Decimal("0.07")) * 100 is 7.000000000000001,
+        # and 0.29 comes out 28.999999999999996. Writing those into a numeric column would
+        # make ordinary weights look like rounding artefacts.
+        weight_pct = float(weight * 100) if weight is not None else None
+        events.append(
+            {
+                "date": execution_d,
+                "ticker": fill.symbol,
+                "event": event,
+                "weight_pct": weight_pct,
+                # Display-only, and not from the ledger: migration 069 records no NAV, so
+                # the prior weight cannot be derived from the lots. It is read from the
+                # last committed `positions` book purely so the UI can show a delta, and
+                # the reason string below says so rather than implying the ledger holds it.
+                "prev_weight_pct": prior_weights.get(fill.symbol),
+                "price": float(fill.price),
+                "reason": (
+                    f"{event} — filled {fill.quantity} share(s) at {fill.price} from order "
+                    f"intent {fill.order_intent_id} (portfolio ledger paper execution "
+                    f"{fill.execution_id}, decision run_date {run_d}). Prior weight shown "
+                    f"from the {prior_book_d or 'unavailable'} positions book, for display only."
+                ),
+                "thesis_id": None,
+                "book_source": BOOK_SOURCE_AUTHORITATIVE,
+            }
+        )
+    return events, ""
 
 
 def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dict[str, Any]]]:
@@ -382,7 +678,12 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     (:func:`_prior_book_date`) — the last date that actually has `positions` rows, which is
     not necessarily the prior weekday.
     """
-    res = sb.table("positions").select("ticker,weight_pct,thesis_id").eq("date", execution_d).execute()
+    res = (
+        sb.table("positions")
+        .select("ticker,weight_pct,thesis_id")
+        .eq("date", execution_d)
+        .execute()
+    )
     rows = getattr(res, "data", None) or []
     targets: Dict[str, float] = {}
     thesis: Dict[str, Optional[str]] = {}
@@ -439,13 +740,56 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     return out if out else None
 
 
+def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict[str, Any]]) -> int:
+    """Write the ledger-projected events plus HOLD continuity, and report what happened.
+
+    `ledger_events` may legitimately be empty — the ledger spoke and nothing traded. The
+    HOLD rows still go on so Activity stays continuous, but no prose reconstruction runs:
+    the authority already said the day had no fills.
+    """
+    filled: Set[str] = {str(e["ticker"]) for e in ledger_events if e.get("ticker")}
+    holds = _hold_events_for_positions_not_in_rebalance(
+        sb, d, filled | _event_tickers_for_date(sb, d)
+    )
+    # Ledger path owns the day: fills already carry authoritative; HOLD continuity under
+    # ledger authority is stamped the same so Activity cannot mix unlabeled rows (#2422).
+    events = _with_book_source(ledger_events + holds, BOOK_SOURCE_AUTHORITATIVE)
+    if not events:
+        print(
+            f"✅ portfolio ledger is authoritative for run_date={rebalance_d} and booked no "
+            f"fills for {d}; no positions on book to hold either — nothing to record."
+        )
+        return 0
+
+    for e in events:
+        sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+
+    # No null-price hint here on purpose: a ledger row's price *is* the fill price, so it
+    # cannot be missing. Only the HOLD rows read price_history, hence the narrower count.
+    null_px = sum(1 for e in holds if e.get("price") is None)
+    if null_px:
+        print(
+            f"⚠️  {null_px} HOLD event(s) have null price (no price_history.open for {d} yet). "
+            f"After opens sync: python3 scripts/backfill_execution_prices.py --date {d}"
+        )
+    print(
+        f"✅ recorded {len(ledger_events)} authoritative fill event(s) from the portfolio "
+        f"ledger (run_date={rebalance_d}) plus {len(holds)} HOLD row(s) for {d}"
+    )
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Record market-open execution events into position_events (OPEN/EXIT/TRIM/ADD/HOLD). "
         "Execution prices use price_history.open for --date (execution day). "
         "HOLD rows keep the ledger continuous on no-trade days."
     )
-    ap.add_argument("--date", default=dt_date.today().isoformat(), help="Execution session date YYYY-MM-DD (opens from this day)")
+    ap.add_argument(
+        "--date",
+        default=dt_date.today().isoformat(),
+        help="Execution session date YYYY-MM-DD (opens from this day)",
+    )
     ap.add_argument(
         "--rebalance-date",
         default=None,
@@ -466,15 +810,40 @@ def main() -> int:
         action="store_true",
         help="Do not derive events from daily_snapshots when rebalance_decision is missing.",
     )
+    ap.add_argument(
+        "--no-ledger",
+        action="store_true",
+        help="Skip the authoritative portfolio-ledger path and reconstruct from prose (#2420).",
+    )
+    ap.add_argument(
+        "--require-ledger",
+        action="store_true",
+        help="Fail (exit 3) instead of falling back to prose when the ledger declines to speak. "
+        "Use this once migration 070 is applied in production and H9 commits every run.",
+    )
     args = ap.parse_args()
     d = args.date
+
+    # Both dates are validated before anything else runs. `--rebalance-date` had no check
+    # at all, and `--date`'s weekday gate accepts an ISO *datetime*, so either flag could
+    # carry a value past this point that only fails much later, mid-read, as a traceback.
+    for flag, value in (("--date", d), ("--rebalance-date", args.rebalance_date)):
+        if value is not None and not _is_calendar_date(value):
+            print(
+                f"error: {flag} must be an ISO-8601 calendar date (YYYY-MM-DD), got {value!r}",
+                file=sys.stderr,
+            )
+            return 2
 
     if not _trading_day_only(d):
         print("Skipping execution: non-trading day (weekend).")
         return 0
 
     if args.prior_trading_day_rebalance and args.rebalance_date:
-        print("error: use only one of --prior-trading-day-rebalance or --rebalance-date", file=sys.stderr)
+        print(
+            "error: use only one of --prior-trading-day-rebalance or --rebalance-date",
+            file=sys.stderr,
+        )
         return 2
 
     rebalance_d = args.rebalance_date
@@ -486,7 +855,30 @@ def main() -> int:
     elif not rebalance_d:
         rebalance_d = d
 
+    if args.no_ledger and args.require_ledger:
+        print("error: use only one of --no-ledger or --require-ledger", file=sys.stderr)
+        return 2
+
     sb = _sb()
+
+    # Authoritative first. The prose paths below run only when the ledger declines.
+    ledger_events: Optional[List[Dict[str, Any]]] = None
+    if args.no_ledger:
+        declined = "--no-ledger was passed"
+    else:
+        ledger_events, declined = build_events_from_paper_fills(sb, rebalance_d, d)
+    if ledger_events is None:
+        if args.require_ledger:
+            print(
+                f"error: --require-ledger was passed but the portfolio ledger is not "
+                f"authoritative for run_date={rebalance_d}: {declined}",
+                file=sys.stderr,
+            )
+            return 3
+        print(f"↪️  portfolio ledger not authoritative ({declined}); using prose fallback.")
+    else:
+        return _record_ledger_events(sb, d, rebalance_d, ledger_events)
+
     payload = _rebalance_payload_for_date(sb, rebalance_d)
     if (
         not payload
@@ -508,6 +900,7 @@ def main() -> int:
             if not digest_events:
                 digest_events = build_events_from_positions_book(sb, d)
             if digest_events:
+                digest_events = _with_book_source(digest_events, BOOK_SOURCE_LEGACY)
                 for e in digest_events:
                     sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
                 null_px = sum(1 for e in digest_events if e.get("price") is None)
@@ -523,8 +916,13 @@ def main() -> int:
                     f"({trade_n} trade-related, {hold_n} HOLD) — no rebalance_decision.json for this date."
                 )
                 return 0
-        print(f"No rebalance_decision payload for documents.date={rebalance_d}; filling from positions only.")
-        extra = _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d))
+        print(
+            f"No rebalance_decision payload for documents.date={rebalance_d}; filling from positions only."
+        )
+        extra = _with_book_source(
+            _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d)),
+            BOOK_SOURCE_LEGACY,
+        )
         if not extra:
             print("No positions rows for this date — nothing to record.")
             return 0
@@ -546,7 +944,10 @@ def main() -> int:
     table = body.get("rebalance_table") if isinstance(body, dict) else None
     if not isinstance(table, list) or not table:
         print("rebalance_decision has no rebalance_table; filling from positions only.")
-        extra = _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d))
+        extra = _with_book_source(
+            _hold_events_for_positions_not_in_rebalance(sb, d, _event_tickers_for_date(sb, d)),
+            BOOK_SOURCE_LEGACY,
+        )
         if not extra:
             print("No positions rows for this date — nothing to record.")
             return 0
@@ -645,7 +1046,8 @@ def main() -> int:
             f"({', '.join(e['ticker'] for e in gap_holds)})"
         )
 
-    # Upsert by date,ticker (current schema)
+    # Upsert by date,ticker (current schema). Prose path is permanently legacy (#2422).
+    events = _with_book_source(events, BOOK_SOURCE_LEGACY)
     for e in events:
         sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
 
@@ -667,4 +1069,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

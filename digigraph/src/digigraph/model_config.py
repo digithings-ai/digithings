@@ -32,7 +32,9 @@ from digillm import get_provider_api_key_env, is_registered_provider
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from digigraph.llm_auth import (
+    byok_default_model_refusal,
     byok_model_routes_elsewhere,
+    byok_operator_model_routes_elsewhere,
     byok_routable_model,
     get_byok_model_override,
     get_byok_override,
@@ -627,29 +629,75 @@ def _apply_byok_model_override(resolved: str) -> str:
 
     The model slug is never logged (see ``_byok_model_override`` in llm_auth), so the
     warning names the provider and not the value that was dropped.
+
+    **No header is not consent.** When the key is bound and no ``X-BYOK-Model`` came
+    with it, *resolved* is whatever the operator's own configuration produced — the
+    tier default on the mode path, a ``phase_models`` override or a capability model
+    on the phase path — and if that names a registered provider, digillm serves it
+    from the operator's env key while the
+    user's key sits bound, displayed as active, and unspent. That is the same
+    mis-billing as a foreign ``X-BYOK-Model``, arrived at by omission instead of by
+    input, so it gets the same answer: refuse. :class:`ValueError` rather than a
+    fallback, because there is nothing to fall back *to* — every model this function
+    could substitute is either the operator's (wrong payer) or one the caller never
+    chose (wrong model), and silently picking a model is the surprise this whole
+    module exists to prevent. ``ValueError`` is already the refusal type here
+    (``_FREE_MODE_MODEL_REQUIRED``) and is in ``server._LLM_PROBE_ERRORS``, so
+    ``/test_llm`` still degrades instead of crashing.
     """
     byok = get_byok_override()
     if not byok:
         return resolved
     _key, provider = byok
     user_model = get_byok_model_override()
-    if not user_model:
-        return resolved
-    if byok_model_routes_elsewhere(provider, user_model):
+    if user_model and byok_model_routes_elsewhere(provider, user_model):
         logger.warning(
             "BYOK provider %r sent an X-BYOK-Model naming another provider; ignoring it "
             "so the user's key is the one that pays",
             provider,
         )
+        # Discarded, not substituted: fall through to the no-header branch so the
+        # request lands exactly where it would have landed had the header never been
+        # sent. Returning *resolved* here instead would hand back the operator's own
+        # default -- which, if that default names a registered provider, is the very
+        # mis-billing this function refuses two lines below (#2490).
+        user_model = ""
+    if not user_model:
+        if byok_operator_model_routes_elsewhere(provider, resolved):
+            raise ValueError(byok_default_model_refusal(provider))
         return resolved
     return byok_routable_model(provider, user_model)
+
+
+def _fallback_model_for_mode(mode: str) -> tuple[str, str]:
+    """Resolve the deployment default when no explicit operator pin is configured.
+
+    Returns ``(model, source_label)``. Extracted because two callers need the same
+    ladder and a credential-adjacent rule must not exist in two copies:
+    :func:`effective_llm_settings` (which also reports ``provider`` / ``api_key_env`` /
+    ``source``, so it cannot just call :func:`operator_default_model`) and
+    :func:`operator_default_model` itself, whose answer the BYOK middleware uses to
+    decide whether the deployment default would bill someone other than the caller.
+
+    Raises :class:`ValueError` in ``llm_mode: free``, where an explicit pin is
+    mandatory — ``defaults.free`` is access policy, never a product slug.
+    """
+    if mode == "free":
+        raise ValueError(_FREE_MODE_MODEL_REQUIRED)
+    data = _load_model_modes()
+    if data.default_model:
+        return str(data.default_model), "model_modes.default_model"
+    # ``free`` is policy-only — never read a product slug from defaults.free.
+    resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
+    return resolved, ("model_modes" if data.defaults else "default")
 
 
 def effective_llm_settings() -> dict[str, object]:
     """Return effective LLM settings for CLI / diagnostics (never includes secret values).
 
     Keys: ``provider``, ``model``, ``llm_mode``, ``api_key_env``, ``api_key_present``,
-    ``source`` (``agents.llm`` | ``env`` | ``model_modes`` | ``default``).
+    ``source`` (``agents.llm`` | ``env`` | ``model_modes.default_model`` |
+    ``model_modes`` | ``default``).
     """
     mode = _get_llm_mode()
     provider, model, api_key_env = _explicit_llm_config()
@@ -668,17 +716,8 @@ def effective_llm_settings() -> dict[str, object]:
                     source = "env"
             except (ImportError, OSError, AttributeError, TypeError, ValueError):
                 source = "env"
-    elif mode == "free":
-        raise ValueError(_FREE_MODE_MODEL_REQUIRED)
     else:
-        data = _load_model_modes()
-        if data.default_model:
-            resolved = str(data.default_model)
-            source = "model_modes.default_model"
-        else:
-            # ``free`` is policy-only — never read a product slug from defaults.free.
-            resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
-            source = "model_modes" if data.defaults else "default"
+        resolved, source = _fallback_model_for_mode(mode)
         if "/" in resolved:
             provider = resolved.split("/", 1)[0]
         else:
@@ -700,6 +739,31 @@ def effective_llm_settings() -> dict[str, object]:
     }
 
 
+def operator_default_model() -> str:
+    """Resolve the deployment's fallback model with **no** BYOK override applied.
+
+    :func:`get_model_for_mode` is this plus :func:`_apply_byok_model_override`; the
+    split exists so a caller can ask what the *operator* configured without the
+    answer depending on whether a BYOK key happens to be bound. The BYOK middleware
+    is that caller: it must know, before binding the key, whether the deployment's
+    own default would route the request to some other provider's env key.
+
+    Today the middleware runs its checks before ``push_byok_header``, so calling
+    ``get_model_for_mode()`` there would return the same string by coincidence of
+    ordering. Coincidence is the wrong thing to build a credential check on — this
+    name makes the independence structural instead.
+
+    Raises :class:`ValueError` in ``llm_mode: free`` without an explicit pin, exactly
+    as ``get_model_for_mode`` always has.
+    """
+    mode = _get_llm_mode()
+    provider, model, _api_key_env = _explicit_llm_config()
+    resolved = _resolve_explicit_model(provider, model)
+    if resolved is None:
+        resolved, _source = _fallback_model_for_mode(mode)
+    return _refuse_paid_in_free_mode(resolved, mode)
+
+
 def get_model_for_mode() -> str:
     """Return the fallback model for phases without a phase_models entry.
 
@@ -716,20 +780,7 @@ def get_model_for_mode() -> str:
     must not swap a free/local digithings install onto paid Olympus models.
     ``llm_mode: free`` refuses non-``:free`` (non-Ollama) model ids.
     """
-    mode = _get_llm_mode()
-    provider, model, _api_key_env = _explicit_llm_config()
-    resolved = _resolve_explicit_model(provider, model)
-    if resolved is None:
-        if mode == "free":
-            raise ValueError(_FREE_MODE_MODEL_REQUIRED)
-        data = _load_model_modes()
-        if data.default_model:
-            resolved = str(data.default_model)
-        else:
-            # Never consult defaults.free — free is access policy, not a model pin.
-            resolved = data.defaults.get(mode) or data.defaults.get("test") or "gpt-4o-mini"
-    resolved = _refuse_paid_in_free_mode(resolved, mode)
-    return _apply_byok_model_override(resolved)
+    return _apply_byok_model_override(operator_default_model())
 
 
 def get_model_for_phase(phase_slug: str) -> str | None:
@@ -761,9 +812,16 @@ def get_model_for_phase(phase_slug: str) -> str | None:
     olympus = _load_olympus_models()
     capability = _capability_for_phase(phase_slug, olympus)
     if capability is not None:
-        return _apply_byok_model_override(
-            _model_for_olympus_capability(capability, tier, phase_slug)
-        )
+        # _model_for_olympus_capability is str | None; the override takes str and now
+        # *refuses* rather than passing through, so an unresolved capability must
+        # short-circuit instead of reaching it.
+        capability_model = _model_for_olympus_capability(capability, tier, phase_slug)
+        if not capability_model:
+            # Signature is ``str | None``; a blank pool entry must read as "unresolved",
+            # not as an empty model name. Callers chain ``or get_model_for_mode()``, so
+            # this is inert today — it stays None so it cannot become a bug later.
+            return None
+        return _apply_byok_model_override(capability_model)
     return None
 
 

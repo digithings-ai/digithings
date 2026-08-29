@@ -4,8 +4,15 @@
 #   • pushes to `main` without ALLOW_MAIN_PUSH=1
 #   • pushes that touch live-trading paths without a `Human-Approved-By:` trailer
 #
-# Installed by `make hooks-install`. Bypass with `git push --no-verify` only
-# in genuine emergencies (the commit message should say so).
+# Installed by `make hooks-install` (and by `make agents-init`), which installs
+# this file **as committed on origin/develop**, not your working copy — one hook
+# is shared by every linked worktree, so installing a task branch's copy would
+# change the policy for all of them. When editing this hook, install your
+# uncommitted version with `HOOKS_REF=WORKTREE make hooks-install` — an
+# override that any later default install, from any worktree, replaces.
+#
+# Bypass with `git push --no-verify` only in genuine emergencies (the commit
+# message should say so).
 
 set -euo pipefail
 
@@ -20,7 +27,7 @@ allowed_url_regex='^(https://github\.com/digithings-ai/digithings(\.git)?|git@gi
 # Contributor namespaces (human handles) go in CONTRIBUTOR_HANDLES; add a new
 # handle (GitHub login) here when a new human contributor joins.
 CONTRIBUTOR_HANDLES='chrizefan'
-branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+)$"
+branch_regex="^(main|develop|module/[a-z0-9-]+|release/v[0-9]+\.[0-9]+\.[0-9]+|release-please--branches--(develop|module/[a-z0-9-]+)--components--[a-z0-9-]+|task/[0-9]+-[a-z0-9-]+|(claude|codex|cursor|copilot)/[a-z0-9-]+|(${CONTRIBUTOR_HANDLES})/[a-z0-9-]+|(feat|fix|docs|chore)/[a-z0-9-]+|bot/[a-z0-9-]+)$"
 
 # A ref deletion pushes an all-zero sha as the local sha; a branch that does not
 # exist upstream yet reports an all-zero remote sha. The width follows the repo's
@@ -69,6 +76,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
       echo "         Allowed patterns (see BRANCHING.md):" >&2
       echo "           main | develop | release/vX.Y.Z" >&2
       echo "           module/<component>  (e.g. module/digiquant, module/digigraph)" >&2
+      echo "           release-please--branches--<target>--components--<component>" >&2
+      echo "                        (pushed by the release-please-*.yml workflows)" >&2
       echo "           task/<N>-<slug>" >&2
       echo "           {claude,codex,cursor,copilot}/<slug>" >&2
       echo "           {${CONTRIBUTOR_HANDLES//|/,}}/<slug>  (human contributors by GitHub handle)" >&2

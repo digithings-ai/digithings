@@ -1299,9 +1299,17 @@
   }
 
   .nb-pager {
-    display: inline-flex;
+    display: inline-grid;
+    grid-template-columns: auto minmax(0, max-content) auto;
     align-items: center;
     gap: 0.3rem;
+  }
+
+  .nb-pager-middle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
   }
 
   .nb-page,
@@ -1377,7 +1385,9 @@
 
       - .nb-pager--capsule (Pager dress="capsule"): one bordered term-bg
         capsule (9px radius, mono 12.5px tabular) with borderless chevron
-        edges — olympus PipelineDaySelector.
+        edges pinned in auto columns — olympus DatePager / pipeline + briefs.
+      - .nb-pager--date .nb-pager-date: fixed-width centered label slot
+        sized for the longest en-US short format ("Wed, Sep 30, 2026").
       - .nb-seg-group--accent (SegmentedControl dress="accent"): sans
         font-medium cells on a transparent track, accent/20 wash + accent
         text on the selection — olympus PerformanceDateRange. ─────────── */
@@ -1385,7 +1395,9 @@
 @layer components {
   .nb-pager--capsule {
     /* shipped capsule: gap-2 px-2.5 py-1.5 border-hair rounded-[9px]
-       bg-term-bg font-mono text-[12.5px] tabular-nums */
+       bg-term-bg font-mono text-[12.5px] tabular-nums; grid keeps edges
+       fixed while the middle label width changes across dates */
+    grid-template-columns: auto 1fr auto;
     gap: 0.5rem;
     padding: 0.375rem 0.625rem;
     border: 1px solid var(--hair);
@@ -1406,6 +1418,59 @@
     background: transparent;
     color: var(--ink-mute);
     transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nb-pager--capsule .nb-page-edge:hover:not(:disabled) {
+    color: var(--ink);
+    border-color: transparent;
+  }
+
+  /* Date capsule: middle column sized for longest short weekday label so
+     arrows never shift when the string grows/shrinks. */
+  .nb-pager--date {
+    min-width: calc(1.5rem + 17ch + 1.5rem);
+  }
+
+  .nb-pager--date .nb-pager-middle {
+    min-width: 17ch;
+  }
+
+  .nb-pager-date {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-width: 17ch;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nb-pager-date:hover:not(:disabled),
+  .nb-pager-date[data-popup-open] {
+    color: var(--accent);
+    background: color-mix(in oklab, var(--accent) 12%, transparent);
+  }
+
+  .nb-pager-date:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .nb-pager-date-text {
+    display: block;
+    width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
   }
 
   .nb-seg-group--accent .nb-seg {

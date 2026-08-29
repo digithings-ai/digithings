@@ -13,7 +13,7 @@ If you're a Claude Code session picking this up fresh, the later sections are th
 git clone https://github.com/digithings-ai/digithings
 cd digithings
 make agents-init         # regenerates .claude/, .cursor/rules, .github/copilot-instructions.md from agents.yml
-make hooks-install       # installs .git/hooks/pre-push guardrails
+make hooks-install       # installs the pre-push guardrails from origin/develop
 gh auth login            # GitHub CLI — required for make pr and issue workflow
 ```
 
@@ -226,7 +226,7 @@ make find-stale                     # find stale branches / artifacts
 - **Nested git repos under the monorepo root** (e.g. a cloned `digichat/` alongside `frontend/digichat/`) will trip cleanup scripts and pollute `git status`. If you see one, check whether it's stranded work before deleting. Everything that ships lives inside the monorepo tree — clones outside `frontend/` or `apps/` are almost always stale.
 - **Stray `node_modules/` at the repo root** means you ran `npm install` in the wrong directory. Workspace installs must happen under `frontend/` (design workspace root) or a specific app dir.
 - **Atlas frontend regeneration**: `frontend/olympus/next-env.d.ts` and `tsconfig.json` are rewritten by Next.js / your IDE. Discard those diffs unless the change is deliberate.
-- **Task branches are worktrees** — `make task ISSUE=N` creates a worktree under `.claude/worktrees/` (gitignored). Don't `cd` out of it mid-task; close with `git worktree remove` after the PR merges.
+- **Task branches are worktrees** — `make task ISSUE=N` creates a worktree under `.worktrees/task/N-slug/` (gitignored). Don't `cd` out of it mid-task; close with `git worktree remove .worktrees/task/N-slug/` after the PR merges.
 - **`make score` requires the editable installs** — `pip install -e "digigraph[dev]" -e "digiquant[dev]" -e "digismith"` once per environment.
 
 ---

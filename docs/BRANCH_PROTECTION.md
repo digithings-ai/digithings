@@ -68,6 +68,7 @@ its own task PR, satisfied by any one of:
 |-------|-------|-----------------|
 | `Cursor Bugbot` concluded success | a machine reviewed it | no |
 | an **APPROVED** review | someone else read it | no |
+| a completed agent-tool review (CodeRabbit, Claude, …) | a PR-review bot finished a pass | no |
 | label `reviewed:agent` + a findings comment | an in-session review ran | yes, but costs a real review |
 | label `reviewed:owner` | "I read this myself" | yes |
 | label `risk:low` | "this didn't warrant a review" | yes |

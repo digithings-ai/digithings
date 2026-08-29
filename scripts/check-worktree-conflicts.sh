@@ -5,8 +5,9 @@
 #   scripts/check-worktree-conflicts.sh ISSUE_NUMBER
 #
 # Reads the GitHub issue title/body to infer a component glob (e.g. "digigraph/**"),
-# then checks each active .worktrees/* branch to see if any changed files overlap.
-# Prints a warning table when overlaps are found. Always exits 0 (warning only, not blocking).
+# then checks each active `.worktrees/task/N-slug/` (and legacy `.worktrees/task-N-slug/`)
+# checkout to see if any changed files overlap. Prints a warning table when overlaps
+# are found. Always exits 0 (warning only, not blocking).
 #
 # Requires: git (gh CLI optional — gracefully skips when unavailable)
 
@@ -98,12 +99,22 @@ fi
 FOUND_CONFLICT=false
 CONFLICT_ROWS=""
 
-for wt_dir in "$WORKTREES_DIR"/*/; do
+# Worktrees live at `.worktrees/task/N-slug/` (see scripts/worktree_task.sh). A
+# one-level `$WORKTREES_DIR/*/` walk only sees the `task/` directory itself and
+# never the per-issue checkouts underneath — so after the nested layout landed
+# (#2569) this advisory went silent. Also accept the older flat
+# `.worktrees/task-N-slug/` shape so a leftover worktree still shows up.
+shopt -s nullglob
+wt_dirs=("$WORKTREES_DIR"/task/*/ "$WORKTREES_DIR"/task-*/)
+shopt -u nullglob
+
+for wt_dir in "${wt_dirs[@]}"; do
   [[ -d "$wt_dir" ]] || continue
 
-  # Skip the worktree for *this* issue (task-N-* pattern)
+  # Skip the worktree for *this* issue. Nested basenames are `N-slug`; flat
+  # legacy basenames are `task-N-slug`.
   wt_name="$(basename "$wt_dir")"
-  if echo "$wt_name" | grep -q "^task-${ISSUE}-"; then
+  if [[ "$wt_name" == "${ISSUE}-"* || "$wt_name" == "task-${ISSUE}-"* ]]; then
     continue
   fi
 

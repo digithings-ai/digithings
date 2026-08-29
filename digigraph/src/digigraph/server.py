@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import os
@@ -111,6 +112,38 @@ async def lite_llm_proxy_header_context(request: Request, call_next):
         pop_lite_llm_proxy(tok)
 
 
+def _byok_default_routes_elsewhere(provider: str) -> bool:
+    """True when this deployment's default model would bill someone other than *provider*.
+
+    Resolution failures answer ``False`` rather than refusing. ``operator_default_model``
+    raises in ``llm_mode: free`` without an explicit pin, and this middleware is not the
+    place to convert a *server* misconfiguration into a 400 blaming the caller's key —
+    the request proceeds and fails where it actually breaks.
+
+    The billing invariant survives that open failure two ways, and which one applies
+    turns on the *path*, not on which error was swallowed. On the mode path,
+    ``get_model_for_mode`` evaluates ``operator_default_model()`` as the *argument* to
+    ``_apply_byok_model_override``, so a failure that recurs re-raises before the
+    resolver is ever entered — nothing is billed because the request fails, not because
+    a second verdict was reached — while a merely transient one (``_LLM_PROBE_ERRORS``
+    is wider than the free-mode ``ValueError``) lets the resolver judge the same string
+    this function could not resolve. On the phase path, ``get_model_for_phase`` never
+    calls ``operator_default_model`` at all: it hands the resolver a ``phase_models``
+    override or an ``olympus_models.yaml`` capability model, neither of which this
+    middleware ever sees, and the resolver refuses on *that* string. Either way the
+    refusal — or the failure — lands on whatever the request would actually have been
+    billed for.
+    """
+    from digigraph.llm_auth import byok_operator_model_routes_elsewhere
+    from digigraph.model_config import operator_default_model
+
+    try:
+        default_model = operator_default_model()
+    except _LLM_PROBE_ERRORS:
+        return False
+    return byok_operator_model_routes_elsewhere(provider, default_model)
+
+
 @app.middleware("http")
 async def byok_header_context(request: Request, call_next):
     """Apply per-request BYOK user API key from X-BYOK-Key / X-BYOK-Provider (digichat BYOK flow).
@@ -118,9 +151,16 @@ async def byok_header_context(request: Request, call_next):
     The key is bound to a ContextVar for the duration of the request only.
     It is never logged or persisted server-side. On each request the key
     overrides the LLM client credentials for that single execution.
+
+    "Duration of the request" is bounded by ``pop_byok`` below for everything that
+    runs in the request task. A streaming response outlives that: its worker thread
+    holds a *copy* of this context, which ``pop_byok`` cannot reach, and clears its
+    own copy in its ``finally`` instead (see ``_stream_completions_progressive``).
     """
     from digigraph.llm_auth import (
+        BYOK_DEFAULT_MODEL_MISMATCH_CODE,
         BYOK_ROUTABLE_PROVIDERS,
+        byok_default_model_refusal,
         byok_model_required,
         byok_model_routes_elsewhere,
         byok_provider_supported,
@@ -150,6 +190,20 @@ async def byok_header_context(request: Request, call_next):
                     f"BYOK provider {provider!r} requires X-BYOK-Model "
                     "(e.g. openai/gpt-4o-mini, gemini/gemini-2.5-flash, claude-sonnet-4-6)."
                 ),
+                request=request,
+                service="digigraph",
+            )
+        if not model and _byok_default_routes_elsewhere(provider):
+            # A key with no model is not a request to use the operator's default: the
+            # default is *this deployment's* string, so if it names a registered
+            # provider digillm bills that provider's env key and the pasted key is
+            # accepted, shown active, and never spent. Same invariant as the mismatch
+            # below, reached by omission rather than by input. Refusing beats
+            # substituting a model the caller did not choose (see #2490).
+            return json_error_response(
+                status_code=400,
+                code=BYOK_DEFAULT_MODEL_MISMATCH_CODE,
+                message=byok_default_model_refusal(provider),
                 request=request,
                 service="digigraph",
             )
@@ -734,10 +788,40 @@ def _stream_completions_progressive(
     if workflow_extras:
         wf_kw.update(workflow_extras)
     workflow_req = WorkflowRequest(**wf_kw)
-    worker = Thread(
-        target=run_digigraph_workflow_streaming,
-        args=(workflow_req, event_queue, cancel_event),
-    )
+
+    from digigraph.llm_auth import clear_byok_bindings
+
+    # Run the worker inside a copy of *this* frame's context. A bare Thread starts
+    # with an empty context, so every ContextVar bound per-request -- above all the
+    # three BYOK bindings pushed by ``push_byok_header`` (digigraph's key/provider and
+    # model overrides, plus digillm's own) -- reads as its default inside the worker.
+    # Streaming BYOK requests were therefore answered on the *operator's* key while
+    # the user's was shown as active: the same billing invariant the X-BYOK-Model
+    # guard in ``byok_header_context`` refuses a whole request to protect. Copy at
+    # spawn rather than re-binding inside the worker: this frame still holds the
+    # bindings (measured), and the worker has no request to re-read them from.
+    #
+    # The copy outlives the request: this thread is neither daemonic nor joined, and
+    # ``byok_header_context``'s ``finally`` runs ``pop_byok`` as soon as the response
+    # starts streaming -- which resets the *parent's* vars only, a copy being a
+    # snapshot rather than a view. So the worker clears its own copy when it finishes,
+    # keeping the middleware's "for the duration of the request only" contract true of
+    # the process and not just of the request task. The residual window is the worker's
+    # own runtime, and that runtime is what has to stay bounded: every event the worker
+    # emits goes through ``workflow._emit_event``, which drops rather than blocks once
+    # ``cancel_event`` is set. A plain blocking ``put`` would not -- the queue above is
+    # bounded and this generator stops draining it on disconnect, so the worker would
+    # wedge inside a node, never reach the ``finally``, and strand the key for the
+    # lifetime of the process rather than for one more node.
+    ctx = contextvars.copy_context()
+
+    def _run_worker() -> None:
+        try:
+            run_digigraph_workflow_streaming(workflow_req, event_queue, cancel_event)
+        finally:
+            clear_byok_bindings()
+
+    worker = Thread(target=ctx.run, args=(_run_worker,))
     worker.start()
 
     cid = f"chatcmpl-{uuid.uuid4().hex[:24]}"

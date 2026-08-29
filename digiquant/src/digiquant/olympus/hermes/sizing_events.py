@@ -1,24 +1,23 @@
-"""In-memory, non-persisted reason-coded adjustment events for the H8 sizing
-pipeline (#2417, Olympus WP2 Task 2.2, OLY-REV-009).
+"""In-memory reason-coded adjustment events for the H8 sizing pipeline
+(#2417, Olympus WP2 Task 2.2, OLY-REV-009), handed to H9 for durable persistence
+(#2768).
 
-Explanation-only: nothing here is written to Supabase, and this is a deliberately
-separate type from the persisted portfolio-lineage ledger models in
-:mod:`digiquant.olympus.hermes.models.portfolio_ledger` (``TargetAdjustmentType`` /
-``TargetAdjustment``, #2415) — that ledger is append-only, persisted, and currently
-fully dark (zero production traffic). ``TargetAdjustmentType`` was extended
-(#2417) to carry the same 12 string values defined here as an additive superset
-of its original 3 (``cap``/``rounding``/``carry``), so the two vocabularies agree
-on their reason codes even though the two *types* stay separate — one governs
-an in-memory event, the other a persisted row, and unifying them would couple
-the dark ledger to the live sizing pipeline for no present benefit. These
-events are plain return-value objects threaded through the H8 sizing call chain
-and intended for future in-process consumers that want an explanation of a
-requested->approved delta (H9, pre-trade risk, outcome episodes) — no such
-consumer exists in this codebase yet; see ``RebalancePayload.adjustments`` in
-``atlas/state.py`` for the current wire shape. H8 remains the sole owner of the
-final weight — nothing here changes, reorders, or re-derives a weight; every
-event field is populated from a value already computed on the real
-weight-calculation path.
+These events remain a deliberately separate type from the persisted portfolio-lineage
+ledger models in :mod:`digiquant.olympus.hermes.models.portfolio_ledger`
+(``TargetAdjustmentType`` / ``TargetAdjustment``, #2415): that ledger is append-only
+and H9 is its sole writer. H8 applies caps upstream of H9 and returns these events
+plus ``SizingResult.requested_pct`` on the sized book; H9 maps ``unit="pct"`` events
+onto ``portfolio_ledger_target_adjustments`` keyed to the matching
+``RequestedTarget``. ``unit="conviction"`` events stay explanation-only (different
+dimension from weight columns).
+``TargetAdjustmentType`` was extended (#2417) to carry the same 12 string values
+defined here as an additive superset of its original 3 (``cap``/``rounding``/
+``carry``), and migration 095 widened the DB CHECK so persisted rows can use the
+fine-grained codes. The two *types* stay separate — one governs an in-memory event,
+the other a persisted row — so the live sizing pipeline is not coupled to the
+ledger model package. H8 remains the sole owner of the final weight — nothing here
+changes, reorders, or re-derives a weight; every event field is populated from a
+value already computed on the real weight-calculation path.
 """
 
 from __future__ import annotations

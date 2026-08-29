@@ -133,6 +133,7 @@ def test_every_scheduled_job_is_still_named_as_expected(crons: dict[str, list[st
     """The three job names the assertions below key on, and their cron counts."""
     assert {name: len(found) for name, found in crons.items()} == {
         "intraday": 1,
+        "fx-refresh": 2,
         "eod-macro": 1,
         "at-open-clock": 2,
     }
@@ -350,3 +351,54 @@ def test_at_open_cannot_run_without_the_gate(workflow: dict) -> None:
     assert writer_checkout["with"]["ref"] == "main"
     run = next(step["run"] for step in clock["steps"] if step.get("id") == "clock")
     assert '>> "$GITHUB_OUTPUT"' in run, "the gate's decision never reaches the job output"
+
+
+# --------------------------------------------------------------------------- #
+# What the at-open job actually invokes (#2420, Task 2.4)
+# --------------------------------------------------------------------------- #
+
+
+def _at_open_command(workflow: dict) -> str:
+    """The shell line that runs the at-open writer, wherever in the job it sits.
+
+    Found by the script's own name rather than by step index or step name, so reordering
+    the job or renaming the step keeps the flag assertions below pointed at the right line.
+
+    Narrowed to the invoking line with shell comments stripped, so the flag assertions read
+    the command and nothing else. Today the prose above this step is a YAML comment, which
+    the parser drops before `step["run"]` ever exists — but a `run: |` block that grew a
+    second line and an inline `# ... --require-ledger ...` note would otherwise turn a
+    comment into a passing or failing assertion about behaviour.
+    """
+    steps = workflow["jobs"]["at-open"]["steps"]
+    runs = [str(step["run"]) for step in steps if "execute_at_open.py" in str(step.get("run", ""))]
+    assert len(runs) == 1, f"expected exactly one at-open invocation, found {len(runs)}"
+    lines = [
+        line.split("#", 1)[0].strip()
+        for line in runs[0].splitlines()
+        if "execute_at_open.py" in line.split("#", 1)[0]
+    ]
+    assert len(lines) == 1, f"expected one at-open command line, found {len(lines)}: {lines}"
+    return lines[0]
+
+
+def test_at_open_fills_the_prior_days_rebalance(workflow: dict) -> None:
+    """The decision is made after one close and filled at the next open.
+
+    Without ``--prior-trading-day-rebalance`` the script looks for a rebalance dated today,
+    finds none at 09:35, and books nothing — a silent no-op, not an error. The flag is the
+    only thing that points it at yesterday's approved targets.
+    """
+    assert "--prior-trading-day-rebalance" in _at_open_command(workflow)
+
+
+def test_at_open_requires_the_ledger_after_opening_snapshot_cutover(workflow: dict) -> None:
+    """After #2589 the cron trusts the ledger path with an explicit require flag.
+
+    ``ensure_legacy_opening_snapshot`` seeds (or cold-start-declines) before fills, so
+    ``--no-ledger`` is gone and ``--require-ledger`` is pinned *present*: a decline becomes
+    exit 3 instead of a silent prose fallback that could hide a failed handover.
+    """
+    command = _at_open_command(workflow)
+    assert "--no-ledger" not in command
+    assert "--require-ledger" in command

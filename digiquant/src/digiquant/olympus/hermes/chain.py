@@ -126,6 +126,18 @@ def _coerce_atlas_state(result: Any) -> AtlasResearchState:
     return AtlasResearchState.model_validate(result) if isinstance(result, dict) else result
 
 
+def _maybe_export_shadow_allocation_artifact(state: Any) -> None:
+    """WP10.1 fail-soft export — never imports challenger/replay/broker code."""
+    try:
+        from digiquant.olympus.hermes.shadow_artifact import (
+            maybe_export_shadow_allocation_artifact,
+        )
+
+        maybe_export_shadow_allocation_artifact(state)
+    except Exception:  # export must not affect production booking
+        _logger.exception("chain: shadow allocation artifact export failed; continuing")
+
+
 def _acquire_checkpointer() -> Any:
     """Return a checkpointer when ``DIGI_CHECKPOINTER`` is set, else ``None``.
 
@@ -156,6 +168,11 @@ def _invoke_resumable(
     Distinct thread per graph (``{thread_base}::{suffix}``) so Atlas/Hermes never
     share a thread (their state schemas differ). If the thread already has a
     checkpoint, invoke(None) to continue from where it died; otherwise invoke(state).
+
+    On resume the checkpointed ``knowledge_cutoff_at`` (and WP12.3
+    ``research_state_pin``) are authoritative — the freshly built *state*
+    argument is discarded so the run does not re-pin wall-clock time or
+    re-select research state mid-replay (#2628 / #2863).
     """
     if checkpointer is None or not thread_base:
         return _coerce_atlas_state(graph.invoke(state))
@@ -324,6 +341,11 @@ def run_atlas_then_hermes(
     ``None`` defers to ``state.config.preferences["debate_rounds"]`` after the Atlas
     pass (preflight loads config; clamped via ``clamp_debate_rounds``). Explicit
     non-None overrides preferences.
+
+    ``initial_state`` pins one UTC ``knowledge_cutoff_at`` before graph invoke
+    (#2628 / WP4.1). Atlas preflight then pins one ``research_state_pin``
+    (#2863 / WP12.3). Checkpoint resume keeps both from the saved thread —
+    it does not re-call ``now()`` or re-select state as ingestion continues.
     """
     state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
@@ -372,6 +394,9 @@ def run_atlas_then_hermes(
                 held=hermes_held,
             )
             state = _safe_invoke_graph(hermes_graph, state, checkpointer, thread_base, "hermes")
+            # WP10.1: one-way shadow artifact after H9. Fail-soft — never reruns or
+            # mutates the production booking path / graph.
+            _maybe_export_shadow_allocation_artifact(state)
         else:
             _logger.error(
                 "chain: Atlas produced no research for %s; skipping Hermes — no rebalance booked",

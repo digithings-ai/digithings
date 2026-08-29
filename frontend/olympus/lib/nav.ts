@@ -1,18 +1,21 @@
 import type { ElementType } from 'react';
-import { LayoutDashboard, PieChart, GitBranch, Activity, Globe } from 'lucide-react';
+import { LayoutDashboard, PieChart, GitBranch, Globe } from 'lucide-react';
 
 export interface NavItem {
   href: string;
   label: string;
   icon: ElementType<{ size?: number }>;
-  /** System is the demoted operator footnote — pinned bottom, muted (desktop). */
+  /** Optional muted/pinned-bottom footnote item (desktop). Unused while spine is four + FX. */
   demoted?: boolean;
 }
 
 /**
- * The portfolio-owner spine: glance → why → full, four destinations.
+ * The portfolio-owner spine: glance → why → full, plus FX Hub.
  * Single source of truth consumed by both the desktop sidebar and the mobile
  * app bar so they can never drift.
+ *
+ * System was removed from top-level nav — run health lives on Pipeline (date
+ * stats) and Brief (timeline). Legacy `/system` redirects to `/pipeline`.
  *
  * The FX Hub suite (/twelve-x) is a permanent destination since the
  * #1664 dashboard integration (previously env-gated behind
@@ -23,20 +26,19 @@ export const NAV: NavItem[] = [
   { href: '/portfolio', label: 'Portfolio', icon: PieChart },
   { href: '/pipeline', label: 'Pipeline', icon: GitBranch },
   { href: '/twelve-x', label: 'FX Hub', icon: Globe },
-  { href: '/system', label: 'System', icon: Activity, demoted: true },
 ];
 
 /**
  * Pathname prefixes that stay LIVE when the live data backend is down (the
  * DB-unavailable gate). Two kinds of routes are exempt:
  *   - operator surfaces that must stay reachable to diagnose / reconfigure:
- *     '/system' (how-it-works lives inside system-page) and '/settings';
+ *     '/pipeline' (run health panel) and '/settings';
  *   - static legacy redirect routes that never touch Supabase, so gating them
  *     would only swallow a redirect.
  * Pathnames are app-relative (basePath '/olympus' is stripped by usePathname).
  */
 export const DB_EXEMPT_PREFIXES = [
-  '/system',
+  '/system', // legacy redirect → /pipeline
   '/settings',
   // twelve-x reads its own research feed (isTwelveXConfigured), not the main
   // Olympus backend — the shell's DB gate must not swallow it (#1664).
@@ -48,6 +50,8 @@ export const DB_EXEMPT_PREFIXES = [
   '/research',
   '/strategy',
   '/portfolio/theses',
+  // House chrome declares corpus/profile contracts; corpus sample keys fail soft.
+  '/house',
 ] as const;
 
 /** True when `pathname` should stay live even while the backend is unreachable. */

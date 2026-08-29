@@ -25,17 +25,13 @@ vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.
 import Sidebar from './sidebar';
 
 describe('Sidebar', () => {
-  it('renders the four owner destinations', () => {
+  it('renders the owner destinations without System', () => {
     const html = renderToStaticMarkup(createElement(Sidebar));
-    for (const label of ['Brief', 'Portfolio', 'Pipeline', 'System']) {
+    for (const label of ['Brief', 'Portfolio', 'Pipeline', 'FX Hub']) {
       expect(html).toContain(label);
     }
-  });
-
-  it('pins System last — demoted to the bottom of the nav', () => {
-    const html = renderToStaticMarkup(createElement(Sidebar));
-    expect(html.indexOf('System')).toBeGreaterThan(html.indexOf('Brief'));
-    expect(html.indexOf('System')).toBeGreaterThan(html.indexOf('Pipeline'));
+    expect(html).not.toContain('>System<');
+    expect(html).not.toContain('System');
   });
 
   it('no longer shows the legacy labels', () => {

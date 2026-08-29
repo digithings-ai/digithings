@@ -10,6 +10,7 @@ from typing import Any  # score:allow untyped any — used for LangGraph update 
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 
+from digiquant.olympus.atlas.research_attention import triage_phase_attention_update
 from digiquant.olympus.atlas.state import AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import SupabaseClient, query_price_deltas
 from digiquant.olympus.atlas.triage import evaluate
@@ -52,7 +53,9 @@ def build_triage_node(deps: TriageDeps | None):
         # cheap (dict[str, float] of ~50 entries).
         state_with_prices = state.model_copy(update={"price_deltas": price_deltas})
         result = evaluate(state_with_prices)
-        return {"triage": result, "price_deltas": price_deltas}
+        planned = state_with_prices.model_copy(update={"triage": result})
+        attention_update = triage_phase_attention_update(planned)
+        return {"triage": result, "price_deltas": price_deltas, **attention_update}
 
     return _triage
 

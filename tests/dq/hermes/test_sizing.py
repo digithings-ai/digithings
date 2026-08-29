@@ -5,6 +5,9 @@ conviction + stance into final target weights via select → raw weights → pos
 sector caps → correlation de-dup → vol-target → breaker → round-to-grid → cash residual.
 Every reduction step is **reduce-only / cash-first**: weight freed by a cap or a drop
 becomes CASH, never redistributed up (which would re-breach the cap it just enforced).
+
+WP8.5 (#2738): post-cutover calibrated-path control-shell locks live in
+``test_allocation_invariants.py``; this module remains the incumbent-leaf suite.
 """
 
 from __future__ import annotations
@@ -729,6 +732,19 @@ _LINEAGE_SCENARIOS: dict[str, dict] = {
         # binds several controls in the same pass at once.
     ),
 }
+
+
+# --------------------------------------------------------------------------- WP6.1 incumbent golden leaves (#2687)
+
+
+def test_incumbent_default_caps_match_golden_fixture() -> None:
+    from tests.dq.hermes.incumbent_risk_fixtures import (
+        dataclass_matches_fixture,
+        load_incumbent_risk_fixture,
+    )
+
+    golden = load_incumbent_risk_fixture()["policy_defaults"]["sizing_caps"]
+    assert dataclass_matches_fixture(SizingCaps(), golden)
 
 
 @pytest.mark.parametrize("scenario", _LINEAGE_SCENARIOS.values(), ids=list(_LINEAGE_SCENARIOS))
