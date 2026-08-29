@@ -67,11 +67,11 @@ class ChromaBackend(DigiIndex):
         ]
         try:
             if embeddings:
-                self._collection.add(
+                self._collection.upsert(
                     ids=ids, embeddings=embeddings, documents=documents, metadatas=metadatas
                 )
             else:
-                self._collection.add(ids=ids, documents=documents, metadatas=metadatas)
+                self._collection.upsert(ids=ids, documents=documents, metadatas=metadatas)
         except (OSError, RuntimeError, TypeError, ValueError):
             logger.exception(
                 "chroma index failed",
