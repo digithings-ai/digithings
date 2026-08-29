@@ -66,7 +66,6 @@ export default function PortfolioShellInner() {
   const metrics = data?.calculated;
   const theses = useMemo(() => data?.portfolio?.strategy?.theses ?? [], [data]);
   const positionHistory = useMemo(() => data?.position_history ?? [], [data]);
-  const positionEvents = useMemo(() => data?.position_events ?? [], [data]);
   const lastUpdated = data?.portfolio?.meta?.last_updated ?? null;
 
   const thesisById = useMemo(
@@ -207,9 +206,11 @@ export default function PortfolioShellInner() {
           <AllocationsTab
             lastUpdated={lastUpdated}
             positions={positions}
+            investedPct={
+              data?.server_portfolio_metrics?.invested_pct ?? metrics?.total_invested ?? null
+            }
             decisions={decisions}
             positionHistory={positionHistory}
-            positionEvents={positionEvents}
             thesisById={thesisById}
             effHistoryDate={effHistoryDate}
             onSelectHistoryDate={selectHistoryDate}

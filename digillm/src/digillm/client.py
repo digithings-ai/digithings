@@ -46,7 +46,7 @@ import re
 import time
 from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -203,6 +203,19 @@ def get_byok() -> tuple[str, str] | None:
     return _byok_override.get()
 
 
+def clear_byok() -> None:
+    """Drop the BYOK override outright, without the token :func:`set_byok` returned.
+
+    :func:`reset_byok` needs that token, and the token only exists in the frame that
+    bound it. A worker thread running inside a *copy* of a request's context inherits
+    the binding but never the token, so this is how such a worker drops its own copy
+    when the work finishes -- see ``clear_byok_bindings`` in digigraph's ``llm_auth``.
+    Calling it in the binding frame instead would clear the value but strand the
+    parent's token, so prefer :func:`reset_byok` there.
+    """
+    _byok_override.set(None)
+
+
 @contextlib.contextmanager
 def proxy_key(token: str | None) -> Iterator[None]:
     """Context manager: set the proxy-key override for the duration of the block."""
@@ -294,6 +307,43 @@ def _parse_provider_prefix(model: str) -> tuple[str | None, str]:
         if provider in _EXTERNAL_PROVIDERS:
             return provider, model_id
     return None, model
+
+
+# A provider's model id normally does not repeat the provider's own name, so the wire
+# id is the litellm string minus exactly one routing prefix
+# (``openrouter/anthropic/claude-sonnet-4`` -> ``anthropic/claude-sonnet-4``). A few ids
+# break that assumption by *being* prefixed with their provider: OpenRouter's auto-router
+# is itself called ``openrouter/auto``, so its litellm form carries the prefix twice and
+# stripping one still has to leave one behind.
+#
+# Listing those ids here is what lets BOTH spellings land on the same wire id. Operators
+# write the doubled ``openrouter/openrouter/auto`` (README, and the Atlas provider
+# diagnostics under ``digiquant/scripts/atlas/``; no tier config lists it), but a BYOK
+# caller cannot: :func:`digigraph.llm_auth.byok_routable_model` strips the provider's own
+# prefix to a fixpoint and re-applies exactly one, by design — that fixpoint is what keeps
+# the middleware and the resolver from disagreeing about a hostile header. So the single-
+# prefix form is the only one BYOK can produce, and without this table it reached the wire
+# as a bare ``auto``, which OpenRouter rejects. Fixing it here rather than in the
+# normalizer keeps the credential-path invariant untouched.
+_SELF_PREFIXED_MODELS: dict[str, frozenset[str]] = {
+    "openrouter": frozenset({"auto"}),
+}
+
+
+def _wire_model(provider: str | None, model_id: str, model: str) -> str:
+    """Return the model id to send to *provider*'s endpoint.
+
+    ``model`` is the caller's full litellm string and ``(provider, model_id)`` its
+    :func:`_parse_provider_prefix` split. Normally the wire id is ``model_id`` (one prefix
+    stripped), but for an id listed in :data:`_SELF_PREFIXED_MODELS` the provider's name is
+    part of the id itself, so it is restored. Both ``openrouter/auto`` and
+    ``openrouter/openrouter/auto`` therefore reach the wire as ``openrouter/auto``.
+    """
+    if provider is None:
+        return model
+    if model_id in _SELF_PREFIXED_MODELS.get(provider, frozenset()):
+        return f"{provider}/{model_id}"
+    return model_id
 
 
 def _default_client_api_key() -> str:
@@ -584,6 +634,27 @@ def provider_call_context(
         _provider_call_metadata.reset(token)
 
 
+def detach_provider_call_context() -> None:
+    """Drop the inherited logical-call metadata in the *current* context, token-free.
+
+    For a thread running inside a :func:`contextvars.copy_context` snapshot taken to
+    carry a request's *credentials* across the boundary. A copy propagates references
+    rather than values, so the snapshot hands every fan-out worker the same mutable
+    :class:`ProviderCallContextHandle`: they all write its ``last_call_id`` (leaving a
+    follow-up call parented on whichever sibling happened to finish last) and all append
+    to the one deferred-record list that ``finalize`` tuples and clears. A worker that
+    inherited an empty context read ``None`` here, so this restores that *for this
+    module's var*. It says nothing about a consumer's own logical-call vars, which the
+    same snapshot carries and which can hold the same handle one layer up --
+    :func:`set_fan_out_detach_hook` is how a consumer clears those alongside this one.
+
+    Nesting fan-out calls under their parent's logical call is a separate feature, and a
+    real one -- it needs a per-worker handle plus a merge at the join, not a shared
+    handle written concurrently.
+    """
+    _provider_call_metadata.set(None)
+
+
 @dataclass
 class _AttemptScope:
     call_id: UUID
@@ -596,6 +667,7 @@ class _AttemptScope:
     finalized: bool = False
     terminal_outcome: ProviderCallOutcome | None = None
     logical_error_type: str | None = None
+    last_attempt_id: UUID | None = None
 
     def start(self) -> tuple[int, RetryReason, datetime]:
         attempt_number = self.next_attempt_number
@@ -747,7 +819,11 @@ def _retry_reason(error: Exception) -> RetryReason:
 
 
 def _optional_nonnegative_int(value: Any) -> int | None:
-    return value if isinstance(value, int) and value >= 0 else None
+    # ``bool`` subclasses ``int``, so ``isinstance(False, int)`` is True. Treating False as 0
+    # would invent a measured-zero token count when the provider omitted usage (#1989).
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 def _optional_attribute(value: Any, name: str) -> Any:
@@ -812,6 +888,8 @@ def _emit_attempt(
     response: Any = None,
     error: Exception | None = None,
 ) -> None:
+    attempt_id = uuid4()
+    scope.last_attempt_id = attempt_id
     observer = _telemetry_observer
     if observer is None:
         return
@@ -819,7 +897,7 @@ def _emit_attempt(
         prompt_tokens, completion_tokens, cost_usd = _response_usage(response)
         served_model = _optional_attribute(response, "model")
         record = ProviderAttemptRecord(
-            attempt_id=uuid4(),
+            attempt_id=attempt_id,
             call_id=scope.call_id,
             attempt_number=attempt_number,
             provider=provider,
@@ -837,6 +915,19 @@ def _emit_attempt(
         emit_telemetry(observer, record)
     except Exception as telemetry_error:
         logger.debug("attempt telemetry failed: %s", type(telemetry_error).__name__)
+
+
+def _wp1_join_fields() -> dict[str, Any]:
+    """Soft-stamp fields for the glass-box usage observer (#2763)."""
+    scope = _attempt_scope.get()
+    if scope is None:
+        return {}
+    fields: dict[str, Any] = {"call_id": scope.call_id}
+    if scope.last_attempt_id is not None:
+        fields["attempt_id"] = scope.last_attempt_id
+    if scope.metadata is not None and scope.metadata.node_run_id is not None:
+        fields["node_run_id"] = scope.metadata.node_run_id
+    return fields
 
 
 def _responses_create_with_attempt(
@@ -916,6 +1007,9 @@ def _record_usage(**fields: Any) -> None:
     if observer is None:
         return
     try:
+        # Stamp WP1 join keys from the active attempt scope unless the caller already set them.
+        for key, value in _wp1_join_fields().items():
+            fields.setdefault(key, value)
         observer(**fields)
     except Exception as exc:  # telemetry must never break the LLM call
         logger.debug("usage observer raised: %s", exc)
@@ -1096,27 +1190,29 @@ def _is_empty_completion(resp: Any) -> bool:
     return not content and not tool_calls
 
 
-def _openrouter_usage_cost(usage: Any) -> float:
-    """Actual USD charged for a call, from OpenRouter's ``usage.cost`` (always present on its
-    responses). The OpenAI SDK is typed for OpenAI's schema, so an unknown ``cost`` field lands
-    in pydantic ``model_extra`` rather than a typed attribute — check both. Returns 0.0 for any
-    provider/SDK that doesn't surface it, so non-OpenRouter calls record no cost."""
+def _openrouter_usage_cost(usage: Any) -> float | None:
+    """Actual USD charged for a call, from OpenRouter's ``usage.cost`` when present.
+
+    The OpenAI SDK is typed for OpenAI's schema, so an unknown ``cost`` field lands in
+    pydantic ``model_extra`` rather than a typed attribute — check both. Returns ``None``
+    when the provider/SDK does not surface cost so glass-box / WP1 paths never fabricate 0
+    (#2763)."""
     if usage is None:
-        return 0.0
+        return None
     cost = getattr(usage, "cost", None)
     if cost is None:
         extra = getattr(usage, "model_extra", None)
         if isinstance(extra, dict):
             cost = extra.get("cost")
     if cost is None:
-        return 0.0
+        return None
     try:
         value = float(cost)
     except (TypeError, ValueError):
-        return 0.0
+        return None
     # float() also accepts 'nan'/'inf'/negatives; a bad cost must not poison run-level
-    # aggregation (one nan turns the whole run's cost_usd into nan). Clamp to a sane 0.0.
-    return value if math.isfinite(value) and value >= 0 else 0.0
+    # aggregation (one nan turns the whole run's cost_usd into nan).
+    return value if math.isfinite(value) and value >= 0 else None
 
 
 def _openrouter_fallback_models() -> list[str]:
@@ -1363,7 +1459,7 @@ def completion(
     """
     provider, model_id = _parse_provider_prefix(model)
     client = get_client_for_model(model)
-    effective_model = model_id if provider is not None else model
+    effective_model = _wire_model(provider, model_id, model)
     usage_started = time.perf_counter()
     provider_attempts = 0
 
@@ -1492,18 +1588,19 @@ def completion(
             raise
 
     _u = getattr(r, "usage", None)
-    _cached_tokens = getattr(getattr(_u, "prompt_tokens_details", None), "cached_tokens", 0) or 0
+    _details = getattr(_u, "prompt_tokens_details", None) if _u is not None else None
+    _cached_raw = getattr(_details, "cached_tokens", None) if _details is not None else None
     _record_usage(
         kind=usage_kind,
         # Record the model OpenRouter actually served (``r.model``), not the request string
         # ("auto" / the allowlist), so cost telemetry reflects what was really billed.
         model=getattr(r, "model", None) or effective_model,
-        prompt_tokens=getattr(_u, "prompt_tokens", 0) or 0,
-        completion_tokens=getattr(_u, "completion_tokens", 0) or 0,
-        cached_tokens=_cached_tokens,
-        # Actual USD charged. OpenRouter always includes ``usage.cost`` on its responses
-        # (usage accounting is on by default); the OpenAI SDK keeps unknown fields in
-        # ``model_extra``. Other providers don't report it → 0.0.
+        prompt_tokens=_optional_nonnegative_int(getattr(_u, "prompt_tokens", None) if _u else None),
+        completion_tokens=_optional_nonnegative_int(
+            getattr(_u, "completion_tokens", None) if _u else None
+        ),
+        cached_tokens=_optional_nonnegative_int(_cached_raw),
+        # Actual USD when reported; None when unknown — never fabricate 0 (#2763).
         cost=_openrouter_usage_cost(_u),
         duration_ms=round((time.perf_counter() - usage_started) * 1000),
         retry_count=max(0, provider_attempts - 1),
@@ -1670,7 +1767,7 @@ def web_search(
     _record_usage(
         kind="web_search",
         model=model_id,
-        cost=float(cost_usd) if cost_usd is not None else 0.0,
+        cost=float(cost_usd) if cost_usd is not None else None,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),
@@ -1726,7 +1823,7 @@ def x_search(
     _record_usage(
         kind="x_search",
         model=model_id,
-        cost=float(cost_usd) if cost_usd is not None else 0.0,
+        cost=float(cost_usd) if cost_usd is not None else None,
         sources=len(sources),
         ok=True,
         duration_ms=round((time.perf_counter() - started) * 1000),
@@ -1799,7 +1896,7 @@ def _stream_completion_one_turn(
     """
     provider, model_id = _parse_provider_prefix(model)
     client = get_client_for_model(model)
-    effective_model = model_id if provider is not None else model
+    effective_model = _wire_model(provider, model_id, model)
 
     kwargs: dict[str, Any] = {
         "model": effective_model,
@@ -1963,6 +2060,53 @@ def _stream_completion_one_turn(
             }
         )
     return content, tc_list
+
+
+# ── Fan-out detach hook ─────────────────────────────────────────────────────────
+# :func:`detach_provider_call_context` clears *this* module's logical-call var, but a
+# consumer that layers its own logical-call ContextVar on top of it -- digigraph's
+# ``usage._LOGICAL_CALL_CONTEXT`` does, and its value holds the very same mutable
+# :class:`ProviderCallContextHandle` -- would still hand every parallel worker one
+# shared handle through the credential snapshot. digillm is a leaf library and cannot
+# reach into a consumer's module to clear it, exactly as it cannot write into a
+# consumer's usage accumulator, so the consumer registers a callback here on the same
+# terms: process-wide, no-op until registered, errors never break the tool call.
+
+_fan_out_detach_hook: Callable[[], None] | None = None
+
+
+def set_fan_out_detach_hook(hook: Callable[[], None] | None) -> None:
+    """Register a callback run at the top of every parallel tool worker.
+
+    Called inside the worker's own copied context, so it must clear caller-side
+    logical-call state token-free (a copy carries values, never reset tokens) and must
+    not touch credentials -- carrying those across the boundary is the whole point of
+    the copy. Pass ``None`` to disable.
+    """
+    global _fan_out_detach_hook
+    _fan_out_detach_hook = hook
+
+
+def _detach_consumer_call_context() -> None:
+    """Run the consumer's detach hook, if one is registered."""
+    hook = _fan_out_detach_hook
+    if hook is None:
+        return
+    try:
+        hook()
+    except Exception as exc:  # a broken hook must not fail the tool call
+        logger.warning("fan-out detach hook raised, telemetry may be shared: %s", exc)
+
+
+def _execute_tool_in_fan_out(
+    execute_tool: Callable[[str, ToolArguments], str | dict[str, Any]],
+    name: str,
+    args: ToolArguments,
+) -> str | dict[str, Any]:
+    """Run one parallel tool call: credentials inherited, telemetry handles dropped."""
+    detach_provider_call_context()
+    _detach_consumer_call_context()
+    return execute_tool(name, args)
 
 
 @_traceable("run_tools")
@@ -2183,9 +2327,24 @@ def run_tools(
         run_parallel = len(parsed) > 1 and all(name in safe for (_, name, _) in parsed)
         if run_parallel:
             results: dict[int, str | dict[str, Any]] = {}
+            # A pool worker starts with an *empty* context, so every ContextVar bound
+            # per-request -- the BYOK key/base-url override above all (:func:`set_byok`)
+            # -- reads as its default inside it. A parallel-safe tool that itself calls
+            # an LLM would then bill the operator's key while the caller's was bound.
+            # Copy per submit, never once for the batch: a single Context cannot be
+            # entered concurrently and raises "is already entered" on the second thread.
+            #
+            # What the copy must NOT carry is the logical-call telemetry handle: a copy
+            # propagates references, so all N workers would share one mutable handle and
+            # race its ``last_call_id`` and deferred-record list. Hence the wrapper --
+            # propagate credentials, not the mutable telemetry handle. It clears two
+            # vars, not one: this module's, and (via the consumer's registered hook) any
+            # logical-call var a consumer layers on top holding the same handle.
             with ThreadPoolExecutor(max_workers=len(parsed)) as executor:
                 future_to_idx = {
-                    executor.submit(execute_tool, name, args): i
+                    executor.submit(
+                        copy_context().run, _execute_tool_in_fan_out, execute_tool, name, args
+                    ): i
                     for i, (_, name, args) in enumerate(parsed)
                 }
                 for future in as_completed(future_to_idx):

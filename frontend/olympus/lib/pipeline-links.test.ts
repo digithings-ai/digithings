@@ -26,8 +26,11 @@ describe('buildPipelineHref (LOCKED deep-link grammar)', () => {
     expect(stageForDocumentKey('analyst/IJR')).toBe('selection');
     expect(stageForDocumentKey('deliberation/EWT')).toBe('selection');
     expect(stageForDocumentKey('pm-rebalance')).toBe('selection');
+    expect(stageForDocumentKey('risk-debate')).toBe('selection');
+    expect(stageForDocumentKey('document-deltas/macro')).toBe('research');
     expect(stageForDocumentKey('sector-energy')).toBe('research');
     expect(stageForDocumentKey('commit-run/28041585974')).toBe('decision');
+    expect(stageForDocumentKey('attention-plan')).toBe('inputs');
     expect(stageForDocumentKey('unknown-thing')).toBeNull();
   });
 });
@@ -53,6 +56,7 @@ describe('pipeline link resolvers', () => {
     expect(p).toEqual({ date: '2026-06-23', stage: 'selection', node: 'analyst/SPY' });
   });
   it('maps sub-steps to document_keys', () => {
+    expect(leafDocumentKey('attention-plan')).toBe('attention-plan');
     expect(leafDocumentKey('pm-direction')).toBe('pm-direction-memo');
     expect(leafDocumentKey('analysts', 'SPY')).toBe('analyst/SPY');
     expect(leafDocumentKey('nope')).toBeNull();

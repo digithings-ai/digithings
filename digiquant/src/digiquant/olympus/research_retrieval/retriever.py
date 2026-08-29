@@ -11,6 +11,7 @@ from digiquant.olympus.atlas.supabase_io import SupabaseClient
 from digiquant.olympus.research_retrieval.blinding import RetrievalPhase
 from digiquant.olympus.research_retrieval.cache import ResearchCache
 from digiquant.olympus.research_retrieval.queries import (
+    RetrievalQueryPin,
     extract_section,
     query_portfolio,
     query_research,
@@ -28,12 +29,14 @@ class ResearchRetriever:
         phase: RetrievalPhase = "atlas_edit",
         cache: ResearchCache | None = None,
         watchlist: tuple[str, ...] = (),
+        retrieval_pin: RetrievalQueryPin | None = None,
     ) -> None:
         self._client = client
         self._run_date = run_date
         self._phase = phase
         self._cache = cache
         self._watchlist = watchlist
+        self._retrieval_pin = retrieval_pin
 
     def query_research(
         self,
@@ -50,6 +53,7 @@ class ResearchRetriever:
             segment=segment,
             phase=self._phase,
             cache=self._cache,
+            retrieval_pin=self._retrieval_pin,
         )
 
     def fetch_prior_document(
@@ -80,4 +84,5 @@ class ResearchRetriever:
             as_of_date=as_of_date,
             ticker=ticker,
             watchlist=self._watchlist,
+            retrieval_pin=self._retrieval_pin,
         )

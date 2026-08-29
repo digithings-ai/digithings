@@ -1,35 +1,429 @@
-"""Olympus unified research + portfolio retrieval (spec §6.1)."""
+"""Olympus unified research + portfolio retrieval (spec §6.1).
+
+Phase 3 WP12.1 frozen research-state contracts live in
+:mod:`digiquant.olympus.research_retrieval.models` (prose remains a view).
+WP12.2 append-only store: :mod:`digiquant.olympus.research_retrieval.store`.
+WP12.3 preflight pin: :mod:`digiquant.olympus.research_retrieval.pin`.
+WP12.4 legacy inventory backfill:
+:mod:`digiquant.olympus.research_retrieval.legacy_backfill`.
+WP12.5 compiled prose views:
+:mod:`digiquant.olympus.research_retrieval.views`.
+WP11.1 ticker evidence bundles + amendments:
+:class:`~digiquant.olympus.research_retrieval.store.EvidenceBundleStore`
+(models in the same ``models`` module; H6 selection cutover is WP11.3+;
+WP13.1 research attention policy extends ``research_retrieval/planner.py``).
+WP11.2 H5 publish:
+:mod:`digiquant.olympus.research_retrieval.evidence_bundle`
+(one base bundle per H5-attempted ticker before the provider call).
+WP11.3 deterministic H6 selection:
+:mod:`digiquant.olympus.research_retrieval.planner`
+(``H6Selection`` reasons/features/budget; ``OLYMPUS_H6_SELECTION_MODE``).
+WP11.4 bounded H6 missing-fact amendment:
+:mod:`digiquant.olympus.research_retrieval.h6_amendment`
+(one validated proposal → targeted retrieval → append-only amendment; no generic H6 search).
+WP13.2 attention persistence:
+:class:`~digiquant.olympus.research_retrieval.store.AttentionStore`
+(plans/decisions/context manifests/policy evaluations; migration
+``092_olympus_attention_context.sql``; storage only — WP13.3+ runtime wiring).
+WP13.5 shadow evaluation:
+:mod:`digiquant.olympus.research_retrieval.shadow_evaluation`
+(reconcile plans to WP1 attempts + downstream artifacts; evidence-only).
+WP14.1 role context compiler:
+:mod:`digiquant.olympus.research_retrieval.context`
+(``ContextCapsule`` / ``ContextManifest`` / role allowlists; models + compiler only — WP14.2+ wiring).
+WP14.2 blinded H5/H6 context wiring:
+:mod:`digiquant.olympus.research_retrieval.context_wiring`
+(``OLYMPUS_CONTEXT_COMPILER_MODE`` off|shadow|enforce beside incumbent provider inputs).
+WP14.3 H7 decision context wiring:
+:mod:`digiquant.olympus.research_retrieval.h7_decision_context`
+(typed mandate/calibration/contribution/risk/authorization/forecast sections;
+:mod:`digiquant.olympus.research_retrieval.h7_prerequisites` preflight snapshot).
+WP14.4 drill-down manifest pinning:
+:mod:`digiquant.olympus.research_retrieval.tools`
+(``OLYMPUS_RETRIEVAL_MANIFEST_MODE`` off|shadow|enforce; pre-call manifest persist +
+WP1 token linkage via :class:`~digiquant.olympus.research_retrieval.store.RoleRetrievalManifestStore`).
+"""
 
 from __future__ import annotations
 
 from digiquant.olympus.research_retrieval.blinding import (
     DIGEST_DOCUMENT_KEY,
+    PromptRole,
     RetrievalPhase,
+    assert_blinded_h5_prompt,
+    assert_blinded_h6_prompt,
+    forbidden_prompt_keys,
     portfolio_tool_allowed,
     research_document_allowed,
+    strip_blinded_forbidden_keys,
 )
 from digiquant.olympus.research_retrieval.cache import ResearchCache
+from digiquant.olympus.research_retrieval.context import (
+    CONTEXT_SCHEMA_VERSION,
+    ContextCapsule,
+    ContextCompileInput,
+    ContextItem,
+    ContextItemKind,
+    ContextManifest,
+    ContextOmission,
+    ContextOmissionReason,
+    ContextRole,
+    RoleContextPolicy,
+    compile_context_capsule,
+    compile_context_manifest,
+    default_role_context_policy,
+    role_context_policy_content_hash,
+)
+from digiquant.olympus.research_retrieval.context_wiring import (
+    OLYMPUS_CONTEXT_COMPILER_MODE_ENV,
+    ContextCompilerMode,
+    RoleContextWireResult,
+    changed_evidence_ids_from_bundle,
+    compile_h5_role_context,
+    compile_h6_role_context,
+    compile_h7_role_context,
+    resolve_context_compiler_mode,
+    try_load_pinned_research_state,
+    wire_h5_phase_inputs,
+    wire_h6_phase_inputs,
+    wire_h7_phase_inputs,
+)
+from digiquant.olympus.research_retrieval.evidence_bundle import (
+    OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV,
+    EvidenceConflict,
+    H5EvidenceBundleBuild,
+    H5EvidenceFact,
+    MissingEvidenceField,
+    build_h5_evidence_bundle,
+    cite_evidence_bundle_on_forecast,
+    evidence_bundle_writer_enabled,
+    facts_from_phase_inputs,
+    publish_h5_evidence_bundle,
+    resolve_h5_state_version_id,
+)
+from digiquant.olympus.research_retrieval.h6_amendment import (
+    H6_AMENDMENT_POLICY_MAX_PER_BASE,
+    H6AmendmentOutcome,
+    H6AmendmentResult,
+    attempt_h6_evidence_amendment,
+    document_key_for_source_kind,
+    retrieve_missing_fact_evidence,
+    validate_missing_fact_proposal,
+)
+from digiquant.olympus.research_retrieval.h7_decision_context import (
+    H7ContextSection,
+    H7DecisionContext,
+    H7DecisionContextCompileInput,
+    H7PrerequisiteSnapshot,
+    H7SectionAvailability,
+    H7SectionKind,
+    assert_h7_no_target_weights,
+    compile_h7_decision_context,
+    strip_h7_weight_keys,
+)
+from digiquant.olympus.research_retrieval.h7_prerequisites import build_h7_prerequisite_snapshot
+from digiquant.olympus.research_retrieval.legacy_backfill import (
+    BackfillCounts,
+    LegacySourceDocument,
+    backfill_legacy_manifests,
+    build_legacy_document_ref,
+)
+from digiquant.olympus.research_retrieval.models import (
+    BeliefStatus,
+    BeliefVersion,
+    EvidenceBundleAmendment,
+    EvidenceRecord,
+    ExpectedEventStatus,
+    ExpectedEventVersion,
+    LegacyDocumentRef,
+    MissingFactRequest,
+    PatchMode,
+    PatchTargetKind,
+    ResearchPatch,
+    ResearchStateManifest,
+    ResearchStatePin,
+    ResearchStateVersion,
+    TickerEvidenceBundle,
+    TypedProvenance,
+)
+from digiquant.olympus.research_retrieval.pin import (
+    STATE_UNAVAILABLE,
+    ResearchStatePinResult,
+    ResearchStateUnavailableError,
+    child_version_must_name_parent,
+    pin_research_state_for_preflight,
+    require_research_state_pin,
+)
+from digiquant.olympus.research_retrieval.planner import (
+    H6_SELECTION_PROMPT_FORBIDDEN_KEYS,
+    OLYMPUS_H6_SELECTION_MODE_ENV,
+    AttentionBudgetEstimate,
+    AttentionContextManifest,
+    AttentionDecision,
+    AttentionDecisionReconciliation,
+    AttentionFeatures,
+    AttentionMode,
+    AttentionPlan,
+    AttentionPolicyEvaluation,
+    AttentionReason,
+    AttentionRolloutMode,
+    AttentionTargetKind,
+    H6Action,
+    H6Budget,
+    H6DecisionFeatures,
+    H6Selection,
+    H6SelectionMode,
+    H6SelectionReason,
+    PersistedAttentionDecision,
+    PersistedAttentionPlan,
+    assert_no_materiality_in_prompt,
+    attention_decision_id,
+    build_h6_decision_features,
+    incumbent_fallback_selection,
+    resolve_h6_selection_mode,
+    select_h6,
+)
 from digiquant.olympus.research_retrieval.queries import (
+    RetrievalDocumentAllowlist,
+    RetrievalManifestMode,
+    RetrievalQueryPin,
+    apply_retrieval_pin_to_result,
+    build_retrieval_query_pin,
     extract_section,
     query_portfolio,
     query_research,
 )
 from digiquant.olympus.research_retrieval.retriever import ResearchRetriever
+from digiquant.olympus.research_retrieval.shadow_evaluation import (
+    AttentionDownstreamOutcomes,
+    ResearchPolicyShadowEvaluationReport,
+    ShadowDecisionEvaluationRow,
+    ShadowProviderAttemptDetail,
+    evaluate_research_policy_shadow,
+    write_shadow_evaluation_report,
+)
+from digiquant.olympus.research_retrieval.store import (
+    ActualProviderAttemptUsage,
+    AttentionStore,
+    AttentionStoreConflict,
+    AttentionStoreError,
+    AttentionStoreMissingError,
+    EvidenceBundleConflict,
+    EvidenceBundleError,
+    EvidenceBundleMissingError,
+    EvidenceBundleStore,
+    LoadedResearchState,
+    PersistedRoleContextManifest,
+    ProviderAttemptTokenLink,
+    ResearchStateConflict,
+    ResearchStateError,
+    ResearchStateMissingError,
+    ResearchStateStore,
+    RoleRetrievalManifestStore,
+    RoleRetrievalManifestStoreConflict,
+    RoleRetrievalManifestStoreError,
+    RoleRetrievalManifestStoreMissingError,
+    provider_attempt_token_link_id,
+    role_context_manifest_record_id,
+)
 from digiquant.olympus.research_retrieval.tools import (
+    OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV,
     RESEARCH_TOOLS,
     build_research_tool_dispatcher,
+    link_manifest_provider_tokens,
+    persist_pre_call_role_manifest,
+    resolve_retrieval_manifest_mode,
+    retrieval_pin_from_wire_result,
+)
+from digiquant.olympus.research_retrieval.views import (
+    COMPILED_BRIEF_DOCUMENT_KEY,
+    COMPILED_DIGEST_DOCUMENT_KEY,
+    VIEW_SCHEMA_VERSION,
+    CompiledResearchView,
+    ResearchViewKind,
+    ResearchViewPublishBlocked,
+    compile_research_brief,
+    compile_research_digest,
+    compile_research_view,
+    compile_views_from_store,
+    document_key_for_view,
+    publish_compiled_views,
+    require_structured_write_ok,
 )
 
 __all__ = [
+    "ActualProviderAttemptUsage",
+    "AttentionBudgetEstimate",
+    "AttentionContextManifest",
+    "AttentionDecision",
+    "AttentionDecisionReconciliation",
+    "AttentionDownstreamOutcomes",
+    "AttentionFeatures",
+    "AttentionMode",
+    "AttentionPlan",
+    "AttentionPolicyEvaluation",
+    "AttentionReason",
+    "AttentionRolloutMode",
+    "AttentionStore",
+    "AttentionStoreConflict",
+    "AttentionStoreError",
+    "AttentionStoreMissingError",
+    "AttentionTargetKind",
+    "BackfillCounts",
+    "BeliefStatus",
+    "BeliefVersion",
+    "COMPILED_BRIEF_DOCUMENT_KEY",
+    "COMPILED_DIGEST_DOCUMENT_KEY",
+    "CONTEXT_SCHEMA_VERSION",
+    "CompiledResearchView",
+    "ContextCapsule",
+    "ContextCompileInput",
+    "ContextItem",
+    "ContextItemKind",
+    "ContextManifest",
+    "ContextOmission",
+    "ContextOmissionReason",
+    "ContextCompilerMode",
+    "ContextRole",
     "DIGEST_DOCUMENT_KEY",
+    "EvidenceBundleAmendment",
+    "EvidenceBundleConflict",
+    "EvidenceBundleError",
+    "EvidenceBundleMissingError",
+    "EvidenceBundleStore",
+    "EvidenceConflict",
+    "EvidenceRecord",
+    "ExpectedEventStatus",
+    "ExpectedEventVersion",
+    "H5EvidenceBundleBuild",
+    "H5EvidenceFact",
+    "H6Action",
+    "H6Budget",
+    "H6DecisionFeatures",
+    "H6Selection",
+    "H6SelectionMode",
+    "H6SelectionReason",
+    "H7DecisionContext",
+    "H7DecisionContextCompileInput",
+    "H7ContextSection",
+    "H7PrerequisiteSnapshot",
+    "H7SectionAvailability",
+    "H7SectionKind",
+    "H6_AMENDMENT_POLICY_MAX_PER_BASE",
+    "H6AmendmentOutcome",
+    "H6AmendmentResult",
+    "H6_SELECTION_PROMPT_FORBIDDEN_KEYS",
+    "LegacyDocumentRef",
+    "LegacySourceDocument",
+    "LoadedResearchState",
+    "MissingEvidenceField",
+    "MissingFactRequest",
+    "OLYMPUS_EVIDENCE_BUNDLE_WRITER_ENV",
+    "OLYMPUS_CONTEXT_COMPILER_MODE_ENV",
+    "OLYMPUS_H6_SELECTION_MODE_ENV",
+    "OLYMPUS_RETRIEVAL_MANIFEST_MODE_ENV",
+    "PatchMode",
+    "PatchTargetKind",
+    "PersistedAttentionDecision",
+    "PersistedAttentionPlan",
+    "PersistedRoleContextManifest",
+    "ProviderAttemptTokenLink",
     "RESEARCH_TOOLS",
     "ResearchCache",
+    "ResearchPolicyShadowEvaluationReport",
+    "ResearchPatch",
     "ResearchRetriever",
+    "ResearchStateConflict",
+    "ResearchStateError",
+    "ResearchStateManifest",
+    "ResearchStateMissingError",
+    "ResearchStatePin",
+    "ResearchStatePinResult",
+    "ResearchStateStore",
+    "RoleRetrievalManifestStore",
+    "RoleRetrievalManifestStoreConflict",
+    "RoleRetrievalManifestStoreError",
+    "RoleRetrievalManifestStoreMissingError",
+    "ResearchStateUnavailableError",
+    "ResearchStateVersion",
+    "ResearchViewKind",
+    "ResearchViewPublishBlocked",
+    "RetrievalDocumentAllowlist",
+    "RetrievalManifestMode",
     "RetrievalPhase",
+    "RetrievalQueryPin",
+    "PromptRole",
+    "RoleContextPolicy",
+    "RoleContextWireResult",
+    "STATE_UNAVAILABLE",
+    "ShadowDecisionEvaluationRow",
+    "ShadowProviderAttemptDetail",
+    "TickerEvidenceBundle",
+    "TypedProvenance",
+    "VIEW_SCHEMA_VERSION",
+    "apply_retrieval_pin_to_result",
+    "assert_blinded_h5_prompt",
+    "assert_blinded_h6_prompt",
+    "assert_h7_no_target_weights",
+    "assert_no_materiality_in_prompt",
+    "attempt_h6_evidence_amendment",
+    "attention_decision_id",
+    "backfill_legacy_manifests",
+    "build_h5_evidence_bundle",
+    "build_h6_decision_features",
+    "build_h7_prerequisite_snapshot",
+    "build_legacy_document_ref",
     "build_research_tool_dispatcher",
+    "build_retrieval_query_pin",
+    "changed_evidence_ids_from_bundle",
+    "child_version_must_name_parent",
+    "cite_evidence_bundle_on_forecast",
+    "compile_h5_role_context",
+    "compile_h6_role_context",
+    "compile_h7_decision_context",
+    "compile_h7_role_context",
+    "compile_context_capsule",
+    "compile_context_manifest",
+    "compile_research_brief",
+    "compile_research_digest",
+    "compile_research_view",
+    "compile_views_from_store",
+    "default_role_context_policy",
+    "document_key_for_source_kind",
+    "document_key_for_view",
+    "evaluate_research_policy_shadow",
+    "evidence_bundle_writer_enabled",
     "extract_section",
+    "forbidden_prompt_keys",
+    "facts_from_phase_inputs",
+    "link_manifest_provider_tokens",
+    "incumbent_fallback_selection",
+    "persist_pre_call_role_manifest",
+    "pin_research_state_for_preflight",
     "portfolio_tool_allowed",
+    "provider_attempt_token_link_id",
+    "publish_compiled_views",
+    "publish_h5_evidence_bundle",
     "query_portfolio",
     "query_research",
+    "require_research_state_pin",
+    "require_structured_write_ok",
     "research_document_allowed",
+    "role_context_manifest_record_id",
+    "role_context_policy_content_hash",
+    "resolve_context_compiler_mode",
+    "resolve_retrieval_manifest_mode",
+    "resolve_h5_state_version_id",
+    "resolve_h6_selection_mode",
+    "retrieval_pin_from_wire_result",
+    "retrieve_missing_fact_evidence",
+    "select_h6",
+    "strip_blinded_forbidden_keys",
+    "strip_h7_weight_keys",
+    "try_load_pinned_research_state",
+    "validate_missing_fact_proposal",
+    "wire_h5_phase_inputs",
+    "wire_h6_phase_inputs",
+    "wire_h7_phase_inputs",
+    "write_shadow_evaluation_report",
 ]

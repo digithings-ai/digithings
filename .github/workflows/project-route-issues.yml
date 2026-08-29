@@ -3,7 +3,7 @@
 # Model:
 #   - Every non-epic issue → its module project (based on component:* label).
 #   - Epics + cross-cutting issues → Project #1 (digithings).
-#   - SITAAS-labeled → Project #10.
+#   - client-pilot-labeled → Project #10.
 #
 # Replaces issue-to-project.yml and issue-to-digiquant-project.yml.
 # Per-module boards: digiquant=#2, digigraph=#3, digisearch=#4, digichat=#5,
@@ -57,10 +57,10 @@ jobs:
           }
           targets = set()
           is_epic = "epic" in labels
-          is_sitaas = "sitaas" in labels
+          is_client_pilot = "client-pilot" in labels
           module_proj = next((p for lab, p in component_to_project.items() if lab in labels), None)
 
-          if is_sitaas:
+          if is_client_pilot:
               targets.add(10)
           if is_epic:
               targets.add(1)

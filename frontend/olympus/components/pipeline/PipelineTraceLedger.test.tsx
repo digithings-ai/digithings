@@ -57,6 +57,49 @@ describe('PipelineTraceLedger', () => {
     expect(filterPipelineTraceEvents(events, '', 'tool_call', 'all')).toHaveLength(1);
     expect(filterPipelineTraceEvents(events, '', 'all', 'issues').map((item) => item.sequence))
       .toEqual([3, 4]);
+    expect(
+      filterPipelineTraceEvents(events, '', 'all', 'all', 'research').map((item) => item.sequence),
+    ).toEqual([1, 2, 3, 4]);
+    expect(filterPipelineTraceEvents(events, '', 'all', 'all', 'inputs')).toHaveLength(0);
+  });
+
+  it('renders a typed gap when Inputs has no call telemetry', () => {
+    const html = renderToStaticMarkup(
+      createElement(PipelineTraceView, {
+        result: {
+          state: 'available',
+          events: [event({ document_key: 'macro', phase: 'phase1' })],
+        },
+        date: '2026-08-05',
+        onClose: () => {},
+      }),
+    );
+
+    expect(html).toContain('Pipeline stage filter');
+    expect(html).toContain('All stages');
+    expect(html).toContain('Research');
+  });
+
+  it('pages a 300-call result set with load-more remaining counts', () => {
+    const events = Array.from({ length: 300 }, (_, index) =>
+      event({
+        sequence: index + 1,
+        document_key: index % 2 === 0 ? 'macro' : 'analyst/QQQ',
+        phase: index % 2 === 0 ? 'phase1' : 'h5_analyst-QQQ',
+        operation: `Op${index + 1}`,
+      }),
+    );
+    const html = renderToStaticMarkup(
+      createElement(PipelineTraceView, {
+        result: { state: 'available', events },
+        date: '2026-08-05',
+        onClose: () => {},
+      }),
+    );
+
+    expect(html).toContain('300 calls');
+    expect(html).toContain('Load 100 more · 200 remaining');
+    expect((html.match(/data-testid="pipeline-trace-event"/g) ?? []).length).toBe(100);
   });
 
   it('renders failures and retries expanded but routine calls collapsed', () => {

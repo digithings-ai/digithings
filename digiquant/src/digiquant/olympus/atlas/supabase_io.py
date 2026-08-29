@@ -410,16 +410,30 @@ def _slim_deliberation_summary(payload: dict[str, Any]) -> dict[str, Any]:
     """Extract PM-relevant fields from a published ``deliberation/{ticker}`` payload.
 
     Drops the full ``transcript`` (the bulk of the doc) — the carry is a slim
-    excerpt, not the full debate dump.
+    excerpt, not the full debate dump. Preserves WP4.4 forecast lineage IDs,
+    the effective forecast blob, and the accepted ``forecast_amendment`` dump so
+    quiet carries retain reconstructable identity for H9 registry retry (#2790).
     """
     body = payload.get("body") if isinstance(payload.get("body"), dict) else payload
     conclusion = str(body.get("conclusion") or "").strip()
-    return {
+    slim: dict[str, Any] = {
         "net_stance": body.get("net_stance"),
         "conviction_delta": body.get("conviction_delta"),
         "converged": body.get("converged"),
         "conclusion_excerpt": conclusion[:400],
     }
+    for key in (
+        "base_forecast_id",
+        "amendment_id",
+        "effective_forecast_id",
+        "amendment_outcome",
+        "forecast_degradation",
+        "effective_forecast",
+        "forecast_amendment",
+    ):
+        if body.get(key) is not None:
+            slim[key] = body[key]
+    return slim
 
 
 def load_prior_analyst_summaries(

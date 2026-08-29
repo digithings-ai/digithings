@@ -77,3 +77,26 @@ def test_chain_dry_run_compiles_daily_graph(capsys):
     assert payload["compiled"]["atlas"] is True
     assert payload["compiled"]["hermes"] is True
     assert "monthly" not in json.dumps(payload)
+
+
+def test_simulated_chain_initial_state_exposes_research_pin_fields():
+    """Simulated invoke surface: one root pin slot + lineage fields on state (#2863)."""
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from digiquant.olympus.atlas.graph import AtlasInput, initial_state
+
+    state = initial_state(
+        AtlasInput(run_date=date(2026, 4, 26), cadence="daily"),
+        knowledge_cutoff_at=datetime(2026, 4, 26, 12, 0, tzinfo=UTC),
+        run_id=uuid4(),
+    )
+    assert state.knowledge_cutoff_at is not None
+    assert state.research_state_pin is None
+    assert state.research_state_status is None
+    assert state.requested_research_state_version_id is None
+    # Dry-run compile still succeeds without a store (pin happens in preflight).
+    code = chain_mod.cli_main(
+        ["--cadence", "daily", "--run-date", "2026-04-26", "--dry-run", "--watchlist", "none"]
+    )
+    assert code == 0

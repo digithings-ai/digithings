@@ -23,6 +23,7 @@ from digiquant.olympus.atlas.supabase_io import (
     publish_document,
     publish_document_delta,
 )
+from digiquant.olympus.attention_plan_graph import maybe_publish_attention_plan_shadow
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,8 @@ class PublishDeps:
     """Wiring deps for the publish node (injected Supabase client)."""
 
     client: SupabaseClient
+    research_state_store: Any | None = None
+    """Optional WP12 store for dual-write of compiled prose views (#2877)."""
 
 
 # ``documents.category`` must satisfy the ``chk_documents_category`` CHECK
@@ -220,6 +223,94 @@ def _carry_incomplete_snapshot(
     return carried  # type: ignore[return-value]
 
 
+def _maybe_publish_compiled_research_views(
+    *,
+    deps: PublishDeps,
+    state: AtlasResearchState,
+    run_type: str,
+    date_str: str,
+) -> list[PublishedArtifact]:
+    """Dual-write WP12.5 compiled prose views when structured persistence is safe.
+
+    Retains incumbent digest/segment writers. Skips (fail-closed) when the
+    research-state pin is unavailable, the store is unwired, exact load fails,
+    or ``publish_compiled_views`` refuses a failed structured write.
+    """
+    if state.research_state_status != "pinned" or not state.research_state_pin:
+        return []
+    store = deps.research_state_store
+    if store is None:
+        return []
+
+    from digiquant.olympus.research_retrieval.models import ResearchStatePin
+    from digiquant.olympus.research_retrieval.store import ResearchStateStore
+    from digiquant.olympus.research_retrieval.views import (
+        compile_views_from_store,
+        document_key_for_view,
+        publish_compiled_views,
+    )
+
+    if not isinstance(store, ResearchStateStore):
+        logger.warning(
+            "publish: research_state_store must be ResearchStateStore; got %s",
+            type(store).__name__,
+        )
+        return []
+
+    try:
+        pin = ResearchStatePin.model_validate(state.research_state_pin)
+        brief, digest = compile_views_from_store(store, pin.state_version_id, strict=True)
+    except Exception:
+        logger.exception(
+            "publish: refusing compiled research views for %s (exact state unavailable)",
+            date_str,
+        )
+        return []
+
+    published: list[PublishedArtifact] = []
+
+    def _publisher(view: Any) -> None:
+        key = document_key_for_view(view.kind)
+        published.append(
+            publish_document(
+                client=deps.client,
+                document_key=key,
+                payload={
+                    "kind": view.kind.value,
+                    "state_version_id": str(view.state_version_id),
+                    "state_content_hash": view.state_content_hash,
+                    "state_schema_version": view.state_schema_version,
+                    "manifest_content_hash": view.manifest_content_hash,
+                    "view_schema_version": view.view_schema_version,
+                    "content_hash": view.content_hash,
+                    "markdown": view.markdown,
+                },
+                doc_type=None,
+                run_type=run_type,
+                title=f"research-state {view.kind.value} {date_str}",
+                date_str=date_str,
+                category="output",
+                segment=key,
+            )
+        )
+
+    try:
+        # Structured path is safe only when exact pin load succeeded above.
+        publish_compiled_views(
+            views=(brief, digest),
+            structured_write_ok=True,
+            publisher=_publisher,
+        )
+    except Exception:
+        logger.exception(
+            "publish: compiled research-view dual-write failed for %s; "
+            "incumbent documents retained",
+            date_str,
+        )
+        return []
+    return published
+
+
 def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict[str, Any]]:
     """Return the publish node bound to ``deps``."""
 
@@ -227,6 +318,19 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
         date_str = state.run_date.isoformat()
         run_type = state.run_type
         artifacts: list[PublishedArtifact] = []
+
+        # Track C glass-box (#2622): shadow AttentionPlan for Pipeline Inputs.
+        # Fail-soft — a planner/publish miss must not block segment/digest writes.
+        try:
+            attention = maybe_publish_attention_plan_shadow(client=deps.client, state=state)
+        except Exception:
+            logger.exception(
+                "publish: attention-plan shadow failed for %s; continuing",
+                date_str,
+            )
+            attention = None
+        if attention is not None:
+            artifacts.append(attention)
 
         for bag in (
             state.phase1_outputs,
@@ -330,6 +434,16 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     "snapshot from prior context",
                     date_str,
                 )
+
+        # WP12.5: dual-write compiled views from exact pinned state (incumbent retained).
+        artifacts.extend(
+            _maybe_publish_compiled_research_views(
+                deps=deps,
+                state=state,
+                run_type=run_type,
+                date_str=date_str,
+            )
+        )
 
         return {
             "published": artifacts
