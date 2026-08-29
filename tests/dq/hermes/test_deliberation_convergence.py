@@ -273,6 +273,7 @@ class TestDeliberationFailureCarry:
         # No PM challenge ran, so there is no debate to have converged.
         assert summary["converged"] is False
         assert summary["transcript"] == []
+        assert summary["selection_reason"]  # WP11.3 provenance on failure path
         # The PhaseError shape the Atlas Hermes-density gate counts stays untouched.
         assert out["errors"][0].phase == "hermes_h6_deliberation"
         assert out["errors"][0].message.startswith("deliberation LLM failed")
@@ -331,3 +332,112 @@ class TestDeliberationFailureCarry:
         shaped = deliberation_summaries(state)["AAPL"]
         assert shaped["carry_reason"] == "fingerprint_skip"
         assert shaped["bear_thesis"] == "prior agreement"
+
+    def test_chat_transcript_publishes_without_mirrored_theses(self) -> None:
+        # H6 has no bull/bear fields — remapping both to conclusion made the document
+        # look two-sided while the real debate lived only under rounds/transcript.
+        state = _state()
+        state.phase_hermes.deliberation_summaries = {
+            "DBO": DeliberationSummary(
+                ticker="DBO",
+                converged=True,
+                conclusion="Pass — thesis completed, no position.",
+                net_stance="neutral",
+                conviction_delta=0,
+                transcript=[
+                    DeliberationTurn(
+                        role="pm",
+                        round_number=1,
+                        message="Conviction 0 on a non-held ticker is a non-call.",
+                    ),
+                    DeliberationTurn(
+                        role="analyst",
+                        round_number=1,
+                        message="Accepted. Recommend COMPLETED; no book add.",
+                    ),
+                ],
+            ).model_dump(mode="json")
+        }
+        shaped = deliberation_summaries(state)["DBO"]
+        assert shaped["rounds_count"] == 1
+        assert shaped["transcript"][0]["role"] == "pm"
+        assert shaped["rounds"][1]["role"] == "analyst"
+        assert shaped["bull_thesis"] == ""
+        assert shaped["bear_thesis"] == ""
+        assert shaped["conclusion"].startswith("Pass")
+
+
+@pytest.mark.unit
+class TestH6SelectionWiring:
+    """WP11.3 — selected success round floor, materiality blinding, failure provenance."""
+
+    def test_enforce_selected_success_meets_two_round_floor(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        monkeypatch.setenv("ATLAS_DELIBERATION_MIN_ROUNDS", "2")
+        compiled = build_pipeline(
+            AtlasResearchState, [build_h6_deliberation(["AAPL"], held={"AAPL"})]
+        )
+        calls: list[str] = []
+
+        def fake(_m: str, msgs: list[dict[str, Any]], **_: Any) -> str:
+            schema = next(
+                p["text"].split("name: ")[1].split(")")[0]
+                for msg in msgs
+                for p in msg.get("content", [])
+                if isinstance(p, dict) and "OUTPUT_SCHEMA" in p.get("text", "")
+            )
+            # Materiality / selection features must never appear in provider prompts.
+            blob = json.dumps(msgs)
+            assert "weight_pct" not in blob
+            assert "h6_selection" not in blob
+            assert "materiality" not in blob
+            calls.append(schema)
+            if schema == "DeliberationPmTurn":
+                # Round-1 rubber-stamp blocked by min_rounds=2.
+                return json.dumps(
+                    DeliberationPmTurn(
+                        converged=True,
+                        challenge="justify sizing vs book",
+                        conclusion="agree buy",
+                        net_stance="bullish",
+                    ).model_dump()
+                )
+            if schema == "DeliberationAnalystTurn":
+                return json.dumps(
+                    DeliberationAnalystTurn(
+                        converged=True,
+                        response="evidence supports buy",
+                        conclusion="aligned on buy",
+                        net_stance="bullish",
+                    ).model_dump()
+                )
+            raise AssertionError(f"unexpected schema {schema}")
+
+        with patch("digigraph.graph.research_agent.completion_text", side_effect=fake):
+            result = compiled.invoke(_state())
+        final = AtlasResearchState.model_validate(result)
+        summary = final.phase_hermes.deliberation_summaries["AAPL"]
+        assert summary["converged"] is True
+        assert summary["selection_reason"] == "decision_boundary"
+        assert summary["h6_selection"]["budget"]["min_rounds"] >= 2
+        assert "DeliberationAnalystTurn" in calls
+        assert len(summary["transcript"]) >= 2
+
+    def test_provider_failure_keeps_typed_selection_provenance(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("OLYMPUS_H6_SELECTION_MODE", "enforce")
+        with patch.object(
+            h6_deliberation,
+            "run_deliberation_loop",
+            side_effect=RuntimeError("provider unavailable"),
+        ):
+            out = build_h6_from_state().worker.run(with_fanout_ticker(_state(), "AAPL"))
+        summary = out["phase_hermes"].deliberation_summaries["AAPL"]
+        assert summary["carry_reason"] == "llm_failure"
+        assert summary["converged"] is False
+        assert summary["selection_reason"] == "decision_boundary"
+        assert summary["h6_selection"]["action"] == "select"
+        assert out["errors"][0].message.startswith("deliberation LLM failed")

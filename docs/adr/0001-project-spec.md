@@ -5,7 +5,7 @@
 
 ## Context
 
-digithings has grown into eight components (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase`). The first real client engagement — **SITAAS** (`projects/sitaas/`) — demonstrated a reusable pattern for composing a subset of components into a running stack:
+digithings has grown into eight components (`digigraph`, `digisearch`, `digiquant`, `digichat`, `digikey`, `digiclaw`, `digismith`, `digibase`). The first real client engagement — the **client pilot** (`projects/client-pilot/`) — demonstrated a reusable pattern for composing a subset of components into a running stack:
 
 - `config.yaml` — project metadata, enabled agents, LLM mode, system prompts, run-storage path, indexes directory, MCP config, service URLs.
 - `indexes/*.yaml` — per-index schema/field mapping.
@@ -13,7 +13,7 @@ digithings has grown into eight components (`digigraph`, `digisearch`, `digiquan
 - `docker-compose.yml` — composes published digithings images, mounts `config.yaml` as `DIGI_PROJECT_CONFIG`, mounts `indexes/` into `digisearch`.
 - `Makefile` — project-local conveniences (`make update`, `make build-no-cache`).
 
-SITAAS does **not** include digiquant. Future projects will include different subsets (e.g. Atlas: digigraph + digisearch + digiquant; a client RAG-only project: digisearch + digichat). Today this composition pattern is **implicit** — documented only in the SITAAS README. Without a shared spec, each new project risks diverging conventions, per-project config shapes, and deployment quirks.
+The client pilot does **not** include digiquant. Future projects will include different subsets (e.g. Atlas: digigraph + digisearch + digiquant; a client RAG-only project: digisearch + digichat). Today this composition pattern is **implicit** — documented only in the client pilot's README. Without a shared spec, each new project risks diverging conventions, per-project config shapes, and deployment quirks.
 
 ## Decision
 
@@ -38,7 +38,7 @@ Formalize the pattern as the **digithings Project Spec**: a declarative manifest
 apiVersion: digithings.ai/v1alpha1
 kind: Project
 metadata:
-  name: sitaas
+  name: client-pilot
   description: "Unified content exploration agent over Azure AI Search."
   version: 0.1.0
   owner: team-or-client
@@ -80,7 +80,7 @@ auth:
     audience: "${DIGIKEY_AUDIENCE:-digi-ecosystem}"
 ```
 
-Today SITAAS's `config.yaml` is already ~80% of this shape. The spec formalizes field names, adds `apiVersion`/`kind` for future evolution, and makes component enablement explicit.
+Today the client pilot's `config.yaml` is already ~80% of this shape. The spec formalizes field names, adds `apiVersion`/`kind` for future evolution, and makes component enablement explicit.
 
 ### Rendering
 
@@ -104,7 +104,7 @@ Every component must:
 - Enables future **managed hosting**: a project manifest is portable enough that we can run it for the client.
 
 **Negative / tradeoffs**
-- Upfront cost: we need to refactor SITAAS to the formal spec and update each component to honor the manifest contract. Probably one focused phase of work.
+- Upfront cost: we need to refactor the client pilot to the formal spec and update each component to honor the manifest contract. Probably one focused phase of work.
 - Risk of premature formalization: the spec may change as we onboard projects 2 and 3. Mitigated by marking `v1alpha1` and being explicit that breaking changes are allowed until `v1`.
 - Adds a layer of indirection for contributors who only want to run the core stack. The root `docker-compose.yml` and `make up` flow must remain the zero-config path.
 
@@ -117,13 +117,13 @@ Every component must:
 ## Migration plan
 
 1. Formalize spec as `docs/spec/project-spec-v1alpha1.md` (this ADR is the rationale; the spec file is the reference).
-2. Refactor `projects/sitaas/config.yaml` → `digiproject.yaml` following the manifest schema. Keep backward-compat loader for one release.
+2. Refactor `projects/client-pilot/config.yaml` → `digiproject.yaml` following the manifest schema. Keep backward-compat loader for one release.
 3. Audit each component for manifest-contract gaps (which env vars? which disablement paths?).
 4. Add a `projects/template/` starter.
-5. Use the spec for the **next** project (Atlas manifest, or SITAAS Phase 2).
+5. Use the spec for the **next** project (Atlas manifest, or Client Pilot Phase 2).
 
 ## Links
 
-- SITAAS reference implementation: `projects/sitaas/`
+- Client pilot reference implementation: `projects/client-pilot/`
 - Related: ADR-0002 (Domain Unification)
 - Related: `docs/VISION.md` — strategic context

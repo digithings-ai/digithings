@@ -14,7 +14,7 @@ This document compares the current digigraph implementation to LangGraph’s des
 | **Checkpointing** | `DIGI_CHECKPOINTER=memory|sqlite|postgres`; **unset defaults to `memory`**. Set `DIGI_CHECKPOINTER=none` to compile without a checkpointer (breaks `thread_id` / thread API). |
 | **Streaming** | Hybrid: LangGraph `stream_mode="updates"` for graph-level trace; research subgraph still uses `stream_callback` / contextvar for tool_call, tool_result, content, and **trace** events (`TraceEventV1`). SSE chunks may include `choices[0].delta.digigraph_trace` for digichat. |
 | **Interrupts / human-in-the-loop** | `DIGI_INTERRUPT_AFTER_RESEARCH=1` compiles with `interrupt_after=["research"]`; `POST /threads/{id}/resume` uses `Command` (see digigraph/ARCHITECTURE.md). |
-| **Multi-turn** | Each HTTP request is one `invoke()`. Conversation history is not in state; the research node sees only the current prompt. For Sitaas, “multi-turn” is effectively a new prompt per request; checkpointing preserves `stored_datasets` for the same thread_id across requests if the client reuses session_id. |
+| **Multi-turn** | Each HTTP request is one `invoke()`. Conversation history is not in state; the research node sees only the current prompt. In project mode, “multi-turn” is effectively a new prompt per request; checkpointing preserves `stored_datasets` for the same thread_id across requests if the client reuses session_id. |
 
 ---
 
@@ -89,7 +89,7 @@ LangGraph supports:
 - **interrupt_before=["node_id"]** / **interrupt_after=["node_id"]** — Pause before or after a node; the graph returns with state marked interrupted.
 - **Command(resume=...)** — Resume from an interrupt by passing a value (e.g. human-approved edit) into the next step.
 
-We don’t use these. For Sitaas, possible use cases:
+In project mode, current use cases and future possibilities include:
 
 - Pause after search (or after a delegate agent) so a human can approve or edit the dataset list before the model continues.
 - Pause before backtest so a human confirms parameters.

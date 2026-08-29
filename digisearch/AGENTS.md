@@ -28,6 +28,8 @@ Before making any change to `digisearch/`:
 - [ ] Confirm `DIGISEARCH_ALLOW_STUB=1` is never set in production code paths
 - [ ] Confirm `GET /azure_status` stays behind `digisearch:query` via `DigiAuthMiddleware` (not public)
 - [ ] Confirm any new ingest path validates the `source` path before opening it (no path traversal)
+- [ ] Confirm chunker changes go through `digisearch.chunking` (`ChunkerBackend` / factory); do not hard-code a chunker in new ingest paths
+- [ ] Confirm never adding `pandas-ta` (deleted upstream); use `pandas-ta-classic` if TA is ever required
 
 ---
 
@@ -43,6 +45,21 @@ Beyond root `AGENTS.md`:
 - **Scope enforcement**: All new endpoints require the appropriate `digisearch:query` or `digisearch:ingest` scope via digikey middleware.
 - **No full doc bodies in spans**: digismith trace attributes must not carry raw document text or chunk content.
 - **bulk ingest worker is a stub**: `ingest_worker.py` logs and exits. Do not add a queue consumer there until Phase 2 is scoped.
+- **Chunker selection is config-only**: use `DIGISEARCH_CHUNKER` or per-index `chunker:` — do not fork ingest code to swap backends.
+
+---
+
+## Chunking strategy guide
+
+| When | Chunker | How |
+|------|---------|-----|
+| SEC filings, research reports, earnings transcripts, long docs | **semantic** (default) | `DIGISEARCH_CHUNKER=semantic` or omit — `ChonkieSemanticChunker` |
+| Short news wires / alerts where latency matters | **token** | `DIGISEARCH_CHUNKER=token` — `ChonkieTokenChunker` |
+| Rollback / characterization of pre-Chonkie behavior | `recursive` / `fixed` | Legacy `ingestion/chunkers/` via the same env var |
+
+`POST /ingest` and the CLI wrap the selected backend in `SegmentAwareChunker` so structural segments never cross chunk boundaries. Atlas flat payloads use `get_document_chunker()` (no segment wrapper).
+
+Factory entry points: `get_ingest_chunker()`, `get_document_chunker()`, `get_chunker_backend()` in `digisearch.chunking.factory`.
 
 ---
 
@@ -51,6 +68,9 @@ Beyond root `AGENTS.md`:
 ```bash
 # Unit tests (no stack required)
 pytest tests/ -m unit -k "digisearch" -v
+
+# Chunking / Chonkie backends
+pytest -m unit -k chunking -v
 
 # Single test file
 pytest tests/digisearch/test_search.py -v

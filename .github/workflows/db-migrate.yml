@@ -49,6 +49,18 @@ name: db-migrate
 # reshaped, not the one its number suggests. Take the next unused prefix (see
 # digiquant/supabase/README.md).
 #
+# A cancelled run is bounded by the same invariant as a failed one, which is what
+# makes `cancel-in-progress` below safe. A cancellation can only ever LOSE a ledger
+# INSERT, never forge one: on the unwrapped path the INSERT rides inside the same
+# --single-transaction psql call as the DDL, so a dropped connection rolls both back
+# together; on the self-wrapping path it is the second of two calls, so dying between
+# them is precisely the asymmetry described above — prod migrated, ledger silent, next
+# run replays the file. So a cancellation is a new *cause* of a failure mode this
+# workflow already documents and accepts, not a new failure mode, and #1814's "never
+# record a version you did not run" holds on both paths regardless. It also takes two
+# migration pushes to main inside one ~40s apply to reach that window at all, whereas
+# queueing behind an unapproved run took the prod schema offline for 15 days.
+#
 # Prod-mutating: runs under the `production` environment — configure a
 # required-reviewer protection rule on it so apply/dispatch needs human approval
 # (CLAUDE.md human gate). Schema state, two separately dated facts — do not
@@ -59,6 +71,11 @@ name: db-migrate
 #   * 2026-08-03 — 063 and 064 were authored, applied and ledger-recorded, so the
 #     ledger now runs through 064_prices_live_lease.sql (61 rows; 062 is burned
 #     and 037/038/059 were never used).
+#   * 2026-08-20 — one run (32395569187) applied 066, 067, 068, 069 and 070 in a
+#     single pass after the stranded run above was cancelled: "applied 5 pending
+#     migration(s); skipped 62 already in the ledger" over 67 files on disk. So the
+#     ledger now runs through 070_olympus_paper_execution_costs.sql, and one approved
+#     run demonstrably absorbs an arbitrary backlog — that is not an inference.
 on:
   push:
     branches: [main]
@@ -69,7 +86,18 @@ on:
 permissions:
   contents: read
 
-concurrency: db-migrate
+concurrency:
+  # One apply at a time: two runs would race on the ledger. But `cancel-in-progress`
+  # has to be TRUE rather than merely absent, which is the opposite of the rule for a
+  # normal production pipeline (CI_CONVENTIONS.md #7 — amended for this case). This job
+  # occupies the group for as long as it sits in the `production` approval gate below,
+  # and the group's occupant is exactly what the flag protects: leave it false and one
+  # never-approved run is a silent outage of the only path to the prod schema. Run
+  # 31003345711 held it from 2026-08-05 to 08-20 and 066-070 never landed (#2541).
+  # Superseding loses nothing because the apply is purely ledger-gated — the newest run
+  # always carries a superset of the work of any run it displaces.
+  group: db-migrate
+  cancel-in-progress: true
 
 jobs:
   migrate:

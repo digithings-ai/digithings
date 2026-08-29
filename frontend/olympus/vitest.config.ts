@@ -33,6 +33,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      '@digithings/web': path.resolve(__dirname, '../digiweb/web/src/index.ts'),
     },
   },
 });

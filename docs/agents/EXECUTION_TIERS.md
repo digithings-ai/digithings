@@ -35,9 +35,12 @@ oldest from 2026-04-19, and 1 closed in the last 30 days. Retargeting stops new 
 being stranded on a tier with no consumer at all; it does not by itself mean the work
 gets done. Whether the Cursor Automation is actually running is a separate question.
 
-**PR code review:** Cursor Bugbot, invoked by hand with a `bugbot run` comment once a
+**PR code review:** default is in-session (see [CODE_REVIEW_POLICY.md](CODE_REVIEW_POLICY.md)).
+Cursor Bugbot, when available, is invoked by hand with a `bugbot run` comment once a
 diff is final. Never at PR open and never per push — Bugbot went usage-based in June
-2026 at roughly $1.00–$1.50 a run. `ci.yml`'s `request-copilot-review` job was removed
+2026 at roughly $1.00–$1.50 a run ([Cursor Bugbot](https://cursor.com/docs/bugbot);
+usage-based pricing as of that month). CodeRabbit is optional/sunset — do not re-request
+it for small follow-up commits. `ci.yml`'s `request-copilot-review` job was removed
 in #1894; it had been reporting success while attaching no reviewer. Claude review
 remains a secondary opt-in (see below). Every commit reaching `main` must clear
 `ci-review-coverage.yml`, which is a required status check.
@@ -65,7 +68,7 @@ Interactive, local, human-in-the-loop. The top tier; takes everything above and 
 
 **Fits:** architecture and new-module scaffolding; complex debugging; cross-module integration; security review; strategy/iterative design; milestone decomposition; targeted `@claude` help.
 
-**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Bugbot is the primary reviewer; enable Claude review only for projects that need deeper analysis. When Bugbot is unavailable, `/review <N>` in-session is the honest fallback — see `CLAUDE.md`.
+**PR code review (secondary, opt-in):** Claude's `/code-review` plugin via `.github/workflows/agent-claude-review.yml` is **off by default**. Enable it by setting repo variable `ENABLE_CLAUDE_PR_REVIEW = true` (Settings → Secrets and variables → Actions → Variables). Also requires `CLAUDE_CODE_OAUTH_TOKEN` secret. Default review is in-session (`/review <N>`, fresh-context subagent — see `CODE_REVIEW_POLICY.md`); Bugbot is the on-demand external option, invoked by hand once a diff is final. Enable this Claude plugin only for projects that need a standing automated pass on top of that.
 
 **Weekly continuous-improvement digest:** `.github/workflows/pipeline-continuous-improvement.yml` runs every Sunday 22:00 UTC, synthesizes the past 7 days of PR/CI/review activity, and files a single tracker issue with 3–5 prioritized suggestions. See [HOUSEKEEPING.md](HOUSEKEEPING.md#continuous-improvement) — synthesis is judgment work, so it lives at Tier 3.
 

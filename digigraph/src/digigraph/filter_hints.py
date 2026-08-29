@@ -1,4 +1,4 @@
-"""NL → filter hints for SITAAS search.
+"""NL → filter hints for project-mode search.
 
 Extract lightweight, structured filter hints (year, region, topic) from a natural-language
 query so downstream search can pre-narrow without the user specifying formal filters.

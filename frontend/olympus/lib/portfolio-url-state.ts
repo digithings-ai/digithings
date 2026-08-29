@@ -80,6 +80,22 @@ export function thesisDetailHref(thesisId: string): string {
   return hrefWithQuery('/portfolio/theses', new URLSearchParams({ thesis: thesisId }));
 }
 
+/** Canonical href for a ticker dossier: `/portfolio/tickers?ticker=<SYM>`. */
+export function tickerDossierHref(ticker: string): string {
+  return hrefWithQuery(
+    '/portfolio/tickers',
+    new URLSearchParams({ ticker: ticker.trim().toUpperCase() })
+  );
+}
+
+/** Optional date focus for the public ledger activity stream. */
+export function ledgerHref(opts?: { date?: string | null; ticker?: string | null }): string {
+  const params = new URLSearchParams();
+  if (opts?.date) params.set('date', opts.date);
+  if (opts?.ticker) params.set('ticker', opts.ticker.trim().toUpperCase());
+  return hrefWithQuery('/portfolio/ledger', params);
+}
+
 export function replaceBrowserUrl(href: string): void {
   if (typeof window === 'undefined') return;
   window.history.replaceState(window.history.state, '', href);

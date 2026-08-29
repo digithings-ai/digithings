@@ -52,6 +52,16 @@ export const PIPELINE_TOPOLOGY: StageDef[] = [
       description: 'Checks that the run has complete, current inputs and records readiness in pipeline state.',
       stateOnly: true,
     },
+    // WP13-class AttentionPlan shadow (#1945 glass-box): published as
+    // `attention-plan` when the shadow planner runs. Absence is expected until
+    // graph wiring lands — treat like beliefs (conditional), not a persistence miss.
+    {
+      id: 'attention-plan',
+      label: 'Attention plan',
+      description:
+        'Records which artifacts the shadow planner would refresh and why, under the pinned ProfileConfig, without actuating routing.',
+      conditionalArtifact: true,
+    },
   ]},
   {
     id: 'research',
