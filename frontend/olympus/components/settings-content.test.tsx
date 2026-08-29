@@ -73,4 +73,21 @@ describe('SettingsContent', () => {
   it('uses no off-palette fin-blue literals', () => {
     expect(render()).not.toContain('fin-blue');
   });
+
+  it('page variant shows Custom-tier workspace gates and Billing anchor', () => {
+    const locked = render({ variant: 'page', tier: 'free' });
+    expect(locked).toContain('settings-workspace-gates');
+    expect(locked).toContain('locked-surface');
+    expect(locked).toContain('settings-billing-anchor');
+    expect(locked).toContain('id="billing"');
+
+    const unlocked = render({ variant: 'page', tier: 'custom' });
+    expect(unlocked).toContain('tier-unlocked-note');
+    expect(unlocked).not.toContain('locked-surface');
+  });
+
+  it('popover variant omits workspace gates (keep chrome compact)', () => {
+    const html = render({ variant: 'popover', tier: 'free' });
+    expect(html).not.toContain('settings-workspace-gates');
+  });
 });

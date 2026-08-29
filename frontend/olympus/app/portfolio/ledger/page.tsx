@@ -4,11 +4,15 @@ import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import HoldingsActivityTable from '@/components/portfolio/HoldingsActivityTable';
 import PageSkeleton from '@/components/page-skeleton';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
+import { EntitledSurface } from '@/components/entitled-surface';
 import { useDashboard } from '@/lib/dashboard-context';
 
 /**
  * Ledger inspectability — position-event activity already anon-readable.
  * Does not claim access to private portfolio_ledger_* / olympus_accounting_* tables.
+ *
+ * Tier: `house_weights_nav` (Baseline+). Locked Observer sees upgrade chrome even
+ * when the event list is empty (either order).
  */
 export default function PortfolioLedgerPage() {
   const { data, loading, error } = useDashboard();
@@ -35,11 +39,13 @@ export default function PortfolioLedgerPage() {
             service_role-only — this surface shows the public event stream only.
           </p>
         </div>
-        {events.length === 0 ? (
-          <p className="text-sm text-ink-mute">No position events recorded yet.</p>
-        ) : (
-          <HoldingsActivityTable events={events} />
-        )}
+        <EntitledSurface artifactClass="house_weights_nav">
+          {events.length === 0 ? (
+            <p className="text-sm text-ink-mute">No position events recorded yet.</p>
+          ) : (
+            <HoldingsActivityTable events={events} />
+          )}
+        </EntitledSurface>
       </div>
     </div>
   );

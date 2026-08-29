@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { Wallet } from 'lucide-react';
 import type { Position } from '@/lib/types';
+import type { PlanTier } from '@/lib/entitlements';
 import { reconcileBook } from '@/lib/book-reconciliation';
 import { ConvictionMeter } from '@/components/shared/conviction-meter';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
+import { EntitledSurface } from '@/components/entitled-surface';
 
 /**
  * "The book today" — a compact holdings strip on the F3 reconciled weight basis
@@ -13,20 +15,25 @@ import { AsOfBadge } from '@/components/shared/as-of-badge';
  * row shows ticker · normalized weight · conviction pips (F6) · day move; rows are
  * sorted by |day move| so the day's biggest mover leads. CASH lives in the header,
  * never as a metric-less row. Links to the full Holdings surface (/portfolio).
+ *
+ * Tier: `house_weights_nav` (Baseline+). Locked Observer sees calm upgrade chrome.
  */
 
 export interface BookStripProps {
   positions: Position[];
   asOfDate: string | null;
+  /** Test override for tier gate; production reads the session. */
+  tier?: PlanTier;
 }
 
-export function BookStrip({ positions, asOfDate }: BookStripProps) {
+export function BookStrip({ positions, asOfDate, tier }: BookStripProps) {
   const { rows, investedPct: invested, cashPct } = reconcileBook(positions);
   const held = rows
     .filter((r) => r.ticker.toUpperCase() !== 'CASH')
     .sort((a, b) => Math.abs(b.day_change_pct ?? 0) - Math.abs(a.day_change_pct ?? 0));
 
   return (
+    <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
     <section data-brief-section="book" className="border-b border-hair px-5 py-5 sm:px-7">
       <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -87,5 +94,6 @@ export function BookStrip({ positions, asOfDate }: BookStripProps) {
         </ul>
       )}
     </section>
+    </EntitledSurface>
   );
 }

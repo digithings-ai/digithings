@@ -29,7 +29,8 @@ export interface AuthContextValue {
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+/** Exported so entitlement hooks can read session without throwing outside the tree. */
+export const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const authEnabled = isOlympusAuthEnabled();

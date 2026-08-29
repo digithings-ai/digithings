@@ -6,6 +6,12 @@ import { Database, Search } from 'lucide-react';
 import { useAtlasTheme } from '@/components/theme-provider';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { normalizePathname } from '@/lib/pathname';
+import {
+  BrokerStatusSurface,
+  OverlayProfileSurface,
+  PrivateBookSurface,
+} from '@/components/tier/custom-workspace-surfaces';
+import type { PlanTier } from '@/lib/entitlements';
 
 export interface SettingsContentProps {
   /** Tighter spacing for the sidebar popover; slightly fuller for the page. */
@@ -21,6 +27,8 @@ export interface SettingsContentProps {
   /** Open the command palette (About card affordance). null disables it (e.g. SSR/test). */
   onOpenPalette?: (() => void) | null;
   onNavigate?: () => void;
+  /** Test override for Custom-tier workspace gates. */
+  tier?: PlanTier;
 }
 
 function pipelineActive(pathname: string): boolean {
@@ -41,6 +49,7 @@ export function SettingsContent({
   dataSourceHost,
   onOpenPalette,
   onNavigate,
+  tier,
 }: SettingsContentProps) {
   const pathname = usePathname();
   const { theme, setTheme } = useAtlasTheme();
@@ -106,6 +115,27 @@ export function SettingsContent({
           </div>
         </div>
       </div>
+
+      {variant === 'page' ? (
+        <div className="space-y-3" data-testid="settings-workspace-gates">
+          <p className="text-[10px] font-medium text-ink-mute">Workspace</p>
+          <PrivateBookSurface tier={tier} />
+          <BrokerStatusSurface tier={tier} />
+          <OverlayProfileSurface tier={tier} />
+          <div
+            id="billing"
+            data-testid="settings-billing-anchor"
+            className="rounded-lg border border-hair bg-term-bg/40 px-4 py-3 space-y-1"
+          >
+            <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
+              Billing
+            </p>
+            <p className="text-sm text-ink-soft">
+              Plan changes and invoices land here when billing is configured.
+            </p>
+          </div>
+        </div>
+      ) : null}
 
       <div>
         <p className="text-[10px] font-medium text-ink-mute mb-2">About</p>

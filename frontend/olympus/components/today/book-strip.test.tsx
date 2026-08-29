@@ -50,4 +50,24 @@ describe('BookStrip', () => {
     );
     expect(html).toContain('No positions held yet');
   });
+
+  it('locks weights for Observer even when the book is empty', () => {
+    const html = renderToStaticMarkup(
+      createElement(BookStrip, {
+        positions: [],
+        asOfDate: null,
+        tier: 'free',
+      }),
+    );
+    expect(html).toContain('locked-surface');
+    expect(html).not.toContain('data-brief-section="book"');
+  });
+
+  it('passthrough for Baseline', () => {
+    const html = renderToStaticMarkup(
+      createElement(BookStrip, { positions, asOfDate: '2026-06-24', tier: 'baseline' }),
+    );
+    expect(html).toContain('data-brief-section="book"');
+    expect(html).not.toContain('locked-surface');
+  });
 });
