@@ -306,8 +306,10 @@ class AlpacaAdapter:
         Invariant: a submit is never retried (by any exception path) without first
         consulting ``get_order_by_client_id``. Only a confirmed 404
         (``BrokerOrderNotFound``) authorizes a resubmit; any other lookup failure
-        propagates without calling submit again. ``_submit_once`` disables
-        ``_call``'s internal 429 loop so every retry decision lives here.
+        propagates without calling submit again. On 429, the sequence is
+        lookup → sleep → **lookup again** → resubmit so a late-indexed order is
+        found before the second submit. ``_submit_once`` disables ``_call``'s
+        internal 429 loop so every retry decision lives here.
         """
         self._validate_local_tif(req)
         last_retryable: BrokerTransportError | BrokerRateLimited | None = None
@@ -344,6 +346,17 @@ class AlpacaAdapter:
                         req.client_order_id,
                     )
                     time.sleep(delay)
+                    # Re-check after backoff — the venue may have indexed the order.
+                    recovered = self._recover_by_client_id(req.client_order_id)
+                    if recovered is not None:
+                        logger.info(
+                            "submit 429 recovered post-backoff via client_order_id=%s "
+                            "fingerprint=%s attempt=%d",
+                            req.client_order_id,
+                            self._auth_fingerprint,
+                            attempt + 1,
+                        )
+                        return recovered
                 else:
                     logger.warning(
                         "submit transport failure after confirmed miss; retrying "
