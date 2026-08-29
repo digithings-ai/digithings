@@ -40,7 +40,7 @@ THRESHOLDS = {
 
 # File-level opt-out: add ``# score:allow <rule>`` near the top of a file.
 # Rules: pandas, pd., bare exec(), subprocess, blocking sleep, untyped any,
-#        notimplementederror stub
+#        notimplementederror stub, todo
 # Tokens are exact (comma-separated, case-sensitive). Put justification on the
 # next comment line — never after an em-dash on the pragma line (that suffix is
 # a silent no-op; inline ``untyped any`` uses a separate line-regex path).
@@ -297,6 +297,8 @@ def _description_rule_key(description: str) -> str | None:
         return "untyped any"
     if "notimplementederror stub" in lower:
         return "notimplementederror stub"
+    if "unresolved todo" in lower or "todo/fixme" in lower:
+        return "todo"
     return None
 
 
