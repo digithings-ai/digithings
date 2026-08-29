@@ -26,8 +26,12 @@ A green third-party **status check** is not an approving review. Check review de
 
 ## Cost-efficient tiering
 
-1. **Scope pass (cheap / fast model)** — map the diff, list risk areas, skip clean files. In Claude: haiku or sonnet. In Cursor: a fast/cheap model slug (e.g. `composer-2.5-fast`), not the expensive default.
-2. **Deep pass (strong model)** — only on flagged areas: correctness, auth, data integrity, races, claim accuracy. In Claude: opus. In Cursor: stronger model or dedicated review agent.
+**General rule (all subagents):** best model for the job; prefer the token-efficient
+choice that still clears the bar; **do not use fast mode** (`*-fast` / speed-optimized
+Cursor slugs). Quality of fit first; cost second; latency never overrides either.
+
+1. **Scope pass (token-efficient)** — map the diff, list risk areas, skip clean files. In Claude: haiku or sonnet. In Cursor: a cheaper non-fast slug (e.g. `composer-2.5`), not the expensive default and not `composer-2.5-fast`.
+2. **Deep pass (strong model)** — only on flagged areas: correctness, auth, data integrity, races, claim accuracy. In Claude: opus. In Cursor: stronger non-fast model or dedicated review agent.
 3. **Refute** — every surviving finding needs a command that was run; drop what a refuter can disprove.
 
 Do not run every lens at opus on a tiny diff. Do not leave review `model` unset under an expensive orchestrator (inheritance tax).
