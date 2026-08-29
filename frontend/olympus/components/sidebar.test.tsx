@@ -19,6 +19,16 @@ vi.mock('@/components/app-shell-context', () => ({
 }));
 vi.mock('@/components/sidebar-settings', () => ({ default: () => null }));
 vi.mock('@/components/atlas-mark', () => ({ AtlasMark: () => null }));
+vi.mock('@/lib/auth-context', () => ({
+  useAuth: () => ({
+    authEnabled: false,
+    session: null,
+    user: null,
+    loading: false,
+    signInWithOAuth: async () => {},
+    signOut: async () => {},
+  }),
+}));
 // next/link needs an app-router context at runtime; render its children inline.
 vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.children }));
 
