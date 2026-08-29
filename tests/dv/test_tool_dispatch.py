@@ -28,9 +28,11 @@ from digivault.tool_dispatch import (
     TOOL_VAULT_SEARCH_TAG,
     VAULT_HANDLERS,
     VAULT_TOOL_NAMES,
+    clear_runtime_handlers,
     dispatch_tool_names,
     dispatch_vault_tool,
     mcp_tool_names,
+    register_runtime_handler,
 )
 from digivault.vault import Vault
 
@@ -109,3 +111,46 @@ def test_dispatch_unknown_vault_tool_raises(tmp_path: Path) -> None:
 
 def test_runtime_only_names_are_the_d1_family() -> None:
     assert RUNTIME_ONLY_TOOL_NAMES == frozenset({TOOL_VAULT_SEARCH_NOTES, TOOL_VAULT_GET_NOTE})
+
+
+def test_register_runtime_handler_rejects_unknown_and_vault_local() -> None:
+    clear_runtime_handlers()
+    try:
+        with pytest.raises(ValueError, match="unknown digivault tool name"):
+            register_runtime_handler("not_a_tool", lambda: None)
+        with pytest.raises(ValueError, match="cannot overwrite vault-local"):
+            register_runtime_handler(TOOL_VAULT_LINT, lambda: None)
+    finally:
+        clear_runtime_handlers()
+
+
+def test_register_runtime_handler_claims_dispatch_name() -> None:
+    clear_runtime_handlers()
+    try:
+        called: list[str] = []
+
+        def _handler() -> str:
+            called.append("search")
+            return "ok"
+
+        register_runtime_handler(TOOL_VAULT_SEARCH_NOTES, _handler)
+        assert TOOL_VAULT_SEARCH_NOTES in dispatch_tool_names()
+        assert _handler() == "ok"
+        assert called == ["search"]
+        # Replacement is allowed for tests / re-import.
+        register_runtime_handler(TOOL_VAULT_SEARCH_NOTES, lambda: "replaced")
+        assert TOOL_VAULT_SEARCH_NOTES in dispatch_tool_names()
+    finally:
+        clear_runtime_handlers()
+        assert TOOL_VAULT_SEARCH_NOTES not in dispatch_tool_names()
+
+
+def test_dispatch_create_note_duplicate_returns_error(tmp_path: Path) -> None:
+    (tmp_path / "exists.md").write_text("---\ntitle: Exists\n---\n\n", encoding="utf-8")
+    result = dispatch_vault_tool(
+        TOOL_VAULT_CREATE_NOTE,
+        {"name": "exists", "title": "Dup"},
+        Vault(tmp_path),
+    )
+    assert result.ok is False
+    assert result.error == "Note already exists: 'exists'"

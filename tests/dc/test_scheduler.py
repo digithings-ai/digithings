@@ -257,3 +257,131 @@ def test_duplicate_agent_names_rejected(tmp_path: Path) -> None:
     with pytest.raises(ScheduleSchemaError) as exc:
         load_agent_definitions(agents_dir)
     assert exc.value.code == "duplicate_agent_name"
+
+
+@pytest.mark.unit
+def test_parse_cron_month_names_and_dow_sunday_alias() -> None:
+    cron = parse_cron("0 0 1 JAN,FEB 0,7")
+    assert cron.month == frozenset({1, 2})
+    # 0 and 7 both mean Sunday after normalize.
+    assert cron.day_of_week == frozenset({0})
+
+
+@pytest.mark.unit
+def test_parse_cron_rejects_zero_step_and_out_of_range() -> None:
+    with pytest.raises(CronParseError) as step_exc:
+        parse_cron("*/0 * * * *")
+    assert step_exc.value.code == "cron_invalid"
+
+    with pytest.raises(CronParseError) as range_exc:
+        parse_cron("60 * * * *")
+    assert range_exc.value.code == "cron_invalid"
+
+
+@pytest.mark.unit
+def test_cron_matches_dom_or_dow_when_both_constrained() -> None:
+    # 15th of month OR Monday — classic cron OR semantics.
+    cron = parse_cron("0 9 15 * MON")
+    monday = datetime(2026, 8, 31, 9, 0, tzinfo=timezone.utc)  # Monday, not 15th
+    fifteenth = datetime(2026, 8, 15, 9, 0, tzinfo=timezone.utc)  # Saturday
+    tuesday = datetime(2026, 8, 25, 9, 0, tzinfo=timezone.utc)  # neither
+    assert cron.matches(monday) is True
+    assert cron.matches(fifteenth) is True
+    assert cron.matches(tuesday) is False
+
+
+@pytest.mark.unit
+def test_next_cron_time_accepts_naive_datetime_as_utc() -> None:
+    after = datetime(2026, 8, 27, 12, 0)  # naive → treated as UTC
+    nxt = next_cron_time("0 13 * * *", after=after)
+    assert nxt == datetime(2026, 8, 27, 13, 0, tzinfo=timezone.utc)
+
+
+@pytest.mark.unit
+def test_event_schedule_requires_event_name() -> None:
+    with pytest.raises(ValidationError):
+        AgentSchedule(mode=ScheduleMode.EVENT)
+    sched = AgentSchedule(mode=ScheduleMode.EVENT, event_name="order.filled")
+    assert sched.event_name == "order.filled"
+
+
+@pytest.mark.unit
+def test_cron_schedule_rejects_blank_cron_after_strip() -> None:
+    with pytest.raises(ValidationError):
+        AgentSchedule(mode=ScheduleMode.CRON, cron="   ")
+
+
+@pytest.mark.unit
+def test_load_agent_definitions_missing_dir(tmp_path: Path) -> None:
+    with pytest.raises(ScheduleSchemaError) as exc:
+        load_agent_definitions(tmp_path / "missing")
+    assert exc.value.code == "agents_dir_missing"
+
+
+@pytest.mark.unit
+def test_scheduler_rejects_disabled_and_event_start(tmp_path: Path) -> None:
+    agents = [
+        AgentDefinition(
+            name="off",
+            schedule=AgentSchedule(
+                mode=ScheduleMode.CONTINUOUS, interval_seconds=5, enabled=False
+            ),
+        ),
+        AgentDefinition(
+            name="evt",
+            schedule=AgentSchedule(mode=ScheduleMode.EVENT, event_name="ping"),
+        ),
+    ]
+    sched = Scheduler(
+        definitions=agents,
+        state_store=JsonStateStore(tmp_path / "s.json"),
+        runner=lambda _a: None,
+    )
+    with pytest.raises(SchedulerError) as disabled:
+        sched.start("off")
+    assert disabled.value.code == "agent_disabled"
+
+    with pytest.raises(SchedulerError) as event_mode:
+        sched.start("evt")
+    assert event_mode.value.code == "event_mode_unsupported"
+
+
+@pytest.mark.unit
+def test_scheduler_drops_stale_agent_state_on_restore(tmp_path: Path) -> None:
+    state_path = tmp_path / "state.json"
+    t0 = datetime(2026, 8, 27, 12, 0, tzinfo=timezone.utc)
+    first = [
+        AgentDefinition(
+            name="gone",
+            schedule=AgentSchedule(mode=ScheduleMode.CONTINUOUS, interval_seconds=10),
+        ),
+        AgentDefinition(
+            name="kept",
+            schedule=AgentSchedule(mode=ScheduleMode.CONTINUOUS, interval_seconds=10),
+        ),
+    ]
+    sched = Scheduler(
+        definitions=first,
+        state_store=JsonStateStore(state_path),
+        runner=lambda _a: None,
+        clock=lambda: t0,
+    )
+    sched.start("gone", now=t0)
+    sched.start("kept", now=t0)
+
+    restarted = Scheduler(
+        definitions=[
+            AgentDefinition(
+                name="kept",
+                schedule=AgentSchedule(mode=ScheduleMode.CONTINUOUS, interval_seconds=10),
+            )
+        ],
+        state_store=JsonStateStore(state_path),
+        runner=lambda _a: None,
+        clock=lambda: t0,
+    )
+    names = {row.name for row in restarted.status()}
+    assert names == {"kept"}
+    persisted = JsonStateStore(state_path).load()
+    assert "gone" not in persisted.agents
+    assert "kept" in persisted.agents
