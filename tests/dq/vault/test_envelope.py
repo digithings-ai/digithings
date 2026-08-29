@@ -17,13 +17,18 @@ Four things are pinned here, in rough order of how much a human reviewer should 
    values each raise a configuration error that does not echo the value.
 """
 
+# score:allow untyped any
+# `Any` below annotates the deserialized `vectors.json` mapping only. Narrowing it to
+# `object` would put a cast in front of every vector lookup without making the assertions
+# any stronger; the production vault carries no `Any` at all.
+
 from __future__ import annotations
 
 import json
 import logging
 import traceback
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from digiquant.vault import (
@@ -48,7 +53,12 @@ from digiquant.vault import (
     seal_credential,
     unseal_credential,
 )
-from digiquant.vault.envelope import KEY_ID_ENV, _seal_bytes_with_nonce
+from digiquant.vault.envelope import (
+    _CREDENTIAL_ADAPTER,
+    KEY_ID_ENV,
+    _CredentialPayload,
+    _seal_bytes_with_nonce,
+)
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -435,8 +445,6 @@ def test_payload_models_forbid_unknown_fields(payload: dict[str, str]) -> None:
     ],
 )
 def test_payload_models_reject_incomplete_credentials(payload: dict[str, str]) -> None:
-    from digiquant.vault.envelope import _CREDENTIAL_ADAPTER
-
     with pytest.raises(ValidationError):
         _CREDENTIAL_ADAPTER.validate_python(payload)
 
@@ -444,6 +452,20 @@ def test_payload_models_reject_incomplete_credentials(payload: dict[str, str]) -
 def test_payloads_are_frozen(credential: ApiKeyCredential) -> None:
     with pytest.raises(ValidationError):
         credential.secret = "rewritten"  # type: ignore[misc]
+
+
+def test_payload_without_secret_material_cannot_be_instantiated() -> None:
+    """A new credential kind must say what its secret is before it can exist.
+
+    Otherwise the gap surfaces as a wrong fingerprint (or a leak through an inherited
+    ``repr``) at the first real credential, rather than at the class definition.
+    """
+
+    class NoSecretMaterial(_CredentialPayload):
+        kind: Literal["no_secret_material"] = "no_secret_material"
+
+    with pytest.raises(TypeError, match="secret_material"):
+        NoSecretMaterial()
 
 
 # --- committed test vectors -------------------------------------------------------

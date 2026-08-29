@@ -55,6 +55,7 @@ persist plaintext" is enforced at runtime rather than left as a comment.
 
 from __future__ import annotations
 
+import abc
 import base64
 import binascii
 import hashlib
@@ -307,16 +308,19 @@ def open_bytes(
 # version (stored in the clear beside the ciphertext). They are unrelated.
 
 
-class _CredentialPayload(_VaultModel):
+class _CredentialPayload(_VaultModel, abc.ABC):
     """Base for sealed credential payloads.
 
     Subclasses declare every secret-bearing field ``repr=False`` and implement
     :meth:`secret_material`, which is both what :func:`fingerprint` digests and what the
-    plaintext-absence test asserts never escapes.
+    plaintext-absence test asserts never escapes. Abstract rather than a
+    ``NotImplementedError`` stub so a subclass that forgets it cannot be constructed at
+    all — the failure lands at definition, not at the first fingerprint of a real secret.
     """
 
+    @abc.abstractmethod
     def secret_material(self) -> str:
-        raise NotImplementedError
+        """Return the bytes-as-text that identify this credential for fingerprinting."""
 
 
 class OAuthCredential(_CredentialPayload):

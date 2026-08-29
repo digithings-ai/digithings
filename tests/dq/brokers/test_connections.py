@@ -8,6 +8,11 @@ cannot move ``revoked_at``, and that ``bytea`` values go out in Postgres' hex li
 rather than as some other encoding the database would silently accept and mangle.
 """
 
+# score:allow untyped any
+# `Any` below types the PostgREST test double's row dicts, which stand in for arbitrary
+# JSON coming back from the database. `connections.py` itself carries no `Any`: its client
+# seam is the `SupabaseClient` / `PostgrestQuery` Protocol pair.
+
 from __future__ import annotations
 
 import logging

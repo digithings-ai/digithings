@@ -42,11 +42,11 @@ much later.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Annotated, Any, Final, Protocol, TypeAlias
+from typing import Annotated, Final, Protocol, TypeAlias
 from uuid import UUID, uuid4
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
@@ -227,15 +227,41 @@ class ConnectionFingerprint(_ConnectionModel):
 BrokerCredentialPayload: TypeAlias = OAuthCredential | ApiKeyCredential
 
 
+class PostgrestResponse(Protocol):
+    """The one attribute this module reads off a PostgREST response."""
+
+    data: object
+
+
+class PostgrestQuery(Protocol):
+    """The exact subset of the PostgREST fluent chain this module uses.
+
+    Spelling the chain out instead of typing it ``Any`` is what makes the store's request
+    shape reviewable: widening a ``select`` or dropping the ``neq`` guard that keeps a
+    revoke from moving ``revoked_at`` has to pass through a named surface. ``supabase``
+    publishes no types for the builder, so this is a structural description of the calls
+    made below — deliberately not the whole builder, which is why it is private-by-intent
+    and named for the chain rather than the vendor class.
+    """
+
+    def select(self, columns: str) -> PostgrestQuery: ...
+    def insert(self, row: Mapping[str, object]) -> PostgrestQuery: ...
+    def update(self, values: Mapping[str, object]) -> PostgrestQuery: ...
+    def eq(self, column: str, value: object) -> PostgrestQuery: ...
+    def neq(self, column: str, value: object) -> PostgrestQuery: ...
+    def order(self, column: str, *, desc: bool = False) -> PostgrestQuery: ...
+    def limit(self, count: int) -> PostgrestQuery: ...
+    def execute(self) -> PostgrestResponse: ...
+
+
 class SupabaseClient(Protocol):
     """The one method this module uses from the ``supabase`` client.
 
     A Protocol so tests inject a fake without the ``supabase`` dependency, mirroring
-    `olympus/atlas/supabase_io.py`. ``Any`` is unavoidable here: the PostgREST query
-    builder is a fluent chain with no published type surface.
+    `olympus/atlas/supabase_io.py`.
     """
 
-    def table(self, name: str) -> Any: ...  # score:allow untyped any — client surface
+    def table(self, name: str) -> PostgrestQuery: ...
 
 
 def _encode_bytea(raw: bytes) -> str:
@@ -267,7 +293,7 @@ def _decode_bytea(value: object, *, column: str) -> bytes:
         ) from None
 
 
-def _rows(response: object) -> list[dict[str, Any]]:
+def _rows(response: PostgrestResponse) -> list[dict[str, object]]:
     """PostgREST responses expose their payload as ``.data``; absent means no rows."""
     data = getattr(response, "data", None)
     if data is None:
@@ -279,7 +305,7 @@ def _rows(response: object) -> list[dict[str, Any]]:
     return [row for row in data if isinstance(row, dict)]
 
 
-def _row_to_connection(row: dict[str, Any]) -> BrokerConnection:
+def _row_to_connection(row: dict[str, object]) -> BrokerConnection:
     payload = dict(row)
     payload["ciphertext"] = _decode_bytea(payload.get("ciphertext"), column="ciphertext")
     payload["nonce"] = _decode_bytea(payload.get("nonce"), column="nonce")
@@ -287,7 +313,7 @@ def _row_to_connection(row: dict[str, Any]) -> BrokerConnection:
     return BrokerConnection.model_validate(payload)
 
 
-def _row_to_fingerprint(row: dict[str, Any]) -> ConnectionFingerprint:
+def _row_to_fingerprint(row: dict[str, object]) -> ConnectionFingerprint:
     payload = dict(row)
     payload["scopes"] = tuple(payload.get("scopes") or ())
     return ConnectionFingerprint.model_validate(payload)
