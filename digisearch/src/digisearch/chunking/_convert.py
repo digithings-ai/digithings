@@ -7,7 +7,11 @@ from typing import Any  # score:allow untyped any — Chonkie chunk objects are 
 from digisearch.core.models import Chunk
 
 
-def chonkie_chunks_to_digisearch(chonkie_chunks: list[Any]) -> list[Chunk]:
+def chonkie_chunks_to_digisearch(
+    chonkie_chunks: list[Any],
+    *,
+    backend: str = "chonkie",
+) -> list[Chunk]:
     """Map Chonkie ``Chunk`` objects (``.text``, indices, token_count) to digisearch Chunks.
 
     ``doc_id`` is left empty; :class:`~digisearch.chunking.document_adapter.BackendDocumentChunker`
@@ -23,7 +27,7 @@ def chonkie_chunks_to_digisearch(chonkie_chunks: list[Any]) -> list[Chunk]:
         start = getattr(raw, "start_index", None)
         end = getattr(raw, "end_index", None)
         token_count = getattr(raw, "token_count", None)
-        meta: dict[str, Any] = {"chunk_index": i, "chunker": "chonkie"}
+        meta: dict[str, Any] = {"chunk_index": i, "chunker": backend}
         if start is not None:
             meta["start"] = int(start)
         if end is not None:

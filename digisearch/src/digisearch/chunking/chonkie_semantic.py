@@ -46,4 +46,7 @@ class ChonkieSemanticChunker:
     def chunk(self, text: str) -> list[Chunk]:
         if not text or not text.strip():
             return []
-        return chonkie_chunks_to_digisearch(list(self._inner.chunk(text)))
+        return chonkie_chunks_to_digisearch(
+            list(self._inner.chunk(text)),
+            backend="chonkie_semantic",
+        )

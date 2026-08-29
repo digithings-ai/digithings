@@ -22,6 +22,19 @@ _TOKEN_ALIASES = frozenset({"token", "chonkie_token", "chonkie-token"})
 _LEGACY_RECURSIVE = frozenset({"recursive"})
 _LEGACY_FIXED = frozenset({"fixed"})
 
+# Process-level caches: Chonkie SemanticChunker construction loads embedding weights
+# (~200ms+ after first download). Reuse backends across POST /ingest calls.
+_backend_cache: dict[str, ChunkerBackend] = {}
+_document_chunker_cache: dict[str, Chunker] = {}
+_ingest_chunker_cache: dict[str, Chunker] = {}
+
+
+def clear_chunker_cache() -> None:
+    """Drop cached backends/chunkers (tests that monkeypatch constructors)."""
+    _backend_cache.clear()
+    _document_chunker_cache.clear()
+    _ingest_chunker_cache.clear()
+
 
 def resolve_chunker_name(
     name: str | None = None,
@@ -54,14 +67,20 @@ def get_chunker_backend(
     * ``token`` — :class:`ChonkieTokenChunker`
     """
     key = resolve_chunker_name(name, index_config=index_config)
+    cached = _backend_cache.get(key)
+    if cached is not None:
+        return cached
     if key in _SEMANTIC_ALIASES:
-        return ChonkieSemanticChunker()
-    if key in _TOKEN_ALIASES:
-        return ChonkieTokenChunker()
-    raise ValueError(
-        f"Unknown DIGISEARCH_CHUNKER={key!r}. "
-        f"Use one of: semantic, token (aliases: chonkie_semantic, chonkie_token)."
-    )
+        backend: ChunkerBackend = ChonkieSemanticChunker()
+    elif key in _TOKEN_ALIASES:
+        backend = ChonkieTokenChunker()
+    else:
+        raise ValueError(
+            f"Unknown DIGISEARCH_CHUNKER={key!r}. "
+            f"Use one of: semantic, token (aliases: chonkie_semantic, chonkie_token)."
+        )
+    _backend_cache[key] = backend
+    return backend
 
 
 def get_document_chunker(
@@ -74,15 +93,21 @@ def get_document_chunker(
     Resolves Chonkie backends and legacy ``recursive`` / ``fixed`` names.
     """
     key = resolve_chunker_name(name, index_config=index_config)
+    cached = _document_chunker_cache.get(key)
+    if cached is not None:
+        return cached
     if key in _LEGACY_RECURSIVE:
         from digisearch.ingestion.chunkers.recursive import RecursiveChunker
 
-        return RecursiveChunker()
-    if key in _LEGACY_FIXED:
+        chunker: Chunker = RecursiveChunker()
+    elif key in _LEGACY_FIXED:
         from digisearch.ingestion.chunkers.fixed import FixedSizeChunker
 
-        return FixedSizeChunker(chunk_size=512)
-    return BackendDocumentChunker(get_chunker_backend(key))
+        chunker = FixedSizeChunker(chunk_size=512)
+    else:
+        chunker = BackendDocumentChunker(get_chunker_backend(key))
+    _document_chunker_cache[key] = chunker
+    return chunker
 
 
 def get_ingest_chunker(
@@ -97,5 +122,11 @@ def get_ingest_chunker(
     """
     from digisearch.ingestion.chunkers.segment_aware import SegmentAwareChunker
 
-    inner = get_document_chunker(name, index_config=index_config)
-    return SegmentAwareChunker(inner=inner)
+    key = resolve_chunker_name(name, index_config=index_config)
+    cached = _ingest_chunker_cache.get(key)
+    if cached is not None:
+        return cached
+    inner = get_document_chunker(key)
+    chunker = SegmentAwareChunker(inner=inner)
+    _ingest_chunker_cache[key] = chunker
+    return chunker

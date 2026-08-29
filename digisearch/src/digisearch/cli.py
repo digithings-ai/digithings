@@ -10,9 +10,10 @@ import typer
 app = typer.Typer(help="digisearch – RAG, document search for Digi ecosystem")
 
 
-def _pick_chunker(name: str) -> Any:
+def _pick_chunker(name: str | None) -> Any:
     from digisearch.chunking.factory import get_ingest_chunker
 
+    # None / blank → factory applies DIGISEARCH_CHUNKER → default semantic.
     return get_ingest_chunker(name)
 
 
@@ -23,7 +24,7 @@ def _sidecar_path_for(file_path: Path) -> Path:
     return file_path.parent / f"{file_path.stem}.yml"
 
 
-def _ingest_paths(paths: list[Path], index: str, chunker_name: str) -> int:
+def _ingest_paths(paths: list[Path], index: str, chunker_name: str | None) -> int:
     from digisearch.core.evidence_metadata import (
         load_sidecar_yaml,
         merge_document_metadata_into_chunks,
@@ -58,11 +59,11 @@ def _ingest_paths(paths: list[Path], index: str, chunker_name: str) -> int:
 def ingest(
     index: str = typer.Option("default", "--index", "-i", help="Index name"),
     source: Path = typer.Argument(..., help="File or directory to ingest"),
-    chunker: str = typer.Option(
-        "semantic",
+    chunker: str | None = typer.Option(
+        None,
         "--chunker",
         "-c",
-        help="semantic (default) | token | recursive | fixed",
+        help="semantic | token | recursive | fixed (default: DIGISEARCH_CHUNKER or semantic)",
     ),
 ) -> None:
     """Ingest documents into an index (stub in-process). Loads ``{stem}.yaml`` / ``.yml`` sidecars."""
@@ -78,11 +79,11 @@ def ingest_batch(
     directory: Path = typer.Argument(
         ..., help="Directory of PDFs/Markdown and optional YAML sidecars"
     ),
-    chunker: str = typer.Option(
-        "semantic",
+    chunker: str | None = typer.Option(
+        None,
         "--chunker",
         "-c",
-        help="semantic (default) | token | recursive | fixed",
+        help="semantic | token | recursive | fixed (default: DIGISEARCH_CHUNKER or semantic)",
     ),
 ) -> None:
     """Batch-ingest every supported file under a directory (PDF + YAML sidecar pattern)."""

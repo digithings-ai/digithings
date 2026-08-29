@@ -10,6 +10,7 @@ from digisearch.chunking.chonkie_token import ChonkieTokenChunker
 from digisearch.chunking.document_adapter import BackendDocumentChunker
 from digisearch.chunking.factory import (
     DEFAULT_CHUNKER_NAME,
+    clear_chunker_cache,
     get_chunker_backend,
     get_document_chunker,
     get_ingest_chunker,
@@ -46,6 +47,13 @@ class _FakeInner:
             _FakeChonkieChunk(text[:mid], 0, mid, mid),
             _FakeChonkieChunk(text[mid:], mid, len(text), len(text) - mid),
         ]
+
+
+@pytest.fixture(autouse=True)
+def _clear_chunker_caches() -> None:
+    clear_chunker_cache()
+    yield
+    clear_chunker_cache()
 
 
 @pytest.mark.unit
@@ -85,7 +93,7 @@ def test_chonkie_semantic_chunker_with_injected_inner() -> None:
     assert len(chunks) == 2
     assert chunks[0].content == "alpha. "
     assert chunks[1].content == "beta."
-    assert chunks[0].metadata["chunker"] == "chonkie"
+    assert chunks[0].metadata["chunker"] == "chonkie_semantic"
     assert chunks[0].doc_id == ""
 
 
@@ -112,6 +120,7 @@ def test_backend_document_chunker_stamps_doc_ids() -> None:
 @pytest.mark.unit
 def test_get_ingest_chunker_default_wraps_semantic(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DIGISEARCH_CHUNKER", raising=False)
+    clear_chunker_cache()
 
     def _fake_semantic() -> ChonkieSemanticChunker:
         return ChonkieSemanticChunker(_inner=_FakeInner(["one block"]))
@@ -128,6 +137,28 @@ def test_get_ingest_chunker_default_wraps_semantic(monkeypatch: pytest.MonkeyPat
     chunks = chunker.chunk(doc)
     assert len(chunks) == 1
     assert chunks[0].content == "one block"
+
+
+@pytest.mark.unit
+def test_cli_default_honors_digisearch_chunker_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Omitting --chunker must apply DIGISEARCH_CHUNKER (not hard-code semantic)."""
+    from digisearch.cli import _pick_chunker
+
+    monkeypatch.setenv("DIGISEARCH_CHUNKER", "token")
+    clear_chunker_cache()
+    picked = _pick_chunker(None)
+    assert isinstance(picked, SegmentAwareChunker)
+    assert isinstance(picked.inner, BackendDocumentChunker)
+    assert isinstance(picked.inner.backend, ChonkieTokenChunker)
+
+
+@pytest.mark.unit
+def test_ingest_chunker_is_cached_per_resolved_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DIGISEARCH_CHUNKER", raising=False)
+    clear_chunker_cache()
+    a = get_ingest_chunker("token")
+    b = get_ingest_chunker("token")
+    assert a is b
 
 
 @pytest.mark.unit
