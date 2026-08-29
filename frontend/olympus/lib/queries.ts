@@ -52,6 +52,7 @@ import { MACRO_PREVIEW_SERIES_IDS } from './macro-curated';
 import { getDocLibraryTier } from './library-doc-tier';
 import { buildInstrumentLookup, resolveInstrumentIdentity } from './instrument-metadata';
 import { normalizePositionEvent } from './position-events';
+import { ledgerEventEconomics } from './position-event-economics';
 import { thesisIdEquals } from './thesis-id';
 import type { ThesisVehicleRow } from './thesis-story';
 
@@ -639,6 +640,7 @@ async function paginatedFetch<TRow>(
 
 type PositionEventRowPick = Pick<
   TableRow<'position_events'>,
+  | 'id'
   | 'date'
   | 'ticker'
   | 'event'
@@ -655,7 +657,7 @@ async function fetchPositionEventsForDashboard(): Promise<PositionEventRowPick[]
     async (offset, pageSize) => {
       const { data, error } = await supabase!
         .from('position_events')
-        .select('date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
+        .select('id,date,ticker,event,weight_pct,prev_weight_pct,price,thesis_id,reason')
         .order('date', { ascending: false })
         .range(offset, offset + pageSize - 1);
       return { data, error };
@@ -699,34 +701,19 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     );
   }
 
-  // Benchmarks are used for sparklines/tiles; we only need a recent window.
-  // PostgREST defaults to paginating results, and ordering by oldest-first can
-  // return only the longest-lived ticker (e.g. SPY) in the first page.
-  const benchCutoff = (() => {
-    const d = new Date();
-    d.setUTCDate(d.getUTCDate() - 180);
-    return d.toISOString().slice(0, 10);
-  })();
-
   const [
     snapshotRes, positionsRes, instrumentsRes, thesesRes, navRes,
-    benchRes, metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
+    metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
     pmRebalanceRes,
   ] = await Promise.all([
     supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
-    supabase.from('positions').select('*').order('date', { ascending: false }).limit(1000),
+    supabase.from('positions').select('*').order('date', { ascending: false }).limit(5000),
     supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
     // Curated NAV (#2599): finalized tips + labeled legacy. Rollback → nav_history / public_nav_history.
     supabase
       .from(ACCOUNTING_NAV_VIEW)
       .select('date,nav,cash_pct,invested_pct,day_return_pct,source,contract')
-      .order('date', { ascending: true }),
-    supabase
-      .from('price_history')
-      .select('date, ticker, close')
-      .in('ticker', [...DASHBOARD_BENCHMARK_TICKERS])
-      .gte('date', benchCutoff)
       .order('date', { ascending: true }),
     supabase.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1).maybeSingle(),
     // Documents index (metadata only — no payload) used for the Research Library.
@@ -789,9 +776,6 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     if (!row?.date) continue;
     research_changelog_by_date[row.date] = parseResearchChangelogPayload(row.payload);
   }
-  if (benchRes.error) {
-    console.error('Supabase price_history (benchmarks) query:', benchRes.error);
-  }
   if (tickerViewRes.error) {
     console.warn('Supabase price_history_tickers view (apply migration 018 if missing):', tickerViewRes.error);
   }
@@ -834,16 +818,29 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       invested_pct: shaped.invested_pct,
     };
   });
-  const benchRows: Pick<TableRow<'price_history'>, 'date' | 'ticker' | 'close'>[] =
-    benchRes.data ?? [];
   const metricsRow = metricsRes.data as TableRow<'portfolio_metrics'> | null;
   const metrics: TableRow<'portfolio_metrics'> =
     metricsRes.error || !metricsRow ? ({} as TableRow<'portfolio_metrics'>) : metricsRow;
 
+  const entryMarks = allPositions.map((p) => ({
+    date: p.date,
+    ticker: p.ticker,
+    entry_price: p.entry_price != null ? Number(p.entry_price) : null,
+  }));
+
   const position_events: DashboardPositionEvent[] = (
     eventsRaw as TableRow<'position_events'>[]
   )
-    .map((e) => normalizePositionEvent(e))
+    .map((e) => {
+      const normalized = normalizePositionEvent(e);
+      const economics = ledgerEventEconomics(normalized, entryMarks);
+      return {
+        ...normalized,
+        avg_entry_price: economics.avgEntryPrice,
+        sold_weight_pct: economics.soldWeightPct,
+        realized_return_pct: economics.realizedReturnPct,
+      };
+    })
     .sort((a, b) => b.date.localeCompare(a.date) || a.ticker.localeCompare(b.ticker));
 
   const server_portfolio_metrics: ServerPortfolioMetrics | null =
@@ -894,29 +891,37 @@ export async function getFullDashboardData(): Promise<DashboardData> {
       ? (digest.regime as Record<string, unknown>)
       : {};
 
-  // Build benchmark map
-  const benchmarks: BenchmarkHistoryMap = {};
-  for (const row of benchRows) {
-    if (!benchmarks[row.ticker]) {
-      benchmarks[row.ticker] = { current: null, history: [] };
-    }
-    benchmarks[row.ticker].history.push({ date: row.date, price: Number(row.close) });
-  }
-  for (const bData of Object.values(benchmarks)) {
-    if (bData.history.length) {
-      bData.current = bData.history[bData.history.length - 1].price;
-    }
-  }
+  // Build benchmark map — NAV-aligned + paginated (same window SSOT as Performance
+  // tearsheet / digiquant landing). A bare PostgREST select of 17 tickers × ~180d
+  // silently truncates at the default 1000-row page and drops recent dates, which
+  // blanked Brief excess/alpha while Performance (aligned fetch) still showed values.
+  const navDatesAsc = navHistory
+    .map((h) => h.date)
+    .filter((d): d is string => typeof d === 'string' && d.length > 0)
+    .sort((a, b) => a.localeCompare(b));
+  const benchFallbackMin = (() => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - 180);
+    return d.toISOString().slice(0, 10);
+  })();
+  const benchMin = navDatesAsc[0] ?? benchFallbackMin;
+  // Upper bound is the later of last NAV and today so live marks past book
+  // persistence still have overlapping benchmark closes for excess/alpha/IR.
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const lastNav = navDatesAsc.length > 0 ? navDatesAsc[navDatesAsc.length - 1]! : todayUtc;
+  const benchMax = lastNav > todayUtc ? lastNav : todayUtc;
+  const benchmarks: BenchmarkHistoryMap = await fetchComparablePriceHistory(
+    [...DASHBOARD_BENCHMARK_TICKERS],
+    benchMin,
+    benchMax,
+  );
 
   const tickerViewRows = (tickerViewRes.data ?? []) as { ticker: string }[];
   let price_history_tickers: string[] = [];
   if (!tickerViewRes.error && tickerViewRows.length > 0) {
     price_history_tickers = sortTickerUniverse(tickerViewRows.map((r) => r.ticker));
   } else {
-    const fb = new Set<string>();
-    for (const row of benchRows) {
-      fb.add(row.ticker);
-    }
+    const fb = new Set<string>(Object.keys(benchmarks));
     for (const t of DASHBOARD_BENCHMARK_TICKERS) {
       fb.add(t);
     }

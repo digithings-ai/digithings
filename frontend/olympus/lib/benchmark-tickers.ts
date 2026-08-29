@@ -5,8 +5,11 @@
  *
  * IBIT: BTC spot ETF proxy. EEM: emerging markets. IWM: small-cap.
  */
+/** Default relative-performance benchmark for Brief + digiquant landing + tearsheet. */
+export const DEFAULT_BRIEF_BENCHMARK_TICKER = 'SPY';
+
 export const DASHBOARD_BENCHMARK_TICKERS = [
-  'SPY',
+  DEFAULT_BRIEF_BENCHMARK_TICKER,
   'QQQ',
   'DIA',
   'IWM',
@@ -24,6 +27,19 @@ export const DASHBOARD_BENCHMARK_TICKERS = [
   'BITO',
   'EFA',
 ] as const;
+
+/** Prefer SPY (Performance / digiquant SSOT); else first dashboard ticker with history. */
+export function pickBriefBenchmarkTicker(
+  benchmarks: Record<string, { history?: readonly unknown[] | null } | undefined>
+): string | null {
+  if (benchmarks[DEFAULT_BRIEF_BENCHMARK_TICKER]?.history?.length) {
+    return DEFAULT_BRIEF_BENCHMARK_TICKER;
+  }
+  for (const t of DASHBOARD_BENCHMARK_TICKERS) {
+    if (benchmarks[t]?.history?.length) return t;
+  }
+  return null;
+}
 
 /** Shown first in comparable picker (major ETFs / names users expect). */
 export const PRIORITY_COMPARABLE_TICKERS: string[] = [

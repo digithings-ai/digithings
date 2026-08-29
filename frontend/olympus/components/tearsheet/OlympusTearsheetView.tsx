@@ -2,16 +2,14 @@
 
 import type React from 'react';
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { Download } from 'lucide-react';
 import {
   IconButton,
-  TabStrip,
   fmtNum,
   fmtPct,
   relativeMetricsFromReturnSeries,
   runTearsheetPrint,
-  tabId,
-  tabPanelId,
   toneClass,
 } from '@digithings/web';
 import type { OlympusTearsheet, PerformanceHoldingRow } from './types';
@@ -19,12 +17,7 @@ import {
   PortfolioContributionChart,
 } from './PortfolioPerformanceCharts';
 import { formatAllocationCategory } from '@/components/portfolio/tabs/palette-and-format';
-
-const PERFORMANCE_TABS = [
-  { id: 'current', label: 'Open positions' },
-  { id: 'historical', label: 'Closed positions' },
-];
-const TAB_LABEL = 'Performance holdings';
+import { ledgerHref } from '@/lib/portfolio-url-state';
 
 function ReturnValue({ value }: { value: number | null }) {
   if (value == null) return <>—</>;
@@ -39,11 +32,9 @@ function ReturnValue({ value }: { value: number | null }) {
 function HoldingsPerformanceTable({
   rows,
   emptyMessage,
-  returnLabel,
 }: {
   rows: PerformanceHoldingRow[];
   emptyMessage: string;
-  returnLabel: 'Unrealized' | 'Realized';
 }) {
   if (!rows.length) {
     return <p className="px-6 py-12 text-center text-sm text-ink-mute">{emptyMessage}</p>;
@@ -56,10 +47,8 @@ function HoldingsPerformanceTable({
           <tr className="border-b border-hair text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
             <th className="px-5 py-2.5 text-left font-normal">Holding</th>
             <th className="px-3 py-2.5 text-left font-normal">Category</th>
-            <th className="px-3 py-2.5 text-right font-normal">
-              {returnLabel === 'Realized' ? 'Sold wt' : 'Weight'}
-            </th>
-            <th className="px-3 py-2.5 text-right font-normal">{returnLabel}</th>
+            <th className="px-3 py-2.5 text-right font-normal">Weight</th>
+            <th className="px-3 py-2.5 text-right font-normal">Unrealized</th>
             <th className="px-5 py-2.5 text-right font-normal">As of</th>
           </tr>
         </thead>
@@ -69,16 +58,7 @@ function HoldingsPerformanceTable({
               key={row.eventId ?? `${row.ticker}-${row.attributionDate ?? ''}-${row.disposition ?? 'open'}`}
               className="hover:bg-ink/[0.02]"
             >
-              <td className="px-5 py-2.5 font-semibold text-ink">
-                <span className="inline-flex items-baseline gap-2">
-                  {row.ticker}
-                  {row.disposition ? (
-                    <span className="font-mono text-[0.58rem] font-normal uppercase tracking-[0.1em] text-ink-mute">
-                      {row.disposition}
-                    </span>
-                  ) : null}
-                </span>
-              </td>
+              <td className="px-5 py-2.5 font-semibold text-ink">{row.ticker}</td>
               <td className="px-3 py-2.5 text-ink-soft">
                 {formatAllocationCategory(row.category)}
               </td>
@@ -86,13 +66,7 @@ function HoldingsPerformanceTable({
                 {row.weightPct != null ? `${row.weightPct.toFixed(1)}%` : '—'}
               </td>
               <td className="px-3 py-2.5 text-right">
-                <ReturnValue
-                  value={
-                    returnLabel === 'Unrealized'
-                      ? row.unrealizedReturnPct
-                      : row.realizedReturnPct
-                  }
-                />
+                <ReturnValue value={row.unrealizedReturnPct} />
               </td>
               <td className="px-5 py-2.5 text-right text-ink-mute">
                 {row.attributionDate ?? '—'}
@@ -133,83 +107,52 @@ function Metric({
   );
 }
 
-function HoldingsPanel({
-  rows,
-  title,
-  emptyMessage,
-  id,
-  tabIndex,
-  returnLabel,
-}: {
-  rows: PerformanceHoldingRow[];
-  title: string;
-  emptyMessage: string;
-  id: string;
-  tabIndex: number;
-  returnLabel: 'Unrealized' | 'Realized';
-}) {
+function OpenHoldingsPanel({ rows }: { rows: PerformanceHoldingRow[] }) {
   return (
-    <section
-      role="tabpanel"
-      id={tabPanelId(TAB_LABEL, id)}
-      aria-labelledby={tabId(TAB_LABEL, id)}
-      className="border-x border-b border-hair bg-surface"
-    >
+    <section className="border-x border-b border-hair bg-surface" data-testid="open-positions-panel">
       <div className="flex items-center justify-between gap-3 border-b border-hair px-5 py-3">
-        <h2 className="font-display text-xl font-normal text-ink">{title}</h2>
+        <h2 className="font-display text-xl font-normal text-ink">Open positions</h2>
         <span className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-          {returnLabel === 'Unrealized' ? 'open book' : 'exits & trims'}
+          open book · unrealized
         </span>
       </div>
-      <HoldingsPerformanceTable rows={rows} emptyMessage={emptyMessage} returnLabel={returnLabel} />
-      <span className="sr-only">
-        Panel {tabIndex + 1} of {PERFORMANCE_TABS.length}
-      </span>
+      <HoldingsPerformanceTable
+        rows={rows}
+        emptyMessage="No open position performance is stored yet."
+      />
     </section>
   );
 }
 
 /**
- * Compact realized read under the return band: the headline above marks the
- * whole book (unrealized included, per NAV); this strip is the recorded-exits
- * record only, deliberately smaller so the two are never confused.
+ * Compact doorway to Ledger (SSOT for exits/trims). Replaces the former Closed
+ * positions tearsheet tab so realized fills are not duplicated.
  */
-function RealizedSummary({ rows }: { rows: PerformanceHoldingRow[] }) {
-  const realized = rows
-    .map((row) => row.realizedReturnPct)
-    .filter((v): v is number => v != null && Number.isFinite(v));
-  if (realized.length === 0) return null;
-  const winners = realized.filter((v) => v > 0).length;
-  const avg = realized.reduce((sum, v) => sum + v, 0) / realized.length;
-  const best = Math.max(...realized);
-  const worst = Math.min(...realized);
-  const exits = rows.filter((row) => row.disposition === 'EXIT').length;
-  const trims = rows.filter((row) => row.disposition === 'TRIM').length;
-  const mix =
-    exits && trims
-      ? `${exits} exit${exits === 1 ? '' : 's'} · ${trims} trim${trims === 1 ? '' : 's'}`
-      : trims
-        ? `${trims} trim${trims === 1 ? '' : 's'}`
-        : `${realized.length} exit${realized.length === 1 ? '' : 's'}`;
-  const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
+function LedgerDoorway({ sellCount }: { sellCount: number }) {
+  const noun =
+    sellCount === 1 ? '1 recorded exit or trim' : `${sellCount} recorded exits & trims`;
   return (
     <div
-      data-testid="realized-summary"
-      className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-x border-b border-hair bg-surface px-5 py-2 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
+      data-testid="ledger-doorway"
+      className="flex flex-wrap items-center justify-between gap-3 border-x border-b border-hair bg-surface px-5 py-2.5 font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute"
     >
-      <span className="font-semibold">Realized · closed positions</span>
-      <span>{mix}</span>
-      <span>win rate {Math.round((winners / realized.length) * 100)}%</span>
-      <span>avg {pct(avg)}</span>
-      <span>best {pct(best)}</span>
-      <span>worst {pct(worst)}</span>
+      <span>
+        {sellCount > 0 ? noun : 'No recorded exits or trims'}
+        {' · '}activity lives on Ledger
+      </span>
+      <Link
+        href={ledgerHref()}
+        className="font-medium text-accent hover:underline"
+        data-testid="ledger-doorway-link"
+      >
+        Open ledger
+      </Link>
     </div>
   );
 }
 
 export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
-  const [activeTab, setActiveTab] = useState(0);
-  const [printing, setPrinting] = useState(false);
+  const [, setPrinting] = useState(false);
   const [benchmarkTicker, setBenchmarkTicker] = useState(
     data.benchmarkComparisons.find((comparison) => comparison.ticker === 'SPY')?.ticker ??
       data.benchmarkTicker
@@ -233,6 +176,7 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
     data.inceptionDate && data.metricsAsOf
       ? `${data.inceptionDate}–${data.metricsAsOf}`
       : null;
+  const sellCount = data.historicalHoldings.length;
 
   return (
     <div className="ts-print-root space-y-0">
@@ -276,17 +220,16 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
         aria-label="Portfolio returns"
         className="grid grid-cols-1 border-x border-b border-hair bg-surface/80 md:grid-cols-[minmax(0,1fr)_auto]"
       >
-        <dl className="m-0 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
+        <dl className="m-0 grid grid-cols-1 sm:grid-cols-3">
           <Metric label="Portfolio return" value={portfolioReturnPct} note="since inception" />
           <Metric
             label={benchmark ? `${benchmark.ticker} return` : 'Benchmark return'}
             value={benchmarkReturnPct}
           />
-          <Metric label="Excess return" value={relativeReturnPct} note="Rp − Rb" />
           <Metric
-            label="Relative gain"
-            value={relative.relativeGainPct}
-            note="same window as excess"
+            label="Excess return"
+            value={relativeReturnPct}
+            note={benchmark ? `Rp − ${benchmark.ticker}` : 'Rp − Rb'}
           />
         </dl>
         <div data-region="stamp" className="flex min-w-[11rem] flex-col items-start justify-center gap-1 border-t border-hair px-5 py-4 font-mono text-[0.65rem] uppercase tracking-wider text-ink-mute md:items-end md:border-l md:border-t-0">
@@ -312,73 +255,19 @@ export function OlympusTearsheetView({ data }: { data: OlympusTearsheet }) {
             label="Information ratio"
             value={relative.informationRatio}
             format="ratio"
-            note="ann. mean(active) / tracking error"
+            note="ann. mean(daily excess) / tracking error"
           />
         </dl>
       </section>
 
-      <RealizedSummary rows={data.historicalHoldings} />
+      <LedgerDoorway sellCount={sellCount} />
 
       <PortfolioContributionChart
         points={data.contributionSeries}
         benchmark={benchmark}
       />
 
-      <div className="border-x border-b border-hair bg-surface px-4 pt-2">
-        <TabStrip
-          tabs={PERFORMANCE_TABS}
-          active={activeTab}
-          onChange={setActiveTab}
-          label={TAB_LABEL}
-          variant="underline"
-          // Only true outside of printing (CodeRabbit, PR #2290): the
-          // printing branch below renders BOTH HoldingsPanels at once (real
-          // ids "current" and "historical" both exist), so sharedPanel's
-          // single-active-id assumption would be wrong there — fall back to
-          // one aria-controls per tab, which is correct while both panels
-          // are genuinely mounted.
-          sharedPanel={!printing}
-        />
-      </div>
-
-      {printing ? (
-        <div className="space-y-5">
-          <HoldingsPanel
-            rows={data.currentHoldings}
-            title="Open positions"
-            emptyMessage="No open position performance is stored yet."
-            id="current"
-            tabIndex={0}
-            returnLabel="Unrealized"
-          />
-          <HoldingsPanel
-            rows={data.historicalHoldings}
-            title="Closed positions"
-            emptyMessage="No realized exit or trim performance is stored yet."
-            id="historical"
-            tabIndex={1}
-            returnLabel="Realized"
-          />
-        </div>
-      ) : activeTab === 0 ? (
-        <HoldingsPanel
-          rows={data.currentHoldings}
-          title="Open positions"
-          emptyMessage="No open position performance is stored yet."
-          id="current"
-          tabIndex={0}
-          returnLabel="Unrealized"
-        />
-      ) : (
-        <HoldingsPanel
-          rows={data.historicalHoldings}
-          title="Closed positions"
-          emptyMessage="No realized exit or trim performance is stored yet."
-          id="historical"
-          tabIndex={1}
-          returnLabel="Realized"
-        />
-      )}
+      <OpenHoldingsPanel rows={data.currentHoldings} />
 
       <p className="mt-3 text-right font-mono text-[0.62rem] text-ink-mute">
         Holdings as of {data.holdingsAsOf ?? '—'}
