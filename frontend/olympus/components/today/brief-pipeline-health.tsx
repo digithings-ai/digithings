@@ -4,9 +4,12 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, GitBranch } from 'lucide-react';
 import type { AtlasRunDiagnostics } from '@/lib/types';
+import { buildPipelineHref } from '@/lib/pipeline-links';
 import { groupRunEpisodes, type RunEpisode, type RunOutcome } from '@/lib/run-episodes';
 import {
   buildWeekDaySlots,
+  canGoToNextWeek,
+  clampWeekStart,
   formatWeekRangeLabel,
   mondayOfWeek,
   shiftWeekStart,
@@ -150,14 +153,20 @@ export function buildLatestRunCards(
   return cards;
 }
 
+/** Shared pill chrome — block + identical border box so empty/filled align. */
+const DAY_PILL_BASE =
+  'box-border block h-2.5 w-full shrink-0 rounded-sm border';
+
 function WeekBar({
   diagnostics,
   weekStart,
+  canGoNext,
   onPrev,
   onNext,
 }: {
   diagnostics: AtlasRunDiagnostics[];
   weekStart: string;
+  canGoNext: boolean;
   onPrev: () => void;
   onNext: () => void;
 }) {
@@ -182,8 +191,10 @@ function WeekBar({
         <button
           type="button"
           aria-label="Next week"
+          aria-disabled={!canGoNext}
+          disabled={!canGoNext}
           onClick={onNext}
-          className="inline-flex h-6 w-6 items-center justify-center text-ink-mute transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+          className="inline-flex h-6 w-6 items-center justify-center text-ink-mute transition-colors hover:text-ink focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50 disabled:pointer-events-none disabled:opacity-30"
         >
           <ChevronRight size={14} aria-hidden />
         </button>
@@ -198,7 +209,7 @@ function WeekBar({
                   <div
                     data-testid={`week-day-empty-${slot.date}`}
                     aria-label={`${slot.date}, no run`}
-                    className="h-2.5 rounded-sm border border-dashed border-hair bg-transparent"
+                    className={`${DAY_PILL_BASE} border-dashed border-hair bg-transparent`}
                   />
                   <p className="text-center font-mono text-[9px] uppercase tracking-wide text-ink-mute">
                     {slot.weekday}
@@ -217,7 +228,7 @@ function WeekBar({
                         type="button"
                         data-testid={`week-day-${slot.date}`}
                         aria-label={buildAriaLabel(ep)}
-                        className={`h-2.5 w-full rounded-sm transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
+                        className={`${DAY_PILL_BASE} border-transparent transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${SEGMENT_COLOR[ep.outcome]}`}
                       />
                     }
                   />
@@ -251,8 +262,8 @@ export function BriefPipelineHealth({
   initialWeekStart?: string;
 }) {
   const pipeline = runStatus(runHealth);
-  const [weekStart, setWeekStart] = useState(
-    () => initialWeekStart ?? mondayOfWeek(now)
+  const [weekStart, setWeekStart] = useState(() =>
+    clampWeekStart(initialWeekStart ?? mondayOfWeek(now), now)
   );
 
   const latestDiag =
@@ -264,6 +275,7 @@ export function BriefPipelineHealth({
     runHealth != null ? buildLatestRunCards(runHealth, latestDiag) : null;
 
   const historyMissing = diagnostics.length === 0 && runHealth !== undefined;
+  const allowNextWeek = canGoToNextWeek(weekStart, now);
 
   return (
     <div data-testid="brief-pipeline-health" className="px-5 py-4 sm:px-6">
@@ -272,7 +284,11 @@ export function BriefPipelineHealth({
           Pipeline health
         </p>
         <Link
-          href="/pipeline"
+          href={
+            runHealth?.runDate
+              ? buildPipelineHref({ date: runHealth.runDate })
+              : '/pipeline'
+          }
           className="inline-flex items-center gap-1 text-[10px] font-medium text-accent hover:underline"
           aria-label="Open pipeline"
         >
@@ -310,8 +326,11 @@ export function BriefPipelineHealth({
         <WeekBar
           diagnostics={diagnostics}
           weekStart={weekStart}
+          canGoNext={allowNextWeek}
           onPrev={() => setWeekStart((w) => shiftWeekStart(w, -1))}
-          onNext={() => setWeekStart((w) => shiftWeekStart(w, 1))}
+          onNext={() =>
+            setWeekStart((w) => clampWeekStart(shiftWeekStart(w, 1), now))
+          }
         />
       )}
     </div>

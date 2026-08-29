@@ -33,22 +33,43 @@ Docker: `docker compose --profile digichat up -d --build digichat` from repo roo
 
 ## `/embed` — iframeable preview
 
-`/embed` is a **minimal, unauthenticated** chat surface designed to be iframed from `digithings.ai` and `digiquant.io` for in-site previews.
+`/embed` is a **minimal, unauthenticated** chat surface iframed from marketing parents.
 
-- **Route:** `GET /embed?accent=<digithings|digiquant|digichat>` (default `digichat`). The query param switches the `--accent` token for host-site color parity — no server-side theming.
-- **Free tier:** first **3 user turns** per host origin, counted client-side in `localStorage` (keyed by `document.referrer` origin). After the limit, a paywall card offers **Bring your own key** (reveals the BYOK input in-place) or **Open digichat** (link to `digithings.ai/chat`).
-- **BYOK:** reuses the shared `useBYOKKey` hook — the embed never duplicates key storage or test logic. A saved key unlocks unlimited turns immediately.
-- **CSP:** `next.config.ts` + `src/lib/security-headers.ts` emit a full CSP on authenticated routes (`frame-ancestors 'none'`, `X-Frame-Options: DENY`, …) and a narrower `frame-ancestors` allowlist on `/embed[/*]` for `digithings.ai` / `digiquant.io` only.
-- **Errors:** failed `/api/chat` responses surface in the embed UI with a Retry action (`formatEmbedChatError`).
-- **Analytics:** `src/lib/embed-gate.ts` exports `emit(event, props)` — a no-op today, single call-site for future vendor wiring.
-- **Non-goals (see #241):** no backend rate limiting, no model selector, no SSO.
+### Production marketing path (#266 / CHR-68)
+
+Live digithings.ai chat is **`frontend/digithings-web`** (`app/chat/page.tsx` + `ChatEmbedShell`) → same-origin iframe:
+
+`https://digithings.ai/embed?host=digithings.ai`
+
+Parent `frame-src` and iframe origin both come from `embedOriginForChat()` (default `https://digithings.ai`). Child `/embed` CSP `frame-ancestors` is set at request time by `src/proxy.ts` (matcher `/embed` only) — first-party `'self' https://digithings.ai https://www.digithings.ai https://digiquant.io` plus runtime `DIGICHAT_EMBED_HOSTS` / tenants. Other digichat routes keep `frame-ancestors 'none'` + `X-Frame-Options: DENY`.
+
+Prod tenant (`host=digithings.ai`): `gateMode: ungated`, `llmAccess: free_then_byok`, `showByok: true`. Do **not** assert a 3-turn gate on that path. `turn_limited` remains for other tenants (unit tests lock it).
+
+The deleted `frontend/website/` landing (`#try` iframe) is **not** the marketing surface — do not restore it.
+
+### Embed behavior
+
+- **Route:** `GET /embed?host=<registry-host>&layout=page|embed&theme=…` (plus optional UI query params). Tenant theme/accent come from `DIGICHAT_EMBED_TENANTS`, not a legacy `?accent=` switch alone.
+- **Gates:** per-tenant `gateMode` — `ungated` (marketing), `turn_limited` (client-side free-turn quota then BYOK), or `trial_form`.
+- **BYOK:** shared `useBYOKKey` hook. `llmAccess: free_then_byok` serves free replies until quota/errors open in-chat BYOK.
+- **CSP:** `next.config.ts` bakes fail-closed `frame-ancestors 'none'` on `/embed`; `src/proxy.ts` overwrites with the allowlist at request time. Never emit `*`.
+- **Errors:** failed `/api/chat` responses surface in the embed UI with Retry (`formatEmbedChatError`).
+- **Analytics:** `src/lib/embed-gate.ts` exports `emit(event, props)` — no-op today.
+- **Non-goals:** #260 tokens, #202 SSO, #201 model selector.
 
 **Production embed gate:** `POST /api/chat` returns **503** for embed requests (`X-Embed-Host`) on **unregistered** hosts unless `DIGICHAT_LEGACY_EMBED_ENABLED=1` (or deprecated `DIGICHAT_EMBED_ENABLED=1`) or `X-Embed-Token` matches `DIGICHAT_EMBED_TOKEN`. Registered tenants in `DIGICHAT_EMBED_TENANTS` use their own token, or first-party bypass for `digithings.ai` / `www.digithings.ai` (and `localhost` / `127.0.0.1` in development when registered). Legacy generic embed does **not** default on when tenants are configured.
 
-Local iframe test:
+### Local dogfood against digithings-web
+
 ```bash
-npm run dev
-# In another terminal, serve website/ and open its index.html; the embed
-# renders at http://localhost:3000/embed?accent=digithings
+# Terminal 1 — digichat (embed child)
+cd frontend/digichat && npm run dev   # http://127.0.0.1:3000
+
+# Terminal 2 — marketing parent (frontend/digithings-web, not frontend/website)
+cd frontend/digithings-web
+NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=http://127.0.0.1:3000 npm run dev
+# open http://127.0.0.1:<web-port>/chat — ChatEmbedShell iframes /embed?host=digithings.ai
 ```
+
+Ensure digichat `DIGICHAT_EMBED_HOSTS` / `DIGICHAT_ALLOW_LOCAL_EMBED_PARENTS` admit the parent origin so `/embed` `frame-ancestors` matches. Direct child check: `http://127.0.0.1:3000/embed?host=digithings.ai`.
 

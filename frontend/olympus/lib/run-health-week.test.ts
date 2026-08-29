@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { RunEpisode } from './run-episodes';
 import {
   buildWeekDaySlots,
+  canGoToNextWeek,
+  clampWeekStart,
   formatWeekRangeLabel,
   mondayOfWeek,
   shiftWeekStart,
@@ -73,6 +75,21 @@ describe('run-health-week', () => {
   it('shifts by whole weeks', () => {
     expect(shiftWeekStart('2026-08-24', -1)).toBe('2026-08-17');
     expect(shiftWeekStart('2026-08-24', 1)).toBe('2026-08-31');
+  });
+
+  it('clamps week starts so the current week is the latest allowed', () => {
+    const now = new Date('2026-08-27T15:00:00Z'); // week of Aug 24
+    expect(clampWeekStart('2026-08-24', now)).toBe('2026-08-24');
+    expect(clampWeekStart('2026-08-17', now)).toBe('2026-08-17');
+    expect(clampWeekStart('2026-08-31', now)).toBe('2026-08-24');
+    expect(clampWeekStart('2026-09-07', now)).toBe('2026-08-24');
+  });
+
+  it('allows next-week only when viewing a past week', () => {
+    const now = new Date('2026-08-27T15:00:00Z');
+    expect(canGoToNextWeek('2026-08-17', now)).toBe(true);
+    expect(canGoToNextWeek('2026-08-24', now)).toBe(false);
+    expect(canGoToNextWeek('2026-08-31', now)).toBe(false);
   });
 
   it('formats a compact week range label', () => {

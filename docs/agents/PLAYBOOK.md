@@ -2,6 +2,8 @@
 
 Use this when driving **Cursor** or similar tools that support delegated tasks. Map the situation to a sub-agent type so work stays parallel and token-efficient.
 
+**Subagent model rule:** best model for the job; prefer the token-efficient choice that still clears the bar; do **not** use fast mode (`*-fast` Cursor slugs). See [CLAUDE.md § Model & subagent policy](../../CLAUDE.md#model--subagent-policy).
+
 ## When you are stuck on *where* code lives
 
 - **Explore:** broad codebase search, file discovery, “how does X work?” before editing.

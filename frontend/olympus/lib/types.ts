@@ -190,6 +190,15 @@ export interface DashboardPositionEvent {
   price: number | null;
   thesis_id: string | null;
   reason: string | null;
+  /** Stable row id when present in the public event stream. */
+  id?: string | null;
+  /**
+   * Sell economics (TRIM/EXIT) or fill-as-entry (OPEN/ADD). Enriched once from
+   * positions.entry_price — never invent fills or cost basis.
+   */
+  avg_entry_price?: number | null;
+  sold_weight_pct?: number | null;
+  realized_return_pct?: number | null;
 }
 
 /** On-demand price + events for an expanded position row chart. */

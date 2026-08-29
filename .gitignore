@@ -139,3 +139,6 @@ canvases/
 
 # playwright-mcp scratch output (page snapshots, console logs)
 .playwright-mcp/
+
+# digiclaw scheduler durable state (local)
+.digiclaw/

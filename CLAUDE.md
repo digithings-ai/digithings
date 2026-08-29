@@ -119,8 +119,8 @@ commits are exempt by nature; every other commit clears it, strongest first:
 
 **When Bugbot / CodeRabbit are unavailable or out of quota, review in-session —
 do not skip.** Bugbot `neutral` is not a review. Run `/review <N>`: tiered
-fresh-context subagents (cheap scope pass, then strong model only on flagged
-areas — see CODE_REVIEW_POLICY.md and `agents/sources/commands/review.md`).
+fresh-context subagents (token-efficient scope pass, then strong model only on
+flagged areas — see CODE_REVIEW_POLICY.md and `agents/sources/commands/review.md`).
 Author session must not review its own work. Verify each finding with a command,
 refute, then post survivors as a PR comment opening with
 `<!-- in-session-review -->` and apply `reviewed:agent`.
@@ -157,6 +157,11 @@ and on whether behaviour or a public factual claim changed.
 
 ## Model & subagent policy
 
+**General rule:** pick the **best model for the job**, prefer the **token-efficient**
+choice that still clears the bar, and **do not use fast mode** (no `*-fast` /
+speed-optimized Cursor slugs). Quality of fit first; cost second; latency never
+overrides either.
+
 Unpinned subagents inherit the orchestrator's model — an unset `model:` under an
 Opus/Fable session silently runs every subagent at that price. Every subagent
 under `agents/sources/subagents/` already pins one; keep doing it:
@@ -165,8 +170,8 @@ under `agents/sources/subagents/` already pins one; keep doing it:
 |------|-------|----------|
 | Routing, dispatch, dictation cleanup, small/mechanical verification | haiku, or sonnet when the check has any real complexity — pick by task, not by habit | `component-router`, `dictation-normalizer`, a lint/type-check triage pass |
 | Implementation, spec-writing (the heavy lifting) | sonnet | `spec-writer`, `test-first-implementer` |
-| Review **scope** pass — map diff, list risk areas, skip clean files | haiku or sonnet (Claude); fast/cheap Cursor model | `/review` first pass |
-| Review **deep** pass / security / architecture — only on flagged areas | opus (Claude); stronger Cursor model or dedicated review agent | `/review` deep lenses, security paths |
+| Review **scope** pass — map diff, list risk areas, skip clean files | haiku or sonnet (Claude); token-efficient Cursor model (not `*-fast`) | `/review` first pass |
+| Review **deep** pass / security / architecture — only on flagged areas | opus (Claude); stronger Cursor model or dedicated review agent (not `*-fast`) | `/review` deep lenses, security paths |
 | Ad-hoc design/architecture consult ("advisor" role — a second opinion outside a formal review, a judge-panel comparison of approaches) | opus for anything hard-to-reverse or architecturally significant; sonnet default otherwise | a `Plan`/`Explore` agent, an `AskUserQuestion` decision point with real trade-offs, a "which approach is better" comparison |
 
 There is deliberately no standing `pr-reviewer`/`security-reviewer` subagent in

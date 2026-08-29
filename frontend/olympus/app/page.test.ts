@@ -1,17 +1,41 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import type { DashboardData } from '@/lib/types';
 
 const { useDashboardMock } = vi.hoisted(() => ({ useDashboardMock: vi.fn() }));
 const { useLiveBriefKpisMock } = vi.hoisted(() => ({ useLiveBriefKpisMock: vi.fn(() => null) }));
 vi.mock('@/lib/dashboard-context', () => ({ useDashboard: () => useDashboardMock() }));
-vi.mock('@/lib/hooks/use-live-brief-kpis', () => ({ useLiveBriefKpis: () => useLiveBriefKpisMock() }));
-vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.children }));
+vi.mock('@/lib/hooks/use-live-brief-kpis', () => ({
+  useLiveBriefKpis: () => useLiveBriefKpisMock(),
+}));
+vi.mock('next/link', () => ({
+  default: (props: {
+    children?: unknown;
+    href?: string;
+    className?: string;
+    'data-testid'?: string;
+    'aria-label'?: string;
+  }) =>
+    createElement(
+      'a',
+      {
+        href: props.href,
+        className: props.className,
+        'data-testid': props['data-testid'],
+        'aria-label': props['aria-label'],
+      },
+      props.children
+    ),
+}));
 
 import OverviewPage from './page';
 
 type Action = { ticker: string; current_pct: number; recommended_pct: number; action: string };
+
+beforeEach(() => {
+  useLiveBriefKpisMock.mockReturnValue(null);
+});
 
 function makeData(actions: Action[]): DashboardData {
   return {
@@ -128,5 +152,34 @@ describe('Today (Overview) page', () => {
     expect(html).toContain('data-testid="daily-brief-workspace"');
     expect(html).toContain('aria-label="Daily investment brief"');
     expect(html).not.toContain('<main');
+  });
+
+  it('surfaces live KPI excess/alpha/IR on the Brief scoreboard when SPY series exists', () => {
+    useLiveBriefKpisMock.mockReturnValue({
+      liveNav: 101.2,
+      liveVsMarkPct: 0,
+      priceAsOfDate: '2026-06-24',
+      dayReturnPct: 0.3,
+      sinceInceptionPct: 1.2,
+      sinceInceptionStartDate: '2026-06-23',
+      portfolioReturnPct: 1.2,
+      benchmarkReturnPct: -0.6,
+      excessReturnPct: 1.8,
+      relativeGainPct: 1.8,
+      alphaPct: 0.45,
+      informationRatio: 0.32,
+      benchmarkTicker: 'SPY',
+      bookNavDate: '2026-06-24',
+    });
+    useDashboardMock.mockReturnValue({
+      data: makeData([]),
+      loading: false,
+      error: null,
+    });
+    const html = renderToStaticMarkup(createElement(OverviewPage));
+    expect(html).toContain('vs SPY');
+    expect(html).toContain('+1.8%');
+    expect(html).toContain('+0.5%'); // alpha rounded via signedPct
+    expect(html).toContain('0.32');
   });
 });

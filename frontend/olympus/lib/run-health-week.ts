@@ -45,6 +45,24 @@ export function shiftWeekStart(weekStartMonday: string, deltaWeeks: number): str
   return formatYmd(d);
 }
 
+/** Cap a Monday week start so it never advances past the week containing `now`. */
+export function clampWeekStart(
+  weekStartMonday: string,
+  now: Date | string = new Date()
+): string {
+  const max = mondayOfWeek(now);
+  // YYYY-MM-DD compares lexicographically in chronological order.
+  return weekStartMonday > max ? max : weekStartMonday;
+}
+
+/** True when the pager may advance one week without entering the future. */
+export function canGoToNextWeek(
+  weekStartMonday: string,
+  now: Date | string = new Date()
+): boolean {
+  return weekStartMonday < mondayOfWeek(now);
+}
+
 export function weekdayShort(ymd: string): string {
   const day = parseYmd(ymd).getUTCDay();
   // Map Sun=0 → index 6; Mon=1 → 0 …
