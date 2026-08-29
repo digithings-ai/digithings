@@ -169,3 +169,5 @@ Run **Tracks A ∥ B ∥ C this month**: make WP2 real and file WP3 for honest m
 ---
 
 *Next doc action: additive progress/product-intent strip on the 2026-08-06 metaplan — not a full rewrite. See metaplan § Progress / Product intent (2026-08-25).*
+
+*Follow-on (2026-08-29): end-to-end Kairos + tenancy milestone sequencing lives in [2026-08-29-olympus-kairos-tenancy-milestone-brief.md](2026-08-29-olympus-kairos-tenancy-milestone-brief.md) (planning only; lock D1–D7 before filing the epic).*
