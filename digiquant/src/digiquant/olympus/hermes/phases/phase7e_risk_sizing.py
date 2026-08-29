@@ -60,7 +60,11 @@ from digiquant.olympus.hermes.sizing_events import (
     SizingAdjustmentType,
     validate_sizing_lineage,
 )
-from digiquant.olympus.hermes.turnover import apply_rebalancing_cadence
+from digiquant.olympus.hermes.turnover import (
+    apply_rebalancing_cadence,
+    clamp_no_trade_band,
+    no_trade_band_pct,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -325,13 +329,29 @@ def _load_ticker_risk(
     }
 
 
-def _verb(current: float | None, target: float) -> str:
-    """Rebalance verb from current → target weight. Unknown current ⇒ treat as 0."""
+def _verb(
+    current: float | None,
+    target: float,
+    *,
+    preferences: Mapping[str, Any] | None = None,
+) -> str:
+    """Rebalance verb from current → target weight. Unknown current ⇒ treat as 0.
+
+    Continuing positions whose |Δ| sits inside the pipeline's existing no-trade band
+    classify as ``hold`` (#3080) — same materiality as ``clamp_no_trade_band``, not a
+    separate hard floor.
+    """
     cur = current or 0.0
     if cur <= 0 < target:
         return "new"
     if target <= 0 < cur:
         return "exit"
+    if (
+        cur > 0
+        and target > 0
+        and abs(target - cur) < no_trade_band_pct(cur, dict(preferences or {}))
+    ):
+        return "hold"
     if target > cur + 1e-9:
         return "add"
     if target < cur - 1e-9:
@@ -402,6 +422,7 @@ def _rebuild_actions(
     sized: dict[str, float],
     current_weights: dict[str, float] | None = None,
     selection_rationale_by_ticker: dict[str, str] | None = None,
+    preferences: Mapping[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Rebuild the advisory action list to match the SIZED book.
 
@@ -411,7 +432,12 @@ def _rebuild_actions(
     the PM's verb is preserved (it can't be recomputed). A PM name that sizing dropped
     becomes an explicit exit-to-cash. ``materialize`` ignores ``actions`` (it books
     ``recommended_portfolio``); these drive the published document only.
+
+    Live drifted weight is stamped onto every row as ``current_pct`` (#3080 / #1850) so the
+    dashboard does not have to invent prior-book → target arrows for HOLD rows.
     """
+    prefs = dict(preferences or {})
+    live = current_weights or {}
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
     for action in original_actions:
@@ -422,12 +448,24 @@ def _rebuild_actions(
             continue
         seen.add(ticker)
         row = dict(action)
+        live_current = _opt_float(live.get(ticker))
+        if live_current is not None:
+            row["current_pct"] = round(live_current, 4)
         if ticker in sized:
-            new_target = round(sized[ticker], 4)
-            row["target_pct"] = new_target
-            current = _opt_float(action.get("current_pct"))
+            new_target = float(sized[ticker])
+            current = (
+                live_current if live_current is not None else _opt_float(action.get("current_pct"))
+            )
+            if (
+                current is not None
+                and current > 0
+                and new_target > 0
+                and abs(new_target - current) < no_trade_band_pct(current, prefs)
+            ):
+                new_target = current
+            row["target_pct"] = round(new_target, 4)
             if current is not None:  # recompute verb only when we know the live weight
-                row["action"] = _verb(current, new_target)
+                row["action"] = _verb(current, new_target, preferences=prefs)
         elif ticker in pm_targets:
             base = str(action.get("rationale") or "").strip()
             row["action"] = "exit"
@@ -440,21 +478,30 @@ def _rebuild_actions(
     # path (original_actions is empty there), so every booked day misreported held
     # rebalances as "new" (#1676). Classify against the live drifted weight instead:
     # add / trim / hold for existing positions, "new" only for genuinely new names.
-    live = current_weights or {}
     for ticker, target in sized.items():
         if ticker not in seen:
-            verb = _verb(_opt_float(live.get(ticker)), target)
-            out.append(
-                {
-                    "ticker": ticker,
-                    "action": verb,
-                    "target_pct": round(target, 4),
-                    "rationale": _published_action_rationale(
-                        ticker,
-                        selection_rationale_by_ticker,
-                    ),
-                }
-            )
+            current = _opt_float(live.get(ticker))
+            approved = float(target)
+            if (
+                current is not None
+                and current > 0
+                and approved > 0
+                and abs(approved - current) < no_trade_band_pct(current, prefs)
+            ):
+                approved = current
+            verb = _verb(current, approved, preferences=prefs)
+            row: dict[str, Any] = {
+                "ticker": ticker,
+                "action": verb,
+                "target_pct": round(approved, 4),
+                "rationale": _published_action_rationale(
+                    ticker,
+                    selection_rationale_by_ticker,
+                ),
+            }
+            if current is not None:
+                row["current_pct"] = round(current, 4)
+            out.append(row)
     return out
 
 
@@ -898,6 +945,17 @@ def _build_sized_book(
     )
     sized = _apply_held_continuity_backstop(sized, state, events=events)
     sized = _cap_total_invested(sized, events=events)
+    # Final-gross scale can nudge every leg by a few bps after the cadence band already
+    # said "no trade". Re-clamp with the same band so those micro deltas never become
+    # published add/trim actions or ledger order intents (#3080).
+    live_weights = {
+        str(k): float(v) for k, v in current_weights.items() if _opt_float(v) is not None
+    }
+    sized = clamp_no_trade_band(
+        sized,
+        current_weights=live_weights,
+        preferences=dict(state.config.preferences),
+    )
     mode_note = f" sizing_input_mode={sizing_mode_label}."
     bundle_note = ""
     bundle_hash: str | None = None
@@ -912,8 +970,9 @@ def _build_sized_book(
             original_actions,
             pm_targets,
             sized,
-            current_weights,
+            live_weights,
             selection_rationale_by_ticker=selection_rationale_by_ticker,
+            preferences=dict(state.config.preferences),
         ),
         "notes": (f"{prior_notes}\n\n" if prior_notes else "")
         + f"Risk-sizing (H8): {result.explanation}{breaker_note}"

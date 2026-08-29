@@ -56,6 +56,7 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 )
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
+from digiquant.olympus.hermes.turnover import no_trade_band_pct
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +261,11 @@ def _prior_weights(state: AtlasResearchState) -> dict[str, float]:
 
 
 def _decision(
-    *, symbol: str, prior_pct: float, target_pct: float
+    *,
+    symbol: str,
+    prior_pct: float,
+    target_pct: float,
+    preferences: Mapping[str, Any] | None = None,
 ) -> tuple[DecisionAction, DecisionReason]:
     """Classify one symbol's weight move into the closed action/reason vocabulary.
 
@@ -270,6 +275,9 @@ def _decision(
     ``EXIT``/``THESIS_INVALIDATED`` even when a risk cap rather than a thesis change
     forced it — H9 sees the weight, not the reason. H8's ``TargetAdjustment`` rows are
     where the cap-driven variants belong.
+
+    Continuing positions inside the existing no-trade band are ``NO_OP`` (#3080) — same
+    materiality H8 already uses, so final-gross micro-nudges never become order intents.
     """
     if symbol == _CASH:
         # Cash is the residual of the sized book, never a conviction: "new_conviction",
@@ -278,6 +286,11 @@ def _decision(
     delta = target_pct - prior_pct
     if abs(delta) < _WEIGHT_EPSILON:
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
+    # New entry / flat exit always count — the band only applies to continuing names.
+    if prior_pct > _WEIGHT_EPSILON and target_pct > _WEIGHT_EPSILON:
+        band = no_trade_band_pct(prior_pct, dict(preferences or {}))
+        if abs(delta) < band:
+            return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if delta > 0:
         return DecisionAction.ADD, DecisionReason.NEW_CONVICTION
     if target_pct <= _WEIGHT_EPSILON:
@@ -447,7 +460,12 @@ def append_commit_chain(
             requested_pct=h8_requested,
             pct_adjustments=symbol_adjustments,
         )
-        action, reason = _decision(symbol=symbol, prior_pct=prior_pct, target_pct=target_pct)
+        action, reason = _decision(
+            symbol=symbol,
+            prior_pct=prior_pct,
+            target_pct=target_pct,
+            preferences=dict(state.config.preferences),
+        )
 
         intent = DecisionIntent(
             id=uuid4(),
@@ -501,6 +519,8 @@ def append_commit_chain(
 
         if symbol == _CASH:
             continue  # cash is a residual, not a tradeable order
+        if action == DecisionAction.NO_OP:
+            continue  # in-band / unchanged — approved target recorded, no order (#3080)
         close = closes.get(symbol)
         if close is None:
             unpriced.append(symbol)

@@ -89,3 +89,29 @@ def test_relative_band_allows_large_drift() -> None:
         run_date=date(2026, 6, 19),
     )
     assert sized["SPY"] == 40.0
+
+
+def test_clamp_no_trade_band_snaps_post_cap_micro_deltas() -> None:
+    from digiquant.olympus.hermes.turnover import clamp_no_trade_band
+
+    out = clamp_no_trade_band(
+        {"SPY": 20.15, "QQQ": 25.0},
+        current_weights={"SPY": 20.0, "QQQ": 20.0},
+        preferences={"rebalance_threshold_pct": 3, "rebalance_rel_band_pct": 20},
+    )
+    assert out["SPY"] == 20.0  # 0.15pp inside band
+    assert out["QQQ"] == 25.0  # 5pp breaches 3pp floor / 4pp rel → kept
+
+
+def test_ledger_decision_uses_no_trade_band_for_continuing_names() -> None:
+    from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
+    from digiquant.olympus.hermes.writers.ledger_io import _decision
+
+    action, _ = _decision(symbol="SPY", prior_pct=20.0, target_pct=20.2)
+    assert action is DecisionAction.NO_OP
+    action, _ = _decision(symbol="SPY", prior_pct=20.0, target_pct=25.0)
+    assert action is DecisionAction.ADD
+    action, _ = _decision(symbol="SPY", prior_pct=20.0, target_pct=0.0)
+    assert action is DecisionAction.EXIT
+    action, _ = _decision(symbol="NEW", prior_pct=0.0, target_pct=2.0)
+    assert action is DecisionAction.ADD

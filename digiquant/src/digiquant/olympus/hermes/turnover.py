@@ -183,6 +183,48 @@ def apply_rebalancing_cadence(
     return hold_drifted_book(sized, current_weights=current_weights, events=events)
 
 
+def no_trade_band_pct(
+    current_pct: float,
+    preferences: dict[str, Any] | None = None,
+) -> float:
+    """Width (pp) of the no-trade band for a continuing position (#934, #3080).
+
+    ``max(rebalance_threshold_pct, rebalance_rel_band_pct * current_pct)`` — the same
+    materiality definition ``apply_turnover_to_sized_book`` and the H8 lineage validator
+    already use. Callers reuse this rather than inventing a separate floor.
+    """
+    prefs = preferences or {}
+    threshold = float(prefs.get("rebalance_threshold_pct") or 3.0)
+    rel_band = float(prefs.get("rebalance_rel_band_pct") or 20.0) / 100.0
+    return max(threshold, rel_band * max(0.0, float(current_pct)))
+
+
+def clamp_no_trade_band(
+    sized: dict[str, float],
+    *,
+    current_weights: dict[str, float],
+    preferences: dict[str, Any],
+) -> dict[str, float]:
+    """Snap continuing targets back to current weight when inside the no-trade band.
+
+    Pure band clamp — no min-hold lockup, no events. Used after final-book controls
+    (``_cap_total_invested``) so a proportional gross-scale cannot reintroduce
+    basis-point add/trim noise the cadence band already suppressed (#3080).
+    """
+    if not current_weights:
+        return sized
+    out = dict(sized)
+    for ticker, current_pct in current_weights.items():
+        if _is_cash(ticker) or current_pct <= 0:
+            continue
+        target_pct = float(out.get(ticker, 0.0))
+        if target_pct <= 0:
+            continue
+        if abs(target_pct - current_pct) < no_trade_band_pct(current_pct, preferences):
+            out[ticker] = current_pct
+    return out
+
+
 def apply_turnover_to_sized_book(
     sized: dict[str, float],
     *,
@@ -211,8 +253,6 @@ def apply_turnover_to_sized_book(
     if not current_weights:
         return sized
 
-    threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)  # absolute floor (pp)
-    rel_band = float(preferences.get("rebalance_rel_band_pct") or 20.0) / 100.0  # of position size
     holding_days = int(preferences.get("holding_days") or 5)
     entry_by_ticker = {
         str(row["ticker"]): _parse_entry_date(row.get("entry_date"))
@@ -249,7 +289,6 @@ def apply_turnover_to_sized_book(
         # so it is not a material requested->approved delta — the lineage validator uses this
         # same band as its materiality threshold, so these suppressed micro-deltas are never
         # flagged as unexplained.
-        band = max(threshold, rel_band * current_pct)
-        if delta < band and target_pct > 0:
+        if delta < no_trade_band_pct(current_pct, preferences) and target_pct > 0:
             out[ticker] = current_pct
     return out

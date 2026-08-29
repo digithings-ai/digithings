@@ -1877,7 +1877,10 @@ that same ticker, so a single pass can never emit both for one name.
 The no-trade-band clamp in `apply_turnover_to_sized_book` deliberately emits **no** event: by
 construction it only fires when the delta is smaller than the pipeline's own materiality band
 (`max(rebalance_threshold_pct, rebalance_rel_band_pct * current_pct)`), so the suppressed
-delta is not material by the pipeline's own definition.
+delta is not material by the pipeline's own definition. After the held-continuity backstop and
+`_cap_total_invested`, H8 re-applies `clamp_no_trade_band` (#3080) so a proportional gross-scale
+cannot reintroduce basis-point add/trim noise; `_rebuild_actions` / ledger `_decision` reuse the
+same band when classifying hold vs add/trim, and published actions stamp live `current_pct`.
 
 `sizing_events.validate_sizing_lineage(requested, approved, adjustments, materiality_pct=...)`
 is the corresponding lineage check: any requested→approved delta larger than

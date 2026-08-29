@@ -637,6 +637,10 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
     eps = 0.0001
+    # Same no-trade band H8 uses (#934 / #3080) — pure MTM drift inside the band is HOLD,
+    # not ADD/TRIM. Defaults match turnover.py when portfolio prefs are unavailable here.
+    abs_band = 3.0
+    rel_band = 0.20
     basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
         prev = prior_w.get(t, 0.0)
@@ -646,6 +650,8 @@ def build_events_from_digest_snapshot(sb, execution_d: str) -> Optional[List[Dic
             ev = "OPEN"
         elif prev > eps and rec <= eps:
             ev = "EXIT"
+        elif prev > eps and rec > eps and abs(chg) < max(abs_band, rel_band * prev):
+            ev = "HOLD"
         elif chg < -eps:
             ev = "TRIM"
         elif chg > eps:
@@ -706,6 +712,10 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
     all_tickers = set(prior_w) | set(targets)
     out: List[Dict[str, Any]] = []
     eps = 0.0001
+    # Same no-trade band H8 uses (#934 / #3080) — pure MTM drift inside the band is HOLD,
+    # not ADD/TRIM. Defaults match turnover.py when portfolio prefs are unavailable here.
+    abs_band = 3.0
+    rel_band = 0.20
     basis = f"prior committed book {prior_d}" if prior_d else "no prior committed book"
     for t in sorted(all_tickers):
         prev = prior_w.get(t, 0.0)
@@ -715,6 +725,8 @@ def build_events_from_positions_book(sb, execution_d: str) -> Optional[List[Dict
             ev = "OPEN"
         elif prev > eps and rec <= eps:
             ev = "EXIT"
+        elif prev > eps and rec > eps and abs(chg) < max(abs_band, rel_band * prev):
+            ev = "HOLD"
         elif chg < -eps:
             ev = "TRIM"
         elif chg > eps:

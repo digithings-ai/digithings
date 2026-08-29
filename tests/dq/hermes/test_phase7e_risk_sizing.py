@@ -834,14 +834,45 @@ class TestActionClassificationAndInvestedCap:
 
     def test_memo_path_actions_classify_against_live_weights(self) -> None:
         # The H7 memo path passes original_actions=[] — previously EVERYTHING was "new".
+        # Deltas must breach the default no-trade band (3pp) or they classify as hold (#3080).
         actions = phase7e_risk_sizing._rebuild_actions(
             [],
             pm_targets={"AAA": 1.0, "BBB": 1.0, "CCC": 1.0, "DDD": 1.0},
-            sized={"AAA": 8.0, "BBB": 3.0, "CCC": 5.0, "DDD": 6.0},
+            sized={"AAA": 10.0, "BBB": 1.0, "CCC": 5.0, "DDD": 6.0},
             current_weights={"AAA": 5.0, "BBB": 5.0, "CCC": 5.0},
         )
         verbs = {row["ticker"]: row["action"] for row in actions}
         assert verbs == {"AAA": "add", "BBB": "trim", "CCC": "hold", "DDD": "new"}
+        by_ticker = {row["ticker"]: row for row in actions}
+        assert by_ticker["AAA"]["current_pct"] == 5.0
+        assert by_ticker["CCC"]["current_pct"] == 5.0
+
+    def test_in_band_delta_classifies_as_hold_and_snaps_target(self) -> None:
+        # 5.0 → 5.4 is inside the 3pp band — publish hold at the live weight, not add.
+        actions = phase7e_risk_sizing._rebuild_actions(
+            [],
+            pm_targets={"SPY": 1.0},
+            sized={"SPY": 5.4},
+            current_weights={"SPY": 5.0},
+        )
+        assert len(actions) == 1
+        assert actions[0]["action"] == "hold"
+        assert actions[0]["target_pct"] == 5.0
+        assert actions[0]["current_pct"] == 5.0
+
+    def test_post_cap_micro_delta_reclamped_by_no_trade_band(self) -> None:
+        # Mimic final-gross scale leaving a 0.2pp nudge after the cadence band held.
+        from digiquant.olympus.hermes.turnover import clamp_no_trade_band
+
+        sized = {"SPY": 20.2, "TLT": 14.85}
+        current = {"SPY": 20.0, "TLT": 15.0}
+        clamped = clamp_no_trade_band(
+            sized,
+            current_weights=current,
+            preferences={"rebalance_threshold_pct": 3, "rebalance_rel_band_pct": 20},
+        )
+        assert clamped["SPY"] == 20.0
+        assert clamped["TLT"] == 15.0
 
     def test_memo_path_actions_carry_pm_selection_rationale(self) -> None:
         actions = phase7e_risk_sizing._rebuild_actions(
