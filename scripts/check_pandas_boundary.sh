@@ -19,6 +19,10 @@ ALLOWLIST=(
   "digiquant/scripts/atlas/preload-history.py"
   "digiquant/src/digiquant/strategies/bollinger_mr.py"
   "digiquant/src/digiquant/strategies/macd_trend.py"
+  # Operator ad-hoc Yahoo fetch; yfinance returns pandas DataFrames (#1719).
+  "digiquant/scripts/fetch_real_ohlcv.py"
+  # Sandbox shim: re-exports pandas_ta_classic for agent image acceptance (#396).
+  "digiquant/sandbox/pandas_ta/__init__.py"
 )
 
 violations=()
