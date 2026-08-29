@@ -5,6 +5,12 @@ Covers each `model_validator`/`field_validator` branch called out in the work pa
 acceptance criteria — quantity/notional XOR, limit_price/order_type coupling, symbol and
 currency normalization, UTC-only timestamp rejection, `raw_sha256` shape — plus the
 frozen/extra-forbid base and runtime-checkable protocol conformance for every stub.
+
+`TestBrokerAdapterProtocolConformance` also absorbs the retired
+`tests/dq/test_brokers.py`'s coverage (stub `name`, `connect()`/`disconnect()` raising
+`NotImplementedError`), parametrized across all three stubs — this file is now the single
+place broker stub/protocol tests live, so a legacy positional `submit_order(symbol, side,
+quantity)` call site can't silently drift back in.
 """
 
 from __future__ import annotations
@@ -319,23 +325,50 @@ class TestBrokerAccountSnapshot:
             self._make(unexpected_field="nope")
 
 
-class TestBrokerAdapterProtocolConformance:
-    """Stubs satisfy the widened runtime-checkable protocol (acceptance criterion)."""
+_STUB_CLASSES: list[type] = [IBAdapterStub, AlpacaAdapterStub, QuantConnectAdapterStub]
+_STUB_NAMES: dict[type, str] = {
+    IBAdapterStub: "ib",
+    AlpacaAdapterStub: "alpaca",
+    QuantConnectAdapterStub: "quantconnect",
+}
 
-    @pytest.mark.parametrize(
-        "stub_cls",
-        [IBAdapterStub, AlpacaAdapterStub, QuantConnectAdapterStub],
-    )
+
+class TestBrokerAdapterProtocolConformance:
+    """Stubs satisfy the widened runtime-checkable protocol (acceptance criterion).
+
+    Folds in the retired ``tests/dq/test_brokers.py``'s intent — each stub's ``name``
+    and ``connect()``/``disconnect()`` raising ``NotImplementedError`` — parametrized
+    across all three stubs rather than the legacy file's ad hoc per-stub subset, so this
+    class is the single source of truth for broker stub/protocol coverage.
+    """
+
+    @pytest.mark.parametrize("stub_cls", _STUB_CLASSES)
     def test_stub_satisfies_broker_adapter_protocol(self, stub_cls: type) -> None:
         assert isinstance(stub_cls(), BrokerAdapter)
 
-    def test_stub_submit_order_takes_request_and_raises(self) -> None:
+    @pytest.mark.parametrize("stub_cls", _STUB_CLASSES)
+    def test_stub_name_matches_broker(self, stub_cls: type) -> None:
+        assert stub_cls().name == _STUB_NAMES[stub_cls]
+
+    @pytest.mark.parametrize("stub_cls", _STUB_CLASSES)
+    def test_stub_connect_raises(self, stub_cls: type) -> None:
+        with pytest.raises(NotImplementedError):
+            stub_cls().connect()
+
+    @pytest.mark.parametrize("stub_cls", _STUB_CLASSES)
+    def test_stub_disconnect_raises(self, stub_cls: type) -> None:
+        with pytest.raises(NotImplementedError):
+            stub_cls().disconnect()
+
+    @pytest.mark.parametrize("stub_cls", _STUB_CLASSES)
+    def test_stub_submit_order_takes_request_and_raises(self, stub_cls: type) -> None:
         req = make_order_request()
         with pytest.raises(NotImplementedError):
-            IBAdapterStub().submit_order(req)
+            stub_cls().submit_order(req)
 
-    def test_stub_exposes_full_widened_surface(self) -> None:
-        stub = AlpacaAdapterStub()
+    @pytest.mark.parametrize("stub_cls", _STUB_CLASSES)
+    def test_stub_exposes_full_widened_surface(self, stub_cls: type) -> None:
+        stub = stub_cls()
         for method_name in (
             "get_account",
             "get_positions",
