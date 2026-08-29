@@ -319,11 +319,16 @@ is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no fr
 | `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/olympus_models.yaml` |
 | `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + web grounding (`openrouter:web_search`) |
 
-`apply_olympus_openrouter_env()` (Hermes chain startup) sets **`OPENROUTER_ALLOWED_MODELS`**
-and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active tier + `openrouter_defaults`.
-No other OpenRouter env vars are set at chain startup. The workflow
+`apply_olympus_openrouter_env()` (Hermes chain startup and `validate-providers.py` preflight)
+sets **`OPENROUTER_ALLOWED_MODELS`** and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active
+tier + `openrouter_defaults`. No other OpenRouter env vars are set at chain startup. The workflow
 (`.github/workflows/pipeline-olympus.yml`) additionally sets `OPENROUTER_FALLBACK_MODELS` on both
 the pipeline run step and the preflight-validation step — see the table below.
+
+**Preflight time ceiling (#2528/#2531):** `digiquant/scripts/atlas/validate-providers.py` sets
+`DIGILLM_REQUEST_TIMEOUT_SECONDS=20` and `DIGILLM_EMPTY_RETRY_MAX=0` before any LLM import (local
+runs and CI). The `Validate AI provider routing` workflow step has `timeout-minutes: 10` so a hung
+provider yields a step **failure**, not a 240-minute job **cancellation**.
 
 #### OpenRouter routing knobs (digillm → `extra_body`)
 
