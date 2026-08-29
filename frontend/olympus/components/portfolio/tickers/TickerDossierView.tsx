@@ -8,11 +8,13 @@ import { useDashboard } from '@/lib/dashboard-context';
 import { useAsyncData } from '@/lib/hooks/use-async-data';
 import { fetchTickerDossier } from '@/lib/queries';
 import type { TickerDossier } from '@/lib/types';
+import type { PlanTier } from '@/lib/entitlements';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import PortfolioSectionNav from '@/components/portfolio/PortfolioSectionNav';
 import PageSkeleton from '@/components/page-skeleton';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
+import { EntitledSurface } from '@/components/entitled-surface';
 import { formatPct, pnlColor } from '@/components/ui';
 import ConvictionHistory from './ConvictionHistory';
 
@@ -110,7 +112,14 @@ function SectionHeading({
   );
 }
 
-export default function TickerDossierView({ ticker }: { ticker: string }) {
+export default function TickerDossierView({
+  ticker,
+  tier,
+}: {
+  ticker: string;
+  /** Test override for house weight gate. */
+  tier?: PlanTier;
+}) {
   const [showAllActions, setShowAllActions] = useState(false);
   const { data, loading: dashboardLoading } = useDashboard();
   const positions = useMemo(() => data?.positions ?? [], [data]);
@@ -256,26 +265,28 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
             </div>
           </div>
 
-          <dl data-region="metrics" className="m-0 grid grid-cols-3 border-l border-t border-hair">
-            <Metric
-              label={held ? 'Current weight' : 'Position'}
-              value={held ? formatWeight(position.weight_actual, 2) : wasHeld ? 'Closed' : 'Not held'}
-              sub={held && position.weight_target != null
-                ? `target ${formatWeight(position.weight_target)}`
-                : recordedSpan}
-            />
-            <Metric
-              label="Since entry"
-              value={held && sinceEntry != null ? formatPct(sinceEntry) : '—'}
-              tone={held && sinceEntry != null ? pnlColor(sinceEntry) : 'text-ink-mute'}
-              sub={held ? position.entry_date : wasHeld ? 'No current position' : null}
-            />
-            <Metric
-              label="Entry"
-              value={held ? formatPrice(position.entry_price) : firstHeldDate ?? '—'}
-              sub={held ? position.entry_date : null}
-            />
-          </dl>
+          <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
+            <dl data-region="metrics" className="m-0 grid grid-cols-3 border-l border-t border-hair">
+              <Metric
+                label={held ? 'Current weight' : 'Position'}
+                value={held ? formatWeight(position.weight_actual, 2) : wasHeld ? 'Closed' : 'Not held'}
+                sub={held && position.weight_target != null
+                  ? `target ${formatWeight(position.weight_target)}`
+                  : recordedSpan}
+              />
+              <Metric
+                label="Since entry"
+                value={held && sinceEntry != null ? formatPct(sinceEntry) : '—'}
+                tone={held && sinceEntry != null ? pnlColor(sinceEntry) : 'text-ink-mute'}
+                sub={held ? position.entry_date : wasHeld ? 'No current position' : null}
+              />
+              <Metric
+                label="Entry"
+                value={held ? formatPrice(position.entry_price) : firstHeldDate ?? '—'}
+                sub={held ? position.entry_date : null}
+              />
+            </dl>
+          </EntitledSurface>
 
           <div
             data-region="stamp"
@@ -360,43 +371,45 @@ export default function TickerDossierView({ ticker }: { ticker: string }) {
                 title="Portfolio position"
                 meta={firstHeldDate ? `first held ${firstHeldDate}` : null}
               />
-              <dl className="grid grid-cols-2 border-l border-t border-hair lg:grid-cols-4">
-                <Metric
-                  label="State"
-                  value={held ? 'Held' : 'No current position'}
-                  sub={held
-                    ? (position.type?.toLowerCase() ?? 'long')
-                    : wasHeld
-                      ? 'Previously held'
-                      : 'Never held'}
-                />
-                <Metric
-                  label="Allocation"
-                  value={held ? formatWeight(position.weight_actual, 2) : '0.00%'}
-                  sub={held && position.weight_target != null
-                    ? `target ${formatWeight(position.weight_target)}`
-                    : null}
-                />
-                <Metric
-                  label={held ? 'Entry mark' : 'First held'}
-                  value={held ? formatPrice(position.entry_price) : firstHeldDate ?? '—'}
-                  sub={held ? position.entry_date : null}
-                />
-                <Metric
-                  label={held ? 'Current leg' : 'Recorded span'}
-                  value={held && currentLegStart
-                    ? `${currentLegStart}–present`
-                    : recordedSpan ?? '—'}
-                />
-              </dl>
-              {rationale ? (
-                <div className="border-t border-hair px-4 py-4 md:px-5">
-                  <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-                    Portfolio rationale
-                  </p>
-                  <p className="mt-2 max-w-4xl text-sm leading-relaxed text-ink-soft">{rationale}</p>
-                </div>
-              ) : null}
+              <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
+                <dl className="grid grid-cols-2 border-l border-t border-hair lg:grid-cols-4">
+                  <Metric
+                    label="State"
+                    value={held ? 'Held' : 'No current position'}
+                    sub={held
+                      ? (position.type?.toLowerCase() ?? 'long')
+                      : wasHeld
+                        ? 'Previously held'
+                        : 'Never held'}
+                  />
+                  <Metric
+                    label="Allocation"
+                    value={held ? formatWeight(position.weight_actual, 2) : '0.00%'}
+                    sub={held && position.weight_target != null
+                      ? `target ${formatWeight(position.weight_target)}`
+                      : null}
+                  />
+                  <Metric
+                    label={held ? 'Entry mark' : 'First held'}
+                    value={held ? formatPrice(position.entry_price) : firstHeldDate ?? '—'}
+                    sub={held ? position.entry_date : null}
+                  />
+                  <Metric
+                    label={held ? 'Current leg' : 'Recorded span'}
+                    value={held && currentLegStart
+                      ? `${currentLegStart}–present`
+                      : recordedSpan ?? '—'}
+                  />
+                </dl>
+                {rationale ? (
+                  <div className="border-t border-hair px-4 py-4 md:px-5">
+                    <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+                      Portfolio rationale
+                    </p>
+                    <p className="mt-2 max-w-4xl text-sm leading-relaxed text-ink-soft">{rationale}</p>
+                  </div>
+                ) : null}
+              </EntitledSurface>
             </section>
 
             <section className="border-y border-hair" data-region="position-history">

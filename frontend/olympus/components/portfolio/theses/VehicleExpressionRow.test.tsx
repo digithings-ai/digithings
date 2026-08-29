@@ -84,4 +84,41 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
     const latestCallSection = html.split('Latest call')[0] + 'Latest call' + html.split('Latest call')[1];
     expect(latestCallSection).not.toContain('text-[10px]');
   });
+
+  it('Observer: locks weight panel; summary weight redacted', () => {
+    const html = renderToStaticMarkup(
+      createElement(VehicleExpressionRow, {
+        ticker: 'AAA',
+        rationale: 'Test rationale',
+        candidateRank: 1,
+        position: position(),
+        latestDecision: decision(),
+        dossierHref: '/portfolio/tickers?ticker=AAA',
+        deliberationHref: '/pipeline',
+        tier: 'free',
+      }),
+    );
+    expect(html).toContain('locked-surface');
+    expect(html).not.toContain('vehicle-weight-panel');
+    expect(html).not.toContain('20.0%');
+    expect(html).toContain('AAA');
+  });
+
+  it('Baseline: weight panel passthrough', () => {
+    const html = renderToStaticMarkup(
+      createElement(VehicleExpressionRow, {
+        ticker: 'AAA',
+        rationale: 'Test rationale',
+        candidateRank: 1,
+        position: position(),
+        latestDecision: decision(),
+        dossierHref: '/portfolio/tickers?ticker=AAA',
+        deliberationHref: '/pipeline',
+        tier: 'baseline',
+      }),
+    );
+    expect(html).toContain('vehicle-weight-panel');
+    expect(html).toContain('20.0%');
+    expect(html).not.toContain('locked-surface');
+  });
 });

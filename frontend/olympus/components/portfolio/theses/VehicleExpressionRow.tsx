@@ -4,10 +4,13 @@ import Link from 'next/link';
 import { ChevronRight, ArrowUpRight } from 'lucide-react';
 import type { Position } from '@/lib/types';
 import type { DecisionLogRow } from '@/lib/holdings-decisions';
-import { ConvictionMeter } from '@/components/shared/conviction-meter';
+import type { PlanTier } from '@/lib/entitlements';
+import { can } from '@/lib/entitlements';
+import { usePlanTier } from '@/lib/use-entitlement';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
 import { Badge } from '@/components/ui';
+import { EntitledSurface } from '@/components/entitled-surface';
 
 /** "12.3%" style, signed for P&L. Tone applied by the caller (P&L-only --up/--down). */
 function fmtPct(v: number | null | undefined, signed = false): string {
@@ -36,6 +39,9 @@ function EnvelopeChip({ label, value }: { label: string; value: string }) {
  * The summary carries the selection (ticker · rationale · #rank · held metrics);
  * expanding reveals the stock-level TIMING story (entry/exit envelope, the latest
  * signed analyst call, and the dossier / deliberation deep links).
+ *
+ * Weight figures are `house_weights_nav` (Baseline+) — Observer sees locked chrome
+ * for the weight panel, not raw `weight_actual`.
  */
 export function VehicleExpressionRow({
   ticker,
@@ -45,6 +51,7 @@ export function VehicleExpressionRow({
   latestDecision,
   dossierHref,
   deliberationHref,
+  tier: tierOverride,
 }: {
   ticker: string;
   rationale: string | null;
@@ -53,7 +60,12 @@ export function VehicleExpressionRow({
   latestDecision: DecisionLogRow | null;
   dossierHref: string;
   deliberationHref: string;
+  /** Test override for house weight gate. */
+  tier?: PlanTier;
 }) {
+  const sessionTier = usePlanTier();
+  const tier = tierOverride ?? sessionTier;
+  const weightsAllowed = can(tier, 'house_weights_nav');
   const held = position != null;
   const sinceEntry = position?.since_entry_return_pct ?? position?.unrealized_pnl_pct ?? null;
   const hasEnvelope =
@@ -87,7 +99,7 @@ export function VehicleExpressionRow({
               {fmtPct(sinceEntry, true)}
             </span>
             <span className="w-14 text-right font-mono text-sm tabular-nums text-ink">
-              {fmtPct(position?.weight_actual)}
+              {weightsAllowed ? fmtPct(position?.weight_actual) : '—'}
             </span>
           </span>
         ) : (
@@ -100,35 +112,37 @@ export function VehicleExpressionRow({
       <div className="space-y-4 px-4 pb-4 pl-11">
         {/* Held metrics + entry/exit envelope (TIMING) */}
         {held ? (
-          <div className="flex flex-wrap gap-x-8 gap-y-3">
-            <EnvelopeChip label="Weight" value={fmtPct(position?.weight_actual)} />
-            <EnvelopeChip
-              label="Since entry"
-              value={fmtPct(sinceEntry, true)}
-            />
-            {position?.entry_price != null ? (
+          <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
+            <div className="flex flex-wrap gap-x-8 gap-y-3" data-testid="vehicle-weight-panel">
+              <EnvelopeChip label="Weight" value={fmtPct(position?.weight_actual)} />
               <EnvelopeChip
-                label="Entry"
-                value={`$${position.entry_price.toFixed(2)}${position.entry_date ? ` · ${position.entry_date}` : ''}`}
+                label="Since entry"
+                value={fmtPct(sinceEntry, true)}
               />
-            ) : null}
-            {hasEnvelope ? (
-              <>
+              {position?.entry_price != null ? (
                 <EnvelopeChip
-                  label="Stop"
-                  value={position?.stop_loss_pct != null ? fmtPct(position.stop_loss_pct) : '—'}
+                  label="Entry"
+                  value={`$${position.entry_price.toFixed(2)}${position.entry_date ? ` · ${position.entry_date}` : ''}`}
                 />
-                <EnvelopeChip
-                  label="Target"
-                  value={position?.target_pct_gain != null ? fmtPct(position.target_pct_gain, true) : '—'}
-                />
-                <EnvelopeChip
-                  label="Horizon"
-                  value={position?.horizon_days != null ? `${position.horizon_days}d` : '—'}
-                />
-              </>
-            ) : null}
-          </div>
+              ) : null}
+              {hasEnvelope ? (
+                <>
+                  <EnvelopeChip
+                    label="Stop"
+                    value={position?.stop_loss_pct != null ? fmtPct(position.stop_loss_pct) : '—'}
+                  />
+                  <EnvelopeChip
+                    label="Target"
+                    value={position?.target_pct_gain != null ? fmtPct(position.target_pct_gain, true) : '—'}
+                  />
+                  <EnvelopeChip
+                    label="Horizon"
+                    value={position?.horizon_days != null ? `${position.horizon_days}d` : '—'}
+                  />
+                </>
+              ) : null}
+            </div>
+          </EntitledSurface>
         ) : (
           <p className="text-xs text-ink-mute">
             Proposed vehicle — the book does not currently hold this ticker.

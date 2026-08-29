@@ -26,6 +26,7 @@ vi.mock('lucide-react', () => ({
   ArrowUpRight: () => createElement('svg', { 'data-icon': 'arrow-up-right' }),
   TrendingUp: () => createElement('svg', { 'data-icon': 'trending-up' }),
   TrendingDown: () => createElement('svg', { 'data-icon': 'trending-down' }),
+  Lock: () => createElement('svg', { 'data-icon': 'lock' }),
 }));
 
 vi.mock('@/components/portfolio/PortfolioSectionNav', () => ({
@@ -158,6 +159,39 @@ describe('TickerDossierView — command band structure', () => {
     expect(html).toContain('held');
     expect(html).toContain('17.20%'); // weight
     expect(html).toContain('+4.80%'); // since-entry formatted
+  });
+
+  it('Observer: locks weight/NAV metrics; no raw weight_actual', () => {
+    vi.mocked(useDashboard).mockReturnValue({
+      data: {
+        positions: [
+          {
+            ticker: 'XLE',
+            name: 'Energy Select Sector SPDR',
+            weight_actual: 17.2,
+            weight_target: null,
+            entry_price: 84.2,
+            entry_date: '2026-01-15',
+            since_entry_return_pct: 4.8,
+            unrealized_pnl_pct: null,
+          },
+        ],
+      },
+      loading: false,
+    } as any);
+
+    vi.mocked(useAsyncData).mockReturnValue({
+      data: { ticker: 'XLE', analyst: null, analystDate: null, coverage: null, decisions: [] },
+      loading: false,
+      error: null,
+    } as any);
+
+    const html = renderToStaticMarkup(
+      createElement(TickerDossierView, { ticker: 'XLE', tier: 'free' }),
+    );
+    expect(html).toContain('locked-surface');
+    expect(html).not.toContain('17.20%');
+    expect(html).not.toContain('data-region="metrics"');
   });
 
   it('renders covered-unheld state with explicit "covered · unheld" label', () => {
