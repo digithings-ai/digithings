@@ -5,6 +5,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+command -v rg >/dev/null || {
+  echo "::error::ripgrep not found — pandas boundary gate cannot run"
+  exit 1
+}
+
 ALLOWLIST=(
   "digiquant/src/digiquant/nautilus_runner.py"
   "digiquant/src/digiquant/tearsheet.py"
@@ -30,7 +35,7 @@ while IFS= read -r line; do
   if [[ "$allowed" == false ]]; then
     violations+=("$rel")
   fi
-done < <(rg -n '^(import pandas|from pandas)' --glob '*.py' digiquant/ 2>/dev/null || true)
+done < <(rg -n '^(import pandas|from pandas)' --glob '*.py' digiquant/)
 
 if ((${#violations[@]} > 0)); then
   echo "pandas import outside allowlist (see digiquant/AGENTS.md):"
