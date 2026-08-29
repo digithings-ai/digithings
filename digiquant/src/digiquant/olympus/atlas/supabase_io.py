@@ -738,6 +738,15 @@ def query_price_technicals_freshness(
     return latest, len(tickers)
 
 
+_PRICE_DELTA_ROW_BUDGET = 900
+_DEFAULT_PRICE_LOOKBACK_DAYS = 14
+
+
+def _price_delta_ticker_batch(lookback_days: int) -> int:
+    """Tickers per ``price_history`` request so a full lookback window fits under the cap."""
+    return max(1, _PRICE_DELTA_ROW_BUDGET // (lookback_days + 1))
+
+
 def query_price_deltas(
     *,
     client: SupabaseClient,
@@ -764,8 +773,9 @@ def query_price_deltas(
     The query is bounded:
     - ``in_(tickers)`` filters server-side, so we never pull rows for
       tickers we don't track.
-    - ``lookback_days`` floors the date range to a small window so the
-      response stays tiny even with weeks of Atlas history.
+    - ``lookback_days`` floors the date range to a small window; requests are
+      batched by ticker so a full window for every ticker fits under PostgREST's
+      row cap.
     """
     from datetime import timedelta
 
@@ -773,15 +783,19 @@ def query_price_deltas(
         return {}
 
     floor = (run_date - timedelta(days=lookback_days)).isoformat()
-    resp = (
-        client.table("price_history")
-        .select("date, ticker, close")
-        .in_("ticker", list(tickers))
-        .gte("date", floor)
-        .lt("date", run_date.isoformat())
-        .execute()
-    )
-    rows: list[PriceHistoryRow] = list(getattr(resp, "data", None) or [])
+    ordered = sorted(tickers)
+    batch = _price_delta_ticker_batch(lookback_days)
+    rows: list[PriceHistoryRow] = []
+    for start in range(0, len(ordered), batch):
+        resp = (
+            client.table("price_history")
+            .select("date, ticker, close")
+            .in_("ticker", ordered[start : start + batch])
+            .gte("date", floor)
+            .lt("date", run_date.isoformat())
+            .execute()
+        )
+        rows.extend(list(getattr(resp, "data", None) or []))
 
     # Group by ticker, sort each group by date desc, take the top two
     # distinct dates, compute pct_change. Avoids any dataframe import — this
