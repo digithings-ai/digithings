@@ -5,7 +5,7 @@ import {
   type ActivitySpan,
 } from "@/lib/chat-activity";
 import { mapDigisearchRagSources } from "./digisearch";
-import { mapDigivaultSearchNotes } from "./digivault";
+import { mapDigivaultGetNote, mapDigivaultSearchNotes } from "./digivault";
 
 export type DigigraphTraceLike = {
   type: string;
@@ -65,6 +65,13 @@ export function mapDigigraphTraceToSpans(
   if (trace.type === "rag_sources") {
     raw = mapDigisearchRagSources(trace.payload ?? {});
   } else if (
+    trace.type === "digivault_get_note" ||
+    trace.payload?.toolName === "digivault_get_note" ||
+    trace.payload?.tool === "digivault_get_note"
+  ) {
+    raw = mapDigivaultGetNote(trace.payload ?? {});
+    if (!raw) raw = mapOpaque(trace);
+  } else if (
     trace.type === "digivault_search_notes" ||
     trace.type === "digivault" ||
     trace.payload?.toolName === "digivault_search_notes"
@@ -86,4 +93,4 @@ export function mapDigigraphTraceToSpans(
 }
 
 export { mapDigisearchRagSources } from "./digisearch";
-export { mapDigivaultSearchNotes } from "./digivault";
+export { mapDigivaultGetNote, mapDigivaultSearchNotes } from "./digivault";
