@@ -2991,3 +2991,33 @@ templates carry unsubscribe link, no broker ids/tokens/keys.
 close-out calls `dispatch_notifications(run_date=…, hour_utc=None)` after DB validation.
 
 Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
+
+## Billing (T2)
+
+Olympus **consumer** subscription tiers are driven by Stripe Checkout + Customer Portal +
+webhook Edge Functions under `digiquant/supabase/functions/` (not Next.js route handlers).
+This is distinct from ADR-0004's digikey metered API seat flow — here entitlements ride
+Supabase Auth JWT `app_metadata.plan_tier` (`free | baseline | custom | enterprise` per
+spec D1) and denormalized `workspaces` billing columns for RLS.
+
+| Function | Auth | Role |
+|----------|------|------|
+| `stripe-webhook` | Stripe-Signature (`STRIPE_WEBHOOK_SECRET`); `verify_jwt=false` | Idempotent `stripe_events` insert → roadmap P4 column mapping → Auth claim sync |
+| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env |
+| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id` |
+
+Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
+Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /
+`STRIPE_PRICE_CUSTOM_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
+`digiquant/supabase/functions/README.md`). Paid claims only while status maps to
+`active`/`past_due` (trialing→active); deleted/incomplete force `plan_tier=free`.
+Ordering is atomic via `workspaces.last_stripe_event_created` CAS (migration 101).
+Idempotency uses `stripe_events.applied_at` — insert-first with NULL marker; duplicate
+pending re-applies; applied rows are true no-ops (poison-pill fix). Claim-sync runs on
+every applied event; failures set `workspaces.claim_sync_pending` (migration 100) and
+still return 200 after marking applied. HTTP errors use stable JSON codes (401/403/…);
+never stack traces or keys.
+
+Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
+(colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
+checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.

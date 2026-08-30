@@ -632,12 +632,22 @@ T0/T1 release train is reviewed.
 
 | Table | PK | Purpose |
 |-------|----|---------|
-| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_*`, `subscription_status`) land here for T2. Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
+| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write) + `last_stripe_event_created` (bigint, CAS watermark for webhook ordering). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
 | `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
-| `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). |
+| `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). Payload stores Stripe `created`. `applied_at` is NULL until workspace+claim apply succeeds; duplicate with `applied_at` NULL re-applies (poison-pill fix). service_role has column-level `UPDATE (applied_at)` only (migration 101). |
 | `job_runs` | `(id uuid)` | Per-workspace job telemetry stub (T4 dispatch). |
 | `audit_log` | `(id uuid)` | Connect/revoke/settings audit trail (K3 first writer). |
 
+**Billing flow (T2):** Edge Functions under `digiquant/supabase/functions/` —
+`stripe-webhook` (signature-verified, `verify_jwt=false`), `create-checkout-session`,
+`customer-portal`. Webhook inserts `stripe_events` first (`applied_at` NULL; duplicate
+with `applied_at` set ⇒ no-op; duplicate pending ⇒ re-apply), CAS-updates `workspaces`
+via `last_stripe_event_created`, applies roadmap P4 column mapping (`baseline`/`custom`
+from env price ids; deleted/incomplete ⇒ `free`), then syncs Supabase Auth
+`app_metadata.plan_tier` for every workspace member on **every** applied event.
+Claim-sync failure sets `workspaces.claim_sync_pending=true` and still returns HTTP 200
+to Stripe after marking `applied_at`. Migrations: `100_workspaces_claim_sync_pending.sql`,
+`101_stripe_webhook_applied_and_ordering.sql` (099 reserved for K3).
 Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 `broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
 BYOK `workspace_provider_credentials` and `profiles` are out of scope (K3/T3).
@@ -741,8 +751,10 @@ from them). Status changes append a new `broker_orders` row with backward
 
 RLS enabled with **no** policies (deny-by-default). `service_role` holds SELECT + INSERT
 only; BEFORE UPDATE/DELETE/TRUNCATE triggers reject mutation (069 pattern). Migration
-number 102 skips 100/101 deliberately (sibling T2 holds them) — renumber-at-merge if the
-gap remains. Structural tests: `tests/dq/olympus/kairos/test_migration_102.py`.
+number 102 originally skipped 100/101 for the sibling T2 branch; those migrations
+now live in-tree (`100_workspaces_claim_sync_pending.sql`,
+`101_stripe_webhook_applied_and_ordering.sql`). Structural tests:
+`tests/dq/olympus/kairos/test_migration_102.py`.
 
 ## RLS (consistent across all tables above)
 
