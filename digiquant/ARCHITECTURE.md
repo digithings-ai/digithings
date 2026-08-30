@@ -1395,6 +1395,8 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   unwrap before validate, and missing `horizon_sessions` / `half_life_sessions` copy
   from the H5 base tenor (GLD in the same run). Scenario economics are never filled
   from the base; invalid probability sums still reject.
+  Out-of-range H6 `conviction_delta` (live `-3` on `DeliberationAnalystTurn`) clamps
+  to `[-2, 2]` at the model boundary so the debate is kept.
   `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
@@ -1693,7 +1695,9 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   appends) and fail-soft list indices (past-end set → append; OOR remove → no-op).
   LLM `PatchOp.op='add'` (RFC 6902's name for that write) maps onto `set` so a
   hedge like house GHA 33426508863 `ops.6.op='add'` does not force a full-mode
-  regeneration. A segment whose patch cannot merge falls back to full-mode regeneration
+  regeneration. Digest `RiskItem` maps the live typo `horizon_hourse` onto
+  `horizon_hours` (same run; otherwise the edit merge fell back to full). A segment
+  whose patch cannot merge falls back to full-mode regeneration
   instead of carrying + degrading the run (#1641). That fallback is **counted, not
   silent** (#1741): the node records `state.merge_fallbacks[segment] = reason` and
   `atlas.telemetry.merge_fallback_breakdown` — registered through the #1736

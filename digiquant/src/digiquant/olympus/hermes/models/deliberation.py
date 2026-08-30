@@ -4,11 +4,34 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import (
+    Annotated,
     Any,  # score:allow untyped any — scored-lint suppression: persisted JSON summary dicts
     Literal,
 )
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, BeforeValidator, Field
+
+CONVICTION_DELTA_MIN = -2
+CONVICTION_DELTA_MAX = 2
+
+
+def _clamp_conviction_delta(value: object) -> object:
+    """Bound LLM ``conviction_delta`` to the H6 contract instead of rejecting the turn.
+
+    House GHA 33426508863 failed ``DeliberationAnalystTurn`` at ``input_value=-3``
+    (``ge=-2``). A -3 is a max-bearish revision; clamp, don't drop the debate.
+    ``bool`` is excluded because it subclasses ``int``.
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        return value
+    if value < CONVICTION_DELTA_MIN:
+        return CONVICTION_DELTA_MIN
+    if value > CONVICTION_DELTA_MAX:
+        return CONVICTION_DELTA_MAX
+    return value
+
+
+ConvictionDelta = Annotated[int, BeforeValidator(_clamp_conviction_delta)]
 
 MissingFactSourceKind = Literal[
     "analyst",
@@ -68,7 +91,7 @@ class DeliberationPmTurn(BaseModel):
         default="neutral",
         description="Your explicit directional call after the debate — choose, don't default.",
     )
-    conviction_delta: int = Field(default=0, ge=-2, le=2)
+    conviction_delta: ConvictionDelta = Field(default=0, ge=-2, le=2)
     # WP11.4 — at most one validated missing-fact supplement per deliberation.
     missing_fact: MissingFactProposal | None = Field(
         default=None,
@@ -87,7 +110,7 @@ class DeliberationAnalystTurn(BaseModel):
     revises_payload: bool = False
     conclusion: str = Field(default="")
     net_stance: Literal["bullish", "neutral", "bearish"] = "neutral"
-    conviction_delta: int = Field(default=0, ge=-2, le=2)
+    conviction_delta: ConvictionDelta = Field(default=0, ge=-2, le=2)
     # Optional complete replacement ForecastTerms for WP4.4 amendment materialization.
     # Partial nested patches are rejected by materialize/resolve — omit when unchanged.
     forecast_amendment: dict[str, Any] | None = None
@@ -107,7 +130,7 @@ class DeliberationSummary(BaseModel):
     converged: bool = True
     conclusion: str = Field(default="")
     net_stance: Literal["bullish", "neutral", "bearish"] = "neutral"
-    conviction_delta: int = Field(default=0, ge=-2, le=2)
+    conviction_delta: ConvictionDelta = Field(default=0, ge=-2, le=2)
     transcript: list[DeliberationTurn] = Field(default_factory=list)
     carried: bool = False
     carry_reason: CarryReason | None = Field(
