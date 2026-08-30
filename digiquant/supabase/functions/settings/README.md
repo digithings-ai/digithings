@@ -58,8 +58,10 @@ Profile schema re-validation imports the real
 ## Tier gate
 
 `plan_tier ∈ {custom, enterprise}` is required for profile writes and broker
-connect (JWT `app_metadata.plan_tier` from T2 sync, else workspace row).
-Otherwise **403 `TIER_FORBIDDEN`**. UI `can()` is presentation only.
+connect, gated on **`workspaces.plan_tier` only** (authoritative after Stripe
+CAS). JWT `app_metadata.plan_tier` is presentation / claim-sync side — never
+prefer it here (stale elevated claim after cancel would fail-open). Otherwise
+**403 `TIER_FORBIDDEN`**. UI `can()` is presentation only.
 
 ## Secrets
 
