@@ -84,6 +84,10 @@ class _FakeQuery:
         self._filters.append(("like", col, pattern))
         return self
 
+    def ilike(self, col: str, pattern: str) -> "_FakeQuery":
+        # PostgREST ``ilike``; fixtures are already lowercase so prefix ``like`` matches.
+        return self.like(col, pattern)
+
     def is_(self, col: str, val: str) -> "_FakeQuery":
         # PostgREST ``.is_(col, "null")``. Used by house ops scripts.
         self._filters.append(("is", col, val))

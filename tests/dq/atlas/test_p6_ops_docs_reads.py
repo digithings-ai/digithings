@@ -28,6 +28,7 @@ def _load(name: str) -> Any:
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -282,3 +283,74 @@ class TestBackfillPmDocsIgnoresOverlay:
             'sb.table("documents")\n        .select("payload")\n        .eq("date", date_iso)'
             not in text
         )
+
+
+class TestPipelineReviewDocsIgnoresOverlay:
+    def test_load_payload_drops_overlay_listed_first(self) -> None:
+        mod = _load("pipeline_review_to_github")
+        key = f"pipeline-review/research/{_DATE}.json"
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    _doc(
+                        workspace_id=_OVERLAY,
+                        document_key=key,
+                        payload={"doc_type": "pipeline_review", "marker": "overlay"},
+                    ),
+                    _doc(
+                        workspace_id=_HOUSE,
+                        document_key=key,
+                        payload={"doc_type": "pipeline_review", "marker": "house"},
+                    ),
+                ]
+            }
+        )
+        payload = mod._load_payload_from_supabase(sb, _DATE, key)
+        assert payload["marker"] == "house"
+
+    def test_overlay_only_review_does_not_file(self) -> None:
+        mod = _load("pipeline_review_to_github")
+        key = f"pipeline-review/research/{_DATE}.json"
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    _doc(
+                        workspace_id=_OVERLAY,
+                        document_key=key,
+                        payload={"doc_type": "pipeline_review", "marker": "overlay"},
+                    )
+                ]
+            }
+        )
+        with pytest.raises(SystemExit, match="No documents row"):
+            mod._load_payload_from_supabase(sb, _DATE, key)
+
+
+class TestPipelineMetaReviewIgnoresOverlay:
+    def test_house_pipeline_review_docs_drops_overlay_listed_first(self) -> None:
+        mod = _load("pipeline_meta_review")
+        key = f"pipeline-review/research/{_DATE}.json"
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "documents": [
+                    _doc(workspace_id=_OVERLAY, document_key=key, payload={"marker": "overlay"}),
+                    _doc(workspace_id=_HOUSE, document_key=key, payload={"marker": "house"}),
+                ]
+            }
+        )
+        rows = mod.house_pipeline_review_docs(sb, "2026-08-01")
+        assert [r["payload"]["marker"] for r in rows] == ["house"]
+
+
+class TestFormatDeliberationIgnoresOverlay:
+    def test_house_transcripts_drop_overlay_listed_first(self) -> None:
+        mod = _load("format_deliberation_transcripts_chat")
+        key = f"deliberation-transcript/{_DATE}/IAU.json"
+        overlay = _doc(workspace_id=_OVERLAY, document_key=key, payload={"ticker": "EVIL"})
+        overlay["id"] = "ov"
+        house = _doc(workspace_id=_HOUSE, document_key=key, payload={"ticker": "IAU"})
+        house["id"] = "hs"
+        sb = FakeSupabaseClient(canned_reads={"documents": [overlay, house]})
+        rows = mod.house_deliberation_transcripts(sb, "2026-08-01", "2026-08-31")
+        assert [r["id"] for r in rows] == ["hs"]
+        assert [r["payload"]["ticker"] for r in rows] == ["IAU"]
