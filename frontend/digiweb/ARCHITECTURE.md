@@ -12,16 +12,32 @@ to discover, copy, and extend standardized components.
 frontend/digiweb/
 ├── README.md              suite overview + the pass-through rule
 ├── ARCHITECTURE.md        this file
+├── DESIGN.md              agent-readable design system (Stitch / Refero shape)
 ├── MANIFEST.json          generated machine index of every reference component
 ├── scripts/
 │   └── build-manifest.mjs regenerates MANIFEST.json from the reference source
 ├── design/                @digithings/design — tokens.css + CSS primitives
+│   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
+│   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
+│   └── references/        external north-star scans (Cursor, herdr, …)
 ├── web/                   @digithings/web — shared React component layer
 └── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
-    ├── app/<family>/       one page per design family (foundations, controls, …)
+    ├── app/<family>/       one page per design family (foundations, iterate, controls, …)
     ├── components/         the reusable patterns (one file each, docblock-headed)
     └── README.md           the canon: tokens, livery, type, motion, chart rules
 ```
+
+The **`/iterate`** family is the human preference gallery for the utilitarian
+terminal blend (`uv-` CSS only). Picks persist in `localStorage`. Round-1 is
+locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
+rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md`.
+
+Live apps import `@digithings/design` tokens and `@digithings/web` primitives —
+they do not fork a second look. Phase 3 product-local fights on this branch:
+digichat shadcn `--radius` pinned to 0, olympus `.glass-card` retired, leftover
+`rounded-*` chrome stripped. Marketing Fraunces heroes are gone (Phase 2).
+Themed `--font-family` follows `--font-sans` (mono); unthemed `:root` Inter
+remains a sans escape hatch.
 
 The three workspaces are consumed **by package name**, so their on-disk location
 is irrelevant to resolution — every other frontend imports them the same way:

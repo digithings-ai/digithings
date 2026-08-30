@@ -115,7 +115,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
   if (loading) return <PageSkeleton />;
   if (error || !data)
     return (
-      <div className="flex items-center justify-center min-h-[40vh] text-down">
+      <div className="flex items-center justify-center min-h-[40vh] text-danger">
         {error || 'Failed to load'}
       </div>
     );
@@ -196,7 +196,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
               <span className="text-xs text-ink-mute tabular-nums">{confidenceLabel}</span>
             </div>
             {t.horizon ? (
-              <span className="rounded-md border border-hair px-2 py-0.5 text-xs text-ink-soft">
+              <span className="border border-hair px-2 py-0.5 text-xs text-ink-soft">
                 {t.horizon}
               </span>
             ) : null}
@@ -204,7 +204,7 @@ export default function ThesisDetailPageInner({ thesisId }: { thesisId: string }
               <span className="font-mono text-xs text-ink-soft">{t.vehicle}</span>
             ) : null}
             {isNonActive(t.status) ? (
-              <span className="rounded-full border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
+              <span className="border border-warn/40 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-warn">
                 {t.status}
               </span>
             ) : null}

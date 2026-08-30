@@ -56,6 +56,9 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 )
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
+from digiquant.olympus.hermes.turnover import no_trade_band_pp
+from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +119,19 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
     resolvable global is what lets a test simulate a mid-chain failure, and keeping
     the verb literally ``insert`` here is what keeps ``upsert`` — which the
     append-only trigger would reject in production — out of this module entirely.
+
+    T0 (#5-T0): ``workspace_id`` is NOT NULL as of migration 097 with no column
+    DEFAULT (every writer reaching these tables is expected to stamp it explicitly —
+    see migration 097's header). H9 is single-tenant today, so this one gate stamps
+    the house workspace on every row that does not already carry one, which covers
+    every caller (``append_commit_chain`` here, plus ``opening_snapshot`` and
+    ``execution_io`` which both route through this same function).
     """
     if not rows:
         return
-    client.table(table).insert(rows).execute()
+    house_id = str(house_workspace_id())
+    stamped = [{"workspace_id": house_id, **row} for row in rows]
+    client.table(table).insert(stamped).execute()
 
 
 def _is_cash(ticker: Any) -> bool:
@@ -130,8 +142,22 @@ def _symbol(raw: Any) -> str:
     return str(raw or "").strip().upper()
 
 
-def _rows_for_date(*, client: SupabaseClient, table: str, run_date: date) -> list[dict[str, Any]]:
-    resp = client.table(table).select("*").eq("run_date", run_date.isoformat()).execute()
+def _rows_for_date(
+    *,
+    client: SupabaseClient,
+    table: str,
+    run_date: date,
+    workspace_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Date + workspace. Omitted ``workspace_id`` is the house, never every row."""
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table(table)
+        .select("*")
+        .eq("run_date", run_date.isoformat())
+        .eq("workspace_id", scoped)
+    )
+    resp = query.execute()
     return list(resp.data or [])
 
 
@@ -260,7 +286,11 @@ def _prior_weights(state: AtlasResearchState) -> dict[str, float]:
 
 
 def _decision(
-    *, symbol: str, prior_pct: float, target_pct: float
+    *,
+    symbol: str,
+    prior_pct: float,
+    target_pct: float,
+    preferences: Mapping[str, Any] | None = None,
 ) -> tuple[DecisionAction, DecisionReason]:
     """Classify one symbol's weight move into the closed action/reason vocabulary.
 
@@ -276,6 +306,13 @@ def _decision(
         # "conviction_reduced" and "thesis_invalidated" are all meaningless for it.
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     delta = target_pct - prior_pct
+    if (
+        preferences is not None
+        and prior_pct > 0
+        and target_pct > 0
+        and abs(delta) < no_trade_band_pp(prior_pct, dict(preferences))
+    ):
+        return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if abs(delta) < _WEIGHT_EPSILON:
         return DecisionAction.NO_OP, DecisionReason.NO_SIGNAL_CHANGE
     if delta > 0:
@@ -387,9 +424,17 @@ def append_commit_chain(
     h8_requested = {_symbol(k): float(v) for k, v in (requested_pct or {}).items()}
     adjustments_by_symbol = _pct_adjustments_by_symbol(h8_adjustments)
 
-    prior_commits = _rows_for_date(client=client, table=COMMITS, run_date=run_date)
-    prior_approved = _rows_for_date(client=client, table=APPROVED_TARGETS, run_date=run_date)
-    prior_orders = _rows_for_date(client=client, table=ORDER_INTENTS, run_date=run_date)
+    overlay_ws = getattr(state.config, "workspace_id", None)
+    require_overlay_persist(overlay_ws)
+    prior_commits = _rows_for_date(
+        client=client, table=COMMITS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_approved = _rows_for_date(
+        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_orders = _rows_for_date(
+        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=overlay_ws
+    )
 
     commit_heads = _heads(prior_commits)
     if len(commit_heads) > 1:
@@ -421,6 +466,9 @@ def append_commit_chain(
     )
 
     commit_id = uuid4()
+    ws_kw: dict[str, UUID] = {}
+    if overlay_ws:
+        ws_kw["workspace_id"] = UUID(str(overlay_ws))
     commit = PortfolioCommit(
         id=commit_id,
         run_date=run_date,
@@ -428,6 +476,7 @@ def append_commit_chain(
         supersedes_id=_id_of(commit_heads[0] if commit_heads else None),
         effective_at=effective_at,
         recorded_at=recorded_at,
+        **ws_kw,
     )
 
     intent_rows: list[dict[str, Any]] = []
@@ -447,7 +496,12 @@ def append_commit_chain(
             requested_pct=h8_requested,
             pct_adjustments=symbol_adjustments,
         )
-        action, reason = _decision(symbol=symbol, prior_pct=prior_pct, target_pct=target_pct)
+        action, reason = _decision(
+            symbol=symbol,
+            prior_pct=prior_pct,
+            target_pct=target_pct,
+            preferences=state.config.preferences,
+        )
 
         intent = DecisionIntent(
             id=uuid4(),
@@ -458,6 +512,7 @@ def append_commit_chain(
             reason=reason,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         requested = RequestedTarget(
             id=uuid4(),
@@ -468,6 +523,7 @@ def append_commit_chain(
             requested_quantity=None,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         for event in symbol_adjustments:
             adjustment_rows.append(
@@ -482,6 +538,7 @@ def append_commit_chain(
                     reason=event.reason,
                     effective_at=effective_at,
                     recorded_at=recorded_at,
+                    **ws_kw,
                 ).model_dump(mode="json")
             )
         approved = ApprovedTarget(
@@ -494,6 +551,7 @@ def append_commit_chain(
             supersedes_id=_id_of(approved_heads.get(symbol)),
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         intent_rows.append(intent.model_dump(mode="json"))
         requested_rows.append(requested.model_dump(mode="json"))
@@ -519,6 +577,7 @@ def append_commit_chain(
                 supersedes_id=_id_of(order_heads.get(symbol)),
                 effective_at=effective_at,
                 recorded_at=recorded_at,
+                **ws_kw,
             ).model_dump(mode="json")
         )
 

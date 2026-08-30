@@ -20,7 +20,7 @@ export default function DeltaDaySummary({
 
   return (
     <div
-      className="rounded-xl border border-accent/35 bg-gradient-to-br from-accent/[0.12] via-accent/[0.06] to-transparent px-5 py-5 text-sm shadow-[0_0_48px_-12px_color-mix(in_srgb,var(--accent)_35%,transparent)] ring-1 ring-inset ring-ink/[0.06]"
+      className="border border-accent/35 bg-gradient-to-br from-accent/[0.12] via-accent/[0.06] to-transparent px-5 py-5 text-sm shadow-[0_0_48px_-12px_color-mix(in_srgb,var(--accent)_35%,transparent)] ring-1 ring-inset ring-ink/[0.06]"
       role="region"
       aria-label="Delta run summary"
     >
@@ -53,7 +53,7 @@ export default function DeltaDaySummary({
           <button
             type="button"
             onClick={onOpenDigest}
-            className="shrink-0 text-sm font-semibold px-4 py-2.5 rounded-lg bg-accent/25 text-accent border border-accent/40 hover:bg-accent/35 transition-colors"
+            className="shrink-0 text-sm font-semibold px-4 py-2.5 bg-ink text-bg border border-ink hover:opacity-90 transition-opacity"
           >
             Open digest
           </button>

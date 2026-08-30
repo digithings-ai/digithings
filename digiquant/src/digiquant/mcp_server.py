@@ -286,6 +286,171 @@ def create_mcp_server() -> Any:
         return json.dumps(out, indent=2, default=str)
 
     @mcp.tool()
+    def digiquant_fit_btc_power_law(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        output_path: str | None = None,
+        notes: str = "",
+    ) -> str:
+        """Fit the BTC power-law (RAQQR) SDCA valuation rails from cached price history (#1082).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache
+        (``digiquant.data.prices.history_cache``) rather than a bespoke fetch —
+        ``refresh=True`` (default) incrementally updates the cache first via the
+        same yfinance pipeline every other price-history consumer uses, bulk-fetching
+        ``bulk_period`` of history for a ticker that isn't cached yet (default ``"max"``,
+        since the fit requires at least 730 daily observations and a short bulk window
+        would leave a cold cache short of that); ``refresh=False`` fits directly from
+        whatever is already cached (useful when network access is unavailable). Persists
+        the fit to ``output_path`` (default: ``sdca/btc_power_law_coefficients.json``,
+        replacing the synthetic placeholder shipped with #1082 — pass an explicit
+        ``output_path`` under a non-editable/read-only install where the package source
+        tree isn't writable). Returns a JSON summary
+        (``{fit_start, fit_end, fit_rows, path}``) or ``{"error": ...}``.
+        """
+        from pathlib import Path
+
+        try:
+            import polars as pl
+
+            from digiquant.data.prices.history_cache import (
+                DEFAULT_CACHE_DIR,
+                incremental_update,
+                load_cached,
+            )
+            from digiquant.strategies.sdca.btc_power_law import (
+                fit_btc_power_law,
+                save_coefficients,
+            )
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+        try:
+            if refresh:
+                df = incremental_update([ticker], cdir, bulk_period=bulk_period).get(ticker)
+            else:
+                df = load_cached(ticker, cdir)
+            if df is None or df.is_empty():
+                return json.dumps({"error": f"no cached price history for {ticker!r}"})
+
+            prices = (
+                df.select(
+                    pl.col("timestamp").cast(pl.Date).alias("date"),
+                    pl.col("close"),
+                )
+                .unique(subset=["date"], keep="last")
+                .sort("date")
+            )
+            coefficients = fit_btc_power_law(
+                prices["date"],
+                prices["close"],
+                notes=notes
+                or f"Fit from cached {ticker!r} history via digiquant_fit_btc_power_law.",
+            )
+            path = save_coefficients(coefficients, Path(output_path) if output_path else None)
+        except Exception as exc:  # surface as JSON, never crash the server
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        return json.dumps(
+            {
+                "fit_start": str(coefficients.fit_start),
+                "fit_end": str(coefficients.fit_end),
+                "fit_rows": coefficients.fit_rows,
+                "path": str(path),
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    def digiquant_build_sdca_risk_index(
+        ticker: str = "BTC-USD",
+        cache_dir: str | None = None,
+        refresh: bool = True,
+        bulk_period: str = "max",
+        risk_model: str = "btc_power_law",
+        coefficients_path: str | None = None,
+        output_path: str | None = None,
+    ) -> str:
+        """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
+
+        Sources ``ticker`` daily closes via the canonical price-history cache
+        (``digiquant.data.prices.history_cache``) — never a bespoke fetch.
+        ``refresh=True`` (default) incrementally updates the cache first;
+        ``refresh=False`` reads whatever is already cached. ``risk_model`` is a
+        string selector so later providers (#3175) can be added without changing
+        this signature; currently only ``"btc_power_law"`` is implemented.
+        Writes the two-column parquet ``SdcaStrategy`` loads via ``risk_path``.
+        Returns JSON ``{path, row_count, date_start, date_end, null_risk_days}``
+        or ``{"error": ...}`` (never raises — missing cache / coefficients /
+        unknown selector surface as error JSON).
+        """
+        from pathlib import Path
+
+        try:
+            import polars as pl
+
+            from digiquant.data.prices.history_cache import (
+                DEFAULT_CACHE_DIR,
+                incremental_update,
+                load_cached,
+            )
+            from digiquant.strategies.sdca.btc_power_law import (
+                BtcPowerLawRiskModel,
+                load_coefficients,
+            )
+            from digiquant.strategies.sdca.risk_index import (
+                RiskIndexBuildResult,
+                build_risk_index,
+                write_risk_index,
+            )
+        except ImportError as exc:
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        if risk_model != "btc_power_law":
+            return json.dumps({"error": f"unknown risk_model {risk_model!r}"})
+
+        cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
+        try:
+            if refresh:
+                df = incremental_update([ticker], cdir, bulk_period=bulk_period).get(ticker)
+            else:
+                df = load_cached(ticker, cdir)
+            if df is None or df.is_empty():
+                return json.dumps({"error": f"no cached price history for {ticker!r}"})
+
+            coeff_path = Path(coefficients_path) if coefficients_path else None
+            if coeff_path is not None and not coeff_path.exists():
+                return json.dumps({"error": f"coefficients file not found: {coeff_path}"})
+
+            prices = (
+                df.select(
+                    pl.col("timestamp").cast(pl.Date).alias("date"),
+                    pl.col("close"),
+                )
+                .unique(subset=["date"], keep="last")
+                .sort("date")
+            )
+            model = BtcPowerLawRiskModel(load_coefficients(coeff_path))
+            frame = build_risk_index(prices["date"], prices["close"], model)
+            dest = Path(output_path) if output_path else Path(f"{ticker}_sdca_risk.parquet")
+            path = write_risk_index(frame, dest)
+        except Exception as exc:  # surface as JSON, never crash the server
+            return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+
+        dates = frame["date"]
+        result = RiskIndexBuildResult(
+            path=str(path),
+            row_count=frame.height,
+            date_start=dates[0],
+            date_end=dates[-1],
+            null_risk_days=int(frame["risk"].null_count()),
+        )
+        return result.model_dump_json(indent=2)
+
+    @mcp.tool()
     def digiquant_generate_slapper_tearsheet(
         strategy: str | None = None,
         cache_dir: str | None = None,

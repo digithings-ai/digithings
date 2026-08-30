@@ -27,7 +27,7 @@ export default function DeltaRequestDocumentView({ payload }: { payload: Record<
 
   return (
     <div className="space-y-6 text-sm">
-      <div className="rounded-lg border border-hair bg-term-bg/50 p-4 space-y-1">
+      <div className="border border-hair bg-term-bg/50 p-4 space-y-1">
         <p>
           <span className="text-ink-mute">Target date:</span>{' '}
           <span className="font-mono text-ink">{date || '—'}</span>
@@ -48,7 +48,7 @@ export default function DeltaRequestDocumentView({ payload }: { payload: Record<
             {changed.map((p) => (
               <span
                 key={p}
-                className="font-mono text-[11px] px-2 py-1 rounded-md bg-accent/15 text-accent border border-accent/25"
+                className="font-mono text-[11px] px-2 py-1 bg-accent/15 text-accent border border-accent/25"
               >
                 {p}
               </span>

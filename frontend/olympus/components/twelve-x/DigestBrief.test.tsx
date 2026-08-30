@@ -29,7 +29,10 @@ function render(digest: Digest): string {
 
 describe('DigestBrief — digest summary markdown', () => {
   it('renders the empty state when there is no digest', () => {
-    expect(render(null)).toContain('No digest for today yet.');
+    const html = render(null);
+    expect(html).toContain('No digest for today yet.');
+    expect(html).toContain('oly-slab');
+    expect(html).not.toContain('glass-card');
   });
 
   it('renders the summary through the markdown renderer inside the .chat-md scope', () => {

@@ -9,7 +9,6 @@ from digigraph.agents._common import finalize_agent_output, load_dataset_path, r
 from digigraph.llm_client import run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
-from digigraph.tool_policy import tool_choice_for_require
 from digigraph.tools.analytics.execute_python import execute_python_on_datasets
 
 ENGINEER_SYSTEM = """You are a data engineer. The user wants to run custom Python code on the dataset(s). You have one tool: execute_python_on_datasets.
@@ -49,7 +48,6 @@ def run_data_engineer_agent(
     session_id: str | None = None,
     additional_dataset_refs: list[str] | None = None,
     options: dict[str, Any] | None = None,
-    require_tool_calls: bool = False,
 ) -> str:
     """Run the data engineer sub-agent; returns JSON of the tool result."""
     dataset_path, err = load_dataset_path(session_id, dataset_ref)
@@ -95,7 +93,6 @@ def run_data_engineer_agent(
         tools=ENGINEER_TOOLS,
         execute_tool=execute_tool,
         on_tool_step=None,
-        tool_choice=tool_choice_for_require(require_tool_calls),
     )
 
     return finalize_agent_output(

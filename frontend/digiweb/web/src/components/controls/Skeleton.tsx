@@ -3,7 +3,7 @@
  * placeholder bars/blocks that hold the layout until data lands, then swap
  * 1:1 to the real thing with no reflow. Variants: line (text bar, `size="sm"`
  * for the label-height cut), block (value bar), circle (avatar), button
- * (pill stand-in). Width/height come from props or call-site utilities —
+ * (button stand-in). Width/height come from props or call-site utilities —
  * the shape defaults sit in `@layer components` in styles/controls-core.css
  * so utilities win. The shimmer is a translating ink-tint gradient (works in
  * any theme, no accent); prefers-reduced-motion drops the sweep and leaves

@@ -25,6 +25,21 @@ try:
 except ImportError:
     pass
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _ensure_importable() -> None:
+    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
+    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
+        path = str(_REPO_ROOT / rel)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+# Bootstrap before importing digiquant packages — this file is also a standalone script.
+_ensure_importable()
+from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+
 
 def _sb():
     if not _HAS_SB:
@@ -276,14 +291,21 @@ BOOK_SOURCE_LEGACY = "legacy"
 BOOK_SOURCE_AUTHORITATIVE = "authoritative"
 
 
-def _with_book_source(
-    events: List[Dict[str, Any]], book_source: str
-) -> List[Dict[str, Any]]:
-    """Return shallow copies stamped with ``book_source`` (never mutates inputs)."""
+def _with_book_source(events: List[Dict[str, Any]], book_source: str) -> List[Dict[str, Any]]:
+    """Return shallow copies stamped with ``book_source`` (never mutates inputs).
+
+    T0 (#5-T0): also stamps ``workspace_id`` here, the single choke point every
+    ``position_events`` upsert in this script passes through. The column is NOT NULL
+    as of migration 097 (with a house-workspace column DEFAULT as a legacy-writer
+    safety net); this script is patched to pass it explicitly like every other writer
+    this WP touches, rather than relying on the fallback.
+    """
+    house_id = str(house_workspace_id())
     out: List[Dict[str, Any]] = []
     for event in events:
         row = dict(event)
         row["book_source"] = book_source
+        row["workspace_id"] = house_id
         out.append(row)
     return out
 
@@ -362,16 +384,6 @@ def _hold_events_for_positions_not_in_rebalance(
 # that makes a silent fallback fatal once that is true.
 # ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-
-
-def _ensure_importable() -> None:
-    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
-    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
-        path = str(_REPO_ROOT / rel)
-        if path not in sys.path:
-            sys.path.insert(0, path)
-
 
 def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     """Declared opens for `tickers` on `d`, in one batched read, as `Decimal`.
@@ -424,6 +436,42 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     return marks
 
 
+def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
+    """Kairos venue-dispatch seam (K4).
+
+    House cron passes ``workspace_id=None`` → always ``paper_internal``, so the
+    existing ``build_events_from_paper_fills`` path and its outputs stay
+    byte-identical. External venues are reachable only when
+    ``OLYMPUS_KAIROS_ROUTING`` is on *and* a workspace with an active paper
+    ``broker_connections`` row is supplied — that path is wired by the Kairos
+    router, not by mutating the paper-fill writer.
+
+    Invalid / empty ``OLYMPUS_KAIROS_WORKSPACE_ID`` values warn and fall back to
+    ``None`` (house) rather than crashing the open job.
+
+    Returns the venue's string value (``ExecutionVenue`` value) so this script
+    does not need a top-level digiquant import at module load time.
+    """
+    _ensure_importable()
+    from uuid import UUID
+
+    from digiquant.olympus.kairos.policy import resolve_venue
+
+    resolved: Optional[UUID] = None
+    raw = (workspace_id or "").strip()
+    if raw:
+        try:
+            resolved = UUID(raw)
+        except ValueError:
+            print(
+                f"⚠️  OLYMPUS_KAIROS_WORKSPACE_ID={workspace_id!r} is not a valid UUID; "
+                f"treating as house (paper_internal).",
+                file=sys.stderr,
+            )
+            resolved = None
+    return resolve_venue(resolved).value
+
+
 def build_events_from_paper_fills(
     sb,
     run_d: str,
@@ -457,6 +505,10 @@ def build_events_from_paper_fills(
     """
     _ensure_importable()
     try:
+        from digiquant.olympus.hermes.models.position_event import (
+            PositionEventKind,
+            PositionEventRow,
+        )
         from digiquant.olympus.hermes.writers.execution_io import (
             approved_weights,
             execute_pending_orders,
@@ -560,9 +612,9 @@ def build_events_from_paper_fills(
         # is an EXIT and a sell to anything else is a TRIM. No weight diff and no epsilon
         # threshold is involved — that ladder is what made EXIT unreachable in #1743.
         if fill.is_sell:
-            event = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
+            event_kind: PositionEventKind = "EXIT" if fill.residual_quantity <= 0 else "TRIM"
         else:
-            event = "OPEN" if fill.prior_quantity <= 0 else "ADD"
+            event_kind = "OPEN" if fill.prior_quantity <= 0 else "ADD"
 
         weight = approved.get(fill.symbol)
         # approved_weight is a 0..1 fraction; position_events.weight_pct is in percent.
@@ -571,28 +623,27 @@ def build_events_from_paper_fills(
         # and 0.29 comes out 28.999999999999996. Writing those into a numeric column would
         # make ordinary weights look like rounding artefacts.
         weight_pct = float(weight * 100) if weight is not None else None
-        events.append(
-            {
-                "date": execution_d,
-                "ticker": fill.symbol,
-                "event": event,
-                "weight_pct": weight_pct,
-                # Display-only, and not from the ledger: migration 069 records no NAV, so
-                # the prior weight cannot be derived from the lots. It is read from the
-                # last committed `positions` book purely so the UI can show a delta, and
-                # the reason string below says so rather than implying the ledger holds it.
-                "prev_weight_pct": prior_weights.get(fill.symbol),
-                "price": float(fill.price),
-                "reason": (
-                    f"{event} — filled {fill.quantity} share(s) at {fill.price} from order "
-                    f"intent {fill.order_intent_id} (portfolio ledger paper execution "
-                    f"{fill.execution_id}, decision run_date {run_d}). Prior weight shown "
-                    f"from the {prior_book_d or 'unavailable'} positions book, for display only."
-                ),
-                "thesis_id": None,
-                "book_source": BOOK_SOURCE_AUTHORITATIVE,
-            }
+        row = PositionEventRow(
+            date=execution_d,
+            ticker=fill.symbol,
+            event=event_kind,
+            weight_pct=weight_pct,
+            # Display-only, and not from the ledger: migration 069 records no NAV, so
+            # the prior weight cannot be derived from the lots. It is read from the
+            # last committed `positions` book purely so the UI can show a delta, and
+            # the reason string below says so rather than implying the ledger holds it.
+            prev_weight_pct=prior_weights.get(fill.symbol),
+            price=float(fill.price),
+            reason=(
+                f"{event_kind} — filled {fill.quantity} share(s) at {fill.price} from order "
+                f"intent {fill.order_intent_id} (portfolio ledger paper execution "
+                f"{fill.execution_id}, decision run_date {run_d}). Prior weight shown "
+                f"from the {prior_book_d or 'unavailable'} positions book, for display only."
+            ),
+            thesis_id=None,
+            book_source=BOOK_SOURCE_AUTHORITATIVE,
         )
+        events.append(row.to_postgrest_row())
     return events, ""
 
 
@@ -762,7 +813,7 @@ def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict
         return 0
 
     for e in events:
-        sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+        sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
 
     # No null-price hint here on purpose: a ledger row's price *is* the fill price, so it
     # cannot be missing. Only the HOLD rows read price_history, hence the narrower count.
@@ -861,6 +912,18 @@ def main() -> int:
 
     sb = _sb()
 
+    # Kairos venue-dispatch seam (K4). House path: workspace_id is unset →
+    # paper_internal → existing ledger paper fills, unchanged. External routing
+    # is env-gated inside resolve_venue; this script does not submit to brokers.
+    venue = resolve_execution_venue_for_run(os.environ.get("OLYMPUS_KAIROS_WORKSPACE_ID"))
+    if venue != "paper_internal":
+        print(
+            f"error: execute_at_open external venue {venue!r} requires the Kairos "
+            f"router (route_pending_orders); this script keeps the paper_internal path only",
+            file=sys.stderr,
+        )
+        return 4
+
     # Authoritative first. The prose paths below run only when the ledger declines.
     ledger_events: Optional[List[Dict[str, Any]]] = None
     if args.no_ledger:
@@ -902,7 +965,9 @@ def main() -> int:
             if digest_events:
                 digest_events = _with_book_source(digest_events, BOOK_SOURCE_LEGACY)
                 for e in digest_events:
-                    sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+                    sb.table("position_events").upsert(
+                        e, on_conflict="workspace_id,date,ticker"
+                    ).execute()
                 null_px = sum(1 for e in digest_events if e.get("price") is None)
                 if null_px:
                     print(
@@ -927,7 +992,7 @@ def main() -> int:
             print("No positions rows for this date — nothing to record.")
             return 0
         for e in extra:
-            sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+            sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
@@ -952,7 +1017,7 @@ def main() -> int:
             print("No positions rows for this date — nothing to record.")
             return 0
         for e in extra:
-            sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+            sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
@@ -1049,7 +1114,7 @@ def main() -> int:
     # Upsert by date,ticker (current schema). Prose path is permanently legacy (#2422).
     events = _with_book_source(events, BOOK_SOURCE_LEGACY)
     for e in events:
-        sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+        sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
 
     null_px = sum(1 for e in events if e.get("price") is None)
     if null_px:

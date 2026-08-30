@@ -48,7 +48,7 @@ export default function PipelineNode({
   const status = resolvedStatus(node);
   const statusLabel = pipelineNodeRunStatusLabel(status);
 
-  // Graph nodes use explicit flat-surface tokens instead of `.glass-card`:
+  // Graph nodes use explicit flat-surface tokens instead of `.oly-slab`:
   // MotionLayer mutates that class for page-level scroll reveals, which races
   // hydration and conflicts with transforms inside this custom camera.
   const cardClass = [
@@ -56,8 +56,8 @@ export default function PipelineNode({
     'transition-[border-color,box-shadow,transform] duration-150',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60',
     isBranch
-      ? 'rounded-md border border-hair bg-term-bg'
-      : 'rounded-lg border border-hair bg-surface',
+      ? 'border border-hair bg-term-bg'
+      : 'border border-hair bg-surface',
     'cursor-pointer hover:-translate-y-px hover:border-hair-2',
     selected ? 'border-accent/60 shadow-[0_0_0_1px_var(--accent)]' : '',
   ]
@@ -106,7 +106,7 @@ export default function PipelineNode({
 
         {/* count badge — accent chrome only, softened (no font-bold) */}
         {count != null && (
-          <span className="flex-shrink-0 rounded-full bg-accent/15 px-1.5 py-px font-mono text-xs tabular-nums text-accent">
+          <span className="flex-shrink-0 bg-accent/15 px-1.5 py-px font-mono text-xs tabular-nums text-accent">
             {count}
           </span>
         )}

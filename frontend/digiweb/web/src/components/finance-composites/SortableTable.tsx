@@ -91,7 +91,7 @@ export function SortableTable<Row>({
       tabIndex={0}
       role="region"
       aria-label="Table, scrollable horizontally"
-      className={`overflow-x-auto rounded-[12px] border border-hair bg-surface${
+      className={`overflow-x-auto rounded-none border border-hair bg-surface${
         className ? ` ${className}` : ""
       }`}
     >

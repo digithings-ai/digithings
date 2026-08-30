@@ -112,7 +112,14 @@ export default function PipelineClient() {
         const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
         if (!url || !key) return;
 
-        const supabase = createClient(url, key);
+        // Secondary client — do not share GoTrue storage with the auth singleton.
+        const supabase = createClient(url, key, {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            detectSessionInUrl: false,
+          },
+        });
         const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
         // Independent reads — run them together instead of one round-trip at a time.
@@ -234,7 +241,7 @@ export default function PipelineClient() {
           aria-label="Open all pipeline artifacts"
           title="All artifacts"
           onClick={handleArtifactLedgerOpen}
-          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 rounded-lg border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
         >
           <Files size={15} aria-hidden />
           <span className="hidden md:inline">All artifacts</span>
@@ -245,7 +252,7 @@ export default function PipelineClient() {
           aria-label="Open pipeline call trace"
           title="Call trace"
           onClick={handleTraceLedgerOpen}
-          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 rounded-lg border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
+          className="mr-1 inline-flex h-9 w-9 items-center justify-center gap-2 border border-hair bg-term-bg font-mono text-xs text-ink transition-colors hover:border-accent/50 hover:text-accent md:mr-2 md:w-auto md:px-3"
         >
           <ListTree size={15} aria-hidden />
           <span className="hidden md:inline">Call trace</span>

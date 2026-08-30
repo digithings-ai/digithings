@@ -24,7 +24,7 @@ from digigraph.languages import resolve_language_directive
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode
 from digigraph.project_config import DigiProjectConfig
-from digigraph.tool_policy import frozen_from_state_list, tool_choice_for_require
+from digigraph.tool_policy import frozen_from_state_list
 from digigraph.tools.digisearch import digisearch
 from digigraph.trace_events import merge_rag_sources_accumulator
 
@@ -490,7 +490,7 @@ def _run_document_rag_path(
         execute_tool=execute_for_llm,
         max_tool_rounds=4,
         on_tool_step=stream_callback,
-        tool_choice=tool_choice_for_require(state.get("require_tool_calls")),
+        tool_choice="required" if state.get("require_tool_calls") else "auto",
     )
 
     planning_mode = bool(cfg.get_planning_mode()) if cfg else False
@@ -707,18 +707,21 @@ def research_node(state: WorkflowState) -> dict:
                 out["error_code"] = err_code
             return out
 
+    # Scope warning, not a guard. `require_tool_calls` is wired into exactly one
+    # tool loop -- the document RAG path above. This path, and the sub-agent runners
+    # under digigraph/agents/*, run at tool_choice="auto" regardless. An operator who
+    # sets DIGI_REQUIRE_TOOL_CALLS=true as a grounding mandate would otherwise get a
+    # silent no-op here (e.g. DIGISEARCH_URL unset, so _digisearch_available() is
+    # False and every request falls through). Log it rather than fail the request:
+    # the flag is advisory outside the RAG path today. Central enforcement is #2384.
     if state.get("require_tool_calls"):
-        return {
-            "strategy_name": None,
-            "symbols": None,
-            "research_note": "error",
-            "research_response": None,
-            "error": (
-                "require_tool_calls is set but this request took a path without a tool loop "
-                "(quant/augmented completion). Configure digisearch for document-RAG grounding "
-                "or disable the mandate for this path."
-            ),
-        }
+        logger.warning(
+            "require_tool_calls=true but this request took the quant/augmented path, "
+            "which does not enforce tool_choice; the grounding mandate is not applied "
+            "(is_document_mode=%s, digisearch_available=%s)",
+            is_document_mode,
+            _digisearch_available(),
+        )
 
     _req_rid = state.get("request_id")
     _norm_rid = None if _req_rid is None else (str(_req_rid).strip() or None)

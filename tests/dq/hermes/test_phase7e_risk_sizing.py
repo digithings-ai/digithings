@@ -32,7 +32,11 @@ from digiquant.olympus.hermes.sizing_events import (
     UnexplainedDeltaError,
     validate_sizing_lineage,
 )
-from digiquant.olympus.hermes.turnover import apply_turnover_to_sized_book, hold_drifted_book
+from digiquant.olympus.hermes.turnover import (
+    apply_turnover_to_sized_book,
+    clamp_no_trade_band,
+    hold_drifted_book,
+)
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
@@ -842,6 +846,24 @@ class TestActionClassificationAndInvestedCap:
         )
         verbs = {row["ticker"]: row["action"] for row in actions}
         assert verbs == {"AAA": "add", "BBB": "trim", "CCC": "hold", "DDD": "new"}
+
+    def test_post_cap_micro_delta_classifies_as_hold_and_carries_current_pct(self) -> None:
+        """#3080 — immaterial post-control deltas publish as hold with live current_pct."""
+        preferences = {"rebalance_threshold_pct": 3, "rebalance_rel_band_pct": 20}
+        current = {"SPY": 20.0}
+        sized = phase7e_risk_sizing._cap_total_invested({"SPY": 20.2, "QQQ": 80.0})
+        sized = clamp_no_trade_band(sized, current_weights=current, preferences=preferences)
+        actions = phase7e_risk_sizing._rebuild_actions(
+            [],
+            pm_targets={"SPY": 1.0},
+            sized=sized,
+            current_weights=current,
+            preferences=preferences,
+        )
+        spy = next(a for a in actions if a["ticker"] == "SPY")
+        assert spy["action"] == "hold"
+        assert spy["current_pct"] == pytest.approx(20.0)
+        assert spy["target_pct"] == pytest.approx(20.0)
 
     def test_memo_path_actions_carry_pm_selection_rationale(self) -> None:
         actions = phase7e_risk_sizing._rebuild_actions(

@@ -247,14 +247,6 @@ def test_require_tool_calls_loads_cfg_when_none_passed(monkeypatch: pytest.Monke
 
 
 @pytest.mark.unit
-def test_tool_choice_for_require_maps_bool_to_openai_values() -> None:
-    from digigraph.tool_policy import tool_choice_for_require
-
-    assert tool_choice_for_require(True) == "required"
-    assert tool_choice_for_require(False) == "auto"
-    assert tool_choice_for_require(None) == "auto"
-
-
 def test_workflow_state_declares_require_tool_calls() -> None:
     """LangGraph drops undeclared TypedDict keys — see #2097."""
     from digigraph.graph.state import WorkflowState

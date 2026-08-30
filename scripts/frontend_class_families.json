@@ -1,6 +1,7 @@
 {
   "_note": "Baseline of app-local CSS component-class families (first hyphen segment of classes DEFINED in each app's own css). The frontend canon guard (#1421) fails when an app grows a NEW family: new UI belongs in the reference + @digithings/web first (frontend/digiweb/MIGRATION.md). To extend deliberately, add the prefix here in the same PR with a justifying comment in that PR's body.",
   "_frozen": "2026-07-08 \u2014 post component-consolidation epic (#1414)",
+  "_oly": "olympus .oly-slab is the BLEND v0.1 tonal slab (surface + hairline, radius 0) that replaced the retired .glass-card family. MotionLayer reveals .oly-slab.",
   "digithings-web": [
     "brand",
     "dc",
@@ -27,6 +28,7 @@
     "atlas",
     "dbar",
     "glass",
+    "oly",
     "prose",
     "qn",
     "recharts",

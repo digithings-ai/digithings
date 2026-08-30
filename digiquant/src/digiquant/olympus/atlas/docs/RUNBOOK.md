@@ -237,8 +237,11 @@ Per-document research deltas (`document_delta`, manifest) use the same **week an
 
 Target: **< $1/day** in xAI usage *without reducing capability* — trim
 redundancy and misallocated effort, never research breadth or freshness.
-Agentic searches dominate cost (~$0.005 per server-side tool invocation — one
-`web_search` pre-pass spawns dozens), tokens are second.
+Agentic searches dominate cost (built-in provider search on the tier's
+`web_search_models` pins — typically `perplexity/sonar` or `:online` variants,
+billed per that model's page; the `openrouter:web_search` Exa server tool is
+**$0.007**/request per [OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search)
+but unreachable from production pools), tokens are second.
 
 Capability-preserving reductions in place:
 
@@ -319,11 +322,16 @@ is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no fr
 | `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/olympus_models.yaml` |
 | `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + web grounding (`openrouter:web_search`) |
 
-`apply_olympus_openrouter_env()` (Hermes chain startup) sets **`OPENROUTER_ALLOWED_MODELS`**
-and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active tier + `openrouter_defaults`.
-No other OpenRouter env vars are set at chain startup. The workflow
+`apply_olympus_openrouter_env()` (Hermes chain startup and `validate-providers.py` preflight)
+sets **`OPENROUTER_ALLOWED_MODELS`** and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active
+tier + `openrouter_defaults`. No other OpenRouter env vars are set at chain startup. The workflow
 (`.github/workflows/pipeline-olympus.yml`) additionally sets `OPENROUTER_FALLBACK_MODELS` on both
 the pipeline run step and the preflight-validation step — see the table below.
+
+**Preflight time ceiling (#2528/#2531):** `digiquant/scripts/atlas/validate-providers.py` sets
+`DIGILLM_REQUEST_TIMEOUT_SECONDS=20` and `DIGILLM_EMPTY_RETRY_MAX=0` before any LLM import (local
+runs and CI). The `Validate AI provider routing` workflow step has `timeout-minutes: 10` so a hung
+provider yields a step **failure**, not a 240-minute job **cancellation**.
 
 #### OpenRouter routing knobs (digillm → `extra_body`)
 
@@ -332,13 +340,17 @@ the pipeline run step and the preflight-validation step — see the table below.
 | **`cost_quality_tradeoff`** | `OPENROUTER_COST_QUALITY_TRADEOFF` (always **10**) | Auto Router plugin dial **0–10**: 0 = most capable, **10 = cheapest** |
 | **`allowed_models`** | `OPENROUTER_ALLOWED_MODELS` | `plugins[{id:auto-router, allowed_models}]` — candidate pool for `openrouter/auto` only |
 | **`provider.require_parameters`** | digillm default ON | Routes structured-output / tool calls to providers that honor `response_format` / `tools` |
-| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain — set in Olympus CI on the pipeline run step since #1622 and on the preflight-validation step since #2512, so the preflight's digillm-routed checks self-heal the same way (#2374) |
-| **`openrouter:web_search`** | `tools` on grounding pre-pass | Exa engine, `$0.005`/search; model comes from `get_grounding_model()`, which picks from the tier's `web_search_models` pool — when that resolves to nothing the grounding pre-pass is skipped, never substituted |
+| **`models` + `route=fallback`** | `OPENROUTER_FALLBACK_MODELS` (optional) | Price-sorted fallback chain on every `openrouter/` request (primary call, not only empty retries) — set on both the pipeline run step and the preflight-validation step since #2512. Covers provider **errors** (5xx, rate limits, endpoint refusals), not empty `200` bodies (#2520) |
+| **`openrouter:web_search`** | `tools` on grounding pre-pass (unreachable from production — see below) | Exa engine, **$0.007**/request for auto/instant/fast modes ([OpenRouter Exa pricing](https://openrouter.ai/docs/features/web-search), 10 results included, +$0.001/extra); production grounding uses built-in search on `perplexity/sonar` or `:online` models from `get_grounding_model()` / `web_search_models` — billed per that model's page |
 
 Phases pass **pinned** `openrouter/<vendor>/<model>` strings (not `openrouter/auto`). Auto
 Router knobs still apply to any auto/fallback path and keep operator overrides bounded.
 
-**Web grounding** uses OpenRouter's `openrouter:web_search` server tool, with the model resolved by `get_grounding_model()`.
+**Web grounding** resolves via `get_grounding_model()` from the tier's `web_search_models`
+pool. Every production pool entry is `perplexity/sonar` or an `:online` variant, so
+digillm uses built-in provider search — not the `openrouter:web_search` Exa server tool
+(which remains the path for non-`:online`/non-Perplexity models and is what check 4 in
+`validate-providers.py` exercises).
 **Structured JSON** phases use pinned open-weight models with `strict:true` json_schema.
 
 Per-phase override: `config/model_modes.yaml` → `phase_models` — **frontier models are
@@ -369,6 +381,11 @@ When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `at
 
 ### OpenRouter empty completions (degraded book, "empty completion from …" in logs)
 
+**First check:** `atlas_run_diagnostics.breakdown.empty_retries` on the run row — `total` and
+`by_model` count every digillm empty-retry self-heal (the `empty-retry n/4` log lines). A green
+`status` with a rising `empty_retries.total` means the provider is flaking but recovering; treat
+it as a warning before it escalates to a hard failure (see 2026-07-20 → 07-21 in #1639).
+
 Every phase uses **pinned open-weight models** from `config/olympus_models.yaml` (via
 `get_model_for_phase`). Legacy `openrouter/openrouter/auto` paths are blocked from frontier
 providers. Every research call is a **structured-output** (`response_format` json_schema) or
@@ -378,7 +395,7 @@ back with empty bodies. Contract and levers, in order of cause:
 1. **Account state first.** An empty body can be the Auto Router silently degrading on a key with no credit/over a limit. Check OpenRouter `GET /api/v1/credits` (balance) and `GET /api/v1/key` (daily/weekly/monthly spend + limits) with the `OPENROUTER_API_KEY` as a Bearer token. This is the cheapest first check.
 2. **Strict structured outputs are sent correctly** (digigraph `research_agent`): `strict: true` + a strict-legal schema (`additionalProperties:false`, all-required, unsupported keywords stripped). A strict request carrying Pydantic's raw schema is rejected by the provider and surfaces as an empty body (not an error).
 3. **`provider.require_parameters` is forced on** for any request carrying `response_format`/`tools` (digillm, independent of the `OPENROUTER_REQUIRE_PARAMETERS` toggle) so the Auto Router only routes to a provider that honors the param. Do **not** disable it for the pipeline.
-4. **Capable-model fallback (operator lever).** The Auto Router is *best-effort* for structured outputs — OpenRouter's own docs do not recommend the bare auto router for json_schema. If empties persist after (1)–(3), pin a capable allowlist via **`OPENROUTER_FALLBACK_MODELS`** (comma-separated, cheap→capable) in the workflow `env:`; digillm routes among them with `route=fallback` and the empty-retry self-heal swaps off a flaky primary. Pick current slugs from the OpenRouter models page filtered by **`supported_parameters=structured_outputs`** (slugs churn — keep them in config, never hard-coded). Restoring this list also restores a cost ceiling if you re-add `OPENROUTER_MAX_*_PRICE`.
+4. **Capable-model fallback (operator lever).** The Auto Router is *best-effort* for structured outputs — OpenRouter's own docs do not recommend the bare auto router for json_schema. Pin a capable allowlist via **`OPENROUTER_FALLBACK_MODELS`** (comma-separated, cheap→capable) in the workflow `env:`; digillm attaches `route=fallback` on the **primary** request so OpenRouter can swap on provider **errors** — not on empty `200` bodies (#2520). Pick current slugs from the OpenRouter models page filtered by **`supported_parameters=structured_outputs`** (slugs churn — keep them in config, never hard-coded). Restoring this list also restores a cost ceiling if you re-add `OPENROUTER_MAX_*_PRICE`.
 
 ## Environment requirements
 1. Python 3.11+ recommended.

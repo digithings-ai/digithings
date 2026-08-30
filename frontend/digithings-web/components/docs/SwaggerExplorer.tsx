@@ -102,7 +102,7 @@ export function SwaggerExplorer({ serviceId }: { serviceId: string }) {
 
   if (error) {
     return (
-      <p className="m-0 text-[0.9rem] text-down" role="alert">
+      <p className="m-0 text-[0.9rem] text-danger" role="alert">
         {error}. Spec still available at{" "}
         <a className="doc-inline-link" href={openApiSpecPath(serviceId)}>
           {openApiSpecPath(serviceId)}

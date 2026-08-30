@@ -42,7 +42,7 @@ export function CopyGrammarReference() {
           cg-row / cg-ours / cg-list--doctrine stay as classes — their dt/dd
           styling and row dividers live in kept combinator rules in the CSS. */}
       <div className="mt-[1.2rem] grid grid-cols-2 gap-[0.9rem] max-[760px]:grid-cols-1">
-        <div className="rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+        <div className="rounded-none border border-hair bg-surface p-[1.2rem]">
           <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-accent">
             Headline formulas
           </p>
@@ -56,7 +56,7 @@ export function CopyGrammarReference() {
           </dl>
         </div>
 
-        <div className="rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+        <div className="rounded-none border border-hair bg-surface p-[1.2rem]">
           <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-accent">
             CTAs name the destination
           </p>
@@ -79,7 +79,7 @@ export function CopyGrammarReference() {
           </p>
         </div>
 
-        <div className="col-span-full rounded-[12px] border border-hair bg-surface p-[1.2rem]">
+        <div className="col-span-full rounded-none border border-hair bg-surface p-[1.2rem]">
           <p className="font-mono text-[0.6rem] uppercase tracking-[0.1em] text-accent">
             Voice doctrine
           </p>

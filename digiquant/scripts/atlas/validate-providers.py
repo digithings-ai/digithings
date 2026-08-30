@@ -7,7 +7,7 @@ Checks (in order):
   2. OpenRouter connectivity (short ping via digillm, pinned to a known-good model)
      Note: phases route on PINNED per-capability models from config/olympus_models.yaml
      (see RUNBOOK.md "OpenRouter model tiers") — bare openrouter/auto is exercised
-     deliberately in checks 3/3b/4 below, not as the connectivity probe.
+     deliberately in check 3 below, not as the connectivity probe.
   3. OpenRouter structured-output routing (real digillm json_schema call)
   3b. OpenRouter function tools — each active-tier phase model accepts the query_data
      tool (guards the ``:online`` "No endpoints found that support tool use" regression)
@@ -160,6 +160,29 @@ def check_env_vars() -> bool:
 # backstop for real transience, not as the mechanism this check depends on to pass.
 _CONNECTIVITY_PING_MODEL = "openrouter/deepseek/deepseek-v4-flash"
 
+# Preflight-local digillm bounds — read once at digillm import. The real pipeline keeps
+# digillm's 600s / empty-retry defaults; the preflight needs a fast FAIL, not a 240-minute
+# job cancellation (#2528/#2531). CI also sets timeout-minutes on this workflow step.
+_PREFLIGHT_REQUEST_TIMEOUT_SECONDS = 20.0
+_PREFLIGHT_EMPTY_RETRY_MAX = 0
+_PREFLIGHT_STEP_TIMEOUT_MINUTES = 10
+
+
+def _configure_preflight_environment() -> None:
+    """Apply production OpenRouter routing and bound digillm before the first LLM import."""
+    os.environ.setdefault(
+        "DIGILLM_REQUEST_TIMEOUT_SECONDS",
+        str(_PREFLIGHT_REQUEST_TIMEOUT_SECONDS),
+    )
+    os.environ.setdefault(
+        "DIGILLM_EMPTY_RETRY_MAX",
+        str(_PREFLIGHT_EMPTY_RETRY_MAX),
+    )
+    _ensure_importable()
+    from digigraph.model_config import apply_olympus_openrouter_env
+
+    apply_olympus_openrouter_env()
+
 
 def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
     print(_bold("\n2. OpenRouter connectivity"))
@@ -192,13 +215,13 @@ def check_openrouter(model: str = _CONNECTIVITY_PING_MODEL) -> bool:
 
 
 def check_openrouter_structured() -> bool:
-    """Validate the REAL structured-output routing path (digillm + env), not just a plain ping.
+    """Validate structured-output routing on ``openrouter/auto`` via the real digillm path.
 
-    A plain ping (check_openrouter) succeeds even when the model can't honor strict json_schema —
-    that's how the pipeline silently degraded (#790/#802). This runs one strict json_schema call
-    through the same digillm path the phases use, so any OPENROUTER_ALLOWED_MODELS / require_parameters
-    routing misconfig (e.g. the 404 "No models match your request and model restrictions" compound)
-    fails the preflight FAST — before the 30-minute pipeline burns a run."""
+    Requires ``_configure_preflight_environment()`` first so ``OPENROUTER_ALLOWED_MODELS``
+    matches production (``apply_olympus_openrouter_env``). With the pool constrained, digillm
+    attaches the ``auto-router`` plugin and omits ``require_parameters`` — the same request
+    shape Hermes chain startup uses. A plain ping (check 2) cannot catch json_schema routing
+    failures (#790/#802); a mis-set allowed-models pool or compound restriction fails here."""
     print(_bold("\n3. OpenRouter structured-output routing (digillm path)"))
     if not os.environ.get("OPENROUTER_API_KEY", "").strip():
         return check("Structured-output ping", False, "OPENROUTER_API_KEY not set")
@@ -231,7 +254,7 @@ def check_openrouter_structured() -> bool:
             f"{elapsed:.1f}s — model={served}, cost=${snap.get('cost_usd', 0.0):.4f}",
         )
     except Exception as exc:
-        # 4xx like the 404 "No models match … model restrictions") must report a clean FAIL,
+        # A 4xx like the 404 "No models match … model restrictions" must report a clean FAIL,
         # not crash the preflight with a traceback. Catching broadly is correct for a probe.
         return check(
             "Structured-output ping (openrouter/auto)",
@@ -332,7 +355,7 @@ def check_openrouter_function_tools() -> bool:
                 check(f"tools accepted: {model}", has_output, detail)
                 all_ok = all_ok and has_output
             except Exception as exc:
-                # is exactly the regression we are guarding; report a clean FAIL per-model.
+                # A tool-use 404 is exactly the regression we are guarding; report a clean FAIL per model.
                 check(f"tools accepted: {model}", False, f"{type(exc).__name__}: {exc}")
                 all_ok = False
         return all_ok
@@ -477,6 +500,7 @@ def main() -> int:
     print(_bold("Atlas provider validation"))
     print("─" * 48)
 
+    _configure_preflight_environment()
     check_env_vars()
 
     if not args.skip_llm:

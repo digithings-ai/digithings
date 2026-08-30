@@ -1,4 +1,4 @@
-"""digiquant CLI: backtest, optimize, export. No fallbacks; raises on failure."""
+"""digiquant CLI: backtest, optimize, export, strategy, prices. No fallbacks; raises on failure."""
 
 from __future__ import annotations
 
@@ -40,9 +40,11 @@ def main() -> None:
 # Register subcommand groups.
 def _register_subgroups() -> None:
     from digiquant.cli.prices import prices as _prices_group
+    from digiquant.cli.strategy import strategy as _strategy_group
     from digiquant.olympus.replay.cli import policy_replay as _policy_replay_group
 
     main.add_command(_prices_group)
+    main.add_command(_strategy_group)
     main.add_command(_policy_replay_group)
 
 

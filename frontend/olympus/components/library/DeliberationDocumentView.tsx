@@ -250,13 +250,13 @@ export default function DeliberationDocumentView({
         )}
         <div className="grid gap-4 md:grid-cols-2">
           {aggressiveCase && (
-            <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
+            <div className="border border-hair bg-term-bg/40 p-4">
               <p className="text-[10px] uppercase tracking-wider text-up mb-2">Aggressive case</p>
               <SafeMarkdown>{cleanMemoProse(aggressiveCase)}</SafeMarkdown>
             </div>
           )}
           {conservativeCase && (
-            <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
+            <div className="border border-hair bg-term-bg/40 p-4">
               <p className="text-[10px] uppercase tracking-wider text-warn mb-2">Conservative case</p>
               <SafeMarkdown>{cleanMemoProse(conservativeCase)}</SafeMarkdown>
             </div>
@@ -336,7 +336,7 @@ export default function DeliberationDocumentView({
                 return (
                   <li
                     key={i}
-                    className={`rounded-lg border border-hair p-4 ${
+                    className={` border border-hair p-4 ${
                       isPm ? 'bg-term-bg/60' : 'bg-term-bg/30'
                     }`}
                     data-role={isPm ? 'pm' : 'analyst'}
@@ -375,13 +375,13 @@ export default function DeliberationDocumentView({
         {showThesisCards ? (
           <div className="grid gap-4 md:grid-cols-2">
             {bullThesis ? (
-              <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
+              <div className="border border-hair bg-term-bg/40 p-4">
                 <p className="text-[10px] uppercase tracking-wider text-up mb-2">Bull thesis</p>
                 <SafeMarkdown>{cleanMemoProse(bullThesis)}</SafeMarkdown>
               </div>
             ) : null}
             {bearThesis ? (
-              <div className="rounded-lg border border-hair bg-term-bg/40 p-4">
+              <div className="border border-hair bg-term-bg/40 p-4">
                 <p className="text-[10px] uppercase tracking-wider text-down/90 mb-2">Bear thesis</p>
                 <SafeMarkdown>{cleanMemoProse(bearThesis)}</SafeMarkdown>
               </div>
@@ -429,7 +429,7 @@ export default function DeliberationDocumentView({
             {finalDecisions.map((row, i) => (
               <div
                 key={i}
-                className="rounded-lg border border-hair bg-term-bg/40 p-4 space-y-3"
+                className="border border-hair bg-term-bg/40 p-4 space-y-3"
               >
                 <div className="font-mono text-base text-accent font-semibold">{row.ticker ?? '—'}</div>
                 <div className="grid gap-3 md:grid-cols-2">
@@ -478,7 +478,7 @@ function DebateRoundBlock({ round }: { round: DebateRound }) {
   const label = `Round ${round.round_number ?? '?'}`;
 
   return (
-    <div className="rounded-lg border border-hair overflow-hidden">
+    <div className="border border-hair overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -510,7 +510,7 @@ function RoundBlock({ round }: { round: Round }) {
   const sections = Array.isArray(round.sections) ? round.sections : [];
 
   return (
-    <div className="rounded-lg border border-hair overflow-hidden">
+    <div className="border border-hair overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen(!open)}

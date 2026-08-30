@@ -27,6 +27,26 @@ from scripts.docs_onboard.write_vault_notes import DigivaultApiWriter, write_vau
 _KEEP = frozenset({PageClass.docs, PageClass.pdf, PageClass.openapi, PageClass.repo_doc})
 
 
+def _workdir_has_crawl_artifacts(workspace: Workspace) -> bool:
+    """True when a prior crawl/ingest run left JSONL state in the workdir."""
+    for path in (
+        workspace.pages_path,
+        workspace.classified_path,
+        workspace.source_map_path,
+    ):
+        if path.is_file() and path.stat().st_size > 0:
+            return True
+    return False
+
+
+def _reset_crawl_workdir(workspace: Workspace) -> None:
+    """Clear crawl + ingest JSONL state so a reused workdir cannot accumulate rows."""
+    workspace.clear_pages()
+    workspace.clear_classified()
+    if workspace.source_map_path.is_file():
+        workspace.source_map_path.write_text("", encoding="utf-8")
+
+
 def _default_repo_root() -> Path:
     # scripts/docs_onboard/run_onboard.py → repo root is parents[2]
     return Path(__file__).resolve().parents[2]
@@ -59,6 +79,8 @@ def run_onboard(
 
     pages_seen = 0
     if not skip_crawl:
+        if _workdir_has_crawl_artifacts(workspace):
+            _reset_crawl_workdir(workspace)
         pages_seen = scrape_site(manifest, workspace, fetch_html=fetch_html)
         classify_pages(manifest, workspace)
         try:
@@ -174,7 +196,7 @@ def run_onboard(
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--manifest", type=Path, required=True)
-    ap.add_argument("--workdir", type=Path, required=True)
+    ap.add_argument("--workdir", type=Path, required=True, help="Fresh directory per apply run")
     ap.add_argument(
         "--vault-root",
         type=Path,

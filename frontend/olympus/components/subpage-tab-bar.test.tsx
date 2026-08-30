@@ -39,6 +39,11 @@ describe('subpageTabButtonClass', () => {
     expect(subpageTabButtonClass(true)).toContain('shrink-0');
     expect(subpageTabButtonClass(false)).toContain('shrink-0');
   });
+
+  it('is zero-radius chrome (utilitarian-terminal v0.1)', () => {
+    expect(subpageTabButtonClass(true)).not.toMatch(/\brounded-(?:sm|md|lg|xl|full)\b/);
+    expect(subpageTabButtonClass(false)).not.toMatch(/\brounded-(?:sm|md|lg|xl|full)\b/);
+  });
 });
 
 function renderBar(): string {

@@ -77,7 +77,7 @@ export default function RiskEnvelopeCell({
           // from assistive tech and the marker's meaning is carried by the sr-only sibling
           // below — not by the tooltip, which only mouse users ever get.
           <div
-            className="relative h-1 w-24 rounded-full bg-term-bg"
+            className="relative h-1 w-24 bg-term-bg"
             title={mark?.label}
             aria-hidden
           >

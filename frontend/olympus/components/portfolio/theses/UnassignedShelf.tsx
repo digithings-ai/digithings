@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import type { Position } from '@/lib/types';
 import type { ProposedDecision } from '@/lib/holdings-decisions';
+import type { PlanTier } from '@/lib/entitlements';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { SignedConvictionBadge } from '@/components/shared/signed-conviction-badge';
 import { AsOfBadge } from '@/components/shared/as-of-badge';
+import { EntitledSurface } from '@/components/entitled-surface';
 
 function dossierHref(ticker: string): string {
   return `/portfolio/tickers?ticker=${encodeURIComponent(ticker.toUpperCase())}`;
@@ -15,13 +17,18 @@ function dossierHref(ticker: string): string {
  * Trailing "unassigned" shelf: the two honest buckets the story spine cannot
  * place. Copy states the backend gap plainly so the empty linkage never reads as
  * a rendering bug.
+ *
+ * Held weights are `house_weights_nav` (Baseline+).
  */
 export function UnassignedShelf({
   heldUnmapped,
   proposedUnheld,
+  tier,
 }: {
   heldUnmapped: Position[];
   proposedUnheld: ProposedDecision[];
+  /** Test override for house weight gate. */
+  tier?: PlanTier;
 }) {
   if (heldUnmapped.length === 0 && proposedUnheld.length === 0) return null;
 
@@ -40,32 +47,34 @@ export function UnassignedShelf({
       {heldUnmapped.length > 0 ? (
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-ink-soft">Held, not yet tied to a market view</h3>
-          <div className="glass-card divide-y divide-hair overflow-hidden p-0">
-            {heldUnmapped.map((p) => (
-              <Link
-                key={p.ticker}
-                href={dossierHref(p.ticker)}
-                className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
-              >
-                <span className="w-16 shrink-0 font-mono text-sm font-semibold text-ink">
-                  {p.ticker}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm text-ink-soft" title={p.name}>
-                  {p.name}
-                </span>
-                <span className="w-16 shrink-0 text-right font-mono text-sm tabular-nums text-ink">
-                  {(p.weight_actual ?? 0).toFixed(1)}%
-                </span>
-              </Link>
-            ))}
-          </div>
+          <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
+            <div className="oly-slab divide-y divide-hair overflow-hidden p-0">
+              {heldUnmapped.map((p) => (
+                <Link
+                  key={p.ticker}
+                  href={dossierHref(p.ticker)}
+                  className="flex items-center gap-4 px-4 py-3 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+                >
+                  <span className="w-16 shrink-0 font-mono text-sm font-semibold text-ink">
+                    {p.ticker}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink-soft" title={p.name}>
+                    {p.name}
+                  </span>
+                  <span className="w-16 shrink-0 text-right font-mono text-sm tabular-nums text-ink">
+                    {(p.weight_actual ?? 0).toFixed(1)}%
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </EntitledSurface>
         </div>
       ) : null}
 
       {proposedUnheld.length > 0 ? (
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-ink-soft">Proposed, not held</h3>
-          <div className="glass-card divide-y divide-hair overflow-hidden p-0">
+          <div className="oly-slab divide-y divide-hair overflow-hidden p-0">
             {proposedUnheld.map((d) => (
               <div key={d.ticker} className="flex items-center gap-3 px-4 py-3">
                 <Link

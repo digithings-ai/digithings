@@ -2,13 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
+import { useAuth } from '@/lib/auth-context';
 import { NAV, type NavItem } from '@/lib/nav';
+import { olympusBasePath } from '@/lib/supabase';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
   const norm = pathname.replace(/\/+$/, '') || '/';
@@ -50,13 +52,30 @@ function routeActive(pathname: string, base: string, href: string): boolean {
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const base = olympusBasePath();
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
     useAppShell();
+  const { authEnabled, user, signOut } = useAuth();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname, setMobileNavOpen]);
+
+  async function handleSignOut() {
+    setSignOutError(null);
+    try {
+      await signOut();
+    } catch (err) {
+      setSignOutError(err instanceof Error ? err.message : 'Sign-out failed');
+    }
+  }
+
+  const identityLabel =
+    user?.email?.trim() ||
+    (typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null) ||
+    (typeof user?.user_metadata?.name === 'string' ? user.user_metadata.name : null) ||
+    'Signed in';
 
   const renderLink = (item: NavItem) => {
     const { href, label, icon: Icon, demoted } = item;
@@ -131,7 +150,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={toggleSidebar}
-              className="hidden md:flex rounded-lg p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair shrink-0"
+              className="hidden md:flex p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair shrink-0"
               aria-label="Collapse sidebar"
             >
               <ChevronLeft size={18} />
@@ -144,7 +163,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={toggleSidebar}
-              className="rounded-lg p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair"
+              className="p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair"
               aria-label="Expand sidebar"
             >
               <ChevronRight size={18} />
@@ -157,7 +176,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={openCommandPalette}
-              className="hidden md:flex items-center gap-2 mx-6 mb-1 rounded-lg border border-hair px-3 py-1.5 text-xs text-ink-mute hover:text-ink-soft hover:bg-ink/[0.03] transition-colors"
+              className="hidden md:flex items-center gap-2 mx-6 mb-1 border border-hair px-3 py-1.5 text-xs text-ink-mute hover:text-ink-soft hover:bg-ink/[0.03] transition-colors"
               aria-label="Search"
             >
               <Search size={14} className="shrink-0" />
@@ -178,6 +197,35 @@ export default function Sidebar() {
             sidebarCollapsed ? 'md:px-2 px-6 py-4' : 'px-6 py-4'
           }`}
         >
+          {authEnabled && user ? (
+            <div
+              className={`mb-3 flex flex-col gap-2 ${sidebarCollapsed ? 'md:items-center' : ''}`}
+              data-testid="sidebar-auth-identity"
+            >
+              <p
+                className={`truncate text-xs text-ink-mute ${sidebarCollapsed ? 'md:sr-only' : ''}`}
+                title={identityLabel}
+              >
+                {identityLabel}
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className={`inline-flex items-center gap-2 border border-hair px-3 py-1.5 text-xs text-ink-soft hover:text-ink hover:bg-ink/[0.04] ${
+                  sidebarCollapsed ? 'md:justify-center md:px-2' : ''
+                }`}
+                aria-label="Sign out"
+              >
+                <LogOut size={14} className="shrink-0" />
+                <span className={sidebarCollapsed ? 'md:sr-only' : ''}>Sign out</span>
+              </button>
+              {signOutError ? (
+                <p className="text-xs text-down" role="alert">
+                  {signOutError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <SidebarSettings sidebarCollapsed={sidebarCollapsed} />
         </div>
       </aside>

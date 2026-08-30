@@ -54,6 +54,9 @@
   --accent: var(--fg);
 
   /* --- Typography ------------------------------------------------------- */
+  /* Unthemed legacy slot. Themed surfaces remap this to --font-sans (mono)
+     under :root[data-theme] so Inter is not the live body default. Override
+     --font-sans locally for a sans/serif escape hatch; --font-family follows. */
   --font-family: 'Inter', system-ui, -apple-system, sans-serif;
   --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Space Mono', monospace;
 
@@ -78,9 +81,11 @@
   --space-9: 8rem;
 
   /* --- Radius ---------------------------------------------------------- */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  /* Utilitarian v0.1 (2026-08-30): zero corners. True circles (spinners,
+     live dots) may still use 999px locally — that is geometry, not chrome. */
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
 
   /* --- Motion ---------------------------------------------------------- */
   --transition-speed: 0.8s;
@@ -295,23 +300,29 @@
   --accent-hermes: var(--ink);
   --accent-kairos: var(--ink);
 
-  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+  /* Utilitarian v0.1: mono is the default voice for claim, body, and chrome.
+     Serif/sans escape hatches set --font-display / --font-sans locally.
+     Legacy --font-family follows --font-sans so themed consumers of
+     components.css / app-shell-terminal do not fall through to Inter. */
+  --font-sans: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
   --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
-  --font-display: "Instrument Serif", Georgia, serif;
+  --font-display: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+  --font-family: var(--font-sans);
+  --font-family-mono: var(--font-mono);
 
   --wrap: 1180px;
   --wrap-wide: 1280px;
   --product-frame-w: 800px;
   --gutter: clamp(1.25rem, 4vw, 3.25rem);
 
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-sm: 0;
+  --r-md: 0;
+  --r-lg: 0;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
 
-  /* Graphite-inspired section rhythm + reveal motion (EVOLUTION.md §5). */
-  --section-y: clamp(4rem, 8vw, 7rem);
+  /* Sparse-leaning marketing rhythm (agentmail); dashboards may tighten locally. */
+  --section-y: clamp(4.5rem, 9vw, 8rem);
   --section-y-tight: clamp(2.5rem, 5vw, 4rem);
   --ease-glide: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-reveal: 0.6s;

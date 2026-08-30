@@ -783,17 +783,12 @@ def _handle_digisearch_fetch_all(
     return out
 
 
-def _require_tool_calls_from_context(context: ToolContext) -> bool:
-    return bool(context.state.get("require_tool_calls"))
-
-
 def _handle_visualization(args: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     result = run_visualization_agent(
         dataset_ref=args.get("dataset_ref", ""),
         task=args.get("task", ""),
         session_id=context.session_id,
         options=args.get("options"),
-        require_tool_calls=_require_tool_calls_from_context(context),
     )
     return {"content": result}
 
@@ -804,7 +799,6 @@ def _handle_analysis(args: dict[str, Any], context: ToolContext) -> dict[str, An
         task=args.get("task", ""),
         session_id=context.session_id,
         options=args.get("options"),
-        require_tool_calls=_require_tool_calls_from_context(context),
     )
     return {"content": result}
 
@@ -815,7 +809,6 @@ def _handle_data_prep(args: dict[str, Any], context: ToolContext) -> dict[str, A
         task=args.get("task", ""),
         session_id=context.session_id,
         options=args.get("options"),
-        require_tool_calls=_require_tool_calls_from_context(context),
     )
     return {"content": result}
 
@@ -827,7 +820,6 @@ def _handle_data_manipulation(args: dict[str, Any], context: ToolContext) -> dic
         session_id=context.session_id,
         second_dataset_ref=args.get("second_dataset_ref"),
         options=args.get("options"),
-        require_tool_calls=_require_tool_calls_from_context(context),
     )
     return {"content": result}
 
@@ -839,7 +831,6 @@ def _handle_data_engineer(args: dict[str, Any], context: ToolContext) -> dict[st
         session_id=context.session_id,
         additional_dataset_refs=args.get("additional_dataset_refs"),
         options=args.get("options"),
-        require_tool_calls=_require_tool_calls_from_context(context),
     )
     return {"content": result}
 

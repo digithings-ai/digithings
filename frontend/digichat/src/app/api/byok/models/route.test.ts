@@ -20,6 +20,7 @@ import { requireDigiChatAuth } from "@/lib/request-auth";
 import { resolveEmbedChatTenant } from "@/lib/embed-chat-tenant";
 import { checkEmbedIpRateLimit } from "@/lib/embed-ip-rate-limit";
 import { checkBffRateLimit } from "@/lib/bff-rate-limit";
+import { resetOpenRouterCatalogCache } from "@/lib/openrouter-catalog-cache";
 
 function req(url: string, headers: Record<string, string> = {}) {
   return new Request(`http://localhost${url}`, { headers });
@@ -27,6 +28,7 @@ function req(url: string, headers: Record<string, string> = {}) {
 
 describe("GET /api/byok/models", () => {
   beforeEach(() => {
+    resetOpenRouterCatalogCache();
     vi.mocked(requireDigiChatAuth).mockResolvedValue(mockAuthCtx);
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: true });
   });
@@ -48,6 +50,7 @@ describe("GET /api/byok/models", () => {
     vi.mocked(checkBffRateLimit).mockReturnValue({ allowed: false, retryAfterSec: 5 });
     const res = await GET(req("/api/byok/models?provider=openrouter"));
     expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("5");
     expect(checkBffRateLimit).toHaveBeenCalled();
   });
 
@@ -64,6 +67,7 @@ describe("GET /api/byok/models", () => {
       req("/api/byok/models?provider=openrouter", { "x-embed-host": "https://digithings.ai" }),
     );
     expect(res.status).toBe(429);
+    expect(res.headers.get("retry-after")).toBe("5");
     expect(checkBffRateLimit).toHaveBeenCalled();
   });
 
@@ -83,6 +87,24 @@ describe("GET /api/byok/models", () => {
       const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
       expect(url).toBe("https://openrouter.ai/api/v1/models");
       expect((init.headers as Record<string, string> | undefined)?.["Authorization"]).toBeUndefined();
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("memoizes the bucketed catalog in-process (#2408)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ data: [{ id: "openai/gpt-oss-20b:free", pricing: { prompt: "0", completion: "0" } }] }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    try {
+      const res1 = await GET(req("/api/byok/models?provider=openrouter"));
+      const res2 = await GET(req("/api/byok/models?provider=openrouter"));
+      expect(res1.status).toBe(200);
+      expect(res2.status).toBe(200);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     } finally {
       fetchSpy.mockRestore();
     }
@@ -122,13 +144,20 @@ describe("GET /api/byok/models", () => {
     }
   });
 
-  it("returns 502 when the upstream request errors/times out", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
+  it("returns 502 when the upstream request errors/times out without leaking internals", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("getaddrinfo EAI_AGAIN openrouter.ai"));
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const res = await GET(req("/api/byok/models?provider=openrouter"));
       expect(res.status).toBe(502);
+      const body = await res.json();
+      expect(body.error).toBe("upstream_unavailable");
+      expect(body.message).toBe("Model catalog is temporarily unavailable. Try again shortly.");
+      expect(JSON.stringify(body)).not.toContain("EAI_AGAIN");
+      expect(errSpy).toHaveBeenCalled();
     } finally {
       fetchSpy.mockRestore();
+      errSpy.mockRestore();
     }
   });
 });

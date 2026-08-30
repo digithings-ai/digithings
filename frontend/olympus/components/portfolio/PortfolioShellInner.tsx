@@ -192,7 +192,7 @@ export default function PortfolioShellInner() {
   if (loading) return <PageSkeleton />;
   if (error || !data || !metrics)
     return (
-      <div className="flex items-center justify-center h-screen text-down">
+      <div className="flex items-center justify-center h-screen text-danger">
         {error || 'Failed to load'}
       </div>
     );
