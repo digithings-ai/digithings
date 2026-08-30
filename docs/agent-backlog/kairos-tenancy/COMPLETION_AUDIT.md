@@ -142,6 +142,27 @@ https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-audi
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
+## Follow-up turn (workspace bootstrap — Agentmail JWT past WORKSPACE_FORBIDDEN)
+
+Agent run: migration **107** `ensure_personal_workspace` + `auth.users` trigger + backfill applied on `core`; settings EF **v19** (`ensureCallerWorkspace`). Agentmail JWT probe → **200** profile/notifications/brokers; checkout **PRICE_NOT_CONFIGURED**. Branch `cursor/workspace-bootstrap-ensure-6434`. Vendors still empty. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft; no UpdateGoal complete.
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Workspace bootstrap | **PASS** | mig 107 on core; members=1; free personal workspace |
+| 2 | Settings JWT E2E | **PASS (Observer reads)** | `/opt/cursor/artifacts/settings-jwt-e2e-agentmail-post-v19.log` — 200/200/200 |
+| 3 | settings EF v19 | **PASS** | ACTIVE version **19** |
+| 4 | Checkout | **BLOCKED** | `PRICE_NOT_CONFIGURED` (Stripe prices empty) |
+| 5 | Vendor secrets | **BLOCKED** | Stripe/Mailgun/Google/Alpaca still empty |
+| 6 | #3183 / goal | **LEAVE DRAFT / FAIL complete** | No merge; no UpdateGoal complete |
+
+### Compare (bootstrap)
+
+```text
+https://github.com/digithings-ai/digithings/compare/develop...cursor/workspace-bootstrap-ensure-6434
+```
+
+---
+
 ## Follow-up turn (post-sbp: merge docs PRs + secrets scan + smoke)
 
 Agent run: rebase+merge [#3209](https://github.com/digithings-ai/digithings/pull/3209) + [#3211](https://github.com/digithings-ai/digithings/pull/3211) (CI green). Load `sbp_` from `.local/secrets/cursor-cloud-agent-supabase-pat` → 12 EF secret names. Confirm settings **v18** ACTIVE; Auth GitHub **Enabled** / Google **Disabled**. Scan GitHub org+repo Actions secrets (dashboard session) — **no** `STRIPE_*` / `ALPACA_*` / `MAILGUN_*` names. Mailgun env empty → skip EF set. Cursor env still missing pasted PAT/vendors (`request-environment-setup-actions` re-recorded). `auth.users` count **0** → no real JWT settings E2E (do not invent). Hatch bodies queued for parent (gh comment/label **403**). Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft; no UpdateGoal complete.
