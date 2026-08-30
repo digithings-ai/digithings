@@ -36,6 +36,18 @@ from digiquant.brokers.contracts import (
 pytestmark = pytest.mark.unit
 
 
+def _patch_trading_client(monkeypatch: pytest.MonkeyPatch, ctor: object) -> None:
+    """Patch ``_TradingClient`` on the module dict ``AlpacaAdapter`` closes over.
+
+    Other tests (``test_sync_cron``) may drop ``sys.modules["digiquant.brokers.alpaca"]``.
+    ``monkeypatch.setattr("digiquant.brokers.alpaca._TradingClient", ...)`` then
+    patches a freshly imported copy while this file's ``AlpacaAdapter`` still
+    looks up the original global — real paper-api HTTP and 401s. Patch the
+    class's ``__globals__`` instead.
+    """
+    monkeypatch.setitem(AlpacaAdapter.__init__.__globals__, "_TradingClient", ctor)
+
+
 def _ts() -> datetime:
     return datetime(2026, 8, 29, 15, 30, tzinfo=UTC)
 
@@ -80,17 +92,14 @@ def adapter(monkeypatch: pytest.MonkeyPatch, client: MagicMock) -> AlpacaAdapter
 
     if alpaca_mod._MarketOrderRequest is None:
         pytest.skip("alpaca-py not installed — install digiquant[brokers-alpaca] for unit mocks")
-    monkeypatch.setattr(
-        "digiquant.brokers.alpaca._TradingClient",
-        MagicMock(return_value=client),
-    )
+    _patch_trading_client(monkeypatch, MagicMock(return_value=client))
     return AlpacaAdapter(auth=ApiKeyAuth(key_id="PK_TEST", secret="SK_TEST"))
 
 
 class TestConstruction:
     def test_paper_true_with_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ctor = MagicMock(return_value=MagicMock())
-        monkeypatch.setattr("digiquant.brokers.alpaca._TradingClient", ctor)
+        _patch_trading_client(monkeypatch, ctor)
         import digiquant.brokers.alpaca as alpaca_mod
 
         if alpaca_mod._MarketOrderRequest is None:
@@ -105,7 +114,7 @@ class TestConstruction:
 
     def test_paper_true_with_oauth(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ctor = MagicMock(return_value=MagicMock())
-        monkeypatch.setattr("digiquant.brokers.alpaca._TradingClient", ctor)
+        _patch_trading_client(monkeypatch, ctor)
         import digiquant.brokers.alpaca as alpaca_mod
 
         if alpaca_mod._MarketOrderRequest is None:
@@ -115,11 +124,21 @@ class TestConstruction:
         assert kwargs["paper"] is True
         assert kwargs["oauth_token"] == "tok_abc"
 
+    def test_oauth_mock_survives_sys_modules_pop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import digiquant.brokers.alpaca as alpaca_mod
+
+        if alpaca_mod._MarketOrderRequest is None:
+            pytest.skip("alpaca-py not installed")
+        monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
+        ctor = MagicMock(return_value=MagicMock())
+        _patch_trading_client(monkeypatch, ctor)
+        AlpacaAdapter(auth=OAuthAuth(access_token="tok_abc"))
+        assert ctor.call_args is not None
+        assert ctor.call_args.kwargs["oauth_token"] == "tok_abc"
+        assert ctor.call_args.kwargs["paper"] is True
+
     def test_live_env_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            "digiquant.brokers.alpaca._TradingClient",
-            MagicMock(return_value=MagicMock()),
-        )
+        _patch_trading_client(monkeypatch, MagicMock(return_value=MagicMock()))
         import digiquant.brokers.alpaca as alpaca_mod
 
         if alpaca_mod._MarketOrderRequest is None:

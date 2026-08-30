@@ -6,6 +6,7 @@ credentials or construct Alpaca/IBKR adapters.
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping, Sequence
 from types import SimpleNamespace
 from uuid import UUID
@@ -329,23 +330,19 @@ def test_connection_id_invalid_exits_3() -> None:
     assert "not found" in err[0]
 
 
-def test_production_empty_does_not_import_alpaca() -> None:
-    import sys
-
+def test_production_empty_does_not_import_alpaca(monkeypatch: pytest.MonkeyPatch) -> None:
     from digiquant.olympus.kairos.sync_cron import _production_sync_batch
 
-    sys.modules.pop("digiquant.brokers.alpaca", None)
+    monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
     synced = _production_sync_batch([], environ={})
     assert synced == 0
     assert "digiquant.brokers.alpaca" not in sys.modules
 
 
-def test_production_refuses_house_and_ibkr_before_unseal() -> None:
-    import sys
-
+def test_production_refuses_house_and_ibkr_before_unseal(monkeypatch: pytest.MonkeyPatch) -> None:
     from digiquant.olympus.kairos.sync_cron import _production_sync_batch
 
-    sys.modules.pop("digiquant.brokers.alpaca", None)
+    monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
     house = _target(workspace_id=house_workspace_id())
     ibkr = _target(connection_id=_IBKR, broker=Broker.IBKR)
     synced = _production_sync_batch((house, ibkr), environ={})
@@ -353,12 +350,10 @@ def test_production_refuses_house_and_ibkr_before_unseal() -> None:
     assert "digiquant.brokers.alpaca" not in sys.modules
 
 
-def test_production_refuses_alpaca_api_key_before_unseal() -> None:
-    import sys
-
+def test_production_refuses_alpaca_api_key_before_unseal(monkeypatch: pytest.MonkeyPatch) -> None:
     from digiquant.olympus.kairos.sync_cron import _production_sync_batch
 
-    sys.modules.pop("digiquant.brokers.alpaca", None)
+    monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
     api_key = _target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY)
     synced = _production_sync_batch((api_key,), environ={})
     assert synced == 0
