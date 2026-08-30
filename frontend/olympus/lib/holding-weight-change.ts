@@ -48,6 +48,23 @@ export function holdingWeightChange(
 }
 
 /**
+ * Day-over-day weight delta for holdings UI — null when there is no material book event
+ * behind the move (#3080). Pure mark-to-market drift in `positions.weight_pct` must not
+ * read as Added/Trimmed when the ledger recorded no decision-grade ADD/TRIM.
+ */
+export function holdingWeightDeltaPp(
+  currentPct: number | null | undefined,
+  priorPct: number | null | undefined,
+  opts?: { hasMaterialBookEvent?: boolean },
+): number | null {
+  const change = holdingWeightChange(currentPct, priorPct);
+  if (change.deltaPp === null) return null;
+  if (change.kind === 'unchanged') return 0;
+  if (opts?.hasMaterialBookEvent === false) return null;
+  return change.deltaPp;
+}
+
+/**
  * The signed label for a change, or `null` when there is no rate of change to show.
  *
  * Returning `null` rather than an em-dash keeps the formatting decision with the component —

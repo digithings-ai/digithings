@@ -35,6 +35,41 @@ def _is_cash(ticker: str) -> bool:
     return ticker.strip().upper() == "CASH"
 
 
+def no_trade_band_pp(current_pct: float, preferences: dict[str, Any]) -> float:
+    """Widest no-trade band for one position, in percentage points (#934, #2417)."""
+    threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)
+    rel_band = float(preferences.get("rebalance_rel_band_pct") or 20.0) / 100.0
+    return max(threshold, rel_band * current_pct)
+
+
+def clamp_no_trade_band(
+    sized: dict[str, float],
+    *,
+    current_weights: dict[str, float],
+    preferences: dict[str, Any],
+) -> dict[str, float]:
+    """Re-clamp post-control weights inside the no-trade band (#3080).
+
+    ``_cap_total_invested`` and the held-continuity backstop can reintroduce micro-deltas
+    after the cadence band already suppressed them. This pass runs after those final-book
+    controls and holds continuing positions at their drifted weight when the residual delta
+    is immaterial — deliberately silent (no adjustment event), same as the primary band
+    clamp in :func:`apply_turnover_to_sized_book`.
+    """
+    if not current_weights:
+        return sized
+    out = dict(sized)
+    for ticker, current_pct in current_weights.items():
+        if _is_cash(ticker) or current_pct <= 0:
+            continue
+        target_pct = out.get(ticker, 0.0)
+        if target_pct <= 0:
+            continue
+        if abs(target_pct - current_pct) < no_trade_band_pp(current_pct, preferences):
+            out[ticker] = current_pct
+    return out
+
+
 def mark_to_market_weights(
     weights: dict[str, float],
     deltas: dict[str, float],
@@ -211,8 +246,6 @@ def apply_turnover_to_sized_book(
     if not current_weights:
         return sized
 
-    threshold = float(preferences.get("rebalance_threshold_pct") or 3.0)  # absolute floor (pp)
-    rel_band = float(preferences.get("rebalance_rel_band_pct") or 20.0) / 100.0  # of position size
     holding_days = int(preferences.get("holding_days") or 5)
     entry_by_ticker = {
         str(row["ticker"]): _parse_entry_date(row.get("entry_date"))
@@ -249,7 +282,7 @@ def apply_turnover_to_sized_book(
         # so it is not a material requested->approved delta — the lineage validator uses this
         # same band as its materiality threshold, so these suppressed micro-deltas are never
         # flagged as unexplained.
-        band = max(threshold, rel_band * current_pct)
+        band = no_trade_band_pp(current_pct, preferences)
         if delta < band and target_pct > 0:
             out[ticker] = current_pct
     return out

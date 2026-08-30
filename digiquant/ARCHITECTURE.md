@@ -2741,3 +2741,161 @@ Contributors are pure, fail-soft (an exception is logged and swallowed), may not
 existing key, and run **once per run** inside `_segment_counts`. Note the split:
 `_segment_totals` is the pure counter used by `atlas_research_produced`, which the chain calls
 *mid-run* to gate Hermes — contributors must never see that half-populated state.
+
+## Kairos execution contracts
+
+`digiquant/src/digiquant/brokers/contracts.py` (K0, part of the Olympus Kairos/tenancy
+program — see `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md`
+§4-K0) defines the typed venue/order/position surface every `BrokerAdapter` implementation
+exchanges with a venue, replacing the previous ad hoc positional `submit_order(symbol,
+side, quantity, order_type)` call. This work package is **contracts and typing only**: no
+HTTP client, no broker SDK, no database access, and no venue router — a later work package
+(K1 Alpaca, K2 IBKR, K4 router/sync) builds on this surface without changing it.
+
+### Vocabulary and models
+
+- `ExecutionVenue` (`StrEnum`): `paper_internal`, `alpaca_paper`, `ibkr_paper`,
+  `alpaca_live`, `ibkr_live`. The `*_live` members exist so the vocabulary is complete for
+  K4's venue-resolution policy; nothing in the codebase today constructs a resolver that
+  reaches either one, and K4's spec binds `resolve_venue` raising on any `*_live` value as
+  a test-pinned invariant.
+- `BrokerOrderStatus` (`StrEnum`): `submitted`, `accepted`, `partially_filled`, `filled`,
+  `canceled`, `rejected`, `expired`.
+- `OrderSide` (`StrEnum`): `buy`, `sell`. `TimeInForce` (`StrEnum`): `day`, `gtc`, `opg`,
+  `ioc`. `OrderType` (`StrEnum`): `market`, `limit` — v1 scope only; stop/stop-limit are
+  deferred to whichever work package's behavior spec first needs them.
+- `BrokerOrderRequest`: `client_order_id`, `symbol`, `side`, `quantity` XOR `notional`
+  (exactly one, mirroring `RequestedTarget`'s weight/quantity XOR in
+  `hermes/models/portfolio_ledger.py`), `order_type`, `limit_price` (required iff
+  `order_type` is `limit`, forbidden otherwise), `time_in_force`.
+- `BrokerOrderAck`: `external_order_id`, `status`, `submitted_at` (UTC), `raw_sha256` — a
+  SHA-256 hex fingerprint of the venue's raw response, never the payload itself.
+- `BrokerFill`: `external_fill_id`, `symbol`, strictly-positive `quantity`/`price`,
+  optional non-negative `fee`, `executed_at` (UTC). "No fill happened" is the absence of a
+  row, never a zero-valued one — same invariant as `PaperExecution`.
+- `BrokerPosition`: `symbol`, signed `quantity` (long positive, short negative),
+  non-negative `avg_entry_price`, signed `market_value`/`unrealized_pl`.
+- `BrokerAccountSnapshot`: `account_id`, signed `equity`/`cash`, non-negative
+  `buying_power`, 3-letter uppercase `currency`, `as_of` (UTC).
+
+All money/quantity fields are `Decimal` (`allow_inf_nan=False`), never `float`. Every
+model is frozen with `extra="forbid"` (`BrokerContractModel`, mirroring
+`PortfolioLedgerModel`), and every UTC-only datetime field is rejected if naive or offset
+by anything other than +00:00 via a locally reimplemented `_reject_non_utc` (mirrors
+`portfolio_ledger._reject_non_utc`; not imported, since that helper is private to its
+module). `symbol` and `currency` fields are stripped and uppercased by a `mode="before"`
+field validator before length/pattern validation runs.
+
+### Widened `BrokerAdapter` protocol
+
+`digiquant/src/digiquant/brokers/base.py`'s `runtime_checkable` `BrokerAdapter` `Protocol`
+gained `get_account() -> BrokerAccountSnapshot`, `get_positions() -> list[BrokerPosition]`,
+`get_order(external_order_id) -> BrokerOrderAck`, `cancel_order(external_order_id) ->
+None`, and `list_fills(since: datetime) -> list[BrokerFill]`, alongside the existing
+`name`/`connect`/`disconnect`. `submit_order` changed shape from the legacy positional
+`submit_order(symbol, side, quantity, order_type) -> str` to `submit_order(req:
+BrokerOrderRequest) -> BrokerOrderAck` — the legacy signature is deliberately not part of
+this protocol.
+
+All three stubs in `brokers/stubs.py` (`IBAdapterStub`, `AlpacaAdapterStub`,
+`QuantConnectAdapterStub`) were migrated to the widened surface; every method still raises
+`NotImplementedError`, so `isinstance(<stub>(), BrokerAdapter)` holds without any of them
+doing real work. `digiquant/brokers/__init__.py` re-exports the contracts alongside the
+protocol and stubs.
+
+### Scope and anti-goals
+
+No I/O, no database, no new runtime dependency, and no live-order-routing path anywhere in
+this module — `ExecutionVenue` defines `*_live` members but nothing routes to them. This
+work package's pre-push hook enforces a small set of forbidden method-name tokens for any
+order-submission code (see `scripts/hooks/pre-push.sh`); none of those tokens appear
+anywhere in `brokers/contracts.py`, `brokers/base.py`, or `brokers/stubs.py` — every method
+here is named `submit_order`, `get_order`, `cancel_order`, or `list_fills`. Broker
+stub/protocol coverage lives entirely in `tests/dq/brokers/test_contracts.py` — the legacy
+`tests/dq/test_brokers.py` was deleted and its coverage folded in there.
+
+### Alpaca adapter
+
+`digiquant/src/digiquant/brokers/alpaca.py` (K1) is the first real `BrokerAdapter`
+implementation: Alpaca Trading API **paper only**, via the optional
+`digiquant[brokers-alpaca]` extra (`alpaca-py>=0.40,<1` — capped to the current major
+because a broker SDK is a behavior-critical boundary). Auth is a tagged union
+`ApiKeyAuth | OAuthAuth`; construction always passes `paper=True` to `TradingClient`, and
+any non-`paper` `env` raises `LiveVenueNotAuthorizedError` (no live override in this
+program yet).
+
+Binding behavior: every submit sets Alpaca `client_order_id` from
+`BrokerOrderRequest.client_order_id` and, on transport **or** rate-limit failure,
+recovers via `get_order_by_client_id` before any retry — only a confirmed HTTP 404
+(`BrokerOrderNotFound`) authorizes a resubmit; any other lookup failure propagates.
+Notional or fractional qty requires `time_in_force=day` (local `BrokerOrderRejected`,
+no HTTP); `extended_hours` is never sent; HTTP errors map to the shared exception
+family in `contracts.py` (`BrokerAuthError` / `BrokerOrderNotFound` /
+`BrokerOrderRejected` / `BrokerRateLimited` / `BrokerTransportError`); money/qty
+parse with `Decimal(str(...))`; logs carry a 6-char sha256 fingerprint +
+`X-Request-ID`, never secrets. Fills are derived from closed-order
+`filled_qty`/`filled_avg_price` via REST polling (no activities helper / websocket in v1).
+
+The package imports without the extra (`brokers/__init__.py` lazy-exports `AlpacaAdapter`;
+`alpaca.py` guards the SDK import). Mocked unit tests live in
+`tests/dq/brokers/test_alpaca_adapter.py`; live paper smoke is
+`tests/dq/brokers/test_alpaca_integration.py` behind the `alpaca_paper` marker + env keys
+(excluded from CI).
+
+### IBKR adapter
+
+`digiquant/src/digiquant/brokers/ibkr.py` (K2) implements `BrokerAdapter` against IBKR's
+Client Portal Web API. **Read-first:** `get_account` / `get_positions` use
+`/portfolio/accounts`, paginated `/portfolio/{id}/positions/{page}`, `/summary`, and
+`/ledger` on the SSO/live-session layer and never call `/iserver/auth/ssodh/init`.
+`connect()` checks `/iserver/auth/status`; `keepalive()` is a single `POST /tickle` (no
+threads — the caller owns any tickle loop). Expired sessions get one transparent re-auth,
+then `BrokerAuthError`.
+
+Order submission is implemented but locked behind `DIGIQUANT_IBKR_ORDERS=1` (default off;
+`submit_order` raises `IbkrOrdersDisabledError`). When enabled, brokerage init uses
+`compete=false`, surfaces competing sessions as `SessionCompetingError` without kicking the
+user, resolves `conid` via `/iserver/secdef/search` (per-symbol cache), submits
+`POST /iserver/account/{id}/orders`, and walks the reply chain against
+`SUPPRESSIBLE_MESSAGE_IDS` (re-applied via `/iserver/questions/suppress` after every session
+init). Off-allowlist prompts → `BrokerOrderRejected(question_text)`.
+
+Pacing: monotonic-clock ≥5s spacing on `/portfolio/accounts`, `/iserver/orders`,
+`/iserver/trades` — violation raises `BrokerRateLimited` (no silent sleep). Money/qty parse
+as `Decimal`; logs carry response SHA-256 fingerprints only. Auth is an injected
+pre-authenticated `IbkrTransport` (no OAuth signing in-tree yet). Optional extra
+`brokers-ibkr = ["httpx>=0.27"]`. Operational notes: `digiquant/docs/brokers/IBKR-NOTES.md`.
+Broker exceptions use the shared family in `contracts.py` (`BrokerAuthError`,
+`BrokerOrderRejected`, `BrokerRateLimited`, `BrokerTransportError`); IBKR-only
+`IbkrOrdersDisabledError` and `SessionCompetingError` remain in `ibkr.py`.
+Tests: `tests/dq/brokers/test_ibkr_adapter.py` (mocked transport only).
+
+## Billing (T2)
+
+Olympus **consumer** subscription tiers are driven by Stripe Checkout + Customer Portal +
+webhook Edge Functions under `digiquant/supabase/functions/` (not Next.js route handlers).
+This is distinct from ADR-0004's digikey metered API seat flow — here entitlements ride
+Supabase Auth JWT `app_metadata.plan_tier` (`free | baseline | custom | enterprise` per
+spec D1) and denormalized `workspaces` billing columns for RLS.
+
+| Function | Auth | Role |
+|----------|------|------|
+| `stripe-webhook` | Stripe-Signature (`STRIPE_WEBHOOK_SECRET`); `verify_jwt=false` | Idempotent `stripe_events` insert → roadmap P4 column mapping → Auth claim sync |
+| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env |
+| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id` |
+
+Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
+Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /
+`STRIPE_PRICE_CUSTOM_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
+`digiquant/supabase/functions/README.md`). Paid claims only while status maps to
+`active`/`past_due` (trialing→active); deleted/incomplete force `plan_tier=free`.
+Ordering is atomic via `workspaces.last_stripe_event_created` CAS (migration 101).
+Idempotency uses `stripe_events.applied_at` — insert-first with NULL marker; duplicate
+pending re-applies; applied rows are true no-ops (poison-pill fix). Claim-sync runs on
+every applied event; failures set `workspaces.claim_sync_pending` (migration 100) and
+still return 200 after marking applied. HTTP errors use stable JSON codes (401/403/…);
+never stack traces or keys.
+
+Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
+(colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
+checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.
