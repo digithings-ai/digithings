@@ -48,10 +48,19 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 ```
 §5 secrets + Auth providers + Stripe/Mailgun/Alpaca apps
   → Edge Function secrets (needs sbp_) + optional full monorepo settings redeploy
-  → develop → main Pages promote (flag-off; no cutover 900) — human release gate (~191 commits)
+  → develop → main Pages promote (flag-off; no cutover 900) — human release gate (~199 commits)
   → §6 cutover (Access on → flag flip → anon-drop 900 → verify → Access off)
 ```
 
+### Pages promote prep (2026-08-30, post-#3181)
+
+| Item | Status |
+|------|--------|
+| `NEXT_PUBLIC_OLYMPUS_AUTH` | Keep **off** (unset/empty) on Cloudflare Pages — safe for pre-cutover promote |
+| Cutover `900` | **Not applied**; stays under `migrations/cutover/` (not top-level) |
+| Branch | `cursor/promote-kairos-pages-3d52` = `origin/develop` tip (`f92a8810`, merge of #3181) |
+| Draft PR develop→main | **Not opened** — agent `gh` token can merge/ready existing PRs + push branches, but **cannot** `createPullRequest` / comment / label (`Resource not accessible by integration`). **Parent:** open draft PR `base=main` `head=cursor/promote-kairos-pages-3d52` (title/body recipe in `COMPLETION_AUDIT.md`). |
+| Review hatches | Findings drafted under `/opt/cursor/artifacts/kairos-reviews/pr-*-review.md` for #3147–#3181; **not posted** — same token 403. Parent with write token: post each body (must start with `<!-- in-session-review -->`) then `gh pr edit N --add-label reviewed:agent`. |
 ---
 
 ## 2. DB migrations 096–105 — apply path
@@ -236,12 +245,11 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — Cursor/VM env **declares** the names but values are **empty** (re-checked 2026-08-30 follow-up); MCP `GET /v4/domains` → auth failed. Fail-soft notify path OK (`MailgunConfig.from_env()` → `None`). **Not** in `.local/secrets/kairos.env` (nothing nonempty to persist). **Not yet** on Supabase EF secrets (needs real key + `sbp_`). No live send attempted. | K5 digest / alerts |
 | Supabase Auth providers (Google, GitHub) on `core` | **Blocked** — dashboard login / OAuth browser failed in agent VM | T1 login when flag on |
 | Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; Agent Mail inbox has no Alpaca verification thread; KYC/browser wall | Product broker connect |
-| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Still blocked** — env still JWT only (re-checked post-#3180; no `sbp_` value prefix; no new secrets). MCP can deploy EF code but cannot set project secrets. **Unlock:** replace Cursor env `SUPABASE_ACCESS_TOKEN` with personal access token `sbp_…`. | EF `secrets set`; full monorepo CLI deploy hygiene |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Still blocked** — env still JWT only (re-checked post-#3181; `eyJ…`, len 1486; **no** `sbp_` prefix; no new vendor keys). MCP can deploy EF code but cannot set project secrets. **Unlock:** replace Cursor env `SUPABASE_ACCESS_TOKEN` with personal access token `sbp_…`. | EF `secrets set`; full monorepo CLI deploy hygiene |
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
-| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) + [#3179](https://github.com/digithings-ai/digithings/pull/3179) + [#3180](https://github.com/digithings-ai/digithings/pull/3180) | **Merged** to `develop` (2026-08-30; tip `bf34c015`) | notifications + schema/docs + cred-push + completion audit; settings EF **v11** (no redeploy on #3180) |
-
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) … [#3181](https://github.com/digithings-ai/digithings/pull/3181) | **Merged** to `develop` (2026-08-30; tip `f92a8810`) | notifications + schema/docs + audits; settings EF **v11** (no redeploy — no `sbp_` / no new secrets) |
 ---
 
 ## 6. Cutover checklist
