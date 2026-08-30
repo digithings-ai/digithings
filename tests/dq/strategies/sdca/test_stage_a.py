@@ -232,8 +232,11 @@ class TestStageAWeightSearch:
             valuation_grid=(1.0,),
             require_extras=True,
         )
+        # Valuation-only is skipped; any non-zero extra satisfies require_extras
+        # (sma_band zeros still count as an enabled extra and dilute valuation).
         assert result.weights.enabled_extras()
-        assert "weekly_rsi" in result.weights.enabled_extras()
+        assert result.weights.valuation == pytest.approx(1.0)
+        assert sum(result.weights.enabled_extras().values()) > 0.0
 
     def test_risk_from_weighted_z_matches_composite_formula(self) -> None:
         dates = [date(2020, 1, 1), date(2020, 1, 2)]
