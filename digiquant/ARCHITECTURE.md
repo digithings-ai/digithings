@@ -3079,6 +3079,8 @@ Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
 are not HTTP 200 exit **3**. Exit **0** only when all five remaining hops are
 proven. Exit **2** when hops are unproven **and** named vendor secrets are
 missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
+Phase C (and the Observer checkout hop) POST `tier=custom` — Baseline would
+leave broker connect / overlay / fill `TIER_FORBIDDEN` after Stripe lands.
 Recipient for staging digests can be an Agentmail inbox once Mailgun is
 configured.
 

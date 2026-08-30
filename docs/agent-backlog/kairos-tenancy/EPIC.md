@@ -131,7 +131,8 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
 still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2** (9 named vendor secrets).
-Observer `notification_prefs.daily_digest` is **true** (PATCH 200 on free; not
+Observer checkout hop and Phase C both POST `tier=custom` (Baseline would leave
+broker/overlay/fill `TIER_FORBIDDEN`). Observer `notification_prefs.daily_digest` is **true** (PATCH 200 on free; not
 Custom-gated). Digest remaining-hop also requires that pref, plus log + inbox
 (Settings About library matches Python; inbox confirm stays operator-only so
 the UI hop stays unproven). `python -m digiquant.notify.dispatch --dry-run`

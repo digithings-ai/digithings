@@ -48,6 +48,9 @@ CHECKOUT_CONFIG_MISS_CODES: frozenset[str] = frozenset(
 
 DEFAULT_PUBLIC_APP_ORIGIN = "https://digiquant.io"
 _LOOPBACK_MARKERS: tuple[str, ...] = ("127.0.0.1", "localhost")
+# Broker connect + overlay + paper fill are Custom+. Baseline checkout would
+# prove Stripe then leave Observer TIER_FORBIDDEN on the remaining hops.
+STAGING_CHECKOUT_BODY: dict[str, object] = {"tier": "custom", "interval": "monthly"}
 
 
 def public_app_urls_ok(http: int, body: Mapping[str, object]) -> bool:
@@ -180,7 +183,7 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
         method="POST",
         path="/create-checkout-session",
         kind=HopExpectation.PRICE_OR_SESSION,
-        body={"tier": "custom", "interval": "monthly"},
+        body=STAGING_CHECKOUT_BODY,
     ),
     ObserverHop(
         label="POST /settings/brokers (wrong path)",
@@ -487,7 +490,7 @@ def run_staging_e2e(
         "POST",
         f"{functions_base}/create-checkout-session",
         headers={"Authorization": f"Bearer {jwt}"},
-        body={"tier": "baseline", "interval": "monthly"},
+        body=STAGING_CHECKOUT_BODY,
     )
     code = _response_code(body) or "ok"
     log(f"  checkout_http={status} code={code}")
@@ -532,6 +535,7 @@ __all__ = [
     "ObserverHop",
     "ProbeResult",
     "RemainingHopEvidence",
+    "STAGING_CHECKOUT_BODY",
     "_digest_inbox_confirmed",
     "collect_remaining_evidence",
     "format_remaining_hops_failure",

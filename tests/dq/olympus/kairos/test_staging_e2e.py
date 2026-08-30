@@ -25,6 +25,7 @@ from digiquant.olympus.kairos.remaining_hops import (
 from digiquant.olympus.kairos.staging_e2e import (
     OBSERVER_HOPS,
     REMAINING_LIVE_HOPS,
+    STAGING_CHECKOUT_BODY,
     HopExpectation,
     collect_remaining_evidence,
     format_remaining_hops_failure,
@@ -135,6 +136,16 @@ def test_prefs_digest_on_requires_daily_digest_true() -> None:
 
 
 @pytest.mark.unit
+def test_staging_checkout_is_custom_not_baseline() -> None:
+    """Broker/overlay/fill remaining hops are Custom+; Baseline would dead-end Observer."""
+    assert STAGING_CHECKOUT_BODY == {"tier": "custom", "interval": "monthly"}
+    hop = next(row for row in OBSERVER_HOPS if row.path == "/create-checkout-session")
+    assert hop.body == STAGING_CHECKOUT_BODY
+    assert hop.body is not None
+    assert hop.body.get("tier") != "baseline"
+
+
+@pytest.mark.unit
 def test_public_app_urls_ok_requires_digiquant_origin() -> None:
     good = {
         "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
@@ -168,6 +179,7 @@ class _FakeHttp:
 
     def __init__(self, by_key: dict[tuple[str, str], tuple[int, dict[str, object]]]) -> None:
         self.by_key = by_key
+        self.bodies: list[tuple[str, str, dict[str, object] | None]] = []
 
     def __call__(
         self,
@@ -177,7 +189,8 @@ class _FakeHttp:
         headers: dict[str, str] | None = None,
         body: dict[str, object] | None = None,
     ) -> tuple[int, dict[str, object]]:
-        del headers, body
+        del headers
+        self.bodies.append((method, url, body))
         matches: list[tuple[int, tuple[int, dict[str, object]]]] = []
         for (m, suffix), payload in self.by_key.items():
             if m == method and url.rstrip("/").endswith(suffix):
@@ -523,14 +536,22 @@ def test_run_staging_e2e_checkout_url_is_not_complete_exits_4(
     environ = {name: f"test-placeholder-{name}" for name in KAIROS_STAGING_REQUIRED_SECRETS}
     environ["KAIROS_STAGING_USER_JWT"] = "test-jwt"
     logs: list[str] = []
+    fake = _FakeHttp(fakes)
     rc = run_staging_e2e(
-        http=_FakeHttp(fakes),
+        http=fake,
         environ=environ,
         log=logs.append,
         log_err=logs.append,
     )
     assert rc == 4
     assert rc != 0
+    checkout_bodies = [
+        body
+        for method, url, body in fake.bodies
+        if method == "POST" and url.rstrip("/").endswith("/create-checkout-session")
+    ]
+    assert checkout_bodies
+    assert all(body == STAGING_CHECKOUT_BODY for body in checkout_bodies)
     blob = "\n".join(logs)
     assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
     for hop in (
@@ -623,7 +644,7 @@ def test_kairos_core_staging_e2e_refuses_fakes() -> None:
         "POST",
         checkout_url,
         headers={"Authorization": f"Bearer {jwt}"},
-        body={"tier": "baseline", "interval": "monthly"},
+        body=STAGING_CHECKOUT_BODY,
     )
     code = str(body.get("code") or "")
     if status >= 500 and code in {"PRICE_NOT_CONFIGURED", "STRIPE_NOT_CONFIGURED"}:
