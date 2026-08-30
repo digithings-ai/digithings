@@ -40,7 +40,30 @@ seg toggle all come from the family barrel. Data derivation (`series.ts`,
 `stats.ts`, `pivot-stats.ts`, `trades.ts`, `types.ts` full schema) is
 app-owned data wiring and stays put; components take render-ready props.
 
-Screen-only reuse: the homepage preview deck
-(`components/landing/StrategySuite.tsx`) renders the same family
-`CandlestickChart` (compact) — one engine backs every price surface in this
-app. Do not fork the engine per surface.
+## Schema 1.3 — DCA kind (#3172)
+
+`TearsheetData.dca` is an optional `TearsheetDcaBreakdown`. Slapper payloads
+omit it and render unchanged. Drive off **null KPIs** (`win_rate_pct` /
+`profit_factor` / `long` / `short`), not a slug allowlist.
+
+| Surface | Renders | Source |
+|---|---|---|
+| Valuation rails (log spot + low/median/high) | `MultiTimeSeries` | family (#3172) |
+| Risk-band strip (0–100, labelled bands) | `RiskBandStrip` | family (#3172) |
+| Accumulation (cost basis vs spot; capital deployed %) | `MultiTimeSeries` + `TimeSeries` | family |
+| Three-way equity (SDCA / lump / flat DCA) | `MultiTimeSeries` on the Equity tab | family |
+
+Rails / risk / cost-basis / lump / flat series are optional diagnostic
+fields (`rails`, `risk_curve`, `cost_basis_curve`, `lump_equity_curve`,
+`flat_dca_equity_curve`). Tabs degrade away when a series is absent —
+live payloads may lag until publish writes the diagnostics (#3168).
+
+Library cards for `kind === "dca"` (or when `vs_lump_pct` is present)
+headline **vs-lump**, **vs-flat-DCA**, and **capital deployed** instead of
+win rate / trade count.
+
+Current signal for a DCA book is **risk, band, daily rate**
+("Accumulate — buying 4.0% of cash today"), not long/short/flat.
+
+Band labels: `<10 Fire sale · 10–25 Accumulate · 25–50 Value · 50–75 Above mid · 75–95 Hot · 95–100 Bubble`.
+All `dca.*_pct` fields are ×100 percents.

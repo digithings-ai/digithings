@@ -19,8 +19,11 @@ import {
   Kpi,
   KpiStrip,
   LOOKBACK_OPTIONS,
+  MultiTimeSeries,
   PRINT_FULL_VIEW,
+  RISK_BANDS,
   ReturnsMatrix,
+  RiskBandStrip,
   SegToggle,
   TerminalMark,
   TimeSeries,
@@ -37,6 +40,7 @@ import {
   type ChartScale,
   type LookbackPreset,
   type MatrixMetric,
+  type OverlaySeries,
   type ReturnsPeriod,
   type TradeLogColumn,
   type TradeLogRow,
@@ -50,7 +54,7 @@ import { SignalDelayChip } from "./signal-delay";
 import type { StatsPivot } from "./pivot-stats";
 import { StrategyNotes } from "./strategy-notes";
 import { strategyDisplayName, symbolBase } from "./strategy-names";
-import { chartFullSpan, clipOhlc, clipPoints } from "./series";
+import { chartFullSpan, clipOhlc, clipPoints, closesFromOhlc } from "./series";
 import {
   avgTradePct,
   cagrPct,
@@ -66,6 +70,7 @@ import {
 } from "./trades";
 import { type TearsheetData, type TearsheetTrade } from "./types";
 import { fetchTearsheet } from "@/lib/live/strategies";
+import { hasTradeKpis, isDcaTearsheet } from "./dca";
 
 function Toned({ v, children }: { v: number | null | undefined; children: React.ReactNode }) {
   const c = toneClass(v);
@@ -112,7 +117,7 @@ function TradeLog({
 }
 
 type TearsheetMode = "charts" | "tables";
-type ChartTab = "price" | "equity" | "drawdown" | "pnl" | "matrix";
+type ChartTab = "price" | "rails" | "risk" | "accumulation" | "equity" | "drawdown" | "pnl" | "matrix";
 type TableTab = "stats" | "trades";
 
 const CHART_H = 440;
@@ -166,6 +171,31 @@ export function TearsheetView({ slug }: { slug: string }) {
     () => (data?.ohlc_bars ? clipOhlc(data.ohlc_bars, data.period_start) : []),
     [data],
   );
+  const chartSpot = useMemo(() => closesFromOhlc(chartOhlc), [chartOhlc]);
+  const chartRails = useMemo(
+    () => (data?.rails ? data.rails.filter((r) => !data.period_start || r.t >= data.period_start) : []),
+    [data],
+  );
+  const chartRisk = useMemo(
+    () => (data?.risk_curve ? clipPoints(data.risk_curve, data.period_start) : []),
+    [data],
+  );
+  const chartCost = useMemo(
+    () => (data?.cost_basis_curve ? clipPoints(data.cost_basis_curve, data.period_start) : []),
+    [data],
+  );
+  const chartDeployed = useMemo(
+    () => (data?.capital_deployed_curve ? clipPoints(data.capital_deployed_curve, data.period_start) : []),
+    [data],
+  );
+  const chartLump = useMemo(
+    () => (data?.lump_equity_curve ? clipPoints(data.lump_equity_curve, data.period_start) : []),
+    [data],
+  );
+  const chartFlat = useMemo(
+    () => (data?.flat_dca_equity_curve ? clipPoints(data.flat_dca_equity_curve, data.period_start) : []),
+    [data],
+  );
 
   const pnlBars = useMemo(() => (data ? tradesForPnlChart(data) : []), [data]);
 
@@ -174,6 +204,12 @@ export function TearsheetView({ slug }: { slug: string }) {
     const base = data.initial_capital;
     return chartEquity.map((p) => ({ t: p.t, v: base > 0 ? (p.v / base - 1) * 100 : 0 }));
   }, [data, chartEquity]);
+
+  const toReturnPct = useCallback(
+    (points: { t: string; v: number }[], base: number) =>
+      points.map((p) => ({ t: p.t, v: base > 0 ? (p.v / base - 1) * 100 : 0 })),
+    [],
+  );
 
   const fullSpan = useMemo<[string, string] | undefined>(() => {
     if (!data) return undefined;
@@ -204,7 +240,15 @@ export function TearsheetView({ slug }: { slug: string }) {
   );
 
   const hasPrice = chartOhlc.length > 0;
-  const chartTab = chartTabPick ?? (hasPrice ? "price" : "equity");
+  const hasRails = chartRails.length > 0 && chartSpot.length > 0;
+  const hasRisk = chartRisk.length > 0;
+  const hasAccum = chartCost.length > 0 || chartDeployed.length > 0;
+  const hasThreeWay = chartLump.length > 0 && chartFlat.length > 0;
+  const showTradeKpis = data ? hasTradeKpis(data.win_rate_pct, data.profit_factor) : true;
+  const dcaBook = data ? isDcaTearsheet(data) : false;
+  const chartTab =
+    chartTabPick ??
+    (hasRails ? "rails" : hasPrice ? "price" : "equity");
 
   useEffect(() => {
     const sheetTitle = strategyDisplayName(slug, data?.label);
@@ -237,14 +281,41 @@ export function TearsheetView({ slug }: { slug: string }) {
   const chartTabOptions = useMemo(() => {
     const opts: { value: ChartTab; label: string }[] = [];
     if (hasPrice) opts.push({ value: "price", label: "Price" });
-    opts.push(
-      { value: "equity", label: "Equity" },
-      { value: "drawdown", label: "Drawdown" },
-      { value: "pnl", label: "P&L" },
-      { value: "matrix", label: "Matrix" },
-    );
+    if (hasRails) opts.push({ value: "rails", label: "Rails" });
+    if (hasRisk) opts.push({ value: "risk", label: "Risk" });
+    if (hasAccum) opts.push({ value: "accumulation", label: "Accumulation" });
+    opts.push({ value: "equity", label: "Equity" }, { value: "drawdown", label: "Drawdown" });
+    if (showTradeKpis) opts.push({ value: "pnl", label: "P&L" });
+    opts.push({ value: "matrix", label: "Matrix" });
     return opts;
-  }, [hasPrice]);
+  }, [hasAccum, hasPrice, hasRails, hasRisk, showTradeKpis]);
+
+  const railsOverlay: OverlaySeries[] = useMemo(() => {
+    if (!hasRails) return [];
+    return [
+      { id: "spot", label: "Spot", points: chartSpot, tone: "accent", fill: true },
+      {
+        id: "low",
+        label: "Low",
+        points: chartRails.map((r) => ({ t: r.t, v: r.low })),
+        tone: "mute",
+        dashed: true,
+      },
+      {
+        id: "median",
+        label: "Median",
+        points: chartRails.map((r) => ({ t: r.t, v: r.median })),
+        tone: "mute",
+      },
+      {
+        id: "high",
+        label: "High",
+        points: chartRails.map((r) => ({ t: r.t, v: r.high })),
+        tone: "mute",
+        dashed: true,
+      },
+    ];
+  }, [chartRails, chartSpot, hasRails]);
 
   const chartLegend = useMemo(() => {
     switch (chartTab) {
@@ -257,8 +328,44 @@ export function TearsheetView({ slug }: { slug: string }) {
             ]}
           />
         );
+      case "rails":
+        return (
+          <ChartLegend
+            items={[
+              { kind: "line", label: "Spot" },
+              { kind: "line-dashed", label: "Low / high" },
+              { kind: "line-mute", label: "Median" },
+            ]}
+          />
+        );
+      case "risk":
+        return (
+          <span className="ts-panel-hint">
+            {RISK_BANDS.map((b) => `${b.lo}–${b.hi} ${b.label}`).join(" · ")}
+          </span>
+        );
+      case "accumulation":
+        return (
+          <ChartLegend
+            items={[
+              { kind: "line", label: "Spot" },
+              { kind: "line-up", label: "Cost basis" },
+              { kind: "line-mute", label: "Capital deployed %" },
+            ]}
+          />
+        );
       case "equity":
-        return <ChartLegend items={[{ kind: "line", label: scale === "log" ? "Equity ($)" : "Return %" }]} />;
+        return hasThreeWay ? (
+          <ChartLegend
+            items={[
+              { kind: "line", label: scale === "log" ? "SDCA ($)" : "SDCA %" },
+              { kind: "line-dashed", label: "Lump" },
+              { kind: "line-mute", label: "Flat DCA" },
+            ]}
+          />
+        ) : (
+          <ChartLegend items={[{ kind: "line", label: scale === "log" ? "Equity ($)" : "Return %" }]} />
+        );
       case "drawdown":
         return <ChartLegend items={[{ kind: "line", label: "Drawdown %" }]} />;
       case "pnl":
@@ -277,7 +384,7 @@ export function TearsheetView({ slug }: { slug: string }) {
         return _exhaustive;
       }
     }
-  }, [chartTab, scale]);
+  }, [chartTab, hasThreeWay, scale]);
 
   if (err) return <p className="ts-status ts-status-error">{err}</p>;
   if (!data) return <p className="ts-status">Loading tearsheet…</p>;
@@ -328,7 +435,7 @@ export function TearsheetView({ slug }: { slug: string }) {
         onChange={applyLookback}
         options={LOOKBACK_OPTIONS}
       />
-      {chartTab === "price" || chartTab === "equity" ? (
+      {chartTab === "price" || chartTab === "equity" || chartTab === "rails" ? (
         <SegToggle
           label="Chart Y-axis scale"
           value={scale}
@@ -345,9 +452,8 @@ export function TearsheetView({ slug }: { slug: string }) {
   return (
     <div className="ts-print-root">
       <div className="ts-print-brand" aria-hidden="true">
-        {/* The mark, not an <img>: the old QR tile was hardcoded to the dark
-            variant with no theme switch, so it printed a black square. In
-            currentColor it follows the print ink like the word beside it. */}
+        {/* Print brand uses TerminalMark in currentColor (the old QR tile was
+            hardcoded to the dark variant and printed as a black square). */}
         <TerminalMark size={22} variant="compact" className="ts-print-brand-mark" />
         <span className="ts-print-brand-word">digiquant</span>
         <a className="ts-print-brand-link" href="https://digiquant.io">digiquant.io</a>
@@ -387,13 +493,24 @@ export function TearsheetView({ slug }: { slug: string }) {
       <KpiStrip primary ariaLabel="Headline performance">
         <Kpi label="CAGR" value={<Toned v={cagr}>{fmtPct(cagr)}</Toned>} />
         <Kpi label="Max drawdown" value={<span className="is-neg">{fmtPct(data.max_drawdown_pct)}</span>} />
-        <Kpi label="Profit factor" value={fmtNum(data.profit_factor, 2)} />
-        <Kpi label="Win rate" value={fmtPct(data.win_rate_pct)} />
-        <Kpi label="Avg trade return" value={<Toned v={avgTrade}>{fmtPct(avgTrade)}</Toned>} />
-        <Kpi
-          label="Trades / yr"
-          value={fmtNum(tradesPerYear(data.total_trades, data.period_start, data.period_end), 1)}
-        />
+        {dcaBook && data.dca ? (
+          <>
+            <Kpi label="Vs lump" value={<Toned v={data.dca.vs_lump_pct}>{fmtPct(data.dca.vs_lump_pct)}</Toned>} />
+            <Kpi label="Vs flat DCA" value={<Toned v={data.dca.vs_flat_dca_pct}>{fmtPct(data.dca.vs_flat_dca_pct)}</Toned>} />
+            <Kpi label="Capital deployed" value={fmtPct(data.dca.capital_deployed_pct)} />
+            <Kpi label="Units" value={fmtNum(data.dca.units_accumulated, 2)} />
+          </>
+        ) : showTradeKpis ? (
+          <>
+            <Kpi label="Profit factor" value={fmtNum(data.profit_factor, 2)} />
+            <Kpi label="Win rate" value={fmtPct(data.win_rate_pct)} />
+            <Kpi label="Avg trade return" value={<Toned v={avgTrade}>{fmtPct(avgTrade)}</Toned>} />
+            <Kpi
+              label="Trades / yr"
+              value={fmtNum(tradesPerYear(data.total_trades, data.period_start, data.period_end), 1)}
+            />
+          </>
+        ) : null}
       </KpiStrip>
 
       <div className="ts-mode-bar">
@@ -439,10 +556,120 @@ export function TearsheetView({ slug }: { slug: string }) {
               </div>
             </div>
           ) : null}
+          {hasRails ? (
+            <div className="ts-tab-pane" hidden={chartTab !== "rails"}>
+              <PrintHeading>Valuation rails</PrintHeading>
+              <div className="ts-chart">
+                <MultiTimeSeries
+                  series={railsOverlay}
+                  height={CHART_H}
+                  scale={chartScale === "log" ? "log" : "linear"}
+                  fmt={fmtCompact}
+                  view={chartView}
+                  onView={setViewFromChart}
+                  fullSpan={fullSpan}
+                  resetView={presetView}
+                  ariaLabel={`${data.symbol} log price with valuation rails`}
+                />
+              </div>
+            </div>
+          ) : null}
+          {hasRisk ? (
+            <div className="ts-tab-pane" hidden={chartTab !== "risk"}>
+              <PrintHeading>Risk band</PrintHeading>
+              <div className="ts-chart">
+                <RiskBandStrip
+                  points={chartRisk}
+                  height={CHART_H}
+                  view={chartView}
+                  onView={setViewFromChart}
+                  fullSpan={fullSpan}
+                  resetView={presetView}
+                  ariaLabel="Composite risk 0 to 100 with labelled bands"
+                />
+              </div>
+            </div>
+          ) : null}
+          {hasAccum ? (
+            <div className="ts-tab-pane" hidden={chartTab !== "accumulation"}>
+              <PrintHeading>Accumulation</PrintHeading>
+              <div className="ts-chart">
+                <MultiTimeSeries
+                  series={[
+                    ...(chartSpot.length
+                      ? [{ id: "spot", label: "Spot", points: chartSpot, tone: "accent" as const, fill: true }]
+                      : []),
+                    ...(chartCost.length
+                      ? [{ id: "cost", label: "Cost basis", points: chartCost, tone: "up" as const }]
+                      : []),
+                  ]}
+                  height={CHART_H}
+                  scale="linear"
+                  fmt={fmtCompact}
+                  view={chartView}
+                  onView={setViewFromChart}
+                  fullSpan={fullSpan}
+                  resetView={presetView}
+                  ariaLabel="Cost basis versus spot price"
+                />
+              </div>
+              {chartDeployed.length > 0 ? (
+                <div className="ts-chart">
+                  <TimeSeries
+                    points={chartDeployed}
+                    height={Math.round(CHART_H * 0.55)}
+                    scale="linear"
+                    tone="accent"
+                    fmt={(v) => fmtCompact(v) + "%"}
+                    view={chartView}
+                    onView={setViewFromChart}
+                    fullSpan={fullSpan}
+                    resetView={presetView}
+                    ariaLabel="Capital deployed, percent of initial cash"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <div className="ts-tab-pane" hidden={chartTab !== "equity"}>
             <PrintHeading>Equity</PrintHeading>
             <div className="ts-chart">
-              {chartScale === "log" ? (
+              {hasThreeWay ? (
+                <MultiTimeSeries
+                  series={
+                    chartScale === "log"
+                      ? [
+                          { id: "sdca", label: "SDCA", points: chartEquity, tone: "accent", fill: true },
+                          { id: "lump", label: "Lump", points: chartLump, tone: "mute", dashed: true },
+                          { id: "flat", label: "Flat DCA", points: chartFlat, tone: "mute" },
+                        ]
+                      : [
+                          { id: "sdca", label: "SDCA", points: equityPct, tone: "accent", fill: true },
+                          {
+                            id: "lump",
+                            label: "Lump",
+                            points: toReturnPct(chartLump, data.initial_capital),
+                            tone: "mute",
+                            dashed: true,
+                          },
+                          {
+                            id: "flat",
+                            label: "Flat DCA",
+                            points: toReturnPct(chartFlat, data.initial_capital),
+                            tone: "mute",
+                          },
+                        ]
+                  }
+                  height={CHART_H}
+                  scale={chartScale === "log" ? "log" : "linear"}
+                  fmt={chartScale === "log" ? fmtCompact : (v) => fmtCompact(v) + "%"}
+                  view={chartView}
+                  onView={setViewFromChart}
+                  fullSpan={fullSpan}
+                  resetView={presetView}
+                  ariaLabel="SDCA equity versus lump-sum and flat DCA"
+                />
+              ) : chartScale === "log" ? (
                 <TimeSeries points={chartEquity} height={CHART_H} scale="log" tone="accent" fmt={fmtCompact} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} ariaLabel="Equity curve in dollars, log scale" />
               ) : (
                 <TimeSeries points={equityPct} height={CHART_H} scale="linear" tone="accent" fmt={(v) => fmtCompact(v) + "%"} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} ariaLabel="Equity curve, percent return, linear scale" />
@@ -455,20 +682,23 @@ export function TearsheetView({ slug }: { slug: string }) {
               <TimeSeries points={chartDrawdown} height={CHART_H} scale="linear" tone="down" zeroBaseline fmt={(v) => v.toFixed(0) + "%"} view={chartView} onView={setViewFromChart} fullSpan={fullSpan} resetView={presetView} ariaLabel="Drawdown, percent below peak equity" />
             </div>
           </div>
-          <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
-            <PrintHeading>Per-trade return</PrintHeading>
-            <div className="ts-chart">
-              <TradeReturnChart
-                bars={pnlBars}
-                height={CHART_H}
-                view={chartView}
-                onView={setViewFromChart}
-                fullSpan={fullSpan}
-                resetView={presetView}
-                ariaLabel="Per-trade profit and loss, percent"
-              />
+          {showTradeKpis ? (
+          {showTradeKpis ? (
+            <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
+              <PrintHeading>Per-trade return</PrintHeading>
+              <div className="ts-chart">
+                <TradeReturnChart
+                  bars={pnlBars}
+                  height={CHART_H}
+                  view={chartView}
+                  onView={setViewFromChart}
+                  fullSpan={fullSpan}
+                  resetView={presetView}
+                  ariaLabel="Per-trade profit and loss, percent"
+                />
+              </div>
             </div>
-          </div>
+          ) : null}
           <div className="ts-tab-pane ts-tab-pane-matrix" hidden={chartTab !== "matrix"}>
             <PrintHeading>Period matrix</PrintHeading>
             <ReturnsMatrix
@@ -490,7 +720,9 @@ export function TearsheetView({ slug }: { slug: string }) {
             onChange={setTableTab}
             options={[
               { value: "stats", label: "Statistics" },
-              { value: "trades", label: "Trade log" },
+              ...(showTradeKpis
+                ? [{ value: "trades" as const, label: "Trade log" }]
+                : []),
             ]}
           />
           {tableTab === "stats" ? (
