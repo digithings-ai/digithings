@@ -738,9 +738,26 @@ cutover here), migration 109 adds:
 | `authenticated_read_house_teaser` | `daily_snapshots`, `theses`, `instruments` | `true` (shared teaser; no `workspace_id`) |
 | `authenticated_select_own_workspace` (expanded) | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID **OR** own membership |
 
-`anon_read` is untouched. Proof: `tests/dq/olympus/test_migration_109_house_teaser.py`.
-Numbering: **108** is creator/product grants (independent); **109** is this RLS
-hotfix. Both files are required.
+`anon_read` on those book tables was **USING (true)** until **110**. Proof:
+`tests/dq/olympus/test_migration_109_house_teaser.py`. Numbering: **108** is
+creator/product grants (independent); **109** is this RLS hotfix.
+
+### Anon house-only private books — migration 110
+
+Pre-cutover: 109 made authenticated SELECT house-OR-membership, but left
+`anon_read USING (true)` — anon was wider than a signed-in member. Overlay
+persist would have leaked private books. Migration **110** recreates
+`anon_read` (same policy name so cutover 900 still DROPs it):
+
+| Policy | Tables | `USING` |
+|--------|--------|---------|
+| `anon_read` | `positions`, `position_events`, `nav_history`, `portfolio_metrics` | house workspace UUID only |
+| `anon_read` | `documents` | house **OR** system |
+
+Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
+`instruments`) are untouched. Overlay must not upsert `daily_snapshots`.
+This is **not** cutover 900: anon can still read house weights/NAV. Proof:
+`tests/dq/olympus/test_migration_110_anon_house_only.py`.
 
 Staged cutover **900** section A2 restores 098 membership-only
 `authenticated_select_own_workspace` on the four book tables and drops

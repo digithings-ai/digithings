@@ -1,8 +1,14 @@
-"""Overlay private-phase persistence gate (T4 / T1-train precondition).
+"""Overlay private-phase persistence gate (T4).
 
-``documents`` / ``positions`` / ``nav_history`` still carry ``anon_read USING (true)``
-until the T1-train anon-policy drop. Overlay must not write private rows onto that
-surface unless an operator has explicitly enabled persistence after that drop.
+Migration 110 narrows ``anon_read`` on workspace-scoped private books
+(``documents`` / ``positions`` / ``nav_history`` / ``portfolio_metrics``) to the
+house (and house+system for documents). Overlay may persist those rows once
+an operator sets ``OLYMPUS_OVERLAY_PERSIST=1`` on a target that has 110
+applied. Cutover 900 is still required before dropping the house teaser for
+anon / free JWTs; it is not the persist precondition.
+
+``daily_snapshots`` stays a house-only ``UNIQUE(date)`` table — overlay
+publish must skip it (see ``publish_phase``) even with persist on.
 """
 
 from __future__ import annotations
@@ -24,7 +30,8 @@ class OverlayPersistDisabled(Exception):
         self.code = JobStatus.PERSIST_DISABLED.value
         self.message = (
             "overlay private-phase persistence is disabled; set "
-            f"{OVERLAY_PERSIST_ENV}=1 only after the T1-train anon-policy drop"
+            f"{OVERLAY_PERSIST_ENV}=1 only after migration 110 "
+            "(anon house-only on private books) is applied on the target"
         )
         super().__init__(self.message)
 

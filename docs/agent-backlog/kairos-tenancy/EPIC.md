@@ -47,7 +47,7 @@ Wave E
 ## Program-level acceptance
 
 - [x] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
-- [x] RLS proof (local harness vs canonical 001–109 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
+- [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
 - [x] No live `submit_order` reachable without env flag + human-gated code path (test-pinned).
@@ -72,8 +72,10 @@ production cron CLIs, remaining-hop proofs from Settings product state, staged
 `cursor/*` cannot write `.github/workflows/`).
 
 **Schema (`core`):** migrations **096–109** applied (`109_authenticated_house_teaser_read`).
-Cutover **900 not applied**. Local RLS harness (throwaway DB + staged 900 A2):
-**59/59 PASS** (2026-08-31). CI on this branch `6fcd7316`: **37/37 green**.
+This branch adds **110** (`anon_read` house-only on private books) so overlay
+persist does not leak to anon; apply to `core` with the file (never 900).
+Cutover **900 not applied**. Local RLS harness (throwaway DB + 001–110 + staged
+900 A2): **59/59 PASS** (2026-08-31). CI on this branch `6fcd7316`: **37/37 green**.
 
 **Edge Functions (`core`):** `settings` **v29 ACTIVE** (`verify_jwt=true`, includes
 `GET /jobs` `/fills` `/notifications/log`); checkout/portal await Stripe price

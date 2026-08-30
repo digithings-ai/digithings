@@ -3207,12 +3207,18 @@ keys after the documents unique is `(workspace_id, date, document_key)`.
 (backfilled house). The legacy `UNIQUE(date, document_key)` is **replaced** by
 `UNIQUE(workspace_id, date, document_key)` — keeping both would still collide
 overlay+house same-key rows. Authenticated own-workspace SELECT is added for
-non-house/non-system rows; **`anon_read` is not touched** (T1-train rule).
+non-house/non-system rows; **migration 110** narrows ``anon_read`` on
+workspace-scoped private books to house (documents: house+system) so overlay
+rows cannot leak to anon. Cutover 900 still DROPs those policies.
 
 **Persist flag.** Overlay private-phase writes (`documents` / `positions` /
 `nav_history` / ledger) require `OLYMPUS_OVERLAY_PERSIST=1` (default off).
-Production may enable that flag **only after** the T1-train anon-policy drop
-ships. With the flag off, research/corpus phases still run; private-phase
+Production may enable that flag **after migration 110** is applied on the
+target (anon house-only on private books). Overlay publish **skips**
+`daily_snapshots` (house-only `UNIQUE(date)` — an overlay upsert would
+overwrite the house Brief). Cutover 900 is still required before dropping
+the house teaser for anon / free JWTs; it is not the persist precondition.
+With the flag off, research/corpus phases still run; private-phase
 persistence refuses and the job row is `persist_disabled`.
 
 **Budget (`budget.py`).** At overlay start the runner calls

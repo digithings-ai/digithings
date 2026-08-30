@@ -15,7 +15,11 @@
 --   migrations/**) but the apply loop finds zero new top-level files → no DDL.
 --   Do NOT move this file to the migrations/ root until cutover.
 --
--- HOW TO APPLY (human, at cutover — never auto)
+-- 110 (pre-cutover, top-level) already narrowed ``anon_read`` on workspace-scoped
+-- private books to the house UUID (documents: house+system). This file still
+-- DROPs those policies so anon cannot read house weights/NAV after cutover.
+-- Do not skip the DROPs because 110 ran.
+--
 --   1. Confirm preconditions below.
 --   2. cp this file to digiquant/supabase/migrations/<next>_drop_anon_read_cutover.sql
 --      on a short-lived cutover branch; open PR → merge → promote to main

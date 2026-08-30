@@ -22,7 +22,7 @@ real `core` Supabase project.
 ## Migration apply order
 
 1. **Shim** (`00_supabase_shim.sql`)
-2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…109, lexicographic `sort` — same as `db-migrate.yml`). Includes `109_authenticated_house_teaser_read` (pre-cutover Auth Pages JWT hotfix).
+2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…110, lexicographic `sort` — same as `db-migrate.yml`). Includes `109_authenticated_house_teaser_read` (pre-cutover Auth Pages JWT hotfix) and `110_anon_house_only_private_books` (anon house-only on overlay-capable book tables).
 3. **Kairos/T4 migrations** `099`, `102`–`105` — now canonical in `digiquant/supabase/migrations/`, applied by the same glob (vendor step dropped after the K3–T4 merges)
 4. **Cutover** `digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql` (staged; not auto-applied in CI). Section A2 restores 098 membership-only SELECT on the house book tables so 109's teaser does not leak weights to free JWTs after `anon_read` is dropped.
 
