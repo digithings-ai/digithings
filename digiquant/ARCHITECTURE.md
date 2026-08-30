@@ -2955,17 +2955,18 @@ T4). Live venue / broker tokens in `active_paper_brokers` (e.g. `"alpaca_live"`,
 `ExecutionVenue.ALPACA_LIVE`) raise `LiveVenueNotAuthorizedError` on the **public** API
 (not a bare `ValueError`); `_assert_not_live` remains defense-in-depth on the return path.
 
-**Router (`router.py`) — authority boundary.** `workspace_id` is passed to `resolve_venue`
-**unchanged** (`None` stays `None`; never substituted with `connection.workspace_id`).
-`connection.env != paper` raises `LiveVenueNotAuthorizedError` before any
-`submit_order`. Pending intents are read via `_pending_order_heads` /
-`_directions_by_order`, which call `_rows_for_date`. T4 made omitted
-`workspace_id` mean the **house** (never every row); the K4 post-filter then
-keeps `connection.workspace_id` and raises `ForeignWorkspaceIntentError` on a
-pending row missing `workspace_id`. Overlay tenant intents are therefore
-invisible to this omitted-workspace read — workspace threading into the
-helpers is the next hop (e2e-chain-test). Foreign-workspace intents are never
-submitted. Builds
+**Router (`router.py`) — authority boundary.** Gates evaluate first:
+`workspace_id` is passed to `resolve_venue` **unchanged** (`None` / house /
+system UUID ⇒ `PAPER_INTERNAL`; never substituted with
+`connection.workspace_id`). `connection.env != paper` raises
+`LiveVenueNotAuthorizedError` before any `submit_order`. After a non-internal
+venue is resolved for a real overlay workspace, ledger reads are **threaded**
+with that `workspace_id` (T4 omitted workspace ⇒ house, so overlay intents are
+otherwise invisible). `_scope_ledger_rows_to_workspace` then asserts every
+returned row matches the connection; a same-date pending head missing
+`workspace_id` raises `ForeignWorkspaceIntentError` (scoped `eq` cannot observe
+a null column, so the router does a date-scoped missing-id scan that never
+submits). Foreign-workspace intents are never submitted. Builds
 `BrokerOrderRequest` from a pending `OrderIntent` (`client_order_id = str(order_intent_id)`;
 side from `DecisionIntent.action` via `_directions_by_order` — never from the positions
 book). `NO_OP`/`REJECT` with a pending intent → `InconsistentOrderChainError`. Appends one
@@ -3116,9 +3117,9 @@ A prefixed model not covered by the unsealed provider (`anthropic/…` with an
 openai BYOK row) refuses `byok_provider_mismatch` rather than falling through
 to house env keys. Missing or unsealable user key ⇒ skip.
 
-**Venue.** K4 `policy.py` (review-fix `9b4e9c86`, merged via K5) hard-codes
-`PAPER_INTERNAL` for `None` / house / system UUIDs. Overlay tenant routing
-still needs workspace threaded into `_pending_order_heads` (next hop).
+**Venue.** K4 `policy.py` (review-fix `9b4e9c86`) hard-codes `PAPER_INTERNAL`
+for `None` / house / system UUIDs. Overlay tenant routing threads
+`workspace_id` into `_pending_order_heads` after those gates.
 
 **Authority note (ledger / paper fills).** Overlay's runner path writes the
 shared corpus (tenant-agnostic keys), the pin-seam `workspace_id` on
@@ -3128,11 +3129,12 @@ receive `workspace_id=` when overlay; house constructors stay on
 `house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`
 or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
 house paper fills are the `execute_at_open` job (date-scoped, house stamp);
-external venue submit is K4's router (`9b4e9c86` gates: None/house/system →
-`PAPER_INTERNAL`, live-env raise before submit, missing ledger `workspace_id`
-→ `ForeignWorkspaceIntentError`). `_pending_order_heads` is house-scoped when
-`workspace_id` is omitted (same as `_rows_for_date`). `documents.workspace_id`
-landed in migration 105; overlay isolation is the column plus the
+external venue submit is K4's router (`9b4e9c86` gates first: None/house/system →
+`PAPER_INTERNAL`, live-env raise before submit; then overlay `workspace_id` is
+threaded into `_pending_order_heads` / `_directions_by_order`; missing ledger
+`workspace_id` → `ForeignWorkspaceIntentError`). Omitted `workspace_id` on those
+helpers is house (same as `_rows_for_date`). `documents.workspace_id` landed in
+migration 105; overlay isolation is the column plus the
 `overlay/{workspace_id}/…` key prefix.
 
 Tests: `tests/dq/olympus/overlay/`.

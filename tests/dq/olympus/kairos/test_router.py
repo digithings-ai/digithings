@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -26,8 +27,13 @@ from digiquant.brokers.contracts import (
     OrderSide,
 )
 from digiquant.olympus.hermes.models.portfolio_ledger import DecisionAction
+from digiquant.olympus.hermes.writers.execution_io import (
+    _pending_order_heads,
+    execute_pending_orders,
+)
 from digiquant.olympus.kairos.policy import (
     AmbiguousVenueError,
+    ForeignWorkspaceIntentError,
     InconsistentOrderChainError,
     resolve_venue,
     routing_enabled,
@@ -41,16 +47,6 @@ from digiquant.olympus.kairos.router import (
 from digiquant.olympus.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
-
-# T4 `_rows_for_date` omitted workspace ⇒ house. Tenant-stamped fixtures are
-# invisible until e2e-chain-test threads `workspace_id` into `_pending_order_heads`.
-_XFAIL_TENANT_VISIBILITY = pytest.mark.xfail(
-    reason=(
-        "T4 house-default ledger read hides tenant-stamped intents; "
-        "workspace threading lands on e2e-chain-test"
-    ),
-    strict=False,
-)
 
 _WS = UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 _CONN = UUID("11111111-2222-3333-4444-555555555555")
@@ -247,7 +243,11 @@ def _chain_store(
     quantity: str = "10",
     workspace_id: UUID = _WS,
 ) -> tuple[dict[str, list[dict[str, Any]]], UUID]:
-    """Minimal ledger chain: decision → requested → approved → pending order."""
+    """Minimal ledger chain: decision → requested → approved → pending order.
+
+    Rows carry ``workspace_id=_WS`` so they match the connection-scoped reads
+    ``route_pending_orders`` issues via ``_pending_order_heads``.
+    """
     decision_id = uuid4()
     requested_id = uuid4()
     approved_id = uuid4()
@@ -330,7 +330,6 @@ def test_route_skips_when_paper_internal() -> None:
     assert store[BROKER_ORDERS] == []
 
 
-@_XFAIL_TENANT_VISIBILITY
 def test_route_submits_and_mirrors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
     store, oid = _chain_store(action=DecisionAction.ADD)
@@ -356,7 +355,6 @@ def test_route_submits_and_mirrors(monkeypatch: pytest.MonkeyPatch) -> None:
     assert row["order_intent_id"] == str(oid)
 
 
-@_XFAIL_TENANT_VISIBILITY
 def test_route_refuses_inconsistent_noop_chain(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
     store, oid = _chain_store(action=DecisionAction.NO_OP)
@@ -376,7 +374,6 @@ def test_route_refuses_inconsistent_noop_chain(monkeypatch: pytest.MonkeyPatch) 
     assert any(oid_str == str(oid) for oid_str, _ in result.refused)
 
 
-@_XFAIL_TENANT_VISIBILITY
 def test_route_deterministic_id_collision_on_retry(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
     store, _oid = _chain_store(action=DecisionAction.TRIM)
@@ -425,7 +422,6 @@ def test_router_module_has_no_upsert() -> None:
 # --- Review probes (authority boundary) -----------------------------------------
 
 
-@_XFAIL_TENANT_VISIBILITY
 def test_foreign_workspace_intents_never_submitted(monkeypatch: pytest.MonkeyPatch) -> None:
     """Tenant-A connection must not submit tenant-B's same-date pending intents."""
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
@@ -543,7 +539,6 @@ def test_pending_missing_workspace_id_raises(monkeypatch: pytest.MonkeyPatch) ->
     store, _ = _chain_store(action=DecisionAction.ADD)
     store["portfolio_ledger_order_intents"][0].pop("workspace_id")
     adapter = _FakeAdapter()
-    from digiquant.olympus.kairos.policy import ForeignWorkspaceIntentError
 
     with pytest.raises(ForeignWorkspaceIntentError):
         route_pending_orders(
@@ -557,3 +552,71 @@ def test_pending_missing_workspace_id_raises(monkeypatch: pytest.MonkeyPatch) ->
             active_paper_brokers=[Broker.ALPACA],
         )
     assert adapter.submitted == []
+
+
+def test_missing_workspace_id_raises_under_threaded_scoped_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Scoped ``eq(workspace_id)`` would silently drop a null-id row; router must raise."""
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    store, oid = _chain_store(action=DecisionAction.ADD)
+    store["portfolio_ledger_order_intents"][0].pop("workspace_id")
+    client = _FakeClient(store)
+    scoped, _ = _pending_order_heads(client=client, run_date=_RUN, workspace_id=_WS)
+    assert all(str(row.get("id")) != str(oid) for row in scoped)
+
+    adapter = _FakeAdapter()
+    with pytest.raises(ForeignWorkspaceIntentError):
+        route_pending_orders(
+            client=client,
+            adapter=adapter,
+            connection=_connection(),
+            run_date=_RUN,
+            submitted_date=_RUN,
+            now=_NOW,
+            workspace_id=_WS,
+            active_paper_brokers=[Broker.ALPACA],
+        )
+    assert adapter.submitted == []
+
+
+def test_overlay_pending_routed_via_own_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Overlay workspace pending routes on its connection; house sibling is unseen."""
+    monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
+    overlay = _WS
+    house = house_workspace_id()
+    store_o, oid_o = _chain_store(action=DecisionAction.ADD, workspace_id=overlay)
+    store_h, oid_h = _chain_store(action=DecisionAction.ADD, workspace_id=house)
+    store_h["portfolio_ledger_order_intents"][0]["symbol"] = "TLT"
+    store_h["portfolio_ledger_decision_intents"][0]["symbol"] = "TLT"
+    store_h["portfolio_ledger_requested_targets"][0]["symbol"] = "TLT"
+    store_h["portfolio_ledger_approved_targets"][0]["symbol"] = "TLT"
+    store = _merge_stores(store_o, store_h)
+    adapter = _FakeAdapter()
+    result = route_pending_orders(
+        client=_FakeClient(store),
+        adapter=adapter,
+        connection=_connection(),
+        run_date=_RUN,
+        submitted_date=_RUN,
+        now=_NOW,
+        workspace_id=overlay,
+        active_paper_brokers=[Broker.ALPACA],
+    )
+    submitted = {req.client_order_id for req in adapter.submitted}
+    assert result.skipped_paper_internal is False
+    assert result.venue is ExecutionVenue.ALPACA_PAPER
+    assert str(oid_o) in submitted
+    assert str(oid_h) not in submitted
+    assert all(req.symbol == "AAPL" for req in adapter.submitted)
+
+
+def test_execute_pending_orders_house_path_omits_workspace_id() -> None:
+    src = inspect.getsource(execute_pending_orders)
+    pending_calls = [
+        line.strip()
+        for line in src.splitlines()
+        if "_pending_order_heads" in line or "_directions_by_order" in line
+    ]
+    assert len(pending_calls) >= 2
+    assert all("workspace_id" not in line for line in pending_calls)

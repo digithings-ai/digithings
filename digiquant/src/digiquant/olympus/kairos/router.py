@@ -42,7 +42,7 @@ from digiquant.olympus.hermes.writers.execution_io import (
     _directions_by_order,
     _pending_order_heads,
 )
-from digiquant.olympus.hermes.writers.ledger_io import _insert
+from digiquant.olympus.hermes.writers.ledger_io import ORDER_INTENTS, _insert
 from digiquant.olympus.kairos.policy import (
     ForeignWorkspaceIntentError,
     InconsistentOrderChainError,
@@ -225,13 +225,11 @@ def _scope_ledger_rows_to_workspace(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Keep only ``workspace_id`` rows; raise on missing id among candidates.
 
-    Ledger helpers (``_pending_order_heads`` / ``_directions_by_order``) call
-    ``_rows_for_date``. T4 made omitted ``workspace_id`` mean the house, never
-    every row; this post-filter is the router's authority boundary on that
-    house-visible set. Foreign-workspace intents are never consumed; a pending
-    row with a null ``workspace_id`` is a disagreement and raises rather than
-    being skipped silently. Overlay tenant visibility requires threading
-    ``workspace_id`` into the helpers (next hop).
+    After venue gates resolve a non-internal overlay workspace, the helpers
+    are threaded with that id (T4 omitted-workspace reads are house-only).
+    This post-filter is belt-and-braces on the scoped result: foreign-workspace
+    intents are never consumed; a pending row with a null ``workspace_id`` is a
+    disagreement and raises rather than being skipped silently.
     """
     expected = str(workspace_id)
     for row in pending:
@@ -262,6 +260,33 @@ def _scope_ledger_rows_to_workspace(
     return own_pending, own_orders
 
 
+def _pending_heads_missing_workspace(*, client: Any, run_date: date) -> list[dict[str, Any]]:
+    """Same-date pending heads whose ``workspace_id`` is absent.
+
+    Scoped ``_rows_for_date`` uses PostgREST ``eq(workspace_id, uuid)``, which
+    cannot observe a null column. Missing id is an authority disagreement, not
+    a silent drop — this scan never submits; the caller raises.
+    """
+    resp = (
+        client.table(ORDER_INTENTS)
+        .select("id,workspace_id,status,supersedes_id,symbol")
+        .eq("run_date", run_date.isoformat())
+        .execute()
+    )
+    rows = list(resp.data or [])
+    superseded = {str(r.get("supersedes_id")) for r in rows if r.get("supersedes_id")}
+    missing: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("id") or "") in superseded:
+            continue
+        if str(row.get("status") or "") != "pending":
+            continue
+        wid = row.get("workspace_id")
+        if wid is None or str(wid).strip() == "":
+            missing.append(row)
+    return missing
+
+
 def route_pending_orders(
     *,
     client: Any,
@@ -282,10 +307,11 @@ def route_pending_orders(
       ``connection.workspace_id``.
     * ``connection.env`` must be ``paper`` before any ``submit_order``; live
       raises :class:`LiveVenueNotAuthorizedError`.
-    * Pending intents are scoped to ``connection.workspace_id`` after the
-      omitted-workspace (house) ledger read; foreign-workspace intents are
-      never submitted. Overlay tenant visibility is the next-hop threading
-      of ``workspace_id`` into ``_pending_order_heads``.
+    * After a non-internal venue is resolved for a real overlay workspace,
+      ledger reads are threaded with that ``workspace_id`` (T4 omitted
+      workspace ⇒ house). ``_scope_ledger_rows_to_workspace`` then asserts
+      every returned row matches; a same-date pending head missing
+      ``workspace_id`` raises :class:`ForeignWorkspaceIntentError`.
 
     When :func:`resolve_venue` returns ``PAPER_INTERNAL``, this function returns
     immediately with ``skipped_paper_internal=True`` and writes nothing — the
@@ -319,13 +345,22 @@ def route_pending_orders(
             f"connection.workspace_id={connection.workspace_id!r}"
         )
 
-    pending, order_rows = _pending_order_heads(client=client, run_date=run_date)
+    # Threading applies only after a non-internal venue for a real overlay workspace.
+    pending, order_rows = _pending_order_heads(
+        client=client, run_date=run_date, workspace_id=workspace_id
+    )
+    missing = _pending_heads_missing_workspace(client=client, run_date=run_date)
     pending, order_rows = _scope_ledger_rows_to_workspace(
-        pending=pending,
+        pending=[*pending, *missing],
         order_rows=order_rows,
         workspace_id=connection.workspace_id,
     )
-    actions, stale = _directions_by_order(client=client, run_date=run_date, order_rows=order_rows)
+    actions, stale = _directions_by_order(
+        client=client,
+        run_date=run_date,
+        order_rows=order_rows,
+        workspace_id=workspace_id,
+    )
 
     intent_ids = [str(row["id"]) for row in pending if row.get("id")]
     existing_ids = _existing_broker_order_ids(client=client, order_intent_ids=intent_ids)

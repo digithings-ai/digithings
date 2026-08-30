@@ -5,7 +5,7 @@
 # Applies:
 #   1) 00_supabase_shim.sql
 #   2) digiquant/supabase/migrations/*.sql (lexicographic sort, top-level)
-#   3) vendor/t4_overlay/{099,102,103,104,105} from origin/cursor/t4-overlay-runs-3d52
+#   (099/102–105 now live in digiquant/supabase/migrations/ — applied by the main glob)
 #   4) cutover/900_drop_anon_read_cutover.sql  (post-cutover state)
 #   5) 01_seed.sql
 #   6) 02_proof.sql
@@ -20,7 +20,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROOF_DIR="$ROOT/scripts/rls_proof"
 MIG_DIR="$ROOT/digiquant/supabase/migrations"
-T4_DIR="$PROOF_DIR/vendor/t4_overlay"
 CUTOVER="$MIG_DIR/cutover/900_drop_anon_read_cutover.sql"
 
 DB_NAME="${DB_NAME:-rls_proof}"
@@ -107,19 +106,6 @@ for f in "${DEVELOP_MIGS[@]}"; do
     continue
   fi
   run_sql_file "develop/${base}" "$f"
-done
-
-log ""
-log "=== Migration source: origin/cursor/t4-overlay-runs-3d52 (vendored) ==="
-log "Applied AFTER develop 101, BEFORE cutover 900:"
-for base in \
-  099_broker_connections.sql \
-  102_kairos_broker_mirror.sql \
-  103_notification_prefs.sql \
-  104_workspace_provider_credentials.sql \
-  105_documents_workspace_id.sql
-do
-  run_sql_file "t4_overlay/${base}" "$T4_DIR/${base}"
 done
 
 run_sql_file "cutover/900_drop_anon_read_cutover.sql (STAGED)" "$CUTOVER"

@@ -18,13 +18,12 @@ real `core` Supabase project.
 | `01_seed.sql` | Two tenants + free observer + representative private rows |
 | `02_proof.sql` | `SET ROLE` + JWT claims matrix; fails the process on any assertion miss |
 | `run.sh` | Recreate DB → shim → migrations → cutover → seed → proof |
-| `vendor/t4_overlay/` | Copies of 099/102–105 from `origin/cursor/t4-overlay-runs-3d52` |
 
 ## Migration apply order
 
 1. **Shim** (`00_supabase_shim.sql`)
 2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…101, lexicographic `sort` — same as `db-migrate.yml`)
-3. **T4 overlay branch** (unmerged at harness write time): `099`, `102`, `103`, `104`, `105` from `vendor/t4_overlay/` (sourced from `origin/cursor/t4-overlay-runs-3d52`)
+3. **Kairos/T4 migrations** `099`, `102`–`105` — now canonical in `digiquant/supabase/migrations/`, applied by the same glob (vendor step dropped after the K3–T4 merges)
 4. **Cutover** `digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql` (staged; not auto-applied in CI)
 
 ## Run
@@ -68,4 +67,4 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 After 096–105 are on `core` and cutover `900` is promoted:
 
 1. Prefer proving against a Supabase branch / preview DB with the same SQL identity switches, **or**
-2. Re-run this harness locally after refreshing `vendor/t4_overlay/` once those files land on develop (then drop the vendor step from `run.sh`).
+2. Vendor step dropped 2026-08-30 after K3/K4/K5/T4 merged — the harness now proves the canonical migration chain directly.
