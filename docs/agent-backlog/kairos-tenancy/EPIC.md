@@ -76,15 +76,19 @@ Wave E
       Next scheduled GHA (`cron: "0 12 * * *"`, ~12:00 UTC) is still the live
       *pipeline* book-commit proof (`python scripts/digiquant_house_pipeline_proof.py`,
       [#3367](https://github.com/digithings-ai/digithings/pull/3367) on `develop`
-      `207dd0a68`). The CLI exits **5** while `origin/main` is still UUID-hotfix
+      `207dd0a68`; fail-close [#3383](https://github.com/digithings-ai/digithings/pull/3383)
+      `6785c44d4`; failsofts line [#3384](https://github.com/digithings-ai/digithings/pull/3384)
+      `5574b9394`). The CLI exits **5** while `origin/main` is still UUID-hotfix
       `3601f72df` so a 12:00 UTC checkout would miss fail-softs
       [#3343](https://github.com/digithings-ai/digithings/pull/3343) →
       [#3348](https://github.com/digithings-ai/digithings/pull/3348) →
       [#3351](https://github.com/digithings-ai/digithings/pull/3351) →
-      [#3354](https://github.com/digithings-ai/digithings/pull/3354). Human should
-      merge those onto `main` **before** that cron. Do **not**
-      `workflow_dispatch`; do **not** apply staged 113 while main writers still
-      upsert date-only. Unit green is not a substitute for a green house publish.
+      [#3354](https://github.com/digithings-ai/digithings/pull/3354). On exit 5 it
+      also prints `failsofts=` mergeability (`stack ready (do not merge from
+      authoring agent)`). Human should merge those onto `main` **before** that
+      cron. Do **not** `workflow_dispatch`; do **not** apply staged 113 while
+      main writers still upsert date-only. Unit green is not a substitute for a
+      green house publish.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
@@ -305,6 +309,8 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 **2026-09-01T03:11Z — [#3369](https://github.com/digithings-ai/digithings/pull/3369) on `develop` (`986082b76`):** fail-closed overlay route cron (`python scripts/kairos_route_cron.py`). Kill switch still defaults **off**. Do not set `OLYMPUS_KAIROS_ROUTING=1` without an explicit human decision. Does not merge human-gated main PRs. Next scheduled house GHA is still the live book-commit proof.
 
 **2026-09-01T07:33Z — [#3381](https://github.com/digithings-ai/digithings/pull/3381) on `develop` (`a463d0b10`):** canonical `DIGIQUANT_*` secrets + `scripts/digiquant_*.py`. Live cron check still exit **2** (Mailgun). Routing still defaults **off**. `pipeline-olympus.yml` filename unchanged until after the 12:00 UTC house proof.
+
+**2026-09-01T08:41Z — [#3384](https://github.com/digithings-ai/digithings/pull/3384) on `develop` (`5574b9394`):** house proof exit 5 prints `failsofts=` mergeability. Live probe house **5** (stack ready, do not merge from authoring agent); pages **3**; cron check **2**. Routing still defaults **off**. `pipeline-olympus.yml` filename unchanged until after the 12:00 UTC house proof.
 
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft
