@@ -77,8 +77,8 @@ a { color: inherit; text-decoration: none; }
 .btn span[aria-hidden] { transition: transform 0.18s var(--ease); }
 .btn:hover span[aria-hidden] { transform: translateX(3px); }
 .btn-sm { padding: 0.5rem 0.95rem; font-size: 0.88rem; }
-.btn-primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; box-shadow: 0 10px 30px -14px var(--accent); }
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 16px 40px -14px var(--accent); }
+.btn-primary { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 500; }
+.btn-primary:hover { transform: translateY(-2px); }
 .btn-ghost { background: transparent; color: var(--ink); }
 .btn-ghost:hover { background: var(--surface); border-color: var(--hair-2); transform: translateY(-2px); }
 

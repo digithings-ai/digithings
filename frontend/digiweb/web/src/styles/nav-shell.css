@@ -300,7 +300,7 @@
   width: min(100%, 20rem);
   margin-left: auto;
   font-size: 1.35rem;
-  font-family: var(--font-serif, Georgia, serif);
+  font-family: var(--font-mono);
   color: var(--ink);
   pointer-events: auto;
 }

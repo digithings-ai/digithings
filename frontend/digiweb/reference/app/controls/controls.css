@@ -136,7 +136,7 @@
 .dd-dot {
   width: 7px;
   height: 7px;
-  border-radius: 0;
+  border-radius: 999px;
   background: var(--accent);
   align-self: center;
 }

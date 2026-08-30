@@ -52,7 +52,7 @@ export function ChatComposerReference() {
         <div className="composer border border-hair rounded-none bg-surface px-[0.85rem] pt-[0.75rem] pb-[0.6rem]">
           <textarea
             ref={areaRef}
-            className="composer-input w-full border-0 bg-transparent resize-none text-ink font-sans text-[0.9rem] leading-[1.5] outline-none min-h-[1.5rem]"
+            className="composer-input w-full border-0 bg-transparent resize-none text-ink font-mono text-[0.9rem] leading-[1.5] outline-none min-h-[1.5rem]"
             rows={1}
             placeholder="Ask digichat to backtest, search, or explain…"
             value={value}
@@ -100,7 +100,7 @@ export function ChatComposerReference() {
               </span>
               <button
                 type="button"
-                className="composer-send inline-flex items-center justify-center w-8 h-8 border-0 rounded-none bg-accent cursor-pointer"
+                className="composer-send inline-flex items-center justify-center w-8 h-8 border-0 rounded-none bg-ink text-bg cursor-pointer"
                 disabled={!value.trim()}
                 aria-label="Send message"
                 onClick={send}
