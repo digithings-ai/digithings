@@ -230,14 +230,26 @@ def test_remaining_hops_unproven_filters_proven_map() -> None:
 
 
 @pytest.mark.unit
-def test_run_staging_e2e_checkout_url_is_not_complete_exits_4() -> None:
-    """Secrets + checkout URL + unsigned webhook ≠ EPIC.md E2E complete."""
+@pytest.mark.parametrize(
+    "webhook",
+    (
+        (400, {"code": "SIGNATURE_INVALID"}),
+        (200, {"received": True}),
+        (502, {"code": "UPSTREAM"}),
+        (400, {}),
+    ),
+)
+def test_run_staging_e2e_checkout_url_is_not_complete_exits_4(
+    webhook: tuple[int, dict[str, object]],
+) -> None:
+    """Secrets + checkout URL + any non-unconfigured webhook ≠ EPIC.md E2E complete."""
+    wh_http, wh_body = webhook
     fakes = _observer_ok_fakes()
     fakes[("POST", "/create-checkout-session")] = (
         200,
         {"url": "https://checkout.stripe.test/cs_test"},
     )
-    fakes[("POST", "/stripe-webhook")] = (400, {"code": "SIGNATURE_INVALID"})
+    fakes[("POST", "/stripe-webhook")] = (wh_http, wh_body)
     environ = {name: f"test-placeholder-{name}" for name in KAIROS_STAGING_REQUIRED_SECRETS}
     environ["KAIROS_STAGING_USER_JWT"] = "test-jwt"
     logs: list[str] = []
@@ -248,6 +260,7 @@ def test_run_staging_e2e_checkout_url_is_not_complete_exits_4() -> None:
         log_err=logs.append,
     )
     assert rc == 4
+    assert rc != 0
     blob = "\n".join(logs)
     assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
     for hop in (
