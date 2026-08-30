@@ -420,3 +420,12 @@ verify_jwt = true
 # Existing live-price cron lane (defaults to verify_jwt true if unset).
 [functions.prices-live]
 verify_jwt = true
+
+# ---------------------------------------------------------------------------
+# Edge Functions — Olympus settings (T3)
+# ---------------------------------------------------------------------------
+# Settings requires a logged-in user JWT. Deploy is blocked until K3 vault
+# lands on the deploy target (see functions/settings/README.md).
+
+[functions.settings]
+verify_jwt = true

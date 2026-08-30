@@ -385,4 +385,40 @@ describe('DailyBriefWorkspace', () => {
     expect(html).toContain('Trim XLF');
     expect(html).toContain('1 allocation change');
   });
+
+  it('Observer (free): keeps research/narrative; locks live scoreboard + book panels', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace {...populatedProps} tier="free" />,
+    );
+
+    // Research / narrative still visible
+    expect(html).toContain('Morning brief');
+    expect(html).toContain('Hold breadth above 65%');
+    expect(html).toContain('Duration selloff');
+    expect(html).toContain('International breadth is improving');
+    expect(html).toContain('data-testid="brief-signals-link"');
+    expect(html).toContain('data-testid="brief-risk-thesis"');
+
+    // Live house_weights_nav panels replaced by LockedSurface
+    expect(html).toContain('locked-surface');
+    expect(html).toContain('data-artifact-class="house_weights_nav"');
+    expect(html).not.toContain('data-brief-section="scoreboard"');
+    expect(html).not.toContain('data-brief-section="book"');
+    expect(html).not.toContain('data-testid="brief-holdings-panel"');
+    expect(html).not.toContain('>Invested<');
+    expect(html).not.toContain('>Day return<');
+    expect(html).not.toContain('>Weight<');
+    expect(html).not.toContain('15.2%');
+    expect(html).not.toContain('30%');
+  });
+
+  it('Baseline: scoreboard + holdings passthrough', () => {
+    const html = renderToStaticMarkup(
+      <DailyBriefWorkspace {...populatedProps} tier="baseline" />,
+    );
+    expect(html).toContain('data-brief-section="scoreboard"');
+    expect(html).toContain('data-testid="brief-holdings-panel"');
+    expect(html).toContain('Invested');
+    expect(html).not.toContain('locked-surface');
+  });
 });
