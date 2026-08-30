@@ -3313,8 +3313,11 @@ the five live hops are named even before secrets land). Observer also POSTs
 `/settings/access/redeem-invite` with a short dummy code (`short`, under the
 Deno min length) and requires `INVITE_INVALID` or `EMAIL_REQUIRED` — live
 settings v32 404s that route. After Observer hops
-pass, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
-`/jobs`, `/fills`, and `/notifications/log`. A hop is proven only from that
+pass **or fail**, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
+`/jobs`, `/fills`, and `/notifications/log` so remaining hops are named on
+exit **3** (live app-urls `/olympus` vs `/dashboard` plus redeem-invite 404
+must not hide product-state blockers). Observer-hop failure still exits **3**.
+A hop is proven only from that
 product state: `subscription_status=active` **and** `has_stripe_subscription`
 **and** `plan_tier` in `{custom, enterprise}` (boolean Stripe id only; house is
 seeded `enterprise`/`active` without Stripe ids and must not prove checkout;
