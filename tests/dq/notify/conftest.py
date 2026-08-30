@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any  # score:allow untyped any — fake Supabase row dicts in tests
+from typing import Any  # score:allow untyped any — in-memory fake Supabase row dicts
 
 
 @dataclass

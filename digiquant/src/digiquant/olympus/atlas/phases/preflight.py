@@ -16,6 +16,7 @@ from typing import (  # score:allow untyped any — used for heterogeneous node-
     Any,
     Callable,
 )
+from uuid import UUID
 
 import yaml
 
@@ -54,6 +55,7 @@ from digiquant.olympus.atlas.supabase_io import (
 )
 from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.turnover import mark_to_market_weights
+from digiquant.olympus.overlay.runner import pin_seam_config
 from digiquant.olympus.temporal import require_knowledge_cutoff_at
 
 # decision_log may be empty or not yet migrated — do not fail the rest of preflight.
@@ -351,14 +353,12 @@ def _hydrate_config(
     run_date: date,
 ) -> tuple[AtlasConfigBundle, list[dict[str, Any]]]:
     """Merge portfolio constraints + materialized prior book into config preferences."""
-    from uuid import UUID
-
     from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
     from digiquant.olympus.atlas.graph import _atlas_config_root
     from digiquant.olympus.profile_config import pin_profile_config_for_preflight
 
     try:
-        prior_book = load_prior_book(client, run_date)
+        prior_book = load_prior_book(client, run_date, workspace_id=config.workspace_id)
     except _SUPABASE_READ_ERRORS:
         prior_book = []
 
@@ -401,6 +401,10 @@ def _hydrate_config(
             "research_budget_usd": str(pinned.research_budget_usd),
         }
 
+    seam = pin_seam_config(
+        requested_version_id=requested_version,
+        workspace_id=UUID(str(config.workspace_id)) if config.workspace_id else None,
+    )
     hydrated = AtlasConfigBundle(
         watchlist=watchlist,
         investment_profile=investment_profile,
@@ -409,6 +413,7 @@ def _hydrate_config(
         macro_series=list(config.macro_series),
         profile_config_version_id=str(pinned.version_id),
         profile_config=pinned.model_dump(mode="json"),
+        workspace_id=seam.workspace_id,
     )
     return hydrated, prior_book
 

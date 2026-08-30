@@ -225,11 +225,13 @@ def _scope_ledger_rows_to_workspace(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Keep only ``workspace_id`` rows; raise on missing id among candidates.
 
-    Ledger helpers (``_pending_order_heads`` / ``_directions_by_order``) still
-    read by ``run_date`` alone — the portfolio ledger predates tenancy filters.
-    This post-filter is the router's authority boundary: foreign-workspace
-    intents are never consumed; a pending row with a null ``workspace_id`` is a
-    disagreement and raises rather than being skipped silently.
+    Ledger helpers (``_pending_order_heads`` / ``_directions_by_order``) call
+    ``_rows_for_date``. T4 made omitted ``workspace_id`` mean the house, never
+    every row; this post-filter is the router's authority boundary on that
+    house-visible set. Foreign-workspace intents are never consumed; a pending
+    row with a null ``workspace_id`` is a disagreement and raises rather than
+    being skipped silently. Overlay tenant visibility requires threading
+    ``workspace_id`` into the helpers (next hop).
     """
     expected = str(workspace_id)
     for row in pending:
@@ -281,7 +283,9 @@ def route_pending_orders(
     * ``connection.env`` must be ``paper`` before any ``submit_order``; live
       raises :class:`LiveVenueNotAuthorizedError`.
     * Pending intents are scoped to ``connection.workspace_id`` after the
-      date-only ledger read; foreign-workspace intents are never submitted.
+      omitted-workspace (house) ledger read; foreign-workspace intents are
+      never submitted. Overlay tenant visibility is the next-hop threading
+      of ``workspace_id`` into ``_pending_order_heads``.
 
     When :func:`resolve_venue` returns ``PAPER_INTERNAL``, this function returns
     immediately with ``skipped_paper_internal=True`` and writes nothing — the
