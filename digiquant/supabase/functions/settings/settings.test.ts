@@ -49,6 +49,8 @@ interface Store {
   prefsMissing?: boolean;
   /** When true, olympus_profile_config lookups fail as if the table is missing. */
   profilesMissing?: boolean;
+  /** When true, ensure_personal_workspace RPC fails (bootstrap disabled). */
+  bootstrapDisabled?: boolean;
 }
 
 function wsRow(id: string, planTier = "custom"): WorkspaceRow {
@@ -317,6 +319,26 @@ function mockAdmin(store: Store): AdminClient {
 
   return {
     from: (table: string) => makeBuilder(table),
+    rpc: async (fn: string, args?: Record<string, unknown>) => {
+      if (fn !== "ensure_personal_workspace") {
+        return { data: null, error: { message: `unknown rpc ${fn}`, code: "PGRST202" } };
+      }
+      if (store.bootstrapDisabled) {
+        return { data: null, error: { message: "bootstrap disabled", code: "P0001" } };
+      }
+      const userId = String(args?.p_user_id ?? "");
+      if (!userId) {
+        return { data: null, error: { message: "p_user_id required", code: "P0001" } };
+      }
+      const existing = store.members.find((m) => m.user_id === userId);
+      if (existing) {
+        return { data: existing.workspace_id, error: null };
+      }
+      const id = `bbbbbbbb-bbbb-4bbb-8bbb-${userId.replace(/-/g, "").slice(0, 12).padEnd(12, "0")}`;
+      store.workspaces.set(id, wsRow(id, "free"));
+      store.members.push({ workspace_id: id, user_id: userId, role: "owner" });
+      return { data: id, error: null };
+    },
   } as unknown as AdminClient;
 }
 
@@ -409,13 +431,41 @@ Deno.test("401 when Authorization bearer missing", async () => {
   assertEquals(json.code, "UNAUTHENTICATED");
 });
 
-Deno.test("403 WORKSPACE_FORBIDDEN when user has no membership", async () => {
+Deno.test("403 WORKSPACE_FORBIDDEN when bootstrap RPC fails", async () => {
   const store = freshStore();
+  store.bootstrapDisabled = true;
   const { status, json } = await call(store, "GET", "/brokers", undefined, {
     userId: "99999999-9999-4999-8999-999999999999",
   });
   assertEquals(status, 403);
   assertEquals(json.code, "WORKSPACE_FORBIDDEN");
+});
+
+Deno.test("GET brokers: auto-bootstraps personal workspace for new Auth user", async () => {
+  const store = freshStore();
+  const newUser = "99999999-9999-4999-8999-999999999999";
+  assertEquals(store.members.filter((m) => m.user_id === newUser).length, 0);
+  const { status, json } = await call(store, "GET", "/brokers", undefined, {
+    userId: newUser,
+  });
+  assertEquals(status, 200);
+  assertEquals(Array.isArray(json.connections), true);
+  assertEquals(store.members.filter((m) => m.user_id === newUser).length, 1);
+  assertEquals(store.members.find((m) => m.user_id === newUser)?.role, "owner");
+  const wsId = store.members.find((m) => m.user_id === newUser)!.workspace_id;
+  assertEquals(store.workspaces.get(wsId)?.plan_tier, "free");
+});
+
+Deno.test("GET profile: auto-bootstraps then returns empty contract", async () => {
+  const store = freshStore();
+  const newUser = "88888888-8888-4888-8888-888888888888";
+  const { status, json } = await call(store, "GET", "/profile", undefined, {
+    userId: newUser,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.profile_key, "workspace");
+  assertEquals(json.version_id, null);
+  assertEquals(store.members.filter((m) => m.user_id === newUser).length, 1);
 });
 
 Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
@@ -433,6 +483,7 @@ Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
 
 Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
   const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
   const { status, json } = await call(store, "POST", "/brokers/connect", {
     broker: "alpaca",
     env: "paper",
@@ -443,6 +494,51 @@ Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
 });
+
+Deno.test(
+  "403 TIER_FORBIDDEN when workspace is free but JWT claim is still custom (stale claim after cancel)",
+  async () => {
+    const store = freshStore();
+    store.workspaces.set(WS_A, wsRow(WS_A, "free"));
+    store.workspaces.get(WS_A)!.claim_sync_pending = true;
+    const profile = await call(store, "PATCH", "/profile", {
+      profile_key: "ws-overlay",
+      label: "Should not write",
+      investment: validInvestment,
+    }, { planTier: "custom" });
+    assertEquals(profile.status, 403);
+    assertEquals(profile.json.code, "TIER_FORBIDDEN");
+    assertEquals(store.profiles.length, 0);
+
+    const connect = await call(store, "POST", "/brokers/connect", {
+      broker: "alpaca",
+      env: "paper",
+      kind: "api_key",
+      key_id: "PK",
+      secret: "sec",
+    }, { planTier: "custom" });
+    assertEquals(connect.status, 403);
+    assertEquals(connect.json.code, "TIER_FORBIDDEN");
+    assertEquals(store.brokers.length, 0);
+  },
+);
+
+Deno.test(
+  "allows custom workspace when JWT claim lags at free (stale claim after upgrade)",
+  async () => {
+    const store = freshStore();
+    store.workspaces.set(WS_A, wsRow(WS_A, "custom"));
+    store.workspaces.get(WS_A)!.claim_sync_pending = true;
+    const { status, json } = await call(store, "PATCH", "/profile", {
+      profile_key: "ws-overlay",
+      label: "Lagging claim OK",
+      investment: validInvestment,
+    }, { planTier: "free" });
+    assertEquals(status, 200);
+    assertEquals(json.workspace_id, WS_A);
+    assertEquals(store.profiles.length, 1);
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Profile — workspace isolation

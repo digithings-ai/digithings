@@ -96,6 +96,32 @@ export async function resolveCallerWorkspace(
   return owner ?? normalized[0]!;
 }
 
+/**
+ * Observer bootstrap: if the caller has no membership, call
+ * `ensure_personal_workspace` (migration 107) then re-resolve.
+ * Covers users created before the auth.users trigger existed.
+ * Never invents membership client-side — RPC owns create + owner insert.
+ */
+export async function ensureCallerWorkspace(
+  admin: AdminClient,
+  userId: string,
+): Promise<{ workspace: WorkspaceRow; role: string } | null> {
+  const existing = await resolveCallerWorkspace(admin, userId);
+  if (existing) return existing;
+
+  const { error } = await admin.rpc("ensure_personal_workspace", {
+    p_user_id: userId,
+  });
+  if (error) {
+    console.error(
+      "ensure_personal_workspace failed",
+      error.code ?? "unknown",
+    );
+    return null;
+  }
+  return resolveCallerWorkspace(admin, userId);
+}
+
 export async function listWorkspaceMembers(
   admin: AdminClient,
   workspaceId: string,

@@ -136,16 +136,15 @@ async function resolveMember(
 }
 
 /**
- * Fail closed on plan tier. Prefer the T2-synced JWT claim (app_metadata.plan_tier);
- * fall back to workspace.plan_tier from the membership join.
+ * Fail closed on plan tier using the authoritative workspace row.
+ *
+ * `workspaces.plan_tier` is CAS-updated by the Stripe webhook. Preferring the
+ * JWT `app_metadata.plan_tier` claim here fails open after cancel when claim
+ * sync sets `claim_sync_pending` but leaves a stale elevated claim on the
+ * token — and fails closed incorrectly on upgrade when the claim lags.
  */
-function requireEligibleTier(
-  user: AuthUser,
-  workspacePlanTier: string,
-): Response | null {
-  const claim = (user.plan_tier ?? "").trim().toLowerCase();
-  const fromWs = (workspacePlanTier ?? "").trim().toLowerCase();
-  const tier = claim || fromWs;
+function requireEligibleTier(workspacePlanTier: string): Response | null {
+  const tier = (workspacePlanTier ?? "").trim().toLowerCase();
   if (!ELIGIBLE_TIERS.has(tier)) {
     return jsonError(
       403,
@@ -279,7 +278,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(deps.user, authz.workspace.plan_tier);
+  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
   if (tierErr) return tierErr;
 
   const workspaceId = authz.workspace.id;
@@ -472,7 +471,7 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(deps.user, authz.workspace.plan_tier);
+  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
   if (tierErr) return tierErr;
 
   const broker = (body.broker ?? "").toLowerCase();
