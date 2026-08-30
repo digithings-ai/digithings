@@ -6,6 +6,8 @@
  * is operator-only (`KAIROS_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also
  * requires ``daily_digest`` on; dispatch skips prefs that are off. Paper fills
  * do not prove the hop unless an Alpaca paper OAuth connection is also present.
+ * Baseline Stripe does not prove checkout — broker connect and overlay stay
+ * Custom-gated.
  */
 
 export const REMAINING_LIVE_HOPS = [
@@ -19,10 +21,12 @@ export const REMAINING_LIVE_HOPS = [
 export type RemainingLiveHop = (typeof REMAINING_LIVE_HOPS)[number];
 
 export const OVERLAY_RUN_STATUSES = new Set(['succeeded']);
+export const STRIPE_CHECKOUT_TIERS = new Set(['custom', 'enterprise']);
 
 export type RemainingHopEvidence = {
   subscription_status?: string | null;
   has_stripe_subscription?: boolean;
+  plan_tier?: string | null;
   connections?: readonly (readonly [string, string, string, string])[];
   jobs?: readonly (readonly [string, string])[];
   fill_count?: number;
@@ -50,7 +54,9 @@ export function provenRemainingHops(evidence: RemainingHopEvidence): RemainingHo
   const digestLog = (evidence.digest_event_keys ?? []).some((key) => key.startsWith('digest:'));
   return {
     browser_stripe_checkout:
-      evidence.subscription_status === 'active' && evidence.has_stripe_subscription === true,
+      evidence.subscription_status === 'active' &&
+      evidence.has_stripe_subscription === true &&
+      STRIPE_CHECKOUT_TIERS.has(evidence.plan_tier ?? ''),
     alpaca_paper_oauth_connect: alpaca,
     overlay_daily_claimed: overlay,
     paper_fill_mirrored: (evidence.fill_count ?? 0) > 0 && alpaca,

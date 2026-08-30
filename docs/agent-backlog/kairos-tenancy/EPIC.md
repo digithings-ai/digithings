@@ -133,7 +133,9 @@ still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-ke
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2** (9 named vendor secrets).
 Observer checkout hop and Phase C both POST `tier=custom` (Baseline would leave
 broker/overlay/fill `TIER_FORBIDDEN`). Settings Billing makes Custom the primary
-checkout CTA for the same reason. Observer `notification_prefs.daily_digest` is **true** (PATCH 200 on free; not
+checkout CTA for the same reason. Remaining-hop `browser_stripe_checkout`
+requires Custom/enterprise **and** Stripe ids — Baseline Stripe does not prove
+it. Observer `notification_prefs.daily_digest` is **true** (PATCH 200 on free; not
 Custom-gated). Digest remaining-hop also requires that pref, plus log + inbox
 (Settings About library matches Python; inbox confirm stays operator-only so
 the UI hop stays unproven). `python -m digiquant.notify.dispatch --dry-run`

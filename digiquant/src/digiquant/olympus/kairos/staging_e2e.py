@@ -328,9 +328,11 @@ def collect_remaining_evidence(
             if isinstance(row, dict) and isinstance(row.get("event_key"), str):
                 keys.append(str(row["event_key"]))
     sub = profile.get("subscription_status")
+    raw_tier = profile.get("plan_tier")
     return RemainingHopEvidence(
         subscription_status=str(sub) if isinstance(sub, str) else None,
         has_stripe_subscription=profile.get("has_stripe_subscription") is True,
+        plan_tier=str(raw_tier) if isinstance(raw_tier, str) else None,
         connections=tuple(connections),
         jobs=tuple(jobs),
         fill_count=fill_count,

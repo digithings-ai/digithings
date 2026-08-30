@@ -321,6 +321,26 @@ def test_proven_remaining_hops_house_active_without_stripe_does_not_count() -> N
 
 
 @pytest.mark.unit
+def test_proven_remaining_hops_baseline_stripe_does_not_count() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(
+            subscription_status="active",
+            has_stripe_subscription=True,
+            plan_tier="baseline",
+        )
+    )
+    assert proven["browser_stripe_checkout"] is False
+    custom = proven_remaining_hops(
+        RemainingHopEvidence(
+            subscription_status="active",
+            has_stripe_subscription=True,
+            plan_tier="custom",
+        )
+    )
+    assert custom["browser_stripe_checkout"] is True
+
+
+@pytest.mark.unit
 def test_proven_remaining_hops_digest_log_without_inbox_is_not_received() -> None:
     proven = proven_remaining_hops(RemainingHopEvidence(digest_event_keys=("digest:2026-08-31",)))
     assert proven["digest_email_received"] is False
@@ -408,6 +428,7 @@ def test_proven_remaining_hops_all_five_from_product_state() -> None:
         RemainingHopEvidence(
             subscription_status="active",
             has_stripe_subscription=True,
+            plan_tier="custom",
             connections=(("alpaca", "paper", "active", "oauth"),),
             jobs=(("overlay_daily", "succeeded"),),
             fill_count=1,
@@ -434,6 +455,7 @@ def test_collect_remaining_evidence_reads_member_scoped_settings() -> None:
         functions_base="https://example.test/functions/v1",
     )
     assert evidence.subscription_status == "none"
+    assert evidence.plan_tier == "ops-custom"
     assert evidence.has_stripe_subscription is False
     assert evidence.fill_count == 0
     assert evidence.daily_digest_enabled is True
@@ -475,7 +497,7 @@ def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> No
         {
             "workspace_id": "ws",
             "subscription_status": "active",
-            "plan_tier": "quant",
+            "plan_tier": "custom",
             "has_stripe_subscription": True,
         },
     )

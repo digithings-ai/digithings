@@ -3,9 +3,10 @@
 Exit 0 is allowed only when every hop here is proven from product state:
 
 - Stripe: ``subscription_status=active`` **and** ``has_stripe_subscription``
-  (workspace has a Stripe subscription id; the id is never returned). House is
-  seeded ``enterprise``/``active`` without Stripe ids — that must not prove
-  checkout. Ops grants with ``subscription_status=none`` also do not.
+  **and** ``plan_tier`` in ``{custom, enterprise}``. House is seeded
+  ``enterprise``/``active`` without Stripe ids — that must not prove checkout.
+  A Baseline Stripe subscription also must not: broker connect and overlay
+  stay ``TIER_FORBIDDEN``. Ops grants with ``subscription_status=none`` do not.
 - Alpaca: paper connection ``active`` with ``auth_kind=oauth``.
 - Overlay: ``job_type=overlay_daily`` with status ``succeeded`` (not
   ``running`` / ``skipped`` / ``persist_disabled`` / ``not_entitled``). A
@@ -33,6 +34,7 @@ REMAINING_LIVE_HOPS: tuple[str, ...] = (
 )
 EXIT_REMAINING_HOPS_UNPROVEN: int = 4
 OVERLAY_RUN_STATUSES: frozenset[str] = frozenset({"succeeded"})
+STRIPE_CHECKOUT_TIERS: frozenset[str] = frozenset({"custom", "enterprise"})
 
 
 class RemainingHopEvidence(BaseModel):
@@ -42,6 +44,7 @@ class RemainingHopEvidence(BaseModel):
 
     subscription_status: str | None = None
     has_stripe_subscription: bool = False
+    plan_tier: str | None = None
     connections: tuple[tuple[str, str, str, str], ...] = Field(default_factory=tuple)
     jobs: tuple[tuple[str, str], ...] = Field(default_factory=tuple)
     fill_count: int = 0
@@ -74,7 +77,9 @@ def proven_remaining_hops(evidence: RemainingHopEvidence) -> dict[str, bool]:
     digest_log = any(key.startswith("digest:") for key in evidence.digest_event_keys)
     return {
         "browser_stripe_checkout": (
-            evidence.subscription_status == "active" and evidence.has_stripe_subscription
+            evidence.subscription_status == "active"
+            and evidence.has_stripe_subscription
+            and evidence.plan_tier in STRIPE_CHECKOUT_TIERS
         ),
         "alpaca_paper_oauth_connect": alpaca,
         "overlay_daily_claimed": overlay,
@@ -89,6 +94,7 @@ __all__ = [
     "EXIT_REMAINING_HOPS_UNPROVEN",
     "OVERLAY_RUN_STATUSES",
     "REMAINING_LIVE_HOPS",
+    "STRIPE_CHECKOUT_TIERS",
     "RemainingHopEvidence",
     "format_remaining_hops_failure",
     "proven_remaining_hops",

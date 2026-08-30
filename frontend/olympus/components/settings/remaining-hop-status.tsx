@@ -31,6 +31,7 @@ export type RemainingHopStatusProps = {
 function evidenceFromPayloads(args: {
   subscription_status?: string | null;
   has_stripe_subscription?: boolean;
+  plan_tier?: string | null;
   connections: { broker: string; env: string; status: string; auth_kind?: string }[];
   jobs: { job_type: string; status: string }[];
   fills: { symbol: string }[];
@@ -40,6 +41,7 @@ function evidenceFromPayloads(args: {
   return {
     subscription_status: args.subscription_status ?? null,
     has_stripe_subscription: args.has_stripe_subscription === true,
+    plan_tier: args.plan_tier ?? null,
     connections: args.connections.map((row) => [
       row.broker,
       row.env,
@@ -85,6 +87,7 @@ export function RemainingHopStatus({
           evidenceFromPayloads({
             subscription_status: profile?.subscription_status,
             has_stripe_subscription: profile?.has_stripe_subscription,
+            plan_tier: profile?.plan_tier,
             connections,
             jobs,
             fills,
@@ -114,7 +117,8 @@ export function RemainingHopStatus({
       </p>
       <p className="text-xs text-ink-mute">
         Member-scoped Settings reads only. House <span className="font-mono">active</span> without
-        a Stripe subscription boolean does not prove checkout. Digest log without inbox
+        a Stripe subscription boolean does not prove checkout. Baseline Stripe does not prove
+        checkout — broker connect and overlay need Custom. Digest log without inbox
         confirmation, or with <span className="font-mono">daily_digest</span> off, does not prove
         received. Alpaca <span className="font-mono">api_key</span> paper fills do not prove the
         OAuth or fill hops.

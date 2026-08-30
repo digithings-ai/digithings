@@ -16,8 +16,26 @@ describe('provenRemainingHops', () => {
     const proven = provenRemainingHops({
       subscription_status: 'active',
       has_stripe_subscription: false,
+      plan_tier: 'enterprise',
     });
     expect(proven.browser_stripe_checkout).toBe(false);
+  });
+
+  it('does not treat Baseline Stripe as the checkout hop', () => {
+    expect(
+      provenRemainingHops({
+        subscription_status: 'active',
+        has_stripe_subscription: true,
+        plan_tier: 'baseline',
+      }).browser_stripe_checkout,
+    ).toBe(false);
+    expect(
+      provenRemainingHops({
+        subscription_status: 'active',
+        has_stripe_subscription: true,
+        plan_tier: 'custom',
+      }).browser_stripe_checkout,
+    ).toBe(true);
   });
 
   it('does not treat digest log without inbox confirmation as received', () => {
@@ -89,6 +107,7 @@ describe('provenRemainingHops', () => {
     const proven = provenRemainingHops({
       subscription_status: 'active',
       has_stripe_subscription: true,
+      plan_tier: 'custom',
       connections: [['alpaca', 'paper', 'active', 'oauth']],
       jobs: [['overlay_daily', 'succeeded']],
       fill_count: 1,

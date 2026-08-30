@@ -3066,8 +3066,10 @@ the five live hops are named even before secrets land). After Observer hops
 pass, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
 `/jobs`, `/fills`, and `/notifications/log`. A hop is proven only from that
 product state: `subscription_status=active` **and** `has_stripe_subscription`
-(boolean; house is seeded `enterprise`/`active` without Stripe ids and must
-not prove checkout; ops grants with `subscription_status=none` also do not);
+**and** `plan_tier` in `{custom, enterprise}` (boolean Stripe id only; house is
+seeded `enterprise`/`active` without Stripe ids and must not prove checkout;
+Baseline Stripe also must not — broker connect and overlay stay
+`TIER_FORBIDDEN`; ops grants with `subscription_status=none` also do not);
 Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
 (not `running` / `skipped` / `persist_disabled` / `not_entitled`); a fill
 fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills

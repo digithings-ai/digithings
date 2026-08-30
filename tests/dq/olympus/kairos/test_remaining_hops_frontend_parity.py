@@ -10,7 +10,11 @@ import re
 from pathlib import Path
 
 import pytest
-from digiquant.olympus.kairos.remaining_hops import OVERLAY_RUN_STATUSES, REMAINING_LIVE_HOPS
+from digiquant.olympus.kairos.remaining_hops import (
+    OVERLAY_RUN_STATUSES,
+    REMAINING_LIVE_HOPS,
+    STRIPE_CHECKOUT_TIERS,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -40,6 +44,29 @@ def test_frontend_overlay_run_statuses_match_python() -> None:
     assert match is not None
     names = frozenset(re.findall(r"'([^']+)'", match.group(1)))
     assert names == OVERLAY_RUN_STATUSES
+
+
+def test_frontend_stripe_checkout_tiers_match_python() -> None:
+    match = re.search(
+        r"export const STRIPE_CHECKOUT_TIERS = new Set\(\[([^\]]+)\]\)",
+        _ts_source(),
+    )
+    assert match is not None
+    names = frozenset(re.findall(r"'([^']+)'", match.group(1)))
+    assert names == STRIPE_CHECKOUT_TIERS
+
+
+def test_frontend_stripe_hop_requires_custom_tier() -> None:
+    source = _ts_source()
+    assert "STRIPE_CHECKOUT_TIERS.has(evidence.plan_tier ?? '')" in source
+    assert (
+        re.search(
+            r"browser_stripe_checkout:\s*evidence\.subscription_status === 'active' && "
+            r"evidence\.has_stripe_subscription === true\s*,",
+            source,
+        )
+        is None
+    )
 
 
 def test_frontend_fill_hop_requires_oauth() -> None:
