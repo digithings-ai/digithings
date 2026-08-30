@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as _dt
 from datetime import date
+from pathlib import Path
 
 import polars as pl
 import pytest
@@ -18,6 +19,7 @@ from digiquant.strategies.sdca.indicator_catalog import (
     composite_weights_from_params,
     dxy_z,
     extra_indicators_for_window,
+    load_date_value_frame,
     m2_liquidity_z,
     parse_indicator_weights_json,
     rs_eth_z,
@@ -163,6 +165,25 @@ class TestBuildExtraIndicators:
         assert len(sliced) == 1
         assert sliced[0].name == "m2"
         assert sliced[0].z.to_list() == [3.0, 4.0, 5.0]
+
+    def test_load_date_value_frame_accepts_fred_observation_date(self, tmp_path: Path) -> None:
+        path = tmp_path / "M2SL.csv"
+        path.write_text("observation_date,M2SL\n2020-01-01,15400.1\n", encoding="utf-8")
+        dates, values = load_date_value_frame(path)
+        assert dates.len() == 1
+        assert dates[0] == date(2020, 1, 1)
+        assert values[0] == pytest.approx(15400.1)
+
+    def test_load_date_value_frame_accepts_iso_timestamp_close(self, tmp_path: Path) -> None:
+        path = tmp_path / "ETH-USD.csv"
+        path.write_text(
+            "timestamp,open,high,low,close,volume,symbol\n"
+            "2017-11-09T00:00:00.000,300,330,290,320.5,1,ETH-USD\n",
+            encoding="utf-8",
+        )
+        dates, values = load_date_value_frame(path)
+        assert dates[0] == date(2017, 11, 9)
+        assert values[0] == pytest.approx(320.5)
 
 
 class TestDefaultMatchesValuationOnly:

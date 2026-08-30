@@ -328,23 +328,35 @@ def sources_from_optional_paths(
 
 
 def load_date_value_frame(path: Path | str) -> tuple[pl.Series, pl.Series]:
-    """CSV/parquet with ``date`` + ``value`` (or ``close`` / ``timestamp``+``close``)."""
+    """CSV/parquet with a date column and a value column.
+
+    Accepts ``date`` / ``timestamp`` / ``observation_date`` (FRED fredgraph.csv)
+    plus ``value`` / ``close`` or the remaining numeric series column.
+    """
     dest = Path(path)
     if not dest.exists():
         raise ValueError(f"macro/extra series file not found: {dest}")
     frame = pl.read_parquet(dest) if dest.suffix.lower() == ".parquet" else pl.read_csv(dest)
-    date_col = "date" if "date" in frame.columns else "timestamp"
-    if date_col not in frame.columns:
-        raise ValueError(f"{dest} needs a date or timestamp column, got {frame.columns}")
-    value_col = "value" if "value" in frame.columns else "close"
-    if value_col not in frame.columns:
-        raise ValueError(f"{dest} needs a value or close column, got {frame.columns}")
+    date_col = next(
+        (c for c in ("date", "timestamp", "observation_date", "DATE") if c in frame.columns),
+        None,
+    )
+    if date_col is None:
+        raise ValueError(
+            f"{dest} needs a date/timestamp/observation_date column, got {frame.columns}"
+        )
+    value_col = next((c for c in ("value", "close") if c in frame.columns), None)
+    if value_col is None:
+        numeric = [c for c in frame.columns if c != date_col and frame.schema[c].is_numeric()]
+        if len(numeric) != 1:
+            raise ValueError(f"{dest} needs a value or close column, got {frame.columns}")
+        value_col = numeric[0]
     dates = frame[date_col]
     if dates.dtype != pl.Date:
         if isinstance(dates.dtype, pl.Datetime):
             dates = dates.cast(pl.Date)
         else:
-            dates = dates.str.to_date()
+            dates = dates.str.to_datetime(strict=False).cast(pl.Date)
     values = frame[value_col].cast(pl.Float64)
     cleaned = (
         pl.DataFrame({"date": dates, "value": values})
