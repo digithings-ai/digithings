@@ -149,26 +149,25 @@ the full module map.
 (`BtcPowerLawRiskModel`) — a fitted BTC power-law (RAQQR). Anti-patterns:
 
 - **Never treat `btc_power_law_coefficients.example.json` as a real fit.**
-  It is a synthetic placeholder (git-ignored `btc_power_law_coefficients.json`
-  doesn't exist yet in most checkouts/environments — no network access to
-  BTC price history or the reference artifact was available when this
-  provider was built). `load_coefficients()` logs a warning when it falls
-  back to the placeholder; don't silence or ignore that warning in code
-  reviewing this area — the fitted curve underneath a `SdcaStrategy` run may
-  not be real.
-- **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
+  It is a synthetic placeholder. The real fit is
+  `btc_power_law_coefficients.json` (committed #3173: Coinbase daily
+  BTC/USD, 2015-07-20–2026-08-29, 4059 rows). `load_coefficients()` prefers
+  the real file and only warns when it falls back to the placeholder —
+  don't silence that warning.
+- **Re-fit via the `digiquant_fit_btc_power_law` MCP tool**
   (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
   price history through `data/prices/history_cache.py` — the same cache
   every other price consumer uses. Don't write a bespoke fetch path for this.
-  (`digiquant_fetch_coinbase_ohlcv`'s CCXT/Coinbase script pipeline writes to
-  the *same* `data/price-history/` directory and ticker naming, not a
-  separate cache — `history_cache.py` is still the right one to call from a
-  new tool because it's the actively-maintained, incrementally-updating
-  pipeline every other consumer builds on, not because the data differs.)
-- **`low_quantile`/`high_quantile` (default 10th/95th) are an unvalidated
-  judgment call**, not verified against the reference artifact's corridor —
-  revisit once that artifact is reachable, don't assume the default is
-  correct.
+  Fill a cold cache with `digiquant_fetch_coinbase_ohlcv` / `scripts/fetch_coinbase.py`
+  then fit with `refresh=False` (Yahoo `incremental_update` 429s). Unit tests
+  keep using the example file / synthetic series; do not point them at the
+  committed real coefficients for numeric fixtures.
+- **`low_quantile`/`high_quantile` default 10th/95th is now coverage-justified
+  (#3173)** — in-sample percent-below-rail matches those quantiles within
+  0.1pp. Truncated refits (through 2020 / 2023) are unstable on later prices;
+  that is a walk-forward / rails-leakage issue (#3174), not a reason to
+  change the default. The owner's railway reference artifact 404'd
+  (2026-08-30) and is not ground truth anyway.
 - The other two #1082 providers (generic per-asset valuation-z, RS-driven
   risk) are not implemented yet.
 
