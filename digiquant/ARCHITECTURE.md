@@ -320,7 +320,7 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `total_pnl` | `float` | `final_balance - 1_000_000.0` (hardcoded starting capital) |
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
 | `sharpe_ratio` | `float | None` | Annualised (252 days) from Nautilus portfolio analyzer |
-| `max_drawdown_pct` | `float | None` | From `get_performance_stats_pnls()` or returns series fallback |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
 | `status` | `str` | `ok` | `partial` | `error` |
@@ -333,7 +333,7 @@ Applied as a hard filter before scoring candidates. Any trial that fails these c
 | Field | Type | Meaning |
 |---|---|---|
 | `min_trades` | `int | None` | Minimum trade count |
-| `max_drawdown_pct` | `float | None` | e.g. `-0.15` for −15% |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%); compared directly with `BacktestResult.max_drawdown_pct` |
 | `min_sharpe` | `float | None` | Minimum Sharpe ratio |
 | `min_return_pct` | `float | None` | Minimum total return |
 | `max_trades_per_year` | `float | None` | Activity cap |
