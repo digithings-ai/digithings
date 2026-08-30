@@ -26,15 +26,17 @@ overlay + house cannot both root a commit on the same date until then.
 ``daily_snapshots`` stays a house-only ``UNIQUE(date)`` table — overlay
 publish must skip it (see ``publish_phase``) even with persist on.
 
-``theses`` / ``analyst_coverage`` / ``thesis_vehicles`` / ``decision_log`` are
-the same class of shared register: no ``workspace_id`` column, leftover
-``UNIQUE(date, …)`` / ``UNIQUE(run_date, ticker)``. Overlay persist-on still
-compiles H1–H5 and preflight_reflect with the overlay client; a same-date
+``theses`` / ``analyst_coverage`` / ``thesis_vehicles`` / ``decision_log`` /
+``onchain_cohort_positioning`` are the same class of shared register: no
+``workspace_id`` column, leftover ``UNIQUE(date, …)`` / ``UNIQUE(run_date, ticker)``
+/ ``UNIQUE(date, market)``. Overlay persist-on still compiles H1–H5,
+preflight_reflect, and Atlas preflight with the overlay client; a same-date
 upsert last-writer-wins the house corpus, and ``resolve_pending`` would stamp
 house reflections by id. ``skip_overlay_shared_register`` no-ops those writes
 for a private workspace. Independent of persist-on and of staged cutover 113
-(113 does not add theses/decision_log tenancy). Private overlay is H7–H9
-book only (T4).
+(113 does not add theses/decision_log/onchain tenancy). Private overlay is
+H7–H9 book only (T4). Overlay still injects ``market_context["onchain_positioning"]``
+in-memory; only the DB upsert is skipped.
 """
 
 from __future__ import annotations
@@ -109,15 +111,16 @@ def require_overlay_legacy_book_safe(workspace_id: UUID | str | None) -> None:
 def skip_overlay_shared_register(workspace_id: UUID | str | None) -> bool:
     """True when overlay must not write house-owned shared registers.
 
-    ``theses``, ``analyst_coverage``, ``thesis_vehicles``, and ``decision_log``
-    have no ``workspace_id`` column. Overlay persist-on is not a license to
-    upsert them: leftover ``UNIQUE(date, thesis_id)`` / ``UNIQUE(date, ticker)``
-    / ``UNIQUE(run_date, ticker)`` last-writer-wins the house row. Overlay
+    ``theses``, ``analyst_coverage``, ``thesis_vehicles``, ``decision_log``, and
+    ``onchain_cohort_positioning`` have no ``workspace_id`` column. Overlay
+    persist-on is not a license to upsert them: leftover ``UNIQUE(date, thesis_id)``
+    / ``UNIQUE(date, ticker)`` / ``UNIQUE(run_date, ticker)`` /
+    ``UNIQUE(date, market)`` last-writer-wins the house row. Overlay
     ``preflight_reflect`` must not ``resolve_pending`` house reflections by id.
     Callers that omit *workspace_id* stay on the house write path. Do not reuse
     :func:`require_overlay_legacy_book_safe` here — that gate lifts after 113;
-    these tables stay shared until a theses/decision_log tenancy migration
-    exists.
+    these tables stay shared until a theses/decision_log/onchain tenancy
+    migration exists.
     """
     return is_private_workspace(workspace_id)
 

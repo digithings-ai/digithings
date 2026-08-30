@@ -69,7 +69,7 @@ def test_require_overlay_legacy_book_safe_blocks_private_allows_house() -> None:
 def test_skip_overlay_shared_register_independent_of_persist_flag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Persist=1 still must not upsert house-owned theses / analyst / vehicles."""
+    """Persist=1 still must not upsert house-owned shared registers."""
     overlay = uuid4()
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     assert skip_overlay_shared_register(overlay) is True
