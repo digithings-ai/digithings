@@ -43,7 +43,7 @@ export function NotifyTab({ api, patchFn = patchNotifications }: NotifyTabProps)
       if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
         setNotReady(true);
         setMessage(
-          'Notification preferences are not ready yet (waiting on K5). Your choices were not saved.',
+          'Notification preferences backend is temporarily unavailable. Your choices were not saved.',
         );
       } else {
         setMessage(err instanceof Error ? err.message : 'Unable to save preferences.');
@@ -58,8 +58,8 @@ export function NotifyTab({ api, patchFn = patchNotifications }: NotifyTabProps)
       <div>
         <h2 className="font-display text-xl text-ink tracking-tight">Notifications</h2>
         <p className="mt-1 text-sm text-ink-soft">
-          Digests and execution alerts land in your inbox once the notify plane ships. Until
-          then, saves return a clear not-ready state.
+          Digests and execution alerts use the email and toggles you save here. Digest hour is
+          UTC.
         </p>
       </div>
 

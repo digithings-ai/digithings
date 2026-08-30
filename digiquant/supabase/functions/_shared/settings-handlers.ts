@@ -6,10 +6,11 @@
  *   GET    /brokers            — list fingerprints only
  *   POST   /brokers/connect    — api_key | oauth (Alpaca code exchange server-side)
  *   POST   /brokers/revoke     — mark revoked (fail closed on unknown)
- *   PATCH  /notifications      — 503 NOT_READY until K5 lands notification_prefs
+ *   PATCH  /notifications      — upsert notification_prefs (workspace member)
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
- * olympus_profile_config.workspace_id) and K3 vault + broker_connections.
+ * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
+ * K5 migration 103 (notification_prefs).
  */
 
 import {
@@ -105,10 +106,16 @@ export async function handleSettingsRequest(
     return revokeBroker(req, deps);
   }
   if (method === "PATCH" && path === "/notifications") {
-    return patchNotifications();
+    return patchNotifications(req, deps);
   }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
+
+/** Matches migration 103 CHECK (email ~ '^[^@]+@[^@]+\.[^@]+$'). */
+const EMAIL_RE = /^[^@]+@[^@]+\.[^@]+$/;
+
+const PREFS_COLUMNS =
+  "workspace_id, email, daily_digest, holding_change_alerts, execution_alerts, digest_hour_utc, updated_at";
 
 async function resolveMember(
   deps: SettingsDeps,
@@ -632,13 +639,132 @@ async function revokeBroker(req: Request, deps: SettingsDeps): Promise<Response>
   });
 }
 
-function patchNotifications(): Response {
-  // notification_prefs table lands with K5 — return a clear 503 until then.
-  return jsonError(
-    503,
-    "NOT_READY",
-    "notification_prefs is not available until K5; prefs cannot be saved yet",
-  );
+async function patchNotifications(
+  req: Request,
+  deps: SettingsDeps,
+): Promise<Response> {
+  let body: {
+    workspace_id?: string;
+    email?: string;
+    daily_digest?: boolean;
+    holding_change_alerts?: boolean;
+    execution_alerts?: boolean;
+    digest_hour_utc?: number;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
+  }
+
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
+  if (!authz.ok) return authz.response;
+
+  const { data: existing, error: lookupErr } = await deps.admin
+    .from("notification_prefs")
+    .select(PREFS_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .maybeSingle();
+
+  if (lookupErr) {
+    return jsonError(
+      503,
+      "NOT_READY",
+      "notification_prefs not available",
+    );
+  }
+
+  const emailRaw = typeof body.email === "string" ? body.email.trim() : "";
+  const emailFallback =
+    typeof deps.user.email === "string" ? deps.user.email.trim() : "";
+  const email =
+    emailRaw ||
+    (typeof existing?.email === "string" ? existing.email : "") ||
+    emailFallback;
+  if (!email || !EMAIL_RE.test(email)) {
+    return jsonError(
+      400,
+      "INVALID_EMAIL",
+      "email is required and must be a valid address",
+    );
+  }
+
+  if (body.digest_hour_utc !== undefined) {
+    const hour = body.digest_hour_utc;
+    if (
+      typeof hour !== "number" ||
+      !Number.isInteger(hour) ||
+      hour < 0 ||
+      hour > 23
+    ) {
+      return jsonError(
+        400,
+        "INVALID_DIGEST_HOUR",
+        "digest_hour_utc must be an integer 0..23",
+      );
+    }
+  }
+
+  const asBool = (
+    incoming: boolean | undefined,
+    prior: unknown,
+    fallback: boolean,
+  ): boolean => {
+    if (typeof incoming === "boolean") return incoming;
+    if (typeof prior === "boolean") return prior;
+    return fallback;
+  };
+
+  const row = {
+    workspace_id: authz.workspace.id,
+    email,
+    daily_digest: asBool(body.daily_digest, existing?.daily_digest, false),
+    holding_change_alerts: asBool(
+      body.holding_change_alerts,
+      existing?.holding_change_alerts,
+      false,
+    ),
+    execution_alerts: asBool(
+      body.execution_alerts,
+      existing?.execution_alerts,
+      false,
+    ),
+    digest_hour_utc:
+      body.digest_hour_utc !== undefined
+        ? body.digest_hour_utc
+        : typeof existing?.digest_hour_utc === "number"
+        ? existing.digest_hour_utc
+        : 12,
+  };
+
+  const { data: upserted, error: upsertErr } = await deps.admin
+    .from("notification_prefs")
+    .upsert(row, { onConflict: "workspace_id" })
+    .select(PREFS_COLUMNS)
+    .single();
+
+  if (upsertErr) {
+    const msg = (upsertErr.message ?? "").toLowerCase();
+    if (msg.includes("email") || msg.includes("check")) {
+      return jsonError(
+        400,
+        "INVALID_EMAIL",
+        "email is required and must be a valid address",
+      );
+    }
+    console.error("notification_prefs upsert failed", upsertErr.code ?? "unknown");
+    return jsonError(500, "PREFS_WRITE_FAILED", "Unable to save notification preferences");
+  }
+
+  return jsonOk({
+    workspace_id: upserted.workspace_id,
+    email: upserted.email,
+    daily_digest: upserted.daily_digest,
+    holding_change_alerts: upserted.holding_change_alerts,
+    execution_alerts: upserted.execution_alerts,
+    digest_hour_utc: upserted.digest_hour_utc,
+    updated_at: upserted.updated_at,
+  });
 }
 
 async function exchangeAlpacaCodeDefault(args: {
