@@ -55,7 +55,9 @@ function AuthLoadingScreen() {
  * - Flag off → AppProviders + children (today's shell).
  * - Flag on + auth route → children only (login / PKCE callback, no chrome).
  * - Flag on + not yet mounted → full shell (prerender-safe; static export keeps <h1>).
- * - Flag on + mounted + loading → loading screen (never empty chrome).
+ * - Flag on + mounted + loading → session check *inside* AppProviders so
+ *   DashboardProvider is not unmounted (a remount aborted house fetches and
+ *   left Brief/Portfolio on the loading skeleton).
  * - Flag on + mounted + no session → LoginScreen.
  * - Flag on + mounted + session → AppProviders + children.
  */
@@ -72,19 +74,15 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  // Prerender / SSR: emit the real page shell so check-static-export sees <h1>.
-  // Gate only after mount once session resolve has had a chance to run.
-  if (!mounted) {
-    return <AppProviders>{children}</AppProviders>;
-  }
-
-  if (loading) {
-    return <AuthLoadingScreen />;
-  }
-
-  if (!session) {
+  // Signed-out after session resolve: login UI, no dashboard chrome.
+  if (mounted && !loading && !session) {
     return <LoginScreen />;
   }
 
-  return <AppProviders>{children}</AppProviders>;
+  // Prerender, session-check, and signed-in all share one AppProviders instance
+  // so getFullDashboardData is not torn down between hydrate and getSession.
+  const showSessionCheck = mounted && loading && !session;
+  return (
+    <AppProviders>{showSessionCheck ? <AuthLoadingScreen /> : children}</AppProviders>
+  );
 }

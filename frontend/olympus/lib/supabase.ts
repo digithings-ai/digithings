@@ -23,6 +23,26 @@ export function olympusBasePath(): string {
   return trimmed || '/olympus';
 }
 
+/** GoTrue options that never restore a user JWT (role stays `anon`). */
+const HOUSE_AUTH_OPTIONS = {
+  persistSession: false,
+  autoRefreshToken: false,
+  detectSessionInUrl: false,
+} as const;
+
+/**
+ * Session-less anon client for house Brief/Portfolio/Pipeline reads.
+ * Must not share GoTrue storage with the PKCE singleton — a signed-in JWT
+ * uses `role=authenticated`, and `anon_read` policies are `TO anon` only.
+ * Until cutover 900, house rows stay on those anon policies.
+ */
+export function buildHouseSupabaseClient(
+  url: string,
+  key: string,
+): SupabaseClient<Database> {
+  return createClient<Database>(url, key, { auth: { ...HOUSE_AUTH_OPTIONS } });
+}
+
 /**
  * Build the browser Supabase client.
  * - Flag off: plain anon client (no behavior change vs pre-T1; prerendered DOM
@@ -47,21 +67,39 @@ export function buildSupabaseClient(
   return createClient<Database>(url, key);
 }
 
-export const supabase: SupabaseClient<Database> | null =
-  supabaseUrl && supabaseAnonKey
-    ? buildSupabaseClient(supabaseUrl, supabaseAnonKey, isOlympusAuthEnabled())
-    : null;
+const configured = Boolean(supabaseUrl && supabaseAnonKey);
 
 /**
- * Session-aware accessor for the data layer. When auth is on, the same PKCE
- * client carries the user JWT (RLS scopes rows). When off, this is the anon
- * client — today's behavior.
+ * PKCE / session client. Login, Settings, and workspace-private RPCs only.
+ * Do not use this for house dashboard reads while anon_read is still live.
+ */
+export const supabase: SupabaseClient<Database> | null = configured
+  ? buildSupabaseClient(supabaseUrl, supabaseAnonKey, isOlympusAuthEnabled())
+  : null;
+
+/**
+ * House corpus client (always session-less). Brief, Portfolio, Pipeline,
+ * snapshot, and observability reads use this so a personal-workspace JWT
+ * cannot hide house pipeline rows.
+ */
+export const supabaseHouse: SupabaseClient<Database> | null = configured
+  ? buildHouseSupabaseClient(supabaseUrl, supabaseAnonKey)
+  : null;
+
+/**
+ * Session-aware accessor for auth + Settings. House data layer uses
+ * {@link getHouseSupabaseClient} instead.
  */
 export function getSupabaseClient(): SupabaseClient<Database> | null {
   return supabase;
 }
 
-export const isSupabaseConfigured = (): boolean => Boolean(supabase);
+/** Session-less anon accessor for house dashboard queries. */
+export function getHouseSupabaseClient(): SupabaseClient<Database> | null {
+  return supabaseHouse;
+}
+
+export const isSupabaseConfigured = (): boolean => configured;
 
 /** OAuth redirect target for Google/GitHub PKCE (must match Supabase dashboard allow-list). */
 export function oauthRedirectTo(): string {

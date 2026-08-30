@@ -19,7 +19,7 @@
  * export (`output: 'export'` on digiquant.io) cannot ship App Router API routes.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { isSupabaseConfigured, supabase } from './supabase';
+import { isSupabaseConfigured, supabaseHouse as supabase } from './supabase';
 import type { Database } from './database.types';
 import type {
   DigestPayload,

@@ -1,4 +1,4 @@
-import { isSupabaseConfigured, supabase } from './supabase';
+import { isSupabaseConfigured, supabaseHouse as supabase } from './supabase';
 import type { ViewRow } from './database.types';
 
 export type PipelineRunEvent = ViewRow<'olympus_run_event_trace'>;

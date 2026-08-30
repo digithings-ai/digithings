@@ -37,6 +37,21 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     expect(opts?.auth?.flowType).toBe('pkce');
   });
 
+  it('house client never persists a session (stays role=anon)', async () => {
+    const { buildHouseSupabaseClient } = await import('./supabase');
+    createClient.mockClear();
+    buildHouseSupabaseClient('https://example.supabase.co', 'anon-key');
+    expect(createClient).toHaveBeenCalledTimes(1);
+    const opts = createClient.mock.calls[0]?.[2] as {
+      auth?: { persistSession?: boolean; autoRefreshToken?: boolean; detectSessionInUrl?: boolean };
+    };
+    expect(opts?.auth).toMatchObject({
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    });
+  });
+
   it('oauthRedirectTo includes /olympus basePath (real implementation)', async () => {
     const { oauthRedirectTo, olympusBasePath } = await import('./supabase');
     expect(olympusBasePath()).toBe('/olympus');

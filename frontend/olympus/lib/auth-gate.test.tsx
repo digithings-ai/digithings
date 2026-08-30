@@ -149,13 +149,15 @@ describe('AuthGate', () => {
     expect(html).not.toContain('data-login');
   });
 
-  it('flag on + mounted + loading: shows session check, not empty chrome or children', () => {
+  it('flag on + mounted + loading: session check stays inside the app shell', () => {
     authState.authEnabled = true;
     authState.loading = true;
     authState.session = null;
     mountedState.client = true;
     const html = renderGate();
     expect(html).toContain('Checking session');
+    expect(html).toContain('data-dashboard="1"');
+    expect(html).toContain('data-frame="1"');
     expect(html).not.toContain('protected-child');
     expect(html).not.toContain('data-login');
   });
