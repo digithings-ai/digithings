@@ -3299,7 +3299,9 @@ candidate counts (`considered`, `digest_on`, `skipped_prefs_off`,
 skip of the count. `--workspace-id` filters the plan. Missing store env exits
 **2** with `NOTIFY_STORE_NOT_CONFIGURED`. Combined cron probe:
 `python scripts/kairos_cron_check.py` (overlay `--check` + kairos sync `--check` +
-Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing which probes failed.
+route `--check` + Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing
+which probes failed. Route `--check` logs `routing_enabled=true|false` and
+never calls `submit_order`.
 Staging inventory also covers these names in
 `digiquant.olympus.kairos.staging_secrets`. `scripts/kairos_staging_e2e.py` runs
 Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password

@@ -28,17 +28,17 @@ _MAILGUN = {
 
 
 def test_run_cron_checks_all_green() -> None:
-    report = run_cron_checks(overlay_rc=0, sync_rc=0, mailgun_rc=0)
+    report = run_cron_checks(overlay_rc=0, sync_rc=0, route_rc=0, mailgun_rc=0)
     assert report.failed == ()
     assert cron_check_exit_code(report) == 0
 
 
 def test_run_cron_checks_names_failures() -> None:
-    report = run_cron_checks(overlay_rc=2, sync_rc=0, mailgun_rc=2)
-    assert report.failed == ("overlay", "mailgun")
+    report = run_cron_checks(overlay_rc=2, sync_rc=0, route_rc=3, mailgun_rc=2)
+    assert report.failed == ("overlay", "kairos_route", "mailgun")
     assert cron_check_exit_code(report) == 2
     msg = format_cron_check_failure(report.failed)
-    assert msg == "KAIROS_CRON_CHECK: overlay, mailgun"
+    assert msg == "KAIROS_CRON_CHECK: overlay, kairos_route, mailgun"
     assert "key-placeholder" not in msg
 
 
@@ -50,9 +50,11 @@ def test_main_empty_env_exits_2() -> None:
     assert "KAIROS_CRON_CHECK:" in blob
     assert "overlay" in blob
     assert "kairos_sync" in blob
+    assert "kairos_route" in blob
     assert "mailgun" in blob
     assert "OVERLAY_STORE_NOT_CONFIGURED" in blob
     assert "KAIROS_SYNC_NOT_CONFIGURED" in blob
+    assert "KAIROS_ROUTING_DISABLED" not in blob
     assert "MAILGUN_NOT_CONFIGURED" in blob
     assert missing_overlay_cron_env_names({})
     assert missing_kairos_sync_env_names({})
@@ -69,6 +71,9 @@ def test_main_complete_env_exits_0() -> None:
     )
     assert rc == 0
     assert logs
-    assert "names only" in logs[0]
+    blob = "\n".join(logs)
+    assert "names only" in blob
+    assert "route" in blob
     assert mailgun_check_exit_code(_MAILGUN) == 0
-    assert "key-placeholder" not in "\n".join(logs)
+    assert "key-placeholder" not in blob
+    assert "submit_order" not in blob
