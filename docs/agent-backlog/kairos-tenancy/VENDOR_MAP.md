@@ -32,7 +32,7 @@
 | Webhook secret | Endpoint → Signing secret (`whsec_…`) → `STRIPE_WEBHOOK_SECRET` |
 | Local file (when ready) | `.local/secrets/digithings-stripe.env` |
 | Human gate | hCaptcha on signup — screenshot `/opt/cursor/artifacts/stripe-hcaptcha-human-needed.png` |
-| Signup attempt email | `digithings@agentmail.to` (form filled, Create account blocked by captcha) |
+| Signup attempt email | `digithings@agentmail.to` (re-filled 2026-08-30; hCaptcha image challenge after Create account) |
 
 ## Mailgun — BLOCKED on reCAPTCHA
 
@@ -48,7 +48,7 @@
 | Local file (when ready) | `.local/secrets/digithings-mailgun.env` |
 | Human gate | reCAPTCHA failed (“Could not validate”) — may also require SMS |
 | Screenshot | `/opt/cursor/artifacts/mailgun-recaptcha-human-needed.png` |
-| Signup attempt email | Interim form used `cursor-cloud-agent6060@agentmail.to` — **re-prefer digithings@** on next attempt |
+| Signup attempt email | **digithings@agentmail.to** (re-filled 2026-08-30 recheck; still reCAPTCHA-blocked) |
 | MCP status | Mailgun MCP auth fails until API key set |
 
 ## Alpaca (paper) — BLOCKED on Cloudflare Turnstile
@@ -64,7 +64,7 @@
 | Local file (when ready) | `.local/secrets/digithings-alpaca.env` |
 | Human gate | Cloudflare Turnstile — Sign up stays disabled until solved |
 | Screenshot | `/opt/cursor/artifacts/alpaca-turnstile-human-needed.png` |
-| Signup attempt | Interim email `cursor-cloud-agent6060@agentmail.to`; **canonical = digithings@agentmail.to** |
+| Signup attempt | **digithings@agentmail.to** (re-filled 2026-08-30; Turnstile still blocks Sign up) |
 | Prior login | `digithings@agentmail.to` → Cognito `NotAuthorizedException` (account never completed) |
 
 ## Google OAuth (optional Supabase Auth) — not started
@@ -106,6 +106,8 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 
 ## Browser tabs left open for human (paused)
 
-1. Stripe register + hCaptcha (`digithings@agentmail.to`)
-2. Mailgun signup + reCAPTCHA error (interim inbox on form — migrate to digithings@)
-3. Alpaca signup + Turnstile (interim inbox on form — migrate to digithings@)
+1. Stripe register + hCaptcha image challenge (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-stripe-hcaptcha-2026-08-30.png`
+2. Mailgun signup + reCAPTCHA error (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-mailgun-recaptcha-2026-08-30.png`
+3. Alpaca signup + Turnstile (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-alpaca-turnstile-2026-08-30.png`
+
+Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`
