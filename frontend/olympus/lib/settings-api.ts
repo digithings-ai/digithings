@@ -54,6 +54,34 @@ export type ProfileTip = {
   watchlist?: string[];
   themes?: string[];
   research_budget_usd?: number | null;
+  /** Workspace billing snapshot — never Stripe customer/subscription ids. */
+  plan_tier?: string;
+  subscription_status?: string;
+  has_stripe_subscription?: boolean;
+};
+
+export type JobRunView = {
+  id: string;
+  job_type: string;
+  status: string;
+  error: string | null;
+  idempotency_key: string;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
+export type FillView = {
+  id: string;
+  symbol: string;
+  quantity: number;
+  executed_at: string | null;
+  recorded_at: string | null;
+};
+
+export type NotificationLogEvent = {
+  event_key: string;
+  sent_date: string;
+  sent_at: string;
 };
 
 export type ProviderCredentialView = {
@@ -271,6 +299,37 @@ export async function getNotifications(
 ): Promise<NotificationPrefs> {
   const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
   return request<NotificationPrefs>(opts, 'GET', `/settings/notifications${q}`);
+}
+
+export async function getJobs(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<JobRunView[]> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const data = await request<{ jobs: JobRunView[] }>(opts, 'GET', `/settings/jobs${q}`);
+  return data.jobs ?? [];
+}
+
+export async function getFills(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<FillView[]> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const data = await request<{ fills: FillView[] }>(opts, 'GET', `/settings/fills${q}`);
+  return data.fills ?? [];
+}
+
+export async function getNotificationLog(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<NotificationLogEvent[]> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const data = await request<{ events: NotificationLogEvent[] }>(
+    opts,
+    'GET',
+    `/settings/notifications/log${q}`,
+  );
+  return data.events ?? [];
 }
 
 export async function patchNotifications(

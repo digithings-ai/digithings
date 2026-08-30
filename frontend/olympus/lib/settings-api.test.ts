@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   connectBrokerApiKey,
   connectProviderKey,
+  getFills,
+  getJobs,
+  getNotificationLog,
   getNotifications,
   getProfile,
   isBillingConfigured,
@@ -180,6 +183,81 @@ describe('settings-api', () => {
         { profile_key: 'ws', label: 'L' },
       ),
     ).rejects.toMatchObject({ status: 409, code: 'VERSION_CONFLICT' } satisfies Partial<SettingsHttpError>);
+  });
+
+  it('getJobs GETs member-scoped job_runs', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toContain('/settings/jobs');
+      expect(init?.method).toBe('GET');
+      return new Response(
+        JSON.stringify({
+          jobs: [
+            {
+              id: 'job-a',
+              job_type: 'overlay_daily',
+              status: 'succeeded',
+              error: null,
+              idempotency_key: 'k',
+              started_at: '2026-08-31T00:00:00Z',
+              finished_at: '2026-08-31T00:01:00Z',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    const jobs = await getJobs({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.job_type).toBe('overlay_daily');
+  });
+
+  it('getFills omits broker external ids from the typed view', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/settings/fills');
+      return new Response(
+        JSON.stringify({
+          fills: [
+            {
+              id: 'f1',
+              symbol: 'AAPL',
+              quantity: 1,
+              executed_at: '2026-08-31T14:00:00Z',
+              recorded_at: '2026-08-31T14:00:01Z',
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    const fills = await getFills({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(fills[0]?.symbol).toBe('AAPL');
+    expect(JSON.stringify(fills)).not.toContain('external_fill_id');
+  });
+
+  it('getNotificationLog GETs digest event keys', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(String(url)).toContain('/settings/notifications/log');
+      return new Response(
+        JSON.stringify({
+          events: [{ event_key: 'digest:2026-08-31', sent_date: '2026-08-31', sent_at: 't' }],
+        }),
+        { status: 200 },
+      );
+    });
+    const events = await getNotificationLog({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(events[0]?.event_key).toBe('digest:2026-08-31');
   });
 
   it('isBillingConfigured is false without Supabase URL', () => {
