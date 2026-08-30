@@ -106,7 +106,7 @@ if [ ! -f functions/api/chat.ts ]; then
   echo "ERROR: functions/api/chat.ts missing after mirror" >&2
   exit 1
 fi
-if find functions -type f -name "*.test.ts" 2>/dev/null | grep -q .; then
+if find functions -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) 2>/dev/null | grep -q .; then
   echo "ERROR: test files still present under functions/ after exclusion (#2348)" >&2
   exit 1
 fi
