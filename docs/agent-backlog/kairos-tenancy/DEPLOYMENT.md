@@ -124,7 +124,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v10** (thin GitHub-raw → `origin/develop` tip) | Notifications upsert live (#3161+#3177 on develop). Smoke: missing/invalid JWT → gateway `401`. Prefer monorepo 9-file bundle once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Management API 403 without `sbp_`). Migration `106` stamped on `core`.
+| `settings` | ACTIVE **v11** (thin GitHub-raw → `0f235935…` / post-#3179 develop tip) | Notifications upsert live (#3161+#3177 on develop). Smoke: missing/invalid JWT → gateway `401` (`settings-v11-smoke.log`). Full monorepo 9-file bundle staged; prefer once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Supabase MCP has no secrets tool; Management API 403 without `sbp_`). Migration `106` stamped on `core`.
 
 ### Schema alignment (agent, 2026-08-30)
 
