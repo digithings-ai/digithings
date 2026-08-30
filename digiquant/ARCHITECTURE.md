@@ -2021,7 +2021,15 @@ assuming it is always present.
 Per ADR-0009: Atlas research writes via `publish_phase` (`documents`, `daily_snapshots`).
 Hermes terminal writes via **H9 `commit_run`** (`positions`, `nav_history`, `theses`,
 portfolio brief, `decision_log`, plus the append-only `portfolio_ledger_*` commit chain —
-see below). `preflight_reflect` resolves due `decision_log` rows daily;
+see below). **PostgREST timeout (#3319):** `build_client` sets
+`httpx.Timeout(connect=10, read=60, write=30, pool=10)` on the Supabase client.
+`append_commit_chain` additionally wraps every `execute()` (including the
+`price_history` read in `_last_closes`) with a 70s daemon-thread deadline
+(`digiquant.olympus.postgrest_timeout`). A hung call raises `PostgrestTimeoutError`
+so the outer pipeline retry can fire; it must not sit until the GitHub Actions
+240-minute job cancel. The worker is daemon so process exit is not joined to the
+hung call (`ThreadPoolExecutor` workers would reintroduce the stall). No client-level retries on this path (disconnect retries
+are a separate #3299 concern). `preflight_reflect` resolves due `decision_log` rows daily;
 beliefs distillation is on-demand only. Legacy `digiquant/scripts/atlas/publish_document.py`
 and `materialize_snapshot.py` are frozen.
 
