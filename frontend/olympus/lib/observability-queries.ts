@@ -44,6 +44,7 @@ import {
   roundPct,
   soldWeightPct,
 } from './position-event-economics';
+import { houseBook } from './house-workspace';
 
 const DECISION_PAGE_SIZE = 1000;
 const DECISION_MAX_ROWS = 50000;
@@ -620,14 +621,12 @@ export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet>
 
   const [positionsRes, metricsRes, attributionRes, eventsRes] = await Promise.all([
     safeSelect<TableRow<'positions'>>('positions', (sb) =>
-      sb
-        .from('positions')
-        .select('*')
+      houseBook(sb, 'positions')
         .order('date', { ascending: false })
         .limit(PERFORMANCE_HISTORY_LIMIT)
     ),
     safeSelect<TableRow<'portfolio_metrics'>>('portfolio_metrics', (sb) =>
-      sb.from('portfolio_metrics').select('*').order('date', { ascending: false }).limit(1)
+      houseBook(sb, 'portfolio_metrics').order('date', { ascending: false }).limit(1)
     ),
     // Book attribution tab stays on current-book lookback (diagnostic). Realized daily
     // contribution is public_daily_realized_attribution — do not mix into this series.
@@ -639,9 +638,7 @@ export async function fetchPerformanceTearsheet(): Promise<PerformanceTearsheet>
         .limit(ATTRIBUTION_LIMIT)
     ),
     safeSelect<TableRow<'position_events'>>('position_events', (sb) =>
-      sb
-        .from('position_events')
-        .select('*')
+      houseBook(sb, 'position_events')
         // EXIT = full close; TRIM = partial sell — both are realized vs average entry.
         .in('event', ['EXIT', 'TRIM'])
         .order('date', { ascending: false })

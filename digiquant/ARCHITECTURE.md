@@ -3224,7 +3224,12 @@ argument off (`load_prior_book`, `load_portfolio_performance_snapshot`,
 `_prior_nav`, `_recent_navs` / `breaker_scale_from_nav_history`,
 `opening_snapshot` Group A reads, `_prune_orphan_positions`, `_rows_for_date`,
 `_pending_order_heads`) filter **and** stamp `house_workspace_id()`. They never
-mean "every row".
+mean "every row". The olympus dashboard Group A readers
+(`frontend/olympus/lib/queries.ts`, `observability-queries.ts`) go through
+`houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom member's overlay
+rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
+`public_accounting_nav_history` (security definer; house-only until a later
+view rewrite).
 
 **Test-fake vs PostgREST `eq` (workspace_id).** The in-memory `_FakeQuery` in
 `tests/dq/atlas/test_supabase_io.py` treats a missing `workspace_id` column as
