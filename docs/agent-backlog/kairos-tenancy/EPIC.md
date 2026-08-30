@@ -63,29 +63,30 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, settings EF v18 + GitHub Auth + `sbp_` partial unlock)
+## Agent delivery status (2026-08-30, post-sbp continue)
 
-**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca + zero `auth.users`). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
 **Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — remaining vendor keys + paste `sbp_…` into Cursor env labeled **cursor cloud agent**. Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
-**Docs branch:** `cursor/cursor-cloud-agent-secrets-status-c8be` (parent opens PR if `gh` 403).
+**Docs branch:** `cursor/kairos-post-sbp-continue-f34a` (prior unlock docs [#3209](https://github.com/digithings-ai/digithings/pull/3209) + [#3211](https://github.com/digithings-ai/digithings/pull/3211) **merged**).
 
 **Code:** all 12 WPs on `develop` (promotion #3141). Wins-hunt [#3191](https://github.com/digithings-ai/digithings/pull/3191) + profile GET [#3187](https://github.com/digithings-ai/digithings/pull/3187) + settings tier gate [#3196](https://github.com/digithings-ai/digithings/pull/3196) — **merged**. Entitlement uses `workspaces.plan_tier` only (no JWT fail-open after cancel).
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
-**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v18** ACTIVE (full monorepo path; smoke 401).
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v18** ACTIVE (smoke 401 — `settings-v18-smoke.log`).
 
-**Auth (`core`):** **GitHub Enabled** (OAuth App `digiquant olympus` → Supabase callback). Site URL `https://digiquant.io`; Olympus redirect allow-list set. **Google still Disabled** (skipped captcha / no client).
+**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Site URL `https://digiquant.io`; Olympus redirect allow-list set. `auth.users` = **0** (no real JWT E2E without inventing a user).
 
 **Secrets (names only):**
-- **`sbp_` path unlocked** — PAT rotated via recreate+revoke (new label **cursor cloud agent**; kairos-named revoked). Management API `secrets list` OK; local `.local/secrets/cursor-cloud-agent-supabase-pat`. **Human must re-paste** into Cursor env (old paste invalid).
-- **EF secrets on `core`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (+ platform `SUPABASE_*` / `FINNHUB_API_KEY`).
-- **Still empty / blocked:** Mailgun (empty + MCP auth fail), Stripe (hCaptcha), Google OAuth client, Alpaca OAuth. Mailgun smoke **skipped**.
+- **`sbp_` path unlocked** — local `.local/secrets/cursor-cloud-agent-supabase-pat` works; Management API lists 12 EF names. **Cursor env paste still missing**.
+- **EF secrets on `core`:** `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (+ platform `SUPABASE_*` / `FINNHUB_API_KEY`).
+- **GitHub Actions:** org/repo/env secrets have **no** `STRIPE_*` / `ALPACA_*` / `MAILGUN_*` names (LLM + Cloudflare + `CORE_SUPABASE_*` only).
+- **Still empty / blocked:** Mailgun (empty — EF set skipped), Stripe, Google OAuth, Alpaca OAuth.
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
 
 **Agent-reachable paper E2E (fakes/mocks — NOT live staging):** 145 passed — `kairos-e2e-paper-fakes-refresh.log`. Staging E2E still **BLOCKED**.
 
-**Review gate (parent):** #3161 / #3184 / #3185 hatched. Later audits + #3196 hatch comment+label **403** this agent — review bodies under `/opt/cursor/artifacts/kairos-reviews/`; parent posts `<!-- in-session-review -->` + `reviewed:agent`. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
+**Review gate (parent):** hatch bodies for #3209/#3211 under `/opt/cursor/artifacts/kairos-reviews/` — `gh` comment+label **403**. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
 
 **Pages promote:** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) left open. **Do not merge** until remaining vendor secrets live **and** intentional Pages cutover. Flag off; no cutover 900.
 
