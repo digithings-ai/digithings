@@ -1,5 +1,5 @@
 provider: nvidia_nim
-last_checked: 2026-07-19
+last_checked: 2026-08-30
 source: agent-research
 
 free_tier:
@@ -15,11 +15,11 @@ free_tier:
       context_window: 128000
       max_input_tokens: 128000
       max_output_tokens: 4096
-      status: active
+      status: deprecated        # confirmed EOL 2026-08-26 (probe's own 410 response carries the exact timestamp)
       verified: false
-      last_verified: 2026-07-19
-      last_verified_latency_ms: 91873
-      verification_error: "Request timed out."
+      last_verified: 2026-08-30
+      last_verified_latency_ms: 118
+      verification_error: "Error code: 410 - {'type': 'about:blank', 'title': 'Gone', 'status': 410, 'detail': \"The model 'meta/llama-3.3-70b-instruct' has reached its end of life on 2026-08-26T09:00:00Z and is no longer available.\"}"
     - name: nvidia/llama-3.3-nemotron-super-49b-v1
       context_window: 131072
       max_input_tokens: 131072
@@ -99,4 +99,4 @@ verification:
   probe_model_alias: nvidia-llama-70b
   github_secret_key: NVIDIA_API_KEY
 
-notes: "PROBE 2026-07-19: meta/llama-3.3-70b-instruct timed out after 91.8s. Research confirms this is a known, recurring issue on NVIDIA Developer Forums (not a status-page outage — status.ngc.nvidia.com showed no active incident) — multiple 2026 threads report free-tier latency spikes up to ~3 minutes under load, with some models (e.g. DeepSeek) failing over half the time. Treat build.nvidia.com's free tier as best-effort/expect-timeouts-under-load rather than production-reliable; reliability flags updated accordingly. No deprecation found for nemotron-3-ultra-550b-a55b — still listed and documented. Added Nemotron 3 Ultra (nvidia/nemotron-3-ultra-550b-a55b): 550B total, 55B active, 1M context, hybrid Mamba-Transformer MoE, launched June 4 2026 at Computex. Catalog now 100+ models. Tool calling confirmed on many models. 200 RPM upgrade requests via forum are common but staff note the forum thread itself does not grant increases — 40 RPM remains the practical free-tier ceiling. Credits do not refill — best for prototyping. Developer Program grants 5000 additional credits."
+notes: "PROBE 2026-08-30: meta/llama-3.3-70b-instruct now returns 410 Gone, stating end-of-life 2026-08-26T09:00:00Z — this supersedes the prior cycle's 91.8s timeout finding; the model is confirmed retired, not merely overloaded. No official replacement/redirect model was named in NVIDIA's public EOL notices found this cycle. ACTION NEEDED: scripts/provider_review/probe.py:51 should be repointed at a still-live free-tier model — nvidia/llama-3.3-nemotron-super-49b-v1, deepseek-ai/deepseek-r1, or nvidia/nemotron-3-ultra-550b-a55b are all still listed active in this snapshot and unaffected by this EOL. No deprecation found for those three this cycle. Catalog still 100+ models. Tool calling confirmed on many models. 40 RPM remains the practical free-tier ceiling (200 RPM forum-requested bumps do not appear to be actually granted per staff comments recorded last cycle). Credits do not refill — best for prototyping. Developer Program grants 5000 additional credits. Prior cycle's reliability finding (chronic free-tier latency spikes/timeouts under load, not a status-page outage) is retained pending a fresh check against one of the still-live models."

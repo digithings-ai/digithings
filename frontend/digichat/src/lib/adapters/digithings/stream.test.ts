@@ -602,6 +602,25 @@ it("relays an allowlisted BYOK refusal code out of a 400 body", async () => {
   ).toBe(true);
 });
 
+it("relays byok_model_provider_mismatch out of a nested 400 body (#2524)", async () => {
+  const { body } = await streamFor400(
+    JSON.stringify({
+      error: {
+        code: "byok_model_provider_mismatch",
+        message: "Model openai/gpt-4o-mini does not match provider openai.",
+        request_id: "req-3",
+        service: "digigraph",
+      },
+    }),
+  );
+
+  expect(body).toContain("byok_model_provider_mismatch");
+  const errorText = errorTextFrom(body);
+  const parsed = parseEmbedChatError(new Error(errorText));
+  expect(parsed?.code).toBe("byok_model_provider_mismatch");
+  expect(formatEmbedChatError(new Error(errorText!))).toBe(BYOK_MODEL_REMEDIABLE_MESSAGE);
+});
+
 // Only the code crosses the boundary. digigraph's message for this refusal
 // f-strings the caller's own X-BYOK-Provider header into its text, and a 400
 // body carries a request_id and service name besides.
