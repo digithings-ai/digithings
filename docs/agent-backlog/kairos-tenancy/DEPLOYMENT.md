@@ -212,7 +212,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Vault master key | `openssl rand -base64 32` → `DIGIQUANT_VAULT_MASTER_KEY` (optional `DIGIQUANT_VAULT_KEY_ID=v1`) | K3 seal/unseal; `settings` broker connect; T4 BYOK |
 | Alpaca Connect / OAuth app (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | Alpaca developer dashboard; redirect `{APP_URL}/olympus/settings/brokers/callback/` | Product broker connect (K1 unit tests mock) |
 | IBKR vendor / OAuth 1.0a onboarding email | Email IBKR; longest pole | K2 live verify; paper orders remain flag-gated off |
-| Cloudflare Access decision (D7) | Zero Trust: remove prod `/olympus/*`; keep staging | Cutover §6 |
+| Cloudflare Access (D7) | Keep prod `/olympus/*` Access **on** through flag flip + anon-drop + verification; remove only as the last §6 step; retain staging overlay | Ungated prod URL while weight/NAV paths still open |
 | Legal read on adviser status | Counsel | Any **live** trading epic (out of this program) |
 
 ---
@@ -222,25 +222,78 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 Execute only after §1 queue is on `main`, §2 migrations 096–105 are in the
 ledger, §3 functions are live, and §5 rows needed for launch are green.
 
+**Safe order (do not reorder):** Access stays on → flag flip → login smoke →
+apply staged SQL → verification (anon + free JWT) → frontend research-view
+cutover PR merged/deployed → **then** remove Access.
+
+- [ ] **Keep Cloudflare Access ON** for production `/olympus/*` (staging overlay
+      retained throughout).
 - [ ] **Flag flip:** set `NEXT_PUBLIC_OLYMPUS_AUTH=1` on Cloudflare Pages; rebuild
       digiquant.io (`scripts/build-digiquant.sh`).
-- [ ] **Smoke login:** Google + GitHub PKCE → `/olympus/auth/callback/` → session.
-- [ ] **Anon-drop migration application (manual):**
+- [ ] **Smoke login:** Google + GitHub PKCE → `/olympus/auth/callback/` → session
+      (Access still in front).
+- [ ] **Anon-drop + weight/NAV close (manual):**
       1. Confirm preconditions in
          [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql)
-         header.
+         header (Access must still be on).
       2. Copy to `digiquant/supabase/migrations/<next>_drop_anon_read_cutover.sql`
          (next free after 105).
       3. PR → `main` → approve `db-migrate` **or** apply via psql + ledger INSERT.
-- [ ] **Cloudflare Access:** remove production `/olympus/*` application; retain
-      staging overlay (D7).
-- [ ] **Verification queries** (from the staged SQL verification block): as
-      `anon`, counts on `positions`, `position_events`, `nav_history`,
-      `portfolio_metrics`, `current_book_lookback`, non-house `documents`, and
-      `public_portfolio_positions` / `public_nav_history` are **0**; shared
-      `price_history` / house `documents` / `daily_snapshots` still readable.
-- [ ] **Authenticated smoke:** member JWT reads own workspace book; cannot read
-      another workspace’s private rows.
+- [ ] **Verification queries** (staged SQL verification block):
+      - As `anon`: `positions`, `position_events`, `nav_history`,
+        `portfolio_metrics`, `current_book_lookback`, `daily_snapshots` (base),
+        `public_portfolio_positions`, `public_nav_history`, `pm-rebalance` docs,
+        non-house docs → **0**; `public_daily_research` → rows and
+        `research_snapshot ? 'portfolio'` is false.
+      - As free-tier JWT: same weight/NAV views + `pm-rebalance` → **0**;
+        `public_daily_research` + research docs (`analyst/*`, etc.) → readable.
+- [ ] **Authenticated Baseline+ smoke:** JWT with `plan_tier=baseline` reads
+      weight-bearing docs; cannot read another workspace’s private rows.
+- [ ] **Frontend research-view cutover** (named task below) merged and Pages
+      redeployed — Observer/anon paths no longer `.from('daily_snapshots')` for
+      payload.
+- [ ] **Cloudflare Access removal (LAST):** remove production `/olympus/*`
+      application; keep staging overlay (D7).
+
+### Named follow-up — frontend (T1-train; do **not** land on this branch)
+
+Cutover SQL revokes base `daily_snapshots` SELECT from anon/authenticated and
+exposes research via `public_daily_research`. Inventory of reads that break
+until the dashboard switches (file: `frontend/olympus/lib/`):
+
+| Call site | Current read | Cutover change |
+|-----------|--------------|----------------|
+| `queries.ts` ~713 | `daily_snapshots` select `snapshot,digest_markdown` (latest) | Observer/free → `public_daily_research` (`research_snapshot`); Baseline+ house book still from positions/NAV (or BFF) — never raw snapshot portfolio |
+| `queries.ts` ~740 | `daily_snapshots` select `date,run_type` (history) | Switch to `public_daily_research` (same columns) |
+| `queries.ts` ~1816 | `digest_markdown, snapshot` for digest render | Research path: render from `research_snapshot`; do not fetch `digest_markdown` for free/anon |
+| `queries.ts` ~1908, ~1921 | `daily_snapshots` meta / prev date | Use `public_daily_research` |
+| `queries.ts` ~1986 | `date, snapshot, digest_markdown` history | Use `public_daily_research`; drop digest_markdown for unentitled tiers |
+| `queries.ts` ~2063 | `date, run_type, snapshot` | Use `public_daily_research` |
+| `snapshot-fetch.ts` ~232 | latest `daily_snapshots` row → `SnapshotEnvelope` | Parse `research_snapshot` for Observer; Baseline+ weight UI must not use this envelope’s stripped digest for book weights |
+| `queries.ts` ~749 | prefetch `documents` `pm-rebalance` | Gate with `can(tier, 'house_weights_nav')`; free must not fetch (RLS will empty, but skip the request) |
+
+Track as a single agent-task issue, e.g. `[agent] cutover — Olympus reads public_daily_research`.
+No frontend edits on the cutover-kit branch.
+
+### Named follow-up — tier-gated house book views (honest smaller scope)
+
+Cutover SQL **REVOKEs** `public_portfolio_positions`, `public_nav_history`, and
+accounting NAV/attribution views from **both** `anon` and `authenticated`
+(definer views — base RLS does not protect them). That fail-closes free JWT.
+
+Why no staged `901_tier_gated_view_policies.sql` in this kit: restoring Baseline+
+SELECT on those views without a proven claim gate (or a BFF that checks
+`plan_tier` then reads via `service_role`) would re-open the free-JWT leak.
+T5 UI already skips unentitled fetches; the data plane must stay fail-closed
+until one of:
+
+1. **BFF / Edge Function** — JWT → tier check → `service_role` select of curated
+   columns; or
+2. **Later migration** — re-GRANT to `authenticated` only after a
+   `auth.jwt()->app_metadata->>plan_tier` policy (or security_invoker rewrite
+   over workspace-scoped base tables) is tested against claim-sync lag.
+
+Document the chosen approach on the epic before re-exposing the views.
 
 ---
 
@@ -283,12 +336,13 @@ PATH="$PWD/.venv/bin:$PATH" pytest -m unit tests/dq/olympus/ -q
 | Migrations 096–105 on `main` | Apply error mid-chain | Fix forward (new migration). Do **not** delete ledger rows. Self-wrapping / IF NOT EXISTS files are replay-safe; cancel-in-progress only loses a ledger INSERT (next run retries). |
 | Edge Functions | Bad deploy / secret miss | `supabase functions deploy <name>` prior known-good SHA; unset bad secrets carefully. Stripe webhook: disable endpoint in Dashboard if signatures fail. |
 | Olympus flag on | Login broken / empty chrome | Set `NEXT_PUBLIC_OLYMPUS_AUTH=` empty; rebuild Pages → anon path restored **only if** anon policies still exist. |
-| Anon-drop applied | Dashboard blank for signed-out / Access already removed | Re-create dropped policies from migration 001/073/050 grants via a new forward migration (do not rewrite history). Prefer: keep Access on until verification passes. |
-| Cloudflare Access removed too early | Public URL + anon key still reads private rows | Re-enable Access application on `/olympus/*` immediately; then finish anon-drop. |
+| Anon-drop applied | Dashboard blank for Observer / research broken | Keep Access on; roll forward with `public_daily_research` frontend switch. Do not rewrite history. Emergency: forward migration re-creating old anon policies only while Access still gates the URL. |
+| Cloudflare Access removed too early | Public URL + anon/free JWT still reads weights/NAV | Re-enable Access on `/olympus/*` immediately; finish verification before removing again. |
 | Stripe / vault | Wrong keys | Rotate Stripe webhook secret; generate new vault key only with a re-seal plan (K3 rotation out of scope — avoid rotating after seal without a job). |
 
-**Ordering tip:** flip the auth flag and verify login **while Access still protects
-prod**, apply the anon-drop, verify queries, **then** remove Access.
+**Ordering tip:** Access on → flag flip → login smoke → apply cutover SQL →
+verify anon **and** free JWT see zero weights/NAV → ship frontend
+`public_daily_research` switch → **then** remove Access.
 
 ---
 
