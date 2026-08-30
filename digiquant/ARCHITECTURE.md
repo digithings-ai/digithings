@@ -3359,6 +3359,19 @@ Alpaca OAuth client id (never the secret) so Brokers connect can start as soon
 as EF secrets land, without a Pages rebuild. Settings UI opens the Billing tab from
 `?tab=billing` / `?checkout=success|cancel`.
 
+**Pages `/dashboard` cutover.** `scripts/kairos_pages_dashboard_gate.py` probes
+live Pages. `--apply` deploys `settings` / `create-checkout-session` /
+`customer-portal` only when `/dashboard` login/callback/settings are 200, this
+checkout mounts `POST /access/redeem-invite` and pins `/dashboard` in
+`_shared/app-url.ts`, **and** the live settings ESZIP
+(`GET https://api.supabase.com/v1/projects/{ref}/functions/settings/body`)
+contains those same executable markers (line comments do not count). Settings
+v32 is `/olympus` and has no redeem-invite — `--apply` must not report success
+while that bundle is still live. Exit 3 while Pages 404s; exit 5 if checkout
+source is stale; exit 6 if the live bundle is still stale. Never weakens
+`public_app_urls_ok`. Requires `SUPABASE_ACCESS_TOKEN` for the post-deploy
+ESZIP proof (never logged).
+
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
 Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /
 `STRIPE_PRICE_CUSTOM_{MONTHLY,ANNUAL}` (set via `supabase secrets set` — see
