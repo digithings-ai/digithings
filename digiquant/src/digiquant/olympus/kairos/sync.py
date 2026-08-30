@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import (
@@ -89,6 +89,10 @@ class SyncResult:
     cursor: SyncCursor | None = None
     calls_used: int = 0
     refused_corrective_orders: bool = True  # invariant: sync never trades
+    # Set when at least one venue fill could not be linked to a mirrored order.
+    # Cursor is held so the orphan is re-read next cycle (see sync_connection).
+    unlinked_fills_held_cursor: bool = False
+    unlinked_fill_ids: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -372,14 +376,27 @@ def sync_connection(
     # Prefer external_order_id when the adapter fill doesn't carry it: fall back to
     # matching symbol against open heads. BrokerFill has no order id field — link by
     # symbol to the unique open head when unambiguous; otherwise skip with a log.
+    #
+    # Cursor advance: never move fills_since past an unlinked (orphan) fill.
+    # Alpaca/IBKR list_fills use an exclusive `after`/`since` bound, so holding
+    # AT the orphan's executed_at would drop it forever. When any orphan exists
+    # we keep the previous cursor so the next cycle re-reads it. Operator remedy:
+    # ensure the submit mirror row exists (same symbol / external_order_id) or
+    # resolve symbol ambiguity among open heads; once the fill links, the cursor
+    # advances normally.
     advanced_since = cursor.fills_since
+    orphan_times: list[datetime] = []
+    orphan_ids: list[str] = []
     for fill in fills:
         broker_order_row = _resolve_order_for_fill(
             fill=fill, heads=heads, orders_by_id=orders_by_id
         )
         if broker_order_row is None:
+            orphan_times.append(fill.executed_at)
+            orphan_ids.append(fill.external_fill_id)
             logger.warning(
-                "kairos sync connection_id=%s could not link fill %s symbol=%s",
+                "kairos sync connection_id=%s could not link fill %s symbol=%s; "
+                "holding fills_since cursor so the orphan is re-read next cycle",
                 connection.id,
                 fill.external_fill_id,
                 fill.symbol,
@@ -399,6 +416,22 @@ def sync_connection(
             result.fills_already_present += 1
         if fill.executed_at > advanced_since:
             advanced_since = fill.executed_at
+
+    if orphan_times:
+        earliest_orphan = min(orphan_times)
+        # Do not advance beyond the earliest unlinked fill; exclusive-since
+        # safety ⇒ hold at the previous cursor so the orphan remains visible.
+        if advanced_since >= earliest_orphan:
+            advanced_since = cursor.fills_since
+        result.unlinked_fills_held_cursor = True
+        result.unlinked_fill_ids = list(orphan_ids)
+        logger.warning(
+            "kairos sync connection_id=%s held fills_since at %s due to %d unlinked "
+            "fill(s); remedy: link mirror order rows or resolve symbol ambiguity",
+            connection.id,
+            advanced_since.isoformat(),
+            len(orphan_ids),
+        )
 
     result.cursor = SyncCursor(fills_since=advanced_since)
     result.calls_used = budget.used
@@ -528,6 +561,45 @@ def _resolve_order_for_fill(
     return hist[0] if len(hist) == 1 else None
 
 
+def run_sync_batch(
+    *,
+    client: Any,
+    cycles: list[tuple[BrokerAdapter, BrokerConnection, SyncCursor]],
+    now: datetime | None = None,
+    pull_snapshot: bool = True,
+) -> list[SyncResult]:
+    """Cron batch entry: sync each active connection, then fail-soft execution alerts.
+
+      ``cycles`` is built by the caller (cron runner) from active ``broker_connections``
+    rows + credential leases. This function does not load connections itself.
+    """
+    stamp = now or datetime.now(UTC)
+    results: list[SyncResult] = []
+    for adapter, connection, cursor in cycles:
+        results.append(
+            sync_connection(
+                client=client,
+                adapter=adapter,
+                connection=connection,
+                cursor=cursor,
+                now=stamp,
+                pull_snapshot=pull_snapshot,
+            )
+        )
+
+    # -------------------------------------------------------------------------
+    # K5: mid-day execution-alert dispatch — fail-soft; never fails the sync batch.
+    # -------------------------------------------------------------------------
+    try:
+        from digiquant.notify.dispatch import dispatch_execution_alerts
+
+        dispatch_execution_alerts(run_date=stamp.date())
+    except Exception:
+        logger.warning("kairos sync: execution-alert dispatch skipped", exc_info=True)
+
+    return results
+
+
 __all__ = [
     "ALPACA_MAX_CALLS_PER_CYCLE",
     "BROKER_EXECUTIONS",
@@ -537,5 +609,6 @@ __all__ = [
     "SyncResult",
     "broker_execution_id",
     "broker_snapshot_id",
+    "run_sync_batch",
     "sync_connection",
 ]

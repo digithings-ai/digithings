@@ -12,7 +12,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from digiquant.data.store.client import build_digiquant_client
 from digiquant.notify.digest import DigestContent, build_digest_content
-from digiquant.notify.entitlements import PlanTier, is_plan_tier
+from digiquant.notify.entitlements import ArtifactClass, PlanTier, can, is_plan_tier
 from digiquant.notify.events import (
     ExecutionAlertEvent,
     HoldingChangeEvent,
@@ -143,20 +143,23 @@ def _workspace_name(sb: SupabaseReader, workspace_id: str) -> str:
     return str(name or "Workspace")
 
 
-def _send_if_allowed(
+def _is_suppressed(client: MailgunClientProtocol, email: str) -> bool:
+    if client.is_suppressed(email):
+        logger.warning(
+            "notify: suppressed address skipped", extra={"email_domain": email.split("@")[-1]}
+        )
+        return True
+    return False
+
+
+def _send_message(
     client: MailgunClientProtocol,
     email: str,
     subject: str,
     text_body: str,
     html_body: str,
-) -> bool:
-    if client.is_suppressed(email):
-        logger.warning(
-            "notify: suppressed address skipped", extra={"email_domain": email.split("@")[-1]}
-        )
-        return False
+) -> None:
     client.send_message(to=email, subject=subject, text_body=text_body, html_body=html_body)
-    return True
 
 
 def dispatch_workspace(
@@ -165,7 +168,10 @@ def dispatch_workspace(
     mailgun_config: MailgunConfig,
     pref: dict[str, Any],
     run_date: date,
-    hour_utc: int | None,
+    hour_utc: int,
+    *,
+    force_digest: bool = False,
+    execution_alerts_only: bool = False,
 ) -> None:
     workspace_id = str(pref["workspace_id"])
     email = str(pref.get("email") or "").strip()
@@ -176,62 +182,130 @@ def dispatch_workspace(
     workspace_name = _workspace_name(sb, workspace_id)
     digest_hour = int(pref.get("digest_hour_utc") or 12)
 
-    if pref.get("daily_digest"):
-        if hour_utc is None or hour_utc == digest_hour:
-            event_key = f"digest:{run_date.isoformat()}"
-            if try_claim_send_slot(sb, workspace_id, event_key, run_date):
-                content = build_digest_content(
-                    sb,
-                    workspace_id,
-                    tier,
-                    run_date,
-                    mailgun_config,
-                    workspace_name=workspace_name,
-                )
-                text, html = _render_daily_digest(content)
-                subject = f"Olympus daily digest — {run_date.isoformat()}"
+    if not execution_alerts_only and pref.get("daily_digest"):
+        if force_digest or hour_utc == digest_hour:
+            if not _is_suppressed(client, email):
+                event_key = f"digest:{run_date.isoformat()}"
+                if try_claim_send_slot(sb, workspace_id, event_key, run_date):
+                    content = build_digest_content(
+                        sb,
+                        workspace_id,
+                        tier,
+                        run_date,
+                        mailgun_config,
+                        workspace_name=workspace_name,
+                    )
+                    text, html = _render_daily_digest(content)
+                    subject = f"Olympus daily digest — {run_date.isoformat()}"
+                    try:
+                        _send_message(client, email, subject, text, html)
+                    except MailgunTransportError as exc:
+                        logger.warning("notify: digest send failed: %s", exc)
+
+    if not execution_alerts_only and pref.get("holding_change_alerts"):
+        if can(tier, ArtifactClass.HOUSE_WEIGHTS_NAV):
+            for event in detect_holding_changes(sb, workspace_id, run_date, mailgun_config):
+                if _is_suppressed(client, email):
+                    break
+                if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
+                    continue
+                text, html = _render_holding_change(event)
+                subject = f"Holding change — {event.ticker} ({run_date.isoformat()})"
                 try:
-                    _send_if_allowed(client, email, subject, text, html)
+                    _send_message(client, email, subject, text, html)
                 except MailgunTransportError as exc:
-                    logger.warning("notify: digest send failed: %s", exc)
+                    logger.warning("notify: holding-change send failed: %s", exc)
 
-    if pref.get("holding_change_alerts"):
-        for event in detect_holding_changes(sb, workspace_id, run_date, mailgun_config):
-            if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
-                continue
-            text, html = _render_holding_change(event)
-            subject = f"Holding change — {event.ticker} ({run_date.isoformat()})"
-            try:
-                _send_if_allowed(client, email, subject, text, html)
-            except MailgunTransportError as exc:
-                logger.warning("notify: holding-change send failed: %s", exc)
-
-    if pref.get("execution_alerts"):
+    if pref.get("execution_alerts") and can(tier, ArtifactClass.PRIVATE_BOOK):
         for event in detect_execution_alerts(sb, workspace_id, run_date, mailgun_config):
+            if _is_suppressed(client, email):
+                break
             if not try_claim_send_slot(sb, workspace_id, event.event_key, run_date):
                 continue
             text, html = _render_execution_alert(event)
             subject = f"Execution alert — {event.symbol} ({run_date.isoformat()})"
             try:
-                _send_if_allowed(client, email, subject, text, html)
+                _send_message(client, email, subject, text, html)
             except MailgunTransportError as exc:
                 logger.warning("notify: execution alert send failed: %s", exc)
+
+
+def _dispatch_with_client(
+    sb: SupabaseReader,
+    client: MailgunClientProtocol,
+    mailgun_config: MailgunConfig,
+    run_date: date,
+    hour_utc: int,
+    *,
+    force_digest: bool = False,
+    execution_alerts_only: bool = False,
+) -> None:
+    prefs = _load_prefs(sb)
+    for pref in prefs:
+        try:
+            dispatch_workspace(
+                sb,
+                client,
+                mailgun_config,
+                pref,
+                run_date,
+                hour_utc,
+                force_digest=force_digest,
+                execution_alerts_only=execution_alerts_only,
+            )
+        except Exception:
+            logger.warning(
+                "notify: workspace dispatch failed",
+                extra={"workspace_id": pref.get("workspace_id")},
+                exc_info=True,
+            )
 
 
 def dispatch_notifications(
     run_date: date | None = None,
     hour_utc: int | None = None,
+    *,
+    force_digest: bool = False,
 ) -> None:
-    """Dispatch all notification types for workspaces with prefs (fail-soft — never raises)."""
+    """Dispatch digest + holding-change + execution alerts (fail-soft — never raises).
+
+    **Cron** (`python -m digiquant.notify.dispatch`): passes ``hour_utc=now.hour`` so
+    daily digests respect ``notification_prefs.digest_hour_utc``.
+
+    **Post-run** (`run_db_first.py` close-out): passes ``force_digest=True`` so today's
+    digest always attempts send regardless of hour; dedupe prevents double-send if cron
+    already delivered.
+    """
     try:
-        _dispatch_notifications_inner(run_date, hour_utc)
+        _dispatch_notifications_inner(
+            run_date,
+            hour_utc,
+            force_digest=force_digest,
+            execution_alerts_only=False,
+        )
     except Exception:
         logger.warning("notify: dispatch failed", exc_info=True)
+
+
+def dispatch_execution_alerts(run_date: date | None = None) -> None:
+    """Execution-alert-only dispatch for K4 sync tail (fail-soft — never raises)."""
+    try:
+        _dispatch_notifications_inner(
+            run_date,
+            hour_utc=datetime.now(UTC).hour,
+            force_digest=False,
+            execution_alerts_only=True,
+        )
+    except Exception:
+        logger.warning("notify: execution-alert dispatch failed", exc_info=True)
 
 
 def _dispatch_notifications_inner(
     run_date: date | None = None,
     hour_utc: int | None = None,
+    *,
+    force_digest: bool = False,
+    execution_alerts_only: bool = False,
 ) -> None:
     sb = build_digiquant_client()
     if sb is None:
@@ -249,29 +323,21 @@ def _dispatch_notifications_inner(
     effective_date = run_date or datetime.now(UTC).date()
     effective_hour = hour_utc if hour_utc is not None else datetime.now(UTC).hour
 
-    prefs = _load_prefs(sb)
-    for pref in prefs:
-        try:
-            dispatch_workspace(
-                sb,
-                client,
-                mailgun_config,
-                pref,
-                effective_date,
-                effective_hour,
-            )
-        except Exception:
-            logger.warning(
-                "notify: workspace dispatch failed",
-                extra={"workspace_id": pref.get("workspace_id")},
-                exc_info=True,
-            )
+    _dispatch_with_client(
+        sb,
+        client,
+        mailgun_config,
+        effective_date,
+        effective_hour,
+        force_digest=force_digest,
+        execution_alerts_only=execution_alerts_only,
+    )
 
 
 def main() -> None:
-    """CLI entry: ``python -m digiquant.notify.dispatch``."""
+    """CLI entry: ``python -m digiquant.notify.dispatch`` (cron hour-gate path)."""
     logging.basicConfig(level=logging.INFO)
-    dispatch_notifications()
+    dispatch_notifications(hour_utc=datetime.now(UTC).hour)
 
 
 if __name__ == "__main__":

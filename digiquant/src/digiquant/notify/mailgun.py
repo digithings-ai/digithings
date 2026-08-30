@@ -5,6 +5,7 @@ API key and domain come from env — never logged. Suppression is checked before
 
 from __future__ import annotations
 
+import base64
 import logging
 import os
 from dataclasses import dataclass
@@ -114,8 +115,6 @@ class UrllibMailgunClient:
 
     def _basic_auth(self) -> str:
         # Mailgun uses api:key as Basic user:password — key must not be logged.
-        import base64
-
         token = base64.b64encode(f"api:{self._config.api_key}".encode()).decode("ascii")
         return token
 

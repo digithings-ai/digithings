@@ -2943,35 +2943,51 @@ external paper venue after H9 / `execute_at_open`, and mirrors acks / fills / po
 append-only (D10). The internal `paper_internal` path is unchanged.
 
 **Venue resolution (`policy.py`).** `resolve_venue(workspace_id, *, active_paper_brokers)`
-performs **no I/O**. House / system (`workspace_id is None`) → always `PAPER_INTERNAL`
-(hard-coded). Kill switch `OLYMPUS_KAIROS_ROUTING` defaults **off** (inverse polarity of
-`OLYMPUS_PORTFOLIO_LEDGER`): off ⇒ only `PAPER_INTERNAL` regardless of connections. With
-the switch on, a workspace with exactly one active paper `broker_connections` row maps to
-`ALPACA_PAPER` / `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`.
-v1 does **not** store an execution-policy column on `workspaces` (T0 untouched; richer
-policy lands with T4). Any path that would return a `*_LIVE` venue raises
-`LiveVenueNotAuthorizedError` (test-pinned).
+performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
+`house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
+(hard-coded; those identities can never route externally). Kill switch
+`OLYMPUS_KAIROS_ROUTING` defaults **off** (inverse polarity of `OLYMPUS_PORTFOLIO_LEDGER`):
+off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
+workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
+`IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
+store an execution-policy column on `workspaces` (T0 untouched; richer policy lands with
+T4). Live venue / broker tokens in `active_paper_brokers` (e.g. `"alpaca_live"`,
+`ExecutionVenue.ALPACA_LIVE`) raise `LiveVenueNotAuthorizedError` on the **public** API
+(not a bare `ValueError`); `_assert_not_live` remains defense-in-depth on the return path.
 
-**Router (`router.py`).** Builds `BrokerOrderRequest` from a pending `OrderIntent`
-(`client_order_id = str(order_intent_id)`; side from `DecisionIntent.action` via the same
-`_directions_by_order` walk as `execution_io` — never from the positions book).
-`NO_OP`/`REJECT` with a pending intent → `InconsistentOrderChainError` (refuse, don't
-guess). Appends one `broker_orders` row with deterministic id
-`uuid5(ns, f"{order_intent_id}:{broker}:{date}")` — retries collide, never duplicate.
-`upsert` is forbidden.
+**Router (`router.py`) — authority boundary.** `workspace_id` is passed to `resolve_venue`
+**unchanged** (`None` stays `None`; never substituted with `connection.workspace_id`).
+`connection.env != paper` raises `LiveVenueNotAuthorizedError` before any
+`submit_order`. Pending intents are read via `_pending_order_heads` /
+`_directions_by_order`, which call `_rows_for_date`. T4 made omitted
+`workspace_id` mean the **house** (never every row); the K4 post-filter then
+keeps `connection.workspace_id` and raises `ForeignWorkspaceIntentError` on a
+pending row missing `workspace_id`. Overlay tenant intents are therefore
+invisible to this omitted-workspace read — workspace threading into the
+helpers is the next hop (e2e-chain-test). Foreign-workspace intents are never
+submitted. Builds
+`BrokerOrderRequest` from a pending `OrderIntent` (`client_order_id = str(order_intent_id)`;
+side from `DecisionIntent.action` via `_directions_by_order` — never from the positions
+book). `NO_OP`/`REJECT` with a pending intent → `InconsistentOrderChainError`. Appends one
+`broker_orders` row with deterministic id `uuid5(ns, f"{order_intent_id}:{broker}:{date}")`
+— retries collide, never duplicate. `upsert` is forbidden.
 
 **Sync (`sync.py`).** Per active connection: refresh order status (supersede chain), pull
 fills since a `SyncCursor`, append `broker_executions` (`uuid5(connection_id,
 external_fill_id)`), and take a positions/account snapshot. Alpaca ≤6 REST
 calls/connection/cycle (`SyncBudgetExceeded`); IBKR pacing lives in the adapter (≥5s).
 Credentials are unsealed only inside the caller's `open_credential` lease — sync never
-sees plaintext. Reconciliation: snapshot vs fill-implied expectation →
-`reconciliation_diverged` + structured report on the snapshot row + log; **never**
-auto-submit corrective orders (`SyncResult.refused_corrective_orders` is always true).
+sees plaintext. Unlinked (orphan) fills hold `fills_since` at the previous cursor so
+exclusive-`since` adapters re-read them next cycle (`unlinked_fills_held_cursor`);
+operator remedy: ensure the submit mirror exists or resolve symbol ambiguity.
+Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverged` +
+structured report on the snapshot row + log; **never** auto-submit corrective orders
+(`SyncResult.refused_corrective_orders` is always true).
 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
-default (no workspace / kill switch off) stays on `build_events_from_paper_fills`.
-Migration 102 + `tests/dq/olympus/kairos/`.
+invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
+(`paper_internal`). Default (no workspace / kill switch off) stays on
+`build_events_from_paper_fills`. Migration 102 + `tests/dq/olympus/kairos/`.
 
 ## Notifications (email v0)
 
@@ -2984,11 +3000,18 @@ Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
 
 **Behavior:** fail-soft everywhere — Mailgun/network errors log a warning and return;
 dedupe via `notification_log` insert-first PK `(workspace_id, event_key, sent_date)`;
-suppression check before send; tier-filtered digest content (`can(tier, class)`);
-templates carry unsubscribe link, no broker ids/tokens/keys.
+suppression checked **before** claim (skipped sends do not burn dedupe slots); tier gates
+on digest sections and event types (`house_weights_nav` for holding-change,
+`private_book` for execution alerts); templates carry unsubscribe link, no broker
+ids/tokens/keys.
 
-**Entry points:** `python -m digiquant.notify.dispatch` (cron); `run_db_first.py`
-close-out calls `dispatch_notifications(run_date=…, hour_utc=None)` after DB validation.
+**Entry points:**
+
+| Caller | Function | Digest hour gate |
+|--------|----------|------------------|
+| Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
+| `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
+| K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
 
 Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 
@@ -3093,8 +3116,9 @@ A prefixed model not covered by the unsealed provider (`anthropic/…` with an
 openai BYOK row) refuses `byok_provider_mismatch` rather than falling through
 to house env keys. Missing or unsealable user key ⇒ skip.
 
-**Venue.** K4 `policy.py` is untouched. House / `workspace_id is None` stays
-`PAPER_INTERNAL`.
+**Venue.** K4 `policy.py` (review-fix `9b4e9c86`, merged via K5) hard-codes
+`PAPER_INTERNAL` for `None` / house / system UUIDs. Overlay tenant routing
+still needs workspace threaded into `_pending_order_heads` (next hop).
 
 **Authority note (ledger / paper fills).** Overlay's runner path writes the
 shared corpus (tenant-agnostic keys), the pin-seam `workspace_id` on
@@ -3104,8 +3128,9 @@ receive `workspace_id=` when overlay; house constructors stay on
 `house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`
 or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
 house paper fills are the `execute_at_open` job (date-scoped, house stamp);
-external venue submit is K4's router, which already takes `workspace_id` and
-resolves via untouched `policy.py`. `_pending_order_heads` is house-scoped when
+external venue submit is K4's router (`9b4e9c86` gates: None/house/system →
+`PAPER_INTERNAL`, live-env raise before submit, missing ledger `workspace_id`
+→ `ForeignWorkspaceIntentError`). `_pending_order_heads` is house-scoped when
 `workspace_id` is omitted (same as `_rows_for_date`). `documents.workspace_id`
 landed in migration 105; overlay isolation is the column plus the
 `overlay/{workspace_id}/…` key prefix.
