@@ -24,6 +24,9 @@ const EMPTY_ACCESS: AccessSnapshot = {
   products: [],
 };
 
+type RpcPayload = NonNullable<Parameters<typeof resolveClientAccess>[0]['rpc']>;
+type RpcResult = { data: unknown; error: { message?: string } | null };
+
 /**
  * Resolve the caller's *effective* plan tier for UI gating.
  * Auth flag off → enterprise (operator parity). Outside AuthProvider with auth
@@ -43,8 +46,8 @@ export function useCan(artifactClass: ArtifactClass): boolean {
 
 /** Client product visibility (FX Hub now; future custom Olympus products). */
 export function useCanAccessProduct(productKey: ClientProductKey | string): boolean {
-  if (!isOlympusAuthEnabled()) return true; // pre-cutover operator parity
   const access = useAccessSnapshot();
+  if (!isOlympusAuthEnabled()) return true; // pre-cutover operator parity
   return canAccessProduct(access.products, productKey);
 }
 
@@ -64,28 +67,27 @@ export function useAccessSnapshot(): AccessSnapshot {
 
   useEffect(() => {
     if (!authOn || !userId) {
-      setRpc(null);
       return;
     }
     const client = getSupabaseClient();
     if (!client) {
-      setRpc(null);
       return;
     }
     let cancelled = false;
-    client
-      .rpc('my_access' as never)
-      .then(({ data, error }: { data: unknown; error: { message?: string } | null }) => {
+    void Promise.resolve(client.rpc('my_access' as never)).then(
+      (result: RpcResult) => {
         if (cancelled) return;
+        const { data, error } = result;
         if (error || !data || typeof data !== 'object') {
           setRpc(null);
           return;
         }
-        setRpc(data as NonNullable<Parameters<typeof resolveClientAccess>[0]['rpc']>);
-      })
-      .catch(() => {
+        setRpc(data as RpcPayload);
+      },
+      () => {
         if (!cancelled) setRpc(null);
-      });
+      },
+    );
     return () => {
       cancelled = true;
     };
@@ -100,5 +102,5 @@ export function useAccessSnapshot(): AccessSnapshot {
     };
   }
   if (!ctx) return EMPTY_ACCESS;
-  return resolveClientAccess({ session, rpc });
+  return resolveClientAccess({ session, rpc: userId ? rpc : null });
 }

@@ -6,8 +6,8 @@ import pytest
 
 from digiquant.notify.entitlements import (
     ARTIFACT_CLASSES,
-    ArtifactClass,
     PLAN_TIERS,
+    ArtifactClass,
     PlanTier,
     can,
     max_plan_tier,
