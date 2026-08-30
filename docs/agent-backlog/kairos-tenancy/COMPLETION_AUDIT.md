@@ -2,7 +2,21 @@
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
-## Follow-up turn (`sbp_` reconfirm + GitHub Auth + docs branch)
+## Follow-up turn (PAT recreate+revoke → **cursor cloud agent**)
+
+Agent run: load rotated `sbp_` from `.local/secrets/cursor-cloud-agent-supabase-pat` (sibling revoked kairos-named token; new token labeled **cursor cloud agent**). Verify Management API / `supabase secrets list` (names only). Confirm EF vault + `APP_URL` still present; settings **v18** ACTIVE. `request-environment-setup-actions` for **re-paste** into Cursor env. Update WAITING + docs note on [#3209](https://github.com/digithings-ai/digithings/pull/3209). Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft; no UpdateGoal complete.
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | New `sbp_` works | **PASS** | `supabase secrets list --project-ref rwagjbkvxkdwqmouagad` → 12 names; prefix `sbp_` |
+| 2 | EF secrets vault + APP_URL | **PASS** | Names present: `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` |
+| 3 | settings EF | **PASS** | **ACTIVE** version **18** |
+| 4 | Cursor env re-paste | **REQUESTED** | `request-environment-setup-actions` — new PAT as **cursor cloud agent** (old paste invalid) |
+| 5 | Stripe / Mailgun / Google / Alpaca | **BLOCKED** | Still missing; listed in WAITING blockers |
+| 6 | Docs / WAITING | **PASS** | Rotation note (recreate+revoke, no values); artifact `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` |
+| 7 | #3183 / goal | **LEAVE DRAFT / FAIL complete** | No merge; no UpdateGoal complete |
+
+## Prior follow-up (`sbp_` reconfirm + GitHub Auth + docs branch)
 
 Agent run: reconfirm `sbp_` Management API secrets list; enable **GitHub** Auth on `core`; set site URL + Olympus redirect allow-list; skip Google/Mailgun/Stripe/Alpaca (captcha or empty). Docs on `cursor/cursor-cloud-agent-secrets-status-c8be`. Settings EF **v18** ACTIVE. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
 

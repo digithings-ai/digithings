@@ -78,7 +78,7 @@ Wave E
 **Auth (`core`):** **GitHub Enabled** (OAuth App `digiquant olympus` → Supabase callback). Site URL `https://digiquant.io`; Olympus redirect allow-list set. **Google still Disabled** (skipped captcha / no client).
 
 **Secrets (names only):**
-- **`sbp_` reconfirmed** — Management API `secrets list` OK; stored gitignored as `.local/secrets/cursor-cloud-agent-supabase-pat` (label **cursor cloud agent**).
+- **`sbp_` path unlocked** — PAT rotated via recreate+revoke (new label **cursor cloud agent**; kairos-named revoked). Management API `secrets list` OK; local `.local/secrets/cursor-cloud-agent-supabase-pat`. **Human must re-paste** into Cursor env (old paste invalid).
 - **EF secrets on `core`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (+ platform `SUPABASE_*` / `FINNHUB_API_KEY`).
 - **Still empty / blocked:** Mailgun (empty + MCP auth fail), Stripe (hCaptcha), Google OAuth client, Alpaca OAuth. Mailgun smoke **skipped**.
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.

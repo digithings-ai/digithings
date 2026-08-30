@@ -1,6 +1,6 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` reconfirmed; vault + `APP_URL` on EF; settings **v18**; **GitHub Auth Enabled** on `core`. Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` path unlocked (PAT **recreated** as **cursor cloud agent**; old kairos-named token **revoked** — re-paste into Cursor env). Vault + `APP_URL` on EF; settings **v18** ACTIVE; **GitHub Auth Enabled** on `core`. Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
@@ -16,7 +16,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 | Name | Format hint |
 |------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — paste from gitignored `.local/secrets/cursor-cloud-agent-supabase-pat` into Cursor env labeled **cursor cloud agent** (replace any JWT) |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — **re-paste the NEW token** from gitignored `.local/secrets/cursor-cloud-agent-supabase-pat` into Cursor env labeled **cursor cloud agent**. Old kairos-named token was revoked (recreate+revoke rename); prior paste is invalid. |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
 | `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
