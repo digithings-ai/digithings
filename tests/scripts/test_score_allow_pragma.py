@@ -1,6 +1,6 @@
 """Regression tests for score:allow pragma keys in scripts/score.py."""
 
-# score:allow notimplementederror stub, pandas
+# score:allow notimplementederror stub, todo, pandas
 # test fixtures embed synthetic anti-pattern diffs by design
 
 from __future__ import annotations
@@ -111,5 +111,66 @@ def test_notimplementederror_emdash_reason_on_pragma_line_is_no_op(target_path):
         f
         for f in results["accuracy"].findings
         if f.file == TARGET_FILE and "notimplementederror" in f.description.lower()
+    ]
+    assert len(findings) == 1
+
+
+def test_todo_suppressed_with_pragma(target_path):
+    target_path.write_text(
+        "# score:allow todo\n"
+        "# intentional deferred marker (human gate)\n"
+        "def stub():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    results = score.scan(_unified_diff(["    # TODO: wire broker adapter"]))
+    findings = [
+        f
+        for f in results["accuracy"].findings
+        if f.file == TARGET_FILE and "todo" in f.description.lower()
+    ]
+    assert findings == []
+
+
+def test_todo_fires_without_pragma(target_path):
+    target_path.write_text("def stub():\n    pass\n", encoding="utf-8")
+    results = score.scan(_unified_diff(["    # TODO: wire broker adapter"]))
+    findings = [
+        f
+        for f in results["accuracy"].findings
+        if f.file == TARGET_FILE and "todo" in f.description.lower()
+    ]
+    assert len(findings) == 1
+
+
+def test_todo_pragma_does_not_suppress_pandas(target_path):
+    target_path.write_text(
+        "# score:allow todo\n"
+        "# reason: deliberate TODO marker only\n"
+        "def stub():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    results = score.scan(_unified_diff(["import pandas as pd"]))
+    findings = [
+        f
+        for f in results["security"].findings
+        if f.file == TARGET_FILE and "pandas" in f.description.lower()
+    ]
+    assert len(findings) == 1
+
+
+def test_todo_emdash_reason_on_pragma_line_is_no_op(target_path):
+    target_path.write_text(
+        "# score:allow todo — reason\n"
+        "def stub():\n"
+        "    pass\n",
+        encoding="utf-8",
+    )
+    results = score.scan(_unified_diff(["    # TODO: wire broker adapter"]))
+    findings = [
+        f
+        for f in results["accuracy"].findings
+        if f.file == TARGET_FILE and "todo" in f.description.lower()
     ]
     assert len(findings) == 1

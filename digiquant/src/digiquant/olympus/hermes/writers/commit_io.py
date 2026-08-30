@@ -30,6 +30,7 @@ from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
+from digiquant.olympus.tenancy import house_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -421,6 +422,12 @@ def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[
     (``sync_positions_from_rebalance.py``, ``materialize_snapshot.py``) issue one
     DELETE per orphan; this issues a single ``in_`` delete instead — same effect,
     one round trip.
+
+    T0 (#5-T0): deliberately NOT scoped by ``workspace_id`` — the house pipeline is the
+    only writer today, so a date-only filter is equivalent to a
+    ``(workspace_id, date)`` filter in practice. Scoping every read in this module by
+    workspace belongs to whichever WP lands multi-tenant pipeline execution (T4); this
+    WP only had to keep INSERT/upsert payloads satisfying the new NOT NULL column.
     """
     resp = client.table("positions").select("ticker").eq("date", date_str).execute()
     existing = {
@@ -514,14 +521,23 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
+    # T0 (#5-T0): workspace_id is NOT NULL as of migration 097; the house pipeline is
+    # single-tenant today, so every row this writer books stamps the house workspace
+    # explicitly rather than relying on the column's DEFAULT (roadmap P6 tracks the
+    # remaining legacy writers — e.g. scripts/update_tearsheet.py — that still lean on
+    # the DEFAULT). The widened UNIQUE constraint is (workspace_id, date, ticker) /
+    # (workspace_id, date), so on_conflict must include it too.
+    workspace_id = str(house_workspace_id())
+
     client.table("nav_history").upsert(
         {
+            "workspace_id": workspace_id,
             "date": date_str,
             "nav": nav,
             "cash_pct": cash_pct,
             "invested_pct": round(invested, 4),
         },
-        on_conflict="date",
+        on_conflict="workspace_id,date",
     ).execute()
 
     if cash_pct > 0.01:
@@ -535,7 +551,8 @@ def book_portfolio(
         )
 
     for row in pos_rows:
-        client.table("positions").upsert(row, on_conflict="date,ticker").execute()
+        row["workspace_id"] = workspace_id
+        client.table("positions").upsert(row, on_conflict="workspace_id,date,ticker").execute()
 
     # Upsert first, then prune: the inverse order would leave a window in which the
     # date has no book at all.
