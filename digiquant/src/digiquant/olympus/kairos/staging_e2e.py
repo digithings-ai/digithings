@@ -1,21 +1,19 @@
 """Kairos staging E2E runner — Observer hops, then vendor-secret loud-fail.
 
-Phase A (optional JWT): live Settings/checkout probes that do not require
-Stripe / Mailgun / Alpaca secrets. Observer writes must return
-``TIER_FORBIDDEN``. Checkout may still be ``PRICE_NOT_CONFIGURED``.
+Phase A: Settings/checkout probes without vendor secrets. Observer writes
+must return ``TIER_FORBIDDEN``. Checkout may still be a named config miss.
 
 Phase B: named vendor secrets. Missing → exit 2 (never paper-fakes).
 
-Phase C: once secrets are present, checkout must return a session URL and
-the webhook must clear ``STRIPE_NOT_CONFIGURED``. Remaining hops (browser
-Checkout, Alpaca OAuth, overlay claim, digest) stay named, not faked.
+Phase C: checkout URL + webhook past ``STRIPE_NOT_CONFIGURED`` → exit 4
+with named remaining hops. Exit 0 is reserved for the full EPIC.md chain.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from enum import StrEnum
 from typing import Literal, Protocol
 
@@ -36,6 +34,16 @@ CHECKOUT_CONFIG_MISS_CODES: frozenset[str] = frozenset(
         "APP_URL_NOT_CONFIGURED",
     }
 )
+
+# Until each remaining hop is proven, the harness must not exit 0.
+REMAINING_LIVE_HOPS: tuple[str, ...] = (
+    "browser_stripe_checkout",
+    "alpaca_paper_oauth_connect",
+    "overlay_daily_claimed",
+    "paper_fill_mirrored",
+    "digest_email_received",
+)
+EXIT_REMAINING_HOPS_UNPROVEN: int = 4
 
 
 class HttpJson(Protocol):
@@ -145,6 +153,16 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
         body={"broker": "alpaca", "env": "paper"},
     ),
 )
+
+
+def remaining_hops_unproven(proven: Mapping[str, object] | None = None) -> tuple[str, ...]:
+    """Return remaining live hops that have not been marked proven."""
+    done = proven or {}
+    return tuple(name for name in REMAINING_LIVE_HOPS if not done.get(name))
+
+
+def format_remaining_hops_failure(unproven: Sequence[str]) -> str:
+    return f"KAIROS_STAGING_E2E_REMAINING_HOPS: {', '.join(unproven)}"
 
 
 def hop_ok(kind: HopExpectation, http: int, code: str | None) -> bool:
@@ -352,25 +370,31 @@ def run_staging_e2e(
         err("stripe-webhook still STRIPE_NOT_CONFIGURED on core EF.")
         return 3
 
+    unproven = remaining_hops_unproven()
+    err(format_remaining_hops_failure(unproven))
     log(
         "kairos_staging_e2e: checkout cleared config errors. "
-        "Complete browser Checkout → Alpaca OAuth → overlay → digest manually; "
-        "Mailgun MCP / notify.dispatch still required for digest proof."
+        "Remaining hops (browser Stripe, Alpaca paper, overlay, fill, digest) "
+        "are unproven — exit 4, not 0. Exit 0 is reserved for the full EPIC.md chain."
     )
-    return 0
+    return EXIT_REMAINING_HOPS_UNPROVEN
 
 
 __all__ = [
     "CHECKOUT_CONFIG_MISS_CODES",
     "DEFAULT_FUNCTIONS_BASE",
+    "EXIT_REMAINING_HOPS_UNPROVEN",
     "OBSERVER_HOPS",
+    "REMAINING_LIVE_HOPS",
     "HopExpectation",
     "HttpJson",
     "JwtResolution",
     "ObserverHop",
     "ProbeResult",
+    "format_remaining_hops_failure",
     "hop_ok",
     "password_grant_access_token",
+    "remaining_hops_unproven",
     "resolve_staging_jwt",
     "run_observer_hops",
     "run_staging_e2e",

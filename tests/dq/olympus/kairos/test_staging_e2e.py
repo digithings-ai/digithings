@@ -20,8 +20,11 @@ from typing import Any
 import pytest
 from digiquant.olympus.kairos.staging_e2e import (
     OBSERVER_HOPS,
+    REMAINING_LIVE_HOPS,
     HopExpectation,
+    format_remaining_hops_failure,
     hop_ok,
+    remaining_hops_unproven,
     resolve_staging_jwt,
     run_observer_hops,
     run_staging_e2e,
@@ -220,6 +223,44 @@ def test_resolve_staging_jwt_prefers_env_token() -> None:
 
 
 @pytest.mark.unit
+def test_remaining_hops_unproven_filters_proven_map() -> None:
+    assert remaining_hops_unproven() == REMAINING_LIVE_HOPS
+    leftover = remaining_hops_unproven({"browser_stripe_checkout": True})
+    assert leftover == REMAINING_LIVE_HOPS[1:]
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_checkout_url_is_not_complete_exits_4() -> None:
+    """Secrets + checkout URL + unsigned webhook ≠ EPIC.md E2E complete."""
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/create-checkout-session")] = (
+        200,
+        {"url": "https://checkout.stripe.test/cs_test"},
+    )
+    fakes[("POST", "/stripe-webhook")] = (400, {"code": "SIGNATURE_INVALID"})
+    environ = {name: f"test-placeholder-{name}" for name in KAIROS_STAGING_REQUIRED_SECRETS}
+    environ["KAIROS_STAGING_USER_JWT"] = "test-jwt"
+    logs: list[str] = []
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ=environ,
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == 4
+    blob = "\n".join(logs)
+    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    for hop in (
+        "browser_stripe_checkout",
+        "alpaca_paper_oauth_connect",
+        "overlay_daily_claimed",
+        "paper_fill_mirrored",
+        "digest_email_received",
+    ):
+        assert hop in blob
+
+
+@pytest.mark.unit
 def test_run_staging_e2e_password_grant_failure_exits_3() -> None:
     rc = run_staging_e2e(
         http=_FakeHttp(
@@ -236,7 +277,6 @@ def test_run_staging_e2e_password_grant_failure_exits_3() -> None:
     assert rc == 3
 
 
-@pytest.mark.unit
 @pytest.mark.unit
 def test_observer_connect_hops_omit_secret_fields() -> None:
     connect = [hop for hop in OBSERVER_HOPS if hop.kind is HopExpectation.TIER_FORBIDDEN]
@@ -331,7 +371,9 @@ def test_kairos_core_staging_e2e_refuses_fakes() -> None:
             "stripe-webhook still STRIPE_NOT_CONFIGURED — set STRIPE_WEBHOOK_SECRET "
             "on core EF secrets and redeploy stripe-webhook"
         )
-    # Remaining hops (browser Checkout, Alpaca OAuth, overlay, digest) need
-    # interactive Stripe + Mailgun accept — CLI documents them for the agent.
-    assert status == 200
-    assert wh_status != 0  # contacted
+    # Remaining hops (browser Checkout, Alpaca OAuth, overlay, fill, digest)
+    # are still unproven. Passing this mark after checkout would fake EPIC.md E2E.
+    pytest.fail(
+        format_remaining_hops_failure(remaining_hops_unproven())
+        + f" (checkout HTTP {status}; webhook HTTP {wh_status})"
+    )

@@ -7,16 +7,19 @@ reads 200, Custom writes ``TIER_FORBIDDEN``. Does not require vendor secrets.
 Phase B: fails loudly with **named** missing secrets when Stripe / Mailgun /
 Alpaca OAuth are unset. Never substitutes paper-fakes for staging acceptance.
 
-Phase C: once secrets are present, checkout must return a session URL.
+Phase C: once secrets are present, checkout must return a session URL and
+the webhook must clear ``STRIPE_NOT_CONFIGURED``. That is **not** complete.
 
 Usage (repo root)::
 
     PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 
 Exit codes:
-  0 — required secrets present and checkout probe cleared config errors
+  0 — reserved until the full EPIC.md chain is proven (unused today)
   2 — named required secrets missing (or JWT missing after secrets present)
   3 — Observer hop regression, or secrets present but core EF misconfigured
+  4 — secrets present and checkout/webhook cleared config errors, but remaining
+      live hops (browser Stripe, Alpaca paper, overlay, fill, digest) unproven
 """
 
 from __future__ import annotations
