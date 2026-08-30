@@ -44,7 +44,7 @@ describe("AuthCard", () => {
     expect(html).toContain("create account");
     expect(html).toContain("Sign up");
     expect(html).toContain("acct-auth-strength");
-    expect(html).toContain("good");
+    expect(html).toContain("strong");
     expect(html).not.toContain("olympus");
   });
 });
