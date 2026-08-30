@@ -159,10 +159,13 @@ class TestPersistence:
             load_coefficients(tmp_path / "does_not_exist.json")
 
     def test_load_example_placeholder_warns(self, caplog) -> None:
-        from digiquant.strategies.sdca.btc_power_law import load_coefficients
+        from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
+            load_coefficients,
+        )
 
         with caplog.at_level("WARNING"):
-            coefficients = load_coefficients()
+            coefficients = load_coefficients(_COEFFICIENTS_EXAMPLE_PATH)
         assert coefficients.fit_rows > 0
         assert any("synthetic" in rec.message.lower() for rec in caplog.records) or any(
             "placeholder" in rec.message.lower() for rec in caplog.records
@@ -171,20 +174,25 @@ class TestPersistence:
 
 class TestBtcPowerLawRiskModel:
     def test_satisfies_risk_model_protocol(self) -> None:
-        from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+        from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
+            BtcPowerLawRiskModel,
+            load_coefficients,
+        )
         from digiquant.strategies.sdca.risk_model import RiskModel
 
-        model = BtcPowerLawRiskModel(load_coefficients())
+        model = BtcPowerLawRiskModel(load_coefficients(_COEFFICIENTS_EXAMPLE_PATH))
         assert isinstance(model, RiskModel)
 
     def test_rails_returns_low_median_high_non_crossing(self) -> None:
         from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
             BTC_GENESIS_DATE,
             BtcPowerLawRiskModel,
             load_coefficients,
         )
 
-        model = BtcPowerLawRiskModel(load_coefficients())
+        model = BtcPowerLawRiskModel(load_coefficients(_COEFFICIENTS_EXAMPLE_PATH))
         dates = pl.Series(
             "date",
             [BTC_GENESIS_DATE + timedelta(days=2000 + 30 * i) for i in range(20)],
@@ -198,13 +206,14 @@ class TestBtcPowerLawRiskModel:
 
     def test_rails_full_is_non_crossing_across_all_seven_quantiles(self) -> None:
         from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
             BTC_GENESIS_DATE,
             QUANTILE_LABELS,
             BtcPowerLawRiskModel,
             load_coefficients,
         )
 
-        model = BtcPowerLawRiskModel(load_coefficients())
+        model = BtcPowerLawRiskModel(load_coefficients(_COEFFICIENTS_EXAMPLE_PATH))
         dates = pl.Series(
             "date",
             [BTC_GENESIS_DATE + timedelta(days=2000 + 30 * i) for i in range(20)],
@@ -216,12 +225,13 @@ class TestBtcPowerLawRiskModel:
 
     def test_rails_null_on_or_before_genesis(self) -> None:
         from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
             BTC_GENESIS_DATE,
             BtcPowerLawRiskModel,
             load_coefficients,
         )
 
-        model = BtcPowerLawRiskModel(load_coefficients())
+        model = BtcPowerLawRiskModel(load_coefficients(_COEFFICIENTS_EXAMPLE_PATH))
         dates = pl.Series("date", [BTC_GENESIS_DATE, BTC_GENESIS_DATE + timedelta(days=1000)])
         rails = model.rails(dates)
         assert rails["low"][0] is None
@@ -230,13 +240,23 @@ class TestBtcPowerLawRiskModel:
         assert rails["median"][1] is not None
 
     def test_rejects_quantile_not_in_fitted_set(self) -> None:
-        from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+        from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
+            BtcPowerLawRiskModel,
+            load_coefficients,
+        )
 
         with pytest.raises(ValueError, match="low/high quantile"):
-            BtcPowerLawRiskModel(load_coefficients(), low_quantile=0.05)
+            BtcPowerLawRiskModel(load_coefficients(_COEFFICIENTS_EXAMPLE_PATH), low_quantile=0.05)
 
     def test_rejects_low_quantile_not_below_median(self) -> None:
-        from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+        from digiquant.strategies.sdca.btc_power_law import (
+            _COEFFICIENTS_EXAMPLE_PATH,
+            BtcPowerLawRiskModel,
+            load_coefficients,
+        )
 
         with pytest.raises(ValueError, match="low_quantile must be"):
-            BtcPowerLawRiskModel(load_coefficients(), low_quantile=0.75, high_quantile=0.25)
+            BtcPowerLawRiskModel(
+                load_coefficients(_COEFFICIENTS_EXAMPLE_PATH), low_quantile=0.75, high_quantile=0.25
+            )

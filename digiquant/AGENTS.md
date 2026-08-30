@@ -159,15 +159,17 @@ the full module map.
 - **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
   (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
   price history through `data/prices/history_cache.py` — the same cache
-  every other price consumer uses. Don't write a bespoke fetch path for this;
-  don't reuse the separate CCXT/Coinbase script pipeline behind
-  `digiquant_fetch_coinbase_ohlcv` either — that's a different, script-local
-  cache.
+  every other price consumer uses. Don't write a bespoke fetch path for this.
+  (`digiquant_fetch_coinbase_ohlcv`'s CCXT/Coinbase script pipeline writes to
+  the *same* `data/price-history/` directory and ticker naming, not a
+  separate cache — `history_cache.py` is still the right one to call from a
+  new tool because it's the actively-maintained, incrementally-updating
+  pipeline every other consumer builds on, not because the data differs.)
 - **`low_quantile`/`high_quantile` (default 10th/95th) are an unvalidated
   judgment call**, not verified against the reference artifact's corridor —
   revisit once that artifact is reachable, don't assume the default is
   correct.
-- The other three #1082 providers (generic per-asset valuation-z, RS-driven
+- The other two #1082 providers (generic per-asset valuation-z, RS-driven
   risk) are not implemented yet.
 
 ### Adding a preset
