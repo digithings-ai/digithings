@@ -220,15 +220,16 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
   `--all` must not poll that row; `--connection-id` on it exits **3** with
   `ALPACA_API_KEY_SYNC_HELD`. Fill remaining-hop also requires Alpaca paper
   OAuth (an `api_key` fill cannot prove it).
-- Combined `kairos_cron_check.py` still **exit 2** — Mailgun names empty. Overlay
+- Combined `scripts/digiquant_cron_check.py` still **exit 2** — Mailgun names empty. Overlay
   + sync + route store probes pass once `CORE_SUPABASE_*` are set. Route `--check`
   logs `routing_enabled=false` and does not submit.
 - Route `--check` / `--dry-run` never submit. `--all` requires
-  `OLYMPUS_KAIROS_ROUTING=1` (default off → exit 3 `KAIROS_ROUTING_DISABLED`).
-  `python scripts/kairos_route_cron.py`. Do not add the kill switch to
+  `DIGIQUANT_EXECUTION_ROUTING=1` (default off → exit 3 `KAIROS_ROUTING_DISABLED`).
+  `python scripts/digiquant_route_cron.py`. Do not add the kill switch to
   `KAIROS_STAGING_REQUIRED_SECRETS`.
 - House GHA must still splice `pipeline-olympus-mailgun.env.yml` on a `chore/` /
-  `feat/` branch. Scheduled probe spec still not installed under `.github/workflows/`.
+  `feat/` branch. Scheduled probe is installed as `.github/workflows/kairos-cron-check.yml`
+  (#3380); `cursor/*` cannot rename it. Canonical CLI is `scripts/digiquant_cron_check.py`.
 
 **Auth (`core`):** GitHub Enabled + Email Enabled; **Google Disabled**. Mailgun MCP
 still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
@@ -300,6 +301,8 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 **2026-09-01T03:22Z — [#3370](https://github.com/digithings-ai/digithings/pull/3370) on `develop` (`3b4e71c18`):** combined cron probe includes route `--check`. Live `kairos_cron_check.py` still exit **2** (Mailgun names empty).
 
 **2026-09-01T03:11Z — [#3369](https://github.com/digithings-ai/digithings/pull/3369) on `develop` (`986082b76`):** fail-closed overlay route cron (`python scripts/kairos_route_cron.py`). Kill switch still defaults **off**. Do not set `OLYMPUS_KAIROS_ROUTING=1` without an explicit human decision. Does not merge human-gated main PRs. Next scheduled house GHA is still the live book-commit proof.
+
+**2026-09-01T07:33Z — [#3381](https://github.com/digithings-ai/digithings/pull/3381) on `develop` (`a463d0b10`):** canonical `DIGIQUANT_*` secrets + `scripts/digiquant_*.py`. Live cron check still exit **2** (Mailgun). Routing still defaults **off**. `pipeline-olympus.yml` filename unchanged until after the 12:00 UTC house proof.
 
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft
