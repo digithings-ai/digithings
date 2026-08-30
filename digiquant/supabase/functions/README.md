@@ -100,6 +100,8 @@ cd digiquant/supabase/functions
 # Install Deno if needed: https://deno.land (# or: curl -fsSL https://deno.land/install.sh | sh)
 deno test --allow-env --allow-read \
   _shared/app-url.test.ts \
+  _shared/access.test.ts \
+  _shared/cors.test.ts \
   _shared/tiers.test.ts \
   _shared/vault.test.ts \
   stripe-webhook/stripe-webhook.test.ts \
