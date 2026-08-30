@@ -57,6 +57,15 @@ export default function Home() {
             self-hosted, so work that once needed a team runs for one.
           </p>
           <div className="dqhero-cta dqhero-scrollcue">
+            {/* Claim + install: shared .cmdline (site.css) is the diegetic
+                proof; the loud control is ink/paper, never a teal pill. */}
+            <p className="cmdline">
+              <span className="prompt">$</span>
+              git clone https://github.com/digithings-ai/digithings.git
+            </p>
+            <a className="btn btn-primary" href="/olympus/">
+              Open olympus
+            </a>
             <span className="dqhero-scroll-label">Scroll to explore</span>
             <div className="dqhero-scroll" aria-hidden="true" />
           </div>

@@ -150,7 +150,7 @@ export function ResearchPipeline() {
                     </span>
                     <h3>{s.title}</h3>
                     <p>{s.body}</p>
-                    <span className="self-start rounded-full border border-hair px-[0.6rem] py-[0.2rem] font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
+                    <span className="self-start rounded-none border border-hair px-[0.6rem] py-[0.2rem] font-mono text-[0.68rem] uppercase tracking-[0.06em] text-ink-mute">
                       {s.tool}
                     </span>
                   </div>
