@@ -3,6 +3,6 @@
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
   },
   "tasks": {
-    "test": "deno test --allow-env _shared/tiers_test.ts stripe-webhook/stripe-webhook_test.ts"
+    "test": "deno test --allow-env _shared/tiers.test.ts stripe-webhook/stripe-webhook.test.ts"
   }
 }

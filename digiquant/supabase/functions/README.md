@@ -63,8 +63,8 @@ cd digiquant/supabase/functions
 
 # Install Deno if needed: https://deno.land (# or: curl -fsSL https://deno.land/install.sh | sh)
 deno test --allow-env \
-  _shared/tiers_test.ts \
-  stripe-webhook/stripe-webhook_test.ts
+  _shared/tiers.test.ts \
+  stripe-webhook/stripe-webhook.test.ts
 ```
 
 Or via the workspace task:
