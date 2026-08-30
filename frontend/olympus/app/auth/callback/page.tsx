@@ -4,6 +4,19 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseClient } from '@/lib/supabase';
 
+const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
+
+function urlHasOAuthError(): boolean {
+  if (typeof window === 'undefined') return false;
+  const search = new URLSearchParams(window.location.search);
+  if (search.get('error')) return true;
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (!hash) return false;
+  return Boolean(new URLSearchParams(hash).get('error'));
+}
+
 /**
  * OAuth PKCE callback (static page). supabase-js detects the URL code,
  * exchanges it into a session, then we route home. No Next route handler.
@@ -11,12 +24,15 @@ import { getSupabaseClient } from '@/lib/supabase';
 export default function AuthCallbackPage() {
   const router = useRouter();
   const client = getSupabaseClient();
-  const [message, setMessage] = useState(() =>
-    client ? 'Completing sign-in…' : 'Supabase is not configured.',
-  );
+  const [message, setMessage] = useState(() => {
+    if (!client) return 'Supabase is not configured.';
+    if (urlHasOAuthError()) return SIGN_IN_FAILED;
+    return 'Completing sign-in…';
+  });
 
   useEffect(() => {
     if (!client) return;
+    if (urlHasOAuthError()) return;
 
     let cancelled = false;
     let settled = false;
@@ -30,7 +46,7 @@ export default function AuthCallbackPage() {
     void client.auth.getSession().then(({ data, error }) => {
       if (cancelled) return;
       if (error) {
-        setMessage(error.message);
+        setMessage(SIGN_IN_FAILED);
         return;
       }
       if (data.session) goHome();
@@ -48,21 +64,8 @@ export default function AuthCallbackPage() {
       }
     });
 
-    const timer = window.setTimeout(() => {
-      if (cancelled || settled) return;
-      void client.auth.getSession().then(({ data }) => {
-        if (cancelled || settled) return;
-        if (data.session) {
-          goHome();
-        } else {
-          setMessage('Sign-in did not complete. Return to login and try again.');
-        }
-      });
-    }, 2500);
-
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
       subscription.unsubscribe();
     };
   }, [client, router]);

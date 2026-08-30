@@ -57,9 +57,11 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import logging
 import re
 import sys
+from datetime import UTC, datetime
 from typing import Any, Protocol  # score:allow untyped any — Vectorize backend duck-typed
 
 from digisearch.core.models import Chunk, Document, Segment
@@ -75,6 +77,27 @@ _DEFAULT_SYNC_BATCH_SIZE = 1000
 
 class ModelMismatchError(RuntimeError):
     """Raised when an index already holds vectors from a different embedding model."""
+
+
+def _mutation_capturing_post(
+    inner_post: Any,
+    mutation_ids: list[str],
+) -> Any:
+    """Wrap Vectorize HTTP posts to collect upsert mutation ids (#2236)."""
+
+    def post(url: str, headers: dict[str, str], body: bytes, content_type: str) -> tuple[int, str]:
+        status, text = inner_post(url, headers, body, content_type)
+        if status == 200 and "/upsert" in url:
+            try:
+                payload = json.loads(text)
+                mutation_id = (payload.get("result") or {}).get("mutationId")
+                if mutation_id:
+                    mutation_ids.append(str(mutation_id))
+            except json.JSONDecodeError:
+                pass
+        return status, text
+
+    return post
 
 
 class Embedder(Protocol):
@@ -379,10 +402,18 @@ def main(argv: list[str] | None = None) -> int:
             self.count += len(chunks)
 
     sink: VectorSink
+    mutation_ids: list[str] = []
     if args.dry_run:
         sink = _CountingSink()
     else:
-        sink = VectorizeBackend(args.index, account_id=account_id, api_token=api_token)
+        from digisearch.indexes.backends.vectorize import _default_http_post
+
+        sink = VectorizeBackend(
+            args.index,
+            account_id=account_id,
+            api_token=api_token,
+            http_post=_mutation_capturing_post(_default_http_post, mutation_ids),
+        )
 
     if not args.dry_run:
         assert_index_model(sink, model_id=MINILM_MODEL_ID, dimensions=384)
@@ -401,6 +432,11 @@ def main(argv: list[str] | None = None) -> int:
         batch_size=DEFAULT_BATCH_SIZE,
     )
     print(f"{'would upsert' if args.dry_run else 'upserted'} {total} vectors → {args.index}")
+    if not args.dry_run:
+        completed_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+        print(f"sync_completed_at={completed_at}", file=sys.stderr)
+        if mutation_ids:
+            print(f"last_mutation_id={mutation_ids[-1]}", file=sys.stderr)
     return 0
 
 

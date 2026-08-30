@@ -23,7 +23,10 @@ export interface AuthContextValue {
   authEnabled: boolean;
   session: Session | null;
   user: User | null;
-  /** Initial session resolve in progress (auth flag on only). */
+  /**
+   * Session resolve in progress after mount (auth flag on only).
+   * Always false during SSR/prerender so AuthGate can emit the full shell.
+   */
   loading: boolean;
   signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
@@ -32,10 +35,13 @@ export interface AuthContextValue {
 /** Exported so entitlement hooks can read session without throwing outside the tree. */
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
+const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const authEnabled = isOlympusAuthEnabled();
   const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(authEnabled);
+  // Start false so static prerender never collapses to a loading screen.
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!authEnabled) {
@@ -43,13 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const client = getSupabaseClient();
     if (!client) {
-      /* eslint-disable react-hooks/set-state-in-effect -- no client: end loading without hanging the gate */
-      setLoading(false);
-      /* eslint-enable react-hooks/set-state-in-effect */
       return;
     }
 
     let cancelled = false;
+    /* eslint-disable react-hooks/set-state-in-effect -- begin session resolve after mount only */
+    setLoading(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
+
     client.auth.getSession().then(({ data }) => {
       if (cancelled) return;
       setSession(data.session);

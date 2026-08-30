@@ -65,7 +65,7 @@ vi.mock('./supabase', async () => {
     ...actual,
     isOlympusAuthEnabled: () => true,
     getSupabaseClient: () => supabaseMock.client,
-    oauthRedirectTo: () => 'http://localhost:3000/olympus/auth/callback/',
+    // Keep real oauthRedirectTo / olympusBasePath — do not stub the redirect URL.
   };
 });
 
@@ -161,14 +161,18 @@ describe('AuthProvider', () => {
     expect(container.querySelector('[data-has-session="0"]')).not.toBeNull();
   });
 
-  it('signInWithOAuth delegates to supabase-js with PKCE redirect', async () => {
+  it('signInWithOAuth delegates to supabase-js with PKCE redirect including /olympus', async () => {
+    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_BASE_PATH', '/olympus');
     await mountProbe();
     await act(async () => {
       await latest!.signInWithOAuth('github');
     });
-    expect(supabaseMock.auth.signInWithOAuth).toHaveBeenCalledWith({
-      provider: 'github',
-      options: { redirectTo: 'http://localhost:3000/olympus/auth/callback/' },
-    });
+    const call = supabaseMock.auth.signInWithOAuth.mock.calls[0]?.[0] as {
+      provider: string;
+      options: { redirectTo: string };
+    };
+    expect(call.provider).toBe('github');
+    expect(call.options.redirectTo).toMatch(/\/olympus\/auth\/callback\/$/);
+    expect(call.options.redirectTo).toBe(`${window.location.origin}/olympus/auth/callback/`);
   });
 });
