@@ -1,9 +1,10 @@
-# Kairos epic — completion audit (vendor recheck, 2026-08-30T21:17Z)
+# Kairos epic — completion audit (GitHub Auth proven, 2026-08-30T21:18Z)
 
-**Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E proof blocked on vendor captchas.
+**Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets.
 
-Full artifact: `/opt/cursor/artifacts/kairos-completion-audit-vendor-recheck.md`  
-Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`
+Full artifact: `/opt/cursor/artifacts/kairos-github-auth-prod-proof.md`  
+Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`  
+Prior vendor recheck: `/opt/cursor/artifacts/kairos-completion-audit-vendor-recheck.md`
 
 ## Summary
 
@@ -12,12 +13,36 @@ Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`
 | Identity | **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged) |
 | Stripe / Mailgun / Alpaca API secrets | **MISSING** — captchas (forms re-filled digithings@) |
 | Core EF vendor secrets | **not set** (vault / APP_URL / SUPABASE_* only) |
-| Staging E2E | exit **2** — 9 named secrets (`kairos-staging-e2e-vendor-recheck.log`) |
+| Staging E2E | exit **2** — 9 named secrets |
 | Mailgun notify loud-fail | exit **2** — `MAILGUN_NOT_CONFIGURED` |
-| Olympus Auth Pages | live login UI; **GitHub** sign-in → authenticated shell (Settings shows core ref `rwagjbkvxkdwqmouagad`) |
-| Email/password on login | **absent** (Google + GitHub only) — cannot use digithings@ Agentmail password path |
+| Olympus Auth Pages (#3231) | live on prod Pages |
+| **GitHub Auth login** | **PROVEN** on `digiquant.io` + `core` DB |
+| mig 107 personal workspace | **fired** for GitHub user (`plan_tier=free`, owner) |
+| Email/password on login UI | **absent** (Google + GitHub only) |
 | Draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) | left draft |
 | Cutover `900` | **not applied** |
+
+## GitHub Auth — prod evidence (no secrets)
+
+Project `rwagjbkvxkdwqmouagad` (`core`), PAT label **digithings**:
+
+| Fact | Value |
+|------|-------|
+| `auth.users` count | **2** |
+| Providers | **1× github**, **1× email** |
+| GitHub user id | `0408ba97-caba-44d3-b2d0-5690ab5160a9` |
+| GitHub email | `chris.stefan@proton.me` |
+| GitHub login | `chrizefan` |
+| Created / last sign-in | `2026-08-30T21:14:44Z` / `2026-08-30T21:15:48Z` |
+| Personal workspace | `4700ff6e-…` slug `u-0408ba97caba44d3b2d05690ab5160a9` |
+| Membership | owner |
+| `plan_tier` | `free` (default; not Stripe-sourced) |
+| Trigger | `on_auth_user_created_ensure_workspace` enabled; row timestamps match user insert |
+| Bootstrap fix | **not needed** |
+
+Unauth smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** (Continue with Google / Continue with GitHub).
+
+Authed browser (agent desktop session still open): sidebar shows `chris.stefan@proton.me` + Sign out; `/olympus/settings/` data source `rwagjbkvxkdwqmouagad.supabase.co`.
 
 ## Secrets obtained (names only)
 
@@ -25,9 +50,15 @@ None of the staging-required vendor API secrets. Present locally (not EF vendors
 
 ## Captcha still needed?
 
-**Yes — all three.** Reply `Stripe captcha done` / `Mailgun captcha done` / `Alpaca turnstile done` after solving in open Cloud Agent browser tabs.
+**Yes — all three.** Reply `Stripe captcha done` / `Mailgun captcha done` / `Alpaca turnstile done` after solving in open Cloud Agent browser tabs (do not close sibling vendor tabs).
+
+## Next steps (staging E2E)
+
+1. Human solves vendor captchas → agent writes `digithings-*.env` + EF `secrets set`.
+2. Re-run `scripts/kairos_staging_e2e.py` (expect exit 0 once secrets land).
+3. Optional: elevate a test workspace `plan_tier` only via documented ops path — GitHub user’s personal WS stays `free` until Stripe checkout.
 
 ## Docs branch
 
-`cursor/kairos-vendor-captcha-ask-3d52` — compare  
-https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-vendor-captcha-ask-3d52
+`cursor/kairos-github-auth-proof-3d52` — compare  
+https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-github-auth-proof-3d52
