@@ -159,6 +159,8 @@ def test_batch_note_upsert_keeps_links_consistent(vault_dir: Path) -> None:
     )
 
     assert [note.name for note in result.notes] == ["c", "d"]
+    assert result.notes[0].backlinks == ("d",)
+    assert result.notes[1].backlinks == ("c",)
     assert server.get_backlinks("c").backlinks == ["d"]
     assert server.get_backlinks("d").backlinks == ["c"]
 

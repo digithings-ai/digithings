@@ -193,7 +193,7 @@ class DigivaultApiWriter:
         self._post_json = post_json or _post_json
         self._batching = False
         self._pending_notes: list[dict[str, Any]] = []
-        self._pending_prunes: list[dict[str, Any]] = []
+        self._pending_prunes: dict[tuple[str, str], dict[str, Any]] = {}
 
     def begin_batch(self) -> None:
         """Collect writes for one efficient ``POST /v1/notes/batch`` request."""
@@ -201,7 +201,7 @@ class DigivaultApiWriter:
             raise RuntimeError("A digivault write batch is already active")
         self._batching = True
         self._pending_notes = []
-        self._pending_prunes = []
+        self._pending_prunes = {}
 
     def write_note(
         self,
@@ -241,7 +241,9 @@ class DigivaultApiWriter:
             "subdir": subdir,
         }
         if self._batching:
-            self._pending_prunes.append(payload)
+            # A repeated source URL has the same parent slug. Its final document
+            # state is the only one that should determine stale children.
+            self._pending_prunes[(parent_doc, subdir)] = payload
             return {"deleted": []}
         headers: dict[str, str] = {}
         if self.bearer_token:
@@ -264,13 +266,13 @@ class DigivaultApiWriter:
                 return {}
             return self._post_json(
                 f"{self.base_url}/v1/notes/batch",
-                {"notes": self._pending_notes, "prunes": self._pending_prunes},
+                {"notes": self._pending_notes, "prunes": list(self._pending_prunes.values())},
                 headers,
             )
         finally:
             self._batching = False
             self._pending_notes = []
-            self._pending_prunes = []
+            self._pending_prunes = {}
 
 
 def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:

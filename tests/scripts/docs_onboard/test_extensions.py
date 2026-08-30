@@ -218,8 +218,13 @@ def test_digivault_api_writer_batches_upserts() -> None:
     writer.begin_batch()
     writer.write_note("a", body="links to [[b]]\n", overwrite=True)
     writer.write_note("b", body="links to [[a]]\n", overwrite=True)
+    writer.prune_children("guide", {"guide__old"}, "clients/acme")
+    writer.prune_children("guide", {"guide__new"}, "clients/acme")
     writer.flush()
 
     assert len(seen) == 1
     assert seen[0]["url"].endswith("/v1/notes/batch")
     assert [note["name"] for note in seen[0]["payload"]["notes"]] == ["a", "b"]
+    assert seen[0]["payload"]["prunes"] == [
+        {"parent_doc": "guide", "keep_names": ["guide__new"], "subdir": "clients/acme"}
+    ]
