@@ -1,6 +1,7 @@
 /* Account surfaces consumed from the digiweb account family (login, signup,
-   session, settings). Token-only; class prefix `.acct-`. Shared `.btn-*`
-   dress comes from controls-core. */
+   session, settings). Token-only; class prefix `.acct-`. Button dress is the
+   reference `.btn-*` grammar (reference/app/globals.css) — olympus does not
+   load that sheet. */
 
 .acct-login-shell {
   min-height: 100vh;
@@ -10,6 +11,43 @@
   justify-content: center;
   padding: 1.5rem;
   color: var(--ink);
+}
+
+.acct-login-card .btn-primary,
+.acct-login-card .btn-ghost,
+.acct-session-rail .btn-ghost {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
+  border-radius: 0;
+  padding: 0.62rem 1.3rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-align: center;
+}
+
+.acct-login-card .btn-primary {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.acct-login-card .btn-primary:disabled,
+.acct-login-card .btn-ghost:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.acct-login-card .btn-ghost,
+.acct-session-rail .btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--hair);
+}
+
+.acct-login-card .btn-ghost:hover,
+.acct-session-rail .btn-ghost:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--hair));
 }
 
 .acct-login-card {
