@@ -358,7 +358,7 @@ def _hydrate_config(
     from digiquant.olympus.profile_config import pin_profile_config_for_preflight
 
     try:
-        prior_book = load_prior_book(client, run_date)
+        prior_book = load_prior_book(client, run_date, workspace_id=config.workspace_id)
     except _SUPABASE_READ_ERRORS:
         prior_book = []
 
@@ -409,6 +409,7 @@ def _hydrate_config(
         macro_series=list(config.macro_series),
         profile_config_version_id=str(pinned.version_id),
         profile_config=pinned.model_dump(mode="json"),
+        workspace_id=config.workspace_id,
     )
     return hydrated, prior_book
 

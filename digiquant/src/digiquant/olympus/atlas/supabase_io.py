@@ -363,23 +363,30 @@ def load_prior_book(
     run_date: date,
     *,
     include_risk_fields: bool = False,
+    workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Positions rows for the most recent date strictly before ``run_date``.
 
     Returns the held book coming into ``run_date`` (newest prior date only),
     or ``[]`` on the first ever run.
+
+    ``workspace_id`` is the T4 overlay pin-seam filter. ``None`` keeps the house
+    query byte-identical (date-only). Overlay passes its workspace so house
+    rows cannot seed a private book.
     """
     columns = "date, ticker, weight_pct, entry_date"
     if include_risk_fields:
         columns += ", entry_price"
-    resp = (
+    query = (
         client.table("positions")
         .select(columns)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(200)
-        .execute()
     )
+    if workspace_id is not None:
+        query = query.eq("workspace_id", str(workspace_id))
+    resp = query.execute()
     rows = list(getattr(resp, "data", None) or [])
     if not rows:
         return []

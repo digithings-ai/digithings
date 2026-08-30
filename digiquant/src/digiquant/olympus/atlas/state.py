@@ -207,6 +207,14 @@ class AtlasConfigBundle(BaseModel):
             "overlay watchlist/themes/risk; never forks or cancels the house run."
         ),
     )
+    # T4 pin seam: overlay workspace. None → house writers keep the T0 house stamp.
+    workspace_id: str | None = Field(
+        default=None,
+        description=(
+            "Overlay workspace id threaded through preflight. None selects the "
+            "house workspace stamp (byte-identical house path)."
+        ),
+    )
 
 
 class PriorContext(BaseModel):

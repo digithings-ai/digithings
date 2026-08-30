@@ -97,6 +97,20 @@ def house_workspace_id() -> UUID:
     return workspace_id_for_slug(HOUSE_WORKSPACE_SLUG)
 
 
+def resolved_workspace_id(raw: UUID | str | None) -> UUID:
+    """Overlay pin-seam helper: explicit id, or the house default when absent.
+
+    T4 threads ``workspace_id`` through preflight. House callers that omit it keep
+    the T0 stamp (``house_workspace_id()``) so house payloads stay byte-identical.
+    """
+    if raw is None:
+        return house_workspace_id()
+    text = str(raw).strip()
+    if not text:
+        return house_workspace_id()
+    return UUID(text)
+
+
 class Workspace(BaseModel):
     """One row of ``public.workspaces`` (roadmap P2a; billing columns per spec D1/D8).
 
@@ -181,6 +195,7 @@ __all__ = [
     "WorkspaceType",
     "house_workspace_id",
     "house_workspace_row",
+    "resolved_workspace_id",
     "system_workspace_id",
     "system_workspace_row",
     "workspace_id_for_slug",

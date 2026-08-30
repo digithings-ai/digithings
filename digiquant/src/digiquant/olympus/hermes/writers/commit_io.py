@@ -396,7 +396,13 @@ def _canonical_thesis_ids(
     return {str(r["ticker"]): str(r["thesis_id"]) for r in rows if r.get("thesis_id")}
 
 
-def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[str]) -> list[str]:
+def _prune_orphan_positions(
+    *,
+    client: SupabaseClient,
+    date_str: str,
+    keep: set[str],
+    workspace_id: str | None = None,
+) -> list[str]:
     """Delete same-date ``positions`` rows absent from the book just written (#1744).
 
     ``positions`` is upserted on ``(date, ticker)``, so a second commit for the same
@@ -423,20 +429,24 @@ def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[
     DELETE per orphan; this issues a single ``in_`` delete instead — same effect,
     one round trip.
 
-    T0 (#5-T0): deliberately NOT scoped by ``workspace_id`` — the house pipeline is the
-    only writer today, so a date-only filter is equivalent to a
-    ``(workspace_id, date)`` filter in practice. Scoping every read in this module by
-    workspace belongs to whichever WP lands multi-tenant pipeline execution (T4); this
-    WP only had to keep INSERT/upsert payloads satisfying the new NOT NULL column.
+    T0 (#5-T0) used a date-only filter. T4 threads ``workspace_id`` for overlay
+    so a private book cannot prune house rows. ``workspace_id is None`` keeps the
+    house query byte-identical (date-only).
     """
-    resp = client.table("positions").select("ticker").eq("date", date_str).execute()
+    query = client.table("positions").select("ticker").eq("date", date_str)
+    if workspace_id is not None:
+        query = query.eq("workspace_id", workspace_id)
+    resp = query.execute()
     existing = {
         str(row.get("ticker")) for row in getattr(resp, "data", None) or [] if row.get("ticker")
     }
     orphans = sorted(existing - keep)
     if not orphans:
         return []
-    client.table("positions").delete().eq("date", date_str).in_("ticker", orphans).execute()
+    delete = client.table("positions").delete().eq("date", date_str)
+    if workspace_id is not None:
+        delete = delete.eq("workspace_id", workspace_id)
+    delete.in_("ticker", orphans).execute()
     logger.warning(
         "commit_io: pruned %d orphan position row(s) for %s not in the committed book: %s",
         len(orphans),
@@ -489,7 +499,10 @@ def book_portfolio(
             row["rationale"] = rationale
 
     prior_book = load_prior_book(
-        client, run_date, include_risk_fields=_position_risk_fields_enabled()
+        client,
+        run_date,
+        include_risk_fields=_position_risk_fields_enabled(),
+        workspace_id=getattr(state.config, "workspace_id", None),
     )
     nav = _compute_nav(client, run_date, prior_book)
 
@@ -521,13 +534,10 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
-    # T0 (#5-T0): workspace_id is NOT NULL as of migration 097; the house pipeline is
-    # single-tenant today, so every row this writer books stamps the house workspace
-    # explicitly rather than relying on the column's DEFAULT (roadmap P6 tracks the
-    # remaining legacy writers — e.g. scripts/update_tearsheet.py — that still lean on
-    # the DEFAULT). The widened UNIQUE constraint is (workspace_id, date, ticker) /
-    # (workspace_id, date), so on_conflict must include it too.
-    workspace_id = str(house_workspace_id())
+    # T0 stamped house_workspace_id(). T4 overlay threads config.workspace_id
+    # through the pin seam; omitting it keeps the house stamp byte-identical.
+    overlay_ws = getattr(state.config, "workspace_id", None)
+    workspace_id = str(house_workspace_id()) if not overlay_ws else str(overlay_ws)
 
     client.table("nav_history").upsert(
         {
@@ -560,6 +570,7 @@ def book_portfolio(
         client=client,
         date_str=date_str,
         keep={str(r["ticker"]) for r in pos_rows},
+        workspace_id=overlay_ws,
     )
 
     return BookedPortfolio(
@@ -572,11 +583,24 @@ def book_portfolio(
     )
 
 
-def manifest_document_key(source_run_id: str) -> str:
+OVERLAY_MANIFEST_PREFIX = "overlay-commit/"
+
+
+def manifest_document_key(source_run_id: str, workspace_id: str | None = None) -> str:
+    """House keys stay ``commit-run/{run_id}``. Overlay is namespaced so a
+    date-scoped house lookup cannot see (or last-writer-wins over) a private book.
+    """
+    if workspace_id:
+        return f"{OVERLAY_MANIFEST_PREFIX}{workspace_id}/{source_run_id}"
     return f"{_MANIFEST_DOC_PREFIX}{source_run_id}"
 
 
-def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dict[str, Any]]:
+def load_commit_manifests(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Every commit manifest already persisted for ``run_date`` (#1744).
 
     Keyed on the **date**, never on ``source_run_id``. ``AtlasResearchState.run_id``
@@ -592,17 +616,14 @@ def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dic
     attempt keeps its own audit artefact; only the idempotency lookup is date-scoped.
     """
     date_str = run_date.isoformat()
+    prefix = f"{OVERLAY_MANIFEST_PREFIX}{workspace_id}/" if workspace_id else _MANIFEST_DOC_PREFIX
     out: list[dict[str, Any]] = []
 
     store = getattr(client, "store", None)
     if isinstance(store, dict):
         for row in store.get("documents", []):
             key = row.get("document_key")
-            if (
-                row.get("date") == date_str
-                and isinstance(key, str)
-                and key.startswith(_MANIFEST_DOC_PREFIX)
-            ):
+            if row.get("date") == date_str and isinstance(key, str) and key.startswith(prefix):
                 payload = row.get("payload")
                 if isinstance(payload, dict):
                     out.append(dict(payload))
@@ -613,7 +634,7 @@ def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dic
         client.table("documents")
         .select("payload")
         .eq("date", date_str)
-        .like("document_key", f"{_MANIFEST_DOC_PREFIX}%")
+        .like("document_key", f"{prefix}%")
         .execute()
     )
     for row in getattr(resp, "data", None) or []:
@@ -661,7 +682,9 @@ def save_commit_manifest(
     date_str = state.run_date.isoformat()
     return publish_document(
         client=client,
-        document_key=manifest_document_key(source_run_id),
+        document_key=manifest_document_key(
+            source_run_id, getattr(state.config, "workspace_id", None)
+        ),
         payload=manifest,
         doc_type="Commit Run",
         run_type=state.run_type,
@@ -1074,6 +1097,7 @@ __all__ = [
     "held_tickers",
     "load_commit_manifests",
     "manifest_commit_seq",
+    "OVERLAY_MANIFEST_PREFIX",
     "manifest_document_key",
     "persist_decision_log",
     "persist_validated_pretrade_risk_report",
