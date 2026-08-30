@@ -33,8 +33,9 @@ locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
 rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md`.
 
 Live apps import `@digithings/design` tokens and `@digithings/web` primitives —
-they do not fork a second look. Remaining product CSS (Fraunces heroes,
-`.glass-card`, local `--radius`) is override debt, not a parallel system.
+they do not fork a second look. Remaining override debt is Phase 3: digichat
+shadcn `--radius` / local `@theme`, olympus `.glass-card`, leftover `rounded-*`
+on twelve-x / FX Hub. Marketing Fraunces heroes are gone (Phase 2).
 
 The three workspaces are consumed **by package name**, so their on-disk location
 is irrelevant to resolution — every other frontend imports them the same way:
