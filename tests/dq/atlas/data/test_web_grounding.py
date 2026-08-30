@@ -12,20 +12,20 @@ pytest.importorskip("openai")
 from digiquant.olympus.atlas.data import web_grounding
 
 
-def _domains_for(monkeypatch_segment: str) -> list[str]:
-    captured = {}
+def _query_for(segment: str) -> str:
+    captured: dict[str, str] = {}
 
-    def _ws(model, query, *, allowed_domains=None, max_results=8):
-        captured["allowed_domains"] = allowed_domains
+    def _ws(model: str, query: str):
+        captured["query"] = query
         return ("- x[[1]](u)", ["https://u"])
 
     with patch.object(web_grounding, "_openrouter_web_search", side_effect=_ws):
         web_grounding.fetch_web_grounding(
-            model="openrouter/openrouter/auto",
-            segment=monkeypatch_segment,
+            model="openrouter/perplexity/sonar",
+            segment=segment,
             run_date=date(2026, 6, 9),
         )
-    return captured["allowed_domains"]
+    return captured["query"]
 
 
 @pytest.mark.unit
@@ -36,7 +36,7 @@ def test_fetch_web_grounding_returns_summary_and_sources():
         return_value=("- CPI rose 0.6%[[1]](u)", ["https://u"]),
     ):
         out = web_grounding.fetch_web_grounding(
-            model="openrouter/openrouter/auto", segment="macro", run_date=date(2026, 6, 9)
+            model="openrouter/perplexity/sonar", segment="macro", run_date=date(2026, 6, 9)
         )
     assert out is not None
     assert out["summary"].startswith("- CPI")
@@ -45,22 +45,37 @@ def test_fetch_web_grounding_returns_summary_and_sources():
 
 
 @pytest.mark.unit
-def test_per_segment_domains_are_used_and_capped():
-    # Each phase searches its own highest-signal sources, capped at 5 domains.
-    politician = _domains_for("alt-politician-signals")
+def test_per_segment_domains_folded_into_query_and_capped():
+    # Native search has no Exa allowlist — domains are a soft preference in the query (#2567).
+    politician = _query_for("alt-politician-signals")
     assert "capitoltrades.com" in politician
-    assert len(politician) <= 5
 
-    macro = _domains_for("macro")
+    macro = _query_for("macro")
     assert "federalreserve.gov" in macro and "bls.gov" in macro
-    assert len(macro) <= 5
 
 
 @pytest.mark.unit
-def test_unmapped_segment_falls_back_to_default_allowlist():
-    domains = _domains_for("some-unmapped-segment")
-    assert "reuters.com" in domains  # the default web_allowed_websites
-    assert len(domains) <= 5
+def test_unmapped_segment_falls_back_to_default_allowlist_in_query():
+    query = _query_for("some-unmapped-segment")
+    assert "reuters.com" in query  # the default web_allowed_websites
+
+
+@pytest.mark.unit
+def test_olympus_grounding_does_not_pass_exa_params():
+    """Olympus must not assemble engine=/max_results= for the digillm Exa toolkit (#2567)."""
+    captured: dict = {}
+
+    def _or_ws(model, query, **kwargs):
+        captured["kwargs"] = kwargs
+        return ("- ok[[1]](https://u)", ["https://u"])
+
+    with patch("digigraph.llm_client.openrouter_web_search", side_effect=_or_ws):
+        web_grounding.fetch_web_grounding(
+            model="openrouter/perplexity/sonar",
+            segment="macro",
+            run_date=date(2026, 6, 9),
+        )
+    assert captured["kwargs"] == {}
 
 
 @pytest.mark.unit

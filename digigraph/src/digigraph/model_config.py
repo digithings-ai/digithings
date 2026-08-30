@@ -569,7 +569,11 @@ def _model_for_olympus_capability(capability: str, tier: str, phase_slug: str) -
 
 
 def get_grounding_model(*, segment: str = "grounding") -> str | None:
-    """Return an OpenRouter model for web-search grounding pre-passes."""
+    """Return a web-search-capable OpenRouter model for Olympus grounding pre-passes.
+
+    Pool is filtered to ``perplexity/*`` / ``:online`` only (#2567) — Olympus must
+    not ground via the digillm Exa toolkit branch.
+    """
     tier_cfg = _load_olympus_models().tiers.get(get_olympus_tier())
     if tier_cfg is None:
         return None
