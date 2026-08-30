@@ -2,6 +2,7 @@
  * Settings Edge Function handlers (T3) — extracted for Deno unit tests.
  *
  * Routes (mounted under /functions/v1/settings):
+ *   GET    /profile            — load tip olympus_profile_config (or empty defaults; no write)
  *   PATCH  /profile            — versioned olympus_profile_config append (workspace-scoped)
  *   GET    /brokers            — list fingerprints only
  *   POST   /brokers/connect    — api_key | oauth (Alpaca code exchange server-side)
@@ -94,6 +95,9 @@ export async function handleSettingsRequest(
   const path = pathOf(url);
   const method = req.method.toUpperCase();
 
+  if (method === "GET" && (path === "/profile" || path === "/profile/")) {
+    return getProfile(req, deps);
+  }
   if (method === "PATCH" && path === "/profile") {
     return patchProfile(req, deps);
   }
@@ -170,6 +174,88 @@ function isUniqueViolation(err: { code?: string; message?: string }): boolean {
   if (err.code === "23505") return true;
   const msg = (err.message ?? "").toLowerCase();
   return msg.includes("unique") || msg.includes("duplicate");
+}
+
+const DEFAULT_PROFILE_KEY = "workspace";
+
+function emptyProfileBody(
+  workspaceId: string,
+  profileKey: string,
+): Record<string, unknown> {
+  return {
+    version_id: null,
+    workspace_id: workspaceId,
+    profile_key: profileKey,
+    schema_version: 1,
+    label: "",
+    supersedes_id: null,
+    recorded_at: null,
+    investment: null,
+    assets: null,
+  };
+}
+
+function profileResponseBody(row: Record<string, unknown>): Record<string, unknown> {
+  const payload =
+    row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+      ? (row.payload as Record<string, unknown>)
+      : {};
+  return {
+    version_id: row.id ?? null,
+    workspace_id: row.workspace_id,
+    profile_key: row.profile_key,
+    schema_version: row.schema_version ?? payload.schema_version ?? 1,
+    label: typeof row.label === "string" ? row.label : String(payload.label ?? ""),
+    supersedes_id: row.supersedes_id ?? null,
+    recorded_at: row.recorded_at ?? null,
+    investment: payload.investment ?? null,
+    assets: payload.assets ?? null,
+  };
+}
+
+/**
+ * GET /profile — tip overlay for hydrate (member authz; no tier write gate).
+ * Empty contract: no tip → 200 with version_id/recorded_at null and empty label
+ * (never inserts). Optional `?profile_key=` (default `workspace`); `house` rejected.
+ */
+async function getProfile(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const rawKey = (url.searchParams.get("profile_key") ?? DEFAULT_PROFILE_KEY).trim();
+  const profileKey = rawKey || DEFAULT_PROFILE_KEY;
+  if (profileKey === HOUSE_PROFILE_KEY) {
+    return jsonError(
+      400,
+      "HOUSE_KEY_FORBIDDEN",
+      "overlay ProfileConfig cannot use the reserved house profile_key",
+    );
+  }
+  if (profileKey.length > 100) {
+    return jsonError(400, "INVALID_PROFILE_KEY", "profile_key too long");
+  }
+
+  const { data: tip, error: tipErr } = await deps.admin
+    .from("olympus_profile_config")
+    .select("id, workspace_id, profile_key, schema_version, label, supersedes_id, recorded_at, payload")
+    .eq("workspace_id", authz.workspace.id)
+    .eq("profile_key", profileKey)
+    .eq("is_house_default", false)
+    .order("recorded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (tipErr) {
+    return jsonError(503, "NOT_READY", "olympus_profile_config not available");
+  }
+
+  if (!tip) {
+    return jsonOk(emptyProfileBody(authz.workspace.id, profileKey));
+  }
+
+  return jsonOk(profileResponseBody(tip as Record<string, unknown>));
 }
 
 async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response> {
