@@ -175,9 +175,10 @@
   --sidebar-border: var(--hair);
 
   /* digichat self-hosts Geist Mono via next/font (CSP-safe). Utilitarian
-     v0.1: one mono voice for claim, body, and chrome. tokens.css still
-     ships Inter on the legacy `--font-family` slot — remap it here so
-     `.app-shell` / `.dc-term-pane` do not fall through to Inter. */
+     v0.1: one mono voice for claim, body, and chrome. tokens.css remaps
+     the legacy `--font-family` slot to `--font-sans` under [data-theme];
+     pin it to the self-hosted face here so app-shell never falls through
+     to Inter or an unloaded JetBrains stack. */
   --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-display: var(--font-mono);
@@ -669,9 +670,9 @@ body:has(.dc-embed-shell[data-wide="1"]) {
  * Phase 3 — utilitarian-terminal v0.1 local restyle.
  *
  * Shared tokens + `@digithings/web` Button `dress="chat"` already ship
- * radius 0 and ink/paper loud fill. This block (1) flattens leftover local
- * chrome and (2) restyles imported `@digithings/digichat-ui` session.css
- * (`.dc-send` still an accent-tinted 8px pill) which this app cannot edit.
+ * radius 0 and ink/paper loud fill. This block keeps imported
+ * `@digithings/digichat-ui` session chrome (`.dc-send`) ink/paper even if
+ * a consumer stylesheet order changes.
  * ------------------------------------------------------------------------- */
 .dc-send,
 .dc-stop {
