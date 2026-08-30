@@ -25,8 +25,8 @@ import {
  * Spec §5-T5 matrix + free-teaser addendum:
  *
  * | Artifact class                         | Observer (free) | Baseline | Custom |
- * | Atlas research / theses / corpus       | ✓               | ✓        | ✓      |
- * | Hermes narrative                       | ✓               | ✓        | ✓      |
+ * | Research / theses / corpus             | ✓               | ✓        | ✓      |
+ * | Portfolio narrative                    | ✓               | ✓        | ✓      |
  * | Digest summary conclusions (teaser)    | ✓               | ✓        | ✓      |
  * | Portfolio glimpse (no weights/NAV)     | ✓               | ✓        | ✓      |
  * | House weights / NAV / tearsheet / …    | —               | ✓        | ✓      |

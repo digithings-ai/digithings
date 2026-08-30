@@ -195,7 +195,7 @@ export function SnapshotEmptyBanner({
   const message =
     reason === 'unconfigured'
       ? 'Supabase credentials are not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.'
-      : 'No Atlas daily investment brief has been published for today or yesterday yet. Check back after the next pipeline run.';
+      : 'No daily investment brief has been published for today or yesterday yet. Check back after the next pipeline run.';
   return (
     <section
       data-testid="snapshot-empty"
@@ -242,7 +242,7 @@ function SnapshotContent({
           <div>
             <p className="text-sm font-semibold text-warn">Stale brief</p>
             <p className="text-xs text-ink-soft">
-              This run&apos;s Atlas digest was published {age ?? 'unknown'} (older than{' '}
+              This run&apos;s research digest was published {age ?? 'unknown'} (older than{' '}
               {DEFAULT_SNAPSHOT_STALENESS_HOURS}h).
             </p>
           </div>
@@ -257,7 +257,7 @@ function SnapshotContent({
               Daily investment brief
             </p>
             <p className="mt-0.5 text-xs text-ink-mute">
-              Atlas research digest for this run — regime, risks, and recommended actions.
+              Research digest for this run — regime, risks, and recommended actions.
             </p>
             <h2
               data-testid="snapshot-headline"

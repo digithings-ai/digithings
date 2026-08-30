@@ -14,6 +14,10 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/components/theme-provider', () => ({
+  useDashboardTheme: () => ({
+    theme: mocks.theme,
+    setTheme: mocks.setTheme,
+  }),
   useAtlasTheme: () => ({
     theme: mocks.theme,
     setTheme: mocks.setTheme,

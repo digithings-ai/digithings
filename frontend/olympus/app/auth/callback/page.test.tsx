@@ -47,6 +47,7 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('@/components/atlas-mark', () => ({
+  DashboardMark: () => createElement('span', null, 'mark'),
   AtlasMark: () => createElement('span', null, 'mark'),
 }));
 

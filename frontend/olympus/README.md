@@ -1,11 +1,11 @@
-# Olympus dashboard
+# digiquant dashboard
 
-Next.js 15 investment-intelligence dashboard for **digiquant Olympus** — the unified product surfacing both Atlas (research) and Hermes (analysis + PM). Joins the root npm workspace at `frontend/olympus/` and consumes the shared design system via
+Next.js 15 investment-intelligence dashboard for **digiquant** — research, portfolio, and execution in one operator surface (ADR-0026). The folder and public path remain `frontend/olympus` / `/olympus/` until the path wave. Joins the root npm workspace and consumes the shared design system via
 `@digithings/design` as a workspace dependency.
 
 ## Quant-native visual layer
 
-Olympus matches the digiquant.io aesthetic by importing the shared canon
+The dashboard matches the digiquant.io aesthetic by importing the shared canon
 tokens, **the** Tailwind v4 bridge (`web-theme.css`), and the quant-native +
 finance-tearsheet grammars directly in `app/globals.css`:
 
@@ -46,7 +46,7 @@ so the decomposition reconciles to portfolio return minus benchmark return.
 Performance fetches the populated approved benchmark universe from `price_history`,
 aligns each series to the NAV dates, defaults to SPY, and recomputes benchmark and
 excess return when the comparison changes.
-Olympus keeps its finance-tearsheet variants and shell print rules app-side at the
+The dashboard keeps its finance-tearsheet variants and shell print rules app-side at the
 bottom of `globals.css`.
 
 The root layout scopes the page to the digiquant accent and blueprint
@@ -63,7 +63,7 @@ background:
   `globals.css` (the design tokens are dark-only).
 - `.accent-digiquant` — sets `--accent` to the muted emerald used across
   digiquant.io. Individual routes may nest `.accent-atlas` to shift to the
-  Atlas-specific green where appropriate.
+  research-job green (`--accent-atlas`) where appropriate.
 - `.qn-metric` — tabular, mono, right-aligned numeric cells. Applied to the
   server-metrics strip; extend to additional metric sites as needed.
 - `.qn-up` / `.qn-down` — directional P&L text, re-pointed in `globals.css` to
@@ -178,7 +178,7 @@ labels while preserving the complete print view.
 
 ## Supabase / RLS
 
-Olympus reads portfolio and research data from the shared Atlas Supabase project
+The dashboard reads portfolio and research data from the shared research Supabase project
 (`digiquant/supabase/migrations/`). Migration `001_initial_schema.sql` enables
 row-level security and adds `anon_read` policies (`FOR SELECT TO anon USING (true)`)
 on core tables so the static export can query with `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
@@ -189,7 +189,7 @@ are not exposed to the browser. A production hardening path is a BFF with
 service-role credentials and restrictive RLS; that is tracked under audit REM-035/036
 and requires human product/security sign-off before changing live policies.
 
-**REM-036 (optional BFF):** set `NEXT_PUBLIC_OLYMPUS_USE_BFF=1` and host Olympus on a
+**REM-036 (optional BFF):** set `NEXT_PUBLIC_OLYMPUS_USE_BFF=1` and host the dashboard on a
 Node runtime with `GET /api/snapshots` (service-role read). Static export on
 digiquant.io cannot ship App Router API routes — `lib/snapshot-fetch.ts` keeps the
 anon path as default. See `docs/reviews/REM-deferred-ops.md`.
@@ -222,7 +222,7 @@ Cloudflare dashboard.
 
 `/settings` is a tabbed workspace — **Profile | Pipeline | Keys | Brokers | Notifications | Billing | About**.
 The 2026-06-24 Settings plan's "no accounts/login" constraint is **superseded** by the
-Kairos tenancy program: authenticated users edit versioned investment overlays, connect
+workspace tenancy program: authenticated users edit versioned investment overlays, connect
 paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
 
 - **Profile** — client JSON-schema validation (bundled v1 schemas) plus Edge Function
@@ -296,7 +296,7 @@ dynamic segment or a path-form href comes back. The `?ticker=` dossier route
 (`app/portfolio/tickers/page.tsx`) is the same pattern for the same reason.
 
 Path-form URLs (`/portfolio/theses/<id>`) are no longer served; old bookmarks land
-on the Olympus 404. Every in-app link, the command palette, and the legacy
+on the dashboard 404. Every in-app link, the command palette, and the legacy
 `/strategy?thesis=` redirect all emit the query form.
 
 ## Brief workspace
@@ -359,7 +359,7 @@ reasoning workflow without replacing their domain interactions:
   not recorded for this run"; they are never reconstructed from aggregate diagnostics.
 - Graph status is explicit: not run, state-only operation, persisted artifact, expected
   artifact missing, parallel dispatch, and stage overview (`lib/pipeline-topology-status.ts`).
-  Atlas / Hermes / Learning bands gate active chrome — research artifacts never paint Hermes
+  Research / Portfolio / Learning bands gate active chrome — research artifacts never paint Portfolio
   or Learning as run. Snapshot presence establishes that a run was recorded even when it
   published no documents (degraded reach across bands).
 - Screenshot matrix (#2645): every topology stage × desktop/mobile plus representative
@@ -379,7 +379,7 @@ Across both routes, accent and warning tokens describe workflow state and
 argument stance. `--up` and `--down` remain reserved for signed P&L or return
 values.
 
-> **Sharing / auth:** Olympus is a static export (`output: 'export'`). Product
+> **Sharing / auth:** The dashboard is a static export (`output: 'export'`). Product
 > login is **Supabase Auth** (Google + GitHub PKCE) behind
 > `NEXT_PUBLIC_OLYMPUS_AUTH=1` — see [`AUTH.md`](AUTH.md) § App auth (T1). Flag
 > off (default) keeps today's anon client. Until cutover, anon RLS
@@ -407,7 +407,7 @@ The Overview page renders a typed `SnapshotEnvelope` panel above the KPI strip
 
 ## Pipeline payload rendering
 
-The Atlas pipeline (SIMP-013) writes validated Pydantic payloads into
+The research pipeline (SIMP-013) writes validated Pydantic payloads into
 `documents.payload` and the digest into `daily_snapshots.snapshot`; the legacy
 `documents.content` and `daily_snapshots.regime` / `actionable` / `risks` /
 `market_data` / `segment_biases` columns stay null. The frontend therefore
@@ -416,7 +416,7 @@ renders from the payloads:
 - `lib/render-pipeline-payloads.ts` — markdown renderers + shape sniffers for
   the pipeline payload shapes: segment reports (`macro`, `bonds`, `equity`,
   `sector-*`, `alt-*`, `inst-*`, …), the Phase-7 master digest (`digest-delta`
-  / `digest-baseline` and the snapshot jsonb), the Hermes `pm-rebalance`
+  / `digest-baseline` and the snapshot jsonb), the portfolio `pm-rebalance`
   decision, the per-ticker bull/bear `deliberation/{ticker}` debate summaries,
   and the portfolio-level `risk-debate` (#698). Segment-specific metric fields
   render generically so new segments display without frontend changes.
@@ -440,13 +440,13 @@ operator/refresh-script territory and may still be empty.
 Instrument identity and classification come from the migration-055 `instruments` table.
 `lib/queries.ts` joins that table once per dashboard load and carries the full provider row on
 each assembled `Position`; the Holdings ledger renders `official_name` below the ticker and
-uses the canonical persisted `category`. If migration 055 is absent, Olympus falls back only
+uses the canonical persisted `category`. If migration 055 is absent, the dashboard falls back only
 to the stored `positions.name` / `positions.category` values and labels a missing category
 `unknown`; it never expands or classifies a ticker in React.
 
 ## Theme tokens
 
-Olympus declares **no** Tailwind `@theme` bridge of its own — #1402 deleted the
+The dashboard declares **no** Tailwind `@theme` bridge of its own — #1402 deleted the
 old app-local `@theme` palette (`--color-bg-primary`, `--color-text-primary`,
 `--color-fin-*`). `app/globals.css` now imports the shared bridge
 (`@digithings/web/styles/web-theme.css`) over the canon tokens

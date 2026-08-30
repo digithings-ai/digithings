@@ -14,16 +14,16 @@ import { SiteNav } from "@/components/landing/SiteNav";
 // moments below it (cmdline, init codeblock, CTAs).
 const POSTER: Record<string, { epithet: string; fine: string }> = {
   atlas: {
-    epithet: "he carries the data.",
+    epithet: "scheduled market research.",
     fine: "digiquant/src/digiquant/olympus/atlas/",
   },
   hermes: {
-    epithet: "he carries the orders.",
+    epithet: "deliberation to a sized book.",
     fine: "digiquant/src/digiquant/olympus/hermes/",
   },
   kairos: {
-    epithet: "he knows the moment.",
-    fine: "the execution stage · planned, no package yet",
+    epithet: "execution after the book.",
+    fine: "digiquant/src/digiquant/olympus/kairos/",
   },
 };
 
@@ -48,7 +48,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
       <main className="section dq-subpage">
         <div className="wrap" style={{ maxWidth: 820 }}>
           <p style={{ fontFamily: "var(--font-mono)", fontSize: ".8rem", color: "var(--ink-mute)", marginBottom: "1.4rem" }}>
-            <Link href="/#pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</Link> / {s.id}
+            <Link href="/#pipeline" style={{ color: "var(--ink-soft)" }}>pipeline</Link> / {s.name.toLowerCase()}
           </p>
           {/* Entrance on the page head only (#1450 polish, flagship grammar):
               breadcrumb and body stay static so content never gates on scroll;
@@ -91,7 +91,7 @@ export default async function SubsystemPage({ params }: { params: Promise<{ id: 
           <pre className="codeblock">{s.initSnippet.code}</pre>
 
           <div style={{ display: "flex", gap: ".75rem", flexWrap: "wrap", marginTop: "2rem" }}>
-            <a className="btn btn-primary" href="/olympus/">Open Olympus <span aria-hidden="true">→</span></a>
+            <a className="btn btn-primary" href="/olympus/">Open dashboard <span aria-hidden="true">→</span></a>
             <a className="btn btn-ghost" href="https://github.com/digithings-ai" target="_blank" rel="noopener noreferrer">Source</a>
           </div>
 

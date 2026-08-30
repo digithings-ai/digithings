@@ -86,7 +86,7 @@ export interface BenchmarkComparison {
 
 export type PerformanceReturnsSource = 'persisted' | 'derived' | 'mixed' | 'unavailable';
 
-export interface OlympusTearsheet {
+export interface PerformanceTearsheet {
   currentNav: number | null;
   netReturnPct: number | null;
   benchmarkReturnPct: number | null;
@@ -103,6 +103,9 @@ export interface OlympusTearsheet {
   currentHoldings: PerformanceHoldingRow[];
   historicalHoldings: PerformanceHoldingRow[];
 }
+
+/** @deprecated Use PerformanceTearsheet. One-release alias (ADR-0026 wave 3). */
+export type OlympusTearsheet = PerformanceTearsheet;
 
 /** Compact card summary in `strategies/index.json` (the library manifest). */
 export interface StrategyIndexEntry {

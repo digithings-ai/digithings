@@ -2,36 +2,42 @@ import type { ReactNode } from "react";
 
 /**
  * Brand marks — promoted from the design reference (symbols/marks) as pure,
- * props-driven components. The four-stroke olympus signature was previously
- * copied verbatim in four places (olympus atlas-mark.tsx + AtlasLoader.tsx,
- * digiquant-web's OlympusMark, the reference specimen) — this file is the
+ * props-driven components. The four-stroke digiquant signature was previously
+ * copied verbatim in four places (dashboard atlas-mark.tsx + AtlasLoader.tsx,
+ * digiquant-web's DigiquantMark, the reference specimen) — this file is the
  * canonical copy. Everything draws in currentColor so a mark inherits the
  * ink/accent of its livery scope. No CSS ships with this family: the marks
  * are pure SVG/text; stroke-draw loader animations stay in the consuming
  * app's CSS, targeted through `strokeClassPrefix`.
+ *
+ * CSS class prefixes (`olympus-mark`, `olympus-stroke`) stay until the path
+ * wave; they are not user-visible. `OlympusMark` is a one-release alias.
  */
 
-export type OlympusMarkProps = {
+export type DigiquantMarkProps = {
   size?: number;
   className?: string;
   /** Accessible name (renders a <title> + role="img"); omitted → decorative. */
   title?: string;
   /**
    * Per-path class hook for stroke-draw animations: each stroke gets
-   * `${prefix} ${prefix}-N` (N = 1..4, outer arc last). The olympus
-   * dashboard's loader keys its draw keyframes off "atlas-loader-stroke";
-   * the reference / digiquant hover replay uses the default
+   * `${prefix} ${prefix}-N` (N = 1..4, outer arc last). The dashboard
+   * loader keys its draw keyframes off "atlas-loader-stroke";
+   * the reference / landing hover replay uses the default
    * "olympus-stroke".
    */
   strokeClassPrefix?: string;
 };
 
-export function OlympusMark({
+/** @deprecated Use DigiquantMarkProps. */
+export type OlympusMarkProps = DigiquantMarkProps;
+
+export function DigiquantMark({
   size = 22,
   className,
   title,
   strokeClassPrefix = "olympus-stroke",
-}: OlympusMarkProps) {
+}: DigiquantMarkProps) {
   const strokeClass = (n: number) => `${strokeClassPrefix} ${strokeClassPrefix}-${n}`;
   return (
     <svg
@@ -80,6 +86,9 @@ export function OlympusMark({
     </svg>
   );
 }
+
+/** @deprecated Use DigiquantMark. One-release alias (ADR-0026 wave 3). */
+export const OlympusMark = DigiquantMark;
 
 export type WordmarkProps = {
   /**

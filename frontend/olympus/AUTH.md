@@ -1,6 +1,6 @@
-# Olympus access gating
+# digiquant dashboard access gating
 
-The Olympus dashboard at `digiquant.io/olympus/` is a **static export** (D6) that
+The digiquant dashboard at `digiquant.io/olympus/` is a **static export** (D6) that
 reads Supabase with the **publishable anon key baked into the JS bundle**. Until
 app auth cutover, every relevant table still has an `anon` RLS policy of
 `USING (true)`, so **anyone with the URL can read all published data**. The anon
@@ -75,7 +75,7 @@ coordinated cutover below — do **not** treat Auth-UI-on as full tenancy cutove
 1. Merge T0 workspaces/RLS (incl. drafted anon-policy drop) when ready.
 2. Confirm `NEXT_PUBLIC_OLYMPUS_AUTH=1` on the digiquant.io Cloudflare Pages build
    (or leave unset so `build-digiquant.sh` defaults it on under `CF_PAGES=1`).
-3. Redeploy the static Olympus bundle.
+3. Redeploy the static dashboard bundle.
 4. Apply cutover SQL `900_*` only after Access + Auth UI plan (never auto).
 5. Owner removes Cloudflare Access from production `/olympus/*` (D7).
 6. Keep Access on **staging** only (below).
@@ -94,7 +94,7 @@ owned); do not encode it in this repo.
 
 1. Cloudflare dashboard → **Zero Trust → Access → Applications → Add an
    application → Self-hosted**.
-2. Point it at the **staging** hostname / path for Olympus (not production
+2. Point it at the **staging** hostname / path for the dashboard (not production
    digiquant.io after cutover).
 3. **Add a policy** → Action **Allow** → Include **Emails** (or domain) for the
    staging allow-list.
@@ -117,7 +117,7 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 - **Next.js route handlers / server components for OAuth** — forbidden under
   `output: 'export'` (D6). PKCE completes in the browser on static pages.
 - **digikey for end-user login** — digikey remains the machine/API plane (D4);
-  Olympus consumer identity is Supabase Auth.
+  dashboard consumer identity is Supabase Auth.
 
 ## Status
 
