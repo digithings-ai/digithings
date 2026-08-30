@@ -763,10 +763,12 @@ Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
 `instruments`) are untouched. Overlay must not upsert `daily_snapshots`.
 **Documents** may persist under `OLYMPUS_OVERLAY_PERSIST=1` after 110.
 **positions / nav_history / ledger** stay refused (`legacy_book_unique`) while
-097's legacy `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
-069's `uq_portfolio_ledger_commits_one_root (run_date)` remain — house writers
-still upsert `on_conflict=date`, so an overlay same-date row would collide or
-be rewritten. This is **not** cutover 900: anon can still read house weights/NAV.
+097's leftover `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
+069's `uq_portfolio_ledger_commits_one_root (run_date)` remain. House writers on
+`develop` already upsert the widened `(workspace_id, …)` targets; the leftover
+097 keys still reject a second workspace's same-date row. Do not drop those
+keys on `core` until `main` house GHA writers are also widened. This is **not**
+cutover 900: anon can still read house weights/NAV.
 Proof: `tests/dq/olympus/test_migration_110_anon_house_only.py` and
 `tests/dq/olympus/overlay/test_persist.py`.
 

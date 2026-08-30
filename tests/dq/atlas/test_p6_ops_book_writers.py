@@ -176,3 +176,32 @@ class TestLegacyConflictTargetsGone:
         assert 'portfolio_metrics").upsert([metrics], on_conflict="date")' not in tear
         sync = (_SCRIPTS / "sync_positions_from_rebalance.py").read_text(encoding="utf-8")
         assert 'on_conflict="date,ticker"' not in sync
+
+
+class TestPositionEntryFromEvents:
+    def test_first_open_add_mark_ignores_non_house_rows(self) -> None:
+        pe = _load("position_entry_from_events")
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        sb = FakeSupabaseClient(
+            canned_reads={
+                "position_events": [
+                    {
+                        "workspace_id": overlay,
+                        "date": "2026-08-01",
+                        "ticker": "IAU",
+                        "event": "OPEN",
+                        "price": 99.0,
+                    },
+                    {
+                        "workspace_id": _HOUSE,
+                        "date": "2026-08-10",
+                        "ticker": "IAU",
+                        "event": "OPEN",
+                        "price": 42.0,
+                    },
+                ]
+            }
+        )
+        ed, px = pe.first_open_add_mark(sb, "IAU", "2026-08-31")
+        assert ed == "2026-08-10"
+        assert px == 42.0
