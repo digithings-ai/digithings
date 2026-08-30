@@ -64,6 +64,21 @@ export function loadPriceTierEnv(
   };
 }
 
+/** Env var name for a paid Checkout price — used in PRICE_NOT_CONFIGURED messages. */
+export function priceEnvKey(
+  tier: Extract<PlanTier, "baseline" | "custom">,
+  interval: "monthly" | "annual",
+): string {
+  if (tier === "baseline") {
+    return interval === "monthly"
+      ? "STRIPE_PRICE_BASELINE_MONTHLY"
+      : "STRIPE_PRICE_BASELINE_ANNUAL";
+  }
+  return interval === "monthly"
+    ? "STRIPE_PRICE_CUSTOM_MONTHLY"
+    : "STRIPE_PRICE_CUSTOM_ANNUAL";
+}
+
 /**
  * Map a Stripe Price id to plan_tier. Unknown / empty ⇒ `free` (safe downgrade).
  * Deleted/canceled subscriptions must call this with null / use `free` directly.

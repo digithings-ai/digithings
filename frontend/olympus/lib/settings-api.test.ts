@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   connectBrokerApiKey,
+  getNotifications,
+  getProfile,
   isBillingConfigured,
   saveProfile,
   SettingsHttpError,
@@ -72,6 +74,62 @@ describe('settings-api', () => {
     expect(sent.env).toBe('paper');
     expect(row.fingerprint).toBe('abcd1234');
     expect(JSON.stringify(row)).not.toContain(secret);
+  });
+
+  it('getNotifications GETs prefs and returns empty-contract shape', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toContain('/settings/notifications');
+      expect(init?.method).toBe('GET');
+      return new Response(
+        JSON.stringify({
+          workspace_id: 'ws-a',
+          email: 'pm@example.com',
+          daily_digest: false,
+          holding_change_alerts: false,
+          execution_alerts: false,
+          digest_hour_utc: 12,
+          updated_at: null,
+        }),
+        { status: 200 },
+      );
+    });
+    const prefs = await getNotifications({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(prefs.updated_at).toBeNull();
+    expect(prefs.digest_hour_utc).toBe(12);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it('getProfile GETs tip and returns empty-contract shape', async () => {
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      expect(String(url)).toContain('/settings/profile');
+      expect(init?.method).toBe('GET');
+      return new Response(
+        JSON.stringify({
+          version_id: null,
+          workspace_id: 'ws-a',
+          profile_key: 'workspace',
+          schema_version: 1,
+          label: '',
+          supersedes_id: null,
+          recorded_at: null,
+          investment: null,
+          assets: null,
+        }),
+        { status: 200 },
+      );
+    });
+    const tip = await getProfile({
+      accessToken: 'tok',
+      functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    expect(tip.version_id).toBeNull();
+    expect(tip.profile_key).toBe('workspace');
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it('maps 409 to SettingsHttpError', async () => {

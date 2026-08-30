@@ -71,7 +71,9 @@ export function resolveSourceTitle(
 export function ragToolDisplayName(tool: unknown): string {
   const t = typeof tool === "string" ? tool.trim() : "";
   if (!t || t === "rag_sources") return "digisearch";
-  if (t === "digivault_search_notes" || t === "digivault") return "digivault";
+  if (t === "digivault_search_notes") return "digivault_search_notes";
+  if (t === "digivault_get_note") return "digivault_get_note";
+  if (t === "digivault") return "digivault";
   if (t === "digithings_docs" || t.startsWith("digisearch")) return "digisearch";
   return t.slice(0, MAX_DOC_FIELD_CHARS);
 }

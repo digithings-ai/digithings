@@ -40,6 +40,19 @@ export type ProfileSaveResult = {
   recorded_at: string;
 };
 
+/** GET /profile tip (or empty contract when no tip yet). */
+export type ProfileTip = {
+  version_id: string | null;
+  workspace_id: string;
+  profile_key: string;
+  schema_version: number;
+  label: string;
+  supersedes_id: string | null;
+  recorded_at: string | null;
+  investment: Record<string, unknown> | null;
+  assets: Record<string, unknown> | null;
+};
+
 export type SettingsApiOptions = {
   /** Absolute or relative functions base, e.g. https://xxx.supabase.co/functions/v1 */
   functionsBaseUrl?: string;
@@ -101,6 +114,17 @@ async function request<T>(
     });
   }
   return json as T;
+}
+
+export async function getProfile(
+  opts: SettingsApiOptions,
+  args?: { workspaceId?: string; profileKey?: string },
+): Promise<ProfileTip> {
+  const params = new URLSearchParams();
+  if (args?.workspaceId) params.set('workspace_id', args.workspaceId);
+  if (args?.profileKey) params.set('profile_key', args.profileKey);
+  const q = params.toString() ? `?${params.toString()}` : '';
+  return request<ProfileTip>(opts, 'GET', `/settings/profile${q}`);
 }
 
 export async function saveProfile(
@@ -170,6 +194,25 @@ export async function revokeBroker(
   return request<BrokerConnectionView>(opts, 'POST', '/settings/brokers/revoke', payload);
 }
 
+export type NotificationPrefs = {
+  workspace_id: string;
+  email: string;
+  daily_digest: boolean;
+  holding_change_alerts: boolean;
+  execution_alerts: boolean;
+  digest_hour_utc: number;
+  /** null when no persisted row yet (GET empty contract). */
+  updated_at: string | null;
+};
+
+export async function getNotifications(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<NotificationPrefs> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  return request<NotificationPrefs>(opts, 'GET', `/settings/notifications${q}`);
+}
+
 export async function patchNotifications(
   opts: SettingsApiOptions,
   payload: {
@@ -180,8 +223,8 @@ export async function patchNotifications(
     digest_hour_utc?: number;
     workspace_id?: string;
   },
-): Promise<Record<string, unknown>> {
-  return request(opts, 'PATCH', '/settings/notifications', payload);
+): Promise<NotificationPrefs> {
+  return request<NotificationPrefs>(opts, 'PATCH', '/settings/notifications', payload);
 }
 
 export async function createCheckoutSession(

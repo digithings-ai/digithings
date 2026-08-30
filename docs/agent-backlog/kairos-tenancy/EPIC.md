@@ -47,7 +47,7 @@ Wave E
 ## Program-level acceptance
 
 - [x] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
-- [x] RLS proof (pre-cutover harness vs canonical 001–105 + staged 900: 61/61; post-T1 anon-drop still human §6): user A cannot read user B's private rows on any tenant table; anon reads zero private rows post-T1.
+- [x] RLS proof (pre-cutover harness vs canonical 001–106 + staged 900: 59/59 this turn; post-T1 anon-drop still human §6): user A cannot read user B's private rows on any tenant table; anon reads zero private rows post-T1.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
 - [x] No live `submit_order` reachable without env flag + human-gated code path (test-pinned).
@@ -63,20 +63,28 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30)
+## Agent delivery status (2026-08-30, Auth Pages)
 
-**Code:** all 12 WPs merged to `develop` (promotion #3141).
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca; prod Auth login awaits merge to `main`). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-auth-pages.md`.  
+**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md). Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
-**Schema (`core`):** migrations 096–105 applied + stamped in `olympus_schema_migrations`. Cutover 900 **not** applied.
+**Auth Pages (T1 deploy gap):** Prod `/olympus/login` **404** because login routes never landed on `main` (Pages @ `980e3e18`). Narrow branch **`cursor/olympus-auth-pages-e036`** → `main` (T1 cherry-pick + CF_PAGES AUTH default + export asserts; **no** cutover 900). Compare: https://github.com/digithings-ai/digithings/compare/main...cursor/olympus-auth-pages-e036. **Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183)** for this gap. Local AUTH=1 `/olympus/login/` → **200**. Docs/audit branch: `cursor/kairos-auth-pages-audit-e036`.
 
-**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (code deployed; runtime awaits Stripe secrets). `settings` ACTIVE as NOT_READY placeholder — full `_shared` redeploy still required. `prices-live` pre-existing.
+**Code:** all 12 WPs on `develop` + notify `MAILGUN_NOT_CONFIGURED` loud-fail CLI. Prior: `PRICE_NOT_CONFIGURED` / `OAUTH_NOT_CONFIGURED` + `scripts/kairos_staging_e2e.py`.
 
-**Olympus build:** green (flag off, static export check).
+**Schema (`core`):** migrations **096–107** applied. Cutover **900 not applied**.
 
-**Acceptance evidence:**
-- House regression: `pytest -m unit tests/dq/olympus/ tests/dq/brokers/ tests/dq/notify/ tests/integration/test_kairos_tenancy_chain.py` → 659 passed (artifact `house-regression-acceptance.log`).
-- Live venue gates: kairos router live/kill probes → 4 passed (`live-venue-gates.log`).
-- RLS isolation harness: 61/61 PASS against canonical chain (`rls_isolation_proof.log`).
-- E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **blocked** on human secrets (§ Human-owned prerequisites).
+**Edge Functions (`core`):** `settings` **v22 ACTIVE**; `create-checkout-session` **v5 ACTIVE**; billing EFs await Stripe secrets.
 
-**Human blockers (unchanged):** Stripe test keys/prices/webhook secret, Mailgun, Auth providers (Google+GitHub), `DIGIQUANT_VAULT_MASTER_KEY`, Alpaca OAuth app, IBKR vendor email, legal read before live epic.
+**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET/PATCH **200**; checkout **`PRICE_NOT_CONFIGURED`**.
+
+**Secrets (names only):**
+- **`sbp_` path unlocked** — Management API lists **12** EF names (no vendor).
+- Agentmail: **no** human-pasted Stripe/Mailgun/Alpaca/Google secrets.
+- **Still empty / blocked:** Mailgun (MCP auth fail), Stripe, Google OAuth, Alpaca OAuth.
+- **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
+- **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2**; notify `--require-mailgun` → exit **2**.
+
+**Closest real chain (NOT staging E2E):** Agentmail Auth → settings 200s → ops Custom (≠ Stripe) → `TIER_FORBIDDEN` on free → vault seal → notify prefs→Agentmail → overlay/router units + local Auth Login UI. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
+
+**Do not mark epic complete** until staging E2E + prod Auth Pages smoke + human/legal/IBKR gates clear.

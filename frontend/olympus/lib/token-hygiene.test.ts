@@ -38,4 +38,25 @@ describe('canon token hygiene (#1402)', () => {
     });
     expect(offenders).toEqual([]);
   });
+
+  it('olympus core has no glass-card class (tonal slabs are .oly-slab)', () => {
+    const appFiles = walk(join(__dirname, '..', 'app'));
+    const core = [...files, ...appFiles].filter((f) => !/\.test\.tsx?$/.test(f));
+    const offenders = core.filter((f) => {
+      const stripped = readFileSync(f, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/\/\/.*$/gm, '');
+      return /\bglass-card\b/.test(stripped);
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('dashboard chrome has no rounded-sm/md/lg/xl (true circles may keep rounded-full)', () => {
+    const chrome = /\brounded-(?:sm|md|lg|xl|2xl|3xl|4xl)\b/;
+    const offenders = files
+      .filter((f) => !/\.test\.tsx?$/.test(f))
+      .filter((f) => chrome.test(readFileSync(f, 'utf8')));
+    expect(offenders).toEqual([]);
+  });
 });

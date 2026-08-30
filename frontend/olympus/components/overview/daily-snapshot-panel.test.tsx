@@ -170,19 +170,20 @@ describe('DailySnapshotPanel — empty / error states', () => {
 
 describe('DailySnapshotPanel — opt-in flat presentation', () => {
   it('preserves card defaults while allowing embedded flat states', () => {
-    expect(render(createElement(SnapshotSkeleton))).toContain('glass-card');
-    expect(render(createElement(SnapshotSkeleton, { flat: true }))).not.toContain('glass-card');
+    expect(render(createElement(SnapshotSkeleton))).toContain('oly-slab');
+    expect(render(createElement(SnapshotSkeleton, { flat: true }))).not.toContain('oly-slab');
+    expect(render(createElement(SnapshotSkeleton))).not.toContain('glass-card');
 
     expect(
       render(createElement(SnapshotErrorBanner, { message: 'offline', onRetry: () => undefined })),
-    ).toContain('glass-card');
+    ).toContain('oly-slab');
     expect(
       render(createElement(SnapshotErrorBanner, {
         message: 'offline',
         onRetry: () => undefined,
         flat: true,
       })),
-    ).not.toContain('glass-card');
+    ).not.toContain('oly-slab');
     expect(
       render(createElement(SnapshotErrorBanner, {
         message: 'offline',
@@ -191,10 +192,11 @@ describe('DailySnapshotPanel — opt-in flat presentation', () => {
       })),
     ).not.toContain('text-down');
 
-    expect(render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row' }))).toContain('glass-card');
+    expect(render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row' }))).toContain('oly-slab');
     expect(
       render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row', flat: true })),
-    ).not.toContain('glass-card');
+    ).not.toContain('oly-slab');
+    expect(render(createElement(SnapshotEmptyBanner, { reason: 'no_recent_row' }))).not.toContain('glass-card');
   });
 
   it('renders actionable and risk collections as flat ledgers when embedded', () => {

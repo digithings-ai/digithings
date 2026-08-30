@@ -29,7 +29,7 @@ export function DivergencePanelBody({ divergence }: { divergence: FxConsensusDiv
         </p>
       </div>
 
-      <section className="space-y-2 rounded-lg border border-hair bg-term-bg p-4">
+      <section className="space-y-2 rounded-none border border-hair bg-term-bg p-4">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
           Twelve-x consensus
         </h4>
@@ -42,7 +42,7 @@ export function DivergencePanelBody({ divergence }: { divergence: FxConsensusDiv
         </p>
       </section>
 
-      <section className="space-y-2 rounded-lg border border-hair bg-term-bg p-4">
+      <section className="space-y-2 rounded-none border border-hair bg-term-bg p-4">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
           PMT Smart Bias
         </h4>
@@ -58,7 +58,7 @@ export function DivergencePanelBody({ divergence }: { divergence: FxConsensusDiv
           <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
             Raw snapshot
           </h4>
-          <pre className="max-h-64 overflow-auto rounded-lg border border-hair bg-surface p-3 text-[10px] leading-relaxed text-ink-soft">
+          <pre className="max-h-64 overflow-auto rounded-none border border-hair bg-surface p-3 text-[10px] leading-relaxed text-ink-soft">
             {rawJson}
           </pre>
         </section>
@@ -85,7 +85,7 @@ export default function DivergencePanel({
           <SheetTitle className="sr-only">{divergence.currency} divergence</SheetTitle>
           <SheetClose
             type="button"
-            className="ml-auto rounded-md p-1 text-ink-mute hover:text-ink"
+            className="ml-auto rounded-none p-1 text-ink-mute hover:text-ink"
             aria-label="Close divergence panel"
           >
             <X size={18} />

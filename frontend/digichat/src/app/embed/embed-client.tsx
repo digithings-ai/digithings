@@ -925,7 +925,6 @@ function PaywallCard({
           type="button"
           size="sm"
           onClick={() => setShowBYOK(true)}
-          style={{ backgroundColor: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           <Key className="mr-1.5 size-3.5" />
           Bring your own key
@@ -935,7 +934,7 @@ function PaywallCard({
           target="_blank"
           rel="noreferrer noopener"
           onClick={() => emit("embed_open_full_chat", {})}
-          className="inline-flex items-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          className="inline-flex items-center rounded-none border border-border bg-transparent px-3 py-1.5 text-sm font-medium hover:bg-muted"
         >
           <ExternalLink className="mr-1.5 size-3.5" />
           Open digichat

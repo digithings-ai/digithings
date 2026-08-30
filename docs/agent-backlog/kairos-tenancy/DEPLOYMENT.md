@@ -4,6 +4,7 @@
 > order when promoting the program to the live `core` Supabase project and
 > digiquant.io. Cross-links:
 > [EPIC](EPIC.md) ·
+> [HUMAN-UNBLOCK](HUMAN-UNBLOCK.md) (ordered secret → EF → Auth → Stripe → Alpaca → flag) ·
 > [issue pack README](README.md) ·
 > [implementation spec](../../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md)
 > (D1–D10 locked).
@@ -40,17 +41,27 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 | 103 | `notification_prefs` + `notification_log` | K5 | stamped (fixed function name) |
 | 104 | `workspace_provider_credentials` (BYOK) | T4 | stamped |
 | 105 | `documents.workspace_id` | T4 | stamped |
+| 106 | align prefs/log to canonical 103 columns | K5/T3 | **applied 2026-08-30** (empty-table rebuild; 103 IF NOT EXISTS had no-op'd on drift) |
 | (cutover) | staged `migrations/cutover/900_…` | human | **not applied** |
 
 ### Remaining (human / production gates)
 
 ```
 §5 secrets + Auth providers + Stripe/Mailgun/Alpaca apps
-  → Edge Function deploys (§3)
-  → develop → main (Pages rebuild; db-migrate will no-op 096–105 already stamped)
+  → Edge Function secrets (needs sbp_) + optional full monorepo settings redeploy
+  → develop → main Pages promote (flag-off; no cutover 900) — human release gate (~199 commits)
   → §6 cutover (Access on → flag flip → anon-drop 900 → verify → Access off)
 ```
 
+### Pages promote prep (2026-08-30, post-#3181)
+
+| Item | Status |
+|------|--------|
+| `NEXT_PUBLIC_OLYMPUS_AUTH` | Narrow Auth Pages PR defaults **on** under `CF_PAGES=1` when unset (UI gate only; anon RLS remains). Set `=0` to force classic shell. Full tenancy still needs cutover `900` (human, §6) |
+| Cutover `900` | **Not applied**; stays under `migrations/cutover/` (not top-level) |
+| Branch | `cursor/promote-kairos-pages-3d52` = `origin/develop` tip (`f92a8810`, merge of #3181) |
+| Draft PR develop→main | **Not opened** — agent `gh` token can merge/ready existing PRs + push branches, but **cannot** `createPullRequest` / comment / label (`Resource not accessible by integration`). **Parent:** open draft PR `base=main` `head=cursor/promote-kairos-pages-3d52` (title/body recipe in `COMPLETION_AUDIT.md`). |
+| Review hatches | Findings drafted under `/opt/cursor/artifacts/kairos-reviews/pr-*-review.md` for #3147–#3181; **not posted** — same token 403. Parent with write token: post each body (must start with `<!-- in-session-review -->`) then `gh pr edit N --add-label reviewed:agent`. |
 ---
 
 ## 2. DB migrations 096–105 — apply path
@@ -115,15 +126,22 @@ ORDER BY version;
 
 ## 3. Edge Function deploys
 
-### Live status on `core` (2026-08-30)
+### Live status on `core` (2026-08-30, sbp unlock + settings v18)
 
 | Function | Status | Notes |
 |----------|--------|-------|
-| `prices-live` | ACTIVE | Pre-existing |
-| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
+| `prices-live` | ACTIVE v8 | Pre-existing |
+| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Awaits `STRIPE_WEBHOOK_SECRET` — unauth POST → `STRIPE_NOT_CONFIGURED` |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE (placeholder v1) | Returns `503 NOT_READY` until vault secret + **full** shared-source redeploy (`supabase functions deploy settings` with `_shared/*`); payload at `/opt/cursor/artifacts/SETTINGS_DEPLOY_NOW.json` |
+| `settings` | ACTIVE **v18** | Workspace `plan_tier` entitlement gate (#3196) + GET `/profile` + GET `/notifications` hydrate + PATCH. Smoke: missing/invalid JWT → gateway `401` (`settings-v18-smoke.log`). EF secrets set: `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (Alpaca/Stripe/Mailgun still absent). Migration `106` stamped on `core`.
+
+### Schema alignment (agent, 2026-08-30)
+
+`103` was stamped while live tables already existed under a **different** column set
+(`digest_enabled` / …). Empty tables were rebuilt to canonical 103 via
+`106_notification_prefs_align_canonical.sql` (applied + stamped on `core`).
+SQL prefs upsert smoke succeeded (service-role path).
 
 ### Deploy commands
 
@@ -214,19 +232,36 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 
 ---
 
-## 5. Human-owned prerequisites
+## 5. Prerequisites — agent progress vs still blocked (names only)
 
-| Prerequisite | Owner action | Blocks |
-|--------------|--------------|--------|
-| Stripe products + price ids (Baseline / Custom, monthly + annual) + `STRIPE_SECRET_KEY` + webhook signing secret | Stripe Dashboard (test mode first) | T2 Edge Functions; checkout/portal; claim sync |
-| Mailgun API key fix + sending domain | Mailgun control panel; set `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` on runners | K5 digest / alerts |
-| Supabase Auth providers (Google, GitHub) on `core` + redirect URLs | Supabase Auth → Providers / URL config | T1 login when flag on |
-| Vault master key | `openssl rand -base64 32` → `DIGIQUANT_VAULT_MASTER_KEY` (optional `DIGIQUANT_VAULT_KEY_ID=v1`) | K3 seal/unseal; `settings` broker connect; T4 BYOK |
-| Alpaca Connect / OAuth app (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | Alpaca developer dashboard; redirect `{APP_URL}/olympus/settings/brokers/callback/` | Product broker connect (K1 unit tests mock) |
-| IBKR vendor / OAuth 1.0a onboarding email | Email IBKR; longest pole | K2 live verify; paper orders remain flag-gated off |
-| Cloudflare Access (D7) | Keep prod `/olympus/*` Access **on** through flag flip + anon-drop + verification; remove only as the last §6 step; retain staging overlay | Ungated prod URL while weight/NAV paths still open |
-| Legal read on adviser status | Counsel | Any **live** trading epic (out of this program) |
+> **Human action order:** follow [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) (Cursor env
+> secrets → EF secrets → redeploy → Auth providers → Stripe webhook → paper Alpaca →
+> flag cutover). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183)
+> until secrets are live and cutover is intentional.
+>
+> Secret **values** live in VM `.env` / `.local/secrets/` (gitignored) and must be
+> copied into Supabase EF secrets + Cursor environment secret store. Never commit values.
 
+| Prerequisite | Status (2026-08-30) | Blocks |
+|--------------|---------------------|--------|
+| Vault master key `DIGIQUANT_VAULT_MASTER_KEY` + `DIGIQUANT_VAULT_KEY_ID` | **SET in VM `.env`** and **pushed to `core` EF secrets** (2026-08-30 via `sbp_` + `supabase secrets set`). | K3 seal; settings brokers; T4 BYOK at runtime |
+| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET in VM** → `http://127.0.0.1:3001` and **pushed to `core` EF secrets**. | OAuth redirect pin; checkout return URLs |
+| Agent Mail inbox | **Available:** `digithings@agentmail.to` | Signup verification |
+| Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
+| Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty Mailgun into EF secrets when obtained. | K5 digest / alerts |
+| Supabase Auth providers (Google, GitHub) on `core` | **Partial** — **GitHub Enabled** (OAuth App `digiquant olympus` + callback). Site URL `https://digiquant.io` + Olympus `/olympus/auth/callback/` allow-list. **Google Disabled** (skipped captcha console). | T1 login when flag on (GitHub path ready; Google still human) |
+| Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; no API secrets to push. | Product broker connect |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Unlocked (agent VM)** — PAT rotated via **recreate+revoke**: new token labeled **cursor cloud agent**; old kairos-named token revoked. Local file `.local/secrets/cursor-cloud-agent-supabase-pat` updated; Management API `secrets list` OK (12 names). EF vault/`APP_URL` intact; settings **v18** ACTIVE. **Human:** re-paste **new** `sbp_…` into Cursor env as **cursor cloud agent** (old paste invalid). | EF secrets; CLI deploy |
+| IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
+| Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
+| Legal read on adviser status | Human / counsel | Any **live** trading epic |
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) … [#3181](https://github.com/digithings-ai/digithings/pull/3181) | **Merged** to `develop` (2026-08-30; tip `f92a8810`) | notifications + schema/docs + audits; settings EF was **v11** |
+| PR [#3184](https://github.com/digithings-ai/digithings/pull/3184) | **Merged** to `develop` (2026-08-30; tip `732a77d0`) | GET `/notifications` + NotifyTab hydrate; settings EF **v12** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
+| PR [#3187](https://github.com/digithings-ai/digithings/pull/3187) | **Merged** to `develop` (2026-08-30; tip `17a84b30`) | GET `/profile` + ProfileTab hydrate; settings EF **v13** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
+| PR [#3196](https://github.com/digithings-ai/digithings/pull/3196) | **Merged** to `develop` (2026-08-30; tip `5b526914`) | Settings entitlement prefers `workspaces.plan_tier` (no JWT fail-open); settings EF **v14** thin pin; smoke 401. No `sbp_` / no EF secrets. |
+| Agent unlock (2026-08-30) | **Partial** — `sbp_` + vault/APP_URL + settings **v22** + checkout **v5** + GitHub Auth + Agentmail + bootstrap (mig 107) + loud-fail `scripts/kairos_staging_e2e.py`; JWT settings **200**; uuid-bind [#3225](https://github.com/digithings-ai/digithings/pull/3225) merged | Waiting `PARTIAL_UNLOCK`. Checkout `PRICE_NOT_CONFIGURED`. Vendors still empty. #3183 left draft. |
+| Live-retry (2026-08-30) | **Partial** — re-scan 0 vendor EF secrets; free→`TIER_FORBIDDEN`→ops custom; vault seal; notify prefs→Agentmail; `MAILGUN_NOT_CONFIGURED` CLI; overlay/router 45 unit; local Olympus Auth+GitHub OAuth UI | Staging E2E still blocked. Branch `cursor/kairos-live-retry-3d52`. Audit `/opt/cursor/artifacts/kairos-completion-audit-live-retry.md`. |
+| PR [#3183](https://github.com/digithings-ai/digithings/pull/3183) | **Draft** promote `develop`→`main` | **Do not merge** until secrets live **and** intentional Pages cutover. |
 ---
 
 ## 6. Cutover checklist
@@ -314,19 +349,29 @@ Document the chosen approach on the epic before re-exposing the views.
 
 Per [EPIC.md](EPIC.md) program-level acceptance (staging / Stripe test mode):
 
+Agent-runnable loud-fail gate (names missing secrets; **never** paper-fakes):
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+# or: pytest -m staging_e2e tests/dq/olympus/kairos/test_staging_e2e.py
+```
+
+Full manual chain once secrets land on Cursor env **and** core EF:
+
 ```bash
 # Skeleton — fill URLs/keys from staging; do not commit secrets.
 set -euo pipefail
-BASE_URL="${BASE_URL:-https://staging.example/olympus}"
-# 1) Signup / login (Supabase Auth Google or GitHub) — manual browser or supabase-js
+SUPABASE_FUNCTIONS="${SUPABASE_FUNCTIONS:-https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1}"
+# 1) Signup / login (Supabase Auth GitHub or Email/Agentmail) — manual browser or supabase-js
 # 2) Subscribe (Stripe test Checkout → Baseline or Custom)
 curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -H "Authorization: Bearer $USER_JWT" \
   -H "Content-Type: application/json" \
-  -d '{"price_env":"STRIPE_PRICE_BASELINE_MONTHLY"}'
+  -d '{"tier":"baseline","interval":"monthly"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
-# 3) Connect Alpaca paper (Settings → brokers; OAuth or API key)
+# 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
 # 4) Overlay run (T4): trigger workspace overlay job; assert job_runs row
+#    (private persist needs OLYMPUS_OVERLAY_PERSIST=1 only after cutover 900)
 # 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
 # 6) Mirrored fill: broker_executions row; broker_position_snapshots updated
 # 7) Digest email (K5): enable notification_prefs.daily_digest; run

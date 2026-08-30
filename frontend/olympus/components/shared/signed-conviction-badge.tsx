@@ -9,7 +9,7 @@ export function SignedConvictionBadge({ value }: { value: number }) {
   const tone = value < 0 ? 'text-down border-down/35' : 'text-up border-up/35';
   return (
     <span
-      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums ${tone}`}
+      className={`inline-flex items-center border px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums ${tone}`}
     >
       {sign}
       {Math.abs(value)}

@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
@@ -80,12 +82,30 @@ describe('TwelveXUnavailable', () => {
     // How-it-works stays reachable while the feed is down; the unavailable
     // state is content-only and flat.
     expect(html).not.toContain('glass-card');
+    expect(html).not.toContain('rounded-lg');
     expect(html).toContain('border-hair');
+    expect(html).toContain('bg-ink');
+    expect(html).toContain('text-bg');
   });
 
   it('uses presentation-safe copy when the feed is not configured', () => {
     const html = renderToStaticMarkup(createElement(TwelveXUnavailable, { configured: false }));
     expect(html).toContain('FX research is not connected');
     expect(html).not.toContain('NEXT_PUBLIC_');
+  });
+});
+
+describe('twelve-x utilitarian slabs', () => {
+  const sources = readdirSync(__dirname).filter(
+    (f) => f.endsWith('.tsx') && !f.endsWith('.test.tsx'),
+  );
+
+  it('has no glass-card, rounded-lg, or rounded-xl leftovers in components', () => {
+    const offenders: string[] = [];
+    for (const f of sources) {
+      const s = readFileSync(join(__dirname, f), 'utf8');
+      if (/\bglass-card\b|\brounded-lg\b|\brounded-xl\b/.test(s)) offenders.push(f);
+    }
+    expect(offenders).toEqual([]);
   });
 });

@@ -41,23 +41,18 @@
 @source "../../digiweb/web/src/components/symbols";
 
 :root[data-theme] {
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  /* v7 direction: editorial Fraunces serif for display headings (loaded via
-     next/font in layout.tsx). Sans Geist still carries body + data. */
-  --serif: var(--font-fraunces), "Fraunces", Georgia, serif;
-  --font-display: var(--serif);
+  --font-display: var(--font-mono);
 }
 
 /* (The former local `--up: var(--accent)` mapping is gone (#1401): tokens.css
    now rules --up = the digiquant phosphor per theme — same colors, but pinned
    to the token so P&L can never follow a livery scope.) */
 
-/* Marketing/editorial headings (.hero-title on pipeline + subsystems) render in
-   the v7 serif via --font-display at weight 400 — the serif voice is never
-   bolded; scale does the shouting (design canon law 03, ruled 2026-07-02).
-   Data surfaces keep sans: the tearsheet/library .ts-h1 sets --font-sans
-   explicitly below, so strategy pages stay in the data tone. */
+/* Marketing headings (.hero-title on pipeline + subsystems) render in the
+   utilitarian mono display at weight 400 — scale does the shouting.
+   Data surfaces stay mono too: tearsheet/library .ts-h1 inherits --font-sans. */
 .hero-title { font-weight: 400 !important; letter-spacing: -0.025em; }
 .hero-title em { font-style: italic; color: var(--accent); -webkit-text-fill-color: initial; }
 
@@ -135,12 +130,12 @@ html {
   scroll-margin-top: var(--dq-nav-h);
 }
 
-/* editorial heading set (serif), shared across every section head. Stays CSS
+/* Display heading set (mono), shared across every section head. Stays CSS
    (intentional skip, #1401): one definition feeds six surfaces including the
    scroll scenes' descendant rules (.dqss-intro .dq-sub, .dq-sechead.center
    combinators) — duplicating the strings as utilities would fork the voice.
    The strategies-page eyebrow was folded into the shared .kicker instead. */
-.dq-title { font-family: var(--serif); font-weight: 400; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.01em; line-height: 1.12; color: var(--ink); margin-top: 0.6rem; }
+.dq-title { font-family: var(--font-display); font-weight: 400; font-size: clamp(1.6rem, 3vw, 2.4rem); letter-spacing: -0.01em; line-height: 1.12; color: var(--ink); margin-top: 0.6rem; }
 .dq-sub { color: var(--ink-soft); margin-top: 0.8rem; max-width: 60ch; line-height: 1.6; }
 
 /* ---- nav dress (the bar itself is the shared NavShell — see SiteNav.tsx) ----
@@ -160,7 +155,7 @@ html {
 /* Desktop tail twin (SiteNav.tsx) — plain icon + label in the theme's own ink
    tone, no `.btn-primary` fill. Same treatment as digithings.ai's
    `.dt-nav-chat-cta`. */
-.dq-nav-olympus-cta { color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 8px; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
+.dq-nav-olympus-cta { color: var(--ink); font-size: 0.9rem; font-weight: 500; text-decoration: none; border: 1px solid var(--hair-2); border-radius: 0; padding: 0.38rem 0.75rem; background: transparent; opacity: 0.92; transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease), background 0.18s var(--ease); }
 .dq-nav-olympus-cta:hover { opacity: 1; border-color: var(--ink-mute); background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .olympus-mark { transform-origin: 50% 50%; }
 /* mark strokes are fully drawn at rest; the Open-Olympus button replays the
@@ -198,7 +193,7 @@ html {
    clicks. Edge-fade is done in-canvas (destination-in), not via a CSS mask. */
 .dqhero-graph { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; }
 .dqhero-inner { position: relative; z-index: 2; max-width: 900px; padding: 0 1.2rem; will-change: transform, opacity; }
-.dqhero-h1 { font-family: var(--serif); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
+.dqhero-h1 { font-family: var(--font-display); font-weight: 400; font-size: clamp(2.5rem, 6vw, 4.7rem); line-height: 1.04; letter-spacing: -0.025em; color: var(--ink); }
 .dqhero-h1 em { font-style: italic; color: var(--accent); }
 /* padding-bottom gives descenders/italic overhang room inside the overflow mask
    (the reveal still hides the line — the hidden state is pushed past the padding);
@@ -212,7 +207,7 @@ html {
 .dqhero-lede { margin: 1.7rem auto 0; max-width: 56ch; color: color-mix(in srgb, var(--ink) 80%, var(--bg)); font-size: 1.1rem; line-height: 1.6; text-shadow: 0 1px 22px color-mix(in srgb, var(--bg) 45%, transparent); opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.5s; }
 .dqhero-lede b { color: var(--ink); font-weight: 500; }
 .dqhero.loaded .dqhero-lede { opacity: 1; transform: none; }
-.dqhero-cta { display: flex; gap: 0.8rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
+.dqhero-cta { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; margin-top: 2.4rem; flex-wrap: wrap; justify-content: center; opacity: 0; transform: translateY(14px); transition: 0.8s var(--ease) 0.62s; }
 .dqhero.loaded .dqhero-cta { opacity: 1; transform: none; }
 
 /* no-JS (law 06): the entrance never gates content — html.no-js renders the
@@ -223,8 +218,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 /* scroll cue: label + prominent vertical accent line (no primary CTA button) */
 .dqhero-scrollcue { flex-direction: column; align-items: center; gap: 0.85rem; margin-top: 2.6rem; }
 .dqhero-scroll-label { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.14em; text-transform: uppercase; color: color-mix(in srgb, var(--accent) 78%, var(--ink-mute)); }
-.dqhero-scroll { position: relative; width: 2px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 999px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 42px color-mix(in srgb, var(--accent) 22%, transparent); }
-.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 28px; border-radius: 999px; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 35%, transparent)); box-shadow: 0 0 14px var(--accent); animation: dq-scrollcue 1.9s var(--ease) infinite; }
+.dqhero-scroll { position: relative; width: 2px; height: 88px; margin: 0 auto; overflow: hidden; border-radius: 0; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 18%, transparent)); box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 42px color-mix(in srgb, var(--accent) 22%, transparent); }
+.dqhero-scroll::after { content: ""; position: absolute; inset: 0 auto auto 0; width: 100%; height: 28px; border-radius: 0; background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 35%, transparent)); box-shadow: 0 0 14px var(--accent); animation: dq-scrollcue 1.9s var(--ease) infinite; }
 @keyframes dq-scrollcue { 0% { transform: translateY(-28px); opacity: 0; } 25% { opacity: 1; } 90% { opacity: 0; } 100% { transform: translateY(88px); opacity: 0; } }
 
 /* Short-viewport nav clearance (#1434): the hero centres its content in
@@ -250,7 +245,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqpipe-steps { list-style: none; position: relative; padding: 0.5rem 0 2rem; margin: 0; }
 .dqpipe-track {
   position: absolute; left: 50%; top: 0; bottom: 2rem; width: 2px; margin-left: -1px;
-  border-radius: 999px; overflow: hidden;
+  border-radius: 0; overflow: hidden;
   background: color-mix(in srgb, var(--hair-2) 75%, transparent);
   box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 12%, transparent);
 }
@@ -258,7 +253,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   transform: scaleY(0);
   transform-origin: top;
-  border-radius: 999px;
+  border-radius: 0;
   background: linear-gradient(var(--accent), color-mix(in srgb, var(--accent) 45%, transparent));
   box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 65%, transparent);
   transition: transform 0.15s linear;
@@ -276,7 +271,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   transform: translateX(52px) translateY(8px);
 }
 .dqpipe-step.is-visible { opacity: 1; transform: none; }
-.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-radius: var(--r-md); padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; box-shadow: 0 24px 48px -36px color-mix(in srgb, var(--accent) 35%, transparent); }
+.dqpipe-card { position: relative; width: min(100%, 340px); background: var(--surface); border: 1px solid var(--hair); border-radius: 0; padding: 1.25rem 1.3rem 1.15rem; display: flex; flex-direction: column; gap: 0.45rem; }
 .dqpipe-step.is-exec .dqpipe-card { background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
 .dqpipe-rail {
   position: absolute; top: 1.6rem; width: 12px; height: 12px; border-radius: 50%;
@@ -307,7 +302,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 /* Live-book flash-on-tick (#1461 payoff) — a ticking cell washes its P&L colour
    for a beat so a live change is perceptible, not silent. Money colours only
    (--up/--down), never a livery. Reduced-motion neutralises the wash below. */
-.dq-tick { border-radius: 4px; padding-inline: 0.18em; }
+.dq-tick { border-radius: 0; padding-inline: 0.18em; }
 .dq-tick-up { animation: dq-tick-up 0.9s var(--ease); }
 .dq-tick-down { animation: dq-tick-down 0.9s var(--ease); }
 @keyframes dq-tick-up {
@@ -331,12 +326,12 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-scene-head { text-align: center; margin-bottom: clamp(1.4rem, 4vw, 2.6rem); }
 .dqp-olympus { display: inline-flex; align-items: center; gap: 0.55rem; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
 .dqp-olympus svg { width: 22px; height: 22px; fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; filter: drop-shadow(0 0 8px var(--accent-weak)); }
-.dqp-scene-title { font-family: var(--serif); font-size: clamp(1.5rem, 3.2vw, 2.3rem); font-weight: 400; letter-spacing: -0.015em; margin-top: 0.5rem; color: var(--ink); }
+.dqp-scene-title { font-family: var(--font-display); font-size: clamp(1.5rem, 3.2vw, 2.3rem); font-weight: 400; letter-spacing: -0.015em; margin-top: 0.5rem; color: var(--ink); }
 .dqp-rail { position: relative; display: flex; justify-content: space-between; max-width: 760px; margin: 0 auto 2rem; padding: 0 8px; }
 .dqp-rail::before { content: ""; position: absolute; left: 8px; right: 8px; top: 11px; height: 2px; background: var(--hair); }
 .dqp-fill { position: absolute; left: 8px; right: 8px; top: 11px; height: 2px; background: var(--accent); transform: scaleX(0); transform-origin: left; box-shadow: 0 0 12px var(--accent); transition: transform 0.15s linear; }
 .dqp-node { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 0.6rem; width: 120px; }
-.dqp-dot { width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--hair-2); background: var(--bg); display: grid; place-items: center; font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-mute); transition: 0.3s var(--ease); }
+.dqp-dot { width: 24px; height: 24px; border-radius: 0; border: 2px solid var(--hair-2); background: var(--bg); display: grid; place-items: center; font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-mute); transition: 0.3s var(--ease); }
 .dqp-node.on .dqp-dot { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 16px var(--accent-weak); }
 .dqp-lab { font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-mute); transition: color 0.3s; }
 .dqp-node.on .dqp-lab { color: var(--ink); }
@@ -344,13 +339,13 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-ehead { position: absolute; inset: 0; opacity: 0; transform: translateY(10px); transition: opacity 0.55s var(--ease), transform 0.55s var(--ease); pointer-events: none; }
 .dqp-ehead.show { opacity: 1; transform: none; }
 .dqp-etag { font-family: var(--font-mono); font-size: 0.74rem; color: var(--accent); letter-spacing: 0.1em; margin-bottom: 0.5rem; }
-.dqp-ehead h3 { font-family: var(--serif); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.55rem; line-height: 1.1; color: var(--ink); }
+.dqp-ehead h3 { font-family: var(--font-display); font-size: clamp(1.5rem, 3vw, 2.2rem); font-weight: 400; letter-spacing: -0.015em; margin-bottom: 0.55rem; line-height: 1.1; color: var(--ink); }
 /* left-align the body to match the left-aligned tag + heading (was centered) */
 .dqp-ehead p { color: var(--ink-soft); font-size: 1rem; line-height: 1.6; max-width: 52ch; margin-inline: 0; }
 /* #000 here is a mask alpha ramp (fully-opaque stop), not a color — leave rule */
 .dqp-track { margin-top: 1.2rem; overflow: hidden; padding: 0.4rem 2px; -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 1.5%, #000 98.5%, transparent 100%); }
 .dqp-steps { display: inline-flex; gap: 0.7rem; will-change: transform; }
-.dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 11px; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
+.dqp-step { flex: none; width: 166px; border: 1px solid var(--hair); border-radius: 0; background: var(--surface); padding: 0.85rem 0.9rem; opacity: 0.34; transition: opacity 0.45s var(--ease), border-color 0.45s var(--ease), transform 0.45s var(--ease), box-shadow 0.45s var(--ease); }
 .dqp-step.lit { opacity: 1; border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: linear-gradient(180deg, var(--accent-weak), var(--surface)); }
 .dqp-step.cur { transform: translateY(-5px); box-shadow: 0 18px 44px -28px var(--accent); }
 .dqp-si { font-family: var(--font-mono); font-size: 0.64rem; color: var(--accent); letter-spacing: 0.06em; }
@@ -359,7 +354,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqp-group { width: 78px; background: transparent; border: none; opacity: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
 .dqp-group span { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-mono); font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-mute); }
 .dqp-sooncard { width: 230px; border-style: dashed; border-color: var(--hair-2); opacity: 1; display: flex; flex-direction: column; justify-content: center; }
-.dqp-badge { display: inline-block; align-self: flex-start; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 999px; padding: 0.18rem 0.5rem; margin-bottom: 0.5rem; }
+.dqp-badge { display: inline-block; align-self: flex-start; font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); border-radius: 0; padding: 0.18rem 0.5rem; margin-bottom: 0.5rem; }
 .dqp-sooncard p { font-size: 0.8rem; color: var(--ink-soft); line-height: 1.5; }
 /* Final track beat: a quiet text+arrow that launches the dashboard. Strips the
    step card chrome (no border/fill/shadow) so it reads as a closing line, not
@@ -417,7 +412,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   color: var(--accent);
   text-decoration: none;
   padding: 0.55rem 1.05rem;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   /* rgba(0,0,0,…) box-shadows here and on the deck cards below are shadow
@@ -450,7 +445,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
   height: auto;
   min-height: 0;
   border: 1px solid var(--hair);
-  border-radius: 16px;
+  border-radius: 0;
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   overflow: hidden;
   padding: clamp(0.85rem, 2cqi, 1.15rem) clamp(0.9rem, 2.2cqi, 1.25rem) clamp(0.95rem, 2cqi, 1.2rem);
@@ -537,7 +532,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 }
 .dqss-card .ts-panel.dqss-preview-panel {
   box-shadow: none;
-  border-radius: 12px;
+  border-radius: 0;
 }
 .dqss-card .ts-panel { margin-bottom: 0; padding: clamp(0.65rem, 1.5cqi, 0.95rem) clamp(0.7rem, 1.6cqi, 1rem); box-shadow: 0 20px 48px -40px rgba(0, 0, 0, 0.45); }
 .dqss-card .ts-panel-head { margin-bottom: 0.45rem; padding-bottom: 0.4rem; flex-shrink: 0; }
@@ -608,7 +603,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
 .dqss-chart-skeleton {
   width: 100%;
   min-height: 13.75rem;
-  border-radius: 8px;
+  border-radius: 0;
   background: linear-gradient(90deg, color-mix(in srgb, var(--hair) 55%, transparent) 0%, color-mix(in srgb, var(--hair) 25%, transparent) 50%, color-mix(in srgb, var(--hair) 55%, transparent) 100%);
   background-size: 200% 100%;
   animation: dqss-skel 1.2s ease-in-out infinite;
@@ -619,7 +614,7 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    above, sized per element instead of duplicated per class. */
 .dqss-logo-skeleton, .dqss-meta-skeleton, .dqss-kpi-skeleton, .dqss-full-skeleton {
   display: inline-block;
-  border-radius: 4px;
+  border-radius: 0;
   background: linear-gradient(90deg, color-mix(in srgb, var(--hair) 55%, transparent) 0%, color-mix(in srgb, var(--hair) 25%, transparent) 50%, color-mix(in srgb, var(--hair) 55%, transparent) 100%);
   background-size: 200% 100%;
   animation: dqss-skel 1.2s ease-in-out infinite;
@@ -676,8 +671,8 @@ html.no-js .dqhero-cta { opacity: 1; transform: none; }
    stays reserved for the terminal moments below (cmdline, init codeblock).
    Surface fallback first: without color-mix() the bloom drops and the
    poster stays a plain hairline panel. */
-.sub-poster { position: relative; border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; padding: 4.5rem 1.6rem 1.4rem; margin-bottom: 2rem; background: var(--surface); background: radial-gradient(130% 95% at 50% 115%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%), var(--surface); }
+.sub-poster { position: relative; border: 1px solid var(--hair); border-radius: 0; overflow: hidden; padding: 4.5rem 1.6rem 1.4rem; margin-bottom: 2rem; background: var(--surface); background: radial-gradient(130% 95% at 50% 115%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%), var(--surface); }
 .sub-poster .sub-regmark { position: absolute; top: 0.7rem; left: 0.8rem; font-family: var(--font-mono); font-weight: 300; color: var(--ink-mute); font-size: 0.8rem; user-select: none; }
-.sub-poster-name { font-family: var(--serif); font-style: italic; font-weight: 300; font-size: clamp(3rem, 8vw, 5rem); line-height: 0.95; letter-spacing: -0.02em; color: var(--ink); text-transform: lowercase; margin: 0; }
+.sub-poster-name { font-family: var(--font-display); font-style: normal; font-weight: 400; font-size: clamp(3rem, 8vw, 5rem); line-height: 0.95; letter-spacing: -0.02em; color: var(--ink); text-transform: lowercase; margin: 0; }
 .sub-poster-epithet { font-family: var(--font-mono); font-size: 0.68rem; letter-spacing: 0.14em; color: var(--accent); color: color-mix(in srgb, var(--accent) 75%, var(--ink)); margin-top: 0.8rem; }
 .sub-poster-fine { font-family: var(--font-mono); font-size: 0.6rem; color: var(--ink-mute); margin-top: 0.45rem; line-height: 1.8; }

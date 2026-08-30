@@ -53,11 +53,11 @@ export function LockedSurface({
       data-testid="locked-surface"
       data-artifact-class={artifactClass}
       data-plan-tier={tier}
-      className={`rounded-lg border border-hair bg-term-bg/50 px-4 py-5 ${className ?? ''}`}
+      className={` border border-hair bg-term-bg/50 px-4 py-5 ${className ?? ''}`}
     >
       <div className="flex items-start gap-3">
         <span
-          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-accent/30 bg-accent/10 text-accent"
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center border border-accent/30 bg-accent/10 text-accent"
           aria-hidden
         >
           <Lock size={14} />

@@ -32,11 +32,23 @@ describe('ProfileTab (happy-dom)', () => {
 
   it('invalid schema shows field error and never calls the network', async () => {
     const saveFn = vi.fn();
+    const getFn = vi.fn(async () => ({
+      version_id: null,
+      workspace_id: 'ws-a',
+      profile_key: 'workspace',
+      schema_version: 1,
+      label: '',
+      supersedes_id: null,
+      recorded_at: null,
+      investment: null,
+      assets: null,
+    }));
     const el = await mount(
       createElement(ProfileTab, {
         api: { accessToken: 'tok' },
         lastVersionId: null,
         saveFn,
+        getFn,
       }),
     );
     // Reserved house key is rejected client-side before any network call.
@@ -83,11 +95,23 @@ describe('ProfileTab (happy-dom)', () => {
         message: 'profile changed elsewhere — reload',
       });
     });
+    const getFn = vi.fn(async () => ({
+      version_id: null,
+      workspace_id: 'ws-a',
+      profile_key: 'workspace',
+      schema_version: 1,
+      label: '',
+      supersedes_id: null,
+      recorded_at: null,
+      investment: null,
+      assets: null,
+    }));
     const el = await mount(
       createElement(ProfileTab, {
         api: { accessToken: 'tok' },
         lastVersionId: 'v0',
         saveFn,
+        getFn,
       }),
     );
     const save = el.querySelector('[data-testid="profile-save"]') as HTMLButtonElement;
@@ -97,5 +121,58 @@ describe('ProfileTab (happy-dom)', () => {
     const conflict = el.querySelector('[data-testid="profile-conflict"]');
     expect(conflict?.textContent ?? '').toMatch(/reload/i);
     expect(saveFn).toHaveBeenCalled();
+  });
+
+  it('hydrates form from GET tip on mount when api is present', async () => {
+    const onVersionSaved = vi.fn();
+    const getFn = vi.fn(async () => ({
+      version_id: 'tip-v1',
+      workspace_id: 'ws-a',
+      profile_key: 'workspace',
+      schema_version: 1,
+      label: 'Hydrated overlay',
+      supersedes_id: null,
+      recorded_at: '2026-08-30T00:00:00Z',
+      investment: {
+        schema_version: 1,
+        risk_tolerance: 'aggressive',
+        horizon_years: 20,
+        liquidity_needs: 'low',
+        base_currency: 'USD',
+        tax_jurisdiction: 'US',
+        esg_preference: 'tilt',
+        excluded_sectors: [],
+        experience_level: 'expert',
+      },
+      assets: {
+        schema_version: 1,
+        excluded_tickers: ['TSLA'],
+      },
+    }));
+    const saveFn = vi.fn();
+    const el = await mount(
+      createElement(ProfileTab, {
+        api: { accessToken: 'tok' },
+        lastVersionId: null,
+        onVersionSaved,
+        saveFn,
+        getFn,
+      }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(getFn).toHaveBeenCalledOnce();
+    expect(onVersionSaved).toHaveBeenCalledWith('tip-v1');
+    const risk = el.querySelector('[data-testid="risk-tolerance"]') as HTMLSelectElement;
+    expect(risk?.value).toBe('aggressive');
+    const horizon = el.querySelector('[data-testid="horizon-years"]') as HTMLInputElement;
+    expect(horizon?.value).toBe('20');
+    const inputs = Array.from(el.querySelectorAll('input'));
+    const labelInput = inputs.find((i) => i.getAttribute('data-testid') !== 'horizon-years' && i.getAttribute('data-testid') !== 'profile-key-input' && i.type !== 'number');
+    // Second text input is Label (key is first with testid).
+    const labelEl = el.querySelectorAll('input:not([data-testid])')[0] as HTMLInputElement | undefined;
+    expect(labelEl?.value ?? labelInput?.value).toBe('Hydrated overlay');
+    expect(saveFn).not.toHaveBeenCalled();
   });
 });

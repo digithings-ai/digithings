@@ -9,7 +9,7 @@ the existing `prices-live/` lane (`deno.json` import map → `npm:@supabase/supa
 | `stripe-webhook` | **`false`** | Stripe → `workspaces` + Auth claim sync (T2) |
 | `create-checkout-session` | `true` | Logged-in Checkout session (T2) |
 | `customer-portal` | `true` | Stripe Customer Portal session (T2) |
-| `settings` | `true` | Profile / brokers / notifications (T3) — **deploy blocked on K3** |
+| `settings` | `true` | Profile / brokers / notifications (T3) |
 
 Shared modules live under [`_shared/`](_shared/): `stripe.ts`, `tiers.ts`,
 `supabase-admin.ts`, `webhook-handler.ts`, `billing-auth.ts`, `vault.ts`
@@ -22,11 +22,11 @@ schemas, appends versioned `olympus_profile_config` overlays (never mutates;
 never the reserved `house` key), and seals broker credentials with the vault
 `parseCredential` + `sealCredential` contract (AAD =
 `{workspace_id}:{broker}:{env}`). Responses never include ciphertext or
-plaintext. `PATCH /notifications` returns `503 NOT_READY` until K5 lands
-`notification_prefs`.
+plaintext. `GET /notifications` hydrates prefs (empty → 200 defaults, `updated_at: null`;
+no write). `PATCH /notifications` upserts `notification_prefs` (migration 103 / K5).
 
-**Deploy is blocked until K3 merges** (vault + `broker_connections`). See
-[`settings/README.md`](settings/README.md).
+**Deploy requires** K3 vault + `broker_connections` and K5 `notification_prefs`
+on the target DB. See [`settings/README.md`](settings/README.md).
 
 ## Deploy
 
@@ -113,7 +113,7 @@ Stripe/Supabase keys in responses or logs.
 | 409 | `NO_STRIPE_CUSTOMER` | Portal without `stripe_customer_id` |
 | 409 | `VERSION_CONFLICT` | Profile optimistic-concurrency miss |
 | 404 | `CONNECTION_NOT_FOUND` | Revoke unknown row |
-| 503 | `NOT_READY` | Notifications before K5; brokers table before K3 |
+| 503 | `NOT_READY` | Missing `notification_prefs` / `broker_connections` tables |
 
 Webhook always returns **200** to Stripe on duplicate events, out-of-order
 ignores, and claim-sync failures (`claim_sync_pending=true` on the workspace row

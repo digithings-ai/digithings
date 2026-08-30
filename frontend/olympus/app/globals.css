@@ -83,18 +83,15 @@
 @source "../../digiweb/web/src/components/finance-composites";
 
 /* ── Fonts (next/font routing) ───────────────────────────────────────────
-   tokens.css names the families literally ("Geist", "Geist Mono",
-   "Instrument Serif") — but olympus self-hosts Geist Sans + Geist Mono +
-   Fraunces through next/font (layout.tsx), which exposes them ONLY via the
-   hashed --font-geist-sans / --font-geist-mono / --font-fraunces variables
-   (#684). Re-declare the
-   canon font tokens (equal specificity, later source) so both the web-theme
-   body defaults and the font-sans/mono/display utilities resolve to faces
-   that actually ship under the Olympus CSP (font-src 'self' data:). */
+   tokens.css names Geist Mono for sans / mono / display (BLEND v0.1).
+   olympus self-hosts that face through next/font (layout.tsx), which
+   exposes it ONLY via the hashed --font-geist-mono variable. Re-declare
+   the canon font tokens (equal specificity, later source) so utilities
+   resolve to the CSP-safe self-hosted face (font-src 'self' data:). */
 :root[data-theme] {
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-fraunces), Georgia, "Times New Roman", serif;
+  --font-display: var(--font-geist-mono), ui-monospace, monospace;
   /* quant-native still reads the legacy token name — route it to canon mono
      so .qn-* text uses the shipped face instead of a JetBrains Mono that
      never loads. */
@@ -103,17 +100,17 @@
 
 /* ── Olympus-local vars (token-derived — no raw palette hex) ─────────────
    Kept OUT of the theme namespace on purpose: these are app-local custom
-   props, not utility tokens. --shadow-glass is a depth cue (black-based
-   shadow, not a themed color); consumers use var(--shadow-glass) directly. */
+   props, not utility tokens. --shadow-overlay is a depth cue for floating
+   chrome (black-based shadow, not a themed color). */
 html {
-  --shadow-glass: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
+  --shadow-overlay: 0 18px 40px -28px rgba(0, 0, 0, 0.6);
   /* Command palette overlay stacking — the shared shell's .cp-overlay reads
      var(--cp-z, 40); olympus's shipped palette stacks at 2000, above the
      sticky nav / sidebar drawer chrome. */
   --cp-z: 2000;
 }
 html.light {
-  --shadow-glass: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
+  --shadow-overlay: 0 18px 40px -30px rgba(0, 0, 0, 0.18);
 }
 
 /* Mobile subpage-tab scroll row (#1570) — hides the scrollbar on the
@@ -135,39 +132,38 @@ html.light {
 .qn-down { color: var(--down); }
 
 /* ── Scroll reveals (MotionLayer adds html.motion-on only when motion is OK) ── */
-html.motion-on .glass-card,
+html.motion-on .oly-slab,
 html.motion-on [data-reveal] {
   opacity: 0;
   transform: translateY(12px);
   transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1), transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: opacity, transform;
 }
-html.motion-on .glass-card.reveal-in,
+html.motion-on .oly-slab.reveal-in,
 html.motion-on [data-reveal].reveal-in {
   opacity: 1;
   transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html.motion-on .glass-card,
+  html.motion-on .oly-slab,
   html.motion-on [data-reveal] { opacity: 1 !important; transform: none !important; transition: none !important; }
 }
 
-/* ── Surface system (x.ai-style flat — EVOLUTION.md §3 Olympus / §10 · #1216) ──
-  Olympus is FLAT: no glass morphism on content (anti-pattern #8). Panels use
-  `--surface` + a 1px `--hair` border, hover to `--hair-2`. Depth is reserved
-  for floating overlays; content panels remain shadowless like the Digiweb
-  reference. `backdrop-blur` is used ONLY on sticky/overlay
-   chrome (nav, mobile app bar, command palette, sidebar) — never on content
-   cards. `.glass-card` is a legacy *name* for this flat panel; new components
-   should read as flat surfaces. */
-.glass-card {
+/* ── Surface system (BLEND v0.1 tonal slab) ────────────────────────────
+   Olympus dashboards are instrument-density tonal slabs: `--surface` fill,
+   1px `--hair` border, radius 0. Hover lifts the hairline to `--hair-2`.
+   Depth is reserved for floating overlays; content panels stay shadowless.
+   `backdrop-blur` is used ONLY on sticky/overlay chrome (nav, mobile app
+   bar, command palette, sidebar) — never on content cards.
+   `.glass-card` is retired — twelve-x call sites must switch to `.oly-slab`. */
+.oly-slab {
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 12px;
-  transition: border-color 0.2s ease, transform 0.2s ease;
+  border-radius: 0;
+  transition: border-color 0.2s ease;
 }
-.glass-card:hover {
+.oly-slab:hover {
   border-color: var(--hair-2);
 }
 
@@ -185,7 +181,7 @@ html.motion-on [data-reveal].reveal-in {
 .recharts-default-tooltip {
   background: var(--term-bg) !important;
   border: 1px solid var(--hair) !important;
-  border-radius: 8px !important;
+  border-radius: 0 !important;
   font-family: var(--font-mono) !important;
   font-size: 12px !important;
 }
@@ -361,7 +357,7 @@ html.light .qn-blueprint-bg {
    selector, so no new app-local class family). Unlayered + later in source
    than the package import, so it outranks both the utility background and
    the package's unlayered @supports blur. Black-based dim layer, not a
-   themed color (same ruling as --shadow-glass above). */
+   themed color (same ruling as --shadow-overlay above). */
 [data-slot="sheet-overlay"] {
   background: rgb(0 0 0 / 0.5);
 }

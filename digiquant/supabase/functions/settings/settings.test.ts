@@ -44,6 +44,13 @@ interface Store {
   members: Array<{ workspace_id: string; user_id: string; role: string }>;
   profiles: Array<Record<string, unknown>>;
   brokers: Array<Record<string, unknown>>;
+  prefs: Array<Record<string, unknown>>;
+  /** When true, notification_prefs lookups fail as if the table is missing. */
+  prefsMissing?: boolean;
+  /** When true, olympus_profile_config lookups fail as if the table is missing. */
+  profilesMissing?: boolean;
+  /** When true, ensure_personal_workspace RPC fails (bootstrap disabled). */
+  bootstrapDisabled?: boolean;
 }
 
 function wsRow(id: string, planTier = "custom"): WorkspaceRow {
@@ -70,6 +77,7 @@ function freshStore(): Store {
     ],
     profiles: [],
     brokers: [],
+    prefs: [],
   };
 }
 
@@ -80,6 +88,7 @@ function mockAdmin(store: Store): AdminClient {
     const filters: Filter[] = [];
     let pendingInsert: Record<string, unknown> | null = null;
     let pendingUpdate: Record<string, unknown> | null = null;
+    let pendingUpsert: Record<string, unknown> | null = null;
     let selectCols = "*";
     let limitN: number | null = null;
     let maybeSingle = false;
@@ -100,6 +109,10 @@ function mockAdmin(store: Store): AdminClient {
     };
     api.update = (vals: Record<string, unknown>) => {
       pendingUpdate = vals;
+      return chain();
+    };
+    api.upsert = (row: Record<string, unknown>, _opts?: unknown) => {
+      pendingUpsert = row;
       return chain();
     };
     api.eq = (col: string, val: unknown) => {
@@ -142,6 +155,12 @@ function mockAdmin(store: Store): AdminClient {
       }
 
       if (table === "olympus_profile_config") {
+        if (store.profilesMissing) {
+          return {
+            data: null,
+            error: { message: 'relation "olympus_profile_config" does not exist', code: "42P01" },
+          };
+        }
         if (pendingInsert) {
           if (pendingInsert.profile_key === "house" && pendingInsert.is_house_default === false) {
             return {
@@ -250,6 +269,45 @@ function mockAdmin(store: Store): AdminClient {
         return { data: projected, error: null };
       }
 
+      if (table === "notification_prefs") {
+        if (store.prefsMissing) {
+          return {
+            data: null,
+            error: { message: 'relation "notification_prefs" does not exist', code: "42P01" },
+          };
+        }
+        if (pendingUpsert) {
+          const email = String(pendingUpsert.email ?? "");
+          if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
+            return {
+              data: null,
+              error: { message: "new row violates check constraint notification_prefs_email_check", code: "23514" },
+            };
+          }
+          const idx = store.prefs.findIndex(
+            (p) => p.workspace_id === pendingUpsert!.workspace_id,
+          );
+          const row = {
+            ...pendingUpsert,
+            updated_at: new Date().toISOString(),
+          };
+          if (idx >= 0) store.prefs[idx] = row;
+          else store.prefs.push(row);
+          return {
+            data: wantSingle || maybeSingle ? row : [row],
+            error: null,
+          };
+        }
+        let rows = [...store.prefs];
+        for (const f of filters) {
+          if (f.op === "eq") rows = rows.filter((r) => r[f.col] === f.val);
+        }
+        if (wantSingle || maybeSingle) {
+          return { data: rows[0] ?? null, error: null };
+        }
+        return { data: rows, error: null };
+      }
+
       return { data: null, error: { message: `unknown table ${table}` } };
     };
 
@@ -261,6 +319,26 @@ function mockAdmin(store: Store): AdminClient {
 
   return {
     from: (table: string) => makeBuilder(table),
+    rpc: async (fn: string, args?: Record<string, unknown>) => {
+      if (fn !== "ensure_personal_workspace") {
+        return { data: null, error: { message: `unknown rpc ${fn}`, code: "PGRST202" } };
+      }
+      if (store.bootstrapDisabled) {
+        return { data: null, error: { message: "bootstrap disabled", code: "P0001" } };
+      }
+      const userId = String(args?.p_user_id ?? "");
+      if (!userId) {
+        return { data: null, error: { message: "p_user_id required", code: "P0001" } };
+      }
+      const existing = store.members.find((m) => m.user_id === userId);
+      if (existing) {
+        return { data: existing.workspace_id, error: null };
+      }
+      const id = `bbbbbbbb-bbbb-4bbb-8bbb-${userId.replace(/-/g, "").slice(0, 12).padEnd(12, "0")}`;
+      store.workspaces.set(id, wsRow(id, "free"));
+      store.members.push({ workspace_id: id, user_id: userId, role: "owner" });
+      return { data: id, error: null };
+    },
   } as unknown as AdminClient;
 }
 
@@ -353,13 +431,41 @@ Deno.test("401 when Authorization bearer missing", async () => {
   assertEquals(json.code, "UNAUTHENTICATED");
 });
 
-Deno.test("403 WORKSPACE_FORBIDDEN when user has no membership", async () => {
+Deno.test("403 WORKSPACE_FORBIDDEN when bootstrap RPC fails", async () => {
   const store = freshStore();
+  store.bootstrapDisabled = true;
   const { status, json } = await call(store, "GET", "/brokers", undefined, {
     userId: "99999999-9999-4999-8999-999999999999",
   });
   assertEquals(status, 403);
   assertEquals(json.code, "WORKSPACE_FORBIDDEN");
+});
+
+Deno.test("GET brokers: auto-bootstraps personal workspace for new Auth user", async () => {
+  const store = freshStore();
+  const newUser = "99999999-9999-4999-8999-999999999999";
+  assertEquals(store.members.filter((m) => m.user_id === newUser).length, 0);
+  const { status, json } = await call(store, "GET", "/brokers", undefined, {
+    userId: newUser,
+  });
+  assertEquals(status, 200);
+  assertEquals(Array.isArray(json.connections), true);
+  assertEquals(store.members.filter((m) => m.user_id === newUser).length, 1);
+  assertEquals(store.members.find((m) => m.user_id === newUser)?.role, "owner");
+  const wsId = store.members.find((m) => m.user_id === newUser)!.workspace_id;
+  assertEquals(store.workspaces.get(wsId)?.plan_tier, "free");
+});
+
+Deno.test("GET profile: auto-bootstraps then returns empty contract", async () => {
+  const store = freshStore();
+  const newUser = "88888888-8888-4888-8888-888888888888";
+  const { status, json } = await call(store, "GET", "/profile", undefined, {
+    userId: newUser,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.profile_key, "workspace");
+  assertEquals(json.version_id, null);
+  assertEquals(store.members.filter((m) => m.user_id === newUser).length, 1);
 });
 
 Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
@@ -377,6 +483,7 @@ Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
 
 Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
   const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
   const { status, json } = await call(store, "POST", "/brokers/connect", {
     broker: "alpaca",
     env: "paper",
@@ -387,6 +494,51 @@ Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
 });
+
+Deno.test(
+  "403 TIER_FORBIDDEN when workspace is free but JWT claim is still custom (stale claim after cancel)",
+  async () => {
+    const store = freshStore();
+    store.workspaces.set(WS_A, wsRow(WS_A, "free"));
+    store.workspaces.get(WS_A)!.claim_sync_pending = true;
+    const profile = await call(store, "PATCH", "/profile", {
+      profile_key: "ws-overlay",
+      label: "Should not write",
+      investment: validInvestment,
+    }, { planTier: "custom" });
+    assertEquals(profile.status, 403);
+    assertEquals(profile.json.code, "TIER_FORBIDDEN");
+    assertEquals(store.profiles.length, 0);
+
+    const connect = await call(store, "POST", "/brokers/connect", {
+      broker: "alpaca",
+      env: "paper",
+      kind: "api_key",
+      key_id: "PK",
+      secret: "sec",
+    }, { planTier: "custom" });
+    assertEquals(connect.status, 403);
+    assertEquals(connect.json.code, "TIER_FORBIDDEN");
+    assertEquals(store.brokers.length, 0);
+  },
+);
+
+Deno.test(
+  "allows custom workspace when JWT claim lags at free (stale claim after upgrade)",
+  async () => {
+    const store = freshStore();
+    store.workspaces.set(WS_A, wsRow(WS_A, "custom"));
+    store.workspaces.get(WS_A)!.claim_sync_pending = true;
+    const { status, json } = await call(store, "PATCH", "/profile", {
+      profile_key: "ws-overlay",
+      label: "Lagging claim OK",
+      investment: validInvestment,
+    }, { planTier: "free" });
+    assertEquals(status, 200);
+    assertEquals(json.workspace_id, WS_A);
+    assertEquals(store.profiles.length, 1);
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Profile — workspace isolation
@@ -534,6 +686,37 @@ Deno.test("POST brokers/connect api_key: seals with AAD; response has no secret"
   assertEquals(parsed.secret, secret);
 });
 
+Deno.test(
+  "POST brokers/connect: crypto.randomUUID bound when deps.uuid omitted (Edge TypeError regression)",
+  async () => {
+    // Production createDefaultDeps does not inject uuid. Unbound
+    // `(crypto.randomUUID)()` throws TypeError "expected Crypto" on Deno/Edge.
+    const store = freshStore();
+    const secret = "EDGE-UUID-BIND-SECRET";
+    const res = await handleSettingsRequest(
+      authReq("POST", "/brokers/connect", {
+        broker: "alpaca",
+        env: "paper",
+        kind: "api_key",
+        key_id: "PKTEST",
+        secret,
+      }),
+      {
+        admin: mockAdmin(store),
+        user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+        vaultKey: TEST_KEY,
+        appUrl: APP_URL,
+      },
+    );
+    const json = await res.json();
+    assertEquals(res.status, 200);
+    assertEquals(typeof json.id, "string");
+    assertEquals((json.id as string).length, 36);
+    assertEquals(store.brokers.length, 1);
+    assertEquals(JSON.stringify(json).includes(secret), false);
+  },
+);
+
 Deno.test("POST brokers/connect oauth: pins redirect_uri; rejects client mismatch", async () => {
   const store = freshStore();
   const mismatch = await call(store, "POST", "/brokers/connect", {
@@ -556,6 +739,33 @@ Deno.test("POST brokers/connect oauth: pins redirect_uri; rejects client mismatc
   assertEquals(ok.status, 200);
   assertEquals(ok.json.auth_kind, "oauth");
   assertEquals(JSON.stringify(ok.json).includes("alpaca-access-token-xyz"), false);
+});
+
+Deno.test("POST brokers/connect oauth: OAUTH_NOT_CONFIGURED when Alpaca client secrets missing", async () => {
+  const store = freshStore();
+  Deno.env.delete("ALPACA_OAUTH_CLIENT_ID");
+  Deno.env.delete("NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID");
+  Deno.env.delete("ALPACA_OAUTH_CLIENT_SECRET");
+  const res = await handleSettingsRequest(
+    authReq("POST", "/brokers/connect", {
+      broker: "alpaca",
+      env: "paper",
+      kind: "oauth",
+      code: "auth-code-no-secrets",
+      redirect_uri: pinnedAlpacaRedirectUri(APP_URL),
+    }),
+    {
+      admin: mockAdmin(store),
+      user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+      vaultKey: TEST_KEY,
+      appUrl: APP_URL,
+      // Intentionally omit exchangeAlpacaCode → production default path.
+    },
+  );
+  const json = await res.json();
+  assertEquals(res.status, 500);
+  assertEquals(json.code, "OAUTH_NOT_CONFIGURED");
+  assertEquals(String(json.message).includes("ALPACA_OAUTH_CLIENT_ID"), true);
 });
 
 Deno.test("POST brokers/connect reconnect: revoke-then-insert on active unique", async () => {
@@ -597,14 +807,200 @@ Deno.test("POST brokers/revoke: fails closed on unknown row", async () => {
   assertEquals(json.code, "CONNECTION_NOT_FOUND");
 });
 
-Deno.test("PATCH notifications: 503 NOT_READY until K5", async () => {
+Deno.test("GET profile: empty contract — 200 defaults, version_id null, no write", async () => {
   const store = freshStore();
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.profile_key, "workspace");
+  assertEquals(json.version_id, null);
+  assertEquals(json.recorded_at, null);
+  assertEquals(json.label, "");
+  assertEquals(json.investment, null);
+  assertEquals(json.assets, null);
+  assertEquals(store.profiles.length, 0);
+});
+
+Deno.test("GET profile: returns tip for workspace member", async () => {
+  const store = freshStore();
+  store.profiles.push({
+    id: "tip-v1",
+    workspace_id: WS_A,
+    profile_key: "workspace",
+    schema_version: 1,
+    is_house_default: false,
+    label: "My overlay",
+    supersedes_id: null,
+    recorded_at: "2026-08-30T12:00:00Z",
+    payload: {
+      version_id: "tip-v1",
+      profile_key: "workspace",
+      label: "My overlay",
+      investment: validInvestment,
+      assets: { schema_version: 1, excluded_tickers: ["XYZ"] },
+    },
+  });
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 200);
+  assertEquals(json.version_id, "tip-v1");
+  assertEquals(json.label, "My overlay");
+  assertEquals(json.profile_key, "workspace");
+  assertEquals((json.investment as { risk_tolerance: string }).risk_tolerance, "moderate");
+  assertEquals((json.assets as { excluded_tickers: string[] }).excluded_tickers[0], "XYZ");
+});
+
+Deno.test("GET profile: house profile_key rejected", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", "/profile?profile_key=house");
+  assertEquals(status, 400);
+  assertEquals(json.code, "HOUSE_KEY_FORBIDDEN");
+});
+
+Deno.test("GET profile: 503 when olympus_profile_config missing", async () => {
+  const store = freshStore();
+  store.profilesMissing = true;
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 503);
+  assertEquals(json.code, "NOT_READY");
+});
+
+Deno.test("GET profile: wrong workspace is forbidden", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", `/profile?workspace_id=${WS_B}`);
+  assertEquals(status, 403);
+  assertEquals(json.code, "WORKSPACE_FORBIDDEN");
+});
+
+Deno.test("GET notifications: returns row for workspace member", async () => {
+  const store = freshStore();
+  store.prefs.push({
+    workspace_id: WS_A,
+    email: "pm@example.com",
+    daily_digest: true,
+    holding_change_alerts: false,
+    execution_alerts: true,
+    digest_hour_utc: 9,
+    updated_at: "2026-01-01T00:00:00Z",
+  });
+  const { status, json } = await call(store, "GET", "/notifications");
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.email, "pm@example.com");
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.execution_alerts, true);
+  assertEquals(json.digest_hour_utc, 9);
+  assertEquals(json.updated_at, "2026-01-01T00:00:00Z");
+  assertEquals(store.prefs.length, 1);
+});
+
+Deno.test("GET notifications: empty contract — 200 defaults, updated_at null, no write", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", "/notifications");
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.email, "owner@example.com");
+  assertEquals(json.daily_digest, false);
+  assertEquals(json.holding_change_alerts, false);
+  assertEquals(json.execution_alerts, false);
+  assertEquals(json.digest_hour_utc, 12);
+  assertEquals(json.updated_at, null);
+  assertEquals(store.prefs.length, 0);
+});
+
+Deno.test("GET notifications: 503 when notification_prefs missing", async () => {
+  const store = freshStore();
+  store.prefsMissing = true;
+  const { status, json } = await call(store, "GET", "/notifications");
+  assertEquals(status, 503);
+  assertEquals(json.code, "NOT_READY");
+});
+
+Deno.test("GET notifications: wrong workspace is forbidden", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", `/notifications?workspace_id=${WS_B}`);
+  assertEquals(status, 403);
+  assertEquals(json.code, "WORKSPACE_FORBIDDEN");
+});
+
+Deno.test("PATCH notifications: upserts prefs for workspace member", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "pm@example.com",
+    daily_digest: true,
+    holding_change_alerts: false,
+    execution_alerts: true,
+    digest_hour_utc: 9,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.email, "pm@example.com");
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.execution_alerts, true);
+  assertEquals(json.digest_hour_utc, 9);
+  assertEquals(store.prefs.length, 1);
+});
+
+Deno.test("PATCH notifications: rejects invalid email", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "not-an-email",
+    daily_digest: true,
+  });
+  assertEquals(status, 400);
+  assertEquals(json.code, "INVALID_EMAIL");
+});
+
+Deno.test("PATCH notifications: rejects digest_hour_utc out of range", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    email: "pm@example.com",
+    digest_hour_utc: 24,
+  });
+  assertEquals(status, 400);
+  assertEquals(json.code, "INVALID_DIGEST_HOUR");
+});
+
+Deno.test("PATCH notifications: 503 when notification_prefs missing", async () => {
+  const store = freshStore();
+  store.prefsMissing = true;
   const { status, json } = await call(store, "PATCH", "/notifications", {
     email: "pm@example.com",
     daily_digest: true,
   });
   assertEquals(status, 503);
   assertEquals(json.code, "NOT_READY");
+});
+
+Deno.test("PATCH notifications: partial update merges prior row", async () => {
+  const store = freshStore();
+  store.prefs.push({
+    workspace_id: WS_A,
+    email: "old@example.com",
+    daily_digest: true,
+    holding_change_alerts: true,
+    execution_alerts: false,
+    digest_hour_utc: 12,
+    updated_at: "2026-01-01T00:00:00Z",
+  });
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    execution_alerts: true,
+  });
+  assertEquals(status, 200);
+  assertEquals(json.email, "old@example.com");
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.holding_change_alerts, true);
+  assertEquals(json.execution_alerts, true);
+  assertEquals(json.digest_hour_utc, 12);
+});
+
+Deno.test("PATCH notifications: wrong workspace is forbidden", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/notifications", {
+    workspace_id: WS_B,
+    email: "pm@example.com",
+  });
+  assertEquals(status, 403);
+  assertEquals(json.code, "WORKSPACE_FORBIDDEN");
 });
 
 // ---------------------------------------------------------------------------

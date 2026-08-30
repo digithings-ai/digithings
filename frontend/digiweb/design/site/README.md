@@ -214,10 +214,10 @@ same division of responsibility as TrustStrip.
 
 **Data shape** (`{ date, version?, title, href, tag? }[]`) — see
 [`../changelog-example.json`](../changelog-example.json) for a worked
-example and `frontend/digiweb/design/smoke/index.html` for a vanilla-JS renderer.
-Source of truth for real content is whatever the consuming app already has
-(a `CHANGELOG.md` excerpt, the GitHub Releases API, or a CMS) — this
-primitive doesn't fetch or own data, only the markup/CSS contract.
+example and [`../releases.json`](../releases.json) for the live tagged
+digichat / digiskills feed the marketing `/changelog` pages consume.
+`frontend/digiweb/design/smoke/index.html` has a vanilla-JS renderer.
+This primitive doesn't fetch or own data, only the markup/CSS contract.
 
 ```html
 <div class="changelog-band">
@@ -238,7 +238,7 @@ primitive doesn't fetch or own data, only the markup/CSS contract.
 | `.changelog-row` | One entry — 1 column below 640px, `8rem 1fr` grid (date / title) at `min-width: 640px`. Hairline divider between rows. |
 | `.changelog-row__date` | Mono date (+ optional version). |
 | `.changelog-row__title` | Title, linked; hover tints `--accent`. |
-| `.changelog-row__tag` | Optional pill (`release`, `fix`, etc.). |
+| `.changelog-row__tag` | Optional hairline tag (`release`, `fix`, etc.) — zero radius, not a pill. |
 | `.changelog-band__footer` | "View all releases →" link pattern. |
 
 ## `CodeSampleBand` (CSS + `code-sample-band.js`, EVOLUTION.md Phase B)

@@ -58,7 +58,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
           return (
             <span
               key={j}
-              className="bg-up/15 text-up rounded-sm px-0.5 border-b border-up/60"
+              className="bg-up/15 text-up px-0.5 border-b border-up/60"
             >
               {w.value}
             </span>
@@ -68,7 +68,7 @@ function WordSwapBlock({ oldText, newText }: { oldText: string; newText: string 
           return (
             <span
               key={j}
-              className="bg-down/15 text-down line-through decoration-down/50 rounded-sm px-0.5"
+              className="bg-down/15 text-down line-through decoration-down/50 px-0.5"
             >
               {w.value}
             </span>
@@ -102,11 +102,11 @@ function compareModeFootnote(pair: DocumentDiffPair): string {
 }
 
 function segmentOuterClass() {
-  return 'inline-flex rounded-lg border border-hair p-0.5 bg-term-bg/80 gap-0.5';
+  return 'inline-flex border border-hair p-0.5 bg-term-bg/80 gap-0.5';
 }
 
 function segmentBtnClass(active: boolean) {
-  return `rounded-md px-3 py-1.5 text-xs font-medium border transition-colors ${
+  return `px-3 py-1.5 text-xs font-medium border transition-colors ${
     active
       ? 'border-accent/40 bg-accent/15 text-accent'
       : 'border-transparent text-ink-mute hover:text-ink hover:bg-ink/[0.06]'
@@ -154,7 +154,7 @@ function DocumentArtifactCompareDropdown({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border border-hair bg-term-bg text-ink-soft hover:border-accent/40 hover:text-ink transition-colors"
         aria-expanded={open ? 'true' : 'false'}
         aria-haspopup="listbox"
       >
@@ -162,7 +162,7 @@ function DocumentArtifactCompareDropdown({
         <ChevronDown size={14} className={`opacity-70 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] rounded-lg border border-hair bg-term-bg shadow-xl overflow-hidden">
+        <div className="absolute left-0 top-full z-[60] mt-1 w-[min(100vw-2rem,20rem)] border border-hair bg-term-bg shadow-xl overflow-hidden">
           <div role="listbox" aria-label="Compare document to" className="py-1">
             <button
               type="button"
@@ -317,7 +317,7 @@ export default function GenericDiffDocumentView({
                   else if (canPrev) setCompareKind('previous_day');
                   else if (canBase) setCompareKind('delta_baseline');
                 }}
-                className="rounded-md border border-hair bg-term-bg px-2 py-1.5 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
+                className="border border-hair bg-term-bg px-2 py-1.5 text-xs text-ink font-mono focus:outline-none focus:ring-1 focus:ring-inset focus:ring-accent/30"
                 aria-label="Compare this document to a custom run date"
               />
             </label>
@@ -393,7 +393,7 @@ export default function GenericDiffDocumentView({
               Line diff with word highlights where a line was replaced · removed (red) · added (green)
             </p>
           )}
-          <div className="rounded-lg border border-hair bg-term-bg/40 text-sm leading-relaxed max-h-[min(62vh,720px)] overflow-auto">
+          <div className="border border-hair bg-term-bg/40 text-sm leading-relaxed max-h-[min(62vh,720px)] overflow-auto">
             {lineItems.map((item, i) => {
               if (item.kind === 'wordSwap') {
                 return <WordSwapBlock key={i} oldText={item.oldText} newText={item.newText} />;
@@ -437,11 +437,11 @@ export default function GenericDiffDocumentView({
             Comparison (left) · current (right)
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[min(62vh,720px)] overflow-auto">
-            <div className="rounded-lg border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
+            <div className="border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
               <p className="text-[10px] font-mono text-ink-mute mb-2">Compare — {pair.compareDate}</p>
               <SafeMarkdown>{pair.beforeMarkdown}</SafeMarkdown>
             </div>
-            <div className="rounded-lg border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
+            <div className="border border-hair bg-term-bg/30 p-3 min-h-0 overflow-auto">
               <p className="text-[10px] font-mono text-ink-mute mb-2">Current — {pair.targetDate}</p>
               <SafeMarkdown>{pair.afterMarkdown}</SafeMarkdown>
             </div>

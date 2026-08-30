@@ -103,7 +103,7 @@ export default function BrokerProfilePanel({
         className={`absolute inset-y-0 right-0 flex w-full max-w-xl flex-col border-l border-hair bg-term-bg shadow-2xl transition-transform duration-200 ease-in-out motion-reduce:transition-none motion-reduce:translate-x-0 ${entered ? 'translate-x-0' : 'translate-x-10'}`}
       >
         <div className="flex shrink-0 justify-center pt-2 sm:hidden" aria-hidden>
-          <span className="h-1 w-9 rounded-full bg-ink/20" />
+          <span className="h-1 w-9 bg-ink/20" />
         </div>
         <div className="flex items-start gap-3 border-b border-hair px-5 py-4">
           <Building2 size={18} className="mt-0.5 shrink-0 text-accent" aria-hidden />
@@ -134,7 +134,7 @@ export default function BrokerProfilePanel({
             type="button"
             onClick={handleClose}
             aria-label="Close"
-            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
+            className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
           >
             <X size={18} aria-hidden />
           </button>
@@ -151,7 +151,7 @@ export default function BrokerProfilePanel({
               return (
                 <div
                   key={`${v.column}-${v.currency}-${i}`}
-                  className={`rounded-lg border ${s.border} bg-ink/[0.02] p-3`}
+                  className={`rounded-none border ${s.border} bg-ink/[0.02] p-3`}
                 >
                   <div className="flex items-center gap-2">
                     <span className={`text-sm leading-none ${s.text}`} aria-hidden>

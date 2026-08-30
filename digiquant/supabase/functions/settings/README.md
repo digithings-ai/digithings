@@ -20,6 +20,8 @@ This function seals broker credentials with the K3 vault public contract
 1. Module migrations **096–098** (workspaces foundation, tenant columns including
    `olympus_profile_config.workspace_id`, RLS hardening).
 2. K3 (`digiquant.vault.envelope` + migration `099_broker_connections.sql`).
+3. K5 migration **103** (`notification_prefs` + `notification_log`) for
+   `GET` / `PATCH /notifications`.
 
 Until then:
 
@@ -45,17 +47,21 @@ Profile schema re-validation imports the real
 
 | Method | Path | Behavior |
 |--------|------|----------|
+| `GET` | `/profile` | Load tip `olympus_profile_config` for workspace member (`?workspace_id=` / `?profile_key=` optional, default key `workspace`). **Empty contract:** no tip → **200** with `version_id`/`recorded_at` null, empty `label`, null investment/assets — read-only, never inserts. `house` key → **400**. Missing table → **503 `NOT_READY`**. No Custom-tier write gate (read for hydrate). **Observer bootstrap:** if the JWT user has no `workspace_members` row, the handler calls `ensure_personal_workspace` (migration 107) before resolve — creates a free personal workspace + owner membership (never system/house). |
 | `PATCH` | `/profile` | Tier gate; schema re-validate; append workspace-scoped version; reject `house` key; 409 on version/supersedes conflict |
 | `GET` | `/brokers` | Fingerprint projection only |
 | `POST` | `/brokers/connect` | Tier gate; `api_key` or Alpaca `oauth` (server-pinned `redirect_uri`); seal via vault; reconnect = revoke-then-insert |
 | `POST` | `/brokers/revoke` | Fail closed on unknown row |
-| `PATCH` | `/notifications` | **503 `NOT_READY`** until K5 lands `notification_prefs` |
+| `GET` | `/notifications` | Load `notification_prefs` for workspace member (`?workspace_id=` optional). **Empty contract:** no row → **200** with defaults (`daily_digest`/`holding_change_alerts`/`execution_alerts` false, `digest_hour_utc` 12, `email` from JWT when present, `updated_at: null`) — read-only, never inserts. Missing table → **503 `NOT_READY`**. |
+| `PATCH` | `/notifications` | Upsert `notification_prefs` (member authz; validates email + `digest_hour_utc` 0–23) |
 
 ## Tier gate
 
 `plan_tier ∈ {custom, enterprise}` is required for profile writes and broker
-connect (JWT `app_metadata.plan_tier` from T2 sync, else workspace row).
-Otherwise **403 `TIER_FORBIDDEN`**. UI `can()` is presentation only.
+connect, gated on **`workspaces.plan_tier` only** (authoritative after Stripe
+CAS). JWT `app_metadata.plan_tier` is presentation / claim-sync side — never
+prefer it here (stale elevated claim after cancel would fail-open). Otherwise
+**403 `TIER_FORBIDDEN`**. UI `can()` is presentation only.
 
 ## Secrets
 

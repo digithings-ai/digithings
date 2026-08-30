@@ -65,7 +65,7 @@ export default function PipelineArtifactLedger({
           type="button"
           aria-label="Close artifact ledger"
           onClick={onClose}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
+          className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink-mute transition-colors hover:text-ink md:h-8 md:w-8"
         >
           <X size={18} aria-hidden />
         </button>
@@ -84,7 +84,7 @@ export default function PipelineArtifactLedger({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search keys, types, or tickers"
-            className="h-10 w-full rounded-lg border border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-mute/70 focus:border-accent"
+            className="h-10 w-full border border-hair bg-surface pl-9 pr-3 font-mono text-xs text-ink outline-none transition-colors placeholder:text-ink-mute/70 focus:border-accent"
           />
         </label>
       </div>

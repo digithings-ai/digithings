@@ -106,7 +106,7 @@ export function ConsensusDataTable({
 
   if (rows.length === 0) {
     return (
-      <div className="glass-card p-8 text-center text-ink-mute text-sm">
+      <div className="oly-slab p-8 text-center text-sm text-ink-mute">
         No consensus data available.
       </div>
     );
@@ -124,7 +124,7 @@ export function ConsensusDataTable({
               data-filter={f.key}
               aria-pressed={on}
               onClick={() => setFilter(f.key)}
-              className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors ${
+              className={`text-[11px] font-medium px-2.5 py-1 rounded-none border transition-colors ${
                 on
                   ? 'border-accent/40 bg-accent/15 text-accent'
                   : 'border-hair text-ink-mute hover:text-ink'
@@ -136,7 +136,7 @@ export function ConsensusDataTable({
         })}
       </div>
 
-      <div className="glass-card p-0 overflow-hidden">
+      <div className="oly-slab overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px] border-collapse">
             <thead>

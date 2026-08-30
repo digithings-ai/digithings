@@ -14,6 +14,8 @@ const nextConfig = {
   // @digithings/web ships TypeScript sources (exports "." → src/index.ts) —
   // Next must compile them (same wiring as digithings-web / digiquant-web).
   transpilePackages: ['@digithings/web'],
+  // Dev preview is often opened at 127.0.0.1 while `next dev` advertises localhost.
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
 };
 
 export default nextConfig;
