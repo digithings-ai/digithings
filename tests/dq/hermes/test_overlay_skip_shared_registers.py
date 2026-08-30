@@ -1,12 +1,14 @@
 """Overlay must not last-writer-win house theses / analyst / vehicle / decision_log / onchain.
 
 Those tables have no ``workspace_id`` column. Overlay persist-on is not a
-license to upsert them.
+license to upsert them. Overlay must not fold house ``decision_log`` lessons
+into beliefs either — ``beliefs_folded_at`` is a shared-register stamp.
 """
 
 from __future__ import annotations
 
 from datetime import date
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -15,6 +17,7 @@ from digiquant.olympus.atlas.decision_log import (
     persist_pending,
     resolve_pending,
 )
+from digiquant.olympus.atlas.graph import AtlasGraphDeps, AtlasInput
 from digiquant.olympus.atlas.phases.preflight import (
     PreflightDeps,
     PreflightReflectDeps,
@@ -23,6 +26,8 @@ from digiquant.olympus.atlas.phases.preflight import (
 )
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.atlas.supabase_io import upsert_onchain_cohort_positioning
+from digiquant.olympus.hermes.chain import ChainDeps, _run_beliefs_fold
+from digiquant.olympus.hermes.graph import HermesGraphDeps
 from digiquant.olympus.hermes.models.thesis import (
     ThesisReviewOutput,
     ThesisStatusUpdate,
@@ -37,6 +42,7 @@ from digiquant.olympus.hermes.writers.thesis_io import (
     upsert_thesis_row,
     upsert_thesis_vehicles,
 )
+from digiquant.olympus.learning.beliefs_distillation import distill_beliefs
 from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 from digiquant.olympus.tenancy import house_workspace_id
 
@@ -446,3 +452,143 @@ def test_overlay_preflight_injects_onchain_without_persisting(
         out = node(overlay_state)
     assert "onchain_positioning" in out["data_layer"].market_context
     assert overlay_client.store.get("onchain_cohort_positioning", []) == []
+
+
+def _beliefs_chain_deps(client: FakeSupabaseClient) -> ChainDeps:
+    return ChainDeps(
+        atlas=AtlasGraphDeps(
+            preflight=PreflightDeps(client=client, config_loader=None),  # type: ignore[arg-type]
+        ),
+        hermes=HermesGraphDeps(),
+    )
+
+
+def _resolved_lesson(*, row_id: str) -> dict[str, object]:
+    return {
+        "id": row_id,
+        "run_id": "house-run",
+        "run_date": "2026-08-20",
+        "ticker": "SPY",
+        "stance": "buy",
+        "conviction": 3,
+        "thesis": "t",
+        "benchmark": "SPY",
+        "holding_days": 5,
+        "status": "resolved",
+        "reflection": "house lesson",
+    }
+
+
+def test_overlay_beliefs_fold_does_not_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    overlay_state = AtlasResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=AtlasConfigBundle(workspace_id=str(overlay)),
+    )
+    with patch(
+        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        side_effect=AssertionError("overlay must not fold house decision_log"),
+    ):
+        _run_beliefs_fold(
+            overlay_state,
+            _beliefs_chain_deps(FakeSupabaseClient()),
+            AtlasInput(run_date=_RUN),
+        )
+    assert overlay_state.errors == []
+
+    house_calls: list[str] = []
+
+    def house_fold(**_kwargs: object) -> bool:
+        house_calls.append("beliefs")
+        return False
+
+    house_state = AtlasResearchState(
+        run_type="delta",
+        run_date=_RUN,
+        config=AtlasConfigBundle(workspace_id=str(house_workspace_id())),
+    )
+    with patch(
+        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        house_fold,
+    ):
+        _run_beliefs_fold(
+            house_state,
+            _beliefs_chain_deps(FakeSupabaseClient()),
+            AtlasInput(run_date=_RUN),
+        )
+    omitted_state = AtlasResearchState(run_type="delta", run_date=_RUN)
+    with patch(
+        "digiquant.olympus.hermes.chain.run_beliefs_distillation_if_triggered",
+        house_fold,
+    ):
+        _run_beliefs_fold(
+            omitted_state,
+            _beliefs_chain_deps(FakeSupabaseClient()),
+            AtlasInput(run_date=_RUN),
+        )
+    assert house_calls == ["beliefs", "beliefs"]
+
+
+def test_overlay_distill_beliefs_does_not_stamp_house_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digiquant.olympus.learning import beliefs_distillation as mod
+
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    rows = [_resolved_lesson(row_id="house-1")]
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    overlay_client.store["decision_log"] = [dict(r) for r in rows]
+
+    def _overlay_must_not_distill(**_kw: object) -> object:
+        raise AssertionError("overlay must not distill house lessons")
+
+    monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
+    written = distill_beliefs(
+        client=overlay_client,
+        run_date=_RUN,
+        run_type="delta",
+        lessons=rows,
+        active_theses=[],
+        workspace_id=overlay,
+    )
+    assert written is False
+    assert overlay_client.store.get("documents", []) == []
+    assert overlay_client.store["decision_log"][0].get("beliefs_folded_at") is None
+
+    house_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    house_client.store["decision_log"] = [dict(r) for r in rows]
+    monkeypatch.setattr(
+        mod,
+        "_run_beliefs_llm",
+        lambda **_kw: mod.BeliefsBlob(
+            schema_version="1.0",
+            date=_RUN,
+            body="House beliefs body.",
+        ),
+    )
+    house_written = distill_beliefs(
+        client=house_client,
+        run_date=_RUN,
+        run_type="delta",
+        lessons=rows,
+        active_theses=[],
+        workspace_id=house_workspace_id(),
+    )
+    omitted_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    omitted_client.store["decision_log"] = [dict(r) for r in rows]
+    omitted_written = distill_beliefs(
+        client=omitted_client,
+        run_date=_RUN,
+        run_type="delta",
+        lessons=rows,
+        active_theses=[],
+    )
+    assert house_written is True
+    assert omitted_written is True
+    assert house_client.store["decision_log"][0].get("beliefs_folded_at") is not None
+    assert omitted_client.store["decision_log"][0].get("beliefs_folded_at") is not None

@@ -74,7 +74,8 @@ Loaded via `digiquant.olympus.hermes.schemas.load_schema(name)`.
 - **H9 terminal:** `commit_run` upserts `positions`, `nav_history`, syncs `theses` /
   `thesis_vehicles`, publishes brief, appends `decision_log`
 - **Atlas `publish_phase`:** research segments + digest only (chain terminal after Hermes)
-- **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node
+- **Beliefs:** on-demand via `run_beliefs_distillation_if_triggered` — not a daily graph node.
+  Overlay nested chain skips the fold so persist-on cannot stamp house `decision_log`.
 
 ## Testing
 

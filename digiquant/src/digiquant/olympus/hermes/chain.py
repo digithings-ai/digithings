@@ -39,6 +39,7 @@ from digiquant.olympus.hermes.graph import (
     build_hermes_graph,
 )
 from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
+from digiquant.olympus.overlay.persist import skip_overlay_shared_register
 
 _logger = logging.getLogger(__name__)
 
@@ -299,11 +300,19 @@ def _run_beliefs_fold(state: AtlasResearchState, deps: ChainDeps, atlas_input: A
     """
     if deps.atlas.preflight.client is None:
         return
+    if skip_overlay_shared_register(state.config.workspace_id):
+        # Overlay persist-on still reaches this post-publish fold after a
+        # fail-soft H9 ``legacy_book_unique``. Distillation reads every
+        # unfolded house ``decision_log`` row and stamps ``beliefs_folded_at``
+        # by id — a shared-register smash, same class as ``resolve_pending``.
+        _logger.info("chain: overlay workspace skips beliefs fold (shared decision_log)")
+        return
     try:
         run_beliefs_distillation_if_triggered(
             client=deps.atlas.preflight.client,
             atlas_input=atlas_input,
             run_type=_legacy_run_type(atlas_input.refresh_scope),
+            workspace_id=state.config.workspace_id,
         )
     except Exception as exc:  # an optional backlog fold must never kill a booked run
         _logger.exception("chain: beliefs distillation failed; continuing")

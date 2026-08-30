@@ -3328,7 +3328,11 @@ house corpus. Overlay `preflight_reflect` / `persist_pending` likewise **skip**
 reflections by id). Overlay Atlas preflight **skips** the
 `onchain_cohort_positioning` upsert (`UNIQUE(date, market)`) the same way; the
 compact summary still lands in in-memory `market_context` for that overlay run.
-Staged cutover 113 does not change that. Private overlay remains
+Overlay `run_atlas_then_hermes` **skips** `_run_beliefs_fold` for a private
+workspace — distillation reads every unfolded house `decision_log` row and
+stamps `beliefs_folded_at` by id, and the chain still reaches that fold after
+a fail-soft H9 `legacy_book_unique`. Staged cutover 113 does not change that.
+Private overlay remains
 H7–H9 book only (T4). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
 With the flag off, research/corpus phases still run; private-phase
