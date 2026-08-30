@@ -49,14 +49,13 @@ is irrelevant to resolution — every other frontend imports them the same way:
 
 `AuthCard` (`web/src/components/account/AuthCard.tsx`, CSS
 `./styles/account-auth.css`) is the promoted sign-in / create-account card.
-**Layout `compact` (A) is selected:** tool mark (`DigiquantMark`) with the
-`digiquant` wordmark beside it, then email, password, and one row of icon-only
-OAuth (`[G][GH][X]`) plus Sign in / Sign up filling the rest. Provider id for X
-is `twitter`; visible label/aria is **X**. Footer is Create an account / Sign in
-only. No olympus. Layouts `icons-first` (B) and `desk` (C) remain as rejected
-specimens on the reference account page (`AuthCardProposals`). The digiquant
-dashboard imports this compact card (`frontend/dashboard/components/login-screen.tsx`).
-X is in the UI; enabling the Twitter provider in Supabase is a separate owner hop.
+Layouts `compact`, `icons-first`, and `desk` share one form: email + password,
+Google / GitHub / X (provider id `twitter`, visible label X), primary submit
+Sign in / Sign up, footer Create an account / Sign in. Compact places the
+`digiquant` wordmark beside the mark. Desk may keep a product kicker, a sign-up
+strength meter, and sign-in Forgot password. Specimens live on the reference
+account page (`AuthCardProposals`) as a layout catalog. The dashboard login
+screen imports compact `AuthCard` (`frontend/dashboard/components/login-screen.tsx`).
 
 The F1 promotion campaign (#1450) added four more component families to
 `@digithings/web`, each a `web/src/components/<family>/` directory with its own

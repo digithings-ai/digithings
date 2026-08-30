@@ -18,8 +18,8 @@ export default function AccountPage() {
         </h1>
         <p>
           Login, sign-up, session, payment, settings, and profile templates — the
-          transactional pages every product surface eventually needs. Compact AuthCard
-          (mark + digiquant wordmark) is the selected login grammar.
+          transactional pages every product surface eventually needs. Sign-in cards in
+          three layouts, then the rest of the account family.
         </p>
       </header>
 
