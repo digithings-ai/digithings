@@ -3,7 +3,7 @@
 # Assembles into dist/:
 #   1. frontend/digiquant-web/out/ — the digiquant.io landing (Next.js static
 #      export, root domain, no basePath) → dist/ root
-#   2. frontend/olympus/out/       — the dashboard (basePath /dashboard)
+#   2. frontend/dashboard/out/     — the dashboard (basePath /dashboard)
 #      → dist/dashboard/ only. /olympus/ is retired (no twin, no 308).
 # The digiquant-web export ships public/_headers (root /* security headers +
 # /dashboard* CSP).
@@ -35,8 +35,8 @@ if [ "$(uname -s)" = "Linux" ]; then
 fi
 
 # REM-037: committed static portfolio JSON must not ship (Supabase is primary).
-if [ -f frontend/olympus/public/dashboard-data.json ]; then
-  echo "ERROR: frontend/olympus/public/dashboard-data.json must not be committed (REM-037)."
+if [ -f frontend/dashboard/public/dashboard-data.json ]; then
+  echo "ERROR: frontend/dashboard/public/dashboard-data.json must not be committed (REM-037)."
   echo "       Remove the file; portfolio data comes from Supabase at runtime."
   exit 1
 fi
@@ -75,9 +75,9 @@ if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_DASHBOARD_AUTH:-}" ]; then
   export NEXT_PUBLIC_DASHBOARD_AUTH=1
 fi
 echo "NEXT_PUBLIC_DASHBOARD_AUTH=${NEXT_PUBLIC_DASHBOARD_AUTH:-<unset>}"
-npm --workspace frontend/olympus run build
+npm --workspace frontend/dashboard run build
 mkdir -p dist/dashboard
-cp -r frontend/olympus/out/. dist/dashboard/
+cp -r frontend/dashboard/out/. dist/dashboard/
 
 # 3. Custom domain marker.
 echo "digiquant.io" > dist/CNAME

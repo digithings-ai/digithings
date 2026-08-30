@@ -11,11 +11,11 @@ tags:
 # digiquant dashboard
 > The human-facing operator surface for digiquant — research, portfolio deliberation, and execution in one place.
 
-This page used to be titled olympus. Product names are now digiquant plus job words (research / portfolio / execution). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md) and [the rebrand scope](../plans/2026-08-30-product-rebrand-scope.md). The dashboard lives at `digiquant.io/dashboard/` (`frontend/olympus` remains the workspace folder).
+This page used to be titled olympus. Product names are now digiquant plus job words (research / portfolio / execution). See [ADR-0026](../adr/0026-retire-olympus-atlas-hermes-kairos.md) and [the rebrand scope](../plans/2026-08-30-product-rebrand-scope.md). The dashboard lives at `digiquant.io/dashboard/` (`frontend/dashboard`).
 
 ## What it is
 
-The dashboard frontend (`frontend/olympus`) for the finance sub-graphs that live inside digiquant as `digiquant.olympus`. It turns pipeline output into a navigable, daily decision surface rather than raw research dumps: a "Morning Read" overview, surfaced bull/bear theses and risk debate, portfolio/NAV tracking, and entry points into strategy work.
+The dashboard frontend (`frontend/dashboard`) for the finance sub-graphs that live inside digiquant as `digiquant.olympus`. It turns pipeline output into a navigable, daily decision surface rather than raw research dumps: a "Morning Read" overview, surfaced bull/bear theses and risk debate, portfolio/NAV tracking, and entry points into strategy work.
 
 Where digichat is the general-purpose chat UI, this is the purpose-built operator view for quantitative finance — the place a researcher starts their day and where deliberations are published for human review.
 

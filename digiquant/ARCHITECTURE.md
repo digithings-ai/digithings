@@ -1728,7 +1728,7 @@ the two percent writers could not satisfy: both are gated on `nav_history` reach
 `_MIN_NAV_HISTORY_ROWS = 20`, and the first running drawdown they compute (~-1.31%) raises
 PostgREST `APIError 23514` — permanently, since running max drawdown is monotonically
 non-increasing. New writers of these columns must emit percent; readers may take the stored
-value directly (`frontend/olympus/lib/portfolio-risk-metrics.ts` maps them onto
+value directly (`frontend/dashboard/lib/portfolio-risk-metrics.ts` maps them onto
 `annVolPct` / `maxDrawdownPct` unchanged).
 
 Known wart, deliberately not changed here: `computed_from` carries
@@ -2458,7 +2458,7 @@ cross-project price copy is therefore **superseded**. `#1066` adds a shared
 incl. `event_datetime_utc` + the impact CHECK + unique `external_id`): the twelve-x
 ingest (`fx_calendar/calendar_db.py`) is repointed to write it, and the Olympus
 twelve-x **events tab reads it via the main Olympus client** (`getUpcomingEvents` in
-`frontend/olympus/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
+`frontend/dashboard/lib/twelve-x/fetch.ts`) rather than the twelve-x project — the
 other FX research tables stay on `twelveXSupabase`. Cutover is gated: the frontend
 read goes live only once the repointed ingest has populated `core`.
 
@@ -2683,7 +2683,7 @@ individual calls, ordering, retries, or timing without fabrication.
 
 | Field | Question | Consumers |
 |---|---|---|
-| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/olympus` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
+| `RunSummary.status` | Was the run healthy? | `atlas_run_diagnostics.status`, `frontend/dashboard` (`run-episodes.ts` `classify()`, `freshness-banner.tsx` `isOk()`) |
 | `RunSummary.retry_signal` | Is re-running worth the money? | `chain._retry_worthy` → the process exit code → CI's outer-retry loop |
 
 `status` stays inside `ok | degraded | failed | cancelled` — there is no CHECK constraint on
@@ -2716,7 +2716,7 @@ detectable and is the only way a future collision would be visible.
   `atlas_run_health` view — appended **last**, since `CREATE OR REPLACE VIEW` can only add
   columns. Pre-existing rows carry the sentinel `0`, never `1`: backfilling 1 would assert 28
   provably-collapsed rows are first attempts, which is the fabrication the change exists to end.
-- `frontend/olympus/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
+- `frontend/dashboard/lib/run-episodes.ts` gets fixed for free — `attempts = rows.length` and the
   `recovered` outcome were built on the assumption that attempts are distinct rows. It orders by
   `attempt` where usable and falls back to `created_at` for `0`-sentinel rows.
   `RUN_DIAGNOSTICS_LIMIT` rose 30 → 90 because a retried date now consumes several slots.
@@ -3040,7 +3040,7 @@ invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
 
 K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
 Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
-`frontend/olympus/lib/entitlements.ts` artifact-class matrix).
+`frontend/dashboard/lib/entitlements.ts` artifact-class matrix).
 
 **Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
 `NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
@@ -3260,7 +3260,7 @@ stamps house `workspace_id` on those same Group A tables when `eq` omits it
 (`HOUSE_BOOK_READ_TABLES` in `atlas/data/queries.py`). House preflight
 `load_prior_context` / analyst and deliberation continuity / beliefs /
 institutional-absence documents also pin house so overlay private docs cannot
-seed the house graph. The dashboard Group A readers (`frontend/olympus/lib/queries.ts`, `observability-queries.ts`)
+seed the house graph. The dashboard Group A readers (`frontend/dashboard/lib/queries.ts`, `observability-queries.ts`)
 go through `houseBook()` (`lib/house-workspace.ts`) so a signed-in Custom
 member's overlay rows cannot mix into Brief / Holdings / Performance. Accounting NAV still uses
 `public_accounting_nav_history` (security definer; house-only until a later
