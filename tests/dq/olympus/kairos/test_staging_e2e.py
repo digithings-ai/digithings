@@ -310,6 +310,16 @@ def test_proven_remaining_hops_ops_custom_none_does_not_count_as_stripe() -> Non
     proven = proven_remaining_hops(RemainingHopEvidence(subscription_status="none"))
     assert proven["browser_stripe_checkout"] is False
     assert remaining_hops_unproven(proven) == REMAINING_LIVE_HOPS
+    # Live ops-custom workspace is plan_tier=custom with subscription_status=none
+    # and no Stripe ids — grant/ops custom must not prove checkout.
+    grant = proven_remaining_hops(
+        RemainingHopEvidence(
+            plan_tier="custom",
+            subscription_status="none",
+            has_stripe_subscription=False,
+        )
+    )
+    assert grant["browser_stripe_checkout"] is False
 
 
 @pytest.mark.unit

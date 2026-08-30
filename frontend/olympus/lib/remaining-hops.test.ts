@@ -10,6 +10,13 @@ describe('provenRemainingHops', () => {
     const proven = provenRemainingHops({ subscription_status: 'none' });
     expect(proven.browser_stripe_checkout).toBe(false);
     expect(remainingHopsUnproven(proven)).toEqual([...REMAINING_LIVE_HOPS]);
+    expect(
+      provenRemainingHops({
+        plan_tier: 'custom',
+        subscription_status: 'none',
+        has_stripe_subscription: false,
+      }).browser_stripe_checkout,
+    ).toBe(false);
   });
 
   it('does not treat house active without Stripe subscription boolean', () => {
