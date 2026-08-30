@@ -8,8 +8,8 @@
   ============================================================================
   digithings — Invoice template (HTML → PDF)
   ----------------------------------------------------------------------------
-  Elegant, monochrome (black & white) invoice: Geist / Geist Mono / Instrument
-  Serif voices, hairline rules, generous whitespace, tabular figures for money.
+  Utilitarian monochrome invoice: Geist Mono for claim, body, and chrome.
+  Hairline rules, zero radius, no glass, tabular figures for money.
   No colour, no logo mark — a clean professional document.
 
   HOW TO USE
@@ -28,7 +28,7 @@
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
 /* --- Tokens (monochrome, black & white) ------------------------------------ */
 :root[data-theme="light"]{
@@ -36,23 +36,24 @@
   --hair:rgba(0,0,0,.11); --hair-2:rgba(0,0,0,.22);
   --ink:#1A1A1A; --ink-soft:#565656; --ink-mute:#8C8C8C;
   --accent:var(--ink);                 /* safety: any stray accent resolves to ink */
-  --sans:"Geist",system-ui,-apple-system,sans-serif;
   --mono:"Geist Mono","JetBrains Mono",ui-monospace,monospace;
-  --serif:"Instrument Serif",Georgia,serif;
+  --sans:var(--mono);
+  --display:var(--mono);
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%}
 body{
   background:var(--bg); color:var(--ink);
-  font-family:var(--sans); font-weight:400; font-size:11px; line-height:1.55;
+  font-family:var(--mono); font-weight:400; font-size:11px; line-height:1.55;
   -webkit-font-smoothing:antialiased;
   padding:40px 20px;
 }
 
 /* Voices -------------------------------------------------------------------- */
-.kick{font-family:var(--mono); font-size:8.5px; font-weight:500; letter-spacing:.22em;
-  text-transform:uppercase; color:var(--ink-mute)}
+.kick{font-family:var(--mono); font-size:9px; font-weight:400; letter-spacing:.02em;
+  color:var(--ink-mute)}
+.kick::before{content:"// "}
 .mono{font-family:var(--mono); font-variant-numeric:tabular-nums lining-nums}
 .ph{color:var(--ink-mute); font-family:var(--mono)}   /* fill-in placeholder */
 
@@ -60,21 +61,21 @@ body{
 .sheet{
   max-width:780px; margin:0 auto; background:var(--surface);
   border:1px solid var(--hair);
-  box-shadow:0 18px 50px -30px rgba(0,0,0,.25);
+  box-shadow:none;
 }
 .pad{padding:52px 56px}
 
 /* Masthead ------------------------------------------------------------------ */
 .masthead{display:flex; justify-content:space-between; align-items:flex-start; gap:40px;
   padding-bottom:18px; border-bottom:1px solid var(--hair)}
-.brand .name{font-family:var(--serif); font-size:22px; line-height:1; letter-spacing:.01em}
+.brand .name{font-family:var(--display); font-size:22px; line-height:1; letter-spacing:.01em}
 .brand-tag{margin-top:6px; font-family:var(--mono); font-size:8.5px; letter-spacing:.2em;
   text-transform:uppercase; color:var(--ink-mute)}
 .from{margin-top:13px; color:var(--ink-soft); font-size:11px; line-height:1.75; max-width:250px}
 .from .who{color:var(--ink); font-weight:500}
 
 .doc-title{text-align:right}
-.doc-title .word{font-family:var(--serif); font-size:30px; line-height:.9; letter-spacing:.02em}
+.doc-title .word{font-family:var(--display); font-size:30px; line-height:.9; letter-spacing:.02em}
 .meta{margin-top:18px; display:grid; grid-template-columns:auto auto; gap:6px 18px;
   justify-content:end; text-align:right}
 .meta dt{font-family:var(--mono); font-size:8.5px; letter-spacing:.16em; text-transform:uppercase;
@@ -136,10 +137,10 @@ body{
 
 /* Optional supplement page — delivery breakdown ----------------------------- */
 .appendix{max-width:780px; margin:30px auto 0; background:var(--surface);
-  border:1px solid var(--hair); box-shadow:0 18px 50px -30px rgba(0,0,0,.25)}
+  border:1px solid var(--hair); box-shadow:none}
 .apx-head{display:flex; justify-content:space-between; align-items:flex-start; gap:24px;
   padding-bottom:16px; border-bottom:1px solid var(--ink)}
-.apx-title{font-family:var(--serif); font-size:24px; line-height:1; margin-top:7px}
+.apx-title{font-family:var(--display); font-size:24px; line-height:1; margin-top:7px}
 .apx-meta{text-align:right; font-family:var(--mono); font-size:10px; line-height:1.9; color:var(--ink-soft)}
 .apx-meta b{color:var(--ink); font-weight:500}
 .apx-meta .sep{color:var(--ink-mute)}
