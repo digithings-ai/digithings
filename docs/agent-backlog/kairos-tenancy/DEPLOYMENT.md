@@ -115,6 +115,18 @@ ORDER BY version;
 
 ## 3. Edge Function deploys
 
+### Live status on `core` (2026-08-30)
+
+| Function | Status | Notes |
+|----------|--------|-------|
+| `prices-live` | ACTIVE | Pre-existing |
+| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
+| `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
+| `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
+| `settings` | ACTIVE (placeholder v1) | Returns `503 NOT_READY` until vault secret + **full** shared-source redeploy (`supabase functions deploy settings` with `_shared/*`); payload at `/opt/cursor/artifacts/SETTINGS_DEPLOY_NOW.json` |
+
+### Deploy commands
+
 Functions live under `digiquant/supabase/functions/`. Deploy from a checkout that
 already contains the merged function code + migrations on the target DB.
 
