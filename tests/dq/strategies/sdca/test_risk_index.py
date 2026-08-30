@@ -125,9 +125,7 @@ class TestBuildRiskIndex:
 
 
 class TestWriteRiskIndex:
-    def test_round_trips_through_sdca_strategy_load(
-        self, tmp_path: Path
-    ) -> None:
+    def test_round_trips_through_sdca_strategy_load(self, tmp_path: Path) -> None:
         pytest.importorskip("nautilus_trader")
         from digiquant.strategies.sdca.nautilus_strategy import SdcaStrategy, SdcaStrategyConfig
         from nautilus_trader.model.data import BarSpecification, BarType
@@ -139,9 +137,7 @@ class TestWriteRiskIndex:
         path = write_risk_index(frame, tmp_path / "risk.parquet")
 
         instrument = TestInstrumentProvider.btcusdt_binance()
-        bar_type = BarType(
-            instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST)
-        )
+        bar_type = BarType(instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST))
         strategy = SdcaStrategy(
             SdcaStrategyConfig(
                 instrument_id=instrument.id,
@@ -231,9 +227,7 @@ class TestNullRiskProducesNoTrade:
         path = write_risk_index(frame, tmp_path / "risk.parquet")
 
         instrument = TestInstrumentProvider.btcusdt_binance()
-        bar_type = BarType(
-            instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST)
-        )
+        bar_type = BarType(instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST))
         strategy = SdcaStrategy(
             SdcaStrategyConfig(
                 instrument_id=instrument.id,
@@ -247,9 +241,7 @@ class TestNullRiskProducesNoTrade:
         strategy._submit_market = Mock()  # type: ignore[method-assign]
 
         def _bar(day: date) -> Bar:
-            ts = dt_to_unix_nanos(
-                _dt.datetime.combine(day, _dt.time.min, tzinfo=_dt.timezone.utc)
-            )
+            ts = dt_to_unix_nanos(_dt.datetime.combine(day, _dt.time.min, tzinfo=_dt.timezone.utc))
             p = instrument.make_price(50.0)
             q = instrument.make_qty(1.0)
             return Bar(bar_type, p, p, p, p, q, ts, ts)

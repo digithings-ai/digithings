@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import polars as pl
@@ -29,7 +29,7 @@ def _tool():
 
 
 def _write_cache(cache_dir: Path, ticker: str = "BTC-USD", n: int = 10) -> None:
-    start = datetime(2020, 1, 1)
+    start = datetime(2020, 1, 1, tzinfo=UTC)
     rows = {
         "timestamp": [start + timedelta(days=i) for i in range(n)],
         "open": [10_000.0] * n,

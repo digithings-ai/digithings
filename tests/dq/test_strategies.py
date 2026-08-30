@@ -261,9 +261,7 @@ class TestSdcaRiskIndexNautilusChain:
 
         n = 40
         start = date(2020, 1, 1)
-        dates = pl.Series(
-            "date", [start + _dt.timedelta(days=i) for i in range(n)], dtype=pl.Date
-        )
+        dates = pl.Series("date", [start + _dt.timedelta(days=i) for i in range(n)], dtype=pl.Date)
         model = BtcPowerLawRiskModel(load_coefficients())
         rails = model.rails(dates)
         # Price at the low rail → valuation-z = +3 → risk = 0 → max buy.
@@ -297,9 +295,7 @@ class TestSdcaRiskIndexNautilusChain:
         prices = price.to_list()
         ohlcv_df = pl.DataFrame(
             {
-                "timestamp": [
-                    _dt.datetime.combine(d, _dt.time.min) for d in dates.to_list()
-                ],
+                "timestamp": [_dt.datetime.combine(d, _dt.time.min) for d in dates.to_list()],
                 "open": prices,
                 "high": prices,
                 "low": prices,
