@@ -38,6 +38,7 @@ from digiquant.olympus.kairos.router import (
     route_pending_orders,
     side_from_action,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -83,8 +84,14 @@ class _FakeQuery:
             self._pending_insert = None
             return _FakeResult(inserted)
         rows = list(self._store.get(self._table, []))
+        house = str(house_workspace_id())
         for col, val in self._filters:
-            rows = [r for r in rows if str(r.get(col)) == str(val)]
+            rows = [
+                r
+                for r in rows
+                if str(r.get(col)) == str(val)
+                or (col == "workspace_id" and str(val) == house and r.get(col) is None)
+            ]
         for col, vals in self._in_filters:
             allowed = {str(v) for v in vals}
             rows = [r for r in rows if str(r.get(col)) in allowed]

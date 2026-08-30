@@ -29,6 +29,7 @@ from digiquant.olympus.atlas.supabase_io import (
     query_price_technicals_freshness,
     upsert_onchain_cohort_positioning,
 )
+from digiquant.olympus.tenancy import house_workspace_id
 
 # ─── In-memory fake Supabase client ─────────────────────────────────────────
 
@@ -136,15 +137,26 @@ class _FakeQuery:
         return self
 
     def _matches(self, row: dict[str, Any]) -> bool:
-        return all(
-            (op == "eq" and row.get(col) == val)
-            or (op == "lt" and str(row.get(col, "")) < str(val))
-            or (op == "lte" and str(row.get(col, "")) <= str(val))
-            or (op == "gte" and str(row.get(col, "")) >= str(val))
-            or (op == "in_" and row.get(col) in val)
-            or (op == "like" and str(row.get(col, "")).startswith(str(val).rstrip("%")))
-            for op, col, val in self._filters
-        )
+        house = str(house_workspace_id())
+        for op, col, val in self._filters:
+            row_val = row.get(col)
+            if op == "eq" and col == "workspace_id" and row_val is None and val == house:
+                # Legacy house fixtures omit the column; T0 stamped house on every
+                # live row. Missing == house so overlay ids never match a house filter.
+                continue
+            if op == "eq" and row_val != val:
+                return False
+            if op == "lt" and str(row.get(col, "")) >= str(val):
+                return False
+            if op == "lte" and str(row.get(col, "")) > str(val):
+                return False
+            if op == "gte" and str(row.get(col, "")) < str(val):
+                return False
+            if op == "in_" and row_val not in val:
+                return False
+            if op == "like" and not str(row.get(col, "")).startswith(str(val).rstrip("%")):
+                return False
+        return True
 
     def execute(self) -> _FakeResponse:
         if self._insert_rows is not None:
@@ -289,9 +301,10 @@ class TestPublishDocument:
         )
         assert out1.table == "documents"
         assert out1.document_key == "macro/2026-04-20.json"
-        # Both upserts record on_conflict on (date, document_key).
+        # Both upserts record on_conflict on (workspace_id, date, document_key).
         rows = client.store["documents"]
-        assert all(r["_on_conflict"] == "date,document_key" for r in rows)
+        assert all(r["_on_conflict"] == "workspace_id,date,document_key" for r in rows)
+        assert all(r["workspace_id"] == str(house_workspace_id()) for r in rows)
         assert out2.document_key == out1.document_key
 
     def test_audit_redacts_nothing_unusual(self, caplog: pytest.LogCaptureFixture) -> None:

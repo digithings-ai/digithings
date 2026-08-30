@@ -57,7 +57,8 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 from digiquant.olympus.hermes.turnover import no_trade_band_pp
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -148,9 +149,14 @@ def _rows_for_date(
     run_date: date,
     workspace_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    query = client.table(table).select("*").eq("run_date", run_date.isoformat())
-    if workspace_id is not None:
-        query = query.eq("workspace_id", workspace_id)
+    """Date + workspace. Omitted ``workspace_id`` is the house, never every row."""
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table(table)
+        .select("*")
+        .eq("run_date", run_date.isoformat())
+        .eq("workspace_id", scoped)
+    )
     resp = query.execute()
     return list(resp.data or [])
 
@@ -419,6 +425,7 @@ def append_commit_chain(
     adjustments_by_symbol = _pct_adjustments_by_symbol(h8_adjustments)
 
     overlay_ws = getattr(state.config, "workspace_id", None)
+    require_overlay_persist(overlay_ws)
     prior_commits = _rows_for_date(
         client=client, table=COMMITS, run_date=run_date, workspace_id=overlay_ws
     )

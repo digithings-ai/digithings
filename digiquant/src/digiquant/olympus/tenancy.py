@@ -98,10 +98,10 @@ def house_workspace_id() -> UUID:
 
 
 def resolved_workspace_id(raw: UUID | str | None) -> UUID:
-    """Overlay pin-seam helper: explicit id, or the house default when absent.
+    """Omitted / ``None`` / blank means **the house workspace**, never "every row".
 
-    T4 threads ``workspace_id`` through preflight. House callers that omit it keep
-    the T0 stamp (``house_workspace_id()``) so house payloads stay byte-identical.
+    House readers and writers that leave ``workspace_id`` off must still filter
+    and stamp ``house_workspace_id()``. Overlay passes an explicit id.
     """
     if raw is None:
         return house_workspace_id()
