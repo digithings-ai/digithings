@@ -2841,3 +2841,31 @@ The package imports without the extra (`brokers/__init__.py` lazy-exports `Alpac
 `tests/dq/brokers/test_alpaca_adapter.py`; live paper smoke is
 `tests/dq/brokers/test_alpaca_integration.py` behind the `alpaca_paper` marker + env keys
 (excluded from CI).
+
+### IBKR adapter
+
+`digiquant/src/digiquant/brokers/ibkr.py` (K2) implements `BrokerAdapter` against IBKR's
+Client Portal Web API. **Read-first:** `get_account` / `get_positions` use
+`/portfolio/accounts`, paginated `/portfolio/{id}/positions/{page}`, `/summary`, and
+`/ledger` on the SSO/live-session layer and never call `/iserver/auth/ssodh/init`.
+`connect()` checks `/iserver/auth/status`; `keepalive()` is a single `POST /tickle` (no
+threads — the caller owns any tickle loop). Expired sessions get one transparent re-auth,
+then `BrokerAuthError`.
+
+Order submission is implemented but locked behind `DIGIQUANT_IBKR_ORDERS=1` (default off;
+`submit_order` raises `IbkrOrdersDisabledError`). When enabled, brokerage init uses
+`compete=false`, surfaces competing sessions as `SessionCompetingError` without kicking the
+user, resolves `conid` via `/iserver/secdef/search` (per-symbol cache), submits
+`POST /iserver/account/{id}/orders`, and walks the reply chain against
+`SUPPRESSIBLE_MESSAGE_IDS` (re-applied via `/iserver/questions/suppress` after every session
+init). Off-allowlist prompts → `BrokerOrderRejected(question_text)`.
+
+Pacing: monotonic-clock ≥5s spacing on `/portfolio/accounts`, `/iserver/orders`,
+`/iserver/trades` — violation raises `BrokerRateLimited` (no silent sleep). Money/qty parse
+as `Decimal`; logs carry response SHA-256 fingerprints only. Auth is an injected
+pre-authenticated `IbkrTransport` (no OAuth signing in-tree yet). Optional extra
+`brokers-ibkr = ["httpx>=0.27"]`. Operational notes: `digiquant/docs/brokers/IBKR-NOTES.md`.
+Broker exceptions use the shared family in `contracts.py` (`BrokerAuthError`,
+`BrokerOrderRejected`, `BrokerRateLimited`, `BrokerTransportError`); IBKR-only
+`IbkrOrdersDisabledError` and `SessionCompetingError` remain in `ibkr.py`.
+Tests: `tests/dq/brokers/test_ibkr_adapter.py` (mocked transport only).
