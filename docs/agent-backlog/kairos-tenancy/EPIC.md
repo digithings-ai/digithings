@@ -89,16 +89,19 @@ under `/olympus`, no loopback). Checkout return URLs are
 client id from `GET /app-urls` (empty until EF secrets land; never the secret)
 so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 
-**Remaining hops (Observer JWT, re-audit 2026-08-31T07:02Z):** all five unproven.
+**Remaining hops (Observer JWT, re-audit 2026-08-31T07:16Z):** all five unproven.
 `job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK
 rows = **0**. One ops-custom workspace has an Alpaca **paper `api_key`** connection
 (not OAuth; does not prove the remaining hop). House is `enterprise`/`active`
 **without** Stripe ids — must not prove checkout. Overlay `--dry-run` against core
 (after D1 `plan_floor` honor): `considered=5 targets=3 billing_active=1` — the
 creator GitHub workspace (`plan_tier=free`, `plan_floor=custom`). Dry-run now
-also prints `byok_present` (active credential rows among entitled targets; no
-unseal). BYOK rows on that workspace are still **0**, so `--execute` would skip
-`no_credentials`. Settings Pipeline / Brokers / Notifications tabs now read
+also prints `byok_present` and `persist_enabled` (live core: `byok_present=0
+persist_enabled=0`). Overlay `--execute` refuses without `OLYMPUS_OVERLAY_PERSIST=1`
+(`OVERLAY_EXECUTE_NOT_CONFIGURED`) so a persist-off run cannot finish
+`persist_disabled` and look like a hop. Persist is safe after migration 110.
+BYOK rows on that workspace are still **0**, so `--execute` would skip
+`no_credentials` even with persist on. Settings Pipeline / Brokers / Notifications tabs now read
 `GET /jobs` `/fills` `/notifications/log` so skip reasons and empty remaining
 hops are visible in the UI. Settings About shows the five remaining hops from
 member-scoped reads (Observer-visible; digest log without inbox confirmation

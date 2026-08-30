@@ -457,6 +457,20 @@ def test_dry_run_counts_byok_present_among_entitled() -> None:
     assert rc == 0
     assert "billing_active=1" in logs[0]
     assert "byok_present=1" in logs[0]
+    assert "persist_enabled=0" in logs[0]
+
+
+def test_dry_run_prints_persist_enabled_when_flag_set() -> None:
+    logs: list[str] = []
+    rc = main(
+        ["--dry-run", "--run-date", _RUN.isoformat()],
+        environ={"OLYMPUS_OVERLAY_PERSIST": "1"},
+        workspaces=[_ws(_USER)],
+        log=logs.append,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    assert "persist_enabled=1" in logs[0]
 
 
 def _module_header(name: str) -> str:
@@ -729,7 +743,11 @@ def test_execute_production_missing_vault_exits_2_before_dispatch() -> None:
     err: list[str] = []
     rc = main(
         ["--execute", "--all", "--run-date", _RUN.isoformat()],
-        environ={"SUPABASE_URL": "https://example.supabase.co", "SUPABASE_SERVICE_ROLE_KEY": "k"},
+        environ={
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "k",
+            "OLYMPUS_OVERLAY_PERSIST": "1",
+        },
         workspaces=[_ws(_USER)],
         log=lambda _m: None,
         log_err=err.append,
@@ -738,3 +756,23 @@ def test_execute_production_missing_vault_exits_2_before_dispatch() -> None:
     assert err
     assert "OVERLAY_EXECUTE_NOT_CONFIGURED" in err[0]
     assert "DIGIQUANT_VAULT_MASTER_KEY" in err[0]
+
+
+def test_execute_production_missing_persist_exits_2_before_dispatch() -> None:
+    err: list[str] = []
+    rc = main(
+        ["--execute", "--all", "--run-date", _RUN.isoformat()],
+        environ={
+            "SUPABASE_URL": "https://example.supabase.co",
+            "SUPABASE_SERVICE_ROLE_KEY": "k",
+            "DIGIQUANT_VAULT_MASTER_KEY": "dGVzdA==",
+        },
+        workspaces=[_ws(_USER)],
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == 2
+    assert err
+    assert "OVERLAY_EXECUTE_NOT_CONFIGURED" in err[0]
+    assert "OLYMPUS_OVERLAY_PERSIST" in err[0]
+    assert "persist_disabled" not in "\n".join(err)

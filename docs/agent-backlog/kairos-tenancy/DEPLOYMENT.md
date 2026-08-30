@@ -370,8 +370,10 @@ curl -sS -X POST "$SUPABASE_FUNCTIONS/create-checkout-session" \
   -d '{"tier":"baseline","interval":"monthly"}'
 # Complete Checkout in browser; wait for stripe-webhook → plan_tier claim
 # 3) Connect Alpaca paper (Settings → brokers; OAuth — needs ALPACA_OAUTH_CLIENT_*)
-# 4) Overlay run (T4): trigger workspace overlay job; assert job_runs row
-#    (private persist needs OLYMPUS_OVERLAY_PERSIST=1 only after cutover 900)
+# 4) Overlay run (T4): `OLYMPUS_OVERLAY_PERSIST=1 python -m digiquant.olympus.overlay --execute --workspace-id <uuid>`
+#    Persist is safe after migration **110** (not 900). `--execute` refuses without the flag
+#    (`OVERLAY_EXECUTE_NOT_CONFIGURED: OLYMPUS_OVERLAY_PERSIST`) so the hop cannot be
+#    `persist_disabled`. Requires BYOK present_and_unsealable. Never `--execute --all`.
 # 5) Routed order (K4): order_intent → broker_orders status accepted/filled (paper)
 # 6) Mirrored fill: broker_executions row; broker_position_snapshots updated
 # 7) Digest email (K5): enable notification_prefs.daily_digest; run

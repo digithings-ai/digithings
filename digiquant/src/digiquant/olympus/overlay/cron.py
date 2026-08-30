@@ -391,6 +391,7 @@ def _log_dry_run(
     loaded: Sequence[WorkspaceEntitlement],
     run_date: date,
     byok_workspace_ids: set[UUID] | None = None,
+    persist_enabled: bool = False,
 ) -> None:
     targets = overlay_cron_targets(loaded)
     entitled = [ws for ws in targets if overlay_billing_entitled(ws)]
@@ -399,7 +400,8 @@ def _log_dry_run(
     log(
         f"overlay dry-run date={run_date.isoformat()} "
         f"considered={len(loaded)} targets={len(targets)} "
-        f"billing_active={len(entitled)} byok_present={ready}"
+        f"billing_active={len(entitled)} byok_present={ready} "
+        f"persist_enabled={int(persist_enabled)}"
     )
 
 
@@ -474,7 +476,13 @@ def main(
                 present = load_active_byok_workspace_ids(_supabase_client_from_env(env))
             except Exception:
                 present = set()
-        _log_dry_run(log, loaded=loaded, run_date=run_date, byok_workspace_ids=present)
+        _log_dry_run(
+            log,
+            loaded=loaded,
+            run_date=run_date,
+            byok_workspace_ids=present,
+            persist_enabled=(env.get("OLYMPUS_OVERLAY_PERSIST") or "").strip() == "1",
+        )
         return 0
 
     if args.execute and overlay_runner is None and store is None and build_store is None:

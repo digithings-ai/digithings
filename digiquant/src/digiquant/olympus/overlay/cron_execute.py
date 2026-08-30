@@ -20,6 +20,7 @@ from digiquant.olympus.overlay.dispatch import (
     overlay_idempotency_key,
 )
 from digiquant.olympus.overlay.models import OverlayError, OverlayRunRequest
+from digiquant.olympus.overlay.persist import OVERLAY_PERSIST_ENV
 from digiquant.vault.envelope import MASTER_KEY_ENV
 
 PROFILE_PIN_MISSING = "profile_pin_missing"
@@ -118,11 +119,13 @@ def missing_overlay_execute_env_names(
     *,
     store_missing: list[str] | None = None,
 ) -> list[str]:
-    """Store + vault names required to execute. Never returns values."""
+    """Store + vault + persist names required to execute. Never returns values."""
     env = os.environ if environ is None else environ
     missing = list(store_missing or [])
     if not (env.get(MASTER_KEY_ENV) or "").strip():
         missing.append(MASTER_KEY_ENV)
+    if (env.get(OVERLAY_PERSIST_ENV) or "").strip() != "1":
+        missing.append(OVERLAY_PERSIST_ENV)
     return missing
 
 

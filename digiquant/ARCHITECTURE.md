@@ -3171,7 +3171,9 @@ exception fails that claimed row (`job_runs.error` = structured code or
 exception type name, never the payload) and continues the batch. Persist-off
 finishes `persist_disabled`, which the staging harness does **not** treat
 as proven (hop requires `succeeded` only). `--execute` apply also requires
-`DIGIQUANT_VAULT_MASTER_KEY` (`OVERLAY_EXECUTE_NOT_CONFIGURED`). Do not run
+`DIGIQUANT_VAULT_MASTER_KEY` and `OLYMPUS_OVERLAY_PERSIST=1` (safe after
+migration 110; `OVERLAY_EXECUTE_NOT_CONFIGURED` if either is missing) so a
+production cron cannot finish `persist_disabled` and look like a hop. Do not run
 `--all` / `--execute --all` against Observer until Stripe + BYOK land;
 skipped rows are not a remaining-hop proof. The cron module does
 not import `byok`/`digillm` (digiquant-only CI). Production apply passes
