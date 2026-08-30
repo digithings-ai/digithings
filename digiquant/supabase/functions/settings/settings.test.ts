@@ -44,11 +44,14 @@ interface Store {
   members: Array<{ workspace_id: string; user_id: string; role: string }>;
   profiles: Array<Record<string, unknown>>;
   brokers: Array<Record<string, unknown>>;
+  keys: Array<Record<string, unknown>>;
   prefs: Array<Record<string, unknown>>;
   /** When true, notification_prefs lookups fail as if the table is missing. */
   prefsMissing?: boolean;
   /** When true, olympus_profile_config lookups fail as if the table is missing. */
   profilesMissing?: boolean;
+  /** When true, workspace_provider_credentials lookups fail as if missing. */
+  keysMissing?: boolean;
   /** When true, ensure_personal_workspace RPC fails (bootstrap disabled). */
   bootstrapDisabled?: boolean;
 }
@@ -77,6 +80,7 @@ function freshStore(): Store {
     ],
     profiles: [],
     brokers: [],
+    keys: [],
     prefs: [],
   };
 }
@@ -251,6 +255,86 @@ function mockAdmin(store: Store): AdminClient {
           return { data: maybeSingle || wantSingle ? projected : rows.map((r) => projectFp(r, selectCols)), error: null };
         }
         let rows = [...store.brokers];
+        for (const f of filters) {
+          if (f.op === "eq") rows = rows.filter((r) => r[f.col] === f.val);
+        }
+        if (orderCol) {
+          const col = orderCol;
+          rows.sort((a, b) => {
+            const av = String(a[col] ?? "");
+            const bv = String(b[col] ?? "");
+            return orderAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+          });
+        }
+        const projected = rows.map((r) => projectFp(r, selectCols));
+        if (wantSingle || maybeSingle) {
+          return { data: projected[0] ?? null, error: null };
+        }
+        return { data: projected, error: null };
+      }
+
+      if (table === "workspace_provider_credentials") {
+        if (store.keysMissing) {
+          return {
+            data: null,
+            error: {
+              message: 'relation "workspace_provider_credentials" does not exist',
+              code: "42P01",
+            },
+          };
+        }
+        if (pendingInsert) {
+          const activeClash = store.keys.some(
+            (k) =>
+              k.workspace_id === pendingInsert!.workspace_id &&
+              k.provider === pendingInsert!.provider &&
+              k.status === "active",
+          );
+          if (activeClash) {
+            return {
+              data: null,
+              error: {
+                message:
+                  "duplicate key value violates unique constraint uq_workspace_provider_credentials_active",
+                code: "23505",
+              },
+            };
+          }
+          const row = {
+            ...pendingInsert,
+            last_used_at: null,
+            revoked_at: null,
+            created_at: new Date().toISOString(),
+          };
+          store.keys.push(row);
+          return {
+            data: wantSingle || maybeSingle
+              ? projectFp(row, selectCols)
+              : [projectFp(row, selectCols)],
+            error: null,
+          };
+        }
+        if (pendingUpdate) {
+          let rows = [...store.keys];
+          for (const f of filters) {
+            if (f.op === "eq") rows = rows.filter((r) => r[f.col] === f.val);
+            if (f.op === "neq") rows = rows.filter((r) => r[f.col] !== f.val);
+          }
+          if (rows.length === 0) {
+            return { data: maybeSingle || wantSingle ? null : [], error: null };
+          }
+          for (const target of rows) {
+            Object.assign(target, pendingUpdate);
+          }
+          const projected = projectFp(rows[0]!, selectCols);
+          return {
+            data: maybeSingle || wantSingle
+              ? projected
+              : rows.map((r) => projectFp(r, selectCols)),
+            error: null,
+          };
+        }
+        let rows = [...store.keys];
         for (const f of filters) {
           if (f.op === "eq") rows = rows.filter((r) => r[f.col] === f.val);
         }
@@ -1006,6 +1090,120 @@ Deno.test("PATCH notifications: wrong workspace is forbidden", async () => {
 // ---------------------------------------------------------------------------
 // Vault helpers used by handlers
 // ---------------------------------------------------------------------------
+
+Deno.test("403 TIER_FORBIDDEN for baseline on keys connect", async () => {
+  const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
+  const { status, json } = await call(store, "POST", "/keys/connect", {
+    provider: "openai",
+    kind: "api_key",
+    secret: "sk-test-baseline-blocked",
+  });
+  assertEquals(status, 403);
+  assertEquals(json.code, "TIER_FORBIDDEN");
+  assertEquals(store.keys.length, 0);
+});
+
+Deno.test("PATCH profile: persists watchlist/themes/research_budget_usd", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/profile", {
+    profile_key: "workspace",
+    label: "Overlay A",
+    watchlist: ["aapl", "MSFT", "aapl"],
+    themes: ["AI", "ai", "Energy"],
+    research_budget_usd: 12.5,
+  });
+  assertEquals(status, 200);
+  assertEquals(typeof json.version_id, "string");
+  const tip = store.profiles[0]!;
+  const payload = tip.payload as Record<string, unknown>;
+  assertEquals(payload.watchlist, ["AAPL", "MSFT"]);
+  assertEquals(payload.themes, ["ai", "energy"]);
+  assertEquals(payload.research_budget_usd, 12.5);
+
+  const got = await call(store, "GET", "/profile");
+  assertEquals(got.status, 200);
+  assertEquals(got.json.watchlist, ["AAPL", "MSFT"]);
+  assertEquals(got.json.themes, ["ai", "energy"]);
+  assertEquals(got.json.research_budget_usd, 12.5);
+});
+
+Deno.test("PATCH profile: rejects negative research_budget_usd", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "PATCH", "/profile", {
+    profile_key: "workspace",
+    label: "Overlay A",
+    research_budget_usd: -1,
+  });
+  assertEquals(status, 400);
+  assertEquals(json.code, "INVALID_BUDGET");
+});
+
+Deno.test("POST keys/connect: seals with AAD workspace:provider:llm; no secret in response", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "POST", "/keys/connect", {
+    provider: "openai",
+    kind: "api_key",
+    key_id: "user",
+    secret: "sk-live-never-echo",
+  });
+  assertEquals(status, 200);
+  assertEquals(json.provider, "openai");
+  assertEquals(typeof json.fingerprint, "string");
+  assertEquals((json.fingerprint as string).length, 8);
+  assertEquals(json.status, "active");
+  const blob = JSON.stringify(json);
+  assertEquals(blob.includes("sk-live-never-echo"), false);
+  assertEquals(blob.includes("ciphertext"), false);
+  assertEquals(store.keys.length, 1);
+  const row = store.keys[0]!;
+  assertEquals(typeof row.ciphertext, "string");
+  assertEquals(String(row.ciphertext).startsWith("\\x"), true);
+
+  const aad = buildAad(WS_A, "openai", "llm");
+  const sealed = {
+    ciphertext: hexToBytes(String(row.ciphertext).slice(2)),
+    nonce: hexToBytes(String(row.nonce).slice(2)),
+    key_id: String(row.key_id),
+  };
+  const opened = await openBytes(sealed, { aad, key: TEST_KEY });
+  const openedText = new TextDecoder().decode(opened);
+  assertEquals(openedText.includes("sk-live-never-echo"), true);
+});
+
+Deno.test("POST keys/connect reconnect: revoke-then-insert on active unique", async () => {
+  const store = freshStore();
+  const first = await call(store, "POST", "/keys/connect", {
+    provider: "groq",
+    secret: "sk-first",
+  });
+  assertEquals(first.status, 200);
+  const second = await call(store, "POST", "/keys/connect", {
+    provider: "groq",
+    secret: "sk-second",
+  });
+  assertEquals(second.status, 200);
+  assertEquals(store.keys.filter((k) => k.status === "active").length, 1);
+  assertEquals(store.keys.filter((k) => k.status === "revoked").length, 1);
+  assertEquals(second.json.fingerprint !== first.json.fingerprint, true);
+});
+
+Deno.test("POST keys/revoke: fails closed on unknown row", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "POST", "/keys/revoke", {
+    credential_id: "00000000-0000-4000-8000-000000000099",
+  });
+  assertEquals(status, 404);
+  assertEquals(json.code, "CREDENTIAL_NOT_FOUND");
+});
+
+Deno.test("GET keys: 503 when workspace_provider_credentials missing", async () => {
+  const store = freshStore();
+  store.keysMissing = true;
+  const { status, json } = await call(store, "GET", "/keys");
+  assertEquals(status, 503);
+  assertEquals(json.code, "NOT_READY");
+});
 
 Deno.test("parseCredential never echoes secrets on failure", () => {
   const secret = "super-secret-value-do-not-leak";

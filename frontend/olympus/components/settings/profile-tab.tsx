@@ -68,6 +68,9 @@ export function ProfileTab({
   const [label, setLabel] = useState('Workspace overlay');
   const [investment, setInvestment] = useState({ ...DEFAULT_INVESTMENT });
   const [excludedTickers, setExcludedTickers] = useState('');
+  const [pipelineWatchlist, setPipelineWatchlist] = useState<string[]>([]);
+  const [pipelineThemes, setPipelineThemes] = useState<string[]>([]);
+  const [pipelineBudget, setPipelineBudget] = useState<number | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -84,6 +87,11 @@ export function ProfileTab({
       }
       setInvestment(investmentFromTip(tip));
       setExcludedTickers(excludedTickersFromTip(tip));
+      setPipelineWatchlist(Array.isArray(tip.watchlist) ? tip.watchlist : []);
+      setPipelineThemes(Array.isArray(tip.themes) ? tip.themes : []);
+      setPipelineBudget(
+        typeof tip.research_budget_usd === 'number' ? tip.research_budget_usd : null,
+      );
       if (typeof tip.version_id === 'string' && tip.version_id) {
         onVersionSaved?.(tip.version_id);
       }
@@ -163,6 +171,9 @@ export function ProfileTab({
         label: label.trim(),
         investment: invResult.value,
         assets: assetsResult.value,
+        watchlist: pipelineWatchlist,
+        themes: pipelineThemes,
+        research_budget_usd: pipelineBudget,
         expected_version_id: lastVersionId,
       });
       setSavedVersion(result.version_id);
