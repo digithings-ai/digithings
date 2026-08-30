@@ -19,6 +19,7 @@ EXPORT_COLUMNS = {
     "asset_units",
     "net_deployed",
     "portfolio_value",
+    "buy_hold_value",
     "flat_dca_value",
 }
 
