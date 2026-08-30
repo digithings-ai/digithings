@@ -9,6 +9,7 @@ import { KeysTab } from '@/components/settings/keys-tab';
 import { BrokersTab } from '@/components/settings/brokers-tab';
 import { NotifyTab } from '@/components/settings/notify-tab';
 import { BillingTab } from '@/components/settings/billing-tab';
+import { RemainingHopStatus } from '@/components/settings/remaining-hop-status';
 import {
   BrokerStatusSurface,
   OverlayProfileSurface,
@@ -107,7 +108,8 @@ export default function SettingsPage() {
           </div>
         ) : null}
         {tab === 'about' ? (
-          <div className="oly-slab p-6 max-w-lg" data-testid="settings-about">
+          <div className="oly-slab p-6 max-w-lg space-y-5" data-testid="settings-about">
+            <RemainingHopStatus api={api} />
             <SettingsContent
               variant="popover"
               lastRunDate={meta?.last_updated ?? null}

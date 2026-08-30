@@ -241,7 +241,9 @@ paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
   (digest remaining-hop needs a `digest:` log key **and** inbox confirmation).
 - **Billing** — links T2 `create-checkout-session` / `customer-portal`; shows
   "billing not configured" when Supabase/billing envs are absent.
-- **About** — prior ops/status/appearance card content.
+- **About** — remaining-hop product state (member-scoped Settings reads; Observer can
+  see unproven Stripe / Alpaca OAuth / overlay / fill / digest without Custom writes)
+  plus prior ops/status/appearance card content.
 
 Edge Function: `digiquant/supabase/functions/settings` (`verify_jwt` true). **Deploy is
 blocked on K3** (vault + `broker_connections`) — see that function's README.
