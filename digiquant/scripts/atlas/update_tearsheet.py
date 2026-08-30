@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 from digiquant.olympus.atlas import dashboard_digest as _digest  # noqa: E402
 from digiquant.olympus.performance_returns import calculate_performance_returns  # noqa: E402
+from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
 
 _JSON_IO_ERRORS = _digest.JSON_IO_ERRORS
 _PRICE_CELL_ERRORS = (KeyError, TypeError, ValueError, IndexError)
@@ -601,12 +602,17 @@ def _get_supabase_client():
     return create_client(url, key)
 
 
+def _house_id() -> str:
+    return str(house_workspace_id())
+
+
 def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
     """Push all data to Supabase tables. Uses upsert (ON CONFLICT DO UPDATE)."""
     if not supabase_configured():
         return
 
     sb = _get_supabase_client()
+    house = _house_id()
     print("   Supabase: pushing data...")
 
     # ---- daily_snapshots ----
@@ -672,6 +678,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
             for p in positions_source:
                 position_rows.append(
                     {
+                        "workspace_id": house,
                         "date": d["date"],
                         "ticker": p["ticker"],
                         "name": p.get("name"),
@@ -692,6 +699,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 pj = pj_lookup.get(ticker, {})
                 position_rows.append(
                     {
+                        "workspace_id": house,
                         "date": d["date"],
                         "ticker": ticker,
                         "name": pj.get("name") or p.get("name"),
@@ -711,7 +719,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
         for i in range(0, len(position_rows), 500):
             chunk = position_rows[i : i + 500]
             try:
-                sb.table("positions").upsert(chunk, on_conflict="date,ticker").execute()
+                sb.table("positions").upsert(chunk, on_conflict="workspace_id,date,ticker").execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (positions chunk {i}): {e}")
         print(f"   Supabase: {len(position_rows)} positions upserted")
@@ -771,6 +779,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
 
             event_rows.append(
                 {
+                    "workspace_id": house,
                     "date": d["date"],
                     "ticker": ticker,
                     "event": event,
@@ -788,6 +797,7 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 prev_p = prev_weights[ticker]
                 event_rows.append(
                     {
+                        "workspace_id": house,
                         "date": d["date"],
                         "ticker": ticker,
                         "event": "EXIT",
@@ -804,18 +814,22 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
         for i in range(0, len(event_rows), 500):
             chunk = event_rows[i : i + 500]
             try:
-                sb.table("position_events").upsert(chunk, on_conflict="date,ticker").execute()
+                sb.table("position_events").upsert(
+                    chunk, on_conflict="workspace_id,date,ticker"
+                ).execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (position_events chunk {i}): {e}")
         print(f"   Supabase: {len(event_rows)} position_events upserted")
 
     # ---- nav_history ----
     if history:
-        nav_rows = [{"date": h["date"], "nav": h["nav"]} for h in history]
+        nav_rows = [
+            {"workspace_id": house, "date": h["date"], "nav": h["nav"]} for h in history
+        ]
         for i in range(0, len(nav_rows), 500):
             chunk = nav_rows[i : i + 500]
             try:
-                sb.table("nav_history").upsert(chunk, on_conflict="date").execute()
+                sb.table("nav_history").upsert(chunk, on_conflict="workspace_id,date").execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (nav_history chunk {i}): {e}")
         print(f"   Supabase: {len(nav_rows)} nav_history rows upserted")
@@ -823,7 +837,10 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
     # ---- portfolio_metrics ----
     if metrics:
         try:
-            sb.table("portfolio_metrics").upsert([metrics], on_conflict="date").execute()
+            sb.table("portfolio_metrics").upsert(
+                [{**metrics, "workspace_id": house}],
+                on_conflict="workspace_id,date",
+            ).execute()
             print(f"   Supabase: portfolio_metrics upserted for {metrics['date']}")
         except _REMOTE_UPSERT_ERRORS as e:
             print(f"   Supabase warning (portfolio_metrics): {e}")

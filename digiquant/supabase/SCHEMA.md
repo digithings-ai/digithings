@@ -712,9 +712,14 @@ NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).
 | `olympus_profile_config` | **system** (house-default row) | **none** | column + FK only |
 
 House pipeline writers (`commit_io`, `ledger_io` / `execution_io` / `opening_snapshot`,
-`accounting.io`, `execute_at_open`) stamp `house_workspace_id()` explicitly.
-Legacy scripts (`refresh_performance_metrics.py`, `sync_positions_from_rebalance.py`,
-`update_tearsheet.py`, …) lean on Group A DEFAULTs + legacy UNIQUEs until roadmap P6.
+`accounting.io`, `execute_at_open`, `portfolio_materialize`,
+`refresh_performance_metrics`) stamp `house_workspace_id()` explicitly.
+Ops / recovery scripts (`sync_positions_from_rebalance.py`, `update_tearsheet.py`,
+`materialize_snapshot.py` positions, `backfill_execution_prices.py`,
+`reconcile_position_events_from_positions.py`) now stamp the same house id and
+target the widened UNIQUEs. P6 still must **drop** the 097 legacy date-only
+arbiters on `core` before overlay private books can persist; do not drop them
+until `main` house GHA writers are on the widened conflict.
 
 ### Authenticated RLS (098) — anon untouched until T1
 
@@ -758,10 +763,12 @@ Shared teasers without `workspace_id` (`daily_snapshots`, `theses`,
 `instruments`) are untouched. Overlay must not upsert `daily_snapshots`.
 **Documents** may persist under `OLYMPUS_OVERLAY_PERSIST=1` after 110.
 **positions / nav_history / ledger** stay refused (`legacy_book_unique`) while
-097's legacy `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
-069's `uq_portfolio_ledger_commits_one_root (run_date)` remain — house writers
-still upsert `on_conflict=date`, so an overlay same-date row would collide or
-be rewritten. This is **not** cutover 900: anon can still read house weights/NAV.
+097's leftover `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and
+069's `uq_portfolio_ledger_commits_one_root (run_date)` remain. House writers on
+`develop` already upsert the widened `(workspace_id, …)` targets; the leftover
+097 keys still reject a second workspace's same-date row. Do not drop those
+keys on `core` until `main` house GHA writers are also widened. This is **not**
+cutover 900: anon can still read house weights/NAV.
 Proof: `tests/dq/olympus/test_migration_110_anon_house_only.py` and
 `tests/dq/olympus/overlay/test_persist.py`.
 
