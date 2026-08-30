@@ -21,6 +21,7 @@
 import {
   requireCustomEligible,
   resolveAccessSnapshot,
+  type AccessAdmin,
 } from "./access.ts";
 import {
   requireBearerHeader,
@@ -181,7 +182,7 @@ async function requireEligibleTier(
   authz: { user: AuthUser; workspace: { id: string; plan_tier: string } },
 ): Promise<Response | null> {
   const snap = await resolveAccessSnapshot({
-    admin: deps.admin as unknown as import("./access.ts").AccessAdmin,
+    admin: deps.admin as unknown as AccessAdmin,
     email: authz.user.email,
     workspaceId: authz.workspace.id,
     workspacePlanTier: authz.workspace.plan_tier,
