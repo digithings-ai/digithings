@@ -125,15 +125,29 @@ class TestConstruction:
         assert kwargs["oauth_token"] == "tok_abc"
 
     def test_oauth_mock_survives_sys_modules_pop(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Reimport after pop must not steal the collection-time class's client.
+
+        String ``setattr`` on ``digiquant.brokers.alpaca._TradingClient`` patches
+        the *new* module. ``AlpacaAdapter`` was imported at collection and still
+        looks up ``_TradingClient`` on the original globals. Poison that slot
+        first so a helper revert fails closed (RuntimeError) instead of live HTTP.
+        """
         import digiquant.brokers.alpaca as alpaca_mod
 
         if alpaca_mod._MarketOrderRequest is None:
             pytest.skip("alpaca-py not installed")
+        boom = MagicMock(side_effect=RuntimeError("unpatched collection-time TradingClient"))
+        monkeypatch.setitem(AlpacaAdapter.__init__.__globals__, "_TradingClient", boom)
         monkeypatch.delitem(sys.modules, "digiquant.brokers.alpaca", raising=False)
+        importlib.import_module("digiquant.brokers.alpaca")
+        fresh_ctor = MagicMock(return_value=MagicMock())
+        monkeypatch.setattr("digiquant.brokers.alpaca._TradingClient", fresh_ctor)
         ctor = MagicMock(return_value=MagicMock())
         _patch_trading_client(monkeypatch, ctor)
         AlpacaAdapter(auth=OAuthAuth(access_token="tok_abc"))
-        assert ctor.call_args is not None
+        ctor.assert_called_once()
+        fresh_ctor.assert_not_called()
+        boom.assert_not_called()
         assert ctor.call_args.kwargs["oauth_token"] == "tok_abc"
         assert ctor.call_args.kwargs["paper"] is True
 
