@@ -63,33 +63,23 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, post-#3180 + unlock re-scan)
+## Agent delivery status (2026-08-30, post-#3181)
 
-**Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-epic-completion-audit.md`.
+**Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Notifications [#3161](https://github.com/digithings-ai/digithings/pull/3161), schema align [#3177](https://github.com/digithings-ai/digithings/pull/3177), unlock docs [#3178](https://github.com/digithings-ai/digithings/pull/3178), cred-push status [#3179](https://github.com/digithings-ai/digithings/pull/3179), completion audit [#3180](https://github.com/digithings-ai/digithings/pull/3180) — **all merged** (develop tip `bf34c015`).
+**Code:** all 12 WPs on `develop` (promotion #3141). Through audit refresh [#3181](https://github.com/digithings-ai/digithings/pull/3181) — **merged** (develop tip `f92a8810`).
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
-**Edge Functions (`core`):** `stripe-webhook` v3, `create-checkout-session` v1, `customer-portal` v3 ACTIVE (await Stripe secrets). `settings` **v11** ACTIVE — thin GitHub-raw pin (post-#3179). Auth smoke: missing/invalid JWT → `401` (`settings-v11-smoke.log`). Full monorepo 9-file bundle staged (`settings-deploy-final.json`); CLI/Management API need `sbp_` PAT. Supabase MCP has **no secrets tool**; project EF secrets still **unset**. No EF redeploy on docs-only #3180.
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v11** ACTIVE — thin pin; **no** redeploy (still no `sbp_` / no new vendor secrets).
 
-**Secrets (names only; re-scanned post-#3180):**
-- **SET in VM `.env` / `.local/secrets/kairos.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **No new nonempty secrets** vs prior turn. Captcha/signup walls **not** re-burned.
-- **Cursor env:** `SUPABASE_ACCESS_TOKEN` = JWT (not `sbp_`) → Management API **403**. Mailgun MCP ready but `MAILGUN_*` / `NOTIFY_FROM` **empty** — no Agent Mail smoke.
-- **Still blocked:** Stripe TEST, Mailgun key+domain, Auth providers, Alpaca OAuth/keys, `sbp_` PAT, IBKR vendor, legal. Vault key **not** on EF secrets.
-- **Review gate:** several Kairos merges lack `reviewed:agent` / hatch — document in audit; required before `main` promote.
+**Secrets (names only; re-scanned post-#3181):**
+- **SET in VM:** `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
+- **No new nonempty secrets.** No captcha vendor signups.
+- **Cursor env:** `SUPABASE_ACCESS_TOKEN` = JWT (`eyJ…`, not `sbp_`). Mailgun/Stripe/Alpaca/Auth keys empty or absent.
+- **Setup actions:** cursor-cloud `request-environment-setup-actions` recorded (minimal blocking set).
+- **Review gate:** findings drafted (`/opt/cursor/artifacts/kairos-reviews/`); agent `gh` **cannot** comment/label (403). Parent must post `<!-- in-session-review -->` + `reviewed:agent`.
 
-**Acceptance evidence (agent-reachable; `/opt/cursor/artifacts/`):**
-- House olympus unit: **420 passed** (`house-olympus-unit.log`).
-- Chain integration refresh: **2 passed** (`kairos-chain-integration-refresh.log`).
-- Kairos router/sync unit refresh: **67 passed** (`kairos-router-unit-refresh.log`).
-- Live venue gates refresh: **8 passed** (`live-venue-gates-refresh.log`).
-- Olympus tier Vitest refresh: **42 passed** (`olympus-tier-gates-refresh.log`).
-- Settings EF smoke: `401` / `401` (`settings-v11-smoke.log`).
-- RLS proof: **59/59 PASS** (`rls_isolation_proof.log`).
-- E2E staging paper chain: **BLOCKED** — not faked.
-
-**Pages promote (`develop` → `main`):** human release-gate (auth flag off; cutover 900 inert).
+**Pages promote:** branch `cursor/promote-kairos-pages-3d52` pushed (= develop tip, ~199 ahead of `main`). Draft PR create **403** — parent opens draft `base=main`. Flag off; no cutover 900.
 
 **Do not mark epic complete** until E2E + human/legal/IBKR gates clear.
