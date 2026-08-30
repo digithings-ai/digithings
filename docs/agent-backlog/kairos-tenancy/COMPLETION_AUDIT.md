@@ -2,7 +2,32 @@
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
-## Follow-up turn (PAT recreate+revoke → **cursor cloud agent**)
+## Follow-up turn (post-sbp: merge docs PRs + secrets scan + smoke)
+
+Agent run: rebase+merge [#3209](https://github.com/digithings-ai/digithings/pull/3209) + [#3211](https://github.com/digithings-ai/digithings/pull/3211) (CI green). Load `sbp_` from `.local/secrets/cursor-cloud-agent-supabase-pat` → 12 EF secret names. Confirm settings **v18** ACTIVE; Auth GitHub **Enabled** / Google **Disabled**. Scan GitHub org+repo Actions secrets (dashboard session) — **no** `STRIPE_*` / `ALPACA_*` / `MAILGUN_*` names. Mailgun env empty → skip EF set. Cursor env still missing pasted PAT/vendors (`request-environment-setup-actions` re-recorded). `auth.users` count **0** → no real JWT settings E2E (do not invent). Hatch bodies queued for parent (gh comment/label **403**). Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft; no UpdateGoal complete.
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Merge #3209 / #3211 | **PASS** | Rebased onto `develop`; Required CI green; merged 2026-08-30T18:49Z |
+| 2 | Hatch comments+labels | **QUEUED for parent** | Bodies: `/opt/cursor/artifacts/kairos-reviews/pr-{3209,3211}-review.md`. `gh` → **403** |
+| 3 | `sbp_` secrets list | **PASS** | Management API → 12 names; PAT label **cursor cloud agent**; prefix `sbp_` |
+| 4 | Auth polish | **PASS (no further change)** | Dashboard: Email+GitHub Enabled; Google Disabled; site URL + redirects already set. Org quota banner noted (restricts 04 Sep 2026 if over quota) |
+| 5 | GitHub secrets Stripe/Alpaca | **ABSENT** | Org: LLM keys only. Repo: Cloudflare/Supabase/project tokens. Env `production`: Cloudflare/D1. No vendor Kairos keys |
+| 6 | Mailgun EF set | **SKIPPED** | `MAILGUN_API_KEY` empty; MCP auth fail |
+| 7 | Cursor env paste | **STILL MISSING** | Process env has no `SUPABASE_ACCESS_TOKEN`/`sbp_`; vendors empty |
+| 8 | Settings v18 smoke | **PASS (unauth)** | `/opt/cursor/artifacts/settings-v18-smoke.log` — profile/notifications/brokers 401; webhook `STRIPE_NOT_CONFIGURED` |
+| 9 | Real JWT settings E2E | **BLOCKED** | `auth.users` = 0; 2 enterprise workspaces orphaned — do not invent test user |
+| 10 | #3183 / goal | **LEAVE DRAFT / FAIL complete** | No merge; no UpdateGoal complete |
+
+### Docs compare (this turn)
+
+```text
+https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-post-sbp-continue-f34a
+```
+
+---
+
+## Prior follow-up (PAT recreate+revoke → **cursor cloud agent**)
 
 Agent run: load rotated `sbp_` from `.local/secrets/cursor-cloud-agent-supabase-pat` (sibling revoked kairos-named token; new token labeled **cursor cloud agent**). Verify Management API / `supabase secrets list` (names only). Confirm EF vault + `APP_URL` still present; settings **v18** ACTIVE. `request-environment-setup-actions` for **re-paste** into Cursor env. Update WAITING + docs note on [#3209](https://github.com/digithings-ai/digithings/pull/3209). Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft; no UpdateGoal complete.
 
