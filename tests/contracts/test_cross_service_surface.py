@@ -8,13 +8,14 @@ suites under ``tests/dv/`` (etc.) still cover them.
 Run::
 
     pytest -m unit tests/contracts/test_cross_service_surface.py
-    make test-baseline   # includes this path via the contracts/baseline filter
 """
 
 from __future__ import annotations
 
 import os
-from typing import Any  # score:allow untyped any — FastAPI app factory return for parametrized services
+from typing import (
+    Any,  # score:allow untyped any — FastAPI app factory return for parametrized services
+)
 
 import pytest
 from digibase.cors import install_cors

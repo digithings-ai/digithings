@@ -14,7 +14,9 @@ score:allow untyped any — fake-client payload dict shape mirrors PostgREST row
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any  # score:allow untyped any — fake-client payload dict shape mirrors PostgREST rows
+from typing import (
+    Any,  # score:allow untyped any — fake-client payload dict shape mirrors PostgREST rows
+)
 
 from digiquant.olympus.tenancy import house_workspace_id
 
@@ -195,4 +197,3 @@ class FakeSupabaseClient:
             store=self.store,
             canned=list(self.canned_reads.get(name, [])),
         )
-

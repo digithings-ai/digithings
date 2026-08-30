@@ -33,9 +33,13 @@ from digiquant.olympus.tenancy import house_workspace_id
 # existing ``from tests.dq.atlas.test_supabase_io import FakeSupabaseClient``
 # imports keep working.
 from tests.fixtures.fake_supabase import (
-    FakeSupabaseClient,
-    _FakeQuery,
-    _FakeResponse,
+    FakeSupabaseClient as FakeSupabaseClient,
+)
+from tests.fixtures.fake_supabase import (
+    _FakeQuery as _FakeQuery,
+)
+from tests.fixtures.fake_supabase import (
+    _FakeResponse as _FakeResponse,
 )
 
 # ─── Tests ──────────────────────────────────────────────────────────────────
