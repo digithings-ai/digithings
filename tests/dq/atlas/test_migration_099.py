@@ -139,12 +139,21 @@ def test_primary_key_is_a_stable_uuid(table_body: str) -> None:
     assert re.search(r"\bid\s+uuid\s+PRIMARY KEY\s+DEFAULT\s+gen_random_uuid\(\)", table_body, re.I)
 
 
-def test_workspace_id_is_required_and_fk_less_until_t0(raw: str, table_body: str) -> None:
-    """The spec §3 sketch keeps this FK-less until T0 creates `workspaces`; a premature FK
-    would make this migration unappliable."""
-    assert re.search(r"workspace_id\s+uuid\s+NOT NULL", table_body, re.I)
-    assert not re.search(r"workspace_id[^,]*REFERENCES", table_body, re.I)
-    assert "T0 will constrain" in raw
+def test_workspace_id_is_required_and_references_workspaces(raw: str, table_body: str) -> None:
+    """T0's 096 creates `workspaces` before 099 runs, so the FK belongs at CREATE time.
+
+    T0's private-set backfill (097) deliberately skips `broker_connections` — K3 owns this
+    column — so the reference must appear in this migration, not as a follow-up ALTER.
+    """
+    assert re.search(
+        r"workspace_id\s+uuid\s+NOT NULL\s+REFERENCES\s+public\.workspaces\s*\(\s*id\s*\)",
+        table_body,
+        re.I,
+    )
+    assert "T0 will constrain" not in raw
+    assert "FK-less" not in raw
+    # Column COMMENT should also describe the live FK, not the pre-T0 placeholder.
+    assert "FK to public.workspaces" in raw or "REFERENCES public.workspaces" in raw
 
 
 @pytest.mark.parametrize(

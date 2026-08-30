@@ -142,3 +142,4 @@ canvases/
 
 # digiclaw scheduler durable state (local)
 .digiclaw/
+.deno/

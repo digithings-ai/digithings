@@ -6,8 +6,10 @@ import { Skeleton, SkeletonGroup } from '@digithings/web';
 import { EmptyState } from '@/components/observability/shared';
 import { FreshnessBanner, latestSuccessfulRun } from '@/components/system/freshness-banner';
 import { RunEconomicsRow } from '@/components/system/run-economics-row';
+import { EntitledSurface } from '@/components/entitled-surface';
 import { fetchAtlasRunDiagnostics } from '@/lib/observability-queries';
 import type { AtlasRunDiagnostics } from '@/lib/types';
+import type { PlanTier } from '@/lib/entitlements';
 
 function forDate(diagnostics: AtlasRunDiagnostics[], date: string): AtlasRunDiagnostics[] {
   return diagnostics.filter((d) => d.run_date === date);
@@ -25,7 +27,14 @@ function summaryLine(dayRuns: AtlasRunDiagnostics[]): string {
 }
 
 /** Collapsible run-health stats for the Pipeline date selector. */
-export default function PipelineRunHealth({ date }: { date: string }) {
+export default function PipelineRunHealth({
+  date,
+  tier,
+}: {
+  date: string;
+  /** Test override for the economics strip gate. */
+  tier?: PlanTier;
+}) {
   const [diagnostics, setDiagnostics] = useState<AtlasRunDiagnostics[] | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -92,7 +101,10 @@ export default function PipelineRunHealth({ date }: { date: string }) {
                 No successful run on {date} — see segment counts below.
               </div>
             )}
-            <RunEconomicsRow latest={dayRuns[0]} />
+            {/* glassbox_economics: Baseline+. Freshness/status stay visible to Observer. */}
+            <EntitledSurface artifactClass="glassbox_economics" tier={tier}>
+              <RunEconomicsRow latest={dayRuns[0]} />
+            </EntitledSurface>
           </>
         )}
       </div>

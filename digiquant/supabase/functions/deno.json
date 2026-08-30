@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2"
+  },
+  "tasks": {
+    "test": "deno test --allow-env --allow-read _shared/vault.test.ts _shared/tiers.test.ts settings/settings.test.ts stripe-webhook/stripe-webhook.test.ts",
+    "test:settings": "deno test --allow-env --allow-read _shared/vault.test.ts settings/settings.test.ts"
+  }
+}
