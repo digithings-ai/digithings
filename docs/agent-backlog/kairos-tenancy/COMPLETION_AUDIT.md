@@ -2,7 +2,9 @@
 
 **Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets.
 
-**2026-08-31T11:24Z house upsert:** live `pipeline-olympus` on `main` failed `42P10` after core 105 replaced `UNIQUE(date, document_key)`. [#3278](https://github.com/digithings-ai/digithings/pull/3278) squash-merged to `main` (`2df473110`). Next 12:00 UTC cron is the live book-commit proof. Overlay **documents** are anon-safe after 110; **positions/nav/ledger** still collide on 097 `UNIQUE(date)` — persist-on cannot prove `overlay_daily` `succeeded` until P6.
+**2026-08-31T11:42Z overlay fail-closed:** [#3277](https://github.com/digithings-ai/digithings/pull/3277) on `develop` (`11d45bfb0`). Persist-on private book writes raise `legacy_book_unique` until P6 drops 097 `UNIQUE(date)`.
+
+**2026-08-31T11:24Z house upsert:** live `pipeline-olympus` on `main` failed `42P10` after core 105 replaced `UNIQUE(date, document_key)`. [#3278](https://github.com/digithings-ai/digithings/pull/3278) squash-merged to `main` (`2df473110`, hotfix CI 36/36). Next 12:00 UTC cron is the live book-commit proof. Overlay **documents** are anon-safe after 110; **positions/nav/ledger** still collide on 097 `UNIQUE(date)` — persist-on cannot prove `overlay_daily` `succeeded` until P6.
 
 **2026-08-30 product-gates follow-up:** creator/ops `entitlement_grants` + free-teaser + FX Hub
 `client_product_grants` implemented on branch `cursor/kairos-product-gates-3d52` (migration 108).
