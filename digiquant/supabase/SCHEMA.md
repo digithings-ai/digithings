@@ -648,6 +648,8 @@ from env price ids; deleted/incomplete ⇒ `free`), then syncs Supabase Auth
 Claim-sync failure sets `workspaces.claim_sync_pending=true` and still returns HTTP 200
 to Stripe after marking `applied_at`. Migrations: `100_workspaces_claim_sync_pending.sql`,
 `101_stripe_webhook_applied_and_ordering.sql` (099 reserved for K3).
+
+
 Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 `broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
 `profiles` remains out of scope (T3). BYOK LLM keys land in migration 104
@@ -719,10 +721,10 @@ the clear. `fingerprint` is the first 8 hex chars of `sha256` over the secret ma
 and is the only display-safe artifact: a label, never an identity — 32 bits collide,
 so it must never be compared to decide two rows hold the same credential.
 
-`workspace_id` **REFERENCES `workspaces(id)`** (T0 migrations 096–098 are on this
-branch; migration **102** adds the FK that K3 deferred). `CHECK` constraints pin the
-envelope's shape at the
-storage layer rather than trusting the writer — `octet_length(nonce) = 12`,
+`workspace_id` **REFERENCES `public.workspaces(id)`** (T0 migrations 096–098 land first
+on this branch, so 099 constrains at CREATE time rather than staying FK-less). `CHECK`
+constraints pin the envelope's shape at the storage layer rather than trusting the
+writer — `octet_length(nonce) = 12`,
 `octet_length(ciphertext) > 16` (a GCM tag alone is not a message), 8 lowercase hex for
 `fingerprint`, a closed vocabulary for `status`/`broker`/`env`/`auth_kind`, and
 `revoked_at` tied to `status = 'revoked'` so a revoked row cannot lack its timestamp.

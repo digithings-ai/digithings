@@ -10,7 +10,7 @@ Update this file when themes start/complete. Link **GitHub Issues** (not bare TO
 | Agent ops & doc hygiene | in_progress | _(add GitHub issue URLs)_ | [ADR template](../adr/0000-template.md) |
 | digiskills — agent-skill compiler | in_progress | [#1453](https://github.com/digithings-ai/digithings/issues/1453) epic, #1454 P0 (ADR, done), #1458 P1 (compiler core, done), [#1472](https://github.com/digithings-ai/digithings/issues/1472) P2 (dogfood) | [ADR-0023](../adr/0023-digiskills-agent-skill-compiler.md) |
 | Self-host GHCR + OpenAPI | in_progress | [#2016](https://github.com/digithings-ai/digithings/issues/2016) epic, #2017–#2021 | GHCR publish, pull compose, committed OpenAPI |
-| Olympus Kairos + tenancy | todo | _(issue pack ready: [kairos-tenancy/](kairos-tenancy/README.md))_ | [Implementation spec](../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md) (decisions locked) · epic + 12 executor briefings drafted for parallel cheap-model dispatch; module branches synced #3083–#3090; live broker cutover human-gated |
+| Olympus Kairos + tenancy | todo | _(issue pack ready: [kairos-tenancy/](kairos-tenancy/README.md))_ | [Implementation spec](../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md) (decisions locked) · epic + 12 executor briefings · [DEPLOYMENT.md](kairos-tenancy/DEPLOYMENT.md) runbook + staged anon-drop under `digiquant/supabase/migrations/cutover/` · module branches synced #3083–#3090; live broker cutover human-gated |
 | _(example) digigraph hub mode_ | todo |  | |
 
 ## Quick links
