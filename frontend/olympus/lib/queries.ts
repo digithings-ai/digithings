@@ -1,6 +1,10 @@
 /**
  * Data access layer — All data from Supabase. No static JSON fallback.
  * Components call these functions; never touch Supabase directly.
+ *
+ * Session-aware (T1): `supabase` is the PKCE client when
+ * `NEXT_PUBLIC_OLYMPUS_AUTH=1` (JWT from supabase-js storage; RLS scopes rows).
+ * Flag off → classic anon client (today's behavior). Query text is unchanged.
  */
 import { supabase, isSupabaseConfigured } from './supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';

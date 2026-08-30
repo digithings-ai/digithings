@@ -218,6 +218,28 @@ days. Why the *cause* of a freeze is not detectable here: Pages' deployment list
 build log, production branch and watch-path config are visible only in the
 Cloudflare dashboard.
 
+## Settings workspace (T3)
+
+`/settings` is a tabbed workspace — **Profile | Brokers | Notifications | Billing | About**.
+The 2026-06-24 Settings plan's "no accounts/login" constraint is **superseded** by the
+Kairos tenancy program: authenticated users edit versioned investment overlays, connect
+paper brokers, and open Stripe checkout/portal.
+
+- **Profile** — client JSON-schema validation (bundled v1 schemas) plus Edge Function
+  re-validation; saves append `olympus_profile_config` versions (never mutate; never the
+  reserved `house` key). Optimistic concurrency via last-seen version id → 409 → reload UI.
+  Gated as Custom-tier (`overlay_profile` via `EntitledSurface`).
+- **Brokers** — Alpaca OAuth (`env=paper` + sessionStorage `state`) and API-key entry;
+  IBKR credential entry labeled beta. Renders fingerprint / broker / env / status /
+  `last_used_at` only. Gated as Custom-tier (`broker_status`).
+- **Notifications** — PATCH prefs; function returns `503 NOT_READY` until K5.
+- **Billing** — links T2 `create-checkout-session` / `customer-portal`; shows
+  "billing not configured" when Supabase/billing envs are absent.
+- **About** — prior ops/status/appearance card content.
+
+Edge Function: `digiquant/supabase/functions/settings` (`verify_jwt` true). **Deploy is
+blocked on K3** (vault + `broker_connections`) — see that function's README.
+
 ## Running
 
 ```bash
@@ -238,7 +260,11 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
+| `NEXT_PUBLIC_OLYMPUS_AUTH`        | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. |
 | `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
+| `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Public Alpaca OAuth client id for Brokers connect (secret stays on the Edge Function).               |
+| `NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL` | Optional Functions base; defaults to `$NEXT_PUBLIC_SUPABASE_URL/functions/v1`.                       |
+| `NEXT_PUBLIC_STRIPE_BILLING_ENABLED` | Set `0` to force Billing "not configured"; otherwise inferred from Supabase URL.                     |
 
 When the URL or anon key is unset the daily-snapshot panel renders an empty
 banner pointing back to this section instead of throwing. On Cloudflare Pages
@@ -341,12 +367,14 @@ Across both routes, accent and warning tokens describe workflow state and
 argument stance. `--up` and `--down` remain reserved for signed P&L or return
 values.
 
-> **Sharing:** the static export embeds the Supabase anon key and every table
-> has `anon` RLS `USING (true)`, so the dashboard URL is world-readable. Gate it
-> with **Cloudflare Access** before sharing — see [`AUTH.md`](AUTH.md) for the
-> runbook and the exact exposure. Migration `033` drops the anon SELECT RLS
-> policy on the operator cost/token telemetry table (`atlas_run_diagnostics`);
-> `pm_notes` is intentionally kept (it's PM commentary the dashboard renders).
+> **Sharing / auth:** Olympus is a static export (`output: 'export'`). Product
+> login is **Supabase Auth** (Google + GitHub PKCE) behind
+> `NEXT_PUBLIC_OLYMPUS_AUTH=1` — see [`AUTH.md`](AUTH.md) § App auth (T1). Flag
+> off (default) keeps today's anon client. Until cutover, anon RLS
+> `USING (true)` still applies; gate shared hosts with **Cloudflare Access**
+> (staging overlay after T1; production Access comes off at cutover — D7).
+> Migration `033` drops anon SELECT on operator cost telemetry
+> (`atlas_run_diagnostics`); `pm_notes` is intentionally kept.
 
 ## Daily snapshot envelope
 
