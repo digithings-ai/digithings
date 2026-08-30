@@ -38,6 +38,7 @@ from digigraph.compaction import (
 )
 from digigraph.llm_client import completion_text, run_tools
 from digigraph.model_config import get_model_for_mode, get_model_for_phase
+from digigraph.tool_policy import tool_choice_for_require
 
 logger = logging.getLogger(__name__)
 
@@ -201,6 +202,7 @@ def run_research_agent(
     tools: list[dict[str, Any]] | None = None,
     execute_tool: Callable[[str, dict[str, Any]], str] | None = None,
     search_parameters: dict[str, Any] | None = None,
+    require_tool_calls: bool = False,
 ) -> T:
     """Run one research-agent LLM call and return a validated Pydantic instance.
 
@@ -373,6 +375,7 @@ def run_research_agent(
                             execute_tool=execute_for_llm,
                             temperature=temperature,
                             search_parameters=search_parameters,
+                            tool_choice=tool_choice_for_require(require_tool_calls),
                         )
                         parent_call_id = call.last_call_id
                 else:

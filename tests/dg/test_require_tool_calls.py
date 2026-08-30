@@ -70,12 +70,10 @@ def test_research_node_defaults_tool_choice_auto_when_state_key_absent(
     assert captured["tool_choice"] == "auto"
 
 
-def test_research_node_warns_when_require_tool_calls_takes_quant_path(
+def test_research_node_rejects_quant_path_when_require_tool_calls_set(
     monkeypatch: pytest.MonkeyPatch,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """#2386: DIGI_REQUIRE_TOOL_CALLS / require_tool_calls must not fail silently on
-    the quant path — the gate only wires tool_choice into the document-RAG loop."""
+    """#2384: quant/augmented path has no tool loop — fail closed when the mandate is set."""
     monkeypatch.delenv("DIGISEARCH_URL", raising=False)
     monkeypatch.setattr(
         "digigraph.graph.research._load_research_settings",
@@ -90,10 +88,9 @@ def test_research_node_warns_when_require_tool_calls_takes_quant_path(
         },
     )
 
-    with caplog.at_level(logging.WARNING, logger="digigraph.graph.research"):
-        research_node({"prompt": "build me a strategy", "require_tool_calls": True})
-
-    assert any(_SCOPE_WARN in r.message for r in caplog.records)
+    out = research_node({"prompt": "build me a strategy", "require_tool_calls": True})
+    assert out.get("research_note") == "error"
+    assert "require_tool_calls" in (out.get("error") or "")
 
 
 def test_research_node_does_not_warn_on_quant_path_when_require_tool_calls_false(

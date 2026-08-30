@@ -71,6 +71,11 @@ def require_tool_calls_for_workflow(
     return bool(req.require_tool_calls)
 
 
+def tool_choice_for_require(require_tool_calls: bool | None) -> str:
+    """Map the workflow grounding mandate to an OpenAI ``tool_choice`` value."""
+    return "required" if require_tool_calls else "auto"
+
+
 def state_list_from_frozen(names: frozenset[str] | None) -> list[str] | None:
     """Serialize allowlist for :class:`WorkflowState` (sorted for stable checkpoints)."""
     if names is None:

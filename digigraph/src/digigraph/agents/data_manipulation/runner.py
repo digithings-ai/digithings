@@ -8,6 +8,7 @@ from typing import Any
 from digigraph.agents._common import finalize_agent_output, load_dataset_path, run_tool_safe
 from digigraph.llm_client import run_tools
 from digigraph.model_config import get_model_for_mode
+from digigraph.tool_policy import tool_choice_for_require
 from digigraph.tools.analytics.data_manipulation import (
     append_datasets,
     group_and_aggregate,
@@ -121,6 +122,7 @@ def run_data_manipulation_agent(
     session_id: str | None = None,
     second_dataset_ref: str | None = None,
     options: dict[str, Any] | None = None,
+    require_tool_calls: bool = False,
 ) -> str:
     """Run the data manipulation sub-agent; returns JSON of the last tool result."""
     dataset_path, err = load_dataset_path(session_id, dataset_ref)
@@ -193,6 +195,7 @@ def run_data_manipulation_agent(
         tools=MANIPULATION_TOOLS,
         execute_tool=execute_tool,
         on_tool_step=None,
+        tool_choice=tool_choice_for_require(require_tool_calls),
     )
 
     return finalize_agent_output(
