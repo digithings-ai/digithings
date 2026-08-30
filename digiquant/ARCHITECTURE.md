@@ -3042,6 +3042,12 @@ every applied event; failures set `workspaces.claim_sync_pending` (migration 100
 still return 200 after marking applied. HTTP errors use stable JSON codes (401/403/…);
 never stack traces or keys.
 
+**Settings entitlement (T3).** `settings` Edge Function tier gates
+(`PATCH /profile`, `POST /brokers/connect`) read **`workspaces.plan_tier` only** —
+never the JWT claim. Preferring a stale elevated `app_metadata.plan_tier` after
+cancel (when claim sync failed) would fail-open and still seal broker credentials
+or append overlay profiles on a `free` workspace.
+
 Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
 (colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
 checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.

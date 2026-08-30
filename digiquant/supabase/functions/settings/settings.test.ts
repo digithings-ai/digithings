@@ -377,6 +377,7 @@ Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
 
 Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
   const store = freshStore();
+  store.workspaces.set(WS_A, wsRow(WS_A, "baseline"));
   const { status, json } = await call(store, "POST", "/brokers/connect", {
     broker: "alpaca",
     env: "paper",
@@ -387,6 +388,51 @@ Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
   assertEquals(status, 403);
   assertEquals(json.code, "TIER_FORBIDDEN");
 });
+
+Deno.test(
+  "403 TIER_FORBIDDEN when workspace is free but JWT claim is still custom (stale claim after cancel)",
+  async () => {
+    const store = freshStore();
+    store.workspaces.set(WS_A, wsRow(WS_A, "free"));
+    store.workspaces.get(WS_A)!.claim_sync_pending = true;
+    const profile = await call(store, "PATCH", "/profile", {
+      profile_key: "ws-overlay",
+      label: "Should not write",
+      investment: validInvestment,
+    }, { planTier: "custom" });
+    assertEquals(profile.status, 403);
+    assertEquals(profile.json.code, "TIER_FORBIDDEN");
+    assertEquals(store.profiles.length, 0);
+
+    const connect = await call(store, "POST", "/brokers/connect", {
+      broker: "alpaca",
+      env: "paper",
+      kind: "api_key",
+      key_id: "PK",
+      secret: "sec",
+    }, { planTier: "custom" });
+    assertEquals(connect.status, 403);
+    assertEquals(connect.json.code, "TIER_FORBIDDEN");
+    assertEquals(store.brokers.length, 0);
+  },
+);
+
+Deno.test(
+  "allows custom workspace when JWT claim lags at free (stale claim after upgrade)",
+  async () => {
+    const store = freshStore();
+    store.workspaces.set(WS_A, wsRow(WS_A, "custom"));
+    store.workspaces.get(WS_A)!.claim_sync_pending = true;
+    const { status, json } = await call(store, "PATCH", "/profile", {
+      profile_key: "ws-overlay",
+      label: "Lagging claim OK",
+      investment: validInvestment,
+    }, { planTier: "free" });
+    assertEquals(status, 200);
+    assertEquals(json.workspace_id, WS_A);
+    assertEquals(store.profiles.length, 1);
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Profile — workspace isolation
