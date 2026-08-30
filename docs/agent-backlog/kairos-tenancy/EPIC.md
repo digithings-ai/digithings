@@ -77,11 +77,12 @@ narrows `anon_read` on private books to house; documents house+system). Live pro
 `positions` still 323 for anon. Cutover **900 not applied**. Local RLS harness
 (throwaway DB + 001–110 + staged 900 A2): **pre-cutover 110 8/8 + post-cutover 59/59 PASS** (2026-08-31).
 
-**Edge Functions (`core`):** `settings` **v31 ACTIVE** (`verify_jwt=true`, includes
-`GET /jobs` `/fills` `/notifications/log` `/app-urls`); checkout **v8** / portal
-**v9**. Checkout/portal await Stripe price secrets (`PRICE_NOT_CONFIGURED`). EF
-secret **names** on core: vault + `APP_URL` + Finnhub + platform `SUPABASE_*`.
-Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
+**Edge Functions (`core`):** `settings` **v32 ACTIVE** (`verify_jwt=true`, includes
+`GET /jobs` `/fills` `/notifications/log` `/app-urls` + public Alpaca client id).
+ESZIP source matches this branch (no redeploy this pass). Checkout **v8** / portal
+**v9** / webhook **v7** (`verify_jwt=false`). Checkout/portal await Stripe price
+secrets (`PRICE_NOT_CONFIGURED`). EF secret **names** on core: vault + `APP_URL` +
+Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
 `APP_URL` / `NEXT_PUBLIC_APP_URL` on `core` is **`https://digiquant.io`** (verified
 2026-08-31 via Observer `GET /settings/app-urls`: Alpaca callback + billing return
 under `/olympus`, no loopback). Checkout return URLs are
@@ -89,11 +90,14 @@ under `/olympus`, no loopback). Checkout return URLs are
 client id from `GET /app-urls` (empty until EF secrets land; never the secret)
 so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 
-**Remaining hops (Observer JWT, re-audit 2026-08-31T07:16Z):** all five unproven.
-`job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK
-rows = **0**. One ops-custom workspace has an Alpaca **paper `api_key`** connection
-(not OAuth; does not prove the remaining hop). House is `enterprise`/`active`
-**without** Stripe ids — must not prove checkout. Overlay `--dry-run` against core
+**Remaining hops (Observer JWT, re-audit 2026-08-31T08:36Z):** all five unproven.
+Staging E2E **exit 2** (9 named vendor secrets); Observer hops all ok including
+Custom checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
+`notification_log` / `stripe_events` / BYOK rows = **0**. One ops-custom workspace
+has an Alpaca **paper `api_key`** connection (1 active + 2 revoked; not OAuth;
+does not prove the remaining hop). House is `enterprise`/`active` **without**
+Stripe ids — must not prove checkout. Baseline Stripe also must not (Custom-only
+remaining-hop pin). Overlay `--dry-run` against core
 (after D1 `plan_floor` honor): `considered=5 targets=3 billing_active=1` — the
 creator GitHub workspace (`plan_tier=free`, `plan_floor=custom`). Dry-run now
 also prints `byok_present` and `persist_enabled` (live core: `byok_present=0
