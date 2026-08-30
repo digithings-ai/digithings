@@ -4,6 +4,7 @@
 > order when promoting the program to the live `core` Supabase project and
 > digiquant.io. Cross-links:
 > [EPIC](EPIC.md) ·
+> [HUMAN-UNBLOCK](HUMAN-UNBLOCK.md) (ordered secret → EF → Auth → Stripe → Alpaca → flag) ·
 > [issue pack README](README.md) ·
 > [implementation spec](../../superpowers/specs/2026-08-29-kairos-tenancy-implementation-spec.md)
 > (D1–D10 locked).
@@ -233,6 +234,11 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 
 ## 5. Prerequisites — agent progress vs still blocked (names only)
 
+> **Human action order:** follow [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) (Cursor env
+> secrets → EF secrets → redeploy → Auth providers → Stripe webhook → paper Alpaca →
+> flag cutover). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183)
+> until secrets are live and cutover is intentional.
+>
 > Secret **values** live in VM `.env` / `.local/secrets/` (gitignored) and must be
 > copied into Supabase EF secrets + Cursor environment secret store. Never commit values.
 
