@@ -41,6 +41,10 @@ per `docs/agents/COMPONENT_ROUTING.md`); use a `cursor/<slug>` or `task/<N>-<slu
 `origin/develop`. digiquant WPs use `make task ISSUE=N` (module branches were synced 2026-08-29,
 PRs #3083–#3090).
 
+**Settings IA addendum:** [`SETTINGS-IA.md`](SETTINGS-IA.md) — Pipeline + Keys (BYOK) tabs,
+tier matrix, models semantics (provider BYOK v0). Gap artifact:
+`/opt/cursor/artifacts/kairos-settings-spec-gap.md`.
+
 ## Running this with cheap models in parallel multitask (read before dispatching)
 
 1. **One WP per agent session.** Paste the WP file as the task prompt (or point the agent at the
