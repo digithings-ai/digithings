@@ -79,6 +79,15 @@ describe('RemainingHopStatus', () => {
             sent_at: '2026-08-31T12:00:00Z',
           },
         ]),
+        getNotificationsFn: vi.fn(async () => ({
+          workspace_id: 'ws',
+          email: 'observer@example.com',
+          daily_digest: true,
+          holding_change_alerts: false,
+          execution_alerts: false,
+          digest_hour_utc: 13,
+          updated_at: '2026-08-31T00:00:00Z',
+        })),
       }),
     );
     expect(el.querySelector('[data-testid="remaining-hop-browser_stripe_checkout"]')?.getAttribute('data-proven')).toBe(

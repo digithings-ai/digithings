@@ -23,6 +23,16 @@ describe('provenRemainingHops', () => {
   it('does not treat digest log without inbox confirmation as received', () => {
     const proven = provenRemainingHops({
       digest_event_keys: ['digest:2026-08-31'],
+      daily_digest_enabled: true,
+    });
+    expect(proven.digest_email_received).toBe(false);
+  });
+
+  it('does not treat digest log with inbox confirm when prefs are off', () => {
+    const proven = provenRemainingHops({
+      digest_event_keys: ['digest:2026-08-31'],
+      digest_inbox_confirmed: true,
+      daily_digest_enabled: false,
     });
     expect(proven.digest_email_received).toBe(false);
   });
@@ -84,6 +94,7 @@ describe('provenRemainingHops', () => {
       fill_count: 1,
       digest_event_keys: ['digest:2026-08-31'],
       digest_inbox_confirmed: true,
+      daily_digest_enabled: true,
     });
     expect(remainingHopsUnproven(proven)).toEqual([]);
     for (const name of REMAINING_LIVE_HOPS) {

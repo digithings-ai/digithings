@@ -238,7 +238,8 @@ paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
   `last_used_at` only, plus `GET /settings/fills` paper-fill fingerprints. Gated as
   Custom-tier (`broker_status`).
 - **Notifications** — PATCH prefs; `GET /settings/notifications/log` delivery events
-  (digest remaining-hop needs a `digest:` log key **and** inbox confirmation).
+  (digest remaining-hop needs a `digest:` log key **and** inbox confirmation **and**
+  `daily_digest` on).
 - **Billing** — links T2 `create-checkout-session` / `customer-portal`; shows
   "billing not configured" when Supabase/billing envs are absent.
 - **About** — remaining-hop product state (member-scoped Settings reads; Observer can

@@ -5,6 +5,7 @@ import {
   getFills,
   getJobs,
   getNotificationLog,
+  getNotifications,
   getProfile,
   listBrokers,
   type SettingsApiOptions,
@@ -24,6 +25,7 @@ export type RemainingHopStatusProps = {
   getJobsFn?: typeof getJobs;
   getFillsFn?: typeof getFills;
   getLogFn?: typeof getNotificationLog;
+  getNotificationsFn?: typeof getNotifications;
 };
 
 function evidenceFromPayloads(args: {
@@ -33,6 +35,7 @@ function evidenceFromPayloads(args: {
   jobs: { job_type: string; status: string }[];
   fills: { symbol: string }[];
   events: { event_key: string }[];
+  daily_digest_enabled: boolean;
 }): RemainingHopEvidence {
   return {
     subscription_status: args.subscription_status ?? null,
@@ -47,6 +50,7 @@ function evidenceFromPayloads(args: {
     fill_count: args.fills.filter((row) => row.symbol.trim()).length,
     digest_event_keys: args.events.map((row) => row.event_key),
     digest_inbox_confirmed: false,
+    daily_digest_enabled: args.daily_digest_enabled,
   };
 }
 
@@ -57,6 +61,7 @@ export function RemainingHopStatus({
   getJobsFn = getJobs,
   getFillsFn = getFills,
   getLogFn = getNotificationLog,
+  getNotificationsFn = getNotifications,
 }: RemainingHopStatusProps) {
   const [proven, setProven] = useState<RemainingHopProven | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,12 +72,13 @@ export function RemainingHopStatus({
     setLoading(true);
     setError(null);
     try {
-      const [profile, connections, jobs, fills, events] = await Promise.all([
+      const [profile, connections, jobs, fills, events, prefs] = await Promise.all([
         getProfileFn(api).catch(() => null),
         listBrokersFn(api).catch(() => []),
         getJobsFn(api).catch(() => []),
         getFillsFn(api).catch(() => []),
         getLogFn(api).catch(() => []),
+        getNotificationsFn(api).catch(() => null),
       ]);
       setProven(
         provenRemainingHops(
@@ -83,6 +89,7 @@ export function RemainingHopStatus({
             jobs,
             fills,
             events,
+            daily_digest_enabled: prefs?.daily_digest === true,
           }),
         ),
       );
@@ -92,7 +99,7 @@ export function RemainingHopStatus({
     } finally {
       setLoading(false);
     }
-  }, [api, getProfileFn, listBrokersFn, getJobsFn, getFillsFn, getLogFn]);
+  }, [api, getProfileFn, listBrokersFn, getJobsFn, getFillsFn, getLogFn, getNotificationsFn]);
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- hydrate hops after mount */
@@ -108,8 +115,9 @@ export function RemainingHopStatus({
       <p className="text-xs text-ink-mute">
         Member-scoped Settings reads only. House <span className="font-mono">active</span> without
         a Stripe subscription boolean does not prove checkout. Digest log without inbox
-        confirmation does not prove received. Alpaca <span className="font-mono">api_key</span>{' '}
-        paper fills do not prove the OAuth or fill hops.
+        confirmation, or with <span className="font-mono">daily_digest</span> off, does not prove
+        received. Alpaca <span className="font-mono">api_key</span> paper fills do not prove the
+        OAuth or fill hops.
       </p>
       {!api ? (
         <p className="text-sm text-ink-mute">Sign in to load remaining hops.</p>

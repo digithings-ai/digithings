@@ -52,3 +52,20 @@ def test_frontend_fill_hop_requires_oauth() -> None:
         )
         is None
     )
+
+
+def test_frontend_digest_hop_requires_prefs_and_inbox() -> None:
+    source = _ts_source()
+    match = re.search(r"digest_email_received:\s*(.*?),\s*\}", source, re.S)
+    assert match is not None
+    body = re.sub(r"\s+", " ", match.group(1))
+    assert "evidence.digest_inbox_confirmed === true" in body
+    assert "digestLog" in body
+    assert "evidence.daily_digest_enabled === true" in body
+    assert (
+        re.search(
+            r"digest_email_received:\s*evidence\.digest_inbox_confirmed === true && digestLog\s*,",
+            source,
+        )
+        is None
+    )

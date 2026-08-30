@@ -3,8 +3,9 @@
  *
  * Mirrors ``digiquant.olympus.kairos.remaining_hops.proven_remaining_hops``.
  * The Settings About panel never claims digest inbox confirmation — that flag
- * is operator-only (`KAIROS_STAGING_DIGEST_INBOX_CONFIRMED`). Paper fills do
- * not prove the hop unless an Alpaca paper OAuth connection is also present.
+ * is operator-only (`KAIROS_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also
+ * requires ``daily_digest`` on; dispatch skips prefs that are off. Paper fills
+ * do not prove the hop unless an Alpaca paper OAuth connection is also present.
  */
 
 export const REMAINING_LIVE_HOPS = [
@@ -27,6 +28,7 @@ export type RemainingHopEvidence = {
   fill_count?: number;
   digest_event_keys?: readonly string[];
   digest_inbox_confirmed?: boolean;
+  daily_digest_enabled?: boolean;
 };
 
 export type RemainingHopProven = Record<RemainingLiveHop, boolean>;
@@ -52,7 +54,10 @@ export function provenRemainingHops(evidence: RemainingHopEvidence): RemainingHo
     alpaca_paper_oauth_connect: alpaca,
     overlay_daily_claimed: overlay,
     paper_fill_mirrored: (evidence.fill_count ?? 0) > 0 && alpaca,
-    digest_email_received: evidence.digest_inbox_confirmed === true && digestLog,
+    digest_email_received:
+      evidence.digest_inbox_confirmed === true &&
+      digestLog &&
+      evidence.daily_digest_enabled === true,
   };
 }
 
