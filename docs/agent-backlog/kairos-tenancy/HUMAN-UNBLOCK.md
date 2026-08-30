@@ -16,6 +16,9 @@ Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
 
 Loud-fail gates (after paste):
 ```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
+# when all three .local/secrets/digithings-{stripe,mailgun,alpaca}.env exist:
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check

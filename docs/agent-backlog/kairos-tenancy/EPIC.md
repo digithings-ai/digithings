@@ -114,7 +114,9 @@ because BYOK rows = **0** — do not `--execute`.
 still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2** (9 named vendor secrets).
-Observer Settings hops all ok (`TIER_FORBIDDEN` on Custom writes).
+`python scripts/kairos_apply_vendor_secrets.py` → exit **2** until the three
+gitignored `digithings-{stripe,mailgun,alpaca}.env` files exist (then `--apply`
+pushes names onto core EF secrets). Observer Settings hops all ok.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
 Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
