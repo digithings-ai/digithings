@@ -221,3 +221,28 @@ class TestInstitutionalAbsenceStreak:
         client = FakeSupabaseClient(canned_reads={"documents": docs})
         streak = query_institutional_absence_streak(client=client, run_date=date(2026, 6, 20))
         assert streak == 0
+
+    def test_overlay_inst_row_does_not_clear_house_streak(self) -> None:
+        from digiquant.olympus.atlas.supabase_io import query_institutional_absence_streak
+        from digiquant.olympus.tenancy import house_workspace_id
+
+        house = str(house_workspace_id())
+        overlay = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        docs = [
+            {
+                "date": "2026-06-19",
+                "document_key": "inst-hedge-fund-intel",
+                "workspace_id": overlay,
+            },
+            {"date": "2026-06-19", "document_key": "macro", "workspace_id": house},
+            {"date": "2026-06-18", "document_key": "equity", "workspace_id": house},
+            {"date": "2026-06-17", "document_key": "macro", "workspace_id": house},
+            {
+                "date": "2026-06-16",
+                "document_key": "inst-institutional-flows",
+                "workspace_id": house,
+            },
+        ]
+        client = FakeSupabaseClient(canned_reads={"documents": docs})
+        streak = query_institutional_absence_streak(client=client, run_date=date(2026, 6, 20))
+        assert streak == 3
