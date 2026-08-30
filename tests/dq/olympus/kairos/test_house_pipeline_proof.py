@@ -14,6 +14,7 @@ from digiquant.olympus.kairos.house_pipeline_proof import (
     UUID_HOTFIX_MERGED_AT,
     UUID_HOTFIX_SHA_PREFIX,
     HouseWorkflowRun,
+    OriginMainRef,
     evaluate_proof,
     format_proof_line,
     main,
@@ -29,6 +30,10 @@ _PRE = datetime(2026, 8, 31, 18, 42, 33, tzinfo=UTC)  # 33426508863
 _POST = datetime(2026, 9, 1, 12, 0, 5, tzinfo=UTC)
 _UUID_HOTFIX_MAIN = "3601f72df05ceb9a1e415cd14e89ee7a7e4bb31a"
 _POST_FAILSOFT_MAIN = "cafebabedeadbeef0123456789abcdef01234567"
+# Live schedule 33426508863 trigger SHA (default branch develop, not checkout ref: main).
+_DEVELOP_TRIGGER_SHA = "b363ea16bd574ee0e55d44a1fbaa209ae3271122"
+_MAIN_COMMITTED_BEFORE_CRON = datetime(2026, 9, 1, 11, 0, tzinfo=UTC)
+_MAIN_COMMITTED_AFTER_CRON = datetime(2026, 9, 1, 12, 30, tzinfo=UTC)
 
 
 def _run(
@@ -192,7 +197,9 @@ def test_main_uses_injected_list_and_refuses_dispatch() -> None:
                 created_at=_PRE,
             ),
         ),
-        resolve_main_sha=lambda: _POST_FAILSOFT_MAIN,
+        resolve_origin_main=lambda: OriginMainRef(
+            sha=_POST_FAILSOFT_MAIN, committed_at=_MAIN_COMMITTED_BEFORE_CRON
+        ),
         log=logs.append,
         log_err=logs.append,
     )
@@ -202,7 +209,9 @@ def test_main_uses_injected_list_and_refuses_dispatch() -> None:
     refuse = main(
         ["--dispatch"],
         list_runs=lambda: (),
-        resolve_main_sha=lambda: _POST_FAILSOFT_MAIN,
+        resolve_origin_main=lambda: OriginMainRef(
+            sha=_POST_FAILSOFT_MAIN, committed_at=_MAIN_COMMITTED_BEFORE_CRON
+        ),
         log=lambda _m: None,
         log_err=logs.append,
     )
@@ -218,7 +227,9 @@ def test_main_list_failure_exits_4() -> None:
     rc = main(
         [],
         list_runs=_boom,
-        resolve_main_sha=lambda: _POST_FAILSOFT_MAIN,
+        resolve_origin_main=lambda: OriginMainRef(
+            sha=_POST_FAILSOFT_MAIN, committed_at=_MAIN_COMMITTED_BEFORE_CRON
+        ),
         log=lambda _m: None,
         log_err=err.append,
     )
@@ -263,36 +274,66 @@ def test_post_failsoft_main_allows_schedule_proof() -> None:
         status="completed",
         conclusion="success",
         created_at=_POST,
-        head_sha=_POST_FAILSOFT_MAIN,
+        head_sha=_DEVELOP_TRIGGER_SHA,
     )
-    proof = evaluate_proof((run,), main_sha=_POST_FAILSOFT_MAIN)
+    proof = evaluate_proof(
+        (run,),
+        main_sha=_POST_FAILSOFT_MAIN,
+        main_committed_at=_MAIN_COMMITTED_BEFORE_CRON,
+    )
     assert proof.reason == "proven_schedule_success"
     assert proof_exit_code(proof) == EXIT_PROVEN
 
 
-def test_success_on_uuid_hotfix_run_sha_is_not_proof() -> None:
+def test_schedule_before_current_main_commit_is_not_proof() -> None:
     run = _run(
         database_id=99,
         event="schedule",
         status="completed",
         conclusion="success",
         created_at=_POST,
-        head_sha=_UUID_HOTFIX_MAIN,
+        head_sha=_DEVELOP_TRIGGER_SHA,
     )
-    proof = evaluate_proof((run,), main_sha=_POST_FAILSOFT_MAIN)
-    assert proof.reason == "schedule_on_uuid_hotfix"
+    proof = evaluate_proof(
+        (run,),
+        main_sha=_POST_FAILSOFT_MAIN,
+        main_committed_at=_MAIN_COMMITTED_AFTER_CRON,
+    )
+    assert proof.reason == "waiting_next_schedule"
     assert proof_exit_code(proof) == EXIT_WAITING_SCHEDULE
-    line = format_proof_line(proof)
-    assert "schedule_on_uuid_hotfix" in line
-    assert "3601f72df05c" in line
+    assert proof.cutoff == _MAIN_COMMITTED_AFTER_CRON
+    assert "do not workflow_dispatch" in format_proof_line(proof)
 
 
-def test_main_exits_5_when_origin_main_is_uuid_hotfix() -> None:
+def test_schedule_failure_before_current_main_commit_is_not_counting() -> None:
+    run = _run(
+        database_id=100,
+        event="schedule",
+        status="completed",
+        conclusion="failure",
+        created_at=_POST,
+        head_sha=_DEVELOP_TRIGGER_SHA,
+    )
+    proof = evaluate_proof(
+        (run,),
+        main_sha=_POST_FAILSOFT_MAIN,
+        main_committed_at=_MAIN_COMMITTED_AFTER_CRON,
+    )
+    assert proof.reason == "waiting_next_schedule"
+    assert proof_exit_code(proof) == EXIT_WAITING_SCHEDULE
+
+
+def test_main_exits_5_without_listing_when_main_is_uuid_hotfix() -> None:
+    def _boom() -> tuple[HouseWorkflowRun, ...]:
+        raise OSError("gh run list failed")
+
     logs: list[str] = []
     rc = main(
         [],
-        list_runs=lambda: (),
-        resolve_main_sha=lambda: _UUID_HOTFIX_MAIN,
+        list_runs=_boom,
+        resolve_origin_main=lambda: OriginMainRef(
+            sha=_UUID_HOTFIX_MAIN, committed_at=UUID_HOTFIX_MERGED_AT
+        ),
         log=logs.append,
         log_err=logs.append,
     )
@@ -304,15 +345,15 @@ def test_main_exits_5_when_origin_main_is_uuid_hotfix() -> None:
     )
 
 
-def test_main_resolve_main_sha_failure_exits_4() -> None:
-    def _boom() -> str:
+def test_main_resolve_origin_main_failure_exits_4() -> None:
+    def _boom() -> OriginMainRef:
         raise OSError("git rev-parse origin/main failed")
 
     err: list[str] = []
     rc = main(
         [],
         list_runs=lambda: (),
-        resolve_main_sha=_boom,
+        resolve_origin_main=_boom,
         log=lambda _m: None,
         log_err=err.append,
     )
