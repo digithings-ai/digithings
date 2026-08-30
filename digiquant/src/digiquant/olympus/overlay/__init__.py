@@ -15,7 +15,7 @@ workspace installed.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any  # score:allow untyped any — PEP 562 lazy re-export shim
 
 _EXPORTS = {
     "BudgetExhausted": "budget",

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any  # score:allow untyped any — fake Supabase client rows
 from uuid import UUID
 
 import pytest
