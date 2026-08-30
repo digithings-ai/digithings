@@ -13,6 +13,7 @@ from uuid import UUID
 import pytest
 from digiquant.brokers.connections import AuthKind, Broker, ConnectionEnv, ConnectionStatus
 from digiquant.olympus.kairos.sync_cron import (
+    ALPACA_API_KEY_HOLD_REASON,
     SyncTarget,
     format_kairos_sync_not_configured,
     kairos_sync_targets,
@@ -30,6 +31,7 @@ pytestmark = pytest.mark.unit
 _USER = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 _CONN = UUID("11111111-2222-3333-4444-555555555555")
 _IBKR = UUID("22222222-3333-4444-5555-666666666666")
+_API_KEY = UUID("33333333-4444-5555-6666-777777777777")
 _FP = "abcd1234"
 
 
@@ -74,6 +76,16 @@ def test_plan_kairos_sync_holds_ibkr() -> None:
     assert len(held) == 1
     assert held[0].connection_id == _IBKR
     assert held[0].reason == "ibkr_requires_brokerage_session"
+
+
+def test_plan_kairos_sync_holds_alpaca_api_key() -> None:
+    oauth = _target()
+    api_key = _target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY)
+    runnable, held = plan_kairos_sync((oauth, api_key))
+    assert [row.connection_id for row in runnable] == [_CONN]
+    assert len(held) == 1
+    assert held[0].connection_id == _API_KEY
+    assert held[0].reason == ALPACA_API_KEY_HOLD_REASON
 
 
 def test_parse_connection_row_skips_invalid() -> None:
@@ -148,6 +160,29 @@ def test_dry_run_does_not_call_sync_batch() -> None:
     assert called == []
     assert "runnable=1" in logs[0]
     assert "ibkr_held=1" in logs[0]
+    assert "alpaca_api_key_held=0" in logs[0]
+
+
+def test_dry_run_counts_alpaca_api_key_held() -> None:
+    logs: list[str] = []
+    called: list[UUID] = []
+    rc = main(
+        ["--dry-run"],
+        environ={},
+        targets=[
+            _target(),
+            _target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY),
+            _target(connection_id=_IBKR, broker=Broker.IBKR),
+        ],
+        sync_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
+        log=logs.append,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    assert called == []
+    assert "runnable=1" in logs[0]
+    assert "ibkr_held=1" in logs[0]
+    assert "alpaca_api_key_held=1" in logs[0]
 
 
 def test_all_calls_sync_batch_only_for_alpaca_paper() -> None:
@@ -159,6 +194,23 @@ def test_all_calls_sync_batch_only_for_alpaca_paper() -> None:
             _target(workspace_id=house_workspace_id()),
             _target(),
             _target(connection_id=_IBKR, broker=Broker.IBKR),
+        ],
+        sync_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    assert called == [_CONN]
+
+
+def test_all_does_not_sync_alpaca_api_key() -> None:
+    called: list[UUID] = []
+    rc = main(
+        ["--all"],
+        environ={},
+        targets=[
+            _target(),
+            _target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY),
         ],
         sync_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
         log=lambda _m: None,
@@ -246,6 +298,23 @@ def test_connection_id_live_exits_3() -> None:
     assert "live" in err[0]
 
 
+def test_connection_id_api_key_exits_3() -> None:
+    err: list[str] = []
+    called: list[UUID] = []
+    rc = main(
+        ["--connection-id", str(_API_KEY)],
+        environ={},
+        targets=[_target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY)],
+        sync_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == 3
+    assert "ALPACA_API_KEY_SYNC_HELD" in err[0]
+    assert str(_API_KEY) in err[0]
+    assert called == []
+
+
 def test_connection_id_invalid_exits_3() -> None:
     err: list[str] = []
     rc = main(
@@ -280,6 +349,18 @@ def test_production_refuses_house_and_ibkr_before_unseal() -> None:
     house = _target(workspace_id=house_workspace_id())
     ibkr = _target(connection_id=_IBKR, broker=Broker.IBKR)
     synced = _production_sync_batch((house, ibkr), environ={})
+    assert synced == 0
+    assert "digiquant.brokers.alpaca" not in sys.modules
+
+
+def test_production_refuses_alpaca_api_key_before_unseal() -> None:
+    import sys
+
+    from digiquant.olympus.kairos.sync_cron import _production_sync_batch
+
+    sys.modules.pop("digiquant.brokers.alpaca", None)
+    api_key = _target(connection_id=_API_KEY, auth_kind=AuthKind.API_KEY)
+    synced = _production_sync_batch((api_key,), environ={})
     assert synced == 0
     assert "digiquant.brokers.alpaca" not in sys.modules
 

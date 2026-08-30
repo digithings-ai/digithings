@@ -117,8 +117,11 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
 - Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +
   `CORE_SUPABASE_SERVICE_KEY` are in the process env (Cloud Agent env does not
   ship them; load from a gitignored PAT-fetched file for this VM only).
-- Sync `--check` / `--dry-run` **exit 0**; dry-run `runnable=1` is the ops-custom
-  Alpaca **api_key** paper row — do not poll/execute it (oauth hop still unproven).
+- Sync `--check` / `--dry-run` **exit 0**; `auth_kind=api_key` is held
+  (`alpaca_api_key_held`, reason `alpaca_api_key_does_not_prove_oauth_hop`).
+  `--all` must not poll that row; `--connection-id` on it exits **3** with
+  `ALPACA_API_KEY_SYNC_HELD`. Fill remaining-hop also requires Alpaca paper
+  OAuth (an `api_key` fill cannot prove it).
 - Combined `kairos_cron_check.py` still **exit 2** — Mailgun names empty. Overlay
   + sync store probes pass once `CORE_SUPABASE_*` are set.
 - House GHA must still splice `pipeline-olympus-mailgun.env.yml` on a `chore/` /

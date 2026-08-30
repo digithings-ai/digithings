@@ -335,6 +335,28 @@ def test_proven_remaining_hops_alpaca_api_key_does_not_count_as_oauth() -> None:
 
 
 @pytest.mark.unit
+def test_proven_remaining_hops_fill_without_oauth_is_not_mirrored() -> None:
+    api_key_fill = proven_remaining_hops(
+        RemainingHopEvidence(
+            connections=(("alpaca", "paper", "active", "api_key"),),
+            fill_count=1,
+        )
+    )
+    assert api_key_fill["paper_fill_mirrored"] is False
+    assert api_key_fill["alpaca_paper_oauth_connect"] is False
+    fill_only = proven_remaining_hops(RemainingHopEvidence(fill_count=1))
+    assert fill_only["paper_fill_mirrored"] is False
+    oauth_fill = proven_remaining_hops(
+        RemainingHopEvidence(
+            connections=(("alpaca", "paper", "active", "oauth"),),
+            fill_count=1,
+        )
+    )
+    assert oauth_fill["paper_fill_mirrored"] is True
+    assert oauth_fill["alpaca_paper_oauth_connect"] is True
+
+
+@pytest.mark.unit
 def test_proven_remaining_hops_all_five_from_product_state() -> None:
     proven = proven_remaining_hops(
         RemainingHopEvidence(

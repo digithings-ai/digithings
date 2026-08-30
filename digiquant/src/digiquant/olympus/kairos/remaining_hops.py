@@ -10,7 +10,9 @@ Exit 0 is allowed only when every hop here is proven from product state:
 - Overlay: ``job_type=overlay_daily`` with status ``succeeded`` (not
   ``running`` / ``skipped`` / ``persist_disabled`` / ``not_entitled``). A
   stuck claim or persist-disabled finish must not prove the EPIC overlay hop.
-- Fill: at least one fingerprint with a symbol.
+- Fill: at least one fingerprint with a symbol **and** an Alpaca paper
+  ``auth_kind=oauth`` connection. An ``api_key`` row with fills must not prove
+  the hop.
 - Digest: a ``digest:`` notification_log key **and** an inbox confirmation
   (claim-ledger rows are inserted before Mailgun send).
 """
@@ -74,7 +76,7 @@ def proven_remaining_hops(evidence: RemainingHopEvidence) -> dict[str, bool]:
         ),
         "alpaca_paper_oauth_connect": alpaca,
         "overlay_daily_claimed": overlay,
-        "paper_fill_mirrored": evidence.fill_count > 0,
+        "paper_fill_mirrored": evidence.fill_count > 0 and alpaca,
         "digest_email_received": evidence.digest_inbox_confirmed and digest_log,
     }
 

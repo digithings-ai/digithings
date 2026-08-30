@@ -3008,17 +3008,22 @@ structured report on the snapshot row + log; **never** auto-submit corrective or
 (`SyncResult.refused_corrective_orders` is always true).
 
 **Cron CLI (`sync_cron.py`, `python -m digiquant.olympus.kairos.sync_cron`).**
-Production entry that polls **Alpaca paper** connections only. House and system
-workspace ids are never sync targets; `env=live` is refused; inactive rows are
-dropped. IBKR paper is counted then held (`ibkr_requires_brokerage_session`) —
-cron does not open a brokerage session. `--check` exits **2** with
-`KAIROS_SYNC_NOT_CONFIGURED` listing missing store env *names*. `--dry-run`
-prints candidate counts and does not unseal. Apply requires `--connection-id`
+Production entry that polls **Alpaca paper OAuth** connections only. House and
+system workspace ids are never sync targets; `env=live` is refused; inactive
+rows are dropped. IBKR paper is counted then held
+(`ibkr_requires_brokerage_session`) — cron does not open a brokerage session.
+Alpaca `auth_kind=api_key` is counted then held
+(`alpaca_api_key_does_not_prove_oauth_hop`) — `--all` must not poll that row,
+and `--connection-id` on it exits **3** with `ALPACA_API_KEY_SYNC_HELD`.
+`--check` exits **2** with `KAIROS_SYNC_NOT_CONFIGURED` listing missing store
+env *names*. `--dry-run` prints candidate counts (`ibkr_held`,
+`alpaca_api_key_held`) and does not unseal. Apply requires `--connection-id`
 or `--all` (refuses implicit broker polls). Apply without an injected callback
 also requires `DIGIQUANT_VAULT_MASTER_KEY` (names only on failure). Credentials
-are unsealed only inside `open_credential` for Alpaca adapter construction.
-Do not run `--all` against Observer until an Alpaca paper OAuth connection
-exists. The fill remaining-hop still requires a mirrored row with a symbol.
+are unsealed only inside `open_credential` for Alpaca OAuth adapter
+construction — `api_key` payloads are never polled. Do not run `--all` against
+Observer until an Alpaca paper OAuth connection exists. The fill remaining-hop
+requires a mirrored row with a symbol **and** an Alpaca paper OAuth connection.
 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
 invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
@@ -3060,7 +3065,8 @@ product state: `subscription_status=active` **and** `has_stripe_subscription`
 not prove checkout; ops grants with `subscription_status=none` also do not);
 Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
 (not `running` / `skipped` / `persist_disabled` / `not_entitled`); a fill
-fingerprint with a symbol; a `digest:`
+fingerprint with a symbol **and** that OAuth paper connection (`api_key` fills
+do not prove the hop); a `digest:`
 log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
 (claim-ledger rows are inserted before Mailgun send). Remaining-hop GETs that
 are not HTTP 200 exit **3**. Exit **0** only when all five remaining hops are

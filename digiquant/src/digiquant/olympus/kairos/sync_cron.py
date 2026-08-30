@@ -1,9 +1,11 @@
-"""Kairos broker-mirror sync cron — paper Alpaca only (K4).
+"""Kairos broker-mirror sync cron — paper Alpaca OAuth only (K4).
 
 Production entry: ``python -m digiquant.olympus.kairos.sync_cron``. House and
 system workspaces, live env rows, and inactive connections are never synced.
 IBKR paper is listed then held (brokerage session is not opened from cron).
-This module does not import Alpaca/IBKR adapters at module level.
+Alpaca ``auth_kind=api_key`` is listed then held (polling that row cannot prove
+the paper OAuth remaining hop). This module does not import Alpaca/IBKR
+adapters at module level.
 """
 
 from __future__ import annotations
@@ -28,6 +30,7 @@ from digiquant.vault.envelope import MASTER_KEY_ENV
 
 _FINGERPRINT_SELECT = "id,workspace_id,broker,env,auth_kind,status,fingerprint"
 IBKR_HOLD_REASON = "ibkr_requires_brokerage_session"
+ALPACA_API_KEY_HOLD_REASON = "alpaca_api_key_does_not_prove_oauth_hop"
 
 
 class SyncTarget(BaseModel):
@@ -89,7 +92,12 @@ def kairos_sync_targets(rows: Sequence[SyncTarget]) -> tuple[SyncTarget, ...]:
 def plan_kairos_sync(
     rows: Sequence[SyncTarget],
 ) -> tuple[tuple[SyncTarget, ...], tuple[KairosSyncHold, ...]]:
-    """Split paper-active non-reserved targets into Alpaca runnable vs IBKR held."""
+    """Split paper-active non-reserved targets into Alpaca OAuth vs held.
+
+    Alpaca ``auth_kind=api_key`` is listed then held — polling that row cannot
+    prove the paper OAuth remaining hop. IBKR paper is held (no brokerage
+    session from cron).
+    """
     runnable: list[SyncTarget] = []
     held: list[KairosSyncHold] = []
     for row in kairos_sync_targets(rows):
@@ -99,6 +107,15 @@ def plan_kairos_sync(
                     connection_id=row.connection_id,
                     workspace_id=row.workspace_id,
                     reason=IBKR_HOLD_REASON,
+                )
+            )
+            continue
+        if row.auth_kind is AuthKind.API_KEY:
+            held.append(
+                KairosSyncHold(
+                    connection_id=row.connection_id,
+                    workspace_id=row.workspace_id,
+                    reason=ALPACA_API_KEY_HOLD_REASON,
                 )
             )
             continue
@@ -219,7 +236,16 @@ def _filter_connection_id(
         return "kairos sync: connection workspace is reserved (house/system)"
     if row.env is ConnectionEnv.LIVE:
         return "kairos sync: live env is not authorized"
+    if row.auth_kind is AuthKind.API_KEY:
+        return (
+            f"ALPACA_API_KEY_SYNC_HELD: {row.connection_id} "
+            "auth_kind=api_key cannot prove the paper oauth hop"
+        )
     return selected
+
+
+def _hold_count(held: Sequence[KairosSyncHold], reason: str) -> int:
+    return sum(1 for item in held if item.reason == reason)
 
 
 def _log_dry_run(
@@ -231,7 +257,9 @@ def _log_dry_run(
     log(
         f"kairos sync dry-run considered={len(loaded)} "
         f"targets={len(kairos_sync_targets(loaded))} "
-        f"runnable={len(runnable)} ibkr_held={len(held)}"
+        f"runnable={len(runnable)} "
+        f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
+        f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
     )
 
 
@@ -285,14 +313,22 @@ def main(
     runnable, held = plan_kairos_sync(loaded)
     if sync_batch is not None:
         synced = sync_batch(runnable)
-        log(f"kairos sync runnable={len(runnable)} synced={synced} ibkr_held={len(held)}")
+        log(
+            f"kairos sync runnable={len(runnable)} synced={synced} "
+            f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
+            f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
+        )
         return 0
     apply_missing = missing_kairos_sync_apply_env_names(env)
     if apply_missing:
         err(format_kairos_sync_not_configured(apply_missing))
         return 2
     synced = _production_sync_batch(runnable, environ=env)
-    log(f"kairos sync runnable={len(runnable)} synced={synced} ibkr_held={len(held)}")
+    log(
+        f"kairos sync runnable={len(runnable)} synced={synced} "
+        f"ibkr_held={_hold_count(held, IBKR_HOLD_REASON)} "
+        f"alpaca_api_key_held={_hold_count(held, ALPACA_API_KEY_HOLD_REASON)}"
+    )
     return 0
 
 
@@ -308,15 +344,16 @@ def _production_sync_batch(
         if target.broker is Broker.ALPACA
         and target.env is ConnectionEnv.PAPER
         and target.status is ConnectionStatus.ACTIVE
+        and target.auth_kind is AuthKind.OAUTH
         and target.workspace_id not in reserved_sync_workspace_ids()
     ]
     if not alpaca_paper:
         return 0
-    from digiquant.brokers.alpaca import AlpacaAdapter, ApiKeyAuth, OAuthAuth
+    from digiquant.brokers.alpaca import AlpacaAdapter, OAuthAuth
     from digiquant.brokers.base import BrokerAdapter
     from digiquant.brokers.connections import BrokerConnection, get_connection, open_credential
     from digiquant.olympus.kairos.sync import SyncCursor, run_sync_batch
-    from digiquant.vault.envelope import ApiKeyCredential, OAuthCredential
+    from digiquant.vault.envelope import OAuthCredential
 
     client = _supabase_client_from_env(environ)
     cursor = SyncCursor(fills_since=datetime.now(tz=UTC) - timedelta(days=7))
@@ -335,17 +372,14 @@ def _production_sync_batch(
             or connection.broker is not Broker.ALPACA
             or connection.env is not ConnectionEnv.PAPER
             or connection.status is not ConnectionStatus.ACTIVE
+            or connection.auth_kind is not AuthKind.OAUTH
         ):
             continue
         with open_credential(client=client, connection=connection) as lease:
             cred = lease.credential
-            if isinstance(cred, OAuthCredential):
-                auth: ApiKeyAuth | OAuthAuth = OAuthAuth(access_token=cred.access_token)
-            elif isinstance(cred, ApiKeyCredential):
-                auth = ApiKeyAuth(key_id=cred.key_id, secret=cred.secret)
-            else:
+            if not isinstance(cred, OAuthCredential):
                 continue
-            adapter = AlpacaAdapter(auth, env="paper")
+            adapter = AlpacaAdapter(OAuthAuth(access_token=cred.access_token), env="paper")
         cycles.append((adapter, connection, cursor))
     if not cycles:
         return 0
@@ -358,6 +392,7 @@ if __name__ == "__main__":
 
 
 __all__ = [
+    "ALPACA_API_KEY_HOLD_REASON",
     "IBKR_HOLD_REASON",
     "KairosSyncHold",
     "SyncTarget",
