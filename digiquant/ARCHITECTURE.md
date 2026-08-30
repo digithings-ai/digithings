@@ -3021,3 +3021,53 @@ never stack traces or keys.
 Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
 (colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
 checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.
+
+## Overlay runs
+
+T4 overlay pipeline (`digiquant/src/digiquant/olympus/overlay/`) gives entitled
+Custom/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
+`run_type` fork, no planner changes).
+
+**Dispatch (`dispatch.py`).** Entitlement is `plan_tier ∈ {custom, enterprise}` AND
+`subscription_status = active` AND BYOK present-and-unsealable. Misses write a
+`job_runs` row `skipped` with `error` = `not_entitled` / `no_credentials` (visible,
+never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; claim
+is insert-first + skip-locked (first claimer wins). Overlay failures never write
+house job rows.
+
+**Runner (`runner.py`).** ProfileConfig pin (`requested_version_id` + `workspace_id`
+at the preflight seam — the pin loader is unchanged) → publish-if-missing into the
+shared corpus under `theme:` / `asset:` / `segment:` keys → private H7–H9 book.
+A write-time assertion rejects any corpus key containing the workspace or user id.
+House callers that omit `workspace_id` keep the T0 house stamp (byte-identical).
+Overlay commit manifests use `overlay-commit/{workspace_id}/…` so a date-scoped
+house lookup cannot last-writer-wins over a private book.
+
+**Budget (`budget.py`).** Attributed spend is `digigraph.usage.snapshot()["cost_usd"]`
+(WP1 / `olympus_provider_attempts`). Crossing `ProfileConfig.research_budget_usd`
+skips remaining research, commits what is consistent, and marks the job
+`budget_exhausted`.
+
+**BYOK (`byok.py`).** Sealed rows in `workspace_provider_credentials` (migration 104)
+reuse the K3 AES-256-GCM envelope. AAD is `workspace_id:provider:llm`. Overlay LLM
+clients are constructed only inside `digillm.client.byok` — house `OPENAI_API_KEY` /
+LiteLLM proxy keys are never a fallback. Missing or unsealable user key ⇒ skip.
+
+**Venue.** K4 `policy.py` is untouched. House / `workspace_id is None` stays
+`PAPER_INTERNAL`.
+
+**Authority note (ledger / paper fills).** Overlay's runner path writes the
+shared corpus (tenant-agnostic keys), the pin-seam `workspace_id` on
+`AtlasConfigBundle`, H9 commit manifests (`overlay-commit/{workspace_id}/…`),
+the private book / NAV (`commit_io`), and the ledger chain (`ledger_io` models
+receive `workspace_id=` when overlay; house constructors stay on
+`house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`
+or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
+house paper fills are the `execute_at_open` job (date-scoped, house stamp);
+external venue submit is K4's router, which already takes `workspace_id` and
+resolves via untouched `policy.py`. `_pending_order_heads` is still date-only —
+a later WP that invokes Kairos for overlay must filter by workspace rather than
+invent a second fill writer here. `documents` has no tenant column (T0 deferred
+it); overlay isolation on manifests is the key prefix, not a column.
+
+Tests: `tests/dq/olympus/overlay/`.
