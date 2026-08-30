@@ -59,7 +59,7 @@ from unittest.mock import patch
 # unit-test suite. Importing from a tests module is unusual, but the
 # fake is the same shape every test in the project already depends on
 # and duplicating it here would be drift-prone.
-from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.fixtures.fake_supabase import FakeSupabaseClient
 
 from digiquant.olympus.atlas.graph import (
     AtlasGraphDeps,

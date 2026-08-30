@@ -80,6 +80,7 @@ jobs:
             digigraph:
               - 'digigraph/**'
               - 'tests/dg/**'
+              - 'tests/contracts/**'
               - '.github/workflows/test-digigraph.yml'
               - 'config/**'
               - 'infra/digichat-release/config/**'
