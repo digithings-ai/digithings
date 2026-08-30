@@ -221,6 +221,6 @@ describe('BillingTab', () => {
     expect(briefAt).toBeGreaterThan(-1);
     expect(deskAt).toBeGreaterThan(briefAt);
     expect(studioAt).toBeGreaterThan(deskAt);
-    expect(html).toContain('Annual · 17% off');
+    expect(html).toContain('Annual · 20% off');
   });
 });

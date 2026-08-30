@@ -1,8 +1,8 @@
 # digiquant consumer pricing (Stripe + UI)
 
 > **Status:** implemented 2026-09-01. Live Stripe catalog is Brief / Desk /
-> Studio at **$10 / $30 / $100** per month (annual = ten months — two months
-> free). Observer stays free and is not a Stripe product. Enterprise is invoice.
+> Studio at **$10 / $30 / $100** per month (annual = **20% off** twelve months:
+> $96 / $288 / $960). Observer stays free and is not a Stripe product. Enterprise is invoice.
 >
 > Product surface is **digiquant**. Stripe product names match the Billing tab
 > and locked-state copy. Internal house-run jargon (**baseline** = the house
@@ -27,16 +27,16 @@
 
 Four rungs: one free teaser, three paid. Each paid rung buys a **deeper cut of the same house**, then the right to run your own.
 
-| Stripe + UI name | Internal id | Monthly | Annual (17% off) | What you get |
-|------------------|-------------|---------|------------------------|--------------|
+| Stripe + UI name | Internal id | Monthly | Annual (20% off) | What you get |
+|------------------|-------------|---------|------------------|--------------|
 | **Observer** | `free` | $0 | — | Teaser: digest *conclusions* + portfolio *names*. No weights, no pipeline, no brokers. Not a Stripe product. |
-| **Brief** | `brief` | **$10** | $100 ($8.33/mo) | Full daily **digest** + **house portfolio** (weights / NAV). Summary outputs only. No pipeline canvas, no brokers, no overlay. |
-| **Desk** | `desk` | **$30** | $300 ($25/mo) | Everything in Brief, plus the **full house pipeline** (research, deliberation, glass-box). **Paper broker connect.** |
-| **Studio** | `studio` | **$100** | $1000 ($83.33/mo) | Everything in Desk, plus **your overlay pipeline**, private book, BYOK. |
+| **Brief** | `brief` | **$10** | $96 ($8/mo) | Full daily **digest** + **house portfolio** (weights / NAV). Summary outputs only. No pipeline canvas, no brokers, no overlay. |
+| **Desk** | `desk` | **$30** | $288 ($24/mo) | Everything in Brief, plus the **full house pipeline** (research, deliberation, glass-box). **Paper broker connect.** |
+| **Studio** | `studio` | **$100** | $960 ($80/mo) | Everything in Desk, plus **your overlay pipeline**, private book, BYOK. |
 | **Enterprise** | `enterprise` | invoice | — | Seats / SLA. Not self-serve. |
 
 Observer stays free so Brief is not selling the same teaser twice. Billing UI
-shows annual as **17% off** the monthly list (equivalent `$ /mo` vs struck
+shows annual as **20% off** the monthly list (equivalent `$ /mo` vs struck
 `$ /mo`), billed yearly.
 
 The earlier $9 / $29 / $99 recommendation was a list-price nudge. Live products shipped at round tens; changing a Stripe *price* later is easy; do not rename the products.
@@ -67,9 +67,9 @@ Runner-up if Brief feels too editorial: **Digest / Glassbox / Overlay**. Do not 
 
 Test mode. Recurring USD. Product name = UI name.
 
-1. **Brief** — “Daily house digest and house portfolio.” Recurring $10 / month. Annual $100 (two months free). Metadata `plan_tier=brief`.
-2. **Desk** — “Full house pipeline, research, and paper broker connect.” Recurring $30 / month. Annual $300. Metadata `plan_tier=desk`.
-3. **Studio** — “Your overlay pipeline, private book, and BYOK.” Recurring $100 / month. Annual $1000. Metadata `plan_tier=studio`.
+1. **Brief** — “Daily house digest and house portfolio.” Recurring $10 / month. Annual $96 (20% off). Metadata `plan_tier=brief`.
+2. **Desk** — “Full house pipeline, research, and paper broker connect.” Recurring $30 / month. Annual $288 (20% off). Metadata `plan_tier=desk`.
+3. **Studio** — “Your overlay pipeline, private book, and BYOK.” Recurring $100 / month. Annual $960 (20% off). Metadata `plan_tier=studio`.
 
 Paste the `price_…` ids into `.local/secrets/digithings-stripe.env` as:
 
