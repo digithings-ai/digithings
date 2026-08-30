@@ -9,7 +9,7 @@
 \echo '=== SEED: begin ==='
 
 -- Fixed ids
--- user-a (custom), user-b (baseline), user-c (free)
+-- user-a (studio), user-b (desk), user-c (free)
 -- ws-a, ws-b, ws-c
 DO $$
 DECLARE

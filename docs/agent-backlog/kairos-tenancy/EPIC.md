@@ -172,7 +172,8 @@ so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 
 **Remaining hops (Observer JWT, re-audit 2026-08-31T08:36Z):** all five unproven.
 Unproven hops now carry closed-vocabulary blocker codes in Settings About and
-the staging harness (Observer live: `plan_tier_not_custom`,
+the staging harness (Observer live at that audit: `plan_tier_not_custom`, now
+`plan_tier_not_studio` after migration 115;
 `no_alpaca_paper_oauth` / `alpaca_api_key_not_oauth` on ops-custom, `overlay_not_succeeded`
 (or `overlay_legacy_book_unique` once persist-on fails against leftover
 `UNIQUE(date)`),
@@ -183,14 +184,14 @@ v32). [#3375](https://github.com/digithings-ai/digithings/pull/3375) logs the fi
 remaining-hop blockers on that exit and still returns 3. After Pages+EF cutover
 the next miss is **exit 2**
 (9 named vendor secrets). Observer hops still match, including
-Custom checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
+Studio checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
 `notification_log` / `stripe_events` / BYOK rows = **0**. One ops-custom workspace
 has an Alpaca **paper `api_key`** connection (1 active + 2 revoked; not OAuth;
 does not prove the remaining hop). House is `enterprise`/`active` **without**
-Stripe ids — must not prove checkout. Baseline Stripe also must not (Custom-only
+Stripe ids — must not prove checkout. Brief/Desk Stripe also must not (Studio-only
 remaining-hop pin). Overlay `--dry-run` against core
 (after D1 `plan_floor` honor): `considered=5 targets=3 billing_active=1` — the
-creator GitHub workspace (`plan_tier=free`, `plan_floor=custom`). Dry-run now
+creator GitHub workspace (`plan_tier=free`, `plan_floor=studio` after 115). Dry-run now
 also prints `byok_present` and `persist_enabled` (live core: `byok_present=0
 persist_enabled=0`). Overlay `--execute` refuses without `OLYMPUS_OVERLAY_PERSIST=1`
 (`OVERLAY_EXECUTE_NOT_CONFIGURED`) so a persist-off run cannot finish
@@ -230,8 +231,8 @@ stays unproven). Overlay publish skips `daily_snapshots`. Flag still **unset**
 because BYOK rows = **0** — do not `--execute`. Seal resume path:
 `python scripts/kairos_seal_byok.py` → exit **2** until gitignored
 `digithings-byok.env` exists. Do not seal a placeholder; `--apply` only against
-an overlay-entitled workspace (GitHub creator `plan_floor=custom`, not Observer
-free, not house/system, not ops-custom `custom`/`none` without a grant).
+an overlay-entitled workspace (GitHub creator `plan_floor=studio`, not Observer
+free, not house/system, not ops-custom `studio`/`none` without a grant).
 
 **Cron CLIs (do not run `--all` / `--execute --all` on Observer or the api_key row):**
 - Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +

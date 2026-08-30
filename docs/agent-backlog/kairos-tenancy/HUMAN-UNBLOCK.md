@@ -90,9 +90,9 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `STRIPE_PRICE_BRIEF_MONTHLY` | `price_…` |
 | `STRIPE_PRICE_DESK_MONTHLY` | `price_…` |
 | `STRIPE_PRICE_STUDIO_MONTHLY` | `price_…` |
-| `STRIPE_PRICE_BRIEF_ANNUAL` | `price_…` (optional) |
-| `STRIPE_PRICE_DESK_ANNUAL` | `price_…` (optional) |
-| `STRIPE_PRICE_STUDIO_ANNUAL` | `price_…` (optional) |
+| `STRIPE_PRICE_BRIEF_ANNUAL` | `price_…` |
+| `STRIPE_PRICE_DESK_ANNUAL` | `price_…` |
+| `STRIPE_PRICE_STUDIO_ANNUAL` | `price_…` |
 | `MAILGUN_API_KEY` | Mailgun private API key (MCP currently auth-fails; env EMPTY) |
 | `MAILGUN_DOMAIN` | Verified sending domain |
 | `NOTIFY_FROM` | Verified From address on that domain |
@@ -107,7 +107,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 ## 0b) Workspace bootstrap — RESOLVED
 
-mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200**. Personal workspace exists. Ops may elevate to `custom` for vault/overlay probes until Stripe prices land (document clearly — **not** Stripe-sourced). GitHub user’s personal WS remains **`free`** (2026-08-30 Settings E2E; ops elevate not applied). Notification prefs point at Agentmail inbox for digest when Mailgun lands.
+mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200**. Personal workspace exists. Ops may elevate to `studio` for vault/overlay probes until Stripe prices land (document clearly — **not** Stripe-sourced). GitHub user’s personal WS remains **`free`** (2026-08-30 Settings E2E; ops elevate not applied). Notification prefs point at Agentmail inbox for digest when Mailgun lands.
 
 ---
 

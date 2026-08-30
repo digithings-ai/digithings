@@ -313,7 +313,7 @@ cutover PR merged/deployed → **then** remove Access.
         `research_snapshot ? 'portfolio'` is false.
       - As free-tier JWT: same weight/NAV views + `pm-rebalance` → **0**;
         `public_daily_research` + research docs (`analyst/*`, etc.) → readable.
-- [ ] **Authenticated Baseline+ smoke:** JWT with `plan_tier=baseline` reads
+- [ ] **Authenticated Brief+ smoke:** JWT with `plan_tier=brief` (or desk/studio) reads
       weight-bearing docs; cannot read another workspace’s private rows.
 - [ ] **Frontend research-view cutover** (named task below) merged and Pages
       redeployed — Observer/anon paths no longer `.from('daily_snapshots')` for
@@ -329,13 +329,13 @@ until the dashboard switches (file: `frontend/dashboard/lib/`):
 
 | Call site | Current read | Cutover change |
 |-----------|--------------|----------------|
-| `queries.ts` ~713 | `daily_snapshots` select `snapshot,digest_markdown` (latest) | Observer/free → `public_daily_research` (`research_snapshot`); Baseline+ house book still from positions/NAV (or BFF) — never raw snapshot portfolio |
+| `queries.ts` ~713 | `daily_snapshots` select `snapshot,digest_markdown` (latest) | Observer/free → `public_daily_research` (`research_snapshot`); Brief+ house book still from positions/NAV (or BFF) — never raw snapshot portfolio |
 | `queries.ts` ~740 | `daily_snapshots` select `date,run_type` (history) | Switch to `public_daily_research` (same columns) |
 | `queries.ts` ~1816 | `digest_markdown, snapshot` for digest render | Research path: render from `research_snapshot`; do not fetch `digest_markdown` for free/anon |
 | `queries.ts` ~1908, ~1921 | `daily_snapshots` meta / prev date | Use `public_daily_research` |
 | `queries.ts` ~1986 | `date, snapshot, digest_markdown` history | Use `public_daily_research`; drop digest_markdown for unentitled tiers |
 | `queries.ts` ~2063 | `date, run_type, snapshot` | Use `public_daily_research` |
-| `snapshot-fetch.ts` ~232 | latest `daily_snapshots` row → `SnapshotEnvelope` | Parse `research_snapshot` for Observer; Baseline+ weight UI must not use this envelope’s stripped digest for book weights |
+| `snapshot-fetch.ts` ~232 | latest `daily_snapshots` row → `SnapshotEnvelope` | Parse `research_snapshot` for Observer; Brief+ weight UI must not use this envelope’s stripped digest for book weights |
 | `queries.ts` ~749 | prefetch `documents` `pm-rebalance` | Gate with `can(tier, 'house_weights_nav')`; free must not fetch (RLS will empty, but skip the request) |
 
 Track as a single agent-task issue, e.g. `[agent] cutover — Olympus reads public_daily_research`.
@@ -347,7 +347,7 @@ Cutover SQL **REVOKEs** `public_portfolio_positions`, `public_nav_history`, and
 accounting NAV/attribution views from **both** `anon` and `authenticated`
 (definer views — base RLS does not protect them). That fail-closes free JWT.
 
-Why no staged `901_tier_gated_view_policies.sql` in this kit: restoring Baseline+
+Why no staged `901_tier_gated_view_policies.sql` in this kit: restoring Brief+
 SELECT on those views without a proven claim gate (or a BFF that checks
 `plan_tier` then reads via `service_role`) would re-open the free-JWT leak.
 T5 UI already skips unentitled fetches; the data plane must stay fail-closed
