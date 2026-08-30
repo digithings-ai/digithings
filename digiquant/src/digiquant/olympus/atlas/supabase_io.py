@@ -621,11 +621,19 @@ def load_active_theses_rows(
 def load_portfolio_performance_snapshot(
     client: SupabaseClient,
     run_date: date,
+    workspace_id: str | None = None,
 ) -> dict[str, Any]:
-    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``."""
+    """Latest NAV point before ``run_date`` plus same-day ``portfolio_metrics``.
+
+    ``workspace_id`` omitted / ``None`` means the house workspace — never an
+    unfiltered date scan. Overlay passes its id so a later private NAV cannot
+    become the house PM snapshot.
+    """
+    scoped = str(resolved_workspace_id(workspace_id))
     nav_resp = (
         client.table("nav_history")
         .select("date, nav, cash_pct, invested_pct")
+        .eq("workspace_id", scoped)
         .lt("date", run_date.isoformat())
         .order("date", desc=True)
         .limit(1)
@@ -639,6 +647,7 @@ def load_portfolio_performance_snapshot(
     metrics_resp = (
         client.table("portfolio_metrics")
         .select("date, pnl_pct, sharpe, volatility, max_drawdown, alpha")
+        .eq("workspace_id", scoped)
         .eq("date", nav_date)
         .limit(1)
         .execute()

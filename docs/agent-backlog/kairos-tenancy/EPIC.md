@@ -116,7 +116,11 @@ safe from anon leak; **positions / nav_history / ledger** still collide on 097's
 legacy `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and 069's
 one-root-per-run_date. House ops writers on `develop` now stamp house
 `workspace_id` and target the widened UNIQUEs (#3280 materialize, #3281 metrics,
-P6 ops-book PR). Overlay same-day books still collide until those 097 keys are
+P6 ops-book PR). House GHA chain Group A **reads** (`commit_io._prior_nav`,
+`portfolio_materialize._prior_nav`, `load_portfolio_performance_snapshot`,
+`breaker_scale_from_nav_history`, `opening_snapshot` positions/NAV) now filter
+house `workspace_id` so overlay NAV/positions cannot compound the house index.
+Overlay same-day books still collide until those 097 keys are
 **dropped** on `core` (after `main` house GHA writers are also widened). Do not set
 `OLYMPUS_OVERLAY_PERSIST=1` expecting a private book — persist-on still cannot
 prove the overlay remaining hop until P6 drops those arbiters. BYOK rows on
