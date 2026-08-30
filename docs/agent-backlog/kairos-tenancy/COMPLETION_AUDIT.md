@@ -2,11 +2,119 @@
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
-Agent run (this turn): https://cursor.com/agents/bc-01c035c3-a440-5e20-b097-d77aa597d9b5  
-Agent run (audit write): https://cursor.com/agents/bc-c5b145ca-ac4a-56ed-ab78-919d4208ab35  
-Agent run (merge + unlock hunt): https://cursor.com/agents/bc-cc69ce13-26ad-5258-9eda-8d2f22c2b5bb  
-Develop tip: `ae11f0d3` (merge of [#3185](https://github.com/digithings-ai/digithings/pull/3185))  
-Settings EF on `core`: **v12** ACTIVE (thin GitHub-raw → `732a77d0` / #3184 hydrate; land note #3185; GET `/notifications` smoke 401 — still no `sbp_` / no new vendor secrets)
+Agent run (this turn): https://cursor.com/agents/bc-2ce79c82-edcc-5b44-b286-961dbf1be964  
+Develop tip: `c751949c` (merge of [#3191](https://github.com/digithings-ai/digithings/pull/3191))  
+Settings EF on `core`: **v13** ACTIVE. Still no `sbp_` / no new vendor secrets.  
+Human unblock: `/opt/cursor/artifacts/kairos-HUMAN-UNBLOCK.md`. Artifact mirror: `/opt/cursor/artifacts/kairos-epic-completion-audit.md`.
+
+### Done-criteria % (post-#3191)
+
+| Bucket | PASS | BLOCKED |
+|--------|------|---------|
+| Wave A–E WPs (12) | 12 code PASS | runtime vendor/secrets |
+| Program acceptance (4) | 3 PASS | 1 BLOCKED (staging E2E) |
+| Human prerequisites (7) | 0 | 7 BLOCKED |
+| **Full epic Done** | ~**35–40%** | majority secrets/human |
+| **Code/agent-reachable Done** | ~**75–80%** | staging E2E + deploy secrets |
+
+---
+
+## Follow-up turn (human-unblock + merge #3191)
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Merge #3191 when CI green | **PASS** | Marked ready; Required CI + CodeQL green; `gh pr merge --merge` → `c751949c` (2026-08-30T17:21:20Z). |
+| 2 | Hatch #3191 | **QUEUED for parent** | Body: `/opt/cursor/artifacts/kairos-reviews/pr-3191-review.md`. `gh` comment + `reviewed:agent` → **403**. |
+| 3 | Secret/env rescan (names only) | **PASS (no unlocks)** | No `sbp_`. JWT `SUPABASE_ACCESS_TOKEN` (`eyJ…`, len 1486). Mailgun/Stripe/Alpaca/Auth API keys empty/absent. Vault + `APP_URL` SET. Signup-note files only. **No** EF secrets push. |
+| 4 | `request-environment-setup-actions` | **PASS** | Single blocking list recorded (sbp_ PAT, Stripe sk_test + prices + whsec, Mailgun key+domain+from, Auth Google/GitHub client secrets, Alpaca OAuth). `get-message-queue` unavailable (legacy workflow). |
+| 5 | `kairos-HUMAN-UNBLOCK.md` | **PASS** | `/opt/cursor/artifacts/kairos-HUMAN-UNBLOCK.md` — ordered checklist after secrets land. |
+| 6 | #3183 promote draft | **LEAVE DRAFT** | Not merged. |
+| 7 | Goal complete? | **FAIL** | Same human/vendor blockers; do not UpdateGoal complete. |
+
+### Nonempty secret **names** this re-scan (values never logged)
+
+| Source | Nonempty names | Empty / absent of interest |
+|--------|----------------|----------------------------|
+| Process env | `SUPABASE_ACCESS_TOKEN` (JWT), `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL` | `MAILGUN_*`, `NOTIFY_FROM`; no Stripe/Alpaca/Auth API keys; **no** `sbp_` |
+| `.env` / `.local/secrets/kairos.env` | `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` | Mailgun empty |
+| Signup notes only | `ALPACA_SIGNUP_*`, `STRIPE_SIGNUP_*` | Not vendor API keys |
+
+---
+
+## Prior follow-up (wins hunt: secrets + brokers + vault + billing)
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Secret/env rescan (names only) | **PASS (no unlocks)** | No `sbp_`. JWT `SUPABASE_ACCESS_TOKEN`. Mailgun/Stripe/Alpaca API keys empty/absent. Vault + `APP_URL` SET. `~/.supabase` telemetry only. **No** EF secrets push / Mailgun smoke. |
+| 2 | Brokers tab hydrate gap | **PASS (already on develop)** | `BrokersTab` `useEffect` → `listBrokers` → GET `/settings/brokers`; EF handler present. Unauth 401/401 (`settings-brokers-get-smoke.log`). **No PR** — not notify/profile-class bug. |
+| 3 | Local vault path (VM env key) | **PASS** | `kairos-vault-env-evidence.log` — `load_master_key(os.environ)` seal/open + `key=None`; vault **76** + connections **41**. Not EF secrets. |
+| 4 | Billing EF smoke (no Stripe keys) | **PASS (honest)** | `billing-ef-smoke.log` — checkout/portal **401** (missing + invalid JWT); webhook **500 STRIPE_NOT_CONFIGURED**; prices-live **401**. |
+| 5 | Merge #3188 | **PASS** | Merged → `a8eadc32`. |
+| 6 | #3183 promote draft | **LEAVE DRAFT** | Not merged. |
+| 7 | Goal complete? | **FAIL** | Same human/vendor blockers; do not UpdateGoal complete. |
+
+### Nonempty secret **names** this re-scan (values never logged)
+
+| Source | Nonempty names | Empty / absent of interest |
+|--------|----------------|----------------------------|
+| Process env | `SUPABASE_ACCESS_TOKEN` (JWT), `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL` | `MAILGUN_*`, `NOTIFY_FROM`; no Stripe/Alpaca API keys; **no** `sbp_` |
+| `.env` / `.local/secrets/kairos.env` | `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` | Mailgun empty |
+| Signup notes only | `ALPACA_SIGNUP_*`, `STRIPE_SIGNUP_*` | Not vendor API keys |
+
+### Brokers PR / compare
+
+```text
+N/A — hydrate already on develop (no cursor/brokers-tab-hydrate branch)
+```
+
+---
+
+## Prior follow-up (post-#3187: profile GET + EF v13 + audit)
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Hatch + merge #3187 | **PASS (merge; hatch 403)** | `gh pr comment` / `reviewed:agent` → **403**. Marked ready; Required CI green; `gh pr merge --merge` → `17a84b30` (2026-08-30T16:59:04Z). Parent can hatch. |
+| 2 | Redeploy settings EF thin-pin to merge SHA | **PASS** | MCP `deploy_edge_function` → **v13** ACTIVE; pin `17a84b3042d6…` (GET `/profile` + GET `/notifications` handlers). |
+| 3 | Smoke 401 (profile + notifications) | **PASS** | Missing + invalid JWT → gateway `401` (`settings-v13-smoke.log`). |
+| 4 | Secret scan (nonempty names only) | **PASS (no unlocks)** | No `sbp_`. `SUPABASE_ACCESS_TOKEN` still JWT. Mailgun/Stripe/Alpaca API keys empty/absent. Signup-note files only. Vault + `APP_URL` SET. **No** EF secrets push / Mailgun smoke. |
+| 5 | Merge #3188 (this audit) | **PASS** | Merged as `a8eadc32` (2026-08-30). |
+| 6 | #3183 promote draft | **LEAVE DRAFT** | Not merged. |
+| 7 | Goal complete? | **FAIL** | Same human/vendor blockers; do not UpdateGoal complete. |
+
+### Nonempty secret **names** this re-scan (values never logged)
+
+| Source | Nonempty names | Empty / absent of interest |
+|--------|----------------|----------------------------|
+| Process env | `SUPABASE_ACCESS_TOKEN` (JWT), `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL` | `MAILGUN_*`, `NOTIFY_FROM`; no Stripe/Alpaca API keys; **no** `sbp_` |
+| `.env` / `.local/secrets/kairos.env` | `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` | Mailgun empty |
+| Signup notes only | `ALPACA_SIGNUP_*`, `STRIPE_SIGNUP_*` | Not vendor API keys |
+
+---
+
+## Follow-up turn (post-#3186: merge + secret rescan + reviews + profile GET)
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Merge #3186 when CI green | **PASS** | Marked ready; Required CI + CodeQL green; `gh pr merge --squash` → `b9e1e8e3` (2026-08-30T16:47:09Z). |
+| 2 | Secret scan (nonempty names only) | **PASS (no unlocks)** | No `sbp_`. `SUPABASE_ACCESS_TOKEN` still JWT. Mailgun/Stripe/Alpaca API keys empty/absent. Vault + `APP_URL` SET. **No** EF push / redeploy / Mailgun smoke. |
+| 3 | In-session review markdown | **QUEUED for parent** | Bodies under `/opt/cursor/artifacts/kairos-reviews/pr-{3141,3177–3181,3186}-review.md`. `gh` comment + `reviewed:agent` → **403**. #3161 + #3184 + #3185 already hatched on GitHub. |
+| 4 | Non-secret code gap | **BRANCH READY** | Missing GET `/profile` (ProfileTab blank defaults) → `cursor/profile-get-hydrate-539c` @ `140bf203`. Deno 32 + Vitest 13 green. `gh pr create` → **403** — parent opens from compare URL. |
+| 5 | #3183 promote draft | **LEAVE DRAFT** | Not merged. |
+| 6 | Goal complete? | **FAIL** | Same human/vendor blockers; do not UpdateGoal complete. |
+
+### Nonempty secret **names** this re-scan (values never logged)
+
+| Source | Nonempty names | Empty / absent of interest |
+|--------|----------------|----------------------------|
+| Process env | `SUPABASE_ACCESS_TOKEN` (JWT), `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL` | `MAILGUN_*`, `NOTIFY_FROM`; no Stripe/Alpaca API keys; **no** `sbp_` |
+| `.env` / `.local/secrets/kairos.env` | `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` | Mailgun empty |
+| Signup notes only | `ALPACA_SIGNUP_*`, `STRIPE_SIGNUP_*` | Not vendor API keys |
+
+### Profile GET compare (parent)
+
+```text
+https://github.com/digithings-ai/digithings/compare/develop...cursor/profile-get-hydrate-539c
+```
 
 ---
 
@@ -18,7 +126,7 @@ Settings EF on `core`: **v12** ACTIVE (thin GitHub-raw → `732a77d0` / #3184 hy
 | 2 | Secret scan (nonempty names only) | **PASS (no unlocks)** | No `sbp_`. `SUPABASE_ACCESS_TOKEN` still JWT (`eyJ…`, len 1486). `MAILGUN_*` / `NOTIFY_FROM` empty. No Stripe/Alpaca **API** keys (signup-note files only). Vault + `APP_URL` SET in VM. **No** EF secrets push / settings redeploy / Mailgun smoke. |
 | 3 | Settings EF still v12 | **PASS** | `list_edge_functions` → `settings` version **12** ACTIVE. Smoke: `settings-v12-smoke.log` (401/401). |
 | 4 | E2E without live vendors (fakes/mocks) | **PASS (NOT live staging)** | Chain 2 + Alpaca 34 + contracts/venue 6 + kairos 67 + IBKR 36 — see `kairos-e2e-paper-fakes-refresh.log`. Explicitly **not** staging signup→Stripe→Alpaca→digest. |
-| 5 | Review hatches for parent (#3184 / #3185) | **PARTIAL** | #3184: `reviewed:agent` + `<!-- in-session-review -->` comment **present**. #3185: **no** hatch (docs-only land note) — parent should hatch before `main` or apply `risk:low` if warranted. |
+| 5 | Review hatches for parent (#3184 / #3185) | **PARTIAL** | #3184: `reviewed:agent` + `<!-- in-session-review -->` comment **present**. #3185: later hatched on GitHub (reconfirmed this turn). |
 | 6 | #3183 promote draft | **LEAVE DRAFT** | Not merged (human release-gate). |
 | 7 | Goal complete? | **FAIL** | Same human/vendor blockers; do not UpdateGoal complete. |
 
@@ -54,9 +162,9 @@ title: chore(promote): develop → main — Kairos Pages prep (flag-off, no cuto
 
 Body must require: Pages `NEXT_PUBLIC_OLYMPUS_AUTH` unset; do not apply `cutover/900`; Access stays on; merge only as deliberate release (~199 commits).
 
-### Material review note (when parent posts #3161)
+### Material review note (historical — fixed by #3184)
 
-`NotifyTab` has no GET/hydrate of existing `notification_prefs` — form starts empty; accidental save can overwrite. Authz + Deno tests otherwise sound.
+`NotifyTab` previously lacked GET/hydrate; **fixed** in #3184. Analogous ProfileTab gap addressed on `cursor/profile-get-hydrate-539c` (awaiting parent PR).
 
 ---
 
@@ -107,11 +215,11 @@ Body must require: Pages `NEXT_PUBLIC_OLYMPUS_AUTH` unset; do not apply `cutover
 | K1 Alpaca paper adapter | **PASS (code)** | Merged; runtime paper connect **BLOCKED** (no Alpaca OAuth/keys; Turnstile wall — not re-burned). |
 | K2 IBKR read-first | **PASS (code)** | Merged; vendor onboarding **BLOCKED** (human). |
 | T1 Supabase Auth login | **PASS (code)** | Merged; Google+GitHub providers on `core` **BLOCKED** (human). |
-| K3 credential vault | **PASS (code)** | Merged; master key in VM **SET**; project EF secrets **BLOCKED** (no `sbp_`). |
+| K3 credential vault | **PASS (code + VM env)** | Merged; local env seal/open **PASS** (`kairos-vault-env-evidence.log`); project EF secrets **BLOCKED** (no `sbp_`). |
 | T2 Stripe tiers | **PASS (code)** | EFs ACTIVE; Stripe test products/keys/webhook **BLOCKED** (hCaptcha — not re-burned). |
 | T5 tier-gated UI | **PASS** | Vitest refresh: 42 passed (`olympus-tier-gates-refresh.log`). |
 | K4 order-intent router + mirror | **PASS** | Kairos unit 67 passed (`kairos-router-unit-refresh.log`); live venue gates 8 passed. |
-| T3 Settings UI + EF | **PASS (code + EF)** | settings **v12** + smoke 401; vault seal at runtime needs EF secrets. |
+| T3 Settings UI + EF | **PASS (code + EF)** | settings **v13** + smoke 401; vault seal at runtime needs EF secrets. |
 | K5 digest email | **PASS (code)** | Notify unit previously green; Mailgun send **BLOCKED** (empty API key / domain). |
 | T4 overlay pipeline | **PASS (code)** | Overlay unit covered in prior chain regression; entitled chain integration 2/2 this turn. |
 
@@ -155,7 +263,9 @@ Body must require: Pages `NEXT_PUBLIC_OLYMPUS_AUTH` unset; do not apply `cutover
 | Kairos router/sync unit | **67 passed** | (in combined log) |
 | IBKR adapter unit | **36 passed** | (in combined log) |
 | Olympus tier gates (Vitest) | **42 passed** | `olympus-tier-gates-refresh.log` (prior same day) |
-| Settings EF auth smoke | **401 / 401** | `settings-v12-smoke.log` |
+| Settings EF auth smoke | **401 / 401** | `settings-v13-smoke.log` (+ brokers GET: `settings-brokers-get-smoke.log`) |
+| Local env vault seal/open | **PASS** | `kairos-vault-env-evidence.log` (76 vault + 41 connections) |
+| Billing EF unauth / not-configured | **PASS (honest)** | `billing-ef-smoke.log` — 401 / `STRIPE_NOT_CONFIGURED` |
 | RLS isolation | **59/59 PASS** | `rls_isolation_proof.log` (+ summary extract) |
 | House olympus unit | **420 passed** | `house-olympus-unit.log` (prior turn, same day) |
 
@@ -165,6 +275,9 @@ Body must require: Pages `NEXT_PUBLIC_OLYMPUS_AUTH` unset; do not apply `cutover
 
 | PR | Result |
 |----|--------|
+| [#3188](https://github.com/digithings-ai/digithings/pull/3188) `cursor/kairos-audit-v13-539c` → `develop` | **MERGED** (`a8eadc32`) |
+| [#3187](https://github.com/digithings-ai/digithings/pull/3187) `cursor/profile-get-hydrate-539c` → `develop` | **MERGED** (`17a84b30`) |
+| [#3186](https://github.com/digithings-ai/digithings/pull/3186) `cursor/kairos-audit-v12-3d52` → `develop` | **MERGED** (`b9e1e8e3`) |
 | [#3185](https://github.com/digithings-ai/digithings/pull/3185) `cursor/settings-hydrate-land-5e7e` → `develop` | **MERGED** (`ae11f0d3`) |
 | [#3184](https://github.com/digithings-ai/digithings/pull/3184) `cursor/settings-notify-hydrate-3d52` → `develop` | **MERGED** (`732a77d0`) |
 | [#3181](https://github.com/digithings-ai/digithings/pull/3181) ops/status docs → `develop` | **MERGED** (`f92a8810`) |
@@ -184,18 +297,17 @@ Prior on develop (unchanged): #3141 promotion, #3161 notifications, #3177 schema
 | Merged → `develop` (Kairos-adjacent) | `reviewed:agent` / hatch? | Note |
 |--------------------------------------|---------------------------|------|
 | #3120 T3 Settings, #3099 T1, #3119 T5, #3125 RLS, #3121 cutover docs | **yes** | OK for later main |
-| #3141 digiquant promote | **no** | Needs hatch before main |
-| #3161 notifications wire | **no** | Needs hatch before main |
-| #3177 schema align docs | **no** | Docs; still needs hatch or `risk:low` if warranted |
-| #3178 unlock status docs | **no** | Docs |
-| #3179 cred-push status docs | **no** | Docs |
-| #3180 completion audit docs | **no** | Docs |
-| #3181 ops/status docs | **no** | Docs |
+| #3141 digiquant promote | **no** | Review body queued: `pr-3141-review.md` |
+| #3161 notifications wire | **yes** | Hatched on GitHub |
+| #3177–#3181 docs/audit series | **no** | Bodies queued under `kairos-reviews/` |
 | #3184 NotifyTab hydrate | **yes** | `reviewed:agent` + in-session-review comment |
-| #3185 settings hydrate land note | **no** | Docs; hatch or `risk:low` before main |
+| #3185 settings hydrate land note | **yes** | Hatched on GitHub (reconfirmed) |
+| #3186 audit v12 refresh | **no** | Body queued: `pr-3186-review.md` |
+| #3187 profile GET hydrate | **no** | Hatch 403 this agent — parent posts findings + `reviewed:agent` |
+| #3188 audit v13 | **no** | Hatch 403 this agent — parent posts findings + `reviewed:agent` |
 | #3156 WP delivery docs | `needs-human-review` only | Not a coverage hatch |
 
-**Parent-only:** #3184 hatch already landed. #3185 still needs a hatch before `main` (or `risk:low` if warranted). Older unhatched merges (#3141, #3161, #3177–#3181, …) still need parent `/review` / Bugbot / owner. Do **not** fake Bugbot.
+**Parent-only:** post queued `<!-- in-session-review -->` comments + `reviewed:agent` (token 403 for this agent). Do **not** fake Bugbot. Leave #3183 draft.
 
 Open develop drafts (#3149 settings tier gate, coverage/bugfix drafts, etc.) similarly lack hatches; not blocking Kairos code path until merge.
 
@@ -205,11 +317,11 @@ Open develop drafts (#3149 settings tier gate, coverage/bugfix drafts, etc.) sim
 
 | Function | Version | Notes |
 |----------|---------|-------|
-| `settings` | **v12** | Thin GitHub-raw pin → `732a77d0` (#3184 GET `/notifications`). Full 9-file bundle staged; CLI/secrets need `sbp_`. Smoke: `settings-v12-smoke.log`. |
+| `settings` | **v13** | Thin GitHub-raw pin → `17a84b30` (#3187 GET `/profile` + #3184 GET `/notifications`). Full 9-file bundle staged; CLI/secrets need `sbp_`. Smoke: `settings-v13-smoke.log`. |
 | `stripe-webhook` | v3 | Awaits Stripe secrets |
-| `create-checkout-session` | v1 | Awaits Stripe secrets |
-| `customer-portal` | v3 | Awaits Stripe secrets |
-| `prices-live` | v6 | Pre-existing |
+| `create-checkout-session` | v1 | Unauth smoke **401**; awaits Stripe secrets |
+| `customer-portal` | v3 | Unauth smoke **401**; awaits Stripe secrets |
+| `prices-live` | v6 | Unauth smoke **401** |
 
 ---
 
@@ -231,8 +343,11 @@ Open develop drafts (#3149 settings tier gate, coverage/bugfix drafts, etc.) sim
 
 - [ ] Obtain `sbp_` PAT → push vault + APP_URL EF secrets → optional full 9-file settings redeploy
 - [ ] Human: Stripe TEST + Mailgun + Auth providers + Alpaca OAuth (outside captcha re-burn)
-- [ ] Staging E2E paper chain once secrets land (local fakes E2E already green — not a substitute)
-- [ ] Fresh-context `/review` (or Bugbot / `reviewed:owner`) on unhatched Kairos merges before main (#3185 + older)
+- [ ] Staging E2E paper chain once secrets land (local fakes E2E + local vault env already green — not substitutes)
+- [ ] Fresh-context `/review` (or Bugbot / `reviewed:owner`) on unhatched Kairos merges before main
 - [ ] Human: IBKR vendor + legal before any live epic
 - [ ] Human: pages promote when ready (no 900, auth flag off); leave #3183 draft
+- [x] Brokers tab hydrate — already on develop (verified this turn; no PR)
+- [x] Local VM vault seal/open evidence — `kairos-vault-env-evidence.log`
+- [x] Billing EF unauth/not-configured smoke — `billing-ef-smoke.log`
 - [ ] **Do not** mark goal complete until staging E2E + human gates clear

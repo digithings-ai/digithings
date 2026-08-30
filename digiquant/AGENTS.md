@@ -176,21 +176,20 @@ the full module map.
 
 ### Adding a preset
 
-Presets are public, hand-authored `curve_nodes`/`long_only` personalities in
-`strategies/sdca/presets.json`, loaded via `strategies/sdca/presets.py`
-(`list_presets()`, `load_preset(name)`). To add one:
+Presets are public personalities in `strategies/sdca/presets.json`, loaded via
+`strategies/sdca/presets.py` (`list_presets()`, `load_preset(name)`). Since
+#3169 they are authored as `SdcaCurveShape` parameters (a dead zone and two
+knees), not 21 free nodes. `load_preset()` still returns `SdcaPreset.curve_nodes`
+for `SdcaStrategyConfig`.
 
-1. Append an entry to `presets.json`: a 21-element `curve_nodes` array (one
-   value per risk node `0, 5, …, 100` — matches `curve.RISK_NODES`), a
-   `long_only` bool, and a `description` explaining the personality in plain
-   language (not tuned parameters — this is public, documented config, not an
-   optimizer output).
-2. If `long_only: true`, every `curve_nodes` value must be `>= 0` — a negative
-   node in a long-only preset is a contradiction the loader does not catch at
-   read time; `tests/dq/strategies/sdca/test_presets.py::test_long_only_preset_never_sells`
-   is what catches it.
-3. Run `pytest tests/dq/strategies/sdca/test_presets.py -v` — no code changes
-   needed for a well-formed entry, `presets.py` reads the file directly.
+1. Append an entry to `presets.json` with `long_only`, a `description`, and a
+   `shape` object: `buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`,
+   `sell_max_rate`, `buy_curvature`, `sell_curvature`. Long-only personalities
+   use `sell_max_rate: 0` and `sell_knee_risk: 100`.
+2. If `long_only: true`, generated nodes must all be `>= 0` — the loader
+   rejects a negative node. `tests/dq/strategies/sdca/test_presets.py::test_long_only_preset_never_sells`
+   is the regression net.
+3. Run `pytest tests/dq/strategies/sdca/test_presets.py tests/dq/strategies/sdca/test_curve_shape.py -v`.
 
 ### SDCA test commands
 

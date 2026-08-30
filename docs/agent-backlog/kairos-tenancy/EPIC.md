@@ -63,24 +63,26 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, post-#3185)
+## Agent delivery status (2026-08-30, post-#3191 / human-unblock)
 
-**Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).
+**Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
+**Human checklist:** `/opt/cursor/artifacts/kairos-HUMAN-UNBLOCK.md` (ordered: Cursor env secrets → EF secrets → redeploy → Auth → Stripe webhook → paper Alpaca → flag cutover).
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Through NotifyTab hydrate [#3184](https://github.com/digithings-ai/digithings/pull/3184) + land note [#3185](https://github.com/digithings-ai/digithings/pull/3185) — **merged** (develop tip `ae11f0d3`).
+**Code:** all 12 WPs on `develop` (promotion #3141). Wins-hunt audit [#3191](https://github.com/digithings-ai/digithings/pull/3191) — **merged** (develop tip `c751949c`). Profile GET [#3187](https://github.com/digithings-ai/digithings/pull/3187) + audit [#3188](https://github.com/digithings-ai/digithings/pull/3188) merged earlier.
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
-**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v12** ACTIVE — thin GitHub-raw pin → `732a77d0` (GET `/notifications` + PATCH). Smoke 401 (`settings-v12-smoke.log`). Still no `sbp_` / no EF secrets push.
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v13** ACTIVE — thin GitHub-raw pin → `17a84b30` (GET `/profile` + GET `/notifications` + PATCH). Smoke 401. Still no `sbp_` / no EF secrets push.
 
-**Secrets (names only; re-scanned post-#3185):**
+**Secrets (names only; re-scanned post-#3191):**
 - **SET in VM:** `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **No new nonempty secrets.** No captcha vendor signups. No EF push / Mailgun smoke.
+- **No new nonempty secrets.** No captcha. No EF secrets push / Mailgun smoke.
 - **Cursor env:** `SUPABASE_ACCESS_TOKEN` = JWT (`eyJ…`, not `sbp_`). Mailgun/Stripe/Alpaca/Auth keys empty or absent.
+- **Setup actions recorded** for human paste into Cursor env (names + format hints).
 
-**Agent-reachable paper E2E (fakes/mocks — NOT live staging):** 145 passed — `kairos-e2e-paper-fakes-refresh.log` (tenancy chain + Alpaca + venue contracts + kairos router/sync + IBKR). Staging E2E still **BLOCKED**.
+**Agent-reachable paper E2E (fakes/mocks — NOT live staging):** 145 passed — `kairos-e2e-paper-fakes-refresh.log`. Staging E2E still **BLOCKED**.
 
-**Review gate (parent):** #3184 hatched (`reviewed:agent` + in-session-review). #3185 + older unhatched merges still need parent hatch before `main`. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
+**Review gate (parent):** #3161 / #3184 / #3185 hatched. #3187/#3188/#3191 hatch comment+label **403** this agent — review bodies under `/opt/cursor/artifacts/kairos-reviews/`; parent posts `<!-- in-session-review -->` + `reviewed:agent`. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
 
 **Pages promote:** branch `cursor/promote-kairos-pages-3d52` pushed; human opens/merges when ready. Flag off; no cutover 900.
 
