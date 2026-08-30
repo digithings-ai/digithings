@@ -30,6 +30,7 @@ def test_tool_path_uses_run_tools_and_validates():
         *,
         temperature=0.2,
         max_tool_rounds=5,
+        tool_choice="auto",
         on_tool_step=None,
         search_parameters=None,
     ):
