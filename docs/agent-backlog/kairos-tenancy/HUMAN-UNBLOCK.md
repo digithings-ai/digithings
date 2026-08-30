@@ -1,10 +1,11 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: NOT COMPLETE.** Do not mark the epic Done. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) (draft promote) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` obtained in agent VM; vault + `APP_URL` EF secrets pushed; settings EF **v17** full deploy + 401 smoke. Still need Stripe/Mailgun/Auth/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
-Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
+Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)  
+Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)
 
 ---
 
@@ -14,7 +15,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 | Name | Format hint |
 |------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` (**replace** current `eyJ…` JWT) |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — **agent already created** token `cursor-kairos-cloud-agent` (gitignored `.local/secrets/supabase_access_token`); **paste into Cursor env** to replace JWT |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
 | `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
@@ -28,13 +29,13 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `AUTH_GITHUB_CLIENT_ID` / `AUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App |
 | `ALPACA_OAUTH_CLIENT_ID` / `ALPACA_OAUTH_CLIENT_SECRET` | Alpaca **paper** OAuth app |
 
-Also already present in VM (copy to EF secrets once `sbp_` works): `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL` / `NEXT_PUBLIC_APP_URL`.
+**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
 
 ---
 
-## 1) Set Supabase Edge Function secrets (`core`)
+## 1) Set remaining Supabase Edge Function secrets (`core`)
 
-Requires `sbp_…` PAT. Example shape (fill from Cursor env / vault files — do not echo values into logs):
+`sbp_…` PAT available in agent VM. Remaining vendor keys still empty — set when obtained:
 
 ```bash
 supabase secrets set \

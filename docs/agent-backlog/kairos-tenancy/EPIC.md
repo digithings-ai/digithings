@@ -63,27 +63,27 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, settings EF v14 + #3196)
+## Agent delivery status (2026-08-30, settings EF v17 + `sbp_` partial unlock)
 
-**Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
-**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) (also `/opt/cursor/artifacts/kairos-HUMAN-UNBLOCK.md`) — ordered: Cursor env secrets → EF secrets → redeploy → Auth → Stripe webhook → paper Alpaca → flag cutover. Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
+**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — remaining vendor keys + paste `sbp_…` into Cursor env from gitignored `.local/secrets/supabase_access_token`. Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
 **Code:** all 12 WPs on `develop` (promotion #3141). Wins-hunt [#3191](https://github.com/digithings-ai/digithings/pull/3191) + profile GET [#3187](https://github.com/digithings-ai/digithings/pull/3187) + settings tier gate [#3196](https://github.com/digithings-ai/digithings/pull/3196) — **merged**. Entitlement uses `workspaces.plan_tier` only (no JWT fail-open after cancel).
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
-**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v14** ACTIVE — thin GitHub-raw pin → `5b526914` (#3196 + GET `/profile` + GET `/notifications` + PATCH). Smoke 401 (`settings-v14-smoke.log`). Still no `sbp_` / no EF secrets push.
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v17** ACTIVE — **full monorepo CLI deploy** from `origin/develop` tip `8bb9690a` (GET `/profile` + GET `/notifications` + PATCH + `requireEligibleTier` on `workspaces.plan_tier`). Smoke 401 (`settings-v17-smoke.log`).
 
-**Secrets (names only; re-scanned this turn):**
-- **SET in VM:** `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **No new nonempty secrets.** No captcha. No EF secrets push / Mailgun smoke.
-- **Cursor env:** `SUPABASE_ACCESS_TOKEN` = JWT (`eyJ…`, not `sbp_`). Mailgun/Stripe/Alpaca/Auth keys empty or absent.
-- **Setup actions recorded** for human paste into Cursor env (names + format hints).
+**Secrets (names only; unlocked this turn via Supabase dashboard as `chrizefan`):**
+- **`sbp_` PAT obtained** (legacy Access Token `cursor-kairos-cloud-agent`, 90d) — stored gitignored under `.local/secrets/` (not committed). Prefer pasting into Cursor env as `SUPABASE_ACCESS_TOKEN`.
+- **EF secrets pushed on `core`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
+- **Still empty / blocked:** Mailgun, Stripe test keys+prices+whsec, Auth Google/GitHub client secrets, Alpaca OAuth. Mailgun smoke **skipped** (empty).
+- **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
 
 **Agent-reachable paper E2E (fakes/mocks — NOT live staging):** 145 passed — `kairos-e2e-paper-fakes-refresh.log`. Staging E2E still **BLOCKED**.
 
 **Review gate (parent):** #3161 / #3184 / #3185 hatched. Later audits + #3196 hatch comment+label **403** this agent — review bodies under `/opt/cursor/artifacts/kairos-reviews/`; parent posts `<!-- in-session-review -->` + `reviewed:agent`. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
 
-**Pages promote:** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) tip synced to current `origin/develop` (`baa7766d`). **Do not merge** until secrets live **and** intentional Pages cutover. Flag off; no cutover 900.
+**Pages promote:** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) left open. **Do not merge** until remaining vendor secrets live **and** intentional Pages cutover. Flag off; no cutover 900.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
