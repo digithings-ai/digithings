@@ -40,6 +40,12 @@ Each file is derived from `docs/providers/snapshots/` and updated weekly by the 
 | [huggingface](huggingface.md) | `meta-llama/Llama-3.3-70B-Instruct` | 128k | None | None | ✅ |
 | [nvidia_nim](nvidia-nim.md) | `meta/llama-3.3-70b-instruct` | 976k | 40 | None | ✅ |
 
+## Retired (do not configure)
+
+| Provider | Notes |
+|---|---|
+| [github_models](github-models.md) | **Retired 2026-07-30** — inference API torn down (#1589) |
+
 ---
 
 *Generated: 2026-08-30 · Next scan: weekly via `provider-review` workflow*
