@@ -740,6 +740,8 @@ This closes only the `OLLAMA_MODEL`-clobber case. A deployment whose *mode defau
 
 **Free-quota errors:** provider 429 / RPD under `llm_mode: free` maps to stable code `free_quota_exceeded` (HTTP 429 + SSE `delta.digigraph_error`) for digichat BYOK handoff. Generic rate limits outside free mode use `rate_limit`.
 
+**`delta.digigraph_error` contract (streaming):** `run_digigraph_workflow_streaming` emits an `("error", {"code", "message"})` queue event only when `final["error_code"]` is set (`workflow.py` — without a code, the error is surfaced as plain `content` only). Today that code is written only for `free_quota_exceeded` and `rate_limit` via `_user_facing_llm_error` in `graph/research.py`; both messages are static product copy, never exception text. digichat's stream adapter relays the SSE `message` for those codes; for `BYOK_MODEL_REMEDIABLE_CODES` it relays the code only and lets `embed-chat-error` supply trusted copy (#2536).
+
 CLI: `digi llm-settings` / `python -m digigraph.cli llm-settings` prints effective provider/model/key-env present (never secrets).
 
 ### 8.3 digistore for LLM Context Reduction
