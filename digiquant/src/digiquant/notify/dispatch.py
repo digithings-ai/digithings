@@ -411,6 +411,36 @@ def _dispatch_notifications_inner(
     )
 
 
+def _run_digest_dry_run(
+    *,
+    workspace_id: str | None,
+    prefs: Sequence[Mapping[str, Any]] | None,
+    mailgun_configured: bool | None,
+    log: Callable[[str], None] | None,
+) -> int:
+    """Print digest candidate counts. Never sends or claims slots."""
+    out = log or print
+    configured = (
+        not bool(missing_mailgun_env_names()) if mailgun_configured is None else mailgun_configured
+    )
+    loaded: Sequence[Mapping[str, Any]]
+    if prefs is None:
+        sb = build_digiquant_client()
+        if sb is None:
+            print(NOTIFY_STORE_NOT_CONFIGURED, file=sys.stderr)
+            return 2
+        loaded = _load_prefs(sb)
+    else:
+        loaded = prefs
+    plan = plan_digest_dispatch(
+        loaded,
+        mailgun_configured=configured,
+        workspace_id=workspace_id,
+    )
+    out(format_digest_dry_run(plan))
+    return 0
+
+
 def main(
     argv: list[str] | None = None,
     *,
@@ -468,28 +498,12 @@ def main(
         return 0
 
     if args.dry_run:
-        out = log or print
-        configured = (
-            not bool(missing_mailgun_env_names())
-            if mailgun_configured is None
-            else mailgun_configured
-        )
-        loaded: Sequence[Mapping[str, Any]]
-        if prefs is None:
-            sb = build_digiquant_client()
-            if sb is None:
-                print(NOTIFY_STORE_NOT_CONFIGURED, file=sys.stderr)
-                return 2
-            loaded = _load_prefs(sb)
-        else:
-            loaded = prefs
-        plan = plan_digest_dispatch(
-            loaded,
-            mailgun_configured=configured,
+        return _run_digest_dry_run(
             workspace_id=args.workspace_id,
+            prefs=prefs,
+            mailgun_configured=mailgun_configured,
+            log=log,
         )
-        out(format_digest_dry_run(plan))
-        return 0
 
     dispatch_notifications(hour_utc=datetime.now(UTC).hour)
     return 0
