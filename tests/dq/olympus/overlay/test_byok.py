@@ -6,15 +6,19 @@ import os
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
+import digillm.client as digillm_client
 import pytest
 from digillm.client import get_byok
 from digiquant.olympus.overlay.byok import (
     BYOK_AAD_PURPOSE,
     LLM_PROVIDERS,
     TABLE_NAME,
+    ByokError,
+    ByokProbe,
     CredentialStatus,
     LlmProvider,
     ProviderCredential,
+    invoke_overlay_chain,
     overlay_llm_session,
     probe_byok,
     provider_base_url,
@@ -26,6 +30,8 @@ from digiquant.olympus.overlay.dispatch import (
     WorkspaceEntitlement,
     dispatch_overlay_daily,
 )
+from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
+from digiquant.olympus.research_corpus import ResearchCorpusStore
 from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
 from digiquant.vault.envelope import (
     ApiKeyCredential,
@@ -33,6 +39,8 @@ from digiquant.vault.envelope import (
     build_aad,
     seal_credential,
 )
+
+from tests.dq.olympus.overlay._sealed import sealed_openai
 
 pytestmark = pytest.mark.unit
 
@@ -149,3 +157,74 @@ def test_probe_unsealable_when_aad_mismatched() -> None:
     probe = probe_byok(client=_Client(), workspace_id=workspace, key=master)
     assert probe.present_and_unsealable is False
     assert probe.reason == "unsealable"
+
+
+def test_invoke_chain_credential_none_refuses_never_calls_chain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    called = {"n": 0}
+
+    def chain(**_kwargs: object) -> None:
+        called["n"] += 1
+
+    store = MemoryJobRunStore()
+    workspace = WorkspaceEntitlement(
+        workspace_id=uuid4(),
+        plan_tier=PlanTier.CUSTOM,
+        subscription_status=SubscriptionStatus.ACTIVE,
+    )
+    job = dispatch_overlay_daily(
+        store=store,
+        workspace=workspace,
+        run_date=date(2026, 8, 30),
+        byok=ByokProbe(present_and_unsealable=True, provider="openai"),
+    ).job
+    result = run_overlay(
+        request=OverlayRunRequest(
+            workspace_id=workspace.workspace_id,
+            run_date=date(2026, 8, 30),
+            profile_version_id=uuid4(),
+        ),
+        job=job,
+        store=store,
+        corpus=ResearchCorpusStore(),
+        byok=ByokProbe(present_and_unsealable=True, provider="openai"),
+        chain=chain,
+        credential=None,
+    )
+    assert called["n"] == 0
+    assert result.status is JobStatus.SKIPPED
+    assert result.skip_reason is OverlaySkipReason.NO_CREDENTIALS
+
+
+def test_invoke_overlay_chain_none_raises_without_calling() -> None:
+    called = {"n": 0}
+
+    def chain(**_kwargs: object) -> None:
+        called["n"] += 1
+
+    with pytest.raises(ByokError) as exc:
+        invoke_overlay_chain(
+            chain=chain,
+            credential=None,
+            vault_key=None,
+            workspace_id=uuid4(),
+            run_date=date(2026, 8, 30),
+            requested_version_id=uuid4(),
+        )
+    assert exc.value.code == "no_credentials"
+    assert called["n"] == 0
+
+
+def test_prefixed_model_not_covered_by_bound_provider_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-house-anthropic-must-not-be-used")
+    monkeypatch.setenv("OPENAI_API_KEY", _HOUSE_KEY)
+    workspace = uuid4()
+    credential, master = sealed_openai(workspace)
+    with overlay_llm_session(credential=credential, key=master):
+        with pytest.raises(ByokError) as exc:
+            digillm_client.get_client_for_model("anthropic/claude-sonnet-4-6")
+    assert exc.value.code == "byok_provider_mismatch"

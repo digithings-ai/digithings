@@ -7,6 +7,9 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from digigraph.usage import record as usage_record
+from digigraph.usage import reset as usage_reset
+from digigraph.usage import start as usage_start
 from digiquant.olympus.overlay.budget import (
     BudgetExhausted,
     OverlayBudget,
@@ -22,6 +25,8 @@ from digiquant.olympus.overlay.dispatch import (
 from digiquant.olympus.overlay.runner import OverlayRunRequest, run_overlay
 from digiquant.olympus.research_corpus import ResearchCorpusStore
 from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
+
+from tests.dq.olympus.overlay._sealed import sealed_openai
 
 pytestmark = pytest.mark.unit
 
@@ -80,3 +85,89 @@ def test_budget_hard_stop_mid_run_carries_remaining() -> None:
     assert finished is not None
     assert finished.status is JobStatus.BUDGET_EXHAUSTED
     assert finished.error == JobStatus.BUDGET_EXHAUSTED.value
+
+
+def test_budget_snapshot_is_run_scoped_not_process_global() -> None:
+    """B4: usage.start(run_id=job.id) clears house spend from earlier in-process."""
+    usage_start(run_id="house-prior")
+    usage_record(kind="chat", model="gpt-4o", cost=9.99)
+    try:
+        store = MemoryJobRunStore()
+        workspace = WorkspaceEntitlement(
+            workspace_id=uuid4(),
+            plan_tier=PlanTier.CUSTOM,
+            subscription_status=SubscriptionStatus.ACTIVE,
+        )
+        claimed = dispatch_overlay_daily(
+            store=store,
+            workspace=workspace,
+            run_date=date(2026, 8, 30),
+            byok=ByokProbe(present_and_unsealable=True, provider="openai"),
+        )
+        result = run_overlay(
+            request=OverlayRunRequest(
+                workspace_id=workspace.workspace_id,
+                run_date=date(2026, 8, 30),
+                profile_version_id=uuid4(),
+                research_budget_usd=Decimal("1.00"),
+                themes=("ai",),
+            ),
+            job=claimed.job,
+            store=store,
+            corpus=ResearchCorpusStore(),
+            byok=ByokProbe(present_and_unsealable=True, provider="openai"),
+        )
+        assert result.status is JobStatus.SUCCEEDED
+        assert result.spent_usd == Decimal("0")
+        assert "theme:ai" in result.published_keys
+    finally:
+        usage_reset()
+
+
+def test_budget_checked_after_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+    """B5: post-chain overrun → budget_exhausted; corpus already published stays."""
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    spent = Decimal("0")
+
+    def reader() -> Decimal:
+        return spent
+
+    def chain(**_kwargs: object) -> None:
+        nonlocal spent
+        spent = Decimal("5.00")
+
+    store = MemoryJobRunStore()
+    workspace = WorkspaceEntitlement(
+        workspace_id=uuid4(),
+        plan_tier=PlanTier.CUSTOM,
+        subscription_status=SubscriptionStatus.ACTIVE,
+    )
+    claimed = dispatch_overlay_daily(
+        store=store,
+        workspace=workspace,
+        run_date=date(2026, 8, 30),
+        byok=ByokProbe(present_and_unsealable=True, provider="openai"),
+    )
+    credential, master = sealed_openai(workspace.workspace_id)
+    result = run_overlay(
+        request=OverlayRunRequest(
+            workspace_id=workspace.workspace_id,
+            run_date=date(2026, 8, 30),
+            profile_version_id=uuid4(),
+            research_budget_usd=Decimal("1.00"),
+            themes=("ai",),
+        ),
+        job=claimed.job,
+        store=store,
+        corpus=ResearchCorpusStore(),
+        byok=ByokProbe(present_and_unsealable=True, provider="openai"),
+        chain=chain,
+        credential=credential,
+        vault_key=master,
+        spend_reader=reader,
+    )
+    assert result.status is JobStatus.BUDGET_EXHAUSTED
+    assert "theme:ai" in result.published_keys
+    finished = store.get_by_idempotency_key(claimed.job.idempotency_key)
+    assert finished is not None
+    assert finished.status is JobStatus.BUDGET_EXHAUSTED

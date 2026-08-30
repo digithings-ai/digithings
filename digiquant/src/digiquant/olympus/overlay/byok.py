@@ -13,15 +13,16 @@ which sets ``digillm.client.byok`` (the existing per-request override).
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from typing import Annotated, Final, Protocol
 from uuid import UUID
 
+import digillm.client as digillm_client
 from digillm.client import byok as digillm_byok
-from digillm.client import get_byok
+from digillm.client import get_byok, is_registered_provider
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from digiquant.vault.envelope import (
@@ -131,6 +132,44 @@ class ProviderCredential(BaseModel):
     @property
     def aad(self) -> bytes:
         return build_aad(str(self.workspace_id), self.provider.value, BYOK_AAD_PURPOSE)
+
+
+def model_route_prefix(model: str) -> str | None:
+    """Registered ``provider/`` prefix, or ``None`` when the default client handles it."""
+    if "/" not in model:
+        return None
+    prefix, _, _ = model.partition("/")
+    return prefix if is_registered_provider(prefix) else None
+
+
+def assert_byok_covers_model(model: str, bound_provider: str) -> None:
+    """Refuse a prefixed model the unsealed provider does not cover.
+
+    ``digillm.get_client_for_model`` would otherwise fall through to house
+    env keys (``ANTHROPIC_API_KEY``, …) when the BYOK base URL does not
+    match the prefix.
+    """
+    prefix = model_route_prefix(model)
+    if prefix is not None and prefix != bound_provider:
+        raise ByokError(
+            "byok_provider_mismatch",
+            f"model {model!r} routes to {prefix!r}; bound BYOK is {bound_provider!r}",
+        )
+
+
+@contextmanager
+def _gate_byok_models(bound_provider: str) -> Iterator[None]:
+    original = digillm_client.get_client_for_model
+
+    def gated(model: str) -> object:
+        assert_byok_covers_model(model, bound_provider)
+        return original(model)
+
+    digillm_client.get_client_for_model = gated  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        digillm_client.get_client_for_model = original
 
 
 def provider_base_url(provider: str) -> str:
@@ -264,7 +303,31 @@ def overlay_llm_session(
         with digillm_byok(payload.secret, provider_base_url(credential.provider.value)):
             if get_byok() is None:
                 raise ByokError("byok_not_bound", "digillm BYOK override failed to bind")
-            yield lease
+            with _gate_byok_models(credential.provider.value):
+                yield lease
+
+
+def invoke_overlay_chain(
+    *,
+    chain: Callable[..., object],
+    credential: ProviderCredential | None,
+    vault_key: MasterKey | None,
+    workspace_id: UUID,
+    run_date: date,
+    requested_version_id: UUID,
+) -> None:
+    """One-graph invoke. ``credential is None`` refuses — never call ``chain()``."""
+    if credential is None:
+        raise ByokError(
+            "no_credentials",
+            "overlay chain requires a bound BYOK credential; house env keys are not a fallback",
+        )
+    with overlay_llm_session(credential=credential, key=vault_key):
+        chain(
+            workspace_id=workspace_id,
+            run_date=run_date,
+            requested_version_id=requested_version_id,
+        )
 
 
 __all__ = [
@@ -276,7 +339,10 @@ __all__ = [
     "LlmProvider",
     "ProviderCredential",
     "TABLE_NAME",
+    "assert_byok_covers_model",
+    "invoke_overlay_chain",
     "load_active_credential",
+    "model_route_prefix",
     "overlay_llm_session",
     "probe_byok",
     "provider_base_url",

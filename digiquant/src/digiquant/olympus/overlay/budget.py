@@ -1,19 +1,27 @@
 """Per-run overlay research budget (T4 / D9).
 
-Attributed spend is read from the existing WP1 telemetry snapshot
-(``digigraph.usage.snapshot()["cost_usd"]``), which is the in-process
-projection of ``olympus_provider_attempts``. Crossing
+Attributed spend is the run-scoped WP1 snapshot
+(``digigraph.usage.start(run_id=job.id)`` then ``snapshot()["cost_usd"]``).
+``start`` clears process-global ``_CALLS``, so house spend from earlier
+in the process is not attributed to the overlay job. Crossing
 ``ProfileConfig.research_budget_usd`` is a graceful stop: remaining
 research is skipped/carried, consistent private-phase writes still
 commit, and the job row becomes ``budget_exhausted`` (UI-visible).
+
+Post-chain overrun: the chain has already returned, so whatever it
+persisted stays; the job is ``budget_exhausted`` rather than
+``succeeded`` so the UI does not look like a full-budget success.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from decimal import Decimal
 
+from digigraph.usage import reset as usage_reset
 from digigraph.usage import snapshot as usage_snapshot
+from digigraph.usage import start as usage_start
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from digiquant.olympus.overlay.dispatch import JobStatus
@@ -28,6 +36,16 @@ class BudgetExhausted(Exception):
         self.limit_usd = limit_usd
         self.message = f"overlay research budget exhausted: spent={spent_usd} limit={limit_usd}"
         super().__init__(self.message)
+
+
+@contextmanager
+def overlay_usage_scope(run_id: str) -> Iterator[None]:
+    """Bind WP1 capture to this overlay job and clear it on the way out."""
+    usage_start(run_id=run_id)
+    try:
+        yield
+    finally:
+        usage_reset()
 
 
 def attributed_spend_usd(
@@ -92,4 +110,5 @@ __all__ = [
     "BudgetExhausted",
     "OverlayBudget",
     "attributed_spend_usd",
+    "overlay_usage_scope",
 ]

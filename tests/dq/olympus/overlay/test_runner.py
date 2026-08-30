@@ -41,6 +41,7 @@ from digiquant.olympus.tenancy import (
 )
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
+from tests.dq.olympus.overlay._sealed import sealed_openai
 
 pytestmark = pytest.mark.unit
 
@@ -130,7 +131,10 @@ def test_house_config_workspace_id_absent_is_none() -> None:
     assert bundle.profile_config_version_id is None
 
 
-def test_overlay_run_writes_carry_overlay_workspace() -> None:
+def test_overlay_run_writes_carry_overlay_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     seen: dict[str, object] = {}
 
     def chain(*, workspace_id, run_date, requested_version_id):
@@ -140,6 +144,7 @@ def test_overlay_run_writes_carry_overlay_workspace() -> None:
 
     store, ws, job = _claimed()
     request = _request(workspace_id=ws.workspace_id, profile_version_id=uuid4())
+    credential, master = sealed_openai(ws.workspace_id)
     result = run_overlay(
         request=request,
         job=job,
@@ -147,6 +152,8 @@ def test_overlay_run_writes_carry_overlay_workspace() -> None:
         corpus=ResearchCorpusStore(),
         byok=_OK,
         chain=chain,
+        credential=credential,
+        vault_key=master,
     )
     assert result.status is JobStatus.SUCCEEDED
     assert seen["workspace_id"] == ws.workspace_id
@@ -156,9 +163,13 @@ def test_overlay_run_writes_carry_overlay_workspace() -> None:
     assert "asset:spy" in result.published_keys
 
 
-def test_overlay_failure_does_not_touch_house_job_rows() -> None:
+def test_overlay_failure_does_not_touch_house_job_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     house_store = MemoryJobRunStore()
     overlay_store, ws, job = _claimed()
+    credential, master = sealed_openai(ws.workspace_id)
 
     def boom(**_kwargs: object) -> None:
         raise RuntimeError("overlay exploded")
@@ -170,6 +181,8 @@ def test_overlay_failure_does_not_touch_house_job_rows() -> None:
         corpus=ResearchCorpusStore(),
         byok=_OK,
         chain=boom,
+        credential=credential,
+        vault_key=master,
         house_job_store=house_store,
     )
     assert result.status is JobStatus.FAILED
@@ -219,7 +232,10 @@ def _book_state(*, workspace_id: str | None = None) -> AtlasResearchState:
     return state
 
 
-def test_overlay_book_stamps_overlay_workspace_house_untouched() -> None:
+def test_overlay_book_stamps_overlay_workspace_house_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     overlay_id = uuid4()
     client = FakeSupabaseClient(
         canned_reads={
