@@ -53,7 +53,7 @@ Beyond root `AGENTS.md`:
 | `digiquant/strategies/bollinger_mr.py` | Nautilus strategy bar helpers | Issue backlog — migrate to stdlib `timedelta` pattern (see `rsi_momentum.py`) |
 | `digiquant/strategies/macd_trend.py` | Same | Same |
 | `digiquant/strategies/rsi_momentum.py` | **Migrated** — uses `datetime.timedelta` only | Done (audit PR) |
-| `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` builds bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081) | None — documented boundary |
+| `tests/dq/test_strategies.py` | `TestSdcaStrategyNautilusParity` and `TestSdcaRiskIndexNautilusChain` build bars via `BarDataWrangler`, same boundary as `nautilus_runner.py` (#1081, #3168) | None — documented boundary |
 
 - **No perf claims without results**: Never return Sharpe, PnL, or drawdown values from anywhere except a completed `BacktestResult` or `OptimizeResult`.
 - **Pipeline ordering is sacrosanct**: validate → backtest → optimize → export. Never skip validation. Never run optimize before backtest.
@@ -134,9 +134,10 @@ the full module map.
 - **`SdcaStrategy` is not in `strategies/registry.py`**, the same as
   `m2_liquidity`. Instantiate `SdcaStrategyConfig` directly — do not add a
   `register()` call for it. Its `risk_path` (a parquet of precomputed
-  `date`/`risk`, built by calling `compute_composite_risk()` +
-  `valuation_z_score()` upstream) has no sensible static default, so
-  `get_strategy()`'s param-merge model doesn't fit.
+  `date`/`risk`) has no sensible static default, so `get_strategy()`'s
+  param-merge model doesn't fit. Build that parquet with
+  `sdca/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
+  `digiquant_build_sdca_risk_index` MCP tool — do not hand-assemble it.
 - **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
   mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
   reimplement it.** This is what keeps the Nautilus-run result and the
