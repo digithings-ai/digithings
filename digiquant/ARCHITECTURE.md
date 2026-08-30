@@ -3353,17 +3353,21 @@ configured.
 
 **House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
 `pipeline-olympus.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
-on `develop` `207dd0a68`). Exit **5** while `origin/main` is still UUID-hotfix
-`3601f72df` — merge fail-softs #3343 → #3348 → #3351 → #3354 before the next
-cron or checkout `ref: main` still misses those writers (the CLI does not list
-runs in that case). `gh run list` `headSha` is the default-branch **trigger**
-(develop), not the job checkout, so counting is `created_at` strictly after
-the later of #3334 (`2026-08-31T20:39Z`) and current `origin/main` committer
-time. Exit **0** only for a **schedule** success after that cutoff.
-`workflow_dispatch` never counts. Exit **3** until a counting
-`cron: "0 12 * * *"` (a 12:00 UTC run that started before fail-softs merged
-does not count). Exit **2** if a counting schedule fails. The CLI refuses
-`--dispatch` / `--apply`.
+on `develop` `207dd0a68`; fail-close while `main` is `3601f72df`
+[#3383](https://github.com/digithings-ai/digithings/pull/3383) `6785c44d4`).
+Exit **5** while `origin/main` is still UUID-hotfix `3601f72df` — merge
+fail-softs #3343 → #3348 → #3351 → #3354 before the next cron or checkout
+`ref: main` still misses those writers (the CLI does not list runs in that
+case). On exit 5 it also prints `failsofts=` mergeability from `gh pr view`
+(`#3343 OPEN MERGEABLE CLEAN` … `stack ready (do not merge from authoring
+agent)`). That line is status only — the authoring agent must not merge those
+PRs. `gh run list` `headSha` is the default-branch **trigger** (develop), not
+the job checkout, so counting is `created_at` strictly after the later of
+#3334 (`2026-08-31T20:39Z`) and current `origin/main` committer time. Exit **0**
+only for a **schedule** success after that cutoff. `workflow_dispatch` never
+counts. Exit **3** until a counting `cron: "0 12 * * *"` (a 12:00 UTC run that
+started before fail-softs merged does not count). Exit **2** if a counting
+schedule fails. The CLI refuses `--dispatch` / `--apply`.
 
 **Entry points:**
 

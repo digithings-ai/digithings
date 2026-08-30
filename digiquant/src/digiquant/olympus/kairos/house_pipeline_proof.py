@@ -13,7 +13,9 @@ fail-softs [#3343](https://github.com/digithings-ai/digithings/pull/3343) →
 [#3351](https://github.com/digithings-ai/digithings/pull/3351) →
 [#3354](https://github.com/digithings-ai/digithings/pull/3354). While
 ``origin/main`` is that SHA the CLI exits 5 so operators merge those PRs
-before the next ``0 12 * * *`` cron.
+before the next ``0 12 * * *`` cron. Exit 5 also prints ``failsofts=``
+mergeability (OPEN/MERGEABLE/CLEAN). That line is status only — never merge
+those PRs from this authoring agent.
 """
 
 from __future__ import annotations
@@ -40,6 +42,7 @@ EXIT_MAIN_MISSING_FAILSOFTS: int = 5
 
 ListRunsFn = Callable[[], Sequence["HouseWorkflowRun"]]
 ResolveOriginMainFn = Callable[[], "OriginMainRef"]
+ListFailsoftPrsFn = Callable[[], Sequence["FailsoftPrRow"]]
 
 
 class HouseWorkflowRun(BaseModel):
@@ -62,6 +65,17 @@ class OriginMainRef(BaseModel):
 
     sha: str = Field(min_length=7)
     committed_at: datetime
+
+
+class FailsoftPrRow(BaseModel):
+    """Sanitized fail-soft PR status — numbers and merge flags only."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    number: int
+    state: str
+    mergeable: str = ""
+    merge_state_status: str = ""
 
 
 class HousePipelineProof(BaseModel):
@@ -89,6 +103,47 @@ def sha_is_uuid_hotfix(sha: str) -> bool:
 
 def failsoft_pr_text() -> str:
     return " ".join(f"#{number}" for number in FAILSOFT_MAIN_PRS)
+
+
+def parse_failsoft_pr(raw: object) -> FailsoftPrRow | None:
+    """Build one row from ``gh pr view --json``. Never logs the payload."""
+    if not isinstance(raw, dict):
+        return None
+    number = raw.get("number")
+    state = raw.get("state")
+    if not isinstance(number, int) or not isinstance(state, str) or not state:
+        return None
+    mergeable = raw.get("mergeable")
+    status = raw.get("mergeStateStatus")
+    return FailsoftPrRow(
+        number=number,
+        state=state,
+        mergeable=mergeable if isinstance(mergeable, str) else "",
+        merge_state_status=status if isinstance(status, str) else "",
+    )
+
+
+def failsofts_merge_ready(rows: Sequence[FailsoftPrRow]) -> bool:
+    """True when every fail-soft PR is OPEN and MERGEABLE. Never merges them."""
+    wanted = set(FAILSOFT_MAIN_PRS)
+    seen = {row.number for row in rows}
+    if seen != wanted:
+        return False
+    return all(row.state == "OPEN" and row.mergeable == "MERGEABLE" for row in rows)
+
+
+def format_failsoft_pr_line(rows: Sequence[FailsoftPrRow]) -> str:
+    """Single-line PR statuses. Numbers and flags only — never merge."""
+    parts = [
+        f"#{row.number} {row.state} {row.mergeable} {row.merge_state_status}".strip()
+        for row in rows
+    ]
+    joined = " ".join(parts) if parts else "(none)"
+    if failsofts_merge_ready(rows):
+        hint = "stack ready (do not merge from authoring agent)"
+    else:
+        hint = "not all MERGEABLE (do not merge from authoring agent)"
+    return f"{CLI_PREFIX}: failsofts={joined} {hint}"
 
 
 def parse_github_runs(raw: object) -> tuple[HouseWorkflowRun, ...]:
@@ -283,11 +338,56 @@ def default_resolve_origin_main() -> OriginMainRef:
     return OriginMainRef(sha=sha, committed_at=committed_at)
 
 
+def default_list_failsoft_prs() -> tuple[FailsoftPrRow, ...]:
+    """``gh pr view`` for fail-softs. Never merges. Missing rows stay omitted."""
+    rows: list[FailsoftPrRow] = []
+    for number in FAILSOFT_MAIN_PRS:
+        proc = subprocess.run(
+            [
+                "gh",
+                "pr",
+                "view",
+                str(number),
+                "--json",
+                "number,state,mergeable,mergeStateStatus",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            continue
+        try:
+            payload: object = json.loads(proc.stdout or "{}")
+        except json.JSONDecodeError:
+            continue
+        row = parse_failsoft_pr(payload)
+        if row is not None:
+            rows.append(row)
+    return tuple(rows)
+
+
+def _log_failsoft_status(
+    list_failsoft_prs: ListFailsoftPrsFn | None,
+    log: Callable[[str], None],
+) -> None:
+    """Print mergeability of fail-soft PRs. Never merges. OSError skips the line."""
+    try:
+        failsofts = tuple(
+            list_failsoft_prs() if list_failsoft_prs is not None else default_list_failsoft_prs()
+        )
+    except OSError:
+        return
+    if failsofts:
+        log(format_failsoft_pr_line(failsofts))
+
+
 def main(
     argv: list[str] | None = None,
     *,
     list_runs: ListRunsFn | None = None,
     resolve_origin_main: ResolveOriginMainFn | None = None,
+    list_failsoft_prs: ListFailsoftPrsFn | None = None,
     log: Callable[[str], None] = print,
     log_err: Callable[[str], None] | None = None,
 ) -> int:
@@ -311,6 +411,7 @@ def main(
             f"{UUID_HOTFIX_SHA_PREFIX}; merge {failsoft_pr_text()} before cron "
             "(do not dispatch)"
         )
+        _log_failsoft_status(list_failsoft_prs, log)
         return EXIT_MAIN_MISSING_FAILSOFTS
     try:
         runs = tuple(list_runs() if list_runs is not None else default_list_runs())
@@ -341,8 +442,10 @@ __all__ = [
     "EXIT_SCHEDULE_FAILED",
     "EXIT_WAITING_SCHEDULE",
     "FAILSOFT_MAIN_PRS",
+    "FailsoftPrRow",
     "HousePipelineProof",
     "HouseWorkflowRun",
+    "ListFailsoftPrsFn",
     "ListRunsFn",
     "OriginMainRef",
     "ResolveOriginMainFn",
@@ -350,12 +453,16 @@ __all__ = [
     "UUID_HOTFIX_SHA_PREFIX",
     "WORKFLOW_FILE",
     "counting_cutoff",
+    "default_list_failsoft_prs",
     "default_list_runs",
     "default_resolve_origin_main",
     "evaluate_proof",
     "failsoft_pr_text",
+    "failsofts_merge_ready",
+    "format_failsoft_pr_line",
     "format_proof_line",
     "main",
+    "parse_failsoft_pr",
     "parse_github_runs",
     "proof_exit_code",
     "select_proof_run",
