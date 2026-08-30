@@ -26,6 +26,13 @@ def test_build_copies_dashboard_export_only_to_dist_dashboard() -> None:
     assert "dist/olympus/index.html" not in text
 
 
+def test_build_asserts_alpaca_oauth_callback_export() -> None:
+    """Pages --apply pins this path; a settings 200 with a callback 404 strands OAuth."""
+    text = BUILD.read_text(encoding="utf-8")
+    assert "[ -f dist/dashboard/settings/brokers/callback/index.html ]" in text
+    assert "alpaca-oauth-callback" in text
+
+
 def test_pages_build_check_asserts_dist_dashboard() -> None:
     text = DEPLOY.read_text(encoding="utf-8")
     assert "test -d dist/dashboard" in text

@@ -96,6 +96,12 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 # Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
 [ -f dist/dashboard/login/index.html ] || { echo "ERROR: dist/dashboard/login/index.html missing — Auth login route not exported" >&2; exit 1; }
 [ -f dist/dashboard/auth/callback/index.html ] || { echo "ERROR: dist/dashboard/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
+# Alpaca OAuth callback (K1/T3). kairos_pages_dashboard_gate --apply pins
+# ALPACA_OAUTH_CALLBACK_PATH here. A Pages export that 200s /dashboard/settings/
+# but 404s this path would still strand broker connect after EF deploy (#3378).
+[ -f dist/dashboard/settings/brokers/callback/index.html ] || { echo "ERROR: dist/dashboard/settings/brokers/callback/index.html missing — Alpaca OAuth callback not exported" >&2; exit 1; }
+grep -q 'alpaca-oauth-callback' dist/dashboard/settings/brokers/callback/index.html \
+  || { echo "ERROR: Alpaca OAuth callback export missing page marker" >&2; exit 1; }
 # Settings (T3 + Observer IA). Cloudflare Pages sets CF_PAGES=1, and this script
 # then defaults NEXT_PUBLIC_DASHBOARD_AUTH=1, so the static shell is the anonymous
 # Observer view: Notifications | Billing | About. Pipeline/Keys testids are
