@@ -32,6 +32,11 @@ scales, the unrealized open-leg bar state, and the entire unlayered
 `[hidden]` pane opening, break-inside rules). These were the recorded gaps
 that made tearsheets keep local renderers before #1463 promoted the grammar.
 
+Zoom windows go through `clampView` (`MIN_VIEW` = 2% of the span) so an empty
+or inverted range cannot blank the chart — the digiquant-web ComboPnl failure
+mode tracked in #1180. `ChartResetButton` / double-click restore the lookback
+preset (or full span).
+
 ## Interaction with the matrix
 
 `ReturnsMatrix` (finance-tearsheet) is THE period-matrix grammar — 3 metrics
