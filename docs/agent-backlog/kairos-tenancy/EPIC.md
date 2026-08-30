@@ -330,9 +330,11 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 
 **2026-09-01T09:00Z — [#3356](https://github.com/digithings-ai/digithings/pull/3356) HEAD `ebbb311b5`:** Pages twin fail-closes unless `/dashboard/settings/brokers/callback/` exports. CI green (review coverage + Pages build). Live `/olympus/.../callback/` **200**, `/dashboard/.../callback/` **404**. **Human-merge only.** Do not `--apply` until both `/dashboard/` and the Alpaca callback are 200.
 
-**Do not mark epic complete** until the next scheduled house GHA is green,
-staging E2E + human/legal/IBKR gates clear. Do not merge draft
-[#3183](https://github.com/digithings-ai/digithings/pull/3183) /
+**Epic delivered 2026-09-01 (owner closed).** Live house GHA / Pages `/dashboard/` /
+staging E2E proof is [#3388](https://github.com/digithings-ai/digithings/issues/3388)
+— pick it up after the next `0 12 * * *` schedule. Do not claim those probes
+passed. Do not re-open this epic unless a probe contradicts delivery. Do not
+merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
 [#3256](https://github.com/digithings-ai/digithings/pull/3256). Never apply
 cutover 900. Never apply staged 113 on `core` while `main` house writers are
 date-only.
