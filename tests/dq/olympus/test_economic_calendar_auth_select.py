@@ -35,5 +35,5 @@ def test_authenticated_select_is_ledger_114_not_113() -> None:
         "CREATE POLICY economic_calendar_authenticated_select ON public.economic_calendar "
         "FOR SELECT TO authenticated USING (true);"
     ) in sql
-    assert re.search(r"\bFOR ALL\b", sql) is None
+    assert re.search(r"\bFOR ALL\b", sql, flags=re.IGNORECASE) is None
     assert re.search(r"\b(INSERT|UPDATE|DELETE)\b", sql, flags=re.IGNORECASE) is None
