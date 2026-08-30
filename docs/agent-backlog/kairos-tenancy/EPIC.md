@@ -134,7 +134,8 @@ still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-ke
 Observer `notification_prefs.daily_digest` is **true** (PATCH 200 on free; not
 Custom-gated). Digest remaining-hop also requires that pref, plus log + inbox
 (Settings About library matches Python; inbox confirm stays operator-only so
-the UI hop stays unproven).
+the UI hop stays unproven). `python -m digiquant.notify.dispatch --dry-run`
+prints digest candidate counts without sending.
 `python scripts/kairos_apply_vendor_secrets.py` → exit **2** until the three
 gitignored `digithings-{stripe,mailgun,alpaca}.env` files exist (then `--apply`
 pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exit
