@@ -63,32 +63,34 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, post-#3161/#3177 + settings v10)
+## Agent delivery status (2026-08-30, post-#3178 + credential push attempt)
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Notifications wire **merged** [#3161](https://github.com/digithings-ai/digithings/pull/3161). Docs/schema align **merged** [#3177](https://github.com/digithings-ai/digithings/pull/3177).
+**Code:** all 12 WPs on `develop` (promotion #3141). Notifications wire **merged** [#3161](https://github.com/digithings-ai/digithings/pull/3161). Docs/schema align **merged** [#3177](https://github.com/digithings-ai/digithings/pull/3177). Unlock-status docs **merged** [#3178](https://github.com/digithings-ai/digithings/pull/3178).
 
 **Schema (`core`):** migrations **096–106** applied + stamped on `olympus_schema_migrations` (106 = `notification_prefs` / `notification_log` canonical align). Cutover **900 not applied**.
 
-**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (await Stripe secrets). `settings` **v10** ACTIVE — thin GitHub-raw pin to `origin/develop` tip (`071b78fb…`) including `PATCH /notifications` → `notification_prefs`. Auth smoke: missing/invalid JWT → `401`. Full monorepo 9-file bundle still preferred once `sbp_` PAT exists (secrets + multi-file hygiene). Project EF secrets still **unset** (Management API 403 without `sbp_`; MCP OAuth has no secrets-set tool).
+**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (await Stripe secrets). `settings` **v10** ACTIVE — thin GitHub-raw pin (pre-#3178 tip `071b78fb…`; post-merge develop tip `f2368e59…` not yet re-pinned). Auth smoke refresh: missing/invalid JWT → `401` (`settings-v10-smoke-refresh.log`). Full monorepo 9-file bundle still preferred once `sbp_` PAT exists. Project EF secrets still **unset** (Management API **403** with JWT; no `sbp_`).
 
 **Secrets (names only):**
 - **SET in VM `.env` / `.local/secrets/kairos.env`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **Cursor env:** `SUPABASE_ACCESS_TOKEN` present but **JWT** (not `sbp_` PAT) — Management API secrets list/set → `401 JWT failed verification`; CLI → invalid format (must be `sbp_…`). `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` **declared but empty** — MCP auth failed; nothing nonempty to copy into kairos.env / EF secrets.
-- **Agent Mail:** `digithings@agentmail.to` (controlled recipient only — no live Mailgun send this turn).
-- **Still blocked:** Stripe test keys/prices/webhook (hCaptcha), Mailgun real API key + domain + `NOTIFY_FROM` (then EF push), Auth providers (Google+GitHub), Alpaca OAuth/KYC, Supabase `sbp_` PAT, IBKR vendor, legal read. Vault master key **not** pushed to project EF secrets.
+- **No new nonempty secrets this turn.**
+- **Cursor env:** `SUPABASE_ACCESS_TOKEN` present but **JWT** (not `sbp_` PAT) — Management API secrets/functions → **403**. `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` **declared but empty**.
+- **Agent Mail:** `digithings@agentmail.to` inbox reachable (0 messages). Mailgun browser signup rejected this address + reCAPTCHA. Stripe TEST signup blocked by **hCaptcha** (one attempt, stopped). Alpaca: Turnstile on signup; login Cognito `NotAuthorizedException` (account never created).
+- **Still blocked:** Stripe test keys/prices/webhook, Mailgun API key + domain + `NOTIFY_FROM`, Auth providers (Google+GitHub), Alpaca OAuth/paper keys, Supabase `sbp_` PAT, IBKR vendor, legal read. Vault master key **not** pushed to project EF secrets. `request-environment-setup-actions` recorded for these.
 
 **Acceptance evidence (agent-reachable; artifacts under `/opt/cursor/artifacts/`):**
 - House olympus unit: **420 passed** (`house-olympus-unit.log`).
 - Vault + notify unit: **138 passed** (`kairos-vault-notify-unit.log`).
-- Notify unit (this turn): **62 passed** (`mailgun-notify-unit.log`); fail-soft empty-env smoke PASS (`mailgun-failsoft-smoke.log`).
+- Notify unit refresh: **62 passed** (`mailgun-notify-unit-refresh.log`).
 - Brokers + contracts: **208 passed**, 2 skipped (`kairos-brokers-contracts.log`).
 - Olympus kairos unit: **67 passed** (`olympus-kairos-unit.log`).
-- Settings EF smoke: `401` no-auth / invalid JWT (`settings-v10-smoke.log`). Settings EF still **v10**.
+- Settings EF smoke refresh: `401` no-auth / invalid JWT (`settings-v10-smoke-refresh.log`).
 - RLS proof: **59/59 PASS** including migration 106 + staged 900 (`rls_isolation_proof.log`).
 - Olympus static export build: **OK** (`olympus-build.log`; `check:static-export` passed).
-- EF secrets push attempt: **blocked** without `sbp_` (`supabase-secrets-set-attempt.log`).
+- EF secrets push: **blocked** without `sbp_` (`supabase-secrets-set-attempt.log`).
+- Cred-push attempt log: `kairos-cred-push-summary.md`.
 - E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **still blocked** on vendor secrets above — not faked.
 
-**Pages promote (`develop` → `main`):** agent-reachable and **policy-safe without cutover 900** while `NEXT_PUBLIC_OLYMPUS_AUTH` stays unset (flag-off). `db-migrate` would no-op 096–106 already stamped; `migrations/cutover/` stays inert (`-maxdepth 1`). ~191 commits / ~392 files ahead of `main` — treat as a **human release-gate** promote PR (do not flip auth flag; do not apply 900). Prep notes: `pages-promote-prep.md` artifact.
+**Pages promote (`develop` → `main`):** agent-reachable and **policy-safe without cutover 900** while `NEXT_PUBLIC_OLYMPUS_AUTH` stays unset (flag-off). `db-migrate` would no-op 096–106 already stamped; `migrations/cutover/` stays inert (`-maxdepth 1`). Treat as a **human release-gate** promote PR (do not flip auth flag; do not apply 900). Prep notes: `pages-promote-prep.md` artifact.
 
 **Do not mark epic complete** until E2E + human/legal/IBKR gates clear.
