@@ -31,6 +31,7 @@ import {
   tickerDossierHref,
 } from '@/lib/portfolio-url-state';
 import { EntitledSurface } from '@/components/entitled-surface';
+import { PortfolioTeaserSurface } from '@/components/tier/portfolio-teaser-surface';
 import {
   BriefPipelineHealth,
   type BriefRunHealth,
@@ -379,6 +380,13 @@ export function DailyBriefWorkspace({
           </div>
         </div>
       </header>
+
+      <div className="px-5 py-3 sm:px-6">
+        <PortfolioTeaserSurface
+          tier={tier}
+          tickers={held.map((p) => p.ticker)}
+        />
+      </div>
 
       <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
         <BriefCardLink

@@ -11,6 +11,7 @@ import SidebarSettings from '@/components/sidebar-settings';
 import { useAuth } from '@/lib/auth-context';
 import { NAV, type NavItem } from '@/lib/nav';
 import { olympusBasePath } from '@/lib/supabase';
+import { useCanAccessProduct } from '@/lib/use-entitlement';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
   const norm = pathname.replace(/\/+$/, '') || '/';
@@ -57,6 +58,7 @@ export default function Sidebar() {
     useAppShell();
   const { authEnabled, user, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const canFxHub = useCanAccessProduct('fx_hub');
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -114,7 +116,11 @@ export default function Sidebar() {
     );
   };
 
-  const primary = NAV.filter((n) => !n.demoted);
+  const primary = NAV.filter((n) => {
+    if (n.demoted) return false;
+    if (n.href === '/twelve-x' && !canFxHub) return false;
+    return true;
+  });
   const demoted = NAV.filter((n) => n.demoted);
 
   return (

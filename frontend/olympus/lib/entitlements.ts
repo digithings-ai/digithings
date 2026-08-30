@@ -2,6 +2,9 @@
  * Olympus plan-tier → artifact-class entitlement map (Kairos tenancy T5).
  *
  * Spec §5-T5 matrix is the single source of truth — pin it in entitlements.test.ts.
+ * Product addendum (2026-08-30): free = teaser only (`digest_summary` +
+ * `portfolio_teaser`); creator/ops `plan_floor` elevates via `effectivePlanTier`
+ * (see `lib/access.ts`); FX Hub is a client product grant, not a plan tier.
  *
  * Python mirror (K5 digest builder) MUST stay in sync:
  *   digiquant/src/digiquant/notify/entitlements.py
@@ -15,13 +18,15 @@ import { isOlympusAuthEnabled } from './supabase';
 export type PlanTier = 'free' | 'baseline' | 'custom' | 'enterprise';
 
 /**
- * Artifact classes gated by plan tier (spec §5-T5).
- * `research` / `narrative` are Observer+; house book surfaces are Baseline+;
- * private workspace surfaces are Custom+.
+ * Artifact classes gated by plan tier (spec §5-T5 + free-teaser addendum).
+ * `research` / `narrative` / teaser classes are Observer+; house book surfaces
+ * are Baseline+; private workspace surfaces are Custom+.
  */
 export type ArtifactClass =
   | 'research'
   | 'narrative'
+  | 'digest_summary'
+  | 'portfolio_teaser'
   | 'house_weights_nav'
   | 'glassbox_economics'
   | 'private_book'
@@ -35,10 +40,15 @@ const PLAN_TIERS: readonly PlanTier[] = [
   'enterprise',
 ] as const;
 
-/** Classes every authenticated Observer (free) may see. */
-const OBSERVER_CLASSES: readonly ArtifactClass[] = ['research', 'narrative'] as const;
+/** Classes every authenticated Observer (free) may see — teaser, not reverse-engineer. */
+const OBSERVER_CLASSES: readonly ArtifactClass[] = [
+  'research',
+  'narrative',
+  'digest_summary',
+  'portfolio_teaser',
+] as const;
 
-/** Baseline adds house paper-book glass-box surfaces. */
+/** Baseline adds house paper-book glass-box surfaces (full pipeline for subscribers). */
 const BASELINE_CLASSES: readonly ArtifactClass[] = [
   ...OBSERVER_CLASSES,
   'house_weights_nav',
@@ -61,8 +71,21 @@ const ALLOWED: Record<PlanTier, ReadonlySet<ArtifactClass>> = {
   enterprise: new Set(CUSTOM_CLASSES),
 };
 
+const TIER_RANK: Record<PlanTier, number> = {
+  free: 0,
+  baseline: 1,
+  custom: 2,
+  enterprise: 3,
+};
+
 export function isPlanTier(value: unknown): value is PlanTier {
   return typeof value === 'string' && (PLAN_TIERS as readonly string[]).includes(value);
+}
+
+/** Higher of two plan tiers. */
+export function maxPlanTier(a: PlanTier, b: PlanTier | null | undefined): PlanTier {
+  if (!b || !isPlanTier(b)) return a;
+  return TIER_RANK[a] >= TIER_RANK[b] ? a : b;
 }
 
 /**
@@ -80,13 +103,24 @@ export function can(tier: PlanTier, artifactClass: ArtifactClass): boolean {
  * before the auth cutover.
  *
  * When auth is on: read `user.app_metadata.plan_tier`; unknown / missing → `free`
- * (fail closed for presentation).
+ * (fail closed for presentation). Prefer `effectivePlanTier` from `my_access`
+ * when the access snapshot has loaded — JWT claim alone misses creator grants.
  */
 export function tierFromSession(session: Session | null | undefined): PlanTier {
   if (!isOlympusAuthEnabled()) return 'enterprise';
   const raw = session?.user?.app_metadata?.plan_tier;
   if (isPlanTier(raw)) return raw;
   return 'free';
+}
+
+/**
+ * Combine workspace/JWT tier with an ops `plan_floor` from entitlement_grants.
+ */
+export function effectivePlanTier(
+  workspaceOrClaimTier: PlanTier,
+  planFloor: PlanTier | null | undefined,
+): PlanTier {
+  return maxPlanTier(workspaceOrClaimTier, planFloor);
 }
 
 /** Minimum tier that unlocks a class — for locked-state upgrade copy. */
@@ -104,6 +138,8 @@ export function requiredTierFor(artifactClass: ArtifactClass): PlanTier {
 export const ARTIFACT_CLASSES: readonly ArtifactClass[] = [
   'research',
   'narrative',
+  'digest_summary',
+  'portfolio_teaser',
   'house_weights_nav',
   'glassbox_economics',
   'private_book',

@@ -645,6 +645,21 @@ Settings / billing Edge Functions call the RPC via `service_role` when
 `_shared/supabase-admin.ts`), so pre-trigger users still bootstrap on first JWT
 settings call.
 
+### Creator / client-product grants (108)
+
+Product gating without widening free Observer:
+
+| Object | Purpose |
+|--------|---------|
+| `entitlement_grants` | PK `email` (lowercased); `plan_floor` ∈ (`baseline`,`custom`,`enterprise`). Effective tier = `max(workspaces.plan_tier, plan_floor)`. Seed: creator `chris.stefan@proton.me` → `custom` (ops unlock without Stripe). RLS deny-by-default; `service_role` only. |
+| `client_product_grants` | PK `(email, product_key)`. `fx_hub` now; future custom Olympus products reuse the same table. 12x client emails inserted by ops (list TBD). Seed: creator → `fx_hub`. |
+| `my_access()` | Authenticated SECURITY DEFINER snapshot: workspace tier, plan_floor, effective tier, products[]. |
+| `plan_tier_rank` / `max_plan_tier` | Helpers for effective-tier math. |
+
+Olympus UI + settings EF resolve **effective** tier (never JWT claim alone) so creator
+baseline/Kairos works while Stripe captchas block Checkout. Free remains teaser-only
+(`digest_summary` + `portfolio_teaser`; no brokers/automations).
+
 ### New tables (096)
 
 | Table | PK | Purpose |

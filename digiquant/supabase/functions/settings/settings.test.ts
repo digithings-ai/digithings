@@ -46,6 +46,10 @@ interface Store {
   brokers: Array<Record<string, unknown>>;
   keys: Array<Record<string, unknown>>;
   prefs: Array<Record<string, unknown>>;
+  /** Ops/creator plan floors keyed by lowercased email (migration 108). */
+  entitlementGrants: Map<string, string>;
+  /** Client product keys keyed by lowercased email. */
+  productGrants: Map<string, string[]>;
   /** When true, notification_prefs lookups fail as if the table is missing. */
   prefsMissing?: boolean;
   /** When true, olympus_profile_config lookups fail as if the table is missing. */
@@ -82,6 +86,8 @@ function freshStore(): Store {
     brokers: [],
     keys: [],
     prefs: [],
+    entitlementGrants: new Map(),
+    productGrants: new Map(),
   };
 }
 
@@ -392,6 +398,30 @@ function mockAdmin(store: Store): AdminClient {
         return { data: rows, error: null };
       }
 
+      if (table === "entitlement_grants") {
+        const email = String(
+          filters.find((f) => f.col === "email" && f.op === "eq")?.val ?? "",
+        ).toLowerCase();
+        const floor = store.entitlementGrants.get(email);
+        const row = floor ? { email, plan_floor: floor } : null;
+        if (wantSingle || maybeSingle) {
+          return { data: row, error: null };
+        }
+        return { data: row ? [row] : [], error: null };
+      }
+
+      if (table === "client_product_grants") {
+        const email = String(
+          filters.find((f) => f.col === "email" && f.op === "eq")?.val ?? "",
+        ).toLowerCase();
+        const keys = store.productGrants.get(email) ?? [];
+        const rows = keys.map((product_key) => ({ email, product_key }));
+        if (wantSingle || maybeSingle) {
+          return { data: rows[0] ?? null, error: null };
+        }
+        return { data: rows, error: null };
+      }
+
       return { data: null, error: { message: `unknown table ${table}` } };
     };
 
@@ -564,6 +594,24 @@ Deno.test("403 TIER_FORBIDDEN for baseline on profile write", async () => {
   assertEquals(json.code, "TIER_FORBIDDEN");
   assertEquals(store.profiles.length, 0);
 });
+
+Deno.test(
+  "creator entitlement_grants elevates free workspace to allow profile write",
+  async () => {
+    const store = freshStore();
+    store.workspaces.set(WS_A, wsRow(WS_A, "free"));
+    store.entitlementGrants.set("owner@example.com", "custom");
+    store.productGrants.set("owner@example.com", ["fx_hub"]);
+    const { status, json } = await call(store, "PATCH", "/profile", {
+      profile_key: "workspace",
+      label: "Creator overlay",
+      investment: validInvestment,
+    }, { planTier: "free" });
+    assertEquals(status, 200, JSON.stringify(json));
+    assertEquals(json.label, "Creator overlay");
+    assertEquals(store.profiles.length, 1);
+  },
+);
 
 Deno.test("403 TIER_FORBIDDEN for baseline on broker connect", async () => {
   const store = freshStore();
