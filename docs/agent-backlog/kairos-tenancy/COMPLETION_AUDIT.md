@@ -4,7 +4,8 @@
 
 Full artifact: `/opt/cursor/artifacts/kairos-github-auth-prod-proof.md`  
 Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`  
-Prior vendor recheck: `/opt/cursor/artifacts/kairos-completion-audit-vendor-recheck.md`
+Prior vendor recheck: `/opt/cursor/artifacts/kairos-completion-audit-vendor-recheck.md`  
+Captcha-ask docs: [#3239](https://github.com/digithings-ai/digithings/pull/3239) merged into `develop` (superseded here with GitHub proof refresh).
 
 ## Summary
 
@@ -13,12 +14,12 @@ Prior vendor recheck: `/opt/cursor/artifacts/kairos-completion-audit-vendor-rech
 | Identity | **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged) |
 | Stripe / Mailgun / Alpaca API secrets | **MISSING** — captchas (forms re-filled digithings@) |
 | Core EF vendor secrets | **not set** (vault / APP_URL / SUPABASE_* only) |
-| Staging E2E | exit **2** — 9 named secrets |
+| Staging E2E | exit **2** — 9 named secrets (`kairos-staging-e2e-vendor-recheck.log`) |
 | Mailgun notify loud-fail | exit **2** — `MAILGUN_NOT_CONFIGURED` |
 | Olympus Auth Pages (#3231) | live on prod Pages |
 | **GitHub Auth login** | **PROVEN** on `digiquant.io` + `core` DB |
 | mig 107 personal workspace | **fired** for GitHub user (`plan_tier=free`, owner) |
-| Email/password on login UI | **absent** (Google + GitHub only) |
+| Email/password on login UI | **absent** (Google + GitHub only) — cannot use digithings@ Agentmail password path |
 | Draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) | left draft |
 | Cutover `900` | **not applied** |
 
@@ -42,7 +43,7 @@ Project `rwagjbkvxkdwqmouagad` (`core`), PAT label **digithings**:
 
 Unauth smoke: `https://digiquant.io/olympus/login` → **308** → `/olympus/login/` **200** (Continue with Google / Continue with GitHub).
 
-Authed browser (agent desktop session still open): sidebar shows `chris.stefan@proton.me` + Sign out; `/olympus/settings/` data source `rwagjbkvxkdwqmouagad.supabase.co`.
+Authed browser (agent desktop session still open): sidebar shows GitHub user email + Sign out; `/olympus/settings/` data source `rwagjbkvxkdwqmouagad.supabase.co`.
 
 ## Secrets obtained (names only)
 
