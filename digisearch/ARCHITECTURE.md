@@ -585,7 +585,9 @@ Two operational notes. First, upsert and query share one embedding model:
 whenever no `embedding_provider` is injected and `Query.embedding` is absent —
 this is also the model `ChromaBackend` embeds with internally, so a Chroma-built
 and a Vectorize-built index over the same corpus are directly comparable. The
-`embedding_model` stamp in vector metadata and the mismatch guard
+default-embedder singleton is initialised under a `threading.Lock` (double-checked
+locking) so concurrent first queries construct at most one ONNX load per process.
+The `embedding_model` stamp in vector metadata and the mismatch guard
 (`assert_index_model()`, which probes one existing vector before a sync and
 refuses to upsert under a different model) both live in `vectorize_sync.py`,
 not in `VectorizeBackend` itself — a chunk added through the generic
