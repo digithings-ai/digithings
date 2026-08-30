@@ -8,7 +8,14 @@
       "component": "digichat",
       "include-component-in-tag": true,
       "include-v-in-tag": true,
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "../../package-lock.json",
+          "jsonpath": "$.packages['frontend/digichat'].version"
+        }
+      ]
     }
   }
 }

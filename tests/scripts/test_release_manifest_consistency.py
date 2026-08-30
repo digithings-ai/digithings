@@ -119,3 +119,54 @@ def test_release_please_targets_a_branch_the_work_actually_lands_on() -> None:
     # Not main: a squashed promotion commit reads as a no-op to a Conventional Commits
     # parser and would swallow the real feat/fix signal (#1343).
     assert "target-branch: main" not in commands
+
+
+@pytest.mark.unit
+def test_digichat_release_bumps_the_root_workspace_lockfile() -> None:
+    """release-type node only updates a sibling package-lock.json (#1974).
+
+    Under npm workspaces the lockfile lives at the repo root, so a digichat release
+    PR that only touched package.json + CHANGELOG + the manifest left
+    ``packages['frontend/digichat'].version`` stale until a hand ``npm install``.
+    The GenericJson extra-file must keep that field in the same release commit.
+    """
+    packages = _config()["packages"]
+    assert isinstance(packages, dict)
+    digichat = packages["frontend/digichat"]
+    assert isinstance(digichat, dict)
+    extras = digichat.get("extra-files")
+    assert isinstance(extras, list) and extras, "digichat must declare extra-files"
+    lock_bumps = [
+        entry
+        for entry in extras
+        if isinstance(entry, dict)
+        and entry.get("type") == "json"
+        and str(entry.get("path", "")).endswith("package-lock.json")
+    ]
+    assert lock_bumps, "digichat extra-files must bump the root package-lock.json"
+    assert lock_bumps[0].get("jsonpath") == "$.packages['frontend/digichat'].version"
+
+
+@pytest.mark.unit
+def test_release_manifest_consistency_lane_sees_release_prs() -> None:
+    """A release PR must not land green while this module's asserts stay skipped.
+
+    Release PRs edit package.json + the manifest (+ now the lockfile). Those paths
+    must stay in the ``ruff_and_scripts`` filter so ``test_release_manifest_consistency``
+    runs on the PR that would break it, not at the next promotion (#1974).
+    """
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    # Prefer the dorny path-filter list (indented under filters:), not the job
+    # output passthrough on line ~40 that also names ruff_and_scripts.
+    marker = "            ruff_and_scripts:\n"
+    start = ci.index(marker)
+    end = ci.index("            workflows:\n", start)
+    block = ci[start:end]
+    for path in (
+        ".release-please-manifest.json",
+        "frontend/digichat/package.json",
+        "package-lock.json",
+    ):
+        assert f"'{path}'" in block or f'"{path}"' in block, (
+            f"{path} missing from ruff_and_scripts — release PRs would skip this lane"
+        )
