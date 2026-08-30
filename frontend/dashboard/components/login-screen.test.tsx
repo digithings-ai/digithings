@@ -91,7 +91,7 @@ describe('LoginScreen', () => {
     expect(authMock.signInWithOAuth).toHaveBeenCalledWith('google');
   });
 
-  it('starts X OAuth with provider id twitter', async () => {
+  it('starts X OAuth with provider id x', async () => {
     await act(async () => {
       root.render(createElement(LoginScreen));
     });
@@ -100,7 +100,7 @@ describe('LoginScreen', () => {
     await act(async () => {
       x!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(authMock.signInWithOAuth).toHaveBeenCalledWith('twitter');
+    expect(authMock.signInWithOAuth).toHaveBeenCalledWith('x');
   });
 
   it('signup mode shows Sign up and a Sign in footer', async () => {

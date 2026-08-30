@@ -6,7 +6,8 @@ import { GitHubGlyph, GoogleGlyph, XGlyph } from "../icons";
 
 export type AuthCardLayout = "compact" | "icons-first" | "desk";
 export type AuthCardMode = "signin" | "signup";
-export type AuthOAuthProvider = "google" | "github" | "twitter";
+/** Supabase OAuth 2.0 id for X is `x` (not legacy `twitter`). UI copy is X. */
+export type AuthOAuthProvider = "google" | "github" | "x";
 
 const STRENGTH_WORDS = ["", "weak", "fair", "good", "strong"] as const;
 const STRENGTH_COLORS = ["", "var(--danger)", "var(--accent)", "var(--accent)", "var(--ink)"] as const;
@@ -42,7 +43,7 @@ export type AuthCardProps = {
 const OAUTH: { provider: AuthOAuthProvider; label: string; testId: string; icon: ReactNode }[] = [
   { provider: "google", label: "Google", testId: "login-google", icon: <GoogleGlyph /> },
   { provider: "github", label: "GitHub", testId: "login-github", icon: <GitHubGlyph width={16} height={16} /> },
-  { provider: "twitter", label: "X", testId: "login-x", icon: <XGlyph /> },
+  { provider: "x", label: "X", testId: "login-x", icon: <XGlyph /> },
 ];
 
 function OAuthButtons({

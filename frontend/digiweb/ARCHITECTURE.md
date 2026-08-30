@@ -50,7 +50,7 @@ is irrelevant to resolution — every other frontend imports them the same way:
 `AuthCard` (`web/src/components/account/AuthCard.tsx`, CSS
 `./styles/account-auth.css`) is the promoted sign-in / create-account card.
 Layouts `compact`, `icons-first`, and `desk` share one form: email + password,
-Google / GitHub / X (provider id `twitter`, visible label X), primary submit
+Google / GitHub / X (Supabase OAuth 2.0 provider id `x`, visible label X), primary submit
 Sign in / Sign up, footer Create an account / Sign in. Compact places the
 `digiquant` wordmark beside the mark. Desk may keep a product kicker, a sign-up
 strength meter, and sign-in Forgot password. Specimens live on the reference
