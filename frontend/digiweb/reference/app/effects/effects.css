@@ -28,7 +28,7 @@
   color: var(--ink-soft);
   text-decoration: none;
   border: 1px solid var(--hair);
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0.3rem 0.7rem;
   transition: color 0.18s var(--ease), border-color 0.18s var(--ease);
 }
@@ -50,7 +50,7 @@
    Terminal component imported from @digithings/web. Always dark: reads the
    --term-* tokens, not the page surface. */
 
-.term { width: 100%; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 14px; overflow: hidden; box-shadow: 0 44px 100px -50px rgba(0,0,0,0.45); }
+.term { width: 100%; background: var(--term-bg); border: 1px solid var(--term-hair); border-radius: 0; overflow: hidden; box-shadow: 0 44px 100px -50px rgba(0,0,0,0.45); }
 .term-bar { display: flex; align-items: center; gap: 8px; padding: 0.7rem 0.9rem; background: var(--term-fill); border-bottom: 1px solid var(--term-hair); }
 .term-bar i { width: 11px; height: 11px; border-radius: 50%; background: #3a342c; display: inline-block; }
 .term-bar i:nth-child(1) { background: #ec6a5e; } .term-bar i:nth-child(2) { background: #f4bf4f; } .term-bar i:nth-child(3) { background: #61c554; }
@@ -184,7 +184,7 @@ html.no-js .dqpipe-track-fill { transform: scaleY(1); }
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
 }
 
 .fx-mesh-frame .dq-ambient {
@@ -263,7 +263,7 @@ html.no-js .dqpipe-track-fill { transform: scaleY(1); }
   position: relative;
   height: 24rem;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--bg);
   overflow: hidden;
   cursor: crosshair;
@@ -285,7 +285,7 @@ html.no-js .dqpipe-track-fill { transform: scaleY(1); }
   top: calc(var(--nav-h) + 1rem);
   height: min(74vh, 560px);
   border: 1px solid var(--hair);
-  border-radius: 16px;
+  border-radius: 0;
   overflow: hidden;
   background: color-mix(in srgb, var(--surface) 40%, transparent);
 }
@@ -297,7 +297,7 @@ html.no-js .dqpipe-track-fill { transform: scaleY(1); }
   will-change: transform;
   overflow: hidden;
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0;
   background: linear-gradient(
     135deg,
     color-mix(in srgb, var(--ink) 8%, var(--surface)),

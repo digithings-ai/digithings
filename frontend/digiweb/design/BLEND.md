@@ -1,8 +1,9 @@
 # digiweb blend lock — utilitarian terminal
 
-**Status:** round-1 picks recorded · consistency reviewed · **not yet token-locked**  
-**Started:** 2026-08-30 · **Round 1:** 2026-08-30  
+**Status:** v0.1 **approved** for promotion · Round 1 locked 2026-08-30  
 **North star:** utilitarian terminal simplicity — mono voice, zero corners, sparse air, white loud CTA, diegetic install proof.
+
+Canon promotion: [`ROLLOUT.md`](ROLLOUT.md) · live check: design-reference `/iterate`
 
 This file is the **human preference ledger**. Live picker: design-reference `/iterate`.  
 Gallery CSS is `uv-`-prefixed and does **not** ship to product apps until we promote winners into `DESIGN.md` + `tokens.css`.
@@ -58,7 +59,7 @@ These are a **starting point**, not absolute law. Below is the consistency pass 
 | **Sparse density** vs finance/olympus dashboards | Sparse marketing air fights data density | **Two densities by surface:** marketing/docs = sparse; olympus/tearsheet/terminal scrollback = instrument density. Same radius/type/CTA grammar. |
 | **Bracket docs** vs zero radius | Brackets are ornamental corners | Keep — brackets are *structure marks*, not radius. They read as terminal chrome, not soft UI. |
 
-### Cohesive v0.1 rules (proposed lock)
+### Cohesive v0.1 rules (locked · promoted)
 
 1. **Radius:** `0` everywhere in marketing and product chrome. No pills. Device bezels may still simulate hardware.
 2. **Type:** Geist Mono (or JetBrains Mono on full-terminal surfaces) for display, body, and chrome. Weight 400–500; hierarchy by size/tracking, not bold.
@@ -86,10 +87,10 @@ These are a **starting point**, not absolute law. Below is the consistency pass 
 
 ---
 
-## How we iterate next
+## Promotion status
 
-1. Review the **composite preview** on `/iterate` (locked blend rendered as one surface).
-2. Call out anything that still feels off — especially tonal-slab vs hairline-only, and mono weight at display scale.
-3. When v0.1 feels right, promote into `DESIGN.md` frontmatter + `tokens.css` (`--r-*` → 0, type defaults, button recipes) in a dedicated follow-up.
+v0.1 is **promoted** into `DESIGN.md` frontmatter + `tokens.css` + design-reference foundations and an early `@digithings/web` chrome sweep. Product apps (digithings-web, digiquant-web, digichat, olympus / FX Hub) follow [`ROLLOUT.md`](ROLLOUT.md) Phases 2–3.
+
+The `/iterate` gallery stays as the preference ledger UI (`uv-` CSS only). Further round tweaks edit BLEND first, then re-promote tokens.
 
 Do **not** ship production landings from gallery CSS alone.

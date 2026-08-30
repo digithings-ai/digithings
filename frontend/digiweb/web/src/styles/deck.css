@@ -18,7 +18,7 @@
   .deck-card {
     background: var(--surface);
     border: 1px solid var(--hair);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 1rem;
   }
 }

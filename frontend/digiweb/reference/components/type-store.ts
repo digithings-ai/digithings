@@ -27,8 +27,16 @@ export const TYPE_SUITES: TypeSuite[] = [
   {
     id: "default",
     label: "default",
-    note: "Fraunces · Geist Sans · Geist Mono",
-    display: "var(--font-fraunces), Georgia, serif",
+    note: "Utilitarian v0.1 — Geist Mono display + body + chrome",
+    display: GEIST_MONO,
+    body: GEIST_MONO,
+    mono: GEIST_MONO,
+  },
+  {
+    id: "utilitarian",
+    label: "utilitarian",
+    note: "Geist Sans body escape · Geist Mono chrome (legacy compare)",
+    display: GEIST_SANS,
     body: GEIST_SANS,
     mono: GEIST_MONO,
   },
@@ -65,14 +73,6 @@ export const TYPE_SUITES: TypeSuite[] = [
     mono: "var(--font-jetbrains), ui-monospace, monospace",
   },
   {
-    id: "utilitarian",
-    label: "utilitarian",
-    note: "Geist Sans display + body · Geist Mono chrome (no special serif)",
-    display: GEIST_SANS,
-    body: GEIST_SANS,
-    mono: GEIST_MONO,
-  },
-  {
     id: "omarchy",
     label: "omarchy",
     note: "JetBrains Mono everywhere — omarchy.org voice",
@@ -80,13 +80,22 @@ export const TYPE_SUITES: TypeSuite[] = [
     body: "var(--font-jetbrains), ui-monospace, monospace",
     mono: "var(--font-jetbrains), ui-monospace, monospace",
   },
+  {
+    id: "serif-legacy",
+    label: "serif-legacy",
+    note: "Pre-v0.1 Instrument Panel — Fraunces · Geist Sans · Geist Mono",
+    display: "var(--font-fraunces), Georgia, serif",
+    body: GEIST_SANS,
+    mono: GEIST_MONO,
+  },
 ];
 
 const KEY = "dr-type";
 const EVENT = "dr-type-change";
 
 /** Apply a type suite by overriding --font-display / --font-sans / --font-mono
- *  inline on <html>. "default" removes the overrides so the globals win. */
+ *  inline on <html>. "default" removes the overrides so the utilitarian mono
+ *  globals win. */
 export function applyType(id: string) {
   const el = document.documentElement;
   const t = TYPE_SUITES.find((x) => x.id === id);

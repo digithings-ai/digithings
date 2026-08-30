@@ -137,7 +137,7 @@
   margin-top: 0.2rem;
   padding: 0.4rem;
   border: 1px solid var(--hair);
-  border-radius: 10px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--bg) 92%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -167,7 +167,7 @@
 .nav-shell-menu-item {
   display: block;
   padding: 0.45rem 0.7rem;
-  border-radius: 7px;
+  border-radius: 0;
   color: var(--ink-soft);
   white-space: nowrap;
   transition:
@@ -219,7 +219,7 @@
   width: 18px;
   height: 1.5px;
   background: currentColor;
-  border-radius: 1px;
+  border-radius: 0;
   transition:
     transform 0.25s var(--ease),
     opacity 0.2s var(--ease);

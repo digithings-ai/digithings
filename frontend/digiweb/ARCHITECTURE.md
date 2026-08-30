@@ -17,7 +17,8 @@ frontend/digiweb/
 ├── scripts/
 │   └── build-manifest.mjs regenerates MANIFEST.json from the reference source
 ├── design/                @digithings/design — tokens.css + CSS primitives
-│   ├── BLEND.md           utilitarian-terminal preference ledger (iterating)
+│   ├── BLEND.md           utilitarian-terminal preference ledger (v0.1 locked)
+│   ├── ROLLOUT.md         phased apply across digiweb → all product frontends
 │   └── references/        external north-star scans (Cursor, herdr, …)
 ├── web/                   @digithings/web — shared React component layer
 └── reference/             the live showcase app (Next.js 16 / React 19 / Tailwind v4 / Motion)
@@ -27,8 +28,9 @@ frontend/digiweb/
 ```
 
 The **`/iterate`** family is the human preference gallery for the utilitarian
-terminal blend (`uv-` CSS only). Picks persist in `localStorage` and are meant
-to be pasted into `design/BLEND.md` before any token/`DESIGN.md` lock.
+terminal blend (`uv-` CSS only). Picks persist in `localStorage`. Round-1 is
+locked in `design/BLEND.md` and promoted into tokens/`DESIGN.md`; further
+rounds still paste here before re-promoting. Product rollout: `design/ROLLOUT.md`.
 The three workspaces are consumed **by package name**, so their on-disk location
 is irrelevant to resolution — every other frontend imports them the same way:
 

@@ -40,7 +40,7 @@
   height: 10.5rem;
   margin-top: 0;
   overflow: clip;
-  border-radius: 12px;
+  border-radius: 0;
   border: 1px solid var(--hair);
   background: var(--surface);
 }
@@ -101,7 +101,7 @@
 .ref-footer-theme {
   display: inline-flex;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   overflow: hidden;
 }
 

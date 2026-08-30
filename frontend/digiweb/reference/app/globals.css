@@ -50,9 +50,9 @@
    next to their page (app/<family>/<family>.css) — keep this file small. */
 
 :root[data-theme] {
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
-  --font-display: var(--font-fraunces), "Fraunces", Georgia, serif;
+  --font-display: var(--font-geist-mono), ui-monospace, monospace;
   --peek: 3.2rem;
   --nav-h: 3.4rem;
 }
@@ -76,7 +76,7 @@ html {
   left: 0.5rem;
   z-index: 30;
   padding: 0.5rem 0.9rem;
-  border-radius: 8px;
+  border-radius: 0;
   background: var(--accent);
   color: var(--on-accent);
   font-family: var(--font-mono);
@@ -173,7 +173,7 @@ html {
   padding: 0 0.3rem;
   border: 1px solid var(--hair);
   border-bottom-width: 2px;
-  border-radius: 5px;
+  border-radius: 0;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   font-family: var(--font-mono);
   font-size: 0.62rem;
@@ -201,7 +201,7 @@ html {
   appearance: none;
   -webkit-appearance: none;
   border: 1px solid var(--hair);
-  border-radius: 8px;
+  border-radius: 0;
   background: transparent;
   color: var(--ink-soft);
   font-family: var(--font-mono);
@@ -294,7 +294,7 @@ html {
   width: 18px;
   height: 1.5px;
   background: currentColor;
-  border-radius: 1px;
+  border-radius: 0;
   transition: transform 0.25s var(--ease);
 }
 
@@ -438,7 +438,8 @@ html {
 
 .hero h1 em {
   color: var(--accent);
-  font-style: italic;
+  font-style: normal;
+  font-weight: 500;
 }
 
 .hero p {
@@ -503,16 +504,17 @@ html {
   font-family: var(--font-mono);
   font-size: 0.78rem;
   letter-spacing: 0.02em;
-  border-radius: 999px;
+  border-radius: 0;
   padding: 0.62rem 1.3rem;
   cursor: pointer;
   border: 1px solid transparent;
 }
 
+/* Loud control = paper/ink fill (not accent). Accent stays for focus/live. */
 .btn-primary {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-color: var(--accent);
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
 }
 
 .btn-primary:disabled {
@@ -534,8 +536,8 @@ html {
   width: 11px;
   height: 11px;
   border-radius: 999px;
-  border: 2px solid color-mix(in srgb, var(--on-accent) 30%, transparent);
-  border-top-color: var(--on-accent);
+  border: 2px solid color-mix(in srgb, var(--bg) 30%, transparent);
+  border-top-color: var(--bg);
   animation: btn-spin 0.7s linear infinite;
 }
 

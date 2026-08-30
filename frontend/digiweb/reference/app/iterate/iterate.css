@@ -259,7 +259,7 @@
 }
 
 .uv-card-r-soft {
-  border-radius: 12px;
+  border-radius: 0;
 }
 .uv-card-r-tight {
   border-radius: 4px;
@@ -534,7 +534,7 @@
 .uv-surface--soft-card {
   background: var(--surface);
   border: 1px solid var(--hair);
-  border-radius: 12px;
+  border-radius: 0; /* tonal slab — soft = fill, not radius */
 }
 
 .uv-surface--hairline-panel {
