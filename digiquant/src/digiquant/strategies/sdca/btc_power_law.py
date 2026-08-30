@@ -27,6 +27,7 @@ output to already be monotonic.
 from __future__ import annotations
 
 import logging
+import warnings
 from datetime import date
 from pathlib import Path
 
@@ -45,8 +46,10 @@ QUANTILE_LABELS: tuple[str, ...] = ("q01", "q10", "q25", "q50", "q75", "q95", "q
 _LABEL_BY_QUANTILE: dict[float, str] = dict(zip(QUANTILES, QUANTILE_LABELS, strict=True))
 
 # A quadratic-in-log-time fit needs real spread in ln(days_since_genesis) to
-# separate its linear and quadratic terms; below this many daily observations the
-# fit is not considered reliable. Data-sufficiency guard per #1082's acceptance
+# separate its linear and quadratic terms; below this many daily observations, or
+# this many calendar days between the first and last date (both enforced in
+# fit_btc_power_law — row count alone doesn't bound gaps between dates), the fit
+# is not considered reliable. Data-sufficiency guard per #1082's acceptance
 # criteria — a starting heuristic (2 years), not a value tuned against real data.
 MIN_FIT_HISTORY_DAYS = 730
 
@@ -133,6 +136,23 @@ def fit_btc_power_law(
             f"fit_btc_power_law requires at least {MIN_FIT_HISTORY_DAYS} daily "
             f"observations for a reliable quadratic-in-log-time fit, got {len(date_list)}"
         )
+    # Row count alone doesn't guarantee calendar coverage: nothing above bounds the
+    # gaps between consecutive dates, so MIN_FIT_HISTORY_DAYS rows of gappy input
+    # can (and, at the exact boundary, always does — see below) span fewer actual
+    # calendar days than the name/docstring promise. x = ln(days_since_genesis) is
+    # what the quadratic is fit against, so calendar span — not row count — is what
+    # actually determines whether there's enough spread to separate the linear and
+    # quadratic terms. Checked separately from (and in addition to) the row-count
+    # guard above: N strictly-increasing dates span at least N-1 days, so N rows at
+    # exactly the row-count floor span only N-1 days — one day short of this check.
+    fit_span_days = (date_list[-1] - date_list[0]).days
+    if fit_span_days < MIN_FIT_HISTORY_DAYS:
+        raise ValueError(
+            f"fit_btc_power_law requires at least {MIN_FIT_HISTORY_DAYS} calendar "
+            f"days between the first and last date for a reliable quadratic-in-log-time "
+            f"fit, got a {fit_span_days}-day span ({date_list[0]} to {date_list[-1]}) "
+            f"across {len(date_list)} rows"
+        )
     if date_list[0] <= genesis:
         raise ValueError(
             f"fit_btc_power_law requires all dates after genesis ({genesis}), "
@@ -141,6 +161,7 @@ def fit_btc_power_law(
 
     import numpy as np
     from statsmodels.regression.quantile_regression import QuantReg
+    from statsmodels.tools.sm_exceptions import ConvergenceWarning, IterationLimitWarning
 
     days_since_genesis = np.array([(d - genesis).days for d in date_list], dtype=float)
     raw_x = np.log(days_since_genesis)
@@ -151,7 +172,23 @@ def fit_btc_power_law(
 
     quantile_coeffs: dict[str, QuantileCoefficients] = {}
     for q, label in zip(QUANTILES, QUANTILE_LABELS, strict=True):
-        result = QuantReg(y, design).fit(q=q, max_iter=2000)
+        # QuantReg.fit's IRLS solver never raises on non-convergence — it silently
+        # returns whatever `beta` the loop was on at max_iter (or mid-cycle), with
+        # only a warnings.warn(IterationLimitWarning/ConvergenceWarning) as the
+        # signal (see statsmodels.regression.quantile_regression.QuantReg.fit).
+        # Consuming result.params unconditionally would let a non-converged fit
+        # through to persisted coefficients. Catch and escalate instead.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = QuantReg(y, design).fit(q=q, max_iter=2000)
+        non_convergence = [
+            w for w in caught if issubclass(w.category, (IterationLimitWarning, ConvergenceWarning))
+        ]
+        if non_convergence:
+            raise ValueError(
+                f"fit_btc_power_law: QuantReg failed to converge for quantile {q} "
+                f"({label}): {non_convergence[0].message}"
+            )
         c, a, b = (float(v) for v in result.params)
         quantile_coeffs[label] = QuantileCoefficients(c=c, a=a, b=b)
 

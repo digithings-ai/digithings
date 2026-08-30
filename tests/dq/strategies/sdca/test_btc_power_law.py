@@ -111,6 +111,79 @@ class TestFitBtcPowerLaw:
         with pytest.raises(ValueError, match="same length"):
             fit_btc_power_law(dates, price.head(price.len() - 1))
 
+    def test_raises_on_quantreg_non_convergence_instead_of_persisting_garbage(self) -> None:
+        """QuantReg's IRLS solver never raises on non-convergence — it silently
+        returns whatever ``beta`` it was on at ``max_iter``, with only a
+        ``warnings.warn(IterationLimitWarning)`` as the signal (see
+        ``statsmodels.regression.quantile_regression.QuantReg.fit``). A price
+        series that alternates between astronomically large and tiny (but still
+        positive, finite, strictly-increasing-date) values every day is a
+        genuinely pathological design for the IRLS reweighting to solve, and
+        empirically drives it to hit ``max_iter=2000`` without converging.
+        ``fit_btc_power_law`` must raise rather than silently persist the
+        resulting garbage coefficients.
+        """
+        from digiquant.strategies.sdca.btc_power_law import fit_btc_power_law
+
+        n = 1500
+        start = date(2015, 1, 1)
+        dates = pl.Series("date", [start + timedelta(days=i) for i in range(n)], dtype=pl.Date)
+        alternating = np.where(np.arange(n) % 2 == 0, 1e12, 1e-6).astype(float)
+        price = pl.Series("close", alternating)
+
+        with pytest.raises(ValueError, match="converge"):
+            fit_btc_power_law(dates, price)
+
+    def test_rejects_row_count_at_floor_with_insufficient_calendar_span(self) -> None:
+        """``MIN_FIT_HISTORY_DAYS`` consecutive daily rows is the previous check's
+        exact acceptance boundary, and it spans only ``MIN_FIT_HISTORY_DAYS - 1``
+        calendar days (N strictly-increasing dates span at least N-1 days) — one
+        day short of what the name/docstring promise. The old row-count-only check
+        wrongly accepted this; the calendar-span check must now reject it.
+        """
+        from digiquant.strategies.sdca.btc_power_law import MIN_FIT_HISTORY_DAYS, fit_btc_power_law
+
+        dates, price = _synthetic_series(n=MIN_FIT_HISTORY_DAYS)
+        assert (dates.to_list()[-1] - dates.to_list()[0]).days == MIN_FIT_HISTORY_DAYS - 1
+        with pytest.raises(ValueError, match="calendar"):
+            fit_btc_power_law(dates, price)
+
+    def test_accepts_gappy_series_at_same_row_count_once_span_is_sufficient(self) -> None:
+        """Same total row count as the rejected floor case above (so row count
+        alone cannot explain the difference), but with one extra day of gap
+        inserted so the calendar span reaches ``MIN_FIT_HISTORY_DAYS`` — this must
+        now pass, showing the guard is keyed on calendar coverage, not density.
+        """
+        from digiquant.strategies.sdca.btc_power_law import (
+            BTC_GENESIS_DATE,
+            MIN_FIT_HISTORY_DAYS,
+            fit_btc_power_law,
+        )
+
+        n = MIN_FIT_HISTORY_DAYS
+        start = BTC_GENESIS_DATE + timedelta(days=2000)
+        # n-1 consecutive rows, then one row pushed one extra day out — same row
+        # count as the fully-dense floor case, but a gap widens the span by 1 day.
+        gappy_dates = [start + timedelta(days=i) for i in range(n - 1)]
+        gappy_dates.append(gappy_dates[-1] + timedelta(days=2))
+        dates = pl.Series("date", gappy_dates, dtype=pl.Date)
+        assert dates.len() == n
+        assert (gappy_dates[-1] - gappy_dates[0]).days == MIN_FIT_HISTORY_DAYS
+
+        days_since_genesis = np.array(
+            [(d - BTC_GENESIS_DATE).days for d in gappy_dates], dtype=float
+        )
+        raw_x = np.log(days_since_genesis)
+        mu = float(raw_x.mean())
+        x = raw_x - mu
+        c, a, b = (3.5, 2.0, 0.3)
+        rng = np.random.default_rng(0)
+        log10_price = c + a * x + b * x**2 + rng.normal(0.0, 0.02, size=n)
+        price = pl.Series("close", 10.0**log10_price)
+
+        coefficients = fit_btc_power_law(dates, price)
+        assert coefficients.fit_rows == n
+
 
 class TestBtcPowerLawCoefficientsModel:
     def test_rejects_incomplete_quantile_set(self) -> None:
