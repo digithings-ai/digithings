@@ -12,7 +12,7 @@
       "extra-files": [
         {
           "type": "json",
-          "path": "../../package-lock.json",
+          "path": "/package-lock.json",
           "jsonpath": "$.packages['frontend/digichat'].version"
         }
       ]

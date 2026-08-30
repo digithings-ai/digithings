@@ -141,9 +141,12 @@ def test_digichat_release_bumps_the_root_workspace_lockfile() -> None:
         for entry in extras
         if isinstance(entry, dict)
         and entry.get("type") == "json"
-        and str(entry.get("path", "")).endswith("package-lock.json")
+        and entry.get("path") == "/package-lock.json"
     ]
-    assert lock_bumps, "digichat extra-files must bump the root package-lock.json"
+    assert lock_bumps, (
+        "digichat extra-files must bump the repo-root lockfile via "
+        "'/package-lock.json' (leading slash — release-please rejects '../')"
+    )
     assert lock_bumps[0].get("jsonpath") == "$.packages['frontend/digichat'].version"
 
 
