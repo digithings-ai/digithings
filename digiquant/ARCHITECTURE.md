@@ -3007,6 +3007,19 @@ Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverge
 structured report on the snapshot row + log; **never** auto-submit corrective orders
 (`SyncResult.refused_corrective_orders` is always true).
 
+**Cron CLI (`sync_cron.py`, `python -m digiquant.olympus.kairos.sync_cron`).**
+Production entry that polls **Alpaca paper** connections only. House and system
+workspace ids are never sync targets; `env=live` is refused; inactive rows are
+dropped. IBKR paper is counted then held (`ibkr_requires_brokerage_session`) —
+cron does not open a brokerage session. `--check` exits **2** with
+`KAIROS_SYNC_NOT_CONFIGURED` listing missing store env *names*. `--dry-run`
+prints candidate counts and does not unseal. Apply requires `--connection-id`
+or `--all` (refuses implicit broker polls). Apply without an injected callback
+also requires `DIGIQUANT_VAULT_MASTER_KEY` (names only on failure). Credentials
+are unsealed only inside `open_credential` for Alpaca adapter construction.
+Do not run `--all` against Observer until an Alpaca paper OAuth connection
+exists. The fill remaining-hop still requires a mirrored row with a symbol.
+
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
 invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
