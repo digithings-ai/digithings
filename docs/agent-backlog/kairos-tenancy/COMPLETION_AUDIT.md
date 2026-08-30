@@ -2,10 +2,31 @@
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
-Agent run (this turn): https://cursor.com/agents/bc-c373b29f-ae7b-58ff-8cf4-32a7c81d539c  
-Agent run (prior fakes E2E): https://cursor.com/agents/bc-01c035c3-a440-5e20-b097-d77aa597d9b5  
-Develop tip: `b9e1e8e3` (merge of [#3186](https://github.com/digithings-ai/digithings/pull/3186))  
-Settings EF on `core`: **v12** ACTIVE (thin GitHub-raw → `732a77d0` / #3184; still no `sbp_` / no new vendor secrets). Pending code: GET `/profile` hydrate on `cursor/profile-get-hydrate-539c` (not yet on develop).
+Agent run (this turn): continue Kairos — merge #3187/#3188 + settings EF v13  
+Develop tip (pre-#3188): `17a84b30` (merge of [#3187](https://github.com/digithings-ai/digithings/pull/3187))  
+Settings EF on `core`: **v13** ACTIVE (thin GitHub-raw → `17a84b30` / #3187; GET `/profile` + GET `/notifications`). Still no `sbp_` / no new vendor secrets. Smoke: `settings-v13-smoke.log` (401/401).
+
+---
+
+## Follow-up turn (post-#3187: profile GET + EF v13 + audit)
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Hatch + merge #3187 | **PASS (merge; hatch 403)** | `gh pr comment` / `reviewed:agent` → **403**. Marked ready; Required CI green; `gh pr merge --merge` → `17a84b30` (2026-08-30T16:59:04Z). Parent can hatch. |
+| 2 | Redeploy settings EF thin-pin to merge SHA | **PASS** | MCP `deploy_edge_function` → **v13** ACTIVE; pin `17a84b3042d6…` (GET `/profile` + GET `/notifications` handlers). |
+| 3 | Smoke 401 (profile + notifications) | **PASS** | Missing + invalid JWT → gateway `401` (`settings-v13-smoke.log`). |
+| 4 | Secret scan (nonempty names only) | **PASS (no unlocks)** | No `sbp_`. `SUPABASE_ACCESS_TOKEN` still JWT. Mailgun/Stripe/Alpaca API keys empty/absent. Signup-note files only. Vault + `APP_URL` SET. **No** EF secrets push / Mailgun smoke. |
+| 5 | Merge #3188 (this audit) | **IN FLIGHT** | Branch updated onto develop after #3187; merge when Required CI green. |
+| 6 | #3183 promote draft | **LEAVE DRAFT** | Not merged. |
+| 7 | Goal complete? | **FAIL** | Same human/vendor blockers; do not UpdateGoal complete. |
+
+### Nonempty secret **names** this re-scan (values never logged)
+
+| Source | Nonempty names | Empty / absent of interest |
+|--------|----------------|----------------------------|
+| Process env | `SUPABASE_ACCESS_TOKEN` (JWT), `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`, `AUTH_URL` | `MAILGUN_*`, `NOTIFY_FROM`; no Stripe/Alpaca API keys; **no** `sbp_` |
+| `.env` / `.local/secrets/kairos.env` | `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` | Mailgun empty |
+| Signup notes only | `ALPACA_SIGNUP_*`, `STRIPE_SIGNUP_*` | Not vendor API keys |
 
 ---
 
@@ -191,6 +212,7 @@ Body must require: Pages `NEXT_PUBLIC_OLYMPUS_AUTH` unset; do not apply `cutover
 
 | PR | Result |
 |----|--------|
+| [#3187](https://github.com/digithings-ai/digithings/pull/3187) `cursor/profile-get-hydrate-539c` → `develop` | **MERGED** (`17a84b30`) |
 | [#3186](https://github.com/digithings-ai/digithings/pull/3186) `cursor/kairos-audit-v12-3d52` → `develop` | **MERGED** (`b9e1e8e3`) |
 | [#3185](https://github.com/digithings-ai/digithings/pull/3185) `cursor/settings-hydrate-land-5e7e` → `develop` | **MERGED** (`ae11f0d3`) |
 | [#3184](https://github.com/digithings-ai/digithings/pull/3184) `cursor/settings-notify-hydrate-3d52` → `develop` | **MERGED** (`732a77d0`) |
@@ -200,9 +222,7 @@ Body must require: Pages `NEXT_PUBLIC_OLYMPUS_AUTH` unset; do not apply `cutover
 
 Prior on develop (unchanged): #3141 promotion, #3161 notifications, #3177 schema align, #3178 unlock status.
 
-**Not merged:** [#3183](https://github.com/digithings-ai/digithings/pull/3183) pages promote draft — leave draft until human asks.
-
-**Open compare (parent):** [profile GET hydrate](https://github.com/digithings-ai/digithings/compare/develop...cursor/profile-get-hydrate-539c) — `gh pr create` 403 this turn.
+**Not merged:** [#3183](https://github.com/digithings-ai/digithings/pull/3183) pages promote draft — leave draft until human asks. [#3188](https://github.com/digithings-ai/digithings/pull/3188) audit v13 — merge in flight.
 
 ---
 
@@ -219,6 +239,8 @@ Prior on develop (unchanged): #3141 promotion, #3161 notifications, #3177 schema
 | #3184 NotifyTab hydrate | **yes** | `reviewed:agent` + in-session-review comment |
 | #3185 settings hydrate land note | **yes** | Hatched on GitHub (reconfirmed) |
 | #3186 audit v12 refresh | **no** | Body queued: `pr-3186-review.md` |
+| #3187 profile GET hydrate | **no** | Hatch 403 this agent — parent posts findings + `reviewed:agent` |
+| #3188 audit v13 | **no** | Hatch 403 this agent — parent posts findings + `reviewed:agent` |
 | #3156 WP delivery docs | `needs-human-review` only | Not a coverage hatch |
 
 **Parent-only:** post queued `<!-- in-session-review -->` comments + `reviewed:agent` (token 403 for this agent). Do **not** fake Bugbot. Leave #3183 draft.
@@ -231,7 +253,7 @@ Open develop drafts (#3149 settings tier gate, coverage/bugfix drafts, etc.) sim
 
 | Function | Version | Notes |
 |----------|---------|-------|
-| `settings` | **v12** | Thin GitHub-raw pin → `732a77d0` (#3184 GET `/notifications`). Full 9-file bundle staged; CLI/secrets need `sbp_`. Smoke: `settings-v12-smoke.log`. |
+| `settings` | **v13** | Thin GitHub-raw pin → `17a84b30` (#3187 GET `/profile` + #3184 GET `/notifications`). Full 9-file bundle staged; CLI/secrets need `sbp_`. Smoke: `settings-v13-smoke.log`. |
 | `stripe-webhook` | v3 | Awaits Stripe secrets |
 | `create-checkout-session` | v1 | Awaits Stripe secrets |
 | `customer-portal` | v3 | Awaits Stripe secrets |
