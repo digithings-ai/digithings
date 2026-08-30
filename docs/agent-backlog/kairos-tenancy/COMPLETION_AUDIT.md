@@ -2,6 +2,36 @@
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
+## Follow-up turn (`sbp_` reconfirm + GitHub Auth + docs branch)
+
+Agent run: reconfirm `sbp_` Management API secrets list; enable **GitHub** Auth on `core`; set site URL + Olympus redirect allow-list; skip Google/Mailgun/Stripe/Alpaca (captcha or empty). Docs on `cursor/cursor-cloud-agent-secrets-status-c8be`. Settings EF **v18** ACTIVE. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | `sbp_` still works | **PASS** | `GET /v1/projects/{core}/secrets` → 12 names; token prefix `sbp_` |
+| 2 | Auth providers Google+GitHub | **PARTIAL** | GitHub **Enabled** (OAuth App `digiquant olympus` / id 3826274). Google **Disabled** (skipped captcha). Site URL `https://digiquant.io`; uri allow-list includes `/olympus/auth/callback/`. |
+| 3 | Mailgun EF + smoke | **SKIPPED** | `MAILGUN_API_KEY` empty; MCP `get-v4-domains` auth fail |
+| 4 | Stripe / Alpaca | **BLOCKED** | No API/OAuth keys; signup notes only; captcha walls |
+| 5 | Docs / WAITING | **PASS** | EPIC / HUMAN-UNBLOCK / DEPLOYMENT / COMPLETION_AUDIT / `WAITING-ON-SECRETS.json` on secrets-status branch |
+| 6 | `request-environment-setup-actions` | **PASS** | Remind paste PAT as **cursor cloud agent** + remaining Stripe/Mailgun/Alpaca/Google |
+| 7 | #3183 / goal | **LEAVE DRAFT / FAIL complete** | No merge; no UpdateGoal complete |
+
+### EF secret **names** on `core` (values never logged)
+
+`APP_URL`, `DIGIQUANT_VAULT_KEY_ID`, `DIGIQUANT_VAULT_MASTER_KEY`, `FINNHUB_API_KEY`, `NEXT_PUBLIC_APP_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_DB_URL`, `SUPABASE_JWKS`, `SUPABASE_PUBLISHABLE_KEYS`, `SUPABASE_SECRET_KEYS`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_URL`
+
+### Docs compare (parent if PR 403)
+
+```text
+https://github.com/digithings-ai/digithings/compare/develop...cursor/cursor-cloud-agent-secrets-status-c8be
+```
+
+---
+
+## Prior audit trail (historical)
+
+**Verdict: NOT COMPLETE** — do not UpdateGoal complete.
+
 Agent run (this turn): secret rescan (no unlocks) + audit for settings **v14** / [#3196](https://github.com/digithings-ai/digithings/pull/3196) + refresh draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) tip to `origin/develop`.  
 Develop tip at branch cut: `baa7766d` (#3198 digichat promote after #3196). Settings EF on `core`: **v14** ACTIVE (thin pin → `5b526914`). Still no `sbp_` / no new vendor secrets. No captcha.  
 Human unblock (in-repo): [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md). Artifact mirror: `/opt/cursor/artifacts/kairos-HUMAN-UNBLOCK.md`.
