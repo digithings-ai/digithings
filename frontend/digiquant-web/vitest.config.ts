@@ -6,12 +6,6 @@ export default defineConfig({
     environment: "node",
     include: ["components/**/*.test.ts", "components/**/*.test.tsx", "lib/**/*.test.ts"],
   },
-  oxc: {
-    jsx: {
-      runtime: "automatic",
-      importSource: "react",
-    },
-  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "."),

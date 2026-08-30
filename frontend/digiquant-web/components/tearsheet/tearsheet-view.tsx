@@ -683,7 +683,6 @@ export function TearsheetView({ slug }: { slug: string }) {
             </div>
           </div>
           {showTradeKpis ? (
-          {showTradeKpis ? (
             <div className="ts-tab-pane" hidden={chartTab !== "pnl"}>
               <PrintHeading>Per-trade return</PrintHeading>
               <div className="ts-chart">
