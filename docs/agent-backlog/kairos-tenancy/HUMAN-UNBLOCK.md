@@ -1,15 +1,19 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30 staging-gap) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + live vault seal unlocked. Product misconfig codes + loud-fail staging harness landed. Still need Stripe/Mailgun/Google/Alpaca for staging E2E (checkout = `PRICE_NOT_CONFIGURED`). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30 live-retry) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + live vault seal + free-tier `TIER_FORBIDDEN` + notify prefs→Agentmail unlocked. Notify CLI loud-fails `MAILGUN_NOT_CONFIGURED`. Still need Stripe/Mailgun/Google/Alpaca for staging E2E (checkout = `PRICE_NOT_CONFIGURED`). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
-Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-staging-gap.md`  
+Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-live-retry.md`  
 Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
-Branch: `cursor/kairos-staging-gap-2ec1`  
-Compare: https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-staging-gap-2ec1
+Branch: `cursor/kairos-live-retry-3d52`  
+Compare: https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-live-retry-3d52
 
-Loud-fail gate (after paste): `PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py`
+Loud-fail gates (after paste):
+```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
+```
 
 ---
 
@@ -40,7 +44,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 ## 0b) Workspace bootstrap — RESOLVED
 
-mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200**. Personal workspace exists (`plan_tier=free` by default). Ops may elevate to `custom` for vault probes until Stripe prices land (document clearly — **not** Stripe-sourced).
+mig **107** + settings `ensureCallerWorkspace` — Agentmail JWT settings **200**. Personal workspace exists. Ops may elevate to `custom` for vault/overlay probes until Stripe prices land (document clearly — **not** Stripe-sourced). Live-retry left workspace at `custom` after proving free→`TIER_FORBIDDEN`. Notification prefs point at Agentmail inbox for digest when Mailgun lands.
 
 ---
 

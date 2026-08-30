@@ -151,3 +151,59 @@ def test_suppression_before_claim_allows_retry() -> None:
     dispatch_workspace(sb, client, cfg, pref, d, hour_utc=12, force_digest=True)
     assert len(client.sent) == 1
     assert len(sb.tables["notification_log"]) == 1
+
+
+def test_missing_mailgun_env_names_empty_and_sentinel(monkeypatch: pytest.MonkeyPatch) -> None:
+    from digiquant.notify.mailgun import MAILGUN_NOT_CONFIGURED, missing_mailgun_env_names
+
+    monkeypatch.delenv("MAILGUN_API_KEY", raising=False)
+    monkeypatch.delenv("MAILGUN_DOMAIN", raising=False)
+    monkeypatch.delenv("NOTIFY_FROM", raising=False)
+    missing = missing_mailgun_env_names({})
+    assert missing == ["MAILGUN_API_KEY", "MAILGUN_DOMAIN", "NOTIFY_FROM"]
+
+    monkeypatch.setenv("MAILGUN_API_KEY", "EMPTY")
+    monkeypatch.setenv("MAILGUN_DOMAIN", "mg.example.com")
+    monkeypatch.setenv("NOTIFY_FROM", "n@example.com")
+    assert missing_mailgun_env_names() == ["MAILGUN_API_KEY"]
+
+    from digiquant.notify.mailgun import MailgunNotConfiguredError, format_mailgun_not_configured
+
+    msg = format_mailgun_not_configured(["MAILGUN_API_KEY"])
+    assert MAILGUN_NOT_CONFIGURED in msg
+    assert "MAILGUN_API_KEY" in msg
+    with pytest.raises(MailgunNotConfiguredError) as ei:
+        from digiquant.notify.mailgun import MailgunConfig
+
+        MailgunConfig.require_from_env()
+    assert ei.value.code == MAILGUN_NOT_CONFIGURED
+    assert "MAILGUN_API_KEY" in ei.value.missing
+
+
+def test_cli_require_mailgun_exits_2(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from digiquant.notify import dispatch as dispatch_mod
+    from digiquant.notify.mailgun import MAILGUN_NOT_CONFIGURED
+
+    monkeypatch.delenv("MAILGUN_API_KEY", raising=False)
+    monkeypatch.delenv("MAILGUN_DOMAIN", raising=False)
+    monkeypatch.delenv("NOTIFY_FROM", raising=False)
+    code = dispatch_mod.main(["--require-mailgun"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert MAILGUN_NOT_CONFIGURED in err
+    assert "MAILGUN_API_KEY" in err
+
+
+def test_cli_require_mailgun_ok_when_present(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from digiquant.notify import dispatch as dispatch_mod
+
+    monkeypatch.setenv("MAILGUN_API_KEY", "key-test")
+    monkeypatch.setenv("MAILGUN_DOMAIN", "mg.example.com")
+    monkeypatch.setenv("NOTIFY_FROM", "n@example.com")
+    code = dispatch_mod.main(["--check"])
+    assert code == 0
+    assert "Mailgun env present" in capsys.readouterr().out

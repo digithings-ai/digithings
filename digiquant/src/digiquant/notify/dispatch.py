@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import argparse
 import logging
+import sys
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -25,8 +27,11 @@ from digiquant.notify.events import (
 from digiquant.notify.mailgun import (
     MailgunClientProtocol,
     MailgunConfig,
+    MailgunNotConfiguredError,
     MailgunTransportError,
     build_mailgun_client,
+    format_mailgun_not_configured,
+    missing_mailgun_env_names,
 )
 
 logger = logging.getLogger(__name__)
@@ -314,13 +319,27 @@ def _dispatch_notifications_inner(
     if sb is None:
         logger.warning("notify: supabase credentials missing — skip dispatch")
         return
+    missing = missing_mailgun_env_names()
+    if missing:
+        # Named code in logs so ops/agents never confuse silent skip with success.
+        logger.warning(
+            "notify: %s — skip dispatch (fail-soft for cron/post-run)",
+            format_mailgun_not_configured(missing),
+        )
+        return
     mailgun_config = MailgunConfig.from_env()
     if mailgun_config is None:
-        logger.warning("notify: mailgun env incomplete — skip dispatch")
+        logger.warning(
+            "notify: %s — skip dispatch",
+            format_mailgun_not_configured(list(missing_mailgun_env_names())),
+        )
         return
     client = build_mailgun_client()
     if client is None:
-        logger.warning("notify: mailgun client unavailable — skip dispatch")
+        logger.warning(
+            "notify: %s — client unavailable, skip dispatch",
+            format_mailgun_not_configured(list(missing_mailgun_env_names())),
+        )
         return
 
     effective_date = run_date or datetime.now(UTC).date()
@@ -337,11 +356,43 @@ def _dispatch_notifications_inner(
     )
 
 
-def main() -> None:
-    """CLI entry: ``python -m digiquant.notify.dispatch`` (cron hour-gate path)."""
+def main(argv: list[str] | None = None) -> int:
+    """CLI entry: ``python -m digiquant.notify.dispatch``.
+
+    Default (cron): hour-gated dispatch; Mailgun gaps are fail-soft inside
+    :func:`dispatch_notifications`.
+
+    ``--require-mailgun`` / ``--check``: loud-fail with exit **2** and code
+    ``MAILGUN_NOT_CONFIGURED`` listing missing env *names* (no values). Use for
+    staging probes and agent gates — never silent green when vendor keys empty.
+    """
+    parser = argparse.ArgumentParser(prog="digiquant.notify.dispatch")
+    parser.add_argument(
+        "--require-mailgun",
+        "--check",
+        dest="require_mailgun",
+        action="store_true",
+        help="Exit 2 with MAILGUN_NOT_CONFIGURED when Mailgun env incomplete",
+    )
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO)
+
+    if args.require_mailgun:
+        missing = missing_mailgun_env_names()
+        if missing:
+            print(format_mailgun_not_configured(missing), file=sys.stderr)
+            return 2
+        try:
+            MailgunConfig.require_from_env()
+        except MailgunNotConfiguredError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        print("notify: Mailgun env present (names only check; send not attempted)")
+        return 0
+
     dispatch_notifications(hour_utc=datetime.now(UTC).hour)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -260,6 +260,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | PR [#3187](https://github.com/digithings-ai/digithings/pull/3187) | **Merged** to `develop` (2026-08-30; tip `17a84b30`) | GET `/profile` + ProfileTab hydrate; settings EF **v13** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3196](https://github.com/digithings-ai/digithings/pull/3196) | **Merged** to `develop` (2026-08-30; tip `5b526914`) | Settings entitlement prefers `workspaces.plan_tier` (no JWT fail-open); settings EF **v14** thin pin; smoke 401. No `sbp_` / no EF secrets. |
 | Agent unlock (2026-08-30) | **Partial** — `sbp_` + vault/APP_URL + settings **v22** + checkout **v5** + GitHub Auth + Agentmail + bootstrap (mig 107) + loud-fail `scripts/kairos_staging_e2e.py`; JWT settings **200**; uuid-bind [#3225](https://github.com/digithings-ai/digithings/pull/3225) merged | Waiting `PARTIAL_UNLOCK`. Checkout `PRICE_NOT_CONFIGURED`. Vendors still empty. #3183 left draft. |
+| Live-retry (2026-08-30) | **Partial** — re-scan 0 vendor EF secrets; free→`TIER_FORBIDDEN`→ops custom; vault seal; notify prefs→Agentmail; `MAILGUN_NOT_CONFIGURED` CLI; overlay/router 45 unit; local Olympus Auth+GitHub OAuth UI | Staging E2E still blocked. Branch `cursor/kairos-live-retry-3d52`. Audit `/opt/cursor/artifacts/kairos-completion-audit-live-retry.md`. |
 | PR [#3183](https://github.com/digithings-ai/digithings/pull/3183) | **Draft** promote `develop`→`main` | **Do not merge** until secrets live **and** intentional Pages cutover. |
 ---
 
