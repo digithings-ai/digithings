@@ -231,8 +231,7 @@ export function PipelineScene() {
   }, []);
 
   return (
-    <section className="dq-olympus" id="desk">
-      <span id="olympus" className="sr-only" aria-hidden="true" />
+    <section className="dq-desk" id="desk">
       <div className="dqp-scrolly" ref={scrollyRef}>
         <div className="dqp-pin">
           <div className="dqp-logo-bg" aria-hidden="true" ref={logoBgRef}>
@@ -240,7 +239,7 @@ export function PipelineScene() {
           </div>
           <div className="wrap">
           <div className="dqp-scene-head">
-            <div className="dqp-olympus">
+            <div className="dqp-desk">
               <DigiquantMark size={22} />
               <span>digiquant · research → portfolio</span>
             </div>

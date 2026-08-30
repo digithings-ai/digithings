@@ -134,8 +134,8 @@ describe('isBffSnapshotEnabled', () => {
     process.env = env;
   });
 
-  it('is true when NEXT_PUBLIC_OLYMPUS_USE_BFF=1', () => {
-    process.env = { ...env, NEXT_PUBLIC_OLYMPUS_USE_BFF: '1' };
+  it('is true when NEXT_PUBLIC_DASHBOARD_USE_BFF=1', () => {
+    process.env = { ...env, NEXT_PUBLIC_DASHBOARD_USE_BFF: '1' };
     expect(isBffSnapshotEnabled()).toBe(true);
   });
 });
@@ -148,7 +148,7 @@ describe('fetchLatestSnapshot BFF path', () => {
   });
 
   it('uses /api/snapshots when BFF flag is on', async () => {
-    process.env = { ...env, NEXT_PUBLIC_OLYMPUS_USE_BFF: '1' };
+    process.env = { ...env, NEXT_PUBLIC_DASHBOARD_USE_BFF: '1' };
     const today = NOW.toISOString().slice(0, 10);
     const row = fixtureSnapshotRow();
     row.date = today;
@@ -165,7 +165,7 @@ describe('fetchLatestSnapshot BFF path', () => {
   });
 
   it('returns unconfigured when BFF responds 404', async () => {
-    process.env = { ...env, NEXT_PUBLIC_OLYMPUS_USE_BFF: '1' };
+    process.env = { ...env, NEXT_PUBLIC_DASHBOARD_USE_BFF: '1' };
     const bffFetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 404,

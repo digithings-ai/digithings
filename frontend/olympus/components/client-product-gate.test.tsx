@@ -18,7 +18,7 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('@/lib/supabase', () => ({
-  isOlympusAuthEnabled: () => authEnabled.value,
+  isDashboardAuthEnabled: () => authEnabled.value,
 }));
 
 vi.mock('@/lib/use-entitlement', () => ({

@@ -145,9 +145,9 @@ describe('tierFromSession', () => {
     vi.resetModules();
   });
 
-  it('returns enterprise when NEXT_PUBLIC_OLYMPUS_AUTH is off (prod pre-cutover)', async () => {
+  it('returns enterprise when NEXT_PUBLIC_DASHBOARD_AUTH is off (prod pre-cutover)', async () => {
     vi.resetModules();
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '');
     const { tierFromSession: tier } = await import('./entitlements');
     expect(tier(null)).toBe('enterprise');
     expect(tier(sessionWithTier('free'))).toBe('enterprise');
@@ -155,7 +155,7 @@ describe('tierFromSession', () => {
 
   it('reads app_metadata.plan_tier when auth is on', async () => {
     vi.resetModules();
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '1');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '1');
     const { tierFromSession: tier } = await import('./entitlements');
     expect(tier(sessionWithTier('baseline'))).toBe('baseline');
     expect(tier(sessionWithTier('custom'))).toBe('custom');
@@ -165,7 +165,7 @@ describe('tierFromSession', () => {
 
   it('falls back to free when auth is on and claim is missing or unknown', async () => {
     vi.resetModules();
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '1');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '1');
     const { tierFromSession: tier } = await import('./entitlements');
     expect(tier(null)).toBe('free');
     expect(tier(sessionWithTier(undefined))).toBe('free');
@@ -250,7 +250,7 @@ describe('access / creator / fx_hub', () => {
 
   it('elevates creator session to custom + fx_hub without Stripe claim', async () => {
     vi.resetModules();
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '1');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '1');
     const session = sessionWithTier('free', 'chris.stefan@proton.me');
     const snap = resolveClientAccess({ session, rpc: null });
     expect(snap.effectivePlanTier).toBe('custom');
@@ -259,7 +259,7 @@ describe('access / creator / fx_hub', () => {
 
   it('keeps non-creator free without product grants', async () => {
     vi.resetModules();
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '1');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '1');
     const session = sessionWithTier('free', 'stranger@example.com');
     const snap = resolveClientAccess({ session, rpc: null });
     expect(snap.effectivePlanTier).toBe('free');
@@ -267,7 +267,7 @@ describe('access / creator / fx_hub', () => {
   });
 
   it('prefers my_access RPC payload over env', () => {
-    vi.stubEnv('NEXT_PUBLIC_OLYMPUS_AUTH', '1');
+    vi.stubEnv('NEXT_PUBLIC_DASHBOARD_AUTH', '1');
     const session = sessionWithTier('free', 'client@12x.example');
     const snap = resolveClientAccess({
       session,

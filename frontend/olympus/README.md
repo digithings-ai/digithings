@@ -77,7 +77,7 @@ background:
 `app/layout.tsx` renders a thin monospaced header strip (`.qn-page-chrome`)
 at the top of `<main>` with route crumbs on the left and an `Open digiquant.io`
 link plus version/env label on the right. The version label reads
-`process.env.NEXT_PUBLIC_OLYMPUS_VERSION` and falls back to `v0.1 · dev`.
+`process.env.NEXT_PUBLIC_DASHBOARD_VERSION` and falls back to `v0.1 · dev`.
 
 **House identity (#2643 / #1945 Track C):** Brief and Portfolio surfaces show a
 compact digithings house ETF paper book banner linking to `/house` —
@@ -183,7 +183,7 @@ The dashboard reads portfolio and research data from the shared research Supabas
 row-level security. Anon `anon_read` on Group A book tables (`positions`,
 `position_events`, `nav_history`, `portfolio_metrics`) is house-UUID only
 (migration 110). Authenticated members can also SELECT their own overlay book
-(migration 109), so olympus Group A readers always go through `houseBook()` in
+(migration 109), so dashboard Group A readers always go through `houseBook()` in
 `lib/house-workspace.ts` — date-only filters would mix overlay weights into the
 public house Brief / Holdings / Performance surfaces. Shared teasers without
 `workspace_id` (`daily_snapshots`, `theses`, `instruments`) stay date-only.
@@ -194,7 +194,7 @@ are not exposed to the browser. A production hardening path is a BFF with
 service-role credentials and restrictive RLS; that is tracked under audit REM-035/036
 and requires human product/security sign-off before changing live policies.
 
-**REM-036 (optional BFF):** set `NEXT_PUBLIC_OLYMPUS_USE_BFF=1` and host the dashboard on a
+**REM-036 (optional BFF):** set `NEXT_PUBLIC_DASHBOARD_USE_BFF=1` and host the dashboard on a
 Node runtime with `GET /api/snapshots` (service-role read). Static export on
 digiquant.io cannot ship App Router API routes — `lib/snapshot-fetch.ts` keeps the
 anon path as default. See `docs/reviews/REM-deferred-ops.md`.
@@ -207,8 +207,7 @@ comes from Supabase (`daily_snapshots`), not a static JSON artifact in git.
 which `scripts/build-digiquant.sh` copies to the **dist root** — Cloudflare Pages
 ignores `_headers` files below the output root, so a copy under `dist/dashboard/`
 would never apply in production (#674).
-The dashboard CSP is scoped to `/dashboard*` (and `/olympus*` while 308s still
-land there); landing pages keep Google Fonts working.
+The dashboard CSP is scoped to `/dashboard*`; landing pages keep Google Fonts working.
 Its `connect-src` permits Supabase reads over HTTPS and Realtime subscriptions over
 secure WebSockets (`wss://*.supabase.co`).
 Constants live in `lib/security-headers.mjs` (Vitest-covered, asserts alignment).
@@ -278,8 +277,8 @@ Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase project URL. Used by every client-side reader, including `lib/snapshot-fetch.ts`.               |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase anon key. The frontend reads `daily_snapshots` under the `anon_read` RLS policy (migration 011). |
-| `NEXT_PUBLIC_DASHBOARD_AUTH`      | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. `NEXT_PUBLIC_OLYMPUS_AUTH` is a one-release alias. |
-| `NEXT_PUBLIC_OLYMPUS_VERSION`     | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
+| `NEXT_PUBLIC_DASHBOARD_AUTH`      | Optional. Set to `1` to enable Supabase Auth login (Google/GitHub PKCE). Default off = today's anon path. |
+| `NEXT_PUBLIC_DASHBOARD_VERSION`   | Optional. Shown in the page-chrome version label (defaults to `v0.1 · dev`).                              |
 | `NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID` | Optional fallback public Alpaca OAuth client id. Brokers tab prefers `GET /settings/app-urls` (EF `ALPACA_OAUTH_CLIENT_ID`; never the secret). |
 | `NEXT_PUBLIC_SUPABASE_FUNCTIONS_URL` | Optional Functions base; defaults to `$NEXT_PUBLIC_SUPABASE_URL/functions/v1`.                       |
 | `NEXT_PUBLIC_STRIPE_BILLING_ENABLED` | Set `0` to force Billing "not configured"; otherwise inferred from Supabase URL.                     |

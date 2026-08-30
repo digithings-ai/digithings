@@ -7,13 +7,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { DigiquantMark, OlympusMark, Wordmark } from "./marks";
+import { DigiquantMark, Wordmark } from "./marks";
 
 describe("DigiquantMark", () => {
-  it("emits the default olympus-stroke hooks and stays decorative", () => {
+  it("emits the default dq-stroke hooks and stays decorative", () => {
     const html = renderToStaticMarkup(<DigiquantMark />);
-    expect(html).toContain("olympus-mark");
-    for (const n of [1, 2, 3, 4]) expect(html).toContain(`olympus-stroke-${n}`);
+    expect(html).toContain("dq-mark");
+    for (const n of [1, 2, 3, 4]) expect(html).toContain(`dq-stroke-${n}`);
     expect(html).toContain('aria-hidden="true"');
     expect(html).toContain('width="22"');
   });
@@ -32,10 +32,6 @@ describe("DigiquantMark", () => {
     expect(html).toContain("<title>digiquant</title>");
     expect(html).toContain('role="img"');
     expect(html).not.toContain("aria-hidden");
-  });
-
-  it("keeps OlympusMark as a one-release alias", () => {
-    expect(OlympusMark).toBe(DigiquantMark);
   });
 });
 

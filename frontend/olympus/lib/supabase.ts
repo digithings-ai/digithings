@@ -9,11 +9,8 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
  * behavior (Cloudflare Access remains the edge gate until cutover).
  * Inlined at build time — static export has no runtime env.
  */
-export function isOlympusAuthEnabled(): boolean {
-  return (
-    process.env.NEXT_PUBLIC_DASHBOARD_AUTH === '1' ||
-    process.env.NEXT_PUBLIC_OLYMPUS_AUTH === '1'
-  );
+export function isDashboardAuthEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_DASHBOARD_AUTH === '1';
 }
 
 const FALLBACK_DASHBOARD_BASE_PATH = '/dashboard';
@@ -23,16 +20,10 @@ const FALLBACK_DASHBOARD_BASE_PATH = '/dashboard';
  * as `basePath: '/dashboard'`). Hard fallback keeps OAuth correct if env is missing.
  */
 export function dashboardBasePath(): string {
-  const raw =
-    process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH ||
-    process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ||
-    FALLBACK_DASHBOARD_BASE_PATH;
+  const raw = process.env.NEXT_PUBLIC_DASHBOARD_BASE_PATH || FALLBACK_DASHBOARD_BASE_PATH;
   const trimmed = raw.replace(/\/+$/, '');
   return trimmed || FALLBACK_DASHBOARD_BASE_PATH;
 }
-
-/** @deprecated Use dashboardBasePath. */
-export const olympusBasePath = dashboardBasePath;
 
 /**
  * Build the browser Supabase client.
@@ -43,7 +34,7 @@ export const olympusBasePath = dashboardBasePath;
 export function buildSupabaseClient(
   url: string,
   key: string,
-  authEnabled: boolean = isOlympusAuthEnabled(),
+  authEnabled: boolean = isDashboardAuthEnabled(),
 ): SupabaseClient<Database> {
   if (authEnabled) {
     return createClient<Database>(url, key, {
@@ -62,7 +53,7 @@ export function buildSupabaseClient(
 
 export const supabase: SupabaseClient<Database> | null =
   supabaseUrl && supabaseAnonKey
-    ? buildSupabaseClient(supabaseUrl, supabaseAnonKey, isOlympusAuthEnabled())
+    ? buildSupabaseClient(supabaseUrl, supabaseAnonKey, isDashboardAuthEnabled())
     : null;
 
 /**

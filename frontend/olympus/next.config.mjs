@@ -10,8 +10,6 @@ const nextConfig = {
   // Used by oauthRedirectTo() so PKCE redirect_to matches AUTH.md allow-list.
   env: {
     NEXT_PUBLIC_DASHBOARD_BASE_PATH: dashboardBasePath,
-    // One-release alias — Cloudflare Pages may still inject the old name.
-    NEXT_PUBLIC_OLYMPUS_BASE_PATH: dashboardBasePath,
   },
   // @digithings/web ships TypeScript sources (exports "." → src/index.ts) —
   // Next must compile them (same wiring as digithings-web / digiquant-web).

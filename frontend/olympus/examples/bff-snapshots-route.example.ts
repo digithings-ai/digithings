@@ -3,7 +3,7 @@
  * Copy to `app/api/snapshots/route.ts` when deploying Olympus on a Node runtime.
  *
  * Requires: OLYMPUS_SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL
- * Enable client: NEXT_PUBLIC_OLYMPUS_USE_BFF=1
+ * Enable client: NEXT_PUBLIC_DASHBOARD_USE_BFF=1
  */
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";

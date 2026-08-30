@@ -1,5 +1,5 @@
 /**
- * Olympus plan-tier → artifact-class entitlement map (Kairos tenancy T5).
+ * Dashboard plan-tier → artifact-class entitlement map (Kairos tenancy T5).
  *
  * Spec §5-T5 matrix is the single source of truth — pin it in entitlements.test.ts.
  * Product addendum (2026-08-30): free = teaser only (`digest_summary` +
@@ -12,7 +12,7 @@
  */
 
 import type { Session } from '@supabase/supabase-js';
-import { isOlympusAuthEnabled } from './supabase';
+import { isDashboardAuthEnabled } from './supabase';
 
 /** String-match `workspaces.plan_tier` DB enum. */
 export type PlanTier = 'free' | 'baseline' | 'custom' | 'enterprise';
@@ -98,7 +98,7 @@ export function can(tier: PlanTier, artifactClass: ArtifactClass): boolean {
 /**
  * Resolve plan tier from a Supabase session.
  *
- * Flag coupling (pre-cutover): when `isOlympusAuthEnabled()` is off, return
+ * Flag coupling (pre-cutover): when `isDashboardAuthEnabled()` is off, return
  * `enterprise` so today's operator UI stays fully visible and T5 can merge
  * before the auth cutover.
  *
@@ -107,7 +107,7 @@ export function can(tier: PlanTier, artifactClass: ArtifactClass): boolean {
  * when the access snapshot has loaded — JWT claim alone misses creator grants.
  */
 export function tierFromSession(session: Session | null | undefined): PlanTier {
-  if (!isOlympusAuthEnabled()) return 'enterprise';
+  if (!isDashboardAuthEnabled()) return 'enterprise';
   const raw = session?.user?.app_metadata?.plan_tier;
   if (isPlanTier(raw)) return raw;
   return 'free';

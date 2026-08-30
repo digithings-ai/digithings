@@ -1,5 +1,5 @@
 /**
- * Honest Auth copy for Olympus login + signup.
+ * Honest Auth copy for dashboard login + signup.
  *
  * Email confirmation uses Supabase Auth SMTP (or Cloudflare Access PIN on
  * staging). Neither is Mailgun digest. Until custom Auth SMTP is wired, the

@@ -127,7 +127,7 @@ export default function SidebarSettings({ sidebarCollapsed }: { sidebarCollapsed
           lastRunDate={meta?.last_updated ?? null}
           lastRunAt={meta?.last_run_at ?? null}
           runType={meta?.latest_snapshot_run_type ?? null}
-          version={process.env.NEXT_PUBLIC_OLYMPUS_VERSION ?? 'v0.1 · dev'}
+          version={process.env.NEXT_PUBLIC_DASHBOARD_VERSION ?? 'v0.1 · dev'}
           dataSourceHost={dataSourceHost()}
           onOpenPalette={() => {
             setOpen(false);

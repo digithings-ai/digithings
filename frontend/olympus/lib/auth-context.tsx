@@ -12,7 +12,7 @@ import {
 import type { Session, User } from '@supabase/supabase-js';
 import {
   getSupabaseClient,
-  isOlympusAuthEnabled,
+  isDashboardAuthEnabled,
   oauthRedirectTo,
   oauthSignInOptions,
   type OAuthProvider,
@@ -22,7 +22,7 @@ import { formatAuthError, isDuplicateSignupUser } from './auth-errors';
 export type { OAuthProvider };
 
 export interface AuthContextValue {
-  /** True when NEXT_PUBLIC_DASHBOARD_AUTH=1 (or OLYMPUS_AUTH alias) at build time. */
+  /** True when NEXT_PUBLIC_DASHBOARD_AUTH=1 at build time. */
   authEnabled: boolean;
   session: Session | null;
   user: User | null;
@@ -51,7 +51,7 @@ function missingClient(): Error {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const authEnabled = isOlympusAuthEnabled();
+  const authEnabled = isDashboardAuthEnabled();
   const [session, setSession] = useState<Session | null>(null);
   // Start false so static prerender never collapses to a loading screen.
   const [loading, setLoading] = useState(false);

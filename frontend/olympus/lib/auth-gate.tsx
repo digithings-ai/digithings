@@ -16,27 +16,23 @@ const AUTH_PATHS_WITH_BASE = new Set([
   '/dashboard/login',
   '/dashboard/signup',
   '/dashboard/auth/callback',
-  '/olympus/login',
-  '/olympus/signup',
-  '/olympus/auth/callback',
 ]);
 
 /**
  * Paths that complete or start OAuth without a session (no dashboard chrome).
  * Exact match only — `/settings/login` must NOT bypass.
  */
-export function isOlympusAuthPath(pathname: string | null): boolean {
+export function isDashboardAuthPath(pathname: string | null): boolean {
   const norm = (pathname ?? '').replace(/\/+$/, '') || '/';
   return AUTH_PATHS.has(norm) || AUTH_PATHS_WITH_BASE.has(norm);
 }
 
 /** PKCE callback only — must run even when a session already exists. */
-export function isOlympusAuthCallbackPath(pathname: string | null): boolean {
+export function isDashboardAuthCallbackPath(pathname: string | null): boolean {
   const norm = (pathname ?? '').replace(/\/+$/, '') || '/';
   return (
     norm === '/auth/callback' ||
-    norm === '/dashboard/auth/callback' ||
-    norm === '/olympus/auth/callback'
+    norm === '/dashboard/auth/callback'
   );
 }
 
@@ -95,11 +91,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <AppProviders>{children}</AppProviders>;
   }
 
-  if (isOlympusAuthCallbackPath(pathname)) {
+  if (isDashboardAuthCallbackPath(pathname)) {
     return <>{children}</>;
   }
 
-  if (isOlympusAuthPath(pathname)) {
+  if (isDashboardAuthPath(pathname)) {
     if (mounted && !loading && session) {
       return <SignedInAuthPathRedirect />;
     }

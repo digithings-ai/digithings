@@ -1,5 +1,5 @@
 /**
- * House-book workspace identity for olympus dashboard Group A reads.
+ * House-book workspace identity for dashboard Group A reads.
  *
  * Matches Python `house_workspace_id()` (uuid5 tenancy namespace + slug `house`)
  * and the migration 096/110 seed. The UUID is public — it is a book selector,

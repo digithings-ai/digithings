@@ -66,47 +66,47 @@ vi.mock('@/components/login-screen', () => ({
 
 vi.mock('@/components/atlas-mark', () => ({ DashboardMark: () => null, AtlasMark: () => null }));
 
-import { AuthGate, isOlympusAuthCallbackPath, isOlympusAuthPath } from './auth-gate';
+import { AuthGate, isDashboardAuthCallbackPath, isDashboardAuthPath } from './auth-gate';
 
 function renderGate(child = 'protected-child'): string {
   return renderToStaticMarkup(createElement(AuthGate, null, child));
 }
 
-describe('isOlympusAuthPath', () => {
+describe('isDashboardAuthPath', () => {
   it('allows exact login, signup, and callback paths (with/without trailing slash)', () => {
-    expect(isOlympusAuthPath('/login')).toBe(true);
-    expect(isOlympusAuthPath('/login/')).toBe(true);
-    expect(isOlympusAuthPath('/signup')).toBe(true);
-    expect(isOlympusAuthPath('/signup/')).toBe(true);
-    expect(isOlympusAuthPath('/auth/callback')).toBe(true);
-    expect(isOlympusAuthPath('/auth/callback/')).toBe(true);
+    expect(isDashboardAuthPath('/login')).toBe(true);
+    expect(isDashboardAuthPath('/login/')).toBe(true);
+    expect(isDashboardAuthPath('/signup')).toBe(true);
+    expect(isDashboardAuthPath('/signup/')).toBe(true);
+    expect(isDashboardAuthPath('/auth/callback')).toBe(true);
+    expect(isDashboardAuthPath('/auth/callback/')).toBe(true);
   });
 
   it('identifies only the PKCE callback as the exchange route', () => {
-    expect(isOlympusAuthCallbackPath('/auth/callback')).toBe(true);
-    expect(isOlympusAuthCallbackPath('/auth/callback/')).toBe(true);
-    expect(isOlympusAuthCallbackPath('/dashboard/auth/callback')).toBe(true);
-    expect(isOlympusAuthCallbackPath('/olympus/auth/callback')).toBe(true);
-    expect(isOlympusAuthCallbackPath('/login')).toBe(false);
-    expect(isOlympusAuthCallbackPath('/signup')).toBe(false);
+    expect(isDashboardAuthCallbackPath('/auth/callback')).toBe(true);
+    expect(isDashboardAuthCallbackPath('/auth/callback/')).toBe(true);
+    expect(isDashboardAuthCallbackPath('/dashboard/auth/callback')).toBe(true);
+    expect(isDashboardAuthCallbackPath('/olympus/auth/callback')).toBe(false);
+    expect(isDashboardAuthCallbackPath('/login')).toBe(false);
+    expect(isDashboardAuthCallbackPath('/signup')).toBe(false);
   });
 
-  it('allows basePath-prefixed exact forms', () => {
-    expect(isOlympusAuthPath('/dashboard/login')).toBe(true);
-    expect(isOlympusAuthPath('/dashboard/signup')).toBe(true);
-    expect(isOlympusAuthPath('/dashboard/auth/callback/')).toBe(true);
-    expect(isOlympusAuthPath('/olympus/login')).toBe(true);
-    expect(isOlympusAuthPath('/olympus/signup')).toBe(true);
-    expect(isOlympusAuthPath('/olympus/auth/callback/')).toBe(true);
+  it('allows basePath-prefixed exact forms and rejects the retired /olympus prefix', () => {
+    expect(isDashboardAuthPath('/dashboard/login')).toBe(true);
+    expect(isDashboardAuthPath('/dashboard/signup')).toBe(true);
+    expect(isDashboardAuthPath('/dashboard/auth/callback/')).toBe(true);
+    expect(isDashboardAuthPath('/olympus/login')).toBe(false);
+    expect(isDashboardAuthPath('/olympus/signup')).toBe(false);
+    expect(isDashboardAuthPath('/olympus/auth/callback/')).toBe(false);
   });
 
   it('rejects lookalike paths that previously bypassed via endsWith', () => {
-    expect(isOlympusAuthPath('/settings/login')).toBe(false);
-    expect(isOlympusAuthPath('/anything/login/')).toBe(false);
-    expect(isOlympusAuthPath('/foo/auth/callback')).toBe(false);
-    expect(isOlympusAuthPath('/')).toBe(false);
-    expect(isOlympusAuthPath('/portfolio')).toBe(false);
-    expect(isOlympusAuthPath(null)).toBe(false);
+    expect(isDashboardAuthPath('/settings/login')).toBe(false);
+    expect(isDashboardAuthPath('/anything/login/')).toBe(false);
+    expect(isDashboardAuthPath('/foo/auth/callback')).toBe(false);
+    expect(isDashboardAuthPath('/')).toBe(false);
+    expect(isDashboardAuthPath('/portfolio')).toBe(false);
+    expect(isDashboardAuthPath(null)).toBe(false);
   });
 });
 

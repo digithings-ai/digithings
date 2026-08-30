@@ -13,7 +13,7 @@ import {
   type ArtifactClass,
   type PlanTier,
 } from './entitlements';
-import { getSupabaseClient, isOlympusAuthEnabled } from './supabase';
+import { getSupabaseClient, isDashboardAuthEnabled } from './supabase';
 
 const EMPTY_ACCESS: AccessSnapshot = {
   email: null,
@@ -35,7 +35,7 @@ type RpcResult = { data: unknown; error: { message?: string } | null };
  */
 export function usePlanTier(): PlanTier {
   const access = useAccessSnapshot();
-  if (!isOlympusAuthEnabled()) return 'enterprise';
+  if (!isDashboardAuthEnabled()) return 'enterprise';
   return access.effectivePlanTier;
 }
 
@@ -44,10 +44,10 @@ export function useCan(artifactClass: ArtifactClass): boolean {
   return can(usePlanTier(), artifactClass);
 }
 
-/** Client product visibility (FX Hub now; future custom Olympus products). */
+/** Client product visibility (FX Hub now; future custom dashboard products). */
 export function useCanAccessProduct(productKey: ClientProductKey | string): boolean {
   const access = useAccessSnapshot();
-  if (!isOlympusAuthEnabled()) return true; // pre-cutover operator parity
+  if (!isDashboardAuthEnabled()) return true; // pre-cutover operator parity
   return canAccessProduct(access.products, productKey);
 }
 
@@ -64,7 +64,7 @@ export function requestAccessRefresh(): void {
  */
 export function useAccessSnapshot(): AccessSnapshot {
   const ctx = useContext(AuthContext);
-  const authOn = isOlympusAuthEnabled();
+  const authOn = isDashboardAuthEnabled();
   const [rpc, setRpc] = useState<Parameters<typeof resolveClientAccess>[0]['rpc']>(
     null,
   );
