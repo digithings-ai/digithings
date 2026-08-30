@@ -46,6 +46,9 @@ interface Store {
   brokers: Array<Record<string, unknown>>;
   keys: Array<Record<string, unknown>>;
   prefs: Array<Record<string, unknown>>;
+  jobs: Array<Record<string, unknown>>;
+  fills: Array<Record<string, unknown>>;
+  notifyLog: Array<Record<string, unknown>>;
   /** Ops/creator plan floors keyed by lowercased email (migration 108). */
   entitlementGrants: Map<string, string>;
   /** Client product keys keyed by lowercased email. */
@@ -86,6 +89,9 @@ function freshStore(): Store {
     brokers: [],
     keys: [],
     prefs: [],
+    jobs: [],
+    fills: [],
+    notifyLog: [],
     entitlementGrants: new Map(),
     productGrants: new Map(),
   };
@@ -416,6 +422,32 @@ function mockAdmin(store: Store): AdminClient {
         ).toLowerCase();
         const keys = store.productGrants.get(email) ?? [];
         const rows = keys.map((product_key) => ({ email, product_key }));
+        if (wantSingle || maybeSingle) {
+          return { data: rows[0] ?? null, error: null };
+        }
+        return { data: rows, error: null };
+      }
+
+      if (table === "job_runs" || table === "broker_executions" || table === "notification_log") {
+        const source =
+          table === "job_runs"
+            ? store.jobs
+            : table === "broker_executions"
+            ? store.fills
+            : store.notifyLog;
+        let rows = [...source];
+        for (const f of filters) {
+          if (f.op === "eq") rows = rows.filter((r) => r[f.col] === f.val);
+        }
+        if (orderCol) {
+          const col = orderCol;
+          rows.sort((a, b) => {
+            const av = String(a[col] ?? "");
+            const bv = String(b[col] ?? "");
+            return orderAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+          });
+        }
+        if (limitN != null) rows = rows.slice(0, limitN);
         if (wantSingle || maybeSingle) {
           return { data: rows[0] ?? null, error: null };
         }
@@ -1293,4 +1325,100 @@ Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /olympus callback", () => {
     pinnedAlpacaRedirectUri("https://app.example"),
     "https://app.example/olympus/settings/brokers/callback/",
   );
+});
+
+Deno.test("GET profile: includes workspace billing snapshot without Stripe ids", async () => {
+  const store = freshStore();
+  store.workspaces.set(WS_A, {
+    ...wsRow(WS_A, "free"),
+    subscription_status: "none",
+    stripe_customer_id: "cus_secret",
+    stripe_subscription_id: "sub_secret",
+  });
+  const { status, json } = await call(store, "GET", "/profile");
+  assertEquals(status, 200);
+  assertEquals(json.plan_tier, "free");
+  assertEquals(json.subscription_status, "none");
+  assertEquals(json.stripe_customer_id, undefined);
+  assertEquals(json.stripe_subscription_id, undefined);
+});
+
+Deno.test("GET /jobs: member lists overlay job_runs; other workspace isolated", async () => {
+  const store = freshStore();
+  store.jobs.push({
+    id: "job-a",
+    workspace_id: WS_A,
+    job_type: "overlay_daily",
+    status: "succeeded",
+    error: null,
+    idempotency_key: `${WS_A}:overlay_daily:2026-08-31`,
+    started_at: "2026-08-31T00:00:00Z",
+    finished_at: "2026-08-31T00:01:00Z",
+  });
+  store.jobs.push({
+    id: "job-b",
+    workspace_id: WS_B,
+    job_type: "overlay_daily",
+    status: "succeeded",
+    error: null,
+    idempotency_key: `${WS_B}:overlay_daily:2026-08-31`,
+    started_at: "2026-08-31T00:00:00Z",
+    finished_at: "2026-08-31T00:01:00Z",
+  });
+  const { status, json } = await call(store, "GET", "/jobs");
+  assertEquals(status, 200);
+  const jobs = json.jobs as Array<Record<string, unknown>>;
+  assertEquals(jobs.length, 1);
+  assertEquals(jobs[0]!.id, "job-a");
+  assertEquals(jobs[0]!.job_type, "overlay_daily");
+  assertEquals(jobs[0]!.status, "succeeded");
+});
+
+Deno.test("GET /fills: member lists broker_executions fingerprints", async () => {
+  const store = freshStore();
+  store.fills.push({
+    id: "fill-a",
+    workspace_id: WS_A,
+    symbol: "AAPL",
+    quantity: 1,
+    executed_at: "2026-08-31T14:00:00Z",
+    recorded_at: "2026-08-31T14:00:01Z",
+    external_fill_id: "ext-secret",
+  });
+  store.fills.push({
+    id: "fill-b",
+    workspace_id: WS_B,
+    symbol: "MSFT",
+    quantity: 2,
+    executed_at: "2026-08-31T14:00:00Z",
+    recorded_at: "2026-08-31T14:00:01Z",
+    external_fill_id: "other",
+  });
+  const { status, json } = await call(store, "GET", "/fills");
+  assertEquals(status, 200);
+  const fills = json.fills as Array<Record<string, unknown>>;
+  assertEquals(fills.length, 1);
+  assertEquals(fills[0]!.symbol, "AAPL");
+  assertEquals(fills[0]!.external_fill_id, undefined);
+});
+
+Deno.test("GET /notifications/log: member lists digest event keys only", async () => {
+  const store = freshStore();
+  store.notifyLog.push({
+    workspace_id: WS_A,
+    event_key: "digest:2026-08-31",
+    sent_date: "2026-08-31",
+    sent_at: "2026-08-31T12:00:00Z",
+  });
+  store.notifyLog.push({
+    workspace_id: WS_B,
+    event_key: "digest:2026-08-31",
+    sent_date: "2026-08-31",
+    sent_at: "2026-08-31T12:00:00Z",
+  });
+  const { status, json } = await call(store, "GET", "/notifications/log");
+  assertEquals(status, 200);
+  const events = json.events as Array<Record<string, unknown>>;
+  assertEquals(events.length, 1);
+  assertEquals(events[0]!.event_key, "digest:2026-08-31");
 });

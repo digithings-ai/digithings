@@ -2,20 +2,21 @@
 """Agent-runnable Kairos staging E2E gate (core Supabase).
 
 Phase A: Observer Settings hops when a JWT (or email/password) is present —
-reads 200, Custom writes ``TIER_FORBIDDEN``. Does not require vendor secrets.
+reads 200, Custom writes ``TIER_FORBIDDEN``. Then Settings product-state
+reads prove remaining hops. Does not require vendor secrets for exit 0.
 
-Phase B: fails loudly with **named** missing secrets when Stripe / Mailgun /
-Alpaca OAuth are unset. Never substitutes paper-fakes for staging acceptance.
+Phase B: if remaining hops are unproven, fails loudly with **named** missing
+secrets when Stripe / Mailgun / Alpaca OAuth are unset. Never paper-fakes.
 
 Phase C: once secrets are present, checkout must return a session URL and
-the webhook must clear ``STRIPE_NOT_CONFIGURED``. That is **not** complete.
+the webhook must clear ``STRIPE_NOT_CONFIGURED``. Unproven hops → exit 4.
 
 Usage (repo root)::
 
     PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 
 Exit codes:
-  0 — reserved until the full EPIC.md chain is proven (unused today)
+  0 — all five remaining hops proven from Settings product-state reads
   2 — named required secrets missing (or JWT missing after secrets present)
   3 — Observer hop regression, or secrets present but core EF misconfigured
   4 — secrets present and checkout/webhook cleared config errors, but remaining

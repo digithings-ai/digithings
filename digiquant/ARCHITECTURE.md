@@ -3036,11 +3036,15 @@ when vendor keys are empty. Staging inventory also covers these names in
 Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password
 is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
 vendor secrets are missing (and prints `KAIROS_STAGING_E2E_REMAINING_HOPS` so
-the five live hops are named even before secrets land). Checkout URL + unsigned
-webhook is **exit 4** (`KAIROS_STAGING_E2E_REMAINING_HOPS: …`) until browser
-Stripe, Alpaca paper, overlay, fill, and digest are proven. Exit 0 is reserved
-for the full EPIC.md chain. Recipient for staging digests can be an Agentmail
-inbox once Mailgun is configured.
+the five live hops are named even before secrets land). After Observer hops
+pass, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
+`/jobs`, `/fills`, and `/notifications/log` and marks a hop proven only from
+that product state (`subscription_status=active`, Alpaca paper `active`,
+`overlay_daily` running/succeeded — not skipped/`not_entitled`, a fill row, a
+`digest:` event key). Ops grants with `subscription_status=none` do not prove
+checkout. Exit **0** only when all five remaining hops are proven. Checkout
+URL + unsigned webhook with hops still unproven is **exit 4**. Recipient for
+staging digests can be an Agentmail inbox once Mailgun is configured.
 
 **Entry points:**
 

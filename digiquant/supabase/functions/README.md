@@ -31,6 +31,10 @@ never the reserved `house` key), and seals broker credentials with the vault
 `{workspace_id}:{broker}:{env}`). Responses never include ciphertext or
 plaintext. `GET /notifications` hydrates prefs (empty → 200 defaults, `updated_at: null`;
 no write). `PATCH /notifications` upserts `notification_prefs` (migration 103 / K5).
+Member-scoped service-role reads: `GET /jobs` (`job_runs`), `GET /fills`
+(`broker_executions` fingerprints, no `external_fill_id`), `GET /notifications/log`
+(event keys only). `GET /profile` includes workspace `plan_tier` +
+`subscription_status` and never Stripe ids.
 
 **Deploy requires** K3 vault + `broker_connections` and K5 `notification_prefs`
 on the target DB. See [`settings/README.md`](settings/README.md).

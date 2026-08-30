@@ -61,7 +61,7 @@ None of the staging-required vendor API secrets. Present locally (not EF vendors
 ## Next steps (staging E2E)
 
 1. Human solves vendor captchas → agent writes `digithings-*.env` + EF `secrets set`.
-2. Re-run `scripts/kairos_staging_e2e.py` (expect exit **2** while vendor secrets are empty; once secrets land expect exit **4** + `KAIROS_STAGING_E2E_REMAINING_HOPS` until browser Stripe, Alpaca paper, overlay, fill, and digest are proven. Exit 0 is reserved for the full EPIC.md chain).
+2. Re-run `scripts/kairos_staging_e2e.py` (expect exit **2** while vendor secrets are empty and remaining hops are unproven; once secrets land expect exit **4** + `KAIROS_STAGING_E2E_REMAINING_HOPS` until Settings product-state reads prove browser Stripe, Alpaca paper, overlay, fill, and digest. Exit **0** only when those five hops are proven).
 3. Optional: elevate a test workspace `plan_tier` only via documented ops path — GitHub user’s personal WS stays `free` until Stripe checkout.
 
 ## Docs branch

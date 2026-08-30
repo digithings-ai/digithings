@@ -1,7 +1,8 @@
 /**
  * settings — authenticated Olympus Settings workspace backend (T3).
  *
- * Routes: GET/PATCH profile, GET/POST brokers, GET/PATCH notifications.
+ * Routes: GET/PATCH profile, GET/POST brokers, GET/PATCH notifications,
+ * GET notifications/log, GET jobs, GET fills.
  *
  * DEPLOY BLOCKED ON K3: sealing credentials requires the vault master key and
  * `broker_connections` table from K3. See README.md in this directory.

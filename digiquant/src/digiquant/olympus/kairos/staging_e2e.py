@@ -1,24 +1,35 @@
-"""Kairos staging E2E runner — Observer hops, then vendor-secret loud-fail.
+"""Kairos staging E2E runner — Observer hops, then remaining-hop product state.
 
 Phase A: Settings/checkout probes without vendor secrets. Observer writes
 must return ``TIER_FORBIDDEN``. Checkout may still be a named config miss.
 
+Phase A2: Settings GETs (profile billing, brokers, jobs, fills, digest log).
+Exit 0 only when all five remaining hops are proven from that product state.
+
 Phase B: named vendor secrets. Missing → exit 2 (never paper-fakes).
 
 Phase C: checkout URL + webhook past ``STRIPE_NOT_CONFIGURED`` → exit 4
-with named remaining hops. Exit 0 is reserved for the full EPIC.md chain.
+with named remaining hops still unproven.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from enum import StrEnum
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.olympus.kairos.remaining_hops import (
+    EXIT_REMAINING_HOPS_UNPROVEN,
+    REMAINING_LIVE_HOPS,
+    RemainingHopEvidence,
+    format_remaining_hops_failure,
+    proven_remaining_hops,
+    remaining_hops_unproven,
+)
 from digiquant.olympus.kairos.staging_secrets import (
     KAIROS_STAGING_REQUIRED_SECRETS,
     format_missing_secrets_failure,
@@ -36,14 +47,6 @@ CHECKOUT_CONFIG_MISS_CODES: frozenset[str] = frozenset(
 )
 
 # Until each remaining hop is proven, the harness must not exit 0.
-REMAINING_LIVE_HOPS: tuple[str, ...] = (
-    "browser_stripe_checkout",
-    "alpaca_paper_oauth_connect",
-    "overlay_daily_claimed",
-    "paper_fill_mirrored",
-    "digest_email_received",
-)
-EXIT_REMAINING_HOPS_UNPROVEN: int = 4
 
 
 class HttpJson(Protocol):
@@ -155,16 +158,6 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
 )
 
 
-def remaining_hops_unproven(proven: Mapping[str, object] | None = None) -> tuple[str, ...]:
-    """Return remaining live hops that have not been marked proven."""
-    done = proven or {}
-    return tuple(name for name in REMAINING_LIVE_HOPS if not done.get(name))
-
-
-def format_remaining_hops_failure(unproven: Sequence[str]) -> str:
-    return f"KAIROS_STAGING_E2E_REMAINING_HOPS: {', '.join(unproven)}"
-
-
 def hop_ok(kind: HopExpectation, http: int, code: str | None) -> bool:
     """Return whether a live response matches the Observer-phase expectation."""
     if kind is HopExpectation.READ_OK:
@@ -220,6 +213,68 @@ def run_observer_hops(
             )
         )
     return results
+
+
+def collect_remaining_evidence(
+    *,
+    http: HttpJson,
+    jwt: str,
+    anon_key: str | None,
+    functions_base: str,
+) -> RemainingHopEvidence:
+    """GET Settings snapshots used to prove remaining hops. Never logs tokens."""
+    headers: dict[str, str] = {"Authorization": f"Bearer {jwt}"}
+    if anon_key:
+        headers["apikey"] = anon_key
+    base = functions_base.rstrip("/")
+
+    def _get(path: str) -> dict[str, object]:
+        status, body = http("GET", f"{base}{path}", headers=headers, body=None)
+        if status != 200 or not isinstance(body, dict):
+            return {}
+        return body
+
+    profile = _get("/settings/profile")
+    brokers = _get("/settings/brokers")
+    jobs_body = _get("/settings/jobs")
+    fills_body = _get("/settings/fills")
+    log_body = _get("/settings/notifications/log")
+    connections: list[tuple[str, str, str]] = []
+    raw_conns = brokers.get("connections")
+    if isinstance(raw_conns, list):
+        for row in raw_conns:
+            if not isinstance(row, dict):
+                continue
+            connections.append(
+                (
+                    str(row.get("broker") or ""),
+                    str(row.get("env") or ""),
+                    str(row.get("status") or ""),
+                )
+            )
+    jobs: list[tuple[str, str]] = []
+    raw_jobs = jobs_body.get("jobs")
+    if isinstance(raw_jobs, list):
+        for row in raw_jobs:
+            if not isinstance(row, dict):
+                continue
+            jobs.append((str(row.get("job_type") or ""), str(row.get("status") or "")))
+    fills = fills_body.get("fills")
+    fill_count = len(fills) if isinstance(fills, list) else 0
+    keys: list[str] = []
+    raw_events = log_body.get("events")
+    if isinstance(raw_events, list):
+        for row in raw_events:
+            if isinstance(row, dict) and isinstance(row.get("event_key"), str):
+                keys.append(str(row["event_key"]))
+    sub = profile.get("subscription_status")
+    return RemainingHopEvidence(
+        subscription_status=str(sub) if isinstance(sub, str) else None,
+        connections=tuple(connections),
+        jobs=tuple(jobs),
+        fill_count=fill_count,
+        digest_event_keys=tuple(keys),
+    )
 
 
 class JwtResolution(BaseModel):
@@ -324,23 +379,39 @@ def run_staging_e2e(
         if failed:
             err("Observer hops failed — Settings EF TIER_FORBIDDEN / read contract regression.")
             return 3
+        evidence = collect_remaining_evidence(
+            http=http,
+            jwt=jwt,
+            anon_key=_anon_from_env(env),
+            functions_base=functions_base,
+        )
+        proven = proven_remaining_hops(evidence)
+        log("kairos_staging_e2e: remaining hop product-state")
+        for name in REMAINING_LIVE_HOPS:
+            log(f"  {name} proven={proven[name]}")
+        unproven = remaining_hops_unproven(proven)
+        if not unproven:
+            log("kairos_staging_e2e: all remaining hops proven from Settings reads")
+            return 0
     else:
         log(
             "kairos_staging_e2e: Observer hops skipped "
             "(set KAIROS_STAGING_USER_JWT or KAIROS_STAGING_EMAIL+PASSWORD+ANON)"
         )
+        proven = {}
+        unproven = remaining_hops_unproven()
 
     log("kairos_staging_e2e: checking required secret *names* (values never printed)")
     log(f"  inventory_count={len(KAIROS_STAGING_REQUIRED_SECRETS)}")
     missing = missing_kairos_staging_secrets(env)
     if missing:
         err(format_missing_secrets_failure(missing))
-        err(format_remaining_hops_failure(remaining_hops_unproven()))
+        err(format_remaining_hops_failure(unproven))
         return 2
 
     if not jwt:
         err(format_missing_secrets_failure(["KAIROS_STAGING_USER_JWT"]))
-        err(format_remaining_hops_failure(remaining_hops_unproven()))
+        err(format_remaining_hops_failure(unproven))
         return 2
 
     status, body = http(
@@ -372,12 +443,10 @@ def run_staging_e2e(
         err("stripe-webhook still STRIPE_NOT_CONFIGURED on core EF.")
         return 3
 
-    unproven = remaining_hops_unproven()
     err(format_remaining_hops_failure(unproven))
     log(
         "kairos_staging_e2e: checkout cleared config errors. "
-        "Remaining hops (browser Stripe, Alpaca paper, overlay, fill, digest) "
-        "are unproven — exit 4, not 0. Exit 0 is reserved for the full EPIC.md chain."
+        "Remaining hops still unproven — exit 4, not 0."
     )
     return EXIT_REMAINING_HOPS_UNPROVEN
 
@@ -393,9 +462,12 @@ __all__ = [
     "JwtResolution",
     "ObserverHop",
     "ProbeResult",
+    "RemainingHopEvidence",
+    "collect_remaining_evidence",
     "format_remaining_hops_failure",
     "hop_ok",
     "password_grant_access_token",
+    "proven_remaining_hops",
     "remaining_hops_unproven",
     "resolve_staging_jwt",
     "run_observer_hops",

@@ -12,6 +12,9 @@
  *   POST   /keys/revoke        — mark revoked (fail closed on unknown)
  *   GET    /notifications      — load notification_prefs (or empty defaults; no write)
  *   PATCH  /notifications      — upsert notification_prefs (workspace member)
+ *   GET    /notifications/log  — notification_log event keys (digest proof; no bodies)
+ *   GET    /jobs               — job_runs for the caller's workspace (overlay hop proof)
+ *   GET    /fills              — broker_executions fingerprints (paper fill hop proof)
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
@@ -140,6 +143,9 @@ export async function handleSettingsRequest(
   if (method === "POST" && path === "/keys/revoke") {
     return revokeKey(req, deps);
   }
+  if (method === "GET" && path === "/notifications/log") {
+    return listNotificationLog(req, deps);
+  }
   if (
     method === "GET" &&
     (path === "/notifications" || path === "/notifications/")
@@ -148,6 +154,12 @@ export async function handleSettingsRequest(
   }
   if (method === "PATCH" && path === "/notifications") {
     return patchNotifications(req, deps);
+  }
+  if (method === "GET" && (path === "/jobs" || path === "/jobs/")) {
+    return listJobs(req, deps);
+  }
+  if (method === "GET" && (path === "/fills" || path === "/fills/")) {
+    return listFills(req, deps);
   }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
@@ -215,6 +227,17 @@ function isUniqueViolation(err: { code?: string; message?: string }): boolean {
 }
 
 const DEFAULT_PROFILE_KEY = "workspace";
+
+function withWorkspaceBilling(
+  body: Record<string, unknown>,
+  workspace: { plan_tier: string; subscription_status: string },
+): Record<string, unknown> {
+  return {
+    ...body,
+    plan_tier: workspace.plan_tier,
+    subscription_status: workspace.subscription_status,
+  };
+}
 
 function emptyProfileBody(
   workspaceId: string,
@@ -328,10 +351,14 @@ async function getProfile(req: Request, deps: SettingsDeps): Promise<Response> {
   }
 
   if (!tip) {
-    return jsonOk(emptyProfileBody(authz.workspace.id, profileKey));
+    return jsonOk(
+      withWorkspaceBilling(emptyProfileBody(authz.workspace.id, profileKey), authz.workspace),
+    );
   }
 
-  return jsonOk(profileResponseBody(tip as Record<string, unknown>));
+  return jsonOk(
+    withWorkspaceBilling(profileResponseBody(tip as Record<string, unknown>), authz.workspace),
+  );
 }
 
 async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response> {
@@ -532,6 +559,97 @@ async function listBrokers(req: Request, deps: SettingsDeps): Promise<Response> 
   }));
 
   return jsonOk({ connections });
+}
+
+const JOB_COLUMNS =
+  "id, workspace_id, job_type, status, error, idempotency_key, started_at, finished_at";
+
+async function listJobs(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("job_runs")
+    .select(JOB_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("started_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "job_runs not available");
+  }
+
+  const jobs = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    job_type: row.job_type,
+    status: row.status,
+    error: row.error ?? null,
+    idempotency_key: row.idempotency_key,
+    started_at: row.started_at,
+    finished_at: row.finished_at,
+  }));
+  return jsonOk({ jobs });
+}
+
+const FILL_COLUMNS = "id, workspace_id, symbol, quantity, executed_at, recorded_at";
+
+async function listFills(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("broker_executions")
+    .select(FILL_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("executed_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "broker_executions not available");
+  }
+
+  const fills = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    symbol: row.symbol,
+    quantity: row.quantity,
+    executed_at: row.executed_at,
+    recorded_at: row.recorded_at,
+  }));
+  return jsonOk({ fills });
+}
+
+const NOTIFY_LOG_COLUMNS = "event_key, sent_date, sent_at";
+
+async function listNotificationLog(
+  req: Request,
+  deps: SettingsDeps,
+): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("notification_log")
+    .select(NOTIFY_LOG_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("sent_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    return jsonError(503, "NOT_READY", "notification_log not available");
+  }
+
+  const events = (data ?? []).map((row: Record<string, unknown>) => ({
+    event_key: row.event_key,
+    sent_date: row.sent_date,
+    sent_at: row.sent_at,
+  }));
+  return jsonOk({ events });
 }
 
 async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response> {

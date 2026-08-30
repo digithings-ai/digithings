@@ -56,7 +56,7 @@ Profile schema re-validation imports the real
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/profile` | Load tip `olympus_profile_config` for workspace member (`?workspace_id=` / `?profile_key=` optional, default key `workspace`). **Empty contract:** no tip → **200** with `version_id`/`recorded_at` null, empty `label`, null investment/assets — read-only, never inserts. `house` key → **400**. Missing table → **503 `NOT_READY`**. No Custom-tier write gate (read for hydrate). **Observer bootstrap:** if the JWT user has no `workspace_members` row, the handler calls `ensure_personal_workspace` (migration 107) before resolve — creates a free personal workspace + owner membership (never system/house). |
+| `GET` | `/profile` | Load tip `olympus_profile_config` for workspace member (`?workspace_id=` / `?profile_key=` optional, default key `workspace`). **Empty contract:** no tip → **200** with `version_id`/`recorded_at` null, empty `label`, null investment/assets — read-only, never inserts. `house` key → **400**. Missing table → **503 `NOT_READY`**. No Custom-tier write gate (read for hydrate). Includes workspace `plan_tier` + `subscription_status` (never `stripe_customer_id` / `stripe_subscription_id`). **Observer bootstrap:** if the JWT user has no `workspace_members` row, the handler calls `ensure_personal_workspace` (migration 107) before resolve — creates a free personal workspace + owner membership (never system/house). |
 | `PATCH` | `/profile` | Tier gate; schema re-validate; append workspace-scoped version; reject `house` key; 409 on version/supersedes conflict |
 | `GET` | `/brokers` | Fingerprint projection only |
 | `POST` | `/brokers/connect` | Tier gate; `api_key` or Alpaca `oauth` (server-pinned `redirect_uri`); seal via vault; reconnect = revoke-then-insert |
@@ -65,7 +65,10 @@ Profile schema re-validation imports the real
 | `POST` | `/keys/connect` | Tier gate; seal LLM `api_key` with AAD `workspace:provider:llm`; reconnect = revoke-then-insert |
 | `POST` | `/keys/revoke` | Fail closed on unknown row |
 | `GET` | `/notifications` | Load `notification_prefs` for workspace member (`?workspace_id=` optional). **Empty contract:** no row → **200** with defaults (`daily_digest`/`holding_change_alerts`/`execution_alerts` false, `digest_hour_utc` 12, `email` from JWT when present, `updated_at: null`) — read-only, never inserts. Missing table → **503 `NOT_READY`**. |
+| `GET` | `/notifications/log` | Member-scoped `notification_log` event keys (`event_key`, `sent_date`, `sent_at`; no bodies). Empty → **200** `{events: []}`. Missing table → **503 `NOT_READY`**. |
 | `PATCH` | `/notifications` | Upsert `notification_prefs` (member authz; validates email + `digest_hour_utc` 0–23) |
+| `GET` | `/jobs` | Member-scoped `job_runs` (id, job_type, status, error, idempotency_key, started_at, finished_at; limit 50). Service-role read — PostgREST `authenticated` is revoked. Empty → **200** `{jobs: []}`. |
+| `GET` | `/fills` | Member-scoped `broker_executions` fingerprints (id, symbol, quantity, executed_at, recorded_at — never `external_fill_id`). Empty → **200** `{fills: []}`. |
 
 ## Tier gate
 
