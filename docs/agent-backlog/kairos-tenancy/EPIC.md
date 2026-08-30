@@ -126,7 +126,7 @@ Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA
 `APP_URL` / `NEXT_PUBLIC_APP_URL` on `core` is **`https://digiquant.io`** (verified
 2026-08-31 via Observer `GET /settings/app-urls`: Alpaca callback + billing return
 under **`/olympus`**, no loopback). Live Pages still serve `/olympus/*`
-(site `/build-info.json` commit `9f898ec1d` / `2026-08-31T20:13:43Z` after the
+(site `/build-info.json` commit `3601f72df` / `2026-08-31T20:42:57Z` after the
 #3331 Pages rebuild; `/olympus/build-info.json` is 404 HTML). `/dashboard/*`
 is **404**. Develop `app-url.ts` and the staging harness pin `/dashboard/...`.
 **Do not redeploy** settings EF with `/dashboard` URLs while live Pages 404
