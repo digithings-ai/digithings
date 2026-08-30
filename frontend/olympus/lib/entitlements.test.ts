@@ -8,7 +8,9 @@ import {
   effectivePlanTier,
   requiredTierFor,
   settingsTabFromLocationHash,
+  settingsTabFromSearch,
   settingsTabsVisible,
+  resolveSettingsTab,
   tierFromSession,
   type ArtifactClass,
   type PlanTier,
@@ -211,6 +213,27 @@ describe('settingsTabsVisible', () => {
     expect(settingsTabFromLocationHash('#profile', custom)).toBe('profile');
     expect(settingsTabFromLocationHash('#nope', free)).toBeNull();
     expect(settingsTabFromLocationHash('', free)).toBeNull();
+  });
+
+  it('settingsTabFromSearch honors Stripe ?tab=billing and ?checkout=', () => {
+    const free = settingsTabsVisible('free').map((t) => t.id);
+    const custom = settingsTabsVisible('custom').map((t) => t.id);
+    expect(settingsTabFromSearch('?tab=billing', free)).toBe('billing');
+    expect(settingsTabFromSearch('tab=billing&checkout=success', free)).toBe('billing');
+    expect(settingsTabFromSearch('?checkout=success', free)).toBe('billing');
+    expect(settingsTabFromSearch('?checkout=cancel', free)).toBe('billing');
+    expect(settingsTabFromSearch('?tab=profile', free)).toBeNull();
+    expect(settingsTabFromSearch('?tab=profile', custom)).toBe('profile');
+    expect(settingsTabFromSearch('', free)).toBeNull();
+  });
+
+  it('resolveSettingsTab prefers query over hash', () => {
+    const free = settingsTabsVisible('free').map((t) => t.id);
+    expect(resolveSettingsTab('?tab=billing', '#about', free, 'notifications')).toBe(
+      'billing',
+    );
+    expect(resolveSettingsTab('', '#about', free, 'notifications')).toBe('about');
+    expect(resolveSettingsTab('', '', free, 'notifications')).toBe('notifications');
   });
 });
 

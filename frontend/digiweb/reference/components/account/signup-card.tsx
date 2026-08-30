@@ -48,7 +48,7 @@ export function SignupCard() {
             {"// oauth first (olympus)"}
           </p>
           <form
-            className="w-full max-w-[380px] rounded-[12px] border border-hair bg-surface p-[1.2rem]"
+            className="w-full max-w-[380px] rounded-none border border-hair bg-surface p-[1.2rem]"
             onSubmit={preventSubmit}
             noValidate
           >
