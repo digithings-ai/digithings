@@ -39,7 +39,8 @@ import {
 } from './render-pipeline-payloads';
 import { DASHBOARD_BENCHMARK_TICKERS, sortTickerUniverse } from './benchmark-tickers';
 import { buildRebalanceActions } from './rebalance-actions';
-import { holdingWeightChange } from './holding-weight-change';
+import { holdingWeightChange, holdingWeightDeltaPp } from './holding-weight-change';
+import { isMaterialBookEvent } from './brief-book-event';
 import {
   ACCOUNTING_NAV_VIEW,
   accountingNavToHistoryShape,
@@ -876,6 +877,12 @@ export async function getFullDashboardData(): Promise<DashboardData> {
   const prevPositions = prevPosDate ? allPositions.filter((p) => p.date === prevPosDate) : [];
   const prevWeightByTicker = new Map(prevPositions.map((p) => [p.ticker, Number(p.weight_pct ?? 0)]));
 
+  const materialBookEventTickers = new Set(
+    position_events
+      .filter((e) => latestPosDate != null && e.date === latestPosDate && isMaterialBookEvent(e))
+      .map((e) => e.ticker.trim().toUpperCase()),
+  );
+
   const latestThesisDate = allTheses.length ? allTheses[0].date : null;
   const currentTheses = latestThesisDate
     ? allTheses.filter((t) => t.date === latestThesisDate)
@@ -1170,10 +1177,15 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     // distinct from a held-but-0% sleeve, which genuinely can move.
     weight_delta:
       latestPosDate && prevPosDate
-        ? holdingWeightChange(
+        ? holdingWeightDeltaPp(
             Number(p.weight_pct ?? 0),
             prevWeightByTicker.has(p.ticker) ? prevWeightByTicker.get(p.ticker) : null,
-          ).deltaPp
+            {
+              hasMaterialBookEvent: materialBookEventTickers.has(
+                String(p.ticker).trim().toUpperCase(),
+              ),
+            },
+          )
         : null,
     current_price: p.current_price != null ? Number(p.current_price) : latestClose(p.ticker).curr,
     entry_price: resolvedEntryPrice(p),
