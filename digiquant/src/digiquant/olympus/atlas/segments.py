@@ -278,6 +278,14 @@ def _pick_aliased_str(data: Mapping[str, Any], names: tuple[str, ...]) -> str | 
     return None
 
 
+def _first_clause(summary: str) -> str | None:
+    """First clause for a derived label; ``$45.36`` must not split on the decimal."""
+    for idx, char in enumerate(summary):
+        if char in ".?!" and (idx + 1 == len(summary) or summary[idx + 1].isspace()):
+            return summary[:idx].strip()[:80] or None
+    return summary.strip()[:80] or None
+
+
 def _coerce_finding_record(data: object) -> object:
     """Map LLM hedges onto Finding without a full-mode regeneration.
 
@@ -298,13 +306,7 @@ def _coerce_finding_record(data: object) -> object:
     if _string_value(out.get("label")) is None:
         picked = _pick_aliased_str(out, ("title", "headline", "name"))
         if picked is None:
-            summary = _string_value(out.get("summary")) or ""
-            cut = len(summary)
-            for sep in (".", "?", "!"):
-                idx = summary.find(sep)
-                if 0 < idx < cut:
-                    cut = idx
-            picked = summary[:cut].strip()[:80] or None
+            picked = _first_clause(_string_value(out.get("summary")) or "")
         if picked is not None:
             out["label"] = picked
     return out

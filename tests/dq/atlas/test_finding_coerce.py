@@ -52,7 +52,7 @@ class TestSummaryAliases:
         )
         finding = report.material_findings[0]
         assert finding.summary == prose
-        assert finding.label
+        assert finding.label == "XLRE traded between $38 and $45.36 all week"
         assert finding.as_of == "2026-08-28"
 
     def test_as_of_only_still_rejected(self) -> None:
