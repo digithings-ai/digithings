@@ -258,7 +258,8 @@ unchanged keys, so the diet does **not** disturb the stable→volatile prompt-ca
 ordering in `digigraph.graph.research_agent._format_scope_block` (#935).
 
 Deliberately **not** used (they reduce capability): higher triage carry
-thresholds, lower `max_search_results`. A **blanket** fan-out cap is still
+thresholds. (`max_search_results` is unused under native Olympus grounding —
+Exa toolkit only.) A **blanket** fan-out cap is still
 rejected, but `ATLAS_MAX_ANALYSTS` is not blanket and since #1767 it is
 genuinely enforced: the prior book is exempt (#936) and thesis vehicles are
 prioritised round-robin *within* the cap, so the reduction falls on the
@@ -320,7 +321,7 @@ is blocked: `cost_quality_tradeoff=10`, open-weight `allowed_models` only, no fr
 | Env | Values | Effect |
 |---|---|---|
 | `OLYMPUS_MODEL_TIER` | `cheap` (default) / `balanced` / `quality` | Selects pinned models from `config/olympus_models.yaml` |
-| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + web grounding (`openrouter:web_search`) |
+| `OPENROUTER_API_KEY` | GitHub secret | Required — all LLM calls + Olympus native web grounding (`get_grounding_model` / Perplexity / `:online`) |
 
 `apply_olympus_openrouter_env()` (Hermes chain startup and `validate-providers.py` preflight)
 sets **`OPENROUTER_ALLOWED_MODELS`** and **`OPENROUTER_COST_QUALITY_TRADEOFF`** from the active
