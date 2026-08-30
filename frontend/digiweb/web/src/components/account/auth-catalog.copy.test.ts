@@ -36,9 +36,10 @@ function load(file: string): string {
 describe("account auth catalog copy", () => {
   it("catalog uses quiet layout names and no task brief", () => {
     const src = load("auth-card-proposals.tsx");
-    expect(src).toContain("// compact");
-    expect(src).toContain("// icons-first");
-    expect(src).toContain("// desk");
+    expect(src).toContain('"compact"');
+    expect(src).toContain('"icons-first"');
+    expect(src).toContain('"desk"');
+    expect(src).toContain("{`// ${id}`}");
     expect(src).toContain('mode="signin"');
     expect(src).toContain('mode="signup"');
     for (const pattern of FORBIDDEN) {
