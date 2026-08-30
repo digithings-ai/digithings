@@ -108,3 +108,41 @@ class TestBuildSdcaRiskIndexTool:
         assert loaded.height == 15
         assert loaded["date"].dtype == pl.Date
         assert loaded["date"][0] == date(2020, 1, 1)
+
+    def test_rolling_z_builds_parquet_from_short_cache(self, tmp_path: Path) -> None:
+        _write_cache(tmp_path, ticker="SOL-USD", n=40)
+        out = tmp_path / "sol_risk.parquet"
+        payload = json.loads(
+            _tool()(
+                ticker="SOL-USD",
+                cache_dir=str(tmp_path),
+                refresh=False,
+                risk_model="rolling_z",
+                rolling_window=10,
+                output_path=str(out),
+            )
+        )
+        assert "error" not in payload, payload
+        assert payload["row_count"] == 40
+        assert payload["null_risk_days"] >= 1
+        assert Path(payload["path"]).exists()
+
+    def test_generic_valuation_builds_parquet_from_eth_like_cache(self, tmp_path: Path) -> None:
+        _write_cache(tmp_path, ticker="ETH-USD", n=900)
+        out = tmp_path / "eth_risk.parquet"
+        payload = json.loads(
+            _tool()(
+                ticker="ETH-USD",
+                cache_dir=str(tmp_path),
+                refresh=False,
+                risk_model="generic_valuation",
+                valuation_form="log_linear",
+                output_path=str(out),
+            )
+        )
+        assert "error" not in payload, payload
+        assert payload["row_count"] == 900
+        assert payload["null_risk_days"] == 0
+        loaded = pl.read_parquet(out)
+        assert loaded.columns == ["date", "risk"]
+        assert loaded["risk"].null_count() == 0

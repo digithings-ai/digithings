@@ -170,8 +170,18 @@ the full module map.
   judgment call**, not verified against the reference artifact's corridor —
   revisit once that artifact is reachable, don't assume the default is
   correct.
-- The other two #1082 providers (generic per-asset valuation-z, RS-driven
-  risk) are not implemented yet.
+- **Provider ladder (#3175):** `btc_power_law` (bespoke genesis-anchored
+  power-law) → `generic_valuation` (log-price trend from the asset's first
+  cached bar, `log_linear` / `log_quadratic`, rails widen when fit span
+  is under ~8 years) → `rolling_z` (rolling log-price z-score fallback
+  for series below `MIN_FIT_HISTORY_DAYS`). Resolve via
+  `strategies/sdca/providers.py::resolve_sdca_risk_model`. Do not copy
+  `btc_power_law.py` to add an asset — add a selector branch instead.
+  Shared QuantReg / rearrangement / history guards live in
+  `quantile_rails.py`.
+- RS-driven risk (#1082 scope item 4) is **not** implemented — it belongs
+  with the RS rotation layer (#1084), not this provider ladder. Do not
+  build it from here.
 
 ### Adding a preset
 

@@ -373,6 +373,8 @@ def create_mcp_server() -> Any:
         risk_model: str = "btc_power_law",
         coefficients_path: str | None = None,
         output_path: str | None = None,
+        valuation_form: str = "log_quadratic",
+        rolling_window: int = 90,
     ) -> str:
         """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
 
@@ -380,11 +382,12 @@ def create_mcp_server() -> Any:
         (``digiquant.data.prices.history_cache``) — never a bespoke fetch.
         ``refresh=True`` (default) incrementally updates the cache first;
         ``refresh=False`` reads whatever is already cached. ``risk_model`` is a
-        string selector so later providers (#3175) can be added without changing
-        this signature; currently only ``"btc_power_law"`` is implemented.
-        Writes the two-column parquet ``SdcaStrategy`` loads via ``risk_path``.
-        Returns JSON ``{path, row_count, date_start, date_end, null_risk_days}``
-        or ``{"error": ...}`` (never raises — missing cache / coefficients /
+        string selector: ``btc_power_law`` (fitted coefficients),
+        ``generic_valuation`` (log-price trend from the first cached bar), or
+        ``rolling_z`` (short-history fallback). Writes the two-column parquet
+        ``SdcaStrategy`` loads via ``risk_path``. Returns JSON
+        ``{path, row_count, date_start, date_end, null_risk_days}`` or
+        ``{"error": ...}`` (never raises — missing cache / coefficients /
         unknown selector surface as error JSON).
         """
         from pathlib import Path
@@ -397,9 +400,9 @@ def create_mcp_server() -> Any:
                 incremental_update,
                 load_cached,
             )
-            from digiquant.strategies.sdca.btc_power_law import (
-                BtcPowerLawRiskModel,
-                load_coefficients,
+            from digiquant.strategies.sdca.providers import (
+                KNOWN_SDCA_RISK_MODELS,
+                resolve_sdca_risk_model,
             )
             from digiquant.strategies.sdca.risk_index import (
                 RiskIndexBuildResult,
@@ -409,7 +412,7 @@ def create_mcp_server() -> Any:
         except ImportError as exc:
             return json.dumps({"error": f"{type(exc).__name__}: {exc}"})
 
-        if risk_model != "btc_power_law":
+        if risk_model not in KNOWN_SDCA_RISK_MODELS:
             return json.dumps({"error": f"unknown risk_model {risk_model!r}"})
 
         cdir = Path(cache_dir) if cache_dir else DEFAULT_CACHE_DIR
@@ -433,7 +436,14 @@ def create_mcp_server() -> Any:
                 .unique(subset=["date"], keep="last")
                 .sort("date")
             )
-            model = BtcPowerLawRiskModel(load_coefficients(coeff_path))
+            model = resolve_sdca_risk_model(
+                risk_model,
+                dates=prices["date"],
+                price=prices["close"],
+                coefficients_path=coeff_path,
+                form=valuation_form,
+                rolling_window=rolling_window,
+            )
             frame = build_risk_index(prices["date"], prices["close"], model)
             dest = Path(output_path) if output_path else Path(f"{ticker}_sdca_risk.parquet")
             path = write_risk_index(frame, dest)

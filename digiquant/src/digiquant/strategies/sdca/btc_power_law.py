@@ -16,6 +16,10 @@ MCP tool (``mcp_server.py``) is the orchestration layer that sources price histo
 and calls it — this module has zero data-fetching or MCP dependency, matching the
 rest of the ``sdca`` package.
 
+The QuantReg loop, rearrangement, history-length guards, and
+``QuantileCoefficients`` live in ``quantile_rails.py`` (#3175). This module is
+the BTC-specific configuration: genesis-anchored log-time and quadratic basis.
+
 **Independently-fit quantile curves can cross** (a lower quantile's curve
 overtaking a higher one at some ``x``), which would violate ``low < median < high``
 downstream in ``valuation.py``. ``rails()``/``rails_full()`` fix this with the
@@ -27,12 +31,23 @@ output to already be monotonic.
 from __future__ import annotations
 
 import logging
-import warnings
 from datetime import date
 from pathlib import Path
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, field_validator
+
+from digiquant.strategies.sdca.quantile_rails import (
+    LABEL_BY_QUANTILE,
+    MIN_FIT_HISTORY_DAYS,
+    QUANTILE_LABELS,
+    QUANTILES,
+    QuantileCoefficients,
+    evaluate_quadratic_log10,
+    fit_quantile_regression,
+    quantile_frame,
+    validate_fit_series,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,30 +56,10 @@ logger = logging.getLogger(__name__)
 # origin of the log-time axis, chosen once and then fixed for reproducibility.
 BTC_GENESIS_DATE: date = date(2009, 1, 3)
 
-QUANTILES: tuple[float, ...] = (0.01, 0.10, 0.25, 0.50, 0.75, 0.95, 0.99)
-QUANTILE_LABELS: tuple[str, ...] = ("q01", "q10", "q25", "q50", "q75", "q95", "q99")
-_LABEL_BY_QUANTILE: dict[float, str] = dict(zip(QUANTILES, QUANTILE_LABELS, strict=True))
-
-# A quadratic-in-log-time fit needs real spread in ln(days_since_genesis) to
-# separate its linear and quadratic terms; below this many daily observations, or
-# this many calendar days between the first and last date (both enforced in
-# fit_btc_power_law — row count alone doesn't bound gaps between dates), the fit
-# is not considered reliable. Data-sufficiency guard per #1082's acceptance
-# criteria — a starting heuristic (2 years), not a value tuned against real data.
-MIN_FIT_HISTORY_DAYS = 730
+_LABEL_BY_QUANTILE = LABEL_BY_QUANTILE
 
 _COEFFICIENTS_PATH = Path(__file__).parent / "btc_power_law_coefficients.json"
 _COEFFICIENTS_EXAMPLE_PATH = Path(__file__).parent / "btc_power_law_coefficients.example.json"
-
-
-class QuantileCoefficients(BaseModel):
-    """One quantile's fitted ``(c, a, b)`` for ``10 ** (c + a*x + b*x**2)``."""
-
-    model_config = ConfigDict(frozen=True, strict=True)
-
-    c: float
-    a: float
-    b: float
 
 
 class BtcPowerLawCoefficients(BaseModel):
@@ -111,48 +106,12 @@ def fit_btc_power_law(
     the reason on any violation, including too little history (see
     ``MIN_FIT_HISTORY_DAYS``) — the data-sufficiency guard #1082 asks for.
     """
-    if dates.dtype != pl.Date:
-        raise ValueError(f"fit_btc_power_law requires dates to be pl.Date, got {dates.dtype}")
-    if dates.len() == 0:
-        raise ValueError("fit_btc_power_law requires at least one row")
-    if price.len() != dates.len():
-        raise ValueError(
-            f"fit_btc_power_law requires dates and price to have the same length, "
-            f"got {dates.len()}, {price.len()}"
-        )
-    if dates.is_null().any():
-        raise ValueError("fit_btc_power_law requires dates to have no null values")
-    date_list: list[date] = dates.to_list()
-    if any(date_list[i] >= date_list[i + 1] for i in range(len(date_list) - 1)):
-        raise ValueError("fit_btc_power_law requires dates to be strictly increasing")
-    if price.is_null().any():
-        raise ValueError("fit_btc_power_law requires price to have no null values")
-    if not price.is_finite().all():
-        raise ValueError("fit_btc_power_law requires price to be finite")
-    if not (price > 0).all():
-        raise ValueError("fit_btc_power_law requires price to be positive")
-    if len(date_list) < MIN_FIT_HISTORY_DAYS:
-        raise ValueError(
-            f"fit_btc_power_law requires at least {MIN_FIT_HISTORY_DAYS} daily "
-            f"observations for a reliable quadratic-in-log-time fit, got {len(date_list)}"
-        )
-    # Row count alone doesn't guarantee calendar coverage: nothing above bounds the
-    # gaps between consecutive dates, so MIN_FIT_HISTORY_DAYS rows of gappy input
-    # can (and, at the exact boundary, always does — see below) span fewer actual
-    # calendar days than the name/docstring promise. x = ln(days_since_genesis) is
-    # what the quadratic is fit against, so calendar span — not row count — is what
-    # actually determines whether there's enough spread to separate the linear and
-    # quadratic terms. Checked separately from (and in addition to) the row-count
-    # guard above: N strictly-increasing dates span at least N-1 days, so N rows at
-    # exactly the row-count floor span only N-1 days — one day short of this check.
-    fit_span_days = (date_list[-1] - date_list[0]).days
-    if fit_span_days < MIN_FIT_HISTORY_DAYS:
-        raise ValueError(
-            f"fit_btc_power_law requires at least {MIN_FIT_HISTORY_DAYS} calendar "
-            f"days between the first and last date for a reliable quadratic-in-log-time "
-            f"fit, got a {fit_span_days}-day span ({date_list[0]} to {date_list[-1]}) "
-            f"across {len(date_list)} rows"
-        )
+    date_list = validate_fit_series(
+        dates,
+        price,
+        caller="fit_btc_power_law",
+        fit_kind="quadratic-in-log-time",
+    )
     if date_list[0] <= genesis:
         raise ValueError(
             f"fit_btc_power_law requires all dates after genesis ({genesis}), "
@@ -160,8 +119,6 @@ def fit_btc_power_law(
         )
 
     import numpy as np
-    from statsmodels.regression.quantile_regression import QuantReg
-    from statsmodels.tools.sm_exceptions import ConvergenceWarning, IterationLimitWarning
 
     days_since_genesis = np.array([(d - genesis).days for d in date_list], dtype=float)
     raw_x = np.log(days_since_genesis)
@@ -169,28 +126,7 @@ def fit_btc_power_law(
     x = raw_x - mu
     y = np.log10(np.array(price.to_list(), dtype=float))
     design = np.column_stack([np.ones_like(x), x, x**2])
-
-    quantile_coeffs: dict[str, QuantileCoefficients] = {}
-    for q, label in zip(QUANTILES, QUANTILE_LABELS, strict=True):
-        # QuantReg.fit's IRLS solver never raises on non-convergence — it silently
-        # returns whatever `beta` the loop was on at max_iter (or mid-cycle), with
-        # only a warnings.warn(IterationLimitWarning/ConvergenceWarning) as the
-        # signal (see statsmodels.regression.quantile_regression.QuantReg.fit).
-        # Consuming result.params unconditionally would let a non-converged fit
-        # through to persisted coefficients. Catch and escalate instead.
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            result = QuantReg(y, design).fit(q=q, max_iter=2000)
-        non_convergence = [
-            w for w in caught if issubclass(w.category, (IterationLimitWarning, ConvergenceWarning))
-        ]
-        if non_convergence:
-            raise ValueError(
-                f"fit_btc_power_law: QuantReg failed to converge for quantile {q} "
-                f"({label}): {non_convergence[0].message}"
-            )
-        c, a, b = (float(v) for v in result.params)
-        quantile_coeffs[label] = QuantileCoefficients(c=c, a=a, b=b)
+    quantile_coeffs = fit_quantile_regression(design, y, caller="fit_btc_power_law")
 
     return BtcPowerLawCoefficients(
         genesis=genesis,
@@ -255,23 +191,8 @@ def _evaluate_rails(coefficients: BtcPowerLawCoefficients, dates: pl.Series) -> 
     raw_x = np.full_like(days_since_genesis, np.nan)
     raw_x[valid] = np.log(days_since_genesis[valid])
     x = raw_x - coefficients.mu
-
-    values = np.full((len(date_list), len(QUANTILE_LABELS)), np.nan)
-    for j, label in enumerate(QUANTILE_LABELS):
-        coeff = coefficients.quantiles[label]
-        values[:, j] = 10.0 ** (coeff.c + coeff.a * x + coeff.b * x**2)
-    values[~valid, :] = np.nan
-
-    # Rearrangement: sort each row ascending so the 7 curves never cross, even
-    # though they were fit independently per quantile.
-    values = np.sort(values, axis=1)
-
-    return pl.DataFrame(
-        {
-            label: pl.Series(label, values[:, j]).fill_nan(None)
-            for j, label in enumerate(QUANTILE_LABELS)
-        }
-    )
+    values = evaluate_quadratic_log10(coefficients.quantiles, x)
+    return quantile_frame(values)
 
 
 class BtcPowerLawRiskModel:
