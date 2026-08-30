@@ -2,6 +2,8 @@
 
 **Status: PARTIAL UNLOCK (2026-08-30 Auth Pages) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + vault seal + free-tier `TIER_FORBIDDEN` + notify prefs→Agentmail unlocked. Notify CLI loud-fails `MAILGUN_NOT_CONFIGURED`. Staging E2E still needs Stripe/Mailgun/Google/Alpaca. Prod `/olympus/login` **404** until narrow Auth Pages PR merges to `main`.
 
+**Credential identity:** paste / label vendor secrets and PATs as **digithings** (not “cursor cloud agent”). See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md). Vendor signup under the old name is paused until parent resumes under digithings.
+
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
 Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-auth-pages.md`  
@@ -31,7 +33,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 | Name | Format hint |
 |------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/cursor-cloud-agent-supabase-pat` (label **cursor cloud agent**) works; re-paste into Cursor env if process env drops it |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/digithings-supabase-pat` (label **digithings**) works; re-paste into Cursor env if process env drops it. See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md) |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
 | `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
