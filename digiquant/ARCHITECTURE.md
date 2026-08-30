@@ -3049,7 +3049,12 @@ templates carry unsubscribe link, no broker ids/tokens/keys.
 
 **Loud-fail probe:** `python -m digiquant.notify.dispatch --require-mailgun` (alias
 `--check`) exits **2** with `MAILGUN_NOT_CONFIGURED` listing missing env *names*
-when vendor keys are empty. Combined cron probe:
+when vendor keys are empty. `--dry-run` loads `notification_prefs` and prints
+candidate counts (`considered`, `digest_on`, `skipped_prefs_off`,
+`skipped_no_email`, `mailgun_configured`) without sending or claiming
+`notification_log` slots — Mailgun absence is `mailgun_configured=0`, not a
+skip of the count. `--workspace-id` filters the plan. Missing store env exits
+**2** with `NOTIFY_STORE_NOT_CONFIGURED`. Combined cron probe:
 `python scripts/kairos_cron_check.py` (overlay `--check` + kairos sync `--check` +
 Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing which probes failed.
 Staging inventory also covers these names in
@@ -3084,6 +3089,7 @@ configured.
 | Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
 | House CLI `python -m digiquant.olympus.hermes.chain` (success, not retry) | `dispatch_house_notifications_after_chain` → `force_digest=True` | No — always attempts today's digest; dedupe prevents double-send |
 | Probe `… --require-mailgun` | env presence only (no send) | N/A — exit 2 if incomplete |
+| Preview `… --dry-run` | `plan_digest_dispatch` (prefs counts; no send/claim) | N/A — `mailgun_configured` flag only |
 | `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
 | Overlay `run_atlas_then_hermes` | none | N/A — nested overlay must not send house mail |
 | K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
