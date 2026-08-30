@@ -32,7 +32,7 @@ from digiquant.olympus.atlas.phases.preflight import (
 )
 from digiquant.olympus.atlas.phases.publish_phase import PublishDeps, build_publish_phase
 from digiquant.olympus.atlas.phases.triage_phase import TriageDeps
-from digiquant.olympus.atlas.state import AtlasResearchState, PhaseError
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseError
 from digiquant.olympus.hermes.graph import (
     HermesGraphDeps,
     ThesisGraphDeps,
@@ -241,6 +241,29 @@ def _record_chain_error(state: AtlasResearchState, label: str, exc: BaseExceptio
         _logger.debug("chain: could not record error for %s", label, exc_info=True)
 
 
+def _preflight_config(deps: ChainDeps) -> AtlasConfigBundle | None:
+    """Pin overlay workspace on initial state before fail-soft graph invoke.
+
+    Overlay identity is loaded in Atlas preflight. If Atlas raises at graph
+    level, ``_safe_invoke_graph`` returns the original state. Beliefs fold
+    then ran with ``workspace_id=None`` (house path) and stamped house
+    ``decision_log``. Call the preflight config loader once up front so a
+    private workspace skip is already on the last-good state. House loaders
+    that omit ``workspace_id`` still fold. Tests may pass ``atlas=None``.
+    """
+    atlas = getattr(deps, "atlas", None)
+    if atlas is None:
+        return None
+    preflight = getattr(atlas, "preflight", None)
+    if preflight is None:
+        return None
+    loader = getattr(preflight, "config_loader", None)
+    if not callable(loader):
+        return None
+    loaded = loader()
+    return loaded if isinstance(loaded, AtlasConfigBundle) else None
+
+
 def _safe_invoke_graph(
     graph: Any, state: AtlasResearchState, checkpointer: Any, thread_base: str | None, label: str
 ) -> AtlasResearchState:
@@ -354,7 +377,9 @@ def run_atlas_then_hermes(
     non-None overrides preferences.
 
     ``initial_state`` pins one UTC ``knowledge_cutoff_at`` before graph invoke
-    (#2628 / WP4.1). Atlas preflight then pins one ``research_state_pin``
+    (#2628 / WP4.1) and, when the preflight ``config_loader`` is present, the
+    overlay ``workspace_id`` so a fail-soft Atlas crash cannot fold beliefs as
+    house. Atlas preflight then pins one ``research_state_pin``
     (#2863 / WP12.3). Checkpoint resume keeps both from the saved thread —
     it does not re-call ``now()`` or re-select state as ingestion continues.
 
@@ -362,7 +387,7 @@ def run_atlas_then_hermes(
     passes False so ``overlay_usage_scope`` is not wiped by a nested
     ``usage.start`` / ``usage.reset``.
     """
-    state = initial_state(atlas_input)
+    state = initial_state(atlas_input, config=_preflight_config(deps))
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
     started_at = datetime.now(tz=timezone.utc)

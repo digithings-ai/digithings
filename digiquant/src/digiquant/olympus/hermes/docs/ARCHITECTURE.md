@@ -607,7 +607,9 @@ Three holes are closed:
    never kill a run that already committed a book. It records `("chain", "beliefs")` instead,
    which degrades the run. Overlay nested chain **skips** the fold
    (`skip_overlay_shared_register`): `decision_log` has no `workspace_id`, and stamping
-   `beliefs_folded_at` by id would consume house lessons.
+   `beliefs_folded_at` by id would consume house lessons. Overlay `workspace_id` is
+   seeded onto `initial_state` from the preflight config loader so a fail-soft Atlas
+   crash cannot fold as house.
 2. **A terminating crash is recorded before the row is written.** `except BaseException:
    _record_chain_error(state, "terminal", exc); raise` sits between the body and the
    `finally`. This catches SystemExit / KeyboardInterrupt / a job timeout's SIGTERM — none of

@@ -3331,7 +3331,10 @@ compact summary still lands in in-memory `market_context` for that overlay run.
 Overlay `run_atlas_then_hermes` **skips** `_run_beliefs_fold` for a private
 workspace — distillation reads every unfolded house `decision_log` row and
 stamps `beliefs_folded_at` by id, and the chain still reaches that fold after
-a fail-soft H9 `legacy_book_unique`. Staged cutover 113 does not change that.
+a fail-soft H9 `legacy_book_unique`. Overlay identity is seeded onto
+`initial_state` from the preflight `config_loader` before graph invoke, so an
+Atlas crash that returns last-good state cannot fold as house
+(`workspace_id=None`). Staged cutover 113 does not change that.
 Private overlay remains
 H7–H9 book only (T4). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.

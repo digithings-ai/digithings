@@ -592,3 +592,52 @@ def test_overlay_distill_beliefs_does_not_stamp_house_rows(
     assert omitted_written is True
     assert house_client.store["decision_log"][0].get("beliefs_folded_at") is not None
     assert omitted_client.store["decision_log"][0].get("beliefs_folded_at") is not None
+
+
+def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Overlay identity must be on initial state, not only after preflight.
+
+    ``_safe_invoke_graph`` returns the pre-Atlas state when Atlas raises.
+    That state used to have ``workspace_id=None``, so beliefs fold took the
+    house path and stamped ``beliefs_folded_at`` on every unfolded row.
+    """
+    from digiquant.olympus.hermes.chain import run_atlas_then_hermes
+    from digiquant.olympus.learning import beliefs_distillation as mod
+
+    overlay = uuid4()
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    overlay_client.store["decision_log"] = [dict(r) for r in rows]
+
+    def _overlay_must_not_distill(**_kw: object) -> object:
+        raise AssertionError("overlay must not distill house lessons")
+
+    monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
+
+    class _BoomAtlasGraph:
+        def invoke(self, *_a: object, **_k: object) -> object:
+            raise RuntimeError("atlas exploded before preflight")
+
+    deps = ChainDeps(
+        atlas=AtlasGraphDeps(
+            preflight=PreflightDeps(
+                client=overlay_client,
+                config_loader=lambda: AtlasConfigBundle(workspace_id=str(overlay)),
+            ),
+        ),
+        hermes=HermesGraphDeps(),
+    )
+    with patch(
+        "digiquant.olympus.hermes.chain.build_atlas_graph",
+        return_value=_BoomAtlasGraph(),
+    ):
+        run_atlas_then_hermes(
+            atlas_input=AtlasInput(run_date=_RUN),
+            deps=deps,
+            manage_usage=False,
+        )
+    assert all(r.get("beliefs_folded_at") is None for r in overlay_client.store["decision_log"])
+    assert overlay_client.store.get("documents", []) == []
