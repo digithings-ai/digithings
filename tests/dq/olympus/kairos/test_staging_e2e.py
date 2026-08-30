@@ -18,6 +18,13 @@ import urllib.request
 from typing import Any
 
 import pytest
+from digiquant.olympus.kairos.staging_e2e import (
+    HopExpectation,
+    hop_ok,
+    resolve_staging_jwt,
+    run_observer_hops,
+    run_staging_e2e,
+)
 from digiquant.olympus.kairos.staging_secrets import (
     KAIROS_STAGING_OPTIONAL_SECRETS,
     KAIROS_STAGING_REQUIRED_SECRETS,
@@ -83,6 +90,129 @@ def test_empty_and_placeholder_values_count_as_missing(
     assert "STRIPE_SECRET_KEY" in missing
     assert "MAILGUN_API_KEY" in missing
     assert "NOTIFY_FROM" in missing
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("kind", "http", "code", "expected"),
+    (
+        (HopExpectation.READ_OK, 200, None, True),
+        (HopExpectation.READ_OK, 401, "UNAUTHENTICATED", False),
+        (HopExpectation.TIER_FORBIDDEN, 403, "TIER_FORBIDDEN", True),
+        (HopExpectation.TIER_FORBIDDEN, 200, None, False),
+        (HopExpectation.TIER_FORBIDDEN, 404, "NOT_FOUND", False),
+        (HopExpectation.PRICE_OR_SESSION, 500, "PRICE_NOT_CONFIGURED", True),
+        (HopExpectation.PRICE_OR_SESSION, 200, None, True),
+        (HopExpectation.PRICE_OR_SESSION, 403, "TIER_FORBIDDEN", False),
+        (HopExpectation.NOT_FOUND, 404, "NOT_FOUND", True),
+        (HopExpectation.NOT_FOUND, 403, "TIER_FORBIDDEN", False),
+    ),
+)
+def test_observer_hop_ok(kind: HopExpectation, http: int, code: str | None, expected: bool) -> None:
+    assert hop_ok(kind, http, code) is expected
+
+
+class _FakeHttp:
+    """Method+path canned responses — never a live network."""
+
+    def __init__(self, by_key: dict[tuple[str, str], tuple[int, dict[str, object]]]) -> None:
+        self.by_key = by_key
+
+    def __call__(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: dict[str, str] | None = None,
+        body: dict[str, object] | None = None,
+    ) -> tuple[int, dict[str, object]]:
+        del headers, body
+        matches: list[tuple[int, tuple[int, dict[str, object]]]] = []
+        for (m, suffix), payload in self.by_key.items():
+            if m == method and url.rstrip("/").endswith(suffix):
+                matches.append((len(suffix), payload))
+        if not matches:
+            return 599, {"code": "MISSING_FAKE"}
+        matches.sort(key=lambda item: item[0], reverse=True)
+        return matches[0][1]
+
+
+def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]:
+    forbidden = (403, {"code": "TIER_FORBIDDEN"})
+    return {
+        ("GET", "/settings/profile"): (200, {"workspace_id": "ws"}),
+        ("GET", "/settings/notifications"): (200, {"workspace_id": "ws"}),
+        ("GET", "/settings/brokers"): (200, {"connections": []}),
+        ("GET", "/settings/keys"): (200, {"keys": []}),
+        ("PATCH", "/settings/profile"): forbidden,
+        ("POST", "/settings/brokers/connect"): forbidden,
+        ("POST", "/settings/keys/connect"): forbidden,
+        ("POST", "/create-checkout-session"): (500, {"code": "PRICE_NOT_CONFIGURED"}),
+        ("POST", "/settings/brokers"): (404, {"code": "NOT_FOUND"}),
+    }
+
+
+@pytest.mark.unit
+def test_observer_hops_pass_on_core_contract() -> None:
+    results = run_observer_hops(
+        http=_FakeHttp(_observer_ok_fakes()),
+        jwt="test-jwt",
+        anon_key="anon",
+        functions_base="https://example.test/functions/v1",
+    )
+    assert all(row.ok for row in results)
+    forbidden = [row for row in results if row.kind is HopExpectation.TIER_FORBIDDEN]
+    assert len(forbidden) == 3
+
+
+@pytest.mark.unit
+def test_observer_hops_fail_when_connect_is_not_forbidden() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/settings/brokers/connect")] = (200, {"id": "should-not-seal"})
+    results = run_observer_hops(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key=None,
+        functions_base="https://example.test/functions/v1",
+    )
+    connect = next(row for row in results if row.label == "POST /settings/brokers/connect")
+    assert connect.ok is False
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
+    logs: list[str] = []
+    rc = run_staging_e2e(
+        http=_FakeHttp(_observer_ok_fakes()),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == 2
+    assert any("TIER_FORBIDDEN" in line or "Observer hops" in line for line in logs)
+    assert any("STRIPE_SECRET_KEY" in line for line in logs)
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_observer_regression_exits_3() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/profile")] = (401, {"code": "UNAUTHENTICATED"})
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 3
+
+
+@pytest.mark.unit
+def test_resolve_staging_jwt_prefers_env_token() -> None:
+    token = resolve_staging_jwt(
+        http=_FakeHttp({}),
+        environ={"KAIROS_STAGING_USER_JWT": "  abc  "},
+    )
+    assert token == "abc"
 
 
 def _http_json(
