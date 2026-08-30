@@ -98,7 +98,7 @@
   .dms-dot {
     width: 8px;
     height: 8px;
-    border-radius: 999px;
+    border-radius: 0;
     background: color-mix(in srgb, var(--ink-mute) 20%, transparent);
   }
 }

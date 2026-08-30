@@ -13,7 +13,7 @@
   align-items: center;
   gap: 1.4rem;
   padding: 0.7rem 1rem;
-  border-radius: 999px;
+  border-radius: 0;
   border: 1px solid transparent;
   background: transparent;
   transition: border-color 0.3s var(--ease), background-color 0.3s var(--ease),

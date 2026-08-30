@@ -138,7 +138,7 @@
 .deck-alert-dot {
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: 0;
   flex-shrink: 0;
   background: var(--ink-mute);
 }

@@ -47,8 +47,8 @@ export function ChatWidgetFrame({
 }: ChatWidgetFrameProps) {
   const frame =
     variant === "embed"
-      ? "overflow-hidden rounded-[8px] border border-hair"
-      : "overflow-hidden rounded-[12px] border border-hair bg-surface";
+      ? "overflow-hidden rounded-none border border-hair"
+      : "overflow-hidden rounded-none border border-hair bg-surface";
   const hasHead = Boolean(eyebrow || title || badge);
 
   return (
@@ -98,7 +98,7 @@ export function ChatWidgetButton({
   return (
     <button
       type={type ?? "button"}
-      className={`cw-btn cursor-pointer rounded-full border px-[1rem] py-[0.5rem] font-mono text-[0.72rem] ${TONES[tone]}${
+      className={`cw-btn cursor-pointer rounded-none border px-[1rem] py-[0.5rem] font-mono text-[0.72rem] ${TONES[tone]}${
         className ? ` ${className}` : ""
       }`}
       {...rest}

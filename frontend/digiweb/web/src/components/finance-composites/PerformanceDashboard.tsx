@@ -93,7 +93,7 @@ export function PerformanceDashboard({
 }: PerformanceDashboardProps) {
   return (
     <div
-      className={`overflow-hidden rounded-[12px] border border-hair bg-surface${
+      className={`overflow-hidden rounded-none border border-hair bg-surface${
         className ? ` ${className}` : ""
       }`}
     >
@@ -169,7 +169,7 @@ export function PerformanceDashboard({
               </span>
               <span className="h-2 overflow-hidden rounded-full bg-ink/[0.08]">
                 <span
-                  className="block h-full rounded-full bg-accent"
+                  className="block h-full rounded-none bg-accent"
                   style={{ width: `${a.pct}%` }}
                 />
               </span>

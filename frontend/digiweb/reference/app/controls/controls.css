@@ -136,7 +136,7 @@
 .dd-dot {
   width: 7px;
   height: 7px;
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--accent);
   align-self: center;
 }
@@ -595,7 +595,7 @@
   appearance: none;
   width: 100%;
   height: 4px;
-  border-radius: 999px;
+  border-radius: 0;
   cursor: pointer;
   background: color-mix(in srgb, var(--ink) 14%, transparent);
 }

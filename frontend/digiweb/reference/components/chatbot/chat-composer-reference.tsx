@@ -40,7 +40,7 @@ export function ChatComposerReference() {
         send.
       </p>
 
-      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-[12px] border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
+      <div className="chat-surface mt-[1.3rem] max-w-[760px] flex flex-col gap-[0.7rem] rounded-none border border-term-hair bg-term-bg px-[1.15rem] pt-[1rem] pb-[1.2rem] font-mono">
         {sent ? (
           <div className="flex gap-[0.55rem] items-baseline justify-start">
             <div className="chat-bubble--user min-w-0 border-0 bg-transparent p-0 font-mono text-[0.84rem] leading-[1.6] text-term-ink">
@@ -49,7 +49,7 @@ export function ChatComposerReference() {
           </div>
         ) : null}
 
-        <div className="composer border border-hair rounded-[14px] bg-surface px-[0.85rem] pt-[0.75rem] pb-[0.6rem]">
+        <div className="composer border border-hair rounded-none bg-surface px-[0.85rem] pt-[0.75rem] pb-[0.6rem]">
           <textarea
             ref={areaRef}
             className="composer-input w-full border-0 bg-transparent resize-none text-ink font-sans text-[0.9rem] leading-[1.5] outline-none min-h-[1.5rem]"
@@ -82,7 +82,7 @@ export function ChatComposerReference() {
               </button>
               <button
                 type="button"
-                className="composer-model inline-flex items-center gap-[0.4rem] px-[0.6rem] py-[0.28rem] border border-hair rounded-full bg-transparent text-ink-soft font-mono text-[0.68rem] cursor-pointer"
+                className="composer-model inline-flex items-center gap-[0.4rem] px-[0.6rem] py-[0.28rem] border border-hair rounded-none bg-transparent text-ink-soft font-mono text-[0.68rem] cursor-pointer"
               >
                 <span className="size-1.5 rounded-full bg-accent" aria-hidden="true" />
                 digichat · opus
@@ -100,7 +100,7 @@ export function ChatComposerReference() {
               </span>
               <button
                 type="button"
-                className="composer-send inline-flex items-center justify-center w-8 h-8 border-0 rounded-full bg-accent cursor-pointer"
+                className="composer-send inline-flex items-center justify-center w-8 h-8 border-0 rounded-none bg-accent cursor-pointer"
                 disabled={!value.trim()}
                 aria-label="Send message"
                 onClick={send}

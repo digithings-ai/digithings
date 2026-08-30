@@ -110,7 +110,7 @@ export function TabsReference() {
                 ].map((s) => (
                   <div
                     key={s.k}
-                    className="flex flex-col gap-[0.25rem] rounded-[9px] border border-hair bg-surface/60 px-[0.85rem] py-[0.7rem]"
+                    className="flex flex-col gap-[0.25rem] rounded-none border border-hair bg-surface/60 px-[0.85rem] py-[0.7rem]"
                   >
                     <span className="font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
                       {s.k}
