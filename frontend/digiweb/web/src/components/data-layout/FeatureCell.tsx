@@ -52,7 +52,7 @@ export function FeatureCell({
 }: FeatureCellProps) {
   return (
     <article
-      className={`fc-cell grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-center gap-[1.6rem] rounded-[12px] border border-hair bg-surface p-[1.6rem] max-[760px]:grid-cols-1${
+      className={`fc-cell grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-center gap-[1.6rem] rounded-none border border-hair bg-surface p-[1.6rem] max-[760px]:grid-cols-1${
         livery ? ` accent-${livery}` : ""
       }${className ? ` ${className}` : ""}`}
     >

@@ -182,7 +182,7 @@ Minimal — no marketing columns. Literal nav labels only; document in Olympus s
 
 ### digiquant.io (Graphite outcomes + Cursor bento)
 
-1. Hero — Fraunces h1 + modality sub + CTAs + stats — #1213
+1. Hero — mono h1 + modality sub + CTAs + stats — #1213
 2. Optional hero picker — Olympus / strategies / pipeline — Phase E
 3. **Olympus scrolly** (only pin) + progress rail — #1215
 4. Bento — Pipeline · Strategies · Pricing — #1214

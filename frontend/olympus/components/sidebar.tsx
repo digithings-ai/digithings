@@ -150,7 +150,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={toggleSidebar}
-              className="hidden md:flex rounded-lg p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair shrink-0"
+              className="hidden md:flex p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair shrink-0"
               aria-label="Collapse sidebar"
             >
               <ChevronLeft size={18} />
@@ -163,7 +163,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={toggleSidebar}
-              className="rounded-lg p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair"
+              className="p-2 text-ink-mute hover:text-ink hover:bg-ink/[0.06] border border-hair"
               aria-label="Expand sidebar"
             >
               <ChevronRight size={18} />
@@ -176,7 +176,7 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={openCommandPalette}
-              className="hidden md:flex items-center gap-2 mx-6 mb-1 rounded-lg border border-hair px-3 py-1.5 text-xs text-ink-mute hover:text-ink-soft hover:bg-ink/[0.03] transition-colors"
+              className="hidden md:flex items-center gap-2 mx-6 mb-1 border border-hair px-3 py-1.5 text-xs text-ink-mute hover:text-ink-soft hover:bg-ink/[0.03] transition-colors"
               aria-label="Search"
             >
               <Search size={14} className="shrink-0" />
@@ -211,7 +211,7 @@ export default function Sidebar() {
               <button
                 type="button"
                 onClick={() => void handleSignOut()}
-                className={`inline-flex items-center gap-2 rounded-lg border border-hair px-3 py-1.5 text-xs text-ink-soft hover:text-ink hover:bg-ink/[0.04] ${
+                className={`inline-flex items-center gap-2 border border-hair px-3 py-1.5 text-xs text-ink-soft hover:text-ink hover:bg-ink/[0.04] ${
                   sidebarCollapsed ? 'md:justify-center md:px-2' : ''
                 }`}
                 aria-label="Sign out"

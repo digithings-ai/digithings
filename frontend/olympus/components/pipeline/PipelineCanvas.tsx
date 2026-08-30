@@ -486,7 +486,7 @@ export default function PipelineCanvas({
                   aria-expanded={expandable ? expanded : undefined}
                   aria-current={selected ? 'step' : undefined}
                   onClick={() => handleNodeClick(node)}
-                  className={`mb-2 flex min-h-14 w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                  className={`mb-2 flex min-h-14 w-full items-center gap-3 border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
                     node.kind === 'fanout-branch'
                       ? 'ml-4 w-[calc(100%-1rem)] border-hair bg-term-bg'
                       : 'border-hair bg-surface'
@@ -509,7 +509,7 @@ export default function PipelineCanvas({
                     ) : null}
                   </span>
                   {count != null && count > 0 ? (
-                    <span className="rounded-full bg-accent/15 px-2 py-0.5 font-mono text-xs tabular-nums text-accent">
+                    <span className="bg-accent/15 px-2 py-0.5 font-mono text-xs tabular-nums text-accent">
                       {count}
                     </span>
                   ) : null}
@@ -529,7 +529,7 @@ export default function PipelineCanvas({
               aria-label="Previous pipeline section"
               disabled={resolvedWalkthroughIndex === 0}
               onClick={() => walkPipeline(-1, 'mobile')}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+              className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ChevronLeft size={20} aria-hidden />
             </button>
@@ -546,7 +546,7 @@ export default function PipelineCanvas({
               aria-label="Next pipeline section"
               disabled={resolvedWalkthroughIndex === walkthroughNodes.length - 1}
               onClick={() => walkPipeline(1, 'mobile')}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
+              className="flex h-11 w-11 shrink-0 items-center justify-center border border-hair text-ink transition-colors hover:border-accent/50 hover:text-accent disabled:cursor-not-allowed disabled:opacity-30"
             >
               <ChevronRight size={20} aria-hidden />
             </button>
@@ -555,7 +555,7 @@ export default function PipelineCanvas({
             {PIPELINE_TOPOLOGY.map((stage, index) => (
               <span
                 key={stage.id}
-                className={`h-1 rounded-full ${index === resolvedStageIndex ? 'bg-accent' : 'bg-hair'}`}
+                className={`h-1 ${index === resolvedStageIndex ? 'bg-accent' : 'bg-hair'}`}
               />
             ))}
           </div>
@@ -576,7 +576,7 @@ export default function PipelineCanvas({
                 role="toolbar"
                 aria-label="Pipeline controls"
                 data-no-pan=""
-                className="pointer-events-auto inline-flex items-center gap-1 rounded-lg border border-hair bg-term-bg/95 p-1 shadow-sm backdrop-blur-md"
+                className="pointer-events-auto inline-flex items-center gap-1 border border-hair bg-term-bg/95 p-1 shadow-sm backdrop-blur-md"
               >
                 <Tooltip>
                   <TooltipTrigger
@@ -690,7 +690,7 @@ export default function PipelineCanvas({
               </div>
             </TooltipProvider>
 
-            <div className="hidden items-center gap-3 rounded-lg border border-hair bg-term-bg/90 px-3 py-2 font-mono text-xs text-ink-mute backdrop-blur-md xl:flex">
+            <div className="hidden items-center gap-3 border border-hair bg-term-bg/90 px-3 py-2 font-mono text-xs text-ink-mute backdrop-blur-md xl:flex">
               <span><span className="text-accent">→</span> sequential</span>
               <span><span className="text-accent">↓</span> parallel</span>
             </div>

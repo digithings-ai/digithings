@@ -13,7 +13,7 @@ function UnlockedNote({ title, body }: { title: string; body: string }) {
   return (
     <div
       data-testid="tier-unlocked-note"
-      className="rounded-lg border border-hair bg-term-bg/40 px-4 py-3 space-y-1"
+      className="border border-hair bg-term-bg/40 px-4 py-3 space-y-1"
     >
       <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">{title}</p>
       <p className="text-sm text-ink-soft">{body}</p>

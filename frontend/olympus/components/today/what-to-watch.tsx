@@ -45,7 +45,7 @@ export function WhatToWatch({ actionables, risks, asOfDate }: WhatToWatchProps) 
         <ol className="space-y-2.5">
           {acts.map((a, i) => (
             <li key={`${a.label}-${i}`} className="flex gap-3">
-              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-hair font-mono text-[11px] tabular-nums text-ink-mute">
+              <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center border border-hair font-mono text-[11px] tabular-nums text-ink-mute">
                 {a.priority ?? i + 1}
               </span>
               <div className="min-w-0">

@@ -50,7 +50,7 @@ export function FooterReference() {
         scroll progress. Everywhere else stays hairline.
       </p>
 
-      <footer className="mt-[1.2rem] overflow-hidden rounded-[12px] border border-hair px-[1.4rem] pt-[1.4rem]">
+      <footer className="mt-[1.2rem] overflow-hidden rounded-none border border-hair px-[1.4rem] pt-[1.4rem]">
         <div className="grid grid-cols-4 gap-[0.8rem] max-[900px]:grid-cols-2">
           {COLUMNS.map((col) => (
             <div key={col.title}>

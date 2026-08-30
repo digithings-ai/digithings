@@ -52,7 +52,7 @@ export function MatrixCellHistoryPanelBody({
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
+          className="-mr-1.5 -mt-1.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink sm:h-9 sm:w-9"
         >
           <X size={18} aria-hidden />
         </button>
@@ -65,7 +65,7 @@ export function MatrixCellHistoryPanelBody({
           return (
             <div
               key={`${view.source_file}-${view.run_date}`}
-              className={`rounded-lg border ${style.border} bg-ink/[0.02] p-3 ${view.isPrimary ? 'ring-1 ring-accent/30' : ''}`}
+              className={`rounded-none border ${style.border} bg-ink/[0.02] p-3 ${view.isPrimary ? 'ring-1 ring-accent/30' : ''}`}
             >
               <div className="flex items-center gap-2">
                 <span className={`text-sm leading-none ${style.text}`} aria-hidden>
@@ -76,7 +76,7 @@ export function MatrixCellHistoryPanelBody({
                   <span className="text-[11px] uppercase text-ink-mute">· {view.conviction}</span>
                 ) : null}
                 {view.isPrimary ? (
-                  <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent">
+                  <span className="rounded-none bg-accent/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent">
                     Latest
                   </span>
                 ) : null}

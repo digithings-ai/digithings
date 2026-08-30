@@ -6,7 +6,7 @@ import { ChevronsLeft, ChevronsRight, Maximize2, Minimize2, X } from 'lucide-rea
 export type DetailPanelSize = 'default' | 'wide' | 'full';
 
 const btnClass =
-  'inline-flex shrink-0 items-center justify-center rounded-lg border border-hair text-ink-mute transition-colors hover:text-ink';
+  'inline-flex shrink-0 items-center justify-center border border-hair text-ink-mute transition-colors hover:text-ink';
 
 /**
  * Widen / full-screen / close controls for detail side panels.

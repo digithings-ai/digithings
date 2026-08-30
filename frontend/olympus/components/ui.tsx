@@ -34,8 +34,8 @@ interface SectionTitleProps {
  * F4 ruling (#1450): stays LOCAL — the promoted controls Card (ctl-card-ref:
  * 12px radius, ruled header rows, no shadow/hover) and the metrics grammar
  * (PerfMetrics: n-up hairline grid, mono values) both render a different
- * look, and the `.glass-card` class here is load-bearing for MotionLayer's
- * scroll-reveal system (globals.css `html.motion-on .glass-card`). */
+ * look, and the `.oly-slab` class here is load-bearing for MotionLayer's
+ * scroll-reveal system (globals.css `html.motion-on .oly-slab`). */
 export function StatCard({
   label,
   value,
@@ -45,7 +45,7 @@ export function StatCard({
   valueClass = '',
 }: StatCardProps) {
   return (
-    <div className="glass-card flex min-h-36 flex-col px-5 py-5">
+    <div className="oly-slab flex min-h-36 flex-col px-5 py-5">
       <div className="flex items-start justify-between gap-3">
         <span className="font-mono text-[0.58rem] uppercase tracking-[0.1em] text-ink-mute">
           {label}

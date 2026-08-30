@@ -82,7 +82,7 @@ export default function SettingsPage() {
           </div>
         ) : null}
         {tab === 'about' ? (
-          <div className="glass-card p-6 max-w-lg" data-testid="settings-about">
+          <div className="oly-slab p-6 max-w-lg" data-testid="settings-about">
             <SettingsContent
               variant="popover"
               lastRunDate={meta?.last_updated ?? null}

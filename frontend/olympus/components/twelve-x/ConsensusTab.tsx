@@ -171,7 +171,7 @@ export default function ConsensusTab({
       </p>
 
       <div
-        className="inline-flex rounded-lg border border-hair overflow-hidden"
+        className="inline-flex overflow-hidden rounded-none border border-hair"
         role="group"
         aria-label="Consensus view"
       >
@@ -211,14 +211,14 @@ export default function ConsensusTab({
 
       {view === 'charts' ? (
         <div className="space-y-5">
-          <div className="glass-card p-4 md:p-5 space-y-3" data-chart="line">
+          <div className="oly-slab space-y-3 p-4 md:p-5" data-chart="line">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
               <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider">
                 Consensus score over time
               </h3>
               <span className="text-[10px] text-ink-mute flex items-center gap-2 w-full">
                 <span className="flex items-center gap-1">
-                  <span className="inline-block h-2.5 w-3 rounded-sm bg-accent/15" />
+                  <span className="inline-block h-2.5 w-3 rounded-none bg-accent/15" />
                   Strong ±{STRONG_BAND}
                 </span>
                 <span className="flex items-center gap-1">
@@ -239,7 +239,7 @@ export default function ConsensusTab({
                     onClick={() => handleLegendClick(ccy)}
                     onDoubleClick={() => handleLegendDoubleClick(ccy)}
                     aria-pressed={isVisible}
-                    className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors ${
+                    className={`px-2.5 py-1 text-xs font-medium rounded-none border transition-colors ${
                       isVisible
                         ? 'border-current opacity-100'
                         : 'border-hair opacity-40'
@@ -282,7 +282,7 @@ export default function ConsensusTab({
                         background: 'var(--term-bg)',
                         border: '1px solid var(--hair)',
                         color: 'var(--ink)',
-                        borderRadius: '8px',
+                        borderRadius: 0,
                         fontSize: '0.8rem',
                       }}
                       formatter={(val, name) => {

@@ -59,7 +59,7 @@ export function CurrencyDrilldownPanelBody({
       </div>
 
       {/* Score metrics */}
-      <div className="space-y-3 rounded-lg border border-hair bg-term-bg p-4">
+      <div className="space-y-3 rounded-none border border-hair bg-term-bg p-4">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
           Consensus Metrics
         </h4>
@@ -85,7 +85,7 @@ export function CurrencyDrilldownPanelBody({
 
       {/* Opinion counts and split */}
       {consensus && (
-        <div className="space-y-3 rounded-lg border border-hair bg-term-bg p-4">
+        <div className="space-y-3 rounded-none border border-hair bg-term-bg p-4">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
             Desk Opinions
           </h4>
@@ -119,7 +119,7 @@ export function CurrencyDrilldownPanelBody({
       )}
 
       {/* Confluence score and components */}
-      <div className="space-y-3 rounded-lg border border-hair bg-term-bg p-4">
+      <div className="space-y-3 rounded-none border border-hair bg-term-bg p-4">
         <h4 className="text-xs font-semibold uppercase tracking-wider text-ink-mute">
           Confluence
         </h4>
@@ -163,7 +163,7 @@ export function CurrencyDrilldownPanelBody({
               return (
                 <div
                   key={i}
-                  className={`rounded-lg border p-3 text-sm ${directionClasses.card}`}
+                  className={`rounded-none border p-3 text-sm ${directionClasses.card}`}
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-ink">{desk.broker}</span>
@@ -191,7 +191,7 @@ export function CurrencyDrilldownPanelBody({
                 key={`${brief.source_file}-${brief.run_date}`}
                 type="button"
                 onClick={() => onOpenBrief(brief.source_file, brief.run_date)}
-                className="w-full rounded-lg border border-hair bg-surface p-3 text-left text-sm transition-colors hover:border-accent hover:bg-surface/80"
+                className="w-full rounded-none border border-hair bg-surface p-3 text-left text-sm transition-colors hover:border-accent hover:bg-surface/80"
               >
                 <div className="font-medium text-ink">{brief.broker_name}</div>
                 <div className="mt-1 text-xs text-ink-mute">{brief.central_thesis}</div>
@@ -242,7 +242,7 @@ export default function CurrencyDrilldownPanel({
             {currency} Details
           </SheetTitle>
           <SheetClose
-            className="-mr-1.5 flex h-9 w-9 items-center justify-center rounded-lg text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink"
+            className="-mr-1.5 flex h-9 w-9 items-center justify-center rounded-none text-ink-mute transition-colors hover:bg-ink/[0.06] hover:text-ink"
             aria-label="Close"
           >
             <X size={18} />

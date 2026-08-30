@@ -441,7 +441,8 @@ old app-local `@theme` palette (`--color-bg-primary`, `--color-text-primary`,
 (`@digithings/design/tokens.css`), so every utility (`bg-surface`, `text-ink`,
 `border-hair`, `text-up` / `text-down`, `font-mono`) resolves to the one canon
 palette. The only app-local custom props left in `globals.css` are non-utility
-depth cues (`--shadow-glass`) and the next/font family re-declarations that
-route the canon font tokens to the self-hosted Geist / Fraunces faces (#684) —
-no color palette. See [`../digiweb/MIGRATION.md`](../digiweb/MIGRATION.md) for
+depth cues (`--shadow-overlay`) and the next/font family re-declarations that
+route the canon font tokens to the self-hosted Geist Mono face — no color
+palette and no serif display face. Dashboard panels use `.oly-slab` (tonal
+`--surface` + hairline, radius 0). See [`../digiweb/MIGRATION.md`](../digiweb/MIGRATION.md) for
 the canon wiring and the `@theme inline` bridge rule.

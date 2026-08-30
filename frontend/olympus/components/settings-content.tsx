@@ -61,7 +61,7 @@ export function SettingsContent({
       <div>
         <p className="text-[10px] font-medium text-ink-mute mb-2">Status</p>
         {lastRunDate ? (
-          <div className="rounded-lg border border-hair bg-term-bg/50 px-3 py-2.5 space-y-1.5">
+          <div className="border border-hair bg-term-bg/50 px-3 py-2.5 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-medium text-ink-soft">Last run</span>
               <AsOfBadge date={lastRunDate} createdAt={lastRunAt} />
@@ -72,7 +72,7 @@ export function SettingsContent({
             </p>
           </div>
         ) : (
-          <div className="rounded-lg border border-hair bg-term-bg/50 px-3 py-2.5">
+          <div className="border border-hair bg-term-bg/50 px-3 py-2.5">
             <p className="text-xs text-ink-mute">No pipeline runs yet</p>
           </div>
         )}
@@ -81,7 +81,7 @@ export function SettingsContent({
       <div>
         <p className="text-[10px] font-medium text-ink-mute mb-2">Appearance</p>
         <div className="flex flex-col gap-1.5">
-          <div className="grid grid-cols-3 rounded-lg border border-hair overflow-hidden text-xs">
+          <div className="grid grid-cols-3 border border-hair overflow-hidden text-xs">
             <button
               type="button"
               aria-pressed={theme === 'auto'}
@@ -125,7 +125,7 @@ export function SettingsContent({
           <div
             id="billing"
             data-testid="settings-billing-anchor"
-            className="rounded-lg border border-hair bg-term-bg/40 px-4 py-3 space-y-1"
+            className="border border-hair bg-term-bg/40 px-4 py-3 space-y-1"
           >
             <p className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
               Billing
@@ -139,7 +139,7 @@ export function SettingsContent({
 
       <div>
         <p className="text-[10px] font-medium text-ink-mute mb-2">About</p>
-        <div className="rounded-lg border border-hair bg-term-bg/50 divide-y divide-hair">
+        <div className="border border-hair bg-term-bg/50 divide-y divide-hair">
           <div className="flex items-center justify-between gap-2 px-3 py-2">
             <span className="text-xs text-ink-soft">Build</span>
             <span className="font-mono text-[11px] text-ink-mute">{version}</span>
@@ -184,7 +184,7 @@ export function SettingsContent({
           <Link
             href="/settings"
             onClick={onNavigate}
-            className="mt-2 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-ink-soft border border-hair hover:bg-ink/[0.04] hover:text-ink transition-colors"
+            className="mt-2 flex items-center gap-2 px-3 py-2 text-sm font-medium text-ink-soft border border-hair hover:bg-ink/[0.04] hover:text-ink transition-colors"
           >
             All settings
           </Link>

@@ -43,7 +43,7 @@ export function AccordionReference() {
         <code>aria-expanded</code> / <code>aria-controls</code>. Reduced motion snaps it open.
       </p>
 
-      <div className="mt-[1.2rem] overflow-hidden rounded-[12px] border border-hair bg-surface/40">
+      <div className="mt-[1.2rem] overflow-hidden rounded-none border border-hair bg-surface/40">
         {ITEMS.map((it, i) => {
           const isOpen = open === i;
           return (

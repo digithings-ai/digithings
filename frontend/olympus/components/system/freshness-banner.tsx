@@ -19,7 +19,7 @@ export function FreshnessBanner({ latest }: { latest: AtlasRunDiagnostics }) {
       ? `${latest.segments_ok ?? 0}/${latest.segments_total} segments`
       : null;
   return (
-    <div className="glass-card flex flex-wrap items-center gap-x-3 gap-y-1 p-4">
+    <div className="oly-slab flex flex-wrap items-center gap-x-3 gap-y-1 p-4">
       <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-accent" aria-hidden />
       <span className="text-sm text-ink">
         Last successful run{' '}

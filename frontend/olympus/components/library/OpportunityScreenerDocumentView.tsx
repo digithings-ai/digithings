@@ -69,7 +69,7 @@ export default function OpportunityScreenerDocumentView({
         </div>
       ) : null}
       {regimeNote ? (
-        <div className="rounded-lg border border-hair bg-term-bg/50 p-3 text-ink-soft text-xs">
+        <div className="border border-hair bg-term-bg/50 p-3 text-ink-soft text-xs">
           <span className="text-ink-mute uppercase tracking-wider mr-2">Regime</span>
           {regimeNote}
         </div>
@@ -77,7 +77,7 @@ export default function OpportunityScreenerDocumentView({
       {rows.length > 0 && columns.length > 0 ? (
         <div>
           <h3 className="text-xs font-semibold text-ink-mute uppercase tracking-wider mb-3">Universe scores</h3>
-          <div className="overflow-x-auto rounded-lg border border-hair">
+          <div className="overflow-x-auto border border-hair">
             <table className="w-full text-xs min-w-[480px]">
               <thead>
                 <tr className="text-ink-mute text-left border-b border-hair bg-term-bg/80">
