@@ -151,9 +151,7 @@ class TestDrawdownBreaker:
                 ]
             }
         )
-        state = breaker_scale_from_nav_history(
-            client, date(2026, 6, 12), config=BreakerConfig()
-        )
+        state = breaker_scale_from_nav_history(client, date(2026, 6, 12), config=BreakerConfig())
         assert state.current_nav == pytest.approx(100.0)
         assert state.scale == 1.0
 
