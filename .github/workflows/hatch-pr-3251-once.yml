@@ -1,0 +1,58 @@
+# One-shot hatch poster for #3251 — cloud agent gh token cannot addComment (403).
+# Removes itself after applying <!-- in-session-review --> + reviewed:agent.
+name: "Hatch: PR 3251 once"
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  hatch:
+    if: github.event.pull_request.number == 3251 || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Post in-session review hatch + label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          PR=3251
+          if gh api "repos/${{ github.repository }}/issues/${PR}/comments" --paginate \
+            --jq 'map(select(.body|contains("<!-- in-session-review -->")))|length' | grep -vq '^0$'; then
+            echo "Hatch comment already present"
+          else
+            BODY_FILE=docs/agent-backlog/kairos-tenancy/reviews/pr-olympus-settings-pages-3d52-review.md
+            test -f "$BODY_FILE"
+            head -1 "$BODY_FILE" | grep -q 'in-session-review'
+            gh pr comment "$PR" --body-file "$BODY_FILE"
+            echo "Posted hatch comment"
+          fi
+          LABELS=$(gh pr view "$PR" --json labels --jq '[.labels[].name]')
+          if echo "$LABELS" | grep -q 'reviewed:agent'; then
+            echo "Label already present"
+          else
+            gh pr edit "$PR" --add-label 'reviewed:agent'
+            echo "Applied reviewed:agent"
+          fi
+      - name: Remove one-shot workflow from branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          WF=.github/workflows/hatch-pr-3251-once.yml
+          if [[ -f "$WF" ]]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git rm "$WF"
+            git commit -m "chore: remove one-shot hatch workflow for #3251 (#3251)"
+            git push origin "HEAD:${{ github.head_ref || github.ref_name }}"
+          fi
