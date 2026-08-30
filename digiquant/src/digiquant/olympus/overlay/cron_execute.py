@@ -237,19 +237,23 @@ def execute_claimed_rows(
     client: object | None,
     log_err: Callable[[str], None],
 ) -> int:
-    """Execute claimed overlay_daily rows. Missing pin / chain=None fail closed."""
+    """Execute claimed overlay_daily rows. Missing pin / chain=None fail closed.
+
+    One row's exception does not abort the batch; that job is marked failed
+    with a visible error (type name only — no exception payload).
+    """
     rc = 0
     for workspace_id in claimed_workspace_ids:
         job = store.get_by_idempotency_key(overlay_idempotency_key(workspace_id, run_date))
         if job is None or job.status is not JobStatus.RUNNING:
             continue
-        pin = resolve_overlay_profile_pin(
-            workspace_id,
-            profile_pins=profile_pins,
-            load_profile_pin=load_profile_pin,
-            client=client,
-        )
         try:
+            pin = resolve_overlay_profile_pin(
+                workspace_id,
+                profile_pins=profile_pins,
+                load_profile_pin=load_profile_pin,
+                client=client,
+            )
             execute_claimed_overlay(
                 job=job,
                 store=store,
@@ -259,9 +263,13 @@ def execute_claimed_rows(
                 overlay_runner=overlay_runner,
                 byok_client=client,
             )
-        except OverlayExecuteRequiresChain as exc:
+        except OverlayError as exc:
             fail_running_job(store, job, exc.code)
             log_err(exc.message)
+            rc = 3
+        except Exception as exc:
+            fail_running_job(store, job, type(exc).__name__)
+            log_err(f"overlay execute failed workspace_id={workspace_id}: {type(exc).__name__}")
             rc = 3
     return rc
 

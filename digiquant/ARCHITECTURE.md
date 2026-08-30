@@ -3145,7 +3145,9 @@ so overlay's `overlay_usage_scope` owns WP1 capture). `chain=None` is
 refused (`OverlayExecuteRequiresChain` / `chain_required`) because
 `execute_overlay(chain=None)` would mark `succeeded` without a book. A
 missing overlay `olympus_profile_config` pin fails closed
-(`profile_pin_missing`) — the house default is never used. Persist-off
+(`profile_pin_missing`) — the house default is never used. A graph or runner
+exception fails that claimed row (`job_runs.error` = structured code or
+exception type name, never the payload) and continues the batch. Persist-off
 finishes `persist_disabled`, which the staging harness does **not** treat
 as proven (hop requires `succeeded` only). `--execute` apply also requires
 `DIGIQUANT_VAULT_MASTER_KEY` (`OVERLAY_EXECUTE_NOT_CONFIGURED`). Do not run

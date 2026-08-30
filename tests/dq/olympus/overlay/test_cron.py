@@ -499,6 +499,51 @@ def test_execute_does_not_run_skipped_workspaces() -> None:
     assert called["runner"] == 0
 
 
+def test_execute_row_exception_fails_closed_and_continues_batch() -> None:
+    store = MemoryJobRunStore()
+    first = uuid4()
+    second = uuid4()
+    ran: list[UUID] = []
+    pin_a, pin_b = uuid4(), uuid4()
+
+    def runner(*, job: JobRun, store: MemoryJobRunStore, request, chain):
+        ran.append(job.workspace_id)
+        if job.workspace_id == first:
+            raise RuntimeError("boom")
+        chain(
+            workspace_id=request.workspace_id,
+            run_date=request.run_date,
+            requested_version_id=request.profile_version_id,
+        )
+        return store.update(
+            job.model_copy(
+                update={"status": JobStatus.SUCCEEDED, "finished_at": datetime.now(tz=UTC)}
+            )
+        )
+
+    err: list[str] = []
+    rc = main(
+        ["--execute", "--all", "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[_ws(first), _ws(second)],
+        store=store,
+        byok=_byok(ok=True),
+        profile_pins={first: pin_a, second: pin_b},
+        chain_factory=lambda **_k: lambda **__: None,
+        overlay_runner=runner,
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == 3
+    assert first in ran and second in ran
+    row_a = store.get_by_idempotency_key(overlay_idempotency_key(first, _RUN))
+    row_b = store.get_by_idempotency_key(overlay_idempotency_key(second, _RUN))
+    assert row_a is not None and row_a.status is JobStatus.FAILED
+    assert row_a.error == "RuntimeError"
+    assert "boom" not in "\n".join(err)
+    assert row_b is not None and row_b.status is JobStatus.SUCCEEDED
+
+
 def test_dispatch_without_execute_stays_running() -> None:
     store = MemoryJobRunStore()
     rc = main(
