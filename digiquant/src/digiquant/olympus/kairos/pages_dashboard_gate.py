@@ -16,6 +16,7 @@ deploy (settings v32 has neither). Never weakens ``public_app_urls_ok``.
 from __future__ import annotations
 
 import argparse
+import http.client
 import os
 import re
 import subprocess
@@ -45,7 +46,7 @@ _SETTINGS_HANDLERS = (
     Path("digiquant") / "supabase" / "functions" / "_shared" / "settings-handlers.ts"
 )
 _APP_URL_TS = Path("digiquant") / "supabase" / "functions" / "_shared" / "app-url.ts"
-_REDEEM_INVITE_RE = re.compile(r'path\s*===\s*"/access/redeem-invite"')
+_REDEEM_INVITE_RE = re.compile(r'method\s*===\s*"POST"\s*&&\s*path\s*===\s*"/access/redeem-invite"')
 _ALPACA_DASHBOARD_RE = re.compile(
     r'export\s+const\s+ALPACA_OAUTH_CALLBACK_PATH\s*=\s*"/dashboard/settings/brokers/callback/"\s*;'
 )
@@ -155,14 +156,20 @@ def probe_pages_dashboard(
     return PagesDashboardReport(origin=base, results=tuple(results))
 
 
+def _strip_ts_comments(source: str) -> str:
+    without_block = re.sub(r"/\*.*?\*/", "", source, flags=re.DOTALL)
+    stripped: list[str] = []
+    for line in without_block.splitlines():
+        if "//" in line:
+            line = line[: line.index("//")]
+        stripped.append(line)
+    return "\n".join(stripped)
+
+
 def _regex_in_code(source: str, pattern: re.Pattern[str]) -> bool:
     """True when ``pattern`` matches a non-comment occurrence."""
-    for match in pattern.finditer(source):
-        line_start = source.rfind("\n", 0, match.start()) + 1
-        if "//" in source[line_start : match.start()]:
-            continue
-        return True
-    return False
+    text = _strip_ts_comments(source)
+    return pattern.search(text) is not None
 
 
 def settings_bundle_ready(source: str, *, live: bool = False) -> tuple[bool, str]:
@@ -236,7 +243,7 @@ def _http_bytes(url: str, *, token: str, timeout: float = 60.0) -> bytes:
             return bytes(response.read())
     except urllib.error.HTTPError as exc:
         raise LiveSettingsFetchError(f"live settings bundle HTTP {int(exc.code)}") from None
-    except OSError:
+    except (OSError, http.client.HTTPException):
         raise LiveSettingsFetchError("live settings bundle fetch failed") from None
 
 
@@ -258,9 +265,21 @@ def fetch_live_settings_bundle(
     return raw.decode("latin-1")
 
 
-def _verify_live_settings(log: Callable[[str], None], live_source: LiveSourceFn | None) -> int:
+def _verify_live_settings(
+    log: Callable[[str], None],
+    live_source: LiveSourceFn | None,
+    *,
+    project_ref: str,
+) -> int:
+    if live_source is None and os.environ.get("PYTEST_CURRENT_TEST"):
+        log("pages dashboard gate: live_source required under pytest")
+        return EXIT_LIVE_EF_STALE
     try:
-        bundle = live_source() if live_source is not None else fetch_live_settings_bundle()
+        bundle = (
+            live_source()
+            if live_source is not None
+            else fetch_live_settings_bundle(project_ref=project_ref)
+        )
     except LiveSettingsFetchError as exc:
         log(f"pages dashboard gate: live settings fetch failed ({exc})")
         return EXIT_LIVE_EF_STALE
@@ -304,7 +323,7 @@ def run_pages_dashboard_gate(
         log("pages dashboard gate apply failed (supabase output not echoed)")
         return EXIT_APPLY_FAILED
     log("pages dashboard gate: settings/checkout/portal deployed")
-    return _verify_live_settings(log, live_source)
+    return _verify_live_settings(log, live_source, project_ref=project_ref)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
