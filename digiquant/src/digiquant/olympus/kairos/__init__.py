@@ -1,0 +1,45 @@
+"""Kairos order-intent router + broker mirror sync (K4).
+
+Routes approved Hermes order intents to the configured venue after H9 /
+``execute_at_open``, and mirrors external acks / fills / positions append-only
+(D10: broker is authoritative for external venues). The internal
+``paper_internal`` path stays byte-for-byte unchanged.
+"""
+
+from __future__ import annotations
+
+from digiquant.olympus.kairos.policy import (
+    AmbiguousVenueError,
+    InconsistentOrderChainError,
+    routing_enabled,
+    resolve_venue,
+)
+from digiquant.olympus.kairos.router import (
+    RouteResult,
+    broker_order_id,
+    broker_order_status_id,
+    route_pending_orders,
+)
+from digiquant.olympus.kairos.sync import (
+    SyncCursor,
+    SyncResult,
+    broker_execution_id,
+    broker_snapshot_id,
+    sync_connection,
+)
+
+__all__ = [
+    "AmbiguousVenueError",
+    "InconsistentOrderChainError",
+    "RouteResult",
+    "SyncCursor",
+    "SyncResult",
+    "broker_execution_id",
+    "broker_order_id",
+    "broker_order_status_id",
+    "broker_snapshot_id",
+    "route_pending_orders",
+    "routing_enabled",
+    "resolve_venue",
+    "sync_connection",
+]
