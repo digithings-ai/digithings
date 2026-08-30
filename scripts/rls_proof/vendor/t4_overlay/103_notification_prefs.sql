@@ -1,3 +1,4 @@
+-- VENDORED FOR PROOF ONLY — do not apply to core; canonical file lives on cursor/t4-overlay-runs-3d52.
 -- 103_notification_prefs.sql
 --
 -- Email notification preferences (K5) + dedupe log for fail-soft Mailgun dispatch.

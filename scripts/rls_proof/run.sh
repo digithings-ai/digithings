@@ -24,6 +24,10 @@ T4_DIR="$PROOF_DIR/vendor/t4_overlay"
 CUTOVER="$MIG_DIR/cutover/900_drop_anon_read_cutover.sql"
 
 DB_NAME="${DB_NAME:-rls_proof}"
+if [[ "$DB_NAME" == "postgres" || "$DB_NAME" == "template1" ]]; then
+  echo "ERROR: DB_NAME must not be 'postgres' or 'template1' (refusing to drop/recreate a system database)." >&2
+  exit 1
+fi
 PGUSER="${PGUSER:-postgres}"
 LOG_FINAL="${LOG:-/opt/cursor/artifacts/rls_isolation_proof.log}"
 # Write to local disk first; copy to LOG_FINAL at end (artifacts mount can flake).
@@ -63,8 +67,8 @@ log ""
 log "Recreating database $DB_NAME ..."
 sudo -u "$PGUSER" psql -v ON_ERROR_STOP=1 -d postgres >>"$LOG" 2>&1 <<EOF
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${DB_NAME}' AND pid <> pg_backend_pid();
-DROP DATABASE IF EXISTS ${DB_NAME};
-CREATE DATABASE ${DB_NAME};
+DROP DATABASE IF EXISTS "${DB_NAME}";
+CREATE DATABASE "${DB_NAME}";
 EOF
 
 run_sql_file "supabase-compat shim" "$PROOF_DIR/00_supabase_shim.sql"
@@ -80,11 +84,11 @@ for f in "${DEVELOP_MIGS[@]}"; do
   # replica (superuser-only) without editing the migration. Documented harness delta.
   if [[ "$base" == "097_workspaces_tenant_columns.sql" ]]; then
     wrap="/var/tmp/rls_097_wrap.sql"
-    cat >"$wrap" <<EOF
-SET session_replication_role = replica;
-\\i ${f}
-SET session_replication_role = origin;
-EOF
+    {
+      printf '%s\n' 'SET session_replication_role = replica;'
+      printf '\\i %s\n' "$f"
+      printf '%s\n' 'SET session_replication_role = origin;'
+    } >"$wrap"
     chmod a+r "$wrap"
     log ""
     log "----------------------------------------------------------------------"

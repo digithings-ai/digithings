@@ -88,6 +88,9 @@ Operator runbook (merge state, migrations 096–105, Edge Functions, Olympus fla
 human prerequisites, cutover checklist, E2E skeleton, rollback):
 [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
+Post-cutover RLS verification harness (vanilla Postgres or production clone):
+[`scripts/rls_proof/`](../../../scripts/rls_proof/) — run after §6 staged SQL is applied.
+
 Staged anon-policy-drop SQL (inert until renamed into the live migrations dir at
 cutover):
 [`digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql`](../../../digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql).

@@ -1,3 +1,4 @@
+-- VENDORED FOR PROOF ONLY — do not apply to core; canonical file lives on cursor/t4-overlay-runs-3d52.
 -- 099_broker_connections.sql
 --
 -- Sealed broker credential store (K3, Kairos milestone 1). At most one *active* row per

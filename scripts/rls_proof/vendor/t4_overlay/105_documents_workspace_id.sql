@@ -1,3 +1,4 @@
+-- VENDORED FOR PROOF ONLY — do not apply to core; canonical file lives on cursor/t4-overlay-runs-3d52.
 -- 105_documents_workspace_id.sql
 --
 -- T4 review (privacy boundary): add workspace_id to `documents` and REPLACE the

@@ -43,6 +43,7 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 | Shim | Production (Supabase `core`) | Notes |
 |------|------------------------------|-------|
 | Roles `anon` / `authenticated` / `service_role` | Platform roles | `service_role` created with `BYPASSRLS` |
+| `authenticator` login role | PostgREST `authenticator` (login) | `NOINHERIT LOGIN`; password `rls_proof_local` is a **local stand-in only** — not production |
 | `auth.users(id)` | Full Auth schema | Minimal PK-only stub for membership FKs / proof inserts |
 | `auth.uid()` / `auth.jwt()` | Auth helpers | Read `request.jwt.claims` JSON (`sub`, `app_metadata`, …) |
 | `pgcrypto` / `moddatetime` | Usually pre-enabled | Enabled explicitly here |
@@ -50,6 +51,9 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 | `public.set_updated_at()` | Not in develop chain (003 has `trigger_set_updated_at`) | Alias for unmerged `103_notification_prefs.sql` |
 | LangGraph `checkpoint*` tables | Created by checkpointer library | Empty stubs so 036/061 can ALTER |
 | `PUBLICATION supabase_realtime` | Realtime platform publication | Empty stub; 063 ADDs `prices_live` |
+| Stub `fx_economic_calendar` | Out-of-repo prod table (031) | Minimal columns so 031 can ENABLE RLS |
+| Stub `olympus_schema_migrations` | Created by `db-migrate.yml` | 057 locks it |
+| Default privileges ALL → client roles | Supabase bootstrap ACL | Migration 060 then revokes writes from anon/authenticated |
 | `session_replication_role=replica` wrap on **097 only** | Not automatic | 075 append-only trigger rejects 097's `UPDATE olympus_profile_config SET workspace_id…`. Harness wraps that one file; do the same on cutover if applying as superuser. |
 
 ## What this does *not* prove

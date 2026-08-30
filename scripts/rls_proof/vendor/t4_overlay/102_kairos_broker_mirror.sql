@@ -1,3 +1,4 @@
+-- VENDORED FOR PROOF ONLY — do not apply to core; canonical file lives on cursor/t4-overlay-runs-3d52.
 -- 102_kairos_broker_mirror.sql
 --
 -- Broker mirror tables (K4, Kairos milestone 1). Append-only submission / fill /

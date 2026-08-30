@@ -1,3 +1,4 @@
+-- VENDORED FOR PROOF ONLY — do not apply to core; canonical file lives on cursor/t4-overlay-runs-3d52.
 -- 104_workspace_provider_credentials.sql
 --
 -- T4 (Kairos + tenancy program, spec §5-T4 / D9) — sealed BYOK LLM provider keys.

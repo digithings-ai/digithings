@@ -239,6 +239,7 @@ cutover PR merged/deployed → **then** remove Access.
       2. Copy to `digiquant/supabase/migrations/<next>_drop_anon_read_cutover.sql`
          (next free after 105).
       3. PR → `main` → approve `db-migrate` **or** apply via psql + ledger INSERT.
+- [ ] **RLS isolation harness** (post-apply): run [`scripts/rls_proof/`](../../../scripts/rls_proof/) against the production DB (or a branch clone with the same policies) after cutover SQL is applied — `LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh` must exit 0 (59/59 assertions).
 - [ ] **Verification queries** (staged SQL verification block):
       - As `anon`: `positions`, `position_events`, `nav_history`,
         `portfolio_metrics`, `current_book_lookback`, `daily_snapshots` (base),
