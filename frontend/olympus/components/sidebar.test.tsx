@@ -29,16 +29,20 @@ const authMock = vi.hoisted(() => ({
   signOut: vi.fn(async () => {}),
 }));
 
-vi.mock('@/lib/auth-context', () => ({
-  useAuth: () => ({
-    authEnabled: authMock.authEnabled,
-    session: authMock.session,
-    user: authMock.user,
-    loading: authMock.loading,
-    signInWithOAuth: authMock.signInWithOAuth,
-    signOut: authMock.signOut,
-  }),
-}));
+vi.mock('@/lib/auth-context', async () => {
+  const React = await vi.importActual<typeof import('react')>('react');
+  return {
+    AuthContext: React.createContext(null),
+    useAuth: () => ({
+      authEnabled: authMock.authEnabled,
+      session: authMock.session,
+      user: authMock.user,
+      loading: authMock.loading,
+      signInWithOAuth: authMock.signInWithOAuth,
+      signOut: authMock.signOut,
+    }),
+  };
+});
 // next/link needs an app-router context at runtime; render its children inline.
 vi.mock('next/link', () => ({ default: (props: { children?: unknown }) => props.children }));
 
