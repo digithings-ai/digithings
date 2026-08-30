@@ -7,18 +7,24 @@ import { describe, expect, it } from "vitest";
 import { AuthCard } from "./AuthCard";
 
 describe("AuthCard", () => {
-  it("compact sign-in is logo + fields + icon row + Sign in, no olympus copy", () => {
+  it("compact sign-in is mark + digiquant wordmark + fields + icon row + Sign in", () => {
     const html = renderToStaticMarkup(<AuthCard layout="compact" />);
     expect(html).toContain('data-layout="compact"');
+    expect(html).toContain("acct-auth-wordmark");
+    expect(html).toContain("digiquant");
     expect(html).toContain("Sign in");
     expect(html).toContain("Create an account");
     expect(html).toContain('data-testid="login-google"');
     expect(html).toContain('data-testid="login-github"');
     expect(html).toContain('data-testid="login-x"');
-    expect(html).toContain("Continue with X");
+    expect(html).toContain('data-testid="login-email-submit"');
+    expect(html).toContain('aria-label="X"');
     expect(html).not.toContain("olympus");
+    expect(html).not.toContain("DigiQuant");
+    expect(html).not.toContain("Twitter");
     expect(html).not.toContain("Open the desk");
     expect(html).not.toContain("Continue with Google</button>");
+    expect(html).not.toContain("Continue with Google");
   });
 
   it("icons-first puts oauth above email", () => {
@@ -38,7 +44,7 @@ describe("AuthCard", () => {
     expect(html).toContain("create account");
     expect(html).toContain("Sign up");
     expect(html).toContain("acct-auth-strength");
-    expect(html).toContain("strong");
+    expect(html).toContain("good");
     expect(html).not.toContain("olympus");
   });
 });

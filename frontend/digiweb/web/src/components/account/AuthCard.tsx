@@ -40,9 +40,9 @@ export type AuthCardProps = {
 };
 
 const OAUTH: { provider: AuthOAuthProvider; label: string; testId: string; icon: ReactNode }[] = [
-  { provider: "google", label: "Continue with Google", testId: "login-google", icon: <GoogleGlyph /> },
-  { provider: "github", label: "Continue with GitHub", testId: "login-github", icon: <GitHubGlyph width={16} height={16} /> },
-  { provider: "twitter", label: "Continue with X", testId: "login-x", icon: <XGlyph /> },
+  { provider: "google", label: "Google", testId: "login-google", icon: <GoogleGlyph /> },
+  { provider: "github", label: "GitHub", testId: "login-github", icon: <GitHubGlyph width={16} height={16} /> },
+  { provider: "twitter", label: "X", testId: "login-x", icon: <XGlyph /> },
 ];
 
 function OAuthButtons({
@@ -64,6 +64,7 @@ function OAuthButtons({
           style={stretch ? { flex: 1, width: "auto" } : undefined}
           disabled={pending !== null && pending !== undefined}
           aria-label={item.label}
+          title={item.label}
           data-testid={item.testId}
           onClick={() => onOAuth?.(item.provider)}
         >
@@ -158,6 +159,16 @@ export function AuthCard({
   );
 
   const submitLabel = pending === "email" ? (signUp ? "Creating…" : "Signing in…") : signUp ? "Sign up" : "Sign in";
+  const markNode = mark ?? <DigiquantMark size={28} />;
+  const brand =
+    layout === "compact" ? (
+      <div className="acct-auth-brand">
+        <div className="acct-auth-mark">{markNode}</div>
+        <span className="acct-auth-wordmark">{productName}</span>
+      </div>
+    ) : (
+      <div className="acct-auth-mark">{markNode}</div>
+    );
 
   let body: ReactNode;
   switch (layout) {
@@ -240,7 +251,7 @@ export function AuthCard({
 
   return (
     <form className="acct-auth" data-layout={layout} data-mode={mode} onSubmit={handleSubmit} noValidate>
-      <div className="acct-auth-mark">{mark ?? <DigiquantMark size={28} className="text-ink" />}</div>
+      {brand}
       {body}
       <p className="acct-auth-switch">
         {signUp ? <a href={href}>Sign in</a> : <a href={href}>Create an account</a>}

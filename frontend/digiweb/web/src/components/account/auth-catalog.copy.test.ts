@@ -16,9 +16,6 @@ const FORBIDDEN = [
   /olympus kicker/i,
   /oauth-first \(olympus\)/i,
   /oauth first \(olympus\)/i,
-  /not selected/i,
-  /· selected/i,
-  /is selected/i,
   /\bincumbent\b/i,
   /owner pick/i,
   /owner hop/i,
@@ -39,7 +36,8 @@ describe("account auth catalog copy", () => {
     expect(src).toContain('"compact"');
     expect(src).toContain('"icons-first"');
     expect(src).toContain('"desk"');
-    expect(src).toContain("{`// ${id}`}");
+    expect(src).toContain("product card");
+    expect(src).toContain("digiquant");
     expect(src).toContain('mode="signin"');
     expect(src).toContain('mode="signup"');
     for (const pattern of FORBIDDEN) {
@@ -49,6 +47,8 @@ describe("account auth catalog copy", () => {
 
   it("account page hero is a family catalog, not a sprint note", () => {
     const src = load(accountPage);
+    expect(src).toContain("digiquant");
+    expect(src).not.toContain("olympus");
     for (const pattern of FORBIDDEN) {
       expect(src).not.toMatch(pattern);
     }

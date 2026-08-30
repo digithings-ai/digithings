@@ -10,8 +10,35 @@
   padding: 1.2rem;
 }
 
+.acct-auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.85rem;
+  min-width: 0;
+}
+
+.acct-auth-brand .acct-auth-mark {
+  margin-bottom: 0;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.acct-auth-wordmark {
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
 .acct-auth-mark {
   margin-bottom: 0.85rem;
+  color: var(--ink);
 }
 
 .acct-auth-kicker {
