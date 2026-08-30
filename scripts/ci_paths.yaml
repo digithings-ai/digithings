@@ -109,6 +109,10 @@ web:
   - frontend/digichat-ui/**
   - frontend/digiweb/web/**
   - frontend/digiweb/design/**
+  # Derived brand kit (avatars, OG cards, social headers). --check runs in
+  # test-web.yml after npm ci (Geist + sharp). A header-only edit must redden
+  # this lane, not merge as an untested PNG.
+  - frontend/digiweb/brand/**
   # The design reference is the canonical surface every other frontend copies patterns
   # from (.claude/skills/digiweb/SKILL.md routes all web work through it), and until this
   # entry nothing built, linted or type-checked it: the only `run build` calls in
