@@ -67,6 +67,24 @@ def _get_default_embedder() -> object:
     return _default_embedder_singleton
 
 
+def _reject_unsupported_query_filters(query: Query) -> None:
+    """Raise if *query* carries filters Vectorize cannot honour.
+
+    Acceptance for #2219: fail loud until metadata-filter translation lands.
+    Empty ``filters`` and blank ``workspace_id`` stay allowed — that is the
+    single-tenant / per-index isolation path used in production today.
+    """
+    workspace = (query.workspace_id or "").strip()
+    filters = query.filters or {}
+    if workspace or filters:
+        raise VectorizeBackendError(
+            "VectorizeBackend does not support Query.filters or workspace_id isolation "
+            "(see digisearch ARCHITECTURE.md §6 / #2219). Use a per-workspace Vectorize "
+            "index, query without filters, or switch to Chroma/Azure until metadata "
+            "filter translation lands."
+        )
+
+
 def _default_http_post(
     url: str, headers: dict[str, str], body: bytes, content_type: str
 ) -> tuple[int, str]:
@@ -272,6 +290,7 @@ class VectorizeBackend(DigiIndex):
         return _get_default_embedder()
 
     def query(self, query: Query) -> list[Result]:
+        _reject_unsupported_query_filters(query)
         perf_start = time.perf_counter()
         vector = list(query.embedding or [])
         if not vector:

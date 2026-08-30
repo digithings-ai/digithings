@@ -708,7 +708,7 @@ digisearch uses `DigiAuthMiddleware` from `digikey.integrations.service_middlewa
 
 ### Multi-tenant isolation
 
-When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation. **Vectorize applies no filter at all** — `VectorizeBackend.query()` sends only `{vector, topK, returnMetadata, returnValues}` and does not consult `Query.filters`, so `workspace_id` isolation is not enforced for this backend today.
+When `workspace_id` is set on `POST /query`, the server injects a mandatory structured filter clause (`workspace_id eq …`) into `Query.filters`. Chroma and stub backends apply this at query time; Azure receives the clause via structured filter → OData translation. **Vectorize does not translate filters yet** — `VectorizeBackend.query()` still sends only `{vector, topK, returnMetadata, returnValues}`, but if `Query.filters` is non-empty or `workspace_id` is set it now raises `VectorizeBackendError` instead of silently returning unscoped matches (#2219). Production corpora that isolate by separate per-corpus indexes keep querying without filters.
 
 Callers omitting `workspace_id` receive unscoped results (single-tenant default). Multi-tenant deployments should require `workspace_id` at the BFF layer.
 
@@ -972,14 +972,14 @@ The current graph is minimal: `node_plan` validates input, `node_retrieve` calls
 
 ### Multi-tenant enforcement
 
-`workspace_id` exists in the data model but is not enforced by any backend. Required work per backend:
+`workspace_id` exists in the data model. Enforcement status per backend:
 
 - **Chroma:** route to a named collection per workspace (`{workspace_id}_{index_name}`) or inject `{"workspace_id": workspace_id}` as a mandatory `where` clause
 - **Azure:** inject an OData filter clause `(workspace_id eq '{workspace_id}')` for all queries
-- **Vectorize:** `VectorizeBackend.query()` sends no filter field today; post-filter matches by `metadata.workspace_id`, route to a per-workspace index, or adopt the Vectorize API's own metadata-filter support if applicable
+- **Vectorize:** `VectorizeBackend.query()` raises `VectorizeBackendError` when filters / `workspace_id` are present (#2219 fail-loud). Full fix: translate `Query.filters` into Vectorize metadata `filter`, register filterable fields as metadata indexes at index creation, or keep routing to a per-workspace index and omit filters
 - **Stub:** filter post-retrieval by `chunk.metadata.get("workspace_id")`
 
-Without this, `workspace_id` is decorative.
+Without this, `workspace_id` is decorative on backends that neither filter nor fail closed.
 
 ### Bulk ingest queue
 

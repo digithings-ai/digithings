@@ -528,3 +528,52 @@ def test_query_treats_null_score_as_zero() -> None:
     results = backend.query(DsQuery(text="x", top_k=3, embedding=[0.0] * 384))
     assert len(results) == 1
     assert results[0].score == 0.0
+
+
+@pytest.mark.unit
+def test_query_raises_when_filters_are_present() -> None:
+    """#2219: Vectorize must fail loud on filters rather than silently ignore them."""
+    from digisearch.core.models import Query as DsQuery
+    from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(VectorizeBackendError, match="does not support Query.filters"):
+        backend.query(
+            DsQuery(
+                text="x",
+                top_k=3,
+                embedding=[0.0] * 384,
+                filters={"structured": [{"field": "workspace_id", "op": "eq", "value": "ws-1"}]},
+            )
+        )
+    assert post.calls == []
+
+
+@pytest.mark.unit
+def test_query_raises_when_workspace_id_is_set() -> None:
+    """#2219: workspace_id alone must also fail closed (server may set it without filters)."""
+    from digisearch.core.models import Query as DsQuery
+    from digisearch.indexes.backends.vectorize_errors import VectorizeBackendError
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    with pytest.raises(VectorizeBackendError, match="workspace_id"):
+        backend.query(
+            DsQuery(text="x", top_k=3, embedding=[0.0] * 384, workspace_id="ws-1")
+        )
+    assert post.calls == []
+
+
+@pytest.mark.unit
+def test_query_allows_empty_filters_and_blank_workspace() -> None:
+    """Unscoped / per-index isolation path remains valid."""
+    from digisearch.core.models import Query as DsQuery
+
+    post = _RecordingPost(body=_MATCHES)
+    backend = VectorizeBackend("i", account_id="a", api_token="t", http_post=post)
+    results = backend.query(
+        DsQuery(text="x", top_k=3, embedding=[0.0] * 384, filters={}, workspace_id="  ")
+    )
+    assert len(results) == 2
+    assert len(post.calls) == 1
