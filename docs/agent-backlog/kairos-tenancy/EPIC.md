@@ -157,7 +157,9 @@ the staging harness (Observer live: `plan_tier_not_custom`,
 `no_paper_fill` / `fill_without_oauth`, `digest_inbox_unconfirmed`). Staging E2E
 **exit 3** (Observer `GET /settings/app-urls` path contract: live `/olympus` vs
 develop `/dashboard` pin; `POST /settings/access/redeem-invite` is also 404 on
-v32). After Pages+EF cutover the next miss is **exit 2**
+v32). [#3375](https://github.com/digithings-ai/digithings/pull/3375) logs the five
+remaining-hop blockers on that exit and still returns 3. After Pages+EF cutover
+the next miss is **exit 2**
 (9 named vendor secrets). Observer hops still match, including
 Custom checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
 `notification_log` / `stripe_events` / BYOK rows = **0**. One ops-custom workspace
