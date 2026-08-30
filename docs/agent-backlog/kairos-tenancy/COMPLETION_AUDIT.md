@@ -1,3 +1,143 @@
+# Kairos epic — completion audit (fresh, 2026-08-30T19:10Z)
+
+**Verdict: NOT COMPLETE** — do not UpdateGoal complete.
+
+Agent run: fresh secrets scan + Agentmail Auth unlock + re-run agent-reachable suites + EPIC acceptance table.
+
+---
+
+## Goal complete?
+
+**NO.** Staging E2E (signup → Stripe → Alpaca paper → overlay → fill → digest) remains **BLOCKED** on vendor secrets. Workspace bootstrap for new Auth users is a newly evidenced product gap (`WORKSPACE_FORBIDDEN`).
+
+---
+
+## Newly unlocked this turn
+
+| Item | Evidence |
+|------|----------|
+| **Agent-owned Auth user** (`auth.users=1`, confirmed) via Agentmail email signup + confirm + password login — **not** invented SQL | `/opt/cursor/artifacts/settings-jwt-e2e-agentmail.log` |
+| Real JWT against settings EF v18 | same log — profile/notifications/brokers → **403 WORKSPACE_FORBIDDEN** |
+| Checkout with JWT reaches price check | `PRICE_NOT_CONFIGURED` (Stripe prices absent) |
+| Fresh unit / paper-fakes suites | house 287, notify+tier 62, kairos 67, chain+adapters (see logs below) |
+
+## Still blocked (names only)
+
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_BASELINE_MONTHLY`, `STRIPE_PRICE_CUSTOM_MONTHLY`
+- `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (Mailgun MCP auth fail)
+- `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` (Google Auth Disabled)
+- `ALPACA_OAUTH_CLIENT_ID` / `ALPACA_OAUTH_CLIENT_SECRET`
+- Cursor env paste of `SUPABASE_ACCESS_TOKEN` (`sbp_…`) — process env **ABSENT**; file `.local/secrets/cursor-cloud-agent-supabase-pat` works when loaded manually
+- **Workspace bootstrap** — no product path creates `workspace_members` for new Auth users (members=0; 2 orphan enterprise system/house workspaces)
+- Cutover `900_drop_anon_read_cutover.sql` — human gate
+- Draft PR **#3183** Pages promote — leave draft
+- IBKR vendor onboarding + legal adviser read — out of epic live-trading gate
+
+---
+
+## EPIC.md acceptance — requirement-by-requirement
+
+### Child work packages (12)
+
+| WP | Status | Evidence |
+|----|--------|----------|
+| K0–K5, T0–T5 code | **PASS** (on `develop`) | Promotion #3141 + follow-ups; EPIC checkboxes marked |
+| Settings EF | **PASS** | `settings` **v18 ACTIVE** (`list_edge_functions`) |
+| Migrations 096–106 | **PASS** | Prior apply + stamps; cutover **900 NOT applied** |
+
+### Program-level acceptance
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | House pipeline regression `pytest -m unit tests/dq/olympus/` | **PASS** | `/opt/cursor/artifacts/house-olympus-unit-fresh.log` — **287 passed** |
+| 2 | RLS proof (pre-cutover) | **PASS** | `/opt/cursor/artifacts/agent-reachable-gates-summary.log` + `rls_isolation_proof.log` — **59/59** (prior turn ~18:56Z; still authoritative) |
+| 3 | E2E staging: signup → Stripe → Alpaca → overlay → fill → digest | **BLOCKED** | Vendors empty; workspace bootstrap gap; no Mailgun send |
+| 4 | No live `submit_order` without flag | **PASS** | Alpaca adapter unit pins (`test_live_env_raises`) in paper-fakes log |
+
+### Human prerequisites (EPIC)
+
+| Prerequisite | Status | Notes |
+|--------------|--------|-------|
+| Alpaca Connect OAuth app | **BLOCKED** | signup notes only; no OAuth client secrets |
+| IBKR OAuth vendor email | **BLOCKED** | longest pole; out of paper path |
+| Stripe test products + webhook | **BLOCKED** | no `sk_test` / `whsec` / `price_` |
+| Mailgun API key + domain | **BLOCKED** | env empty; MCP `get-v4-domains` auth fail |
+| Supabase Auth Google+GitHub | **PARTIAL** | GitHub Enabled; Google Disabled; **Email Enabled** (Agentmail path works) |
+| `DIGIQUANT_VAULT_MASTER_KEY` in deploy | **PASS** | EF secret name present |
+| Legal adviser read | **BLOCKED** | human; before live-cutover epic |
+
+---
+
+## Secrets scan (names / presence only — values never logged)
+
+Source artifact: `/opt/cursor/artifacts/kairos-secrets-scan-fresh.json`
+
+| Source | Nonempty of interest | Empty / absent |
+|--------|----------------------|----------------|
+| Process env | `DIGIQUANT_VAULT_*`, `AUTH_URL` | `SUPABASE_ACCESS_TOKEN`, all Stripe/Mailgun/Alpaca/Google |
+| `.local/secrets/` | `sbp_` PAT (label **cursor cloud agent**), GitHub OAuth client id/secret, vault, APP_URL; signup-note files | No Stripe/Alpaca **API** keys |
+| EF secrets (`core`) | 12 names: vault, APP_URL, platform SUPABASE_*, FINNHUB | All 11 vendor names still absent |
+| GitHub Actions secrets | **403** via `gh` (cannot list) | Prior dashboard scan: no STRIPE/ALPACA/MAILGUN names |
+
+Mailgun MCP: namespace `ready` but API **Authentication failed**. Agentmail MCP: org `digithings` + inboxes usable.
+
+---
+
+## Agent-reachable suites (this turn)
+
+| Suite | Result | Log |
+|-------|--------|-----|
+| House olympus (excl. kairos/overlay) | 287 passed | `house-olympus-unit-fresh.log` |
+| Notify + tier gates | 62 passed | `notify-tier-gates-fresh.log` |
+| Kairos olympus | 67 passed | `kairos-olympus-unit-fresh.log` |
+| Brokers+vault+overlay (prior ~18:58) | 317 passed | `kairos-unit-suites.log` |
+| Paper E2E fakes (**NOT staging**) | chain 2 + alpaca 34 + contracts/venue 66 + kairos 67 + ibkr 36 | `kairos-e2e-paper-fakes-fresh.log` |
+| Settings unauth | 401×3; webhook `STRIPE_NOT_CONFIGURED` | `settings-v18-smoke-fresh.log` |
+| Settings **with** Agentmail JWT | 403 WORKSPACE_FORBIDDEN | `settings-jwt-e2e-agentmail.log` |
+
+---
+
+## Auth path detail (agent-owned)
+
+1. `POST /auth/v1/signup` with `*@agentmail.to` → user created, confirmation sent.
+2. Agentmail inbox created; resend confirmation; received **Confirm Your Signup** from Supabase Auth.
+3. `GET /auth/v1/verify` → 303 with session; password grant → JWT.
+4. `auth.users=1` confirmed; **did not** invent SQL users.
+5. Settings requires `workspace_members` — **none exist** (0 members). No insert performed (product bootstrap missing).
+
+---
+
+## PRs / branches
+
+| Item | Action |
+|------|--------|
+| Docs branch | `cursor/kairos-audit-agentmail-auth-3d52` |
+| #3183 | **LEAVE DRAFT** — do not merge |
+| Goal | **FAIL complete** |
+
+### Compare URL
+
+```text
+https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-audit-agentmail-auth-3d52
+```
+
+---
+
+## Exact next human actions
+
+1. Paste into Cursor Cloud env: `SUPABASE_ACCESS_TOKEN` (`sbp_…` from `.local/secrets/cursor-cloud-agent-supabase-pat`, label **cursor cloud agent**) + all Stripe / Mailgun / Alpaca OAuth names listed above.
+2. Stripe test mode: products Baseline+Custom, webhook → `…/functions/v1/stripe-webhook`, paste `sk_test` / `whsec` / `price_` ids.
+3. Mailgun: valid API key + verified domain + `NOTIFY_FROM` (MCP currently fails auth).
+4. Alpaca: finish paper OAuth app; paste client id/secret.
+5. Product/ops: **workspace bootstrap** for Observer (free) on first Auth session — today settings returns `WORKSPACE_FORBIDDEN` for real JWTs with zero memberships.
+6. Optional Google OAuth when captcha-free.
+7. Only after staging E2E green: intentional Pages cutover (merge #3183 when ready) + flag + cutover SQL 900.
+
+
+---
+
+## Prior audit trail (historical)
+
 # Kairos epic — completion audit (2026-08-30)
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.

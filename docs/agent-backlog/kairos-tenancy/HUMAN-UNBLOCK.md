@@ -1,12 +1,12 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` path unlocked (PAT **cursor cloud agent**; env `SUPABASE_ACCESS_TOKEN` works this session). Vault + `APP_URL` on EF; settings **v18** ACTIVE; **GitHub Auth Enabled** on `core`. Docs [#3209](https://github.com/digithings-ai/digithings/pull/3209)/[#3211](https://github.com/digithings-ai/digithings/pull/3211)/[#3213](https://github.com/digithings-ai/digithings/pull/3213) **merged**. Agent-reachable gates re-run: RLS **59/59**, vault unit + brokers/overlay **317**, settings unauth **401**. `auth.users=0` — human must sign in once (GitHub). Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` works from `.local/secrets/cursor-cloud-agent-supabase-pat` (label **cursor cloud agent**); process env still lacks pasted `SUPABASE_ACCESS_TOKEN`. Vault + `APP_URL` on EF; settings **v18** ACTIVE; **GitHub Auth Enabled** on `core`. **Agentmail Auth path unlocked:** `auth.users=1` (confirmed) → real JWT; settings returns **403 WORKSPACE_FORBIDDEN** (`workspace_members=0` — product bootstrap gap). Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
-Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)  
+Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-fresh.md`  
 Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
-Docs branch: `cursor/kairos-post-3213-gates-3d52`
+Docs branch: `cursor/kairos-audit-agentmail-auth-3d52`
 
 ---
 
@@ -16,21 +16,27 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 | Name | Format hint |
 |------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — **re-paste the NEW token** from gitignored `.local/secrets/cursor-cloud-agent-supabase-pat` into Cursor env labeled **cursor cloud agent**. Old kairos-named token was revoked (recreate+revoke rename); prior paste is invalid. |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — **re-paste** from gitignored `.local/secrets/cursor-cloud-agent-supabase-pat` labeled **cursor cloud agent**. Process env was ABSENT this turn (file load only). |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
 | `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
 | `STRIPE_PRICE_CUSTOM_MONTHLY` | `price_…` |
 | `STRIPE_PRICE_BASELINE_ANNUAL` | `price_…` (optional) |
 | `STRIPE_PRICE_CUSTOM_ANNUAL` | `price_…` (optional) |
-| `MAILGUN_API_KEY` | Mailgun private API key |
+| `MAILGUN_API_KEY` | Mailgun private API key (MCP currently auth-fails) |
 | `MAILGUN_DOMAIN` | Verified sending domain |
 | `NOTIFY_FROM` | Verified From address on that domain |
 | `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client (still needed) |
 | `ALPACA_OAUTH_CLIENT_ID` / `ALPACA_OAUTH_CLIENT_SECRET` | Alpaca **paper** OAuth app |
 
 **Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.  
-**Done Auth:** GitHub provider **Enabled** on `core` (OAuth App `digiquant olympus`). Google still Disabled.
+**Done Auth:** GitHub provider **Enabled** on `core` (OAuth App `digiquant olympus`). Google still Disabled. Email Enabled — Agentmail signup/confirm works for agent-owned users.
+
+---
+
+## 0b) Workspace bootstrap (new blocker after Auth unlock)
+
+Real JWT settings E2E now fails closed with `WORKSPACE_FORBIDDEN` because **`workspace_members` is empty** (2 orphan enterprise system/house workspaces, 0 members). Observer (free) users need an automatic personal workspace + owner membership on first session (or an explicit EF route). Until that ships or ops provision membership, Settings profile/notifications/brokers cannot return 200 for new Auth users. Checkout fails earlier on `PRICE_NOT_CONFIGURED` until Stripe prices land.
 
 ---
 
@@ -70,6 +76,7 @@ Smoke: unauth → gateway `401`; Stripe webhook without key must not stay `STRIP
 ## 3) Supabase Auth providers on `core`
 
 - **GitHub:** Enabled (callback `https://rwagjbkvxkdwqmouagad.supabase.co/auth/v1/callback`). Site URL + Olympus redirect allow-list set.
+- **Email:** Enabled — agent used Agentmail (`@agentmail.to`) for signup/confirm without inventing SQL users.
 - **Google:** Still Disabled — create OAuth client when captcha-free console access is available; then enable in dashboard.
 
 ---
@@ -79,7 +86,7 @@ Smoke: unauth → gateway `401`; Stripe webhook without key must not stay `STRIP
 1. Products/prices for Baseline + Custom (monthly required).
 2. Endpoint → `…/functions/v1/stripe-webhook` with events for checkout + subscription lifecycle.
 3. Put `whsec_…` into EF secrets (step 1).
-4. One test Checkout → claim / `plan_tier` sync.
+4. One test Checkout → claim / `plan_tier` sync (requires workspace membership first — see §0b).
 
 ---
 
