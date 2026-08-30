@@ -63,29 +63,28 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, staging-gap)
+## Agent delivery status (2026-08-30, live-retry)
 
-**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-staging-gap.md`.  
-**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — vendor keys only (bootstrap + vault seal path unlocked). Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
-**Branch:** `cursor/kairos-staging-gap-2ec1` — compare https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-staging-gap-2ec1 (`gh pr create` often 403).
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) + `/opt/cursor/artifacts/kairos-completion-audit-live-retry.md`.  
+**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — vendor keys only. Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
+**Branch:** `cursor/kairos-live-retry-3d52` — compare https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-live-retry-3d52 (`gh pr create` often 403).
 
-**Code:** all 12 WPs on `develop` (promotion #3141) + bootstrap [#3223](https://github.com/digithings-ai/digithings/pull/3223) + uuid-bind [#3225](https://github.com/digithings-ai/digithings/pull/3225) **merged**. This turn: named `PRICE_NOT_CONFIGURED` / `OAUTH_NOT_CONFIGURED` + loud-fail staging harness (`scripts/kairos_staging_e2e.py`, `pytest -m staging_e2e`).
+**Code:** all 12 WPs on `develop` + notify `MAILGUN_NOT_CONFIGURED` loud-fail CLI (`python -m digiquant.notify.dispatch --require-mailgun`). Prior: named `PRICE_NOT_CONFIGURED` / `OAUTH_NOT_CONFIGURED` + `scripts/kairos_staging_e2e.py`.
 
-**Schema (`core`):** migrations **096–107** applied (`ensure_personal_workspace`). Cutover **900 not applied**.
+**Schema (`core`):** migrations **096–107** applied. Cutover **900 not applied**.
 
 **Edge Functions (`core`):** `settings` **v22 ACTIVE**; `create-checkout-session` **v5 ACTIVE**; billing EFs await Stripe secrets.
 
-**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET/PATCH **200**; checkout **`PRICE_NOT_CONFIGURED`**.
+**Auth (`core`):** **GitHub Enabled** + Email Enabled; **Google Disabled**. Agentmail JWT → settings GET/PATCH **200**; checkout **`PRICE_NOT_CONFIGURED`**. Prod Pages `/olympus/login` **404** until #3183; local auth=1 LoginScreen + GitHub OAuth start proven.
 
 **Secrets (names only):**
-- **`sbp_` path unlocked** — local PAT + process env nonempty; Management API lists **12** EF names (no vendor).
-- **EF secrets on `core`:** vault + `APP_URL` + platform `SUPABASE_*` / `FINNHUB` only.
-- **Still empty / blocked:** Mailgun (MCP auth fail; env EMPTY), Stripe, Google OAuth, Alpaca OAuth.
+- **`sbp_` path unlocked** — Management API lists **12** EF names (no vendor).
+- **Still empty / blocked:** Mailgun (MCP auth fail), Stripe, Google OAuth, Alpaca OAuth.
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
-- **Harness today:** `python scripts/kairos_staging_e2e.py` → exit **2** with named missing secrets (not silent pass).
+- **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2**; notify `--require-mailgun` → exit **2**.
 
-**Closest real chain (NOT staging E2E):** Agentmail Auth → bootstrap → settings 200s → ops Custom elevation → live vault seal (fake api_key) → paper-fakes unit suites. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
+**Closest real chain (NOT staging E2E):** Agentmail Auth → settings 200s → ops Custom (≠ Stripe) → `TIER_FORBIDDEN` on free → vault seal → notify prefs→Agentmail → overlay/router units. Staging signup→Stripe→Alpaca OAuth→digest still **BLOCKED**.
 
-**Pages promote:** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) left open. **Do not merge** until remaining vendor secrets live **and** intentional Pages cutover. Flag off; no cutover 900.
+**Pages promote:** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) left open. **Do not merge** until vendor secrets live **and** intentional Pages cutover.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
