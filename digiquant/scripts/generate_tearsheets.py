@@ -18,8 +18,9 @@ and does not use that gate.
 Structural config (symbol, capital, sizing, trade window, precision) comes from
 the PUBLIC ``strategies/settings.json``; indicator calibrations come from the
 gitignored ``calibrations.json``. The trade window (``trade_start``) is enforced
-inside the strategy, so warmup uses earlier bars while reported trades match the
-TradingView Strategy Tester window.
+inside Slapper (warmup bars, reported trades match TradingView). SDCA builds
+the risk index on the full delayed cache, then feeds Nautilus only bars from
+``trade_start`` so the spot cash book starts at ``initial_cash`` in that window.
 
 Each strategy's backtest runs in its own spawned process: NautilusTrader's Rust
 logging can only initialize once per process, so a second in-process
@@ -50,6 +51,7 @@ import logging
 import multiprocessing
 import signal
 import sys
+from datetime import date as date_cls
 from datetime import timedelta
 from decimal import Decimal
 from multiprocessing.connection import Connection
@@ -152,6 +154,27 @@ def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFr
     ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
     cutoff = ohlcv[ts_col].max() - timedelta(days=signal_delay_days)
     return ohlcv.filter(pl.col(ts_col) <= cutoff)
+
+
+def window_ohlcv_to_trade_start(ohlcv: pl.DataFrame, trade_start: str) -> pl.DataFrame:
+    """Drop bars before the published trade window.
+
+    Risk-index construction keeps the full delayed cache (power-law rails need
+    history). The Nautilus spot book starts at ``trade_start`` with
+    ``initial_cash`` so lump/flat comparisons share that window.
+    """
+    import polars as pl
+
+    if not trade_start or ohlcv.is_empty():
+        return ohlcv
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    cutoff = date_cls.fromisoformat(trade_start)
+    dtype = ohlcv[ts_col].dtype
+    if dtype == pl.Date:
+        return ohlcv.filter(pl.col(ts_col) >= cutoff)
+    if dtype == pl.Datetime or isinstance(dtype, pl.Datetime):
+        return ohlcv.filter(pl.col(ts_col).cast(pl.Date) >= cutoff)
+    return ohlcv.filter(pl.col(ts_col).cast(pl.Utf8).str.slice(0, 10) >= trade_start)
 
 
 def _mult(direction: str, entry_price: float, price: float) -> float:
@@ -258,15 +281,17 @@ def run_nautilus(
     from nautilus_trader.model.data import Bar
     from nautilus_trader.model.enums import AccountType, OmsType
     from nautilus_trader.model.identifiers import InstrumentId
-    from nautilus_trader.model.instruments import CryptoPerpetual
+    from nautilus_trader.model.instruments import CryptoPerpetual, CurrencyPair
     from nautilus_trader.model.objects import Currency, Money, Price, Quantity
 
     from digiquant.strategies import get_strategy
     from digiquant.strategies.registry import config_declares_field
 
     d = settings["defaults"]
+    family = strategy_type_of(settings, strategy)
     venue_name = "SIM"
     base_ccy = symbol.split("-")[0]
+    quote_ccy = Currency.from_str(str(d.get("quote_currency", "USD")))
 
     ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
     ts_vals = ohlcv[ts_col].to_list()
@@ -284,30 +309,67 @@ def run_nautilus(
 
     price_prec = int(d.get("price_precision", 2))
     size_prec = int(d.get("size_precision", 8))
-    inst = CryptoPerpetual(
-        instrument_id=InstrumentId.from_str(f"{symbol}.{venue_name}"),
-        raw_symbol=ids.Symbol(symbol),
-        base_currency=Currency.from_str(base_ccy),
-        quote_currency=USD,
-        settlement_currency=USD,
-        is_inverse=False,
-        price_precision=price_prec,
-        size_precision=size_prec,
-        price_increment=Price.from_str(f"{10**-price_prec:.{price_prec}f}"),
-        size_increment=Quantity.from_str(f"{10**-size_prec:.{size_prec}f}"),
-        max_quantity=None,
-        min_quantity=Quantity.from_str(f"{10**-size_prec:.{size_prec}f}"),
-        max_notional=None,
-        min_notional=None,
-        max_price=None,
-        min_price=None,
-        margin_init=Decimal("0"),
-        margin_maint=Decimal("0"),
-        maker_fee=Decimal("0"),
-        taker_fee=Decimal("0"),
-        ts_event=0,
-        ts_init=0,
-    )
+    price_inc = Price.from_str(f"{10**-price_prec:.{price_prec}f}")
+    size_inc = Quantity.from_str(f"{10**-size_prec:.{size_prec}f}")
+    inst_id = InstrumentId.from_str(f"{symbol}.{venue_name}")
+    raw_symbol = ids.Symbol(symbol)
+    if family == "sdca":
+        # Spot cash book: buy remaining cash / sell remaining holdings.
+        # Slapper keeps the margin perpetual venue unchanged.
+        inst = CurrencyPair(
+            instrument_id=inst_id,
+            raw_symbol=raw_symbol,
+            base_currency=Currency.from_str(base_ccy),
+            quote_currency=quote_ccy,
+            price_precision=price_prec,
+            size_precision=size_prec,
+            price_increment=price_inc,
+            size_increment=size_inc,
+            lot_size=None,
+            max_quantity=None,
+            min_quantity=size_inc,
+            max_notional=None,
+            min_notional=None,
+            max_price=None,
+            min_price=None,
+            margin_init=Decimal("0"),
+            margin_maint=Decimal("0"),
+            maker_fee=Decimal("0"),
+            taker_fee=Decimal("0"),
+            ts_event=0,
+            ts_init=0,
+        )
+        account_type = AccountType.CASH
+        venue_base = None
+        start_money = Money(d["initial_capital"], quote_ccy)
+    else:
+        inst = CryptoPerpetual(
+            instrument_id=inst_id,
+            raw_symbol=raw_symbol,
+            base_currency=Currency.from_str(base_ccy),
+            quote_currency=USD,
+            settlement_currency=USD,
+            is_inverse=False,
+            price_precision=price_prec,
+            size_precision=size_prec,
+            price_increment=price_inc,
+            size_increment=size_inc,
+            max_quantity=None,
+            min_quantity=size_inc,
+            max_notional=None,
+            min_notional=None,
+            max_price=None,
+            min_price=None,
+            margin_init=Decimal("0"),
+            margin_maint=Decimal("0"),
+            maker_fee=Decimal("0"),
+            taker_fee=Decimal("0"),
+            ts_event=0,
+            ts_init=0,
+        )
+        account_type = AccountType.MARGIN
+        venue_base = USD
+        start_money = Money(d["initial_capital"], USD)
     bar_type = BarType.from_str(f"{symbol}.{venue_name}-{d.get('bar_spec', '1-DAY-LAST')}-EXTERNAL")
 
     def _epoch_ns(value) -> int:
@@ -346,9 +408,9 @@ def run_nautilus(
     engine.add_venue(
         venue=Venue(venue_name),
         oms_type=OmsType.NETTING,
-        account_type=AccountType.MARGIN,
-        base_currency=USD,
-        starting_balances=[Money(d["initial_capital"], USD)],
+        account_type=account_type,
+        base_currency=venue_base,
+        starting_balances=[start_money],
     )
     engine.add_instrument(inst)
     engine.add_data(bars)
@@ -715,17 +777,33 @@ def run_and_write(
             f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
             f"({coefficients.fit_rows} rows). Preset {preset_name}."
         )
+        provenance_notes.append(
+            "Nautilus venue: spot CurrencyPair + CASH (remaining cash / remaining "
+            "holdings). Engine bars from trade_start; risk index uses the full "
+            "delayed cache. Not a long/short book; not broker live-trading."
+        )
+
+    engine_ohlcv = ohlcv
+    if family == "sdca":
+        engine_ohlcv = window_ohlcv_to_trade_start(ohlcv, trade_start)
+        if engine_ohlcv.is_empty():
+            logger.error(
+                "No bars left for %s after trade_start=%s",
+                symbol,
+                trade_start,
+            )
+            return None
 
     logger.info(
         "Running Nautilus backtest: %s (%s, %d bars, cal=%s, signal_delay=%dd)",
         strategy,
         symbol,
-        len(ohlcv),
+        len(engine_ohlcv),
         cal_label,
         signal_delay_days,
     )
     positions, bars_list, ohlc_bars, signal_log, fills_report = run_nautilus(
-        strategy, symbol, ohlcv, settings, calibration=calibration
+        strategy, symbol, engine_ohlcv, settings, calibration=calibration
     )
     trades = trades_from_positions(positions)
     trades = carry_open_at_period_end(trades, bars_list, trade_start)

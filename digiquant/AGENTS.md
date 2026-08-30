@@ -158,8 +158,10 @@ the full module map.
   not degrade. Trade KPIs stay `null` for `kind=dca`.
 - **Library, not broker live.** `btc_sdca` ships into the public strategy
   library (delayed signals, #1462). Do **not** enable Nautilus live-trading
-  or broker adapters for SDCA. `--push-supabase` is an operator step after
-  a real Nautilus generate; do not run it from an agent environment.
+  or broker adapters for SDCA. Publish uses a spot CASH venue and leaves
+  the remaining book open at engine stop. `--push-supabase` is an operator
+  step after a real Nautilus generate; do not run it from an agent
+  environment.
 - **Published personality is `balanced`.** Walk-forward OOS
   `beats_flat_dca_oos` is currently false (`btc_composite_*.json`). Do not
   publish `btc_optimized` as a winner.

@@ -145,18 +145,37 @@ def breakdown_from_daily(
     )
 
 
+def _apply_fill(cash: float, units: float, fill: SdcaFill) -> tuple[float, float, float]:
+    """Apply one fill; return ``(cash, units, signed_notional)``."""
+    notional = fill.qty * fill.price
+    if fill.side == "buy":
+        return cash - notional, units + fill.qty, notional
+    return cash + notional, units - fill.qty, -notional
+
+
 def daily_state_from_fills(
     fills: Sequence[SdcaFill],
     bars: Sequence[tuple[str, float]],
     initial_cash: float,
 ) -> dict[str, list]:
-    """Replay fills onto the bar calendar; return daily series for ``breakdown_from_daily``."""
+    """Replay fills onto the bar calendar; return daily series for ``breakdown_from_daily``.
+
+    Fills dated before the first bar seed the opening cash/holdings book so a
+    published ``trade_start`` window does not start empty while the engine
+    (or a prior warmup) already traded.
+    """
     by_date: dict[str, list[SdcaFill]] = {}
     for fill in fills:
         by_date.setdefault(fill.date, []).append(fill)
 
     cash = float(initial_cash)
     units = 0.0
+    if bars:
+        start = bars[0][0]
+        warmup = sorted((f for f in fills if f.date < start), key=lambda f: f.date)
+        for fill in warmup:
+            cash, units, _traded = _apply_fill(cash, units, fill)
+
     prices: list[float] = []
     portfolio_values: list[float] = []
     daily_trade_usd: list[float] = []
@@ -166,15 +185,8 @@ def daily_state_from_fills(
     for date, close in bars:
         traded = 0.0
         for fill in by_date.get(date, []):
-            notional = fill.qty * fill.price
-            if fill.side == "buy":
-                cash -= notional
-                units += fill.qty
-                traded += notional
-            else:
-                cash += notional
-                units -= fill.qty
-                traded -= notional
+            cash, units, signed = _apply_fill(cash, units, fill)
+            traded += signed
         prices.append(float(close))
         daily_trade_usd.append(traded)
         asset_units.append(units)

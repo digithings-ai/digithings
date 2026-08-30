@@ -264,8 +264,10 @@ class SdcaStrategy(Strategy):
         self._pending_qty = 0.0
 
     def on_stop(self) -> None:
+        # Leave remaining cash / remaining holdings open. Flattening at engine
+        # stop would invent a round-trip that is not the DCA product. This
+        # wrapper is backtest-only — do not wire it to broker live-trading.
         self.cancel_all_orders(self.config.instrument_id)
-        self.close_all_positions(self.config.instrument_id)
 
     def on_reset(self) -> None:
         self._cash = self.config.initial_cash

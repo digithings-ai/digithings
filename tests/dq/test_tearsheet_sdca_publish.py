@@ -158,6 +158,56 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert not any("NOT production parity" in rec.message for rec in caplog.records)
 
 
+def test_window_ohlcv_to_trade_start_drops_warmup_bars() -> None:
+    raw = _daily_ohlcv(date(2017, 12, 1), 40)
+    windowed = gts.window_ohlcv_to_trade_start(raw, "2018-01-01")
+    assert windowed["timestamp"].min() >= date(2018, 1, 1)
+    assert windowed["timestamp"].max() == raw["timestamp"].max()
+    assert gts.window_ohlcv_to_trade_start(raw, "").height == raw.height
+
+
+def test_run_and_write_windows_engine_bars_to_trade_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    _daily_ohlcv(date(2017, 12, 1), 50).write_csv(cache / "BTC-USD.csv")
+    output = tmp_path / "out"
+    captured: dict[str, object] = {}
+
+    class _EmptyPositions:
+        def iterrows(self):
+            return iter(())
+
+    def _fake_nautilus(strategy, symbol, ohlcv, settings, calibration=None):
+        captured["min"] = ohlcv["timestamp"].min()
+        ts = ohlcv["timestamp"].to_list()
+        closes = ohlcv["close"].to_list()
+        bars = [(str(t)[:10], float(c)) for t, c in zip(ts, closes, strict=True)]
+        ohlc = [
+            (str(t)[:10], float(c), float(c), float(c), float(c))
+            for t, c in zip(ts, closes, strict=True)
+        ]
+        return _EmptyPositions(), bars, ohlc, {}, None
+
+    monkeypatch.setattr(gts, "run_nautilus", _fake_nautilus)
+    settings = gts.load_settings()
+    entry = gts.run_and_write(
+        "btc_sdca",
+        "BTC-USD",
+        settings,
+        cache,
+        output,
+        cal_source="file",
+        signal_delay_days=0,
+    )
+    assert entry is not None
+    assert captured["min"] is not None
+    assert str(captured["min"])[:10] >= "2018-01-01"
+    payload = json.loads((output / "btc_sdca.json").read_text())
+    assert payload["period_start"] >= "2018-01-01"
+
+
 @requires_nautilus
 def test_trade_size_only_passed_when_config_declares_it() -> None:
     from digiquant.strategies.registry import config_declares_field, get_strategy

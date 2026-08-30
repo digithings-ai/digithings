@@ -70,6 +70,23 @@ def test_harness_and_fill_replay_agree() -> None:
     assert dca.vs_flat_dca_pct != pytest.approx(dca.vs_flat_dca_pct / 100.0)
 
 
+def test_daily_state_seeds_fills_before_first_bar() -> None:
+    """Published trade window must carry the book, not start empty at $1000."""
+    fills = [
+        SdcaFill(date="2017-12-31", side="buy", qty=1.0, price=100.0),
+        SdcaFill(date="2018-01-01", side="buy", qty=0.5, price=200.0),
+    ]
+    bars = [("2018-01-01", 200.0), ("2018-01-02", 220.0)]
+    state = daily_state_from_fills(fills, bars, 1000.0)
+    assert state["asset_units"][0] == pytest.approx(1.5)
+    assert state["asset_units"][1] == pytest.approx(1.5)
+    assert state["prices"][0] == pytest.approx(200.0)
+    # $100 warmup + $100 window buy → $200 deployed, $800 cash + 1.5 * 200 MTM.
+    assert state["net_deployed"][0] == pytest.approx(200.0)
+    assert state["portfolio_values"][0] == pytest.approx(1100.0)
+    assert state["portfolio_values"][1] == pytest.approx(1130.0)
+
+
 class _Empty:
     empty = True
     shape = (0, 0)
