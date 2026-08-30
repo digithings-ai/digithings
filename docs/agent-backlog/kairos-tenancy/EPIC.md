@@ -84,9 +84,12 @@ Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA
 `job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK
 rows = **0**. One ops-custom workspace has an Alpaca **paper `api_key`** connection
 (not OAuth; does not prove the remaining hop). House is `enterprise`/`active`
-**without** Stripe ids — must not prove checkout. Overlay `--dry-run` against core:
-`considered=5 targets=3 billing_active=0` — no entitled overlay workspace, so
-`--execute` would dispatch nothing.
+**without** Stripe ids — must not prove checkout. Overlay `--dry-run` against core
+(after D1 `plan_floor` honor): `considered=5 targets=3 billing_active=1` — the
+creator GitHub workspace (`plan_tier=free`, `plan_floor=custom`). Dry-run now
+also prints `byok_present` (active credential rows among entitled targets; no
+unseal). BYOK rows on that workspace are still **0**, so `--execute` would skip
+`no_credentials`. Do not `--execute`.
 
 **Cron CLIs (do not run `--all` / `--execute --all` on Observer or the api_key row):**
 - Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +

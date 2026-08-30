@@ -3145,8 +3145,11 @@ entry that writes `job_runs` via `SupabaseJobRunStore`. House and system
 workspace ids are never overlay targets (even if seeded `enterprise`/`active`).
 `--check` exits **2** with `OVERLAY_STORE_NOT_CONFIGURED` listing missing env
 *names* (`SUPABASE_URL` / `CORE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` /
-`CORE_SUPABASE_SERVICE_KEY`). `--dry-run` prints candidate counts and writes
-nothing. Apply requires `--workspace-id` or `--all` (refuses implicit writes).
+`CORE_SUPABASE_SERVICE_KEY`). `--dry-run` prints candidate counts
+(`considered`, `targets`, `billing_active`, `byok_present`) and writes nothing.
+`byok_present` counts active `workspace_provider_credentials` rows among
+billing-entitled targets (presence only; no unseal). Apply requires
+`--workspace-id` or `--all` (refuses implicit writes).
 `--all` against a free workspace inserts a visible `skipped`/`not_entitled`
 row; it does not invoke the graph. Dispatch-only claims leave the row
 `running`. `--execute` runs claimed jobs through the **one** Olympus graph

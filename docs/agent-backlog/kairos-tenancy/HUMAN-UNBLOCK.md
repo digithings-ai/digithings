@@ -29,7 +29,7 @@ PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.kairos.sync_cron --check
 Overlay / sync `--check` need `CORE_SUPABASE_URL` + `CORE_SUPABASE_SERVICE_KEY` in the
 process env (not in the Cloud Agent env today). This VM can load a gitignored
 PAT-fetched file under `.local/secrets/` for those two names only. Do **not**
-`--execute` overlay while `billing_active=0`, and do **not** poll the ops-custom
+`--execute` overlay while BYOK is missing (`byok_present=0`), and do **not** poll the ops-custom
 Alpaca `api_key` paper row (oauth hop still unproven).
 
 Scheduled probe (not installed from `cursor/*` — `.github/workflows/` is protected):

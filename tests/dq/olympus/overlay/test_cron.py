@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import pytest
 from digiquant.olympus.overlay.cron import (
     format_overlay_store_not_configured,
+    load_active_byok_workspace_ids,
     load_overlay_cron_workspaces,
     main,
     missing_overlay_cron_env_names,
@@ -168,6 +169,7 @@ def test_dry_run_does_not_write_job_runs() -> None:
     assert store.get_by_idempotency_key(overlay_idempotency_key(_USER, _RUN)) is None
     assert "targets=1" in logs[0]
     assert "billing_active=1" in logs[0]
+    assert "byok_present=0" in logs[0]
 
 
 def test_dry_run_counts_plan_floor_custom_without_stripe() -> None:
@@ -189,6 +191,7 @@ def test_dry_run_counts_plan_floor_custom_without_stripe() -> None:
     assert rc == 0
     assert "targets=1" in logs[0]
     assert "billing_active=1" in logs[0]
+    assert "byok_present=0" in logs[0]
 
 
 def test_parse_workspace_row_reads_plan_floor() -> None:
@@ -338,6 +341,10 @@ def test_load_overlay_cron_workspaces_parses_valid_rows() -> None:
     assert loaded[0].plan_floor is None
 
 
+class AuthApiError(Exception):
+    """Mimics supabase AuthApiError — not OSError/RuntimeError/ValueError/TypeError."""
+
+
 class _GrantClient:
     """Workspaces + grants + owner membership + Auth admin emails."""
 
@@ -348,13 +355,17 @@ class _GrantClient:
         grants: list[dict[str, object]],
         members: list[dict[str, object]],
         users: list[SimpleNamespace],
+        list_users: object | None = None,
+        credentials: list[dict[str, object]] | None = None,
     ) -> None:
         self._tables = {
             "workspaces": workspaces,
             "entitlement_grants": grants,
             "workspace_members": members,
+            "workspace_provider_credentials": credentials or [],
         }
-        self.auth = SimpleNamespace(admin=SimpleNamespace(list_users=lambda: users))
+        list_fn = list_users if callable(list_users) else lambda: users
+        self.auth = SimpleNamespace(admin=SimpleNamespace(list_users=list_fn))
 
     def table(self, name: str) -> _WorkspacesQuery:
         return _WorkspacesQuery(self._tables.get(name, []))
@@ -384,6 +395,68 @@ def test_load_overlay_cron_workspaces_attaches_owner_plan_floor() -> None:
     assert len(loaded) == 1
     assert loaded[0].plan_tier is PlanTier.FREE
     assert loaded[0].plan_floor is PlanTier.CUSTOM
+
+
+def test_load_overlay_cron_workspaces_auth_admin_error_is_fail_soft() -> None:
+    def boom() -> list[object]:
+        raise AuthApiError("auth admin unavailable")
+
+    client = _GrantClient(
+        workspaces=[
+            {"id": str(_USER), "plan_tier": "free", "subscription_status": "none"},
+        ],
+        grants=[{"email": "chris.stefan@proton.me", "plan_floor": "custom"}],
+        members=[
+            {
+                "workspace_id": str(_USER),
+                "user_id": "0408ba97-caba-44d3-b2d0-5690ab5160a9",
+                "role": "owner",
+            }
+        ],
+        users=[],
+        list_users=boom,
+    )
+    loaded = load_overlay_cron_workspaces(client)
+    assert len(loaded) == 1
+    assert loaded[0].plan_floor is None
+
+
+def test_load_active_byok_workspace_ids_counts_active_only() -> None:
+    client = _GrantClient(
+        workspaces=[],
+        grants=[],
+        members=[],
+        users=[],
+        credentials=[
+            {"workspace_id": str(_USER), "status": "active"},
+            {"workspace_id": str(uuid4()), "status": "revoked"},
+            {"workspace_id": "not-a-uuid", "status": "active"},
+        ],
+    )
+    present = load_active_byok_workspace_ids(client)
+    assert present == {_USER}
+
+
+def test_dry_run_counts_byok_present_among_entitled() -> None:
+    logs: list[str] = []
+    rc = main(
+        ["--dry-run", "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[
+            _ws(
+                _USER,
+                tier=PlanTier.FREE,
+                status=SubscriptionStatus.NONE,
+                plan_floor=PlanTier.CUSTOM,
+            ),
+        ],
+        byok_workspace_ids={_USER},
+        log=logs.append,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    assert "billing_active=1" in logs[0]
+    assert "byok_present=1" in logs[0]
 
 
 def _module_header(name: str) -> str:

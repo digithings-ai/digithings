@@ -150,7 +150,8 @@ def _auth_emails_by_user_id(client: object) -> dict[str, str]:
         return {}
     try:
         raw = list_users()
-    except (OSError, RuntimeError, ValueError, TypeError):
+    except Exception:
+        # Auth admin is optional; Stripe-only entitlement still applies.
         return {}
     users = getattr(raw, "users", raw)
     if not isinstance(users, list):
@@ -168,6 +169,34 @@ def _auth_emails_by_user_id(client: object) -> dict[str, str]:
         if uid is None or not isinstance(email, str) or not email.strip():
             continue
         out[str(uid)] = email.strip().lower()
+    return out
+
+
+def load_active_byok_workspace_ids(client: object) -> set[UUID]:
+    """Active ``workspace_provider_credentials`` workspace ids (presence only).
+
+    Does not unseal. Missing table or client errors are an empty set so dry-run
+    still prints ``byok_present=0`` instead of aborting.
+    """
+    try:
+        raw = _select_rows(
+            client,
+            "workspace_provider_credentials",
+            "workspace_id,status",
+            eq=("status", "active"),
+        )
+    except Exception:
+        return set()
+    out: set[UUID] = set()
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("status") or "").strip().lower() != "active":
+            continue
+        try:
+            out.add(UUID(str(row["workspace_id"])))
+        except (ValueError, TypeError, KeyError):
+            continue
     return out
 
 
@@ -361,13 +390,16 @@ def _log_dry_run(
     *,
     loaded: Sequence[WorkspaceEntitlement],
     run_date: date,
+    byok_workspace_ids: set[UUID] | None = None,
 ) -> None:
     targets = overlay_cron_targets(loaded)
     entitled = [ws for ws in targets if overlay_billing_entitled(ws)]
+    present = byok_workspace_ids or set()
+    ready = sum(1 for ws in entitled if ws.workspace_id in present)
     log(
         f"overlay dry-run date={run_date.isoformat()} "
         f"considered={len(loaded)} targets={len(targets)} "
-        f"billing_active={len(entitled)}"
+        f"billing_active={len(entitled)} byok_present={ready}"
     )
 
 
@@ -397,6 +429,7 @@ def main(
     load_profile_pin: Callable[[UUID], UUID | None] | None = None,
     chain_factory: OverlayChainFactory | None = None,
     overlay_runner: OverlayRunner | None = None,
+    byok_workspace_ids: set[UUID] | None = None,
     log: Callable[[str], None] = print,
     log_err: Callable[[str], None] | None = None,
 ) -> int:
@@ -435,7 +468,13 @@ def main(
 
     run_date = date.fromisoformat(args.run_date) if args.run_date else datetime.now(tz=UTC).date()
     if args.dry_run:
-        _log_dry_run(log, loaded=loaded, run_date=run_date)
+        present = byok_workspace_ids
+        if present is None and workspaces is None and not missing:
+            try:
+                present = load_active_byok_workspace_ids(_supabase_client_from_env(env))
+            except Exception:
+                present = set()
+        _log_dry_run(log, loaded=loaded, run_date=run_date, byok_workspace_ids=present)
         return 0
 
     if args.execute and overlay_runner is None and store is None and build_store is None:
@@ -481,6 +520,7 @@ __all__ = [
     "OverlayCronReport",
     "OverlayCronRow",
     "format_overlay_store_not_configured",
+    "load_active_byok_workspace_ids",
     "load_overlay_cron_workspaces",
     "load_workspace_plan_floors",
     "main",
