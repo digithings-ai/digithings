@@ -4,12 +4,40 @@
 
 Agent run (audit write): https://cursor.com/agents/bc-c5b145ca-ac4a-56ed-ab78-919d4208ab35  
 Agent run (merge + unlock hunt): https://cursor.com/agents/bc-cc69ce13-26ad-5258-9eda-8d2f22c2b5bb  
-Develop tip: `bf34c015` (merge of [#3180](https://github.com/digithings-ai/digithings/pull/3180))  
-Settings EF on `core`: **v11** ACTIVE (thin GitHub-raw pin; tip advanced by docs-only #3180 — no EF redeploy this turn)
+Develop tip: `f92a8810` (merge of [#3181](https://github.com/digithings-ai/digithings/pull/3181))  
+Settings EF on `core`: **v11** ACTIVE (thin GitHub-raw pin; no EF redeploy — still no `sbp_` / no new vendor secrets)
 
 ---
 
-## Follow-up turn (merge audit + unlock hunt)
+## Follow-up turn (post-#3181: merge + secret rescan + review/promote)
+
+| # | Criterion | Status | Evidence |
+|---|-----------|--------|----------|
+| 1 | Merge #3181 when CI green | **PASS** | Marked ready; Required CI + CodeQL green; `gh pr merge --merge` → `f92a8810` (2026-08-30T16:20:08Z). |
+| 2 | Secret scan (nonempty names only) | **PASS (no unlocks)** | No `sbp_`. `SUPABASE_ACCESS_TOKEN` still JWT (`eyJ…`, len 1486). Mailgun/Stripe/Alpaca/Auth provider keys **missing or empty**. Vault + `APP_URL` still SET in VM (unchanged). **No** EF secrets push / settings redeploy / Mailgun smoke. |
+| 3 | Review hatches (`<!-- in-session-review -->` + `reviewed:agent`) | **BLOCKED (token)** | Diffs reviewed for #3147, #3148, #3156, #3161, #3177–#3181. Bodies written to `/opt/cursor/artifacts/kairos-reviews/pr-*-review.md`. `gh`/`api` comment + label → **403** Resource not accessible by integration. **Do not fake Bugbot.** Parent must post comments + labels with a write token. |
+| 4 | Pages promote prep (flag off, no 900) | **BRANCH READY / PR BLOCKED** | Pushed `cursor/promote-kairos-pages-3d52` (= develop tip, ~199 ahead of main). `gh pr create --draft` → **403**. Recipe below. Cutover 900 **not** applied. |
+| 5 | `request-environment-setup-actions` | **PASS** | Minimal blocking set recorded: `SUPABASE_ACCESS_TOKEN` (`sbp_`), Mailgun nonempty, Stripe TEST keys+prices+webhook, Auth provider client IDs, Alpaca paper OAuth. |
+| 6 | Goal complete? | **FAIL** | Same human/vendor blockers; do not UpdateGoal complete. |
+
+### Draft promote PR recipe (parent)
+
+```text
+base: main
+head: cursor/promote-kairos-pages-3d52
+draft: true
+title: chore(promote): develop → main — Kairos Pages prep (flag-off, no cutover 900)
+```
+
+Body must require: Pages `NEXT_PUBLIC_OLYMPUS_AUTH` unset; do not apply `cutover/900`; Access stays on; merge only as deliberate release (~199 commits).
+
+### Material review note (when parent posts #3161)
+
+`NotifyTab` has no GET/hydrate of existing `notification_prefs` — form starts empty; accidental save can overwrite. Authz + Deno tests otherwise sound.
+
+---
+
+## Prior follow-up (merge #3180 + unlock hunt)
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
