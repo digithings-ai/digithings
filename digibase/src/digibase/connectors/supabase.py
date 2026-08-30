@@ -234,9 +234,52 @@ class SupabaseConnector:
             logger.error("supabase: select failed for %s: %s", table, exc)
             return SupabaseReadResult(success=False, error=str(exc))
 
+    def delete(
+        self,
+        table: str,
+        *,
+        eq: dict[str, Any] | None = None,
+        in_: dict[str, list[Any] | tuple[Any, ...]] | None = None,
+    ) -> SupabaseWriteResult:
+        """Delete rows matching at least one equality or non-empty membership filter."""
+        memberships = {col: list(vals) for col, vals in (in_ or {}).items() if vals}
+        if not eq and not memberships:
+            return SupabaseWriteResult(
+                success=False,
+                table=table,
+                error="refusing unfiltered delete: provide eq or a non-empty in_ filter",
+            )
+        try:
+            query = self._client.table(table).delete()
+            for col, val in (eq or {}).items():
+                query = query.eq(col, val)
+            for col, vals in memberships.items():
+                query = query.in_(col, vals)
+            response = query.execute()
+            deleted_rows = list(getattr(response, "data", None) or [])
+            self._audit(
+                table,
+                "delete",
+                len(deleted_rows),
+                None,
+                filter_columns=sorted([*(eq or {}), *memberships]),
+            )
+            return SupabaseWriteResult(success=True, table=table, rows=len(deleted_rows))
+        except Exception as exc:
+            logger.error("supabase: delete failed for %s: %s", table, exc)
+            return SupabaseWriteResult(success=False, table=table, error=str(exc))
+
     # ── Private helpers ───────────────────────────────────────────────────────
 
-    def _audit(self, table: str, operation: str, rows: int, on_conflict: str | None) -> None:
+    def _audit(
+        self,
+        table: str,
+        operation: str,
+        rows: int,
+        on_conflict: str | None,
+        *,
+        filter_columns: list[str] | None = None,
+    ) -> None:
         """Emit a redacted audit line with metadata only.
 
         Contract — important: ``digibase.audit.redact_mapping`` redacts VALUES of
@@ -255,6 +298,7 @@ class SupabaseConnector:
                     "operation": operation,
                     "rows": rows,
                     "on_conflict": on_conflict,
+                    "filter_columns": filter_columns or [],
                 }
             ),
         )

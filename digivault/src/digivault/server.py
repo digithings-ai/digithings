@@ -396,6 +396,20 @@ class SetFrontmatterRequest(BaseModel):
     updates: dict[str, Any] = Field(..., description="Frontmatter keys to merge")
 
 
+class PruneChildrenRequest(BaseModel):
+    """Delete stale segment notes for one parent within one vault subdirectory."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    parent_doc: str = Field(..., min_length=1)
+    keep_names: list[str] = Field(default_factory=list)
+    subdir: str = Field(default="")
+
+
+class PruneChildrenResponse(BaseModel):
+    deleted: list[str]
+
+
 class RenameRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -563,6 +577,18 @@ def create_note(req: CreateNoteRequest) -> Note:
         )
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/v1/notes/prune-children", response_model=PruneChildrenResponse)
+def prune_children(req: PruneChildrenRequest) -> PruneChildrenResponse:
+    """Remove stale segment children for one parent, scoped to a vault subdirectory."""
+    try:
+        deleted = _open_vault().prune_children(
+            req.parent_doc, set(req.keep_names), subdir=req.subdir
+        )
+    except VaultError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return PruneChildrenResponse(deleted=deleted)
 
 
 @app.patch("/v1/notes/{name}/frontmatter", response_model=Note)

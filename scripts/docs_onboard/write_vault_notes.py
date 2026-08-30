@@ -118,6 +118,8 @@ class NoteWriter(Protocol):
         overwrite: bool = False,
     ) -> Any: ...
 
+    def prune_children(self, parent_doc: str, keep_names: set[str], subdir: str = "") -> Any: ...
+
 
 def _pdf_document(path: Path) -> Any:
     """Parsed digisearch Document for a PDF (carries page segments)."""
@@ -216,6 +218,22 @@ class DigivaultApiWriter:
             headers["Authorization"] = f"Bearer {self.bearer_token}"
         return self._post_json(f"{self.base_url}/v1/notes", payload, headers)
 
+    def prune_children(
+        self, parent_doc: str, keep_names: set[str], subdir: str = ""
+    ) -> dict[str, Any]:
+        headers: dict[str, str] = {}
+        if self.bearer_token:
+            headers["Authorization"] = f"Bearer {self.bearer_token}"
+        return self._post_json(
+            f"{self.base_url}/v1/notes/prune-children",
+            {
+                "parent_doc": parent_doc,
+                "keep_names": sorted(keep_names),
+                "subdir": subdir,
+            },
+            headers,
+        )
+
 
 def _post_json(url: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
     data = json.dumps(payload).encode()
@@ -275,6 +293,7 @@ def write_vault_notes(
                 subdir=manifest.vault_subdir,
                 overwrite=True,
             )
+            vault.prune_children(slug, set(), manifest.vault_subdir)
             written += 1
             continue
         child_names: list[str] = []
@@ -304,6 +323,7 @@ def write_vault_notes(
             subdir=manifest.vault_subdir,
             overwrite=True,
         )
+        vault.prune_children(slug, set(child_names), manifest.vault_subdir)
         written += 1
     return written
 
