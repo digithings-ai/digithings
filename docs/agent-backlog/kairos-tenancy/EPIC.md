@@ -77,14 +77,17 @@ narrows `anon_read` on private books to house; documents house+system). Live pro
 `positions` still 323 for anon. Cutover **900 not applied**. Local RLS harness
 (throwaway DB + 001–110 + staged 900 A2): **pre-cutover 110 8/8 + post-cutover 59/59 PASS** (2026-08-31).
 
-**Edge Functions (`core`):** `settings` **v29 ACTIVE** (`verify_jwt=true`, includes
-`GET /jobs` `/fills` `/notifications/log`); checkout/portal await Stripe price
-secrets (`PRICE_NOT_CONFIGURED`). EF secret **names** on core: vault + `APP_URL` +
-Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
-`APP_URL` must be `https://digiquant.io` (not loopback). Checkout return URLs are
-`/olympus/settings/?tab=billing`. `GET /settings/app-urls` is the Observer probe.
+**Edge Functions (`core`):** `settings` **v31 ACTIVE** (`verify_jwt=true`, includes
+`GET /jobs` `/fills` `/notifications/log` `/app-urls`); checkout **v8** / portal
+**v9**. Checkout/portal await Stripe price secrets (`PRICE_NOT_CONFIGURED`). EF
+secret **names** on core: vault + `APP_URL` + Finnhub + platform `SUPABASE_*`.
+Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
+`APP_URL` / `NEXT_PUBLIC_APP_URL` on `core` is **`https://digiquant.io`** (verified
+2026-08-31 via Observer `GET /settings/app-urls`: Alpaca callback + billing return
+under `/olympus`, no loopback). Checkout return URLs are
+`/olympus/settings/?tab=billing`.
 
-**Remaining hops (Observer JWT, re-audit 2026-08-31T05:11Z):** all five unproven.
+**Remaining hops (Observer JWT, re-audit 2026-08-31T07:02Z):** all five unproven.
 `job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK
 rows = **0**. One ops-custom workspace has an Alpaca **paper `api_key`** connection
 (not OAuth; does not prove the remaining hop). House is `enterprise`/`active`
@@ -123,7 +126,8 @@ still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-ke
 `python scripts/kairos_apply_vendor_secrets.py` → exit **2** until the three
 gitignored `digithings-{stripe,mailgun,alpaca}.env` files exist (then `--apply`
 pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exit
-**2** until `digithings-byok.env` exists. Observer Settings hops all ok. A fifth
+**2** until `digithings-byok.env` exists. Observer Settings hops all ok including
+`GET /settings/app-urls`. A fifth
 personal workspace (`kairos-e2e-…+s3101@`, `plan_tier=free`) appeared on core;
 it does not prove Stripe.
 
