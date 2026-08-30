@@ -54,7 +54,7 @@ from datetime import timedelta
 from decimal import Decimal
 from multiprocessing.connection import Connection
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import polars as pl
@@ -338,7 +338,7 @@ def run_nautilus(
     )
     engine.add_instrument(inst)
     engine.add_data(bars)
-    injected: dict[str, Any] = dict(calibration or {})
+    injected: dict[str, object] = dict(calibration or {})
     if config_declares_field(strategy, "size_pct_equity"):
         injected.setdefault("size_pct_equity", float(d["size_pct_equity"]))
     trade_size = Decimal(1) if config_declares_field(strategy, "trade_size") else None

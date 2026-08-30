@@ -87,7 +87,9 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     def _boom(*_args: object, **_kwargs: object) -> dict:
         raise AssertionError("resolve_calibrations must not run for strategy_type=sdca")
 
-    monkeypatch.setattr(gts, "resolve_calibrations", _boom)
+    import digiquant.strategies.calibrations_loader as cal_loader
+
+    monkeypatch.setattr(cal_loader, "resolve_calibrations", _boom)
 
     class _EmptyPositions:
         def iterrows(self):
