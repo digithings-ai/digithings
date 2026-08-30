@@ -2,11 +2,13 @@
  * Data access layer — All data from Supabase. No static JSON fallback.
  * Components call these functions; never touch Supabase directly.
  *
- * Session-aware (T1): `supabase` is the PKCE client when
- * `NEXT_PUBLIC_OLYMPUS_AUTH=1` (JWT from supabase-js storage; RLS scopes rows).
- * Flag off → classic anon client (today's behavior). Query text is unchanged.
+ * House reads use the session-less anon client (`supabaseHouse`). Auth Pages
+ * PKCE attaches a user JWT (`role=authenticated`); `anon_read` is `TO anon`
+ * only, so Brief/Portfolio went empty for signed-in users before this split.
+ * JWT stays on `getSupabaseClient()` for login/Settings. Cutover 900 is the
+ * coordinated drop of anon_read — not this hotfix.
  */
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabaseHouse as supabase, isSupabaseConfigured } from './supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, TableRow } from './database.types';
 import type {
@@ -710,7 +712,7 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
     pmRebalanceRes,
   ] = await Promise.all([
-    supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
+    supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('positions').select('*').order('date', { ascending: false }).limit(5000),
     supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),

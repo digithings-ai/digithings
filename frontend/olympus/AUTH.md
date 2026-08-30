@@ -22,8 +22,15 @@ Everything is behind `NEXT_PUBLIC_OLYMPUS_AUTH=1` (build-time). Flag **off**
 shell: `AuthGate` passes children through and queries use the classic anon client.
 
 Flag **on** + signed out ⇒ login UI (never empty chrome). Flag on + signed in ⇒
-dashboard shell; the same PKCE client attaches the user JWT so RLS can scope
-rows after the coordinated anon-policy drop.
+dashboard shell.
+
+**Two clients (required while anon_read is still live):** house Brief /
+Portfolio / Pipeline reads use a session-less anon client (`supabaseHouse`,
+`persistSession: false`). Login and Settings use the PKCE client, which
+attaches the user JWT. `anon_read` policies are `TO anon` only — sending the
+JWT (`role=authenticated`) hides house rows and 406s `daily_snapshots.single()`.
+Do not point `lib/queries.ts` at the PKCE singleton until cutover 900 replaces
+anon_read with authenticated house/teaser policies.
 
 ### Env / build
 
@@ -53,6 +60,8 @@ on `main` for Cloudflare Pages to stop 404ing those paths. Enabling
 it on when `CF_PAGES=1` and the var is unset) shows the LoginScreen / AuthGate
 **without** applying `migrations/cutover/900_*`. Anon RLS stays until the
 coordinated cutover below — do **not** treat Auth-UI-on as full tenancy cutover.
+House dashboard queries must keep using the session-less anon client until that
+cutover; the PKCE JWT is for login/Settings only.
 
 ### Cutover checklist (coordinated release — human)
 
