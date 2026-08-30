@@ -3303,7 +3303,8 @@ books) so overlay `documents` rows do not leak through `anon_read`. Overlay
 `uq_portfolio_ledger_commits_one_root (run_date)` still sit beside the widened
 keys — H9 `commit_io`, `portfolio_materialize`, and `refresh_performance_metrics`
 now upsert the widened `(workspace_id, …)` targets, as do the remaining house
-ops scripts (`update_tearsheet`, `sync_positions_from_rebalance`,
+ops scripts (`update_tearsheet` Group A plus documents
+`on_conflict=workspace_id,date,document_key`, `sync_positions_from_rebalance`,
 `materialize_snapshot` positions, `backfill_execution_prices`,
 `reconcile_position_events_from_positions`). Overlay private books still refuse
 (`legacy_book_unique`) until staged cutover **113**

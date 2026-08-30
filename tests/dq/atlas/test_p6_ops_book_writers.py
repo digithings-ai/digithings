@@ -95,7 +95,20 @@ class TestUpdateTearsheetPush:
         ]
         ut.push_to_supabase(
             parsed,
-            docs=[],
+            docs=[
+                {
+                    "date": "2026-08-31",
+                    "title": "Digest",
+                    "type": "Daily Digest",
+                    "path": "data/agent-cache/daily/2026-08-31/DIGEST.md",
+                    "content": "HOUSE-DIGEST",
+                    "phase": 7,
+                    "category": "synthesis",
+                    "segment": "digest",
+                    "sector": None,
+                    "runType": "baseline",
+                }
+            ],
             history=[{"date": "2026-08-31", "nav": 100.0}],
             metrics={"date": "2026-08-31", "computed_from": "tearsheet"},
             pj_positions=[],
@@ -112,6 +125,39 @@ class TestUpdateTearsheetPush:
         events = sb.store["position_events"]
         assert events[0]["_on_conflict"] == "workspace_id,date,ticker"
         assert events[0]["workspace_id"] == _HOUSE
+        docs_written = sb.store["documents"]
+        assert docs_written[0]["_on_conflict"] == "workspace_id,date,document_key"
+        assert docs_written[0]["workspace_id"] == _HOUSE
+        assert docs_written[0]["document_key"] == "digest"
+        assert "file_path" not in docs_written[0]
+
+
+class TestDocumentKeyFromCachePath:
+    def test_daily_digest_and_rollup_prefixes(self) -> None:
+        if str(_SCRIPTS) not in sys.path:
+            sys.path.insert(0, str(_SCRIPTS))
+        import update_tearsheet as ut
+
+        assert (
+            ut._document_key_from_cache_path("data/agent-cache/daily/2026-08-31/DIGEST.md")
+            == "digest"
+        )
+        assert (
+            ut._document_key_from_cache_path("data/agent-cache/daily/2026-08-31/DIGEST-DELTA.md")
+            == "digest-delta"
+        )
+        assert (
+            ut._document_key_from_cache_path("data/agent-cache/daily/2026-08-31/sectors/xlk.md")
+            == "sectors/xlk.md"
+        )
+        assert (
+            ut._document_key_from_cache_path("data/agent-cache/weekly/2026-08-31.md")
+            == "weekly/2026-08-31.md"
+        )
+        assert (
+            ut._document_key_from_cache_path("data/agent-cache/deep-dives/NVDA.md")
+            == "deep-dives/NVDA.md"
+        )
 
 
 class TestMaterializeSnapshotPositions:
@@ -174,6 +220,8 @@ class TestLegacyConflictTargetsGone:
         assert 'on_conflict="date,ticker"' not in tear
         assert 'nav_history").upsert(chunk, on_conflict="date")' not in tear
         assert 'portfolio_metrics").upsert([metrics], on_conflict="date")' not in tear
+        assert 'on_conflict="date,file_path"' not in tear
+        assert 'on_conflict="workspace_id,date,document_key"' in tear
         sync = (_SCRIPTS / "sync_positions_from_rebalance.py").read_text(encoding="utf-8")
         assert 'on_conflict="date,ticker"' not in sync
 

@@ -606,6 +606,37 @@ def _house_id() -> str:
     return str(house_workspace_id())
 
 
+def _document_key_from_cache_path(path: str) -> str:
+    """Logical ``documents.document_key`` from a recovery cache path (migration 009).
+
+    ``file_path`` was renamed to ``document_key`` and ``UNIQUE(date, file_path)``
+    dropped; leftover ``on_conflict=date,file_path`` 42P10s against core.
+    """
+    p = str(path or "").replace("\\", "/").lstrip("/")
+    marker = "/daily/"
+    idx = p.find(marker)
+    if idx >= 0:
+        rest = p[idx + len(marker) :]
+        slash = rest.find("/")
+        if slash >= 0 and len(rest) >= 11 and rest[4] == "-" and rest[7] == "-":
+            rest = rest[slash + 1 :]
+        if rest in ("DIGEST.md", "digest"):
+            return "digest"
+        if rest in ("DIGEST-DELTA.md", "digest-delta"):
+            return "digest-delta"
+        return rest
+    for prefix in ("weekly/", "monthly/", "deep-dives/"):
+        found = p.find(prefix)
+        if found >= 0:
+            return p[found:]
+    name = p.rsplit("/", 1)[-1]
+    if name in ("DIGEST.md", "digest"):
+        return "digest"
+    if name in ("DIGEST-DELTA.md", "digest-delta"):
+        return "digest-delta"
+    return name
+
+
 def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
     """Push all data to Supabase tables. Uses upsert (ON CONFLICT DO UPDATE)."""
     if not supabase_configured():
@@ -848,6 +879,9 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
     # ---- documents ----
     doc_rows = []
     for d in docs:
+        key = _document_key_from_cache_path(d.get("path", "") or "")
+        if not key:
+            continue
         doc_rows.append(
             {
                 "date": d["date"],
@@ -858,15 +892,18 @@ def push_to_supabase(parsed_digests, docs, history, metrics, pj_positions):
                 "segment": d.get("segment"),
                 "sector": d.get("sector"),
                 "run_type": d.get("runType"),
-                "file_path": d.get("path", ""),
+                "document_key": key,
                 "content": d.get("content"),
+                "workspace_id": house,
             }
         )
     if doc_rows:
         for i in range(0, len(doc_rows), 200):
             chunk = doc_rows[i : i + 200]
             try:
-                sb.table("documents").upsert(chunk, on_conflict="date,file_path").execute()
+                sb.table("documents").upsert(
+                    chunk, on_conflict="workspace_id,date,document_key"
+                ).execute()
             except _REMOTE_UPSERT_ERRORS as e:
                 print(f"   Supabase warning (documents chunk {i}): {e}")
         print(f"   Supabase: {len(doc_rows)} documents upserted")
