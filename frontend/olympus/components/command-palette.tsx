@@ -30,6 +30,7 @@ import { buildPipelineHref, DIGEST_DOCUMENT_KEYS } from '@/lib/pipeline-links';
 import { buildDocumentSearchItems } from '@/lib/document-search';
 import { fetchAllTickers } from '@/lib/queries';
 import { thesisDetailHref } from '@/lib/portfolio-url-state';
+import { useCanAccessProduct } from '@/lib/use-entitlement';
 import type { Doc } from '@/lib/types';
 
 export type CmdItem = {
@@ -231,8 +232,13 @@ export default function CommandPalette() {
   const router = useRouter();
   const { data } = useDashboard();
   const { commandPaletteOpen: open, openCommandPalette, closeCommandPalette } = useAppShell();
+  const canFxHub = useCanAccessProduct('fx_hub');
 
-  const items = useMemo<CmdItem[]>(() => buildCommandItems(data), [data]);
+  const items = useMemo<CmdItem[]>(() => {
+    const all = buildCommandItems(data);
+    if (canFxHub) return all;
+    return all.filter((i) => i.id !== 'go-fx' && i.id !== 'go-fx-how');
+  }, [data, canFxHub]);
   const docs = useMemo<Doc[]>(() => data?.docs ?? [], [data]);
 
   // Live ticker union (#1562 PR2) — fetched once on mount, independent of the

@@ -27,6 +27,10 @@ vi.mock('@/lib/observability-queries', async () => {
 
 vi.mock('@/components/observability/AttributionTab', () => ({ default: () => null }));
 vi.mock('@/components/page-skeleton', () => ({ default: () => null }));
+vi.mock('@/lib/use-entitlement', () => ({
+  useCan: () => true,
+  usePlanTier: () => 'enterprise',
+}));
 
 vi.mock('react', async () => {
   const actual = await vi.importActual<typeof import('react')>('react');

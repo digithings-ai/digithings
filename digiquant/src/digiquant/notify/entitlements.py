@@ -1,6 +1,8 @@
 """Olympus plan-tier → artifact-class entitlement map (Kairos tenancy T5 mirror).
 
 Spec §5-T5 matrix is the single source of truth — pin it in entitlements tests.
+Free-teaser addendum (2026-08-30): Observer also gets ``digest_summary`` +
+``portfolio_teaser`` (no weights/NAV, no brokers/automations).
 
 TypeScript mirror (T5 UI gate) MUST stay in sync:
   frontend/olympus/lib/entitlements.ts
@@ -22,10 +24,12 @@ class PlanTier(StrEnum):
 
 
 class ArtifactClass(StrEnum):
-    """Artifact classes gated by plan tier (spec §5-T5)."""
+    """Artifact classes gated by plan tier (spec §5-T5 + free-teaser)."""
 
     RESEARCH = "research"
     NARRATIVE = "narrative"
+    DIGEST_SUMMARY = "digest_summary"
+    PORTFOLIO_TEASER = "portfolio_teaser"
     HOUSE_WEIGHTS_NAV = "house_weights_nav"
     GLASSBOX_ECONOMICS = "glassbox_economics"
     PRIVATE_BOOK = "private_book"
@@ -41,7 +45,12 @@ PLAN_TIERS: Final[tuple[PlanTier, ...]] = (
 )
 
 OBSERVER_CLASSES: Final[frozenset[ArtifactClass]] = frozenset(
-    {ArtifactClass.RESEARCH, ArtifactClass.NARRATIVE}
+    {
+        ArtifactClass.RESEARCH,
+        ArtifactClass.NARRATIVE,
+        ArtifactClass.DIGEST_SUMMARY,
+        ArtifactClass.PORTFOLIO_TEASER,
+    }
 )
 
 BASELINE_CLASSES: Final[frozenset[ArtifactClass]] = OBSERVER_CLASSES | frozenset(
@@ -65,11 +74,25 @@ ALLOWED: Final[dict[PlanTier, frozenset[ArtifactClass]]] = {
 
 ARTIFACT_CLASSES: Final[tuple[ArtifactClass, ...]] = tuple(ArtifactClass)
 
+_TIER_RANK: Final[dict[PlanTier, int]] = {
+    PlanTier.FREE: 0,
+    PlanTier.BASELINE: 1,
+    PlanTier.CUSTOM: 2,
+    PlanTier.ENTERPRISE: 3,
+}
+
 
 def is_plan_tier(value: object) -> bool:
     if not isinstance(value, str):
         return False
     return value in {t.value for t in PLAN_TIERS}
+
+
+def max_plan_tier(a: PlanTier, b: PlanTier | None) -> PlanTier:
+    """Higher of two plan tiers (creator/ops plan_floor elevation)."""
+    if b is None:
+        return a
+    return a if _TIER_RANK[a] >= _TIER_RANK[b] else b
 
 
 def can(tier: PlanTier, artifact_class: ArtifactClass) -> bool:
@@ -100,5 +123,6 @@ __all__ = [
     "PlanTier",
     "can",
     "is_plan_tier",
+    "max_plan_tier",
     "required_tier_for",
 ]

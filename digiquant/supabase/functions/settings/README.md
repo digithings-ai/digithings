@@ -7,7 +7,15 @@ connect/revoke, and notification prefs.
 |---------|-------|
 | `verify_jwt` | **true** |
 | CORS | OPTIONS → 204 + Allow-* (digiquant.io browser callers) |
-| Deploy | **BLOCKED ON K3 MERGE** + module migrations **096–098** |
+| Deploy | After K3 + migrations **096–108** (108 = creator/product grants) |
+
+## Tier gate (effective plan)
+
+Writes to Profile / Brokers / Keys require **effective** plan_tier ∈
+(`custom`, `enterprise`). Effective = `max(workspaces.plan_tier,
+entitlement_grants.plan_floor)` (migration **108**). Creator seed
+(`chris.stefan@proton.me` → `custom`) unlocks Kairos Settings without Stripe.
+JWT claim alone is not authoritative.
 
 ## Deploy gate — blocked on K3 + tenancy migrations
 

@@ -19,6 +19,11 @@
  */
 
 import {
+  requireCustomEligible,
+  resolveAccessSnapshot,
+  type AccessAdmin,
+} from "./access.ts";
+import {
   requireBearerHeader,
   requireWorkspaceMember,
   type AuthUser,
@@ -67,9 +72,6 @@ const FINGERPRINT_COLUMNS =
 
 const KEY_FINGERPRINT_COLUMNS =
   "id, workspace_id, provider, auth_kind, fingerprint, scopes, status, created_at, revoked_at, last_used_at";
-
-/** Custom/enterprise only — baseline cannot write overlays, BYOK, or brokers. */
-const ELIGIBLE_TIERS = new Set(["custom", "enterprise"]);
 
 /** Closed vocabulary matching migration 104 workspace_provider_credentials.provider. */
 const LLM_PROVIDERS = new Set([
@@ -164,21 +166,30 @@ async function resolveMember(
 }
 
 /**
- * Fail closed on plan tier using the authoritative workspace row.
+ * Fail closed on plan tier using workspace row + ops entitlement_grants.
  *
  * `workspaces.plan_tier` is CAS-updated by the Stripe webhook. Preferring the
- * JWT `app_metadata.plan_tier` claim here fails open after cancel when claim
+ * JWT `app_metadata.plan_tier` claim alone fails open after cancel when claim
  * sync sets `claim_sync_pending` but leaves a stale elevated claim on the
  * token — and fails closed incorrectly on upgrade when the claim lags.
+ *
+ * Creator/ops emails in `entitlement_grants` raise the *effective* floor
+ * (migration 108) so baseline/Kairos works without Stripe for allowlisted
+ * operators. Paying customers still go through Stripe → workspaces.plan_tier.
  */
-function requireEligibleTier(workspacePlanTier: string): Response | null {
-  const tier = (workspacePlanTier ?? "").trim().toLowerCase();
-  if (!ELIGIBLE_TIERS.has(tier)) {
-    return jsonError(
-      403,
-      "TIER_FORBIDDEN",
-      "plan_tier must be custom or enterprise for this settings action",
-    );
+async function requireEligibleTier(
+  deps: SettingsDeps,
+  authz: { user: AuthUser; workspace: { id: string; plan_tier: string } },
+): Promise<Response | null> {
+  const snap = await resolveAccessSnapshot({
+    admin: deps.admin as unknown as AccessAdmin,
+    email: authz.user.email,
+    workspaceId: authz.workspace.id,
+    workspacePlanTier: authz.workspace.plan_tier,
+  });
+  const gate = requireCustomEligible(snap.effectivePlanTier);
+  if (!gate.ok) {
+    return jsonError(403, "TIER_FORBIDDEN", gate.message);
   }
   return null;
 }
@@ -345,7 +356,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
+  const tierErr = await requireEligibleTier(deps, authz);
   if (tierErr) return tierErr;
 
   const workspaceId = authz.workspace.id;
@@ -546,7 +557,7 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
+  const tierErr = await requireEligibleTier(deps, authz);
   if (tierErr) return tierErr;
 
   const broker = (body.broker ?? "").toLowerCase();
@@ -864,7 +875,7 @@ async function connectKey(req: Request, deps: SettingsDeps): Promise<Response> {
   const authz = await resolveMember(deps, body.workspace_id ?? null);
   if (!authz.ok) return authz.response;
 
-  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
+  const tierErr = await requireEligibleTier(deps, authz);
   if (tierErr) return tierErr;
 
   const provider = (body.provider ?? "").toLowerCase().trim();

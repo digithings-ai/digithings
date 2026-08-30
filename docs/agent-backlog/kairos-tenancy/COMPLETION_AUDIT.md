@@ -2,6 +2,11 @@
 
 **Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets.
 
+**2026-08-30 product-gates follow-up:** creator/ops `entitlement_grants` + free-teaser + FX Hub
+`client_product_grants` implemented on branch `cursor/kairos-product-gates-3d52` (migration 108).
+Full gap: [`KAIROS-ALPACA-FINALIZE-GAP.md`](KAIROS-ALPACA-FINALIZE-GAP.md) and
+`/opt/cursor/artifacts/kairos-alpaca-finalize-gap.md`. Still **not** epic-complete.
+
 Full artifact: `/opt/cursor/artifacts/kairos-github-auth-prod-proof.md`  
 Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`  
 Prior vendor recheck: `/opt/cursor/artifacts/kairos-completion-audit-vendor-recheck.md`  

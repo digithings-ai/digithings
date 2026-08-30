@@ -18,6 +18,10 @@ const TIER_LABEL: Record<PlanTier, string> = {
 const VALUE_PROP: Record<ArtifactClass, string> = {
   research: 'Atlas research and corpus identity are included on every plan.',
   narrative: 'Hermes deliberation narrative is included on every plan.',
+  digest_summary:
+    'Digest conclusions are included on the free plan as a teaser. Full glass-box detail unlocks on Baseline.',
+  portfolio_teaser:
+    'A light portfolio glimpse is included on the free plan. Weights, NAV, and connections unlock on paid tiers.',
   house_weights_nav:
     'House weights, NAV, tearsheet, ledger, and attribution unlock on Baseline.',
   glassbox_economics:
