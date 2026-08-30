@@ -1,5 +1,8 @@
 """Unit tests for Kairos broker mirror sync (K4)."""
 
+# score:allow untyped any
+# Fake PostgREST rows are heterogeneous dicts matching Supabase payloads.
+
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
@@ -265,9 +268,7 @@ def test_status_supersede_chain() -> None:
     new_row = next(r for r in store[BROKER_ORDERS] if r.get("supersedes_id"))
     assert new_row["supersedes_id"] == str(_ORDER)
     assert new_row["status"] == "filled"
-    assert new_row["id"] == str(
-        broker_order_status_id(_ORDER, BrokerOrderStatus.FILLED, _NOW)
-    )
+    assert new_row["id"] == str(broker_order_status_id(_ORDER, BrokerOrderStatus.FILLED, _NOW))
 
 
 def test_cursor_advances_to_latest_fill() -> None:
@@ -374,8 +375,7 @@ def test_sync_module_has_no_upsert() -> None:
     from pathlib import Path
 
     text = (
-        Path(__file__).resolve().parents[4]
-        / "digiquant/src/digiquant/olympus/kairos/sync.py"
+        Path(__file__).resolve().parents[4] / "digiquant/src/digiquant/olympus/kairos/sync.py"
     ).read_text(encoding="utf-8")
     assert ".upsert(" not in text
 

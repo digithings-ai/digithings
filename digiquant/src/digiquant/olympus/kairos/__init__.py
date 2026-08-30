@@ -11,8 +11,8 @@ from __future__ import annotations
 from digiquant.olympus.kairos.policy import (
     AmbiguousVenueError,
     InconsistentOrderChainError,
-    routing_enabled,
     resolve_venue,
+    routing_enabled,
 )
 from digiquant.olympus.kairos.router import (
     RouteResult,

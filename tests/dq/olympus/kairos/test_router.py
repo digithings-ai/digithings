@@ -1,5 +1,8 @@
 """Unit tests for Kairos venue policy + order-intent router (K4)."""
 
+# score:allow untyped any, notimplementederror stub
+# Fake BrokerAdapter unused methods raise; fake PostgREST rows are untyped dicts.
+
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
@@ -166,7 +169,9 @@ def test_routing_enabled_opt_in(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_house_workspace_always_paper_internal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "1")
-    assert resolve_venue(None, active_paper_brokers=[Broker.ALPACA]) is ExecutionVenue.PAPER_INTERNAL
+    assert (
+        resolve_venue(None, active_paper_brokers=[Broker.ALPACA]) is ExecutionVenue.PAPER_INTERNAL
+    )
 
 
 def test_kill_switch_off_forces_paper_internal() -> None:
@@ -175,9 +180,7 @@ def test_kill_switch_off_forces_paper_internal() -> None:
 
 def test_active_alpaca_paper_when_routing_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OLYMPUS_KAIROS_ROUTING", "on")
-    assert (
-        resolve_venue(_WS, active_paper_brokers=[Broker.ALPACA]) is ExecutionVenue.ALPACA_PAPER
-    )
+    assert resolve_venue(_WS, active_paper_brokers=[Broker.ALPACA]) is ExecutionVenue.ALPACA_PAPER
 
 
 def test_active_ibkr_paper_when_routing_on(monkeypatch: pytest.MonkeyPatch) -> None:

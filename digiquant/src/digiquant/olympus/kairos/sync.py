@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import (
@@ -147,26 +147,14 @@ def _heads_by_external_order(
 
 
 def _load_connection_orders(*, client: Any, connection_id: UUID) -> list[dict[str, Any]]:
-    resp = (
-        client.table(BROKER_ORDERS)
-        .select("*")
-        .eq("connection_id", str(connection_id))
-        .execute()
-    )
+    resp = client.table(BROKER_ORDERS).select("*").eq("connection_id", str(connection_id)).execute()
     return list(resp.data or [])
 
 
-def _existing_execution_ids(
-    *, client: Any, ids: list[str]
-) -> set[str]:
+def _existing_execution_ids(*, client: Any, ids: list[str]) -> set[str]:
     if not ids:
         return set()
-    resp = (
-        client.table(BROKER_EXECUTIONS)
-        .select("id")
-        .in_("id", ids)
-        .execute()
-    )
+    resp = client.table(BROKER_EXECUTIONS).select("id").in_("id", ids).execute()
     return {str(row["id"]) for row in (resp.data or []) if row.get("id")}
 
 
@@ -203,11 +191,7 @@ def _fill_implied_positions(
 
 
 def _positions_from_snapshot(positions: list[BrokerPosition]) -> dict[str, Decimal]:
-    return {
-        p.symbol.upper(): p.quantity
-        for p in positions
-        if p.quantity != 0
-    }
+    return {p.symbol.upper(): p.quantity for p in positions if p.quantity != 0}
 
 
 def _reconcile(
@@ -307,17 +291,10 @@ def _append_fill(
     return True
 
 
-def _load_all_fills_for_orders(
-    *, client: Any, order_ids: list[str]
-) -> list[dict[str, Any]]:
+def _load_all_fills_for_orders(*, client: Any, order_ids: list[str]) -> list[dict[str, Any]]:
     if not order_ids:
         return []
-    resp = (
-        client.table(BROKER_EXECUTIONS)
-        .select("*")
-        .in_("broker_order_id", order_ids)
-        .execute()
-    )
+    resp = client.table(BROKER_EXECUTIONS).select("*").in_("broker_order_id", order_ids).execute()
     return list(resp.data or [])
 
 
@@ -449,11 +426,7 @@ def sync_connection(
     all_order_ids = list(orders_by_id.keys())
     mirrored_fills = _load_all_fills_for_orders(client=client, order_ids=all_order_ids)
     # Build a side lookup that includes every order row (heads + superseded).
-    side_index = {
-        str(r["id"]): r
-        for r in orders
-        if r.get("id")
-    }
+    side_index = {str(r["id"]): r for r in orders if r.get("id")}
     # Prefer latest head for side when present.
     for head in heads.values():
         side_index[str(head["id"])] = head
@@ -530,9 +503,7 @@ def _resolve_order_for_fill(
     on the same symbol; if several match, refuse to guess.
     """
     matches = [
-        row
-        for row in heads.values()
-        if str(row.get("symbol") or "").upper() == fill.symbol.upper()
+        row for row in heads.values() if str(row.get("symbol") or "").upper() == fill.symbol.upper()
     ]
     if len(matches) == 1:
         return matches[0]

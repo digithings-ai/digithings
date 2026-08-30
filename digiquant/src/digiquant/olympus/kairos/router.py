@@ -246,9 +246,7 @@ def route_pending_orders(
         )
 
     pending, order_rows = _pending_order_heads(client=client, run_date=run_date)
-    actions, stale = _directions_by_order(
-        client=client, run_date=run_date, order_rows=order_rows
-    )
+    actions, stale = _directions_by_order(client=client, run_date=run_date, order_rows=order_rows)
 
     intent_ids = [str(row["id"]) for row in pending if row.get("id")]
     existing_ids = _existing_broker_order_ids(client=client, order_intent_ids=intent_ids)
