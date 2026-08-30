@@ -1,13 +1,17 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: WAITING_HUMAN_CAPTCHA (2026-08-30 vendor onboard) — NOT COMPLETE.** Agent filled Stripe/Mailgun/Alpaca signup forms; each vendor blocked automation (hCaptcha / reCAPTCHA / Turnstile). No vendor EF secrets set yet. Staging E2E still loud-fails named secrets. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183); never apply cutover 900.
+**Status: WAITING_HUMAN_CAPTCHA (2026-08-30) — NOT COMPLETE.** Identity: **digithings**. Captchas still block Stripe/Mailgun/Alpaca. No vendor EF secrets set. Staging E2E loud-fails named secrets. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183); never apply cutover 900.
 
-**Human captcha ask (one per vendor):** [`/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`](/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md)  
-**Vendor map:** [`VENDOR_MAP.md`](VENDOR_MAP.md) · artifact `/opt/cursor/artifacts/kairos-VENDOR-MAP.md`  
-**Waiting:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`WAITING_HUMAN_CAPTCHA`)  
-**Branch:** `cursor/kairos-vendor-onboard-3d52`  
+**Secret files (when obtained):** `.local/secrets/digithings-stripe.env`, `digithings-mailgun.env`, `digithings-alpaca.env` — **not** `cursor-cloud-agent-*.env`.  
+**Canonical inbox:** `digithings@agentmail.to` (interim `cursor-cloud-agent6060@agentmail.to` = accidental only).  
+**Identity:** [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md) · `/opt/cursor/artifacts/kairos-digithings-vendor-naming-ready.md`  
+**Human captcha ask:** `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`  
+**Vendor map:** [`VENDOR_MAP.md`](VENDOR_MAP.md) · `/opt/cursor/artifacts/kairos-VENDOR-MAP.md`  
+**Waiting:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`identity=digithings`)  
+**PR:** [#3233](https://github.com/digithings-ai/digithings/pull/3233) · branch `cursor/kairos-vendor-onboard-3d52`  
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)
+
 
 Loud-fail gates (after paste):
 ```bash
@@ -30,7 +34,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 | Name | Format hint |
 |------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/cursor-cloud-agent-supabase-pat` (label **cursor cloud agent**) works; re-paste into Cursor env if process env drops it |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — file `.local/secrets/digithings-supabase-pat` (label **digithings**) works; re-paste into Cursor env if process env drops it |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
 | `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
