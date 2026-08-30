@@ -287,7 +287,7 @@ register(
     SdcaStrategyConfig,
     {
         "initial_cash": 1000.0,
-        "long_only": True,
+        "long_only": False,
         "curve_nodes": DEFAULT_BTC_NODES,
     },
     aliases=["sdca"],

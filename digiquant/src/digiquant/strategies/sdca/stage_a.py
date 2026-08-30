@@ -141,8 +141,14 @@ def optimize_stage_a_weights(
     search_names: Sequence[str] = PRICE_OSCILLATOR_NAMES,
     grid: Sequence[float] = (0.0, 0.5, 1.0),
     valuation_grid: Sequence[float] = (0.0, 0.5, 1.0),
+    require_extras: bool = False,
 ) -> StageAResult:
-    """Grid-search extra weights so composite troughs/peaks overlap ``windows``."""
+    """Grid-search extra weights so composite troughs/peaks overlap ``windows``.
+
+    ``require_extras=True`` skips valuation-only (and other zero-extra) rows so
+    the published composite is actually a blend, not a re-discovery of
+    power-law-only risk.
+    """
     best: StageAResult | None = None
     evaluated = 0
     names = tuple(search_names)
@@ -152,6 +158,8 @@ def optimize_stage_a_weights(
             try:
                 weights = SdcaCompositeWeights(valuation=float(val), **payload)
             except ValueError:
+                continue
+            if require_extras and not weights.enabled_extras():
                 continue
             if any(name not in extra_z for name in weights.enabled_extras()):
                 continue

@@ -162,9 +162,11 @@ the full module map.
   the remaining book open at engine stop. `--push-supabase` is an operator
   step after a real Nautilus generate; do not run it from an agent
   environment.
-- **Published personality is `balanced`.** Walk-forward OOS
-  `beats_flat_dca_oos` is currently false (`btc_composite_*.json`). Do not
-  publish `btc_optimized` as a winner.
+- **Published `btc_sdca` is composite + distribute.** Settings use
+  `indicator_weights` `{valuation: 1.0, sma_band: 0.5}` (require_extras Stage A)
+  and preset `btc_optimized` (sells enabled, `long_only: false`). Walk-forward
+  OOS `beats_flat_dca_oos` is still false — do not claim an OOS win over flat
+  DCA; provenance stays honest.
 
 ### RiskModel providers (#1082)
 

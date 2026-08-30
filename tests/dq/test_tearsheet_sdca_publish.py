@@ -60,6 +60,12 @@ def test_settings_btc_sdca_is_dca_family() -> None:
     assert entry["kind"] == "dca"
     assert gts.strategy_type_of(settings, "btc_sdca") == "sdca"
     assert gts.strategy_type_of(settings, "btc_slapper") == "slapper"
+    sdca = entry["sdca"]
+    assert sdca["long_only"] is False
+    weights = sdca["indicator_weights"]
+    extras = sum(float(weights[k]) for k in ("weekly_rsi", "weekly_macd", "sma_band", "m2", "rs_eth", "dxy"))
+    assert extras > 0.0
+    assert sdca["preset"] != "balanced"
 
 
 def test_sdca_risk_index_uses_signal_delayed_frame_only(tmp_path: Path) -> None:

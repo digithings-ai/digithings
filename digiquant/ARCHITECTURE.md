@@ -544,9 +544,10 @@ nodes; `load_preset(name)` still returns an `SdcaPreset` whose `curve_nodes`
 are generated at load so `AccumDistCurve` / `SdcaStrategyConfig` stay unchanged.
 These are documented personalities, not optimized parameters — except
 `btc_optimized` (#3174), which is the walk-forward winner plus a provenance
-sidecar (`btc_optimized_provenance.json`). The checked-in v1 file matches
-`accumulate_and_distribute` until an operator re-runs the Nautilus evaluator
-on real BTC; it is **not** a published digiquant.io number. To add a preset:
+sidecar (`btc_optimized_provenance.json`). Published `btc_sdca` uses this
+distribute curve (`sell_max_rate=5`, `long_only: false`) with composite risk
+`valuation` + `sma_band` (not valuation-only `balanced` long-only). OOS
+`beats_flat_dca_oos` remains false — not a digiquant.io OOS claim. To add a preset:
 append a `shape` object plus `long_only` and `description` to `presets.json`;
 `SdcaPreset` validates node count (always 21 after generation) and, if
 `long_only` is `true`, that every node is `>= 0` at load time. The four
@@ -618,10 +619,12 @@ composite_z = clip( Σ_i (z_i · w_i) / Σ_i w_i , -3, 3 )
 risk        = 50 − composite_z × 50/3
 ```
 
-`z_i` are daily series in `[-3, 3]` (cheap = +3, rich = −3). `settings.json`
-`btc_sdca.sdca.indicator_weights` defaults `valuation=1`, all extras `0`
-(including `weekly_rsi` / `weekly_macd` / `sma_band`). Weekly MACD is kept at
-0 unless Stage A turns it on — it is not a second equal vote with weekly RSI.
+`z_i` are daily series in `[-3, 3]` (cheap = +3, rich = −3). Published
+`btc_sdca.sdca.indicator_weights` is composite `valuation=1` + `sma_band=0.5`
+(require_extras Stage A); other extras stay at `0`. The catalog /
+`SdcaCompositeWeights` model default remains valuation-only until a caller
+enables extras. Weekly MACD is kept at 0 unless Stage A turns it on — it is
+not a second equal vote with weekly RSI.
 **sma_band sign:** close below the 90-day SMA (in rolling-σ units) is cheap
 (+z); above is rich (−z). Raw realized vol is unsigned and is not used.
 **Alpha** vs the power-law median is omitted (collinear with `valuation_z`);
