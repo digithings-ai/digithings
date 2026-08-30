@@ -387,7 +387,7 @@ def run_atlas_then_hermes(
     passes False so ``overlay_usage_scope`` is not wiped by a nested
     ``usage.start`` / ``usage.reset``.
     """
-    state = initial_state(atlas_input, config=_preflight_config(deps))
+    state = initial_state(atlas_input)
     # Capture LLM usage for the whole run and ALWAYS write the diagnostics row + reset on
     # the way out (telemetry is fail-soft inside write_row, so this never crashes the run).
     started_at = datetime.now(tz=timezone.utc)
@@ -399,6 +399,12 @@ def run_atlas_then_hermes(
     if manage_usage:
         _usage.start(run_id=deps.diagnostics.run_id if deps.diagnostics is not None else None)
     try:
+        pinned = _preflight_config(deps)
+        if pinned is not None:
+            # Preserve the already-pinned knowledge_cutoff_at. Overlay identity
+            # must be on last-good state before fail-soft graph invoke; a raising
+            # loader stays inside this envelope so diagnostics still flush.
+            state = state.model_copy(update={"config": pinned})
         # Operator escape hatch: beliefs-only run (no Atlas/Hermes research).
         if atlas_input.refresh_scope == "beliefs":
             _run_beliefs_fold(state, deps, atlas_input)

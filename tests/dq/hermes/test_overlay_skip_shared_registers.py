@@ -641,3 +641,49 @@ def test_overlay_beliefs_fold_skips_when_atlas_crashes_before_preflight(
         )
     assert all(r.get("beliefs_folded_at") is None for r in overlay_client.store["decision_log"])
     assert overlay_client.store.get("documents", []) == []
+
+
+def test_overlay_config_loader_failure_records_terminal_and_does_not_fold(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from digiquant.olympus.hermes.chain import DiagnosticsDeps, run_atlas_then_hermes
+    from digiquant.olympus.learning import beliefs_distillation as mod
+
+    monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
+    rows = [_resolved_lesson(row_id=f"house-{i}") for i in range(21)]
+    overlay_client = FakeSupabaseClient(canned_reads={"decision_log": rows})
+    overlay_client.store["decision_log"] = [dict(r) for r in rows]
+
+    def _overlay_must_not_distill(**_kw: object) -> object:
+        raise AssertionError("overlay must not distill house lessons")
+
+    monkeypatch.setattr(mod, "_run_beliefs_llm", _overlay_must_not_distill)
+
+    def boom_loader() -> AtlasConfigBundle:
+        raise RuntimeError("loader exploded")
+
+    written: dict[str, object] = {}
+
+    def _capture(_client: object, *, state: AtlasResearchState, **_kwargs: object) -> None:
+        written["errors"] = [(e.phase, e.node) for e in state.errors]
+        return None
+
+    deps = ChainDeps(
+        atlas=AtlasGraphDeps(
+            preflight=PreflightDeps(client=overlay_client, config_loader=boom_loader),
+        ),
+        hermes=HermesGraphDeps(),
+        diagnostics=DiagnosticsDeps(client=object(), run_id="r1"),
+    )
+    with (
+        patch("digiquant.olympus.atlas.diagnostics.write_row", _capture),
+        pytest.raises(RuntimeError, match="loader exploded"),
+    ):
+        run_atlas_then_hermes(
+            atlas_input=AtlasInput(run_date=_RUN),
+            deps=deps,
+            manage_usage=True,
+        )
+    assert written["errors"] == [("chain", "terminal")]
+    assert all(r.get("beliefs_folded_at") is None for r in overlay_client.store["decision_log"])
+    assert overlay_client.store.get("documents", []) == []
