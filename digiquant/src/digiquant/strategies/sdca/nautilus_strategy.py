@@ -170,6 +170,7 @@ class SdcaStrategy(Strategy):
             rate = max(rate, 0.0)
 
         close = bar.close.as_double()
+        # Remaining cash / remaining holdings from the fill-synced shadow book.
         buy_usd, sell_units = size_trade(rate, self._cash, self._asset_units)
 
         if rate > 0:
