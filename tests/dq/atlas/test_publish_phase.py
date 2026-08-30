@@ -87,8 +87,8 @@ class TestPublishNode:
                 "digest",
             ]
         )
-        # Idempotency: every upsert declares (date, document_key) on-conflict.
-        assert all(r["_on_conflict"] == "date,document_key" for r in doc_rows)
+        # Idempotency: every upsert declares (workspace_id, date, document_key).
+        assert all(r["_on_conflict"] == "workspace_id,date,document_key" for r in doc_rows)
         # Return value records every artifact so state.published is populated.
         assert len(result["published"]) == len(doc_rows) + 1  # +1 for daily_snapshots
 

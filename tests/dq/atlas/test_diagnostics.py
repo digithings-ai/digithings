@@ -518,6 +518,7 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert row["segments_failed"] == 1
     assert row["model"] == "x-ai/grok-4"  # derived from usage snapshot models
     assert row["breakdown"]["models"] == ["x-ai/grok-4"]
+    assert row["breakdown"]["empty_retries"] == {"total": 0, "by_model": {}}
     assert row["started_at"] == "2026-06-12T10:00:00+00:00"
     assert row["finished_at"] == "2026-06-12T10:02:03.456000+00:00"
     assert row["duration_s"] == pytest.approx(123.456)
@@ -528,6 +529,27 @@ def test_write_row_upserts_with_usage_and_counts() -> None:
     assert events[0]["run_date"] == "2026-06-12"
     assert events[0]["phase"] == "macro"
     assert events[0]["_on_conflict"] == "run_id,attempt,sequence"
+
+
+def test_write_row_surfaces_empty_retries_from_usage_snapshot() -> None:
+    client = FakeSupabaseClient()
+    state = _state(phase1={"macro": _today("macro")})
+    diagnostics.write_row(
+        client,
+        state=state,
+        run_id="empty-retry-run",
+        run_type="baseline",
+        run_date=RUN_DATE,
+        usage_snapshot={
+            "llm_calls": 5,
+            "empty_retries": {"total": 3, "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1}},
+        },
+    )
+    row = client.store["atlas_run_diagnostics"][0]
+    assert row["breakdown"]["empty_retries"] == {
+        "total": 3,
+        "by_model": {"openrouter/auto": 2, "x-ai/grok-4": 1},
+    }
 
 
 def test_write_row_is_fail_soft() -> None:

@@ -25,8 +25,9 @@
  * it were ever inferred wrong is silent (#1379 was exactly that class of bug).
  */
 
-import { resolveEmbedClientConfigFromParams } from "@/lib/embed-client-config";
+import { resolveEmbedClientConfigFromParams, resolveEmbedHostParamOrReferer } from "@/lib/embed-client-config";
 import { parseEmbedThemeParam } from "@/lib/embed-theme-messages";
+import { headers } from "next/headers";
 import EmbedClient from "./embed-client";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,12 @@ export const dynamic = "force-dynamic";
  * No value from the request is interpolated into this string. The two scripts
  * are complete literals selected by a boolean, so even a registry entry that
  * somehow carried an unexpected `theme` can only pick one of them — there is
- * no concatenation path for request data to reach the document. */
+ * no concatenation path for request data to reach the document.
+ *
+ * Soft client-side navigations do not execute scripts inserted via
+ * `dangerouslySetInnerHTML`; production embeds are always a fresh document
+ * load, so the pin applies on first paint only — theme after in-app routing
+ * comes from the client hook, not this script. */
 const THEME_PIN_SCRIPTS = {
   light:
     "try{var e=document.documentElement;e.setAttribute('data-theme','light');e.classList.add('light');e.classList.remove('dark')}catch(t){}",
@@ -63,11 +69,13 @@ export default async function EmbedPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+  const hdrs = await headers();
+  const referer = hdrs.get("referer") ?? hdrs.get("referrer");
   const first = (value: string | string[] | undefined): string | undefined =>
     Array.isArray(value) ? value[0] : value;
   const initialTenantCfg = resolveEmbedClientConfigFromParams(
     first(params.token),
-    first(params.host),
+    resolveEmbedHostParamOrReferer(first(params.host), referer),
   );
   const urlTheme = parseEmbedThemeParam(first(params.theme));
   const paintTheme = urlTheme ?? initialTenantCfg.theme;
