@@ -102,19 +102,22 @@ components:
 
 digiweb reads as a cockpit, not a brochure. Monochrome is the resting state — black, white, and a three-step ink hierarchy — with color held in reserve as a signal, never spent as decoration. Every affordance from a button to a candlestick chart is built out of the same restrained kit: hairline borders, pill controls, one mono type voice for anything that is chrome or data, and a single serif voice reserved for the moments the product actually wants to make a human claim. The system does not perform enthusiasm; it reports state precisely and gets out of the way.
 
-### Active blend — utilitarian terminal (iterating)
+### Active blend — utilitarian terminal (round 1)
 
-As of 2026-08-30 we are **tightening** the Instrument Panel toward utilitarian terminal simplicity — inspired by [herdr.dev](design/references/herdr.dev.md), [agentmail.to](design/references/agentmail.to.md), and [omarchy.org](design/references/omarchy.org.md), alongside the existing Cursor / Graphite / xAI north stars.
+As of 2026-08-30 we are **tightening** the Instrument Panel toward utilitarian terminal simplicity — inspired by [herdr.dev](design/references/herdr.dev.md), [agentmail.to](design/references/agentmail.to.md), and [omarchy.org](design/references/omarchy.org.md), alongside Cursor / Graphite / xAI. Round-1 human picks + consistency review live in [`design/BLEND.md`](design/BLEND.md); composite preview on reference `/iterate`.
 
-Working preference (not fully locked — pick live on the reference `/iterate` page; ledger in [`design/BLEND.md`](design/BLEND.md)):
+**Cohesive v0.1 candidate (preference → system):**
 
-- Prefer **basic fonts** (Geist Sans + Geist Mono, or JetBrains Mono for full-terminal surfaces) over special display faces as the default claim voice; serif becomes opt-in.
-- Prefer **sharp / zero-radius marketing chrome** over soft pill theater; shape meaning (actionable vs container) may move from pill→sharp rectangle.
-- Prefer **diegetic product proof** (terminal, curl install, live code) over atmospheric mesh and decorative motion.
-- Prefer **sparse API heroes** (one white or ink CTA; docs as ghost/bracket sibling) over multi-CTA clusters.
+- **Radius 0** on controls, cards, and inputs — no pills. Shape no longer means actionable-vs-container; **fill vs outline** does.
+- **Mono everything** (Geist Mono / JetBrains Mono) for display, body, and chrome. Serif is an escape hatch, not the default claim voice.
+- **Loud CTA = white rect** (paper fill on dark). `--accent` is for focus, live/status, chart identity — not the primary marketing fill.
+- **Sparse ghost nav** + **bracket docs** sibling; **`//` kickers** kept.
+- **Hero = claim + install** (curl box); quiet stat row only.
+- **Surfaces = tonal slabs** — `--surface` fill + hairline + zero radius (“soft” means value step, not roundness).
+- **Two densities:** sparse landings; instrument dashboards — same atoms.
 - Still reject glass, violet washes, synthwave, Inter-as-brand, and multi-accent chrome.
 
-Until picks are locked into this file’s frontmatter and `tokens.css`, production surfaces keep the current Instrument Panel tokens. Gallery CSS uses the `uv-` prefix and ships only in the design-reference app.
+Until v0.1 is promoted into this file’s frontmatter and `tokens.css`, production surfaces keep the current Instrument Panel tokens. Gallery CSS uses the `uv-` prefix and ships only in the design-reference app.
 
 That restraint is structural, not stylistic. A dashboard, a landing page, and a terminal-style chatbot all draw from the *same* instrument-panel vocabulary — the module color that dresses digigraph's marketing hero is the identical `--accent` variable a digiquant chart reads to tint its equity line, just scoped differently. Color is a wiring diagram, not a moodboard: every hue in the system routes to an explicit meaning (a module's identity, a gain, a loss, a diff) and never means two things in the same place.
 
@@ -123,9 +126,9 @@ digiweb explicitly rejects the AI-slop default aesthetic: no purple-to-blue grad
 **Key Characteristics:**
 - Monochrome-by-default livery; color is opt-in per surface and always routes through `--accent`, never a hardcoded hex.
 - Three color domains that never blend: **identity** (`--accent` / module liveries), **money** (`--up` / `--down`, fixed literals, livery-proof), and **diff** (`--rv-add` / `--rv-del`, a third pastel-only palette reserved for code review).
-- One mono voice for chrome and data (labels, buttons, tables, terminal text), one serif voice for the rare human claim (marketing headlines, markdown headings, an account holder's name) — never both competing on the same element. *(Under iterate: serif may become opt-in; utilitarian sans / mono-all are candidate defaults.)*
-- Pill shape means "you can act on this"; rectangular 8–16px radius means "this is a container." Shape carries the same meaning everywhere in the system. *(Under iterate: sharp/zero radius may replace pills for marketing chrome.)*
-- "One loud thing per viewport": exactly one solid-fill, accent-colored control is allowed on screen at a time. Every sibling recedes to a transparent, hairline-bordered outline. *(Under iterate: the loud fill may be white/ink rather than accent.)*
+- Round-1 candidate: **one mono voice** for claim, body, and chrome; serif is an escape hatch only. Shipping still uses Instrument Serif for display until tokens promote.
+- Round-1 candidate: **radius 0** everywhere in chrome; actionable vs container is read by **fill vs hairline**, not pill vs rectangle. Shipping still uses pills until tokens promote.
+- "One loud thing per viewport": exactly one solid-fill control — round-1 candidate is **white/paper rect**, with `--accent` reserved for focus/live/identity. Shipping still uses accent-filled pills until tokens promote.
 - Flat by default; a black shadow means "this is a floating overlay," an accent glow means "this is alive right now" — the two never substitute for each other.
 
 ## Colors

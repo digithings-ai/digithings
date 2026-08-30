@@ -57,8 +57,8 @@ is the only shared chrome.
 - **Two voices.** `--font-display` (Fraunces serif by default) for human claims,
   never bolded; `--font-mono` (Geist Mono) for data, labels, and micro-caps;
   `--font-sans` (Geist Sans) for body. All three swap together as a coordinated
-  **type suite** from the nav's suite selector (see `type-store.ts`; 5 suites:
-  default, plex, editorial, grotesk, terminal) — display + body + mono move as a
+  **type suite** from the nav's suite selector (see `type-store.ts`; suites:
+  default, plex, editorial, grotesk, terminal, utilitarian, omarchy) — display + body + mono move as a
   set so you evaluate the whole pairing.
 - **Motion laws.** One motion moment per surface; always honour
   `prefers-reduced-motion` (render the final state); content must read without
