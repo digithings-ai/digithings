@@ -1192,6 +1192,10 @@ digiquant ships two sibling sub-graphs that compose end-to-end on **one daily to
   serializer includes assessment; legacy priors without typed forecast force
   full; skip preserves identity; partial nested forecast edits are rejected).
   H6 appends optional evidence-linked `ForecastAmendment` without rewriting the base;
+  LLM envelopes that nest economics under `terms` (SLV/IAU in house GHA 33426508863)
+  unwrap before validate, and missing `horizon_sessions` / `half_life_sessions` copy
+  from the H5 base tenor (GLD in the same run). Scenario economics are never filled
+  from the base; invalid probability sums still reject.
   `resolve_effective_forecast` selects base or accepted amendment (invalid/failed
   amendments and post-cutoff known_at preserve base). Fingerprint skip and slim prior
   carry retain effective identity/time/hash **and** the accepted `forecast_amendment`
