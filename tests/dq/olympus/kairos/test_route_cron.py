@@ -164,6 +164,58 @@ def test_dispatch_is_refused() -> None:
     assert called == []
 
 
+def test_apply_is_refused() -> None:
+    err: list[str] = []
+    called: list[UUID] = []
+    rc = main(
+        ["--apply"],
+        environ={**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"},
+        targets=[_target()],
+        route_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == 4
+    assert "--apply" in err[0]
+    assert called == []
+
+
+def test_connection_id_routing_off_does_not_load() -> None:
+    err: list[str] = []
+    called: list[UUID] = []
+    loaded: list[str] = []
+    rc = main(
+        ["--connection-id", str(_CONN)],
+        environ=_STORE,
+        load_targets=lambda: loaded.append("loaded") or [_target()],
+        route_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == EXIT_ROUTING_DISABLED
+    assert KAIROS_ROUTING_DISABLED in err[0]
+    assert called == []
+    assert loaded == []
+
+
+def test_connection_id_missing_says_route_not_sync() -> None:
+    err: list[str] = []
+    called: list[UUID] = []
+    missing = UUID("00000000-0000-0000-0000-000000000000")
+    rc = main(
+        ["--connection-id", str(missing)],
+        environ={**_STORE, "OLYMPUS_KAIROS_ROUTING": "1"},
+        targets=[_target()],
+        route_batch=lambda rows: called.extend(t.connection_id for t in rows) or 0,
+        log=lambda _m: None,
+        log_err=err.append,
+    )
+    assert rc == EXIT_ROUTING_DISABLED
+    assert "kairos route:" in err[0]
+    assert "kairos sync:" not in err[0]
+    assert called == []
+
+
 def test_none_argv_uses_sys_argv(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.argv", ["route_cron", "--check"])
     err: list[str] = []

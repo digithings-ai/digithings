@@ -67,6 +67,17 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _filter_route_connection_id(
+    loaded: list[SyncTarget],
+    connection_id: str,
+) -> list[SyncTarget] | str:
+    """Same eligibility as sync; operator errors say ``kairos route``."""
+    selected = _filter_connection_id(loaded, connection_id)
+    if isinstance(selected, str):
+        return selected.replace("kairos sync:", "kairos route:", 1)
+    return selected
+
+
 def _log_dry_run(
     log: Callable[[str], None],
     *,
@@ -149,7 +160,7 @@ def main(
         err(loaded)
         return EXIT_NOT_CONFIGURED
     if args.connection_id:
-        loaded = _filter_connection_id(loaded, args.connection_id)
+        loaded = _filter_route_connection_id(loaded, args.connection_id)
         if isinstance(loaded, str):
             err(loaded)
             return EXIT_ROUTING_DISABLED
