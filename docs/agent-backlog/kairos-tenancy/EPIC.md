@@ -75,7 +75,7 @@ production cron CLIs, remaining-hop proofs from Settings product state, staged
 narrows `anon_read` on private books to house; documents house+system). Live probe
 2026-08-31: overlay doc visible to service (1) and hidden from `anon` (0); house
 `positions` still 323 for anon. Cutover **900 not applied**. Local RLS harness
-(throwaway DB + 001–110 + staged 900 A2): **59/59 PASS** (2026-08-31).
+(throwaway DB + 001–110 + staged 900 A2): **pre-cutover 110 8/8 + post-cutover 59/59 PASS** (2026-08-31).
 
 **Edge Functions (`core`):** `settings` **v29 ACTIVE** (`verify_jwt=true`, includes
 `GET /jobs` `/fills` `/notifications/log`); checkout/portal await Stripe price
