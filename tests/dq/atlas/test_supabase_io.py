@@ -287,9 +287,10 @@ class TestPublishDocument:
         )
         assert out1.table == "documents"
         assert out1.document_key == "macro/2026-04-20.json"
-        # Both upserts record on_conflict on (date, document_key).
+        # Both upserts record on_conflict on (workspace_id, date, document_key).
         rows = client.store["documents"]
-        assert all(r["_on_conflict"] == "date,document_key" for r in rows)
+        assert all(r["_on_conflict"] == "workspace_id,date,document_key" for r in rows)
+        assert all(r["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319" for r in rows)
         assert out2.document_key == out1.document_key
 
     def test_audit_redacts_nothing_unusual(self, caplog: pytest.LogCaptureFixture) -> None:

@@ -12,8 +12,8 @@ Design:
 - Every write passes its payload through ``digibase.audit.redact_mapping``
   before the audit log line is emitted — non-negotiable per CLAUDE.md.
 - Idempotency: all writes are upserts on the schema-declared unique keys
-  (``(date, document_key)`` for ``documents``; ``date`` for ``daily_snapshots``).
-  Retries of the same node are safe.
+  (``(workspace_id, date, document_key)`` for ``documents`` after migration 105;
+  ``date`` for ``daily_snapshots``). Retries of the same node are safe.
 """
 
 from __future__ import annotations
@@ -29,6 +29,11 @@ from digibase.audit import redact_mapping
 from digiquant.olympus.atlas.state import Phase7DigestPayload, PriorContext, PublishedArtifact
 
 logger = logging.getLogger(__name__)
+
+# Migration 096 house seed. Core UNIQUE after 105 is (workspace_id, date, document_key).
+# House GHA pins ``ref: main``; upserting on the pre-105 pair raises Postgres 42P10.
+HOUSE_WORKSPACE_ID = "6b753576-ced9-5319-9bfa-c5d0aacd9319"
+DOCUMENTS_ON_CONFLICT = "workspace_id,date,document_key"
 
 
 class DocumentRowPayload(TypedDict, total=False):
@@ -57,6 +62,7 @@ class DocumentUpsertRow(TypedDict, total=False):
     document_key: str
     payload: DocumentRowPayload
     content: str | None
+    workspace_id: str
 
 
 class DailySnapshotUpsertRow(TypedDict, total=False):
@@ -228,7 +234,11 @@ def publish_document(
     sector: str | None = None,
     content_markdown: str | None = None,
 ) -> PublishedArtifact:
-    """Upsert one row into ``documents`` on ``(date, document_key)``.
+    """Upsert one row into ``documents`` on ``(workspace_id, date, document_key)``.
+
+    House pipeline writers stamp the 096 house workspace. Core dropped
+    ``UNIQUE(date, document_key)`` in migration 105; the pre-105 conflict
+    target raises ``42P10``.
 
     ``doc_type=None`` is the canonical signal for per-segment Phase 1-5
     documents — the schema's ``chk_documents_doc_type`` constraint allows
@@ -238,8 +248,8 @@ def publish_document(
 
     Returns a :class:`PublishedArtifact` that callers append to
     ``AtlasResearchState.published``. Idempotent — replays with the same
-    (date, document_key) either update the row or no-op depending on whether
-    the payload changed.
+    (workspace_id, date, document_key) either update the row or no-op depending
+    on whether the payload changed.
     """
     row: DocumentUpsertRow = {
         "date": date_str,
@@ -253,9 +263,12 @@ def publish_document(
         "document_key": document_key,
         "payload": payload,
         "content": content_markdown,
+        "workspace_id": HOUSE_WORKSPACE_ID,
     }
     resp = (
-        client.table("documents").upsert(_json_safe(row), on_conflict="date,document_key").execute()
+        client.table("documents")
+        .upsert(_json_safe(row), on_conflict=DOCUMENTS_ON_CONFLICT)
+        .execute()
     )
     row_id = _extract_row_id(resp) or document_key
     _audit(
