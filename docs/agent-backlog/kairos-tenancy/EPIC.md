@@ -86,6 +86,6 @@ Wave E
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
 - **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2**; notify `--require-mailgun` → exit **2**.
 
-**Closest real chain (NOT staging E2E):** Agentmail email signup + confirm → JWT → settings profile/notifications/brokers **200** + free personal workspace (107) → checkout **`PRICE_NOT_CONFIGURED`**. Prior: ops Custom (≠ Stripe) → vault seal. Staging signup→Stripe→Alpaca OAuth→overlay→digest still **BLOCKED**.
+**Closest real chain (NOT staging E2E):** Agentmail email signup + confirm → JWT → settings GET profile/notifications/brokers/keys **200** + free personal workspace (107) → Observer `PATCH /notifications` **200** → profile/keys/`brokers/connect` **403 `TIER_FORBIDDEN`** → checkout **`PRICE_NOT_CONFIGURED`**. Ops-custom (≠ Stripe) oauth connect **`OAUTH_NOT_CONFIGURED`**. Overlay `not_entitled` skip in-process vs live `workspaces` (`free`/`none` and `custom`/`none`); `job_runs` on `core` still **0**. Staging signup→Stripe→Alpaca OAuth→overlay claim→digest still **BLOCKED**.
 
 **Do not mark epic complete** until staging E2E (signup → Stripe → Alpaca paper → overlay → digest) plus Google Auth, legal, and IBKR vendor gates clear. Prod Auth Pages login route already smokes (#3231); email UI waits on #3266.

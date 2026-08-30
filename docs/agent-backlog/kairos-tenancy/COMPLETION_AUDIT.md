@@ -1,5 +1,7 @@
 # Kairos epic — completion audit (GitHub Auth proven, 2026-08-30T21:18Z)
 
+**2026-08-31T01:16Z Observer write-gate hop:** live `settings` EF vs free JWT — GET profile/notifications/brokers/keys **200**; `PATCH /notifications` **200**; `PATCH /profile` + `POST /brokers/connect` + `POST /keys/connect` **403 `TIER_FORBIDDEN`**. Ops-custom oauth connect **`OAUTH_NOT_CONFIGURED`**. Overlay `not_entitled` skip in-process; `job_runs` on `core` = 0. Staging E2E still exit **2**. Evidence: `/opt/cursor/artifacts/kairos-observer-tier-gate.md`.
+
 **Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets.
 
 **2026-08-30 product-gates follow-up:** creator/ops `entitlement_grants` + free-teaser + FX Hub

@@ -1,6 +1,6 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: WAITING_HUMAN_CAPTCHA (2026-08-31T01:10Z) — NOT COMPLETE.** Identity: **digithings**. Captchas still block Stripe (hCaptcha), Mailgun (reCAPTCHA), Alpaca (Turnstile). Vendor EF secret files `digithings-{stripe,mailgun,alpaca}.env` **absent**. Staging E2E exit **2**. **Email signup hop on `core` proven** (Auth signup → Agentmail confirm → password grant → mig 107 free workspace → settings profile/notifications/brokers **200** → checkout **`PRICE_NOT_CONFIGURED`**). Olympus Auth Pages live (#3231) — GitHub login on prod. Email/oauth-first **UI** still waits on [#3264](https://github.com/digithings-ai/digithings/pull/3264) → `develop` then [#3266](https://github.com/digithings-ai/digithings/pull/3266) → `main`. Google **Disabled**. Settings EF **v27**. `olympus_schema_migrations` now stamps **107** (objects were already live). Staged cutover 900 house-teaser revert: [#3268](https://github.com/digithings-ai/digithings/pull/3268) (local RLS 59/59; **not** applied to `core`). Do not merge #3183 / #3256. Never apply cutover 900.
+**Status: WAITING_HUMAN_CAPTCHA (2026-08-31T01:17Z) — NOT COMPLETE.** Identity: **digithings**. Captchas still block Stripe (hCaptcha), Mailgun (reCAPTCHA), Alpaca (Turnstile). Vendor EF secret files `digithings-{stripe,mailgun,alpaca}.env` **absent**. Staging E2E exit **2**; notify `--require-mailgun` exit **2**. **Observer hop on `core` proven:** email signup → settings GET profile/notifications/brokers/keys **200** → `PATCH /notifications` **200** → `PATCH /profile` + `POST /brokers/connect` + `POST /keys/connect` **403 `TIER_FORBIDDEN`** → checkout **`PRICE_NOT_CONFIGURED`**. Ops-custom (≠ Stripe) `POST /brokers/connect` oauth **500 `OAUTH_NOT_CONFIGURED`** (passed the tier gate). Overlay `not_entitled` skip in-process vs live `workspaces` rows; `job_runs` on `core` still empty. Olympus Auth Pages live (#3231) — GitHub login on prod. Email/oauth-first **UI** still waits on [#3264](https://github.com/digithings-ai/digithings/pull/3264) → `develop` then [#3266](https://github.com/digithings-ai/digithings/pull/3266) → `main`. Google **Disabled**. Settings EF **v27**. `olympus_schema_migrations` stamps **107**. Staged cutover 900 house-teaser revert: [#3268](https://github.com/digithings-ai/digithings/pull/3268) (local RLS 59/59; **not** applied to `core`). Do not merge #3183 / #3256. Never apply cutover 900.
 
 **Secret files (when obtained):** `.local/secrets/digithings-stripe.env`, `digithings-mailgun.env`, `digithings-alpaca.env` — **not** `cursor-cloud-agent-*.env`.  
 **Canonical inbox:** `digithings@agentmail.to` (interim `cursor-cloud-agent6060@agentmail.to` = accidental only).  
@@ -26,7 +26,9 @@ PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgu
 
 **Account UI (2026-08-31):** oauth-first login/signup, email/password, gated Settings tabs omitted (not greyed), `/settings#billing`. Develop: [#3264](https://github.com/digithings-ai/digithings/pull/3264). Pages: [#3266](https://github.com/digithings-ai/digithings/pull/3266). Google OAuth click reaches the PKCE authorize URL; HTTP 400 is dashboard-side (`external_google_enabled=false`). Enable Google on `core` + Google Cloud redirect `https://rwagjbkvxkdwqmouagad.supabase.co/auth/v1/callback`.
 
-**GitHub Auth (2026-08-30T21:15Z):** human signed in on prod. `core` DB: `auth.users` = 2 (1 github / 1 email); GitHub user → Personal workspace owner `plan_tier=free` via mig 107 trigger. No bootstrap fix needed. Evidence: `/opt/cursor/artifacts/kairos-github-auth-prod-proof.md`.
+**GitHub Auth (2026-08-30T21:15Z):** human signed in on prod. `core` DB: `auth.users` = **3** (1 github / 2 email after Observer plus-address signup). GitHub user → Personal workspace owner `plan_tier=free` via mig 107 trigger. No bootstrap fix needed. Evidence: `/opt/cursor/artifacts/kairos-github-auth-prod-proof.md`.
+
+**Observer `TIER_FORBIDDEN` (2026-08-31T01:16Z):** live settings EF vs free JWT. Connect path is `POST /settings/brokers/connect` (`POST /settings/brokers` is `404 NOT_FOUND`). Evidence: `/opt/cursor/artifacts/kairos-observer-tier-gate.md`.
 
 **Settings EF CORS (2026-08-30T21:38Z):** `settings` / `create-checkout-session` / `customer-portal` answer OPTIONS with 204 + Allow-*; browser fetch from digiquant.io works. Branch `cursor/settings-ef-cors-053b` (deployed to core). Free-tier connect remains `TIER_FORBIDDEN`.
 
@@ -53,7 +55,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 **Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.  
 **Done Auth:** GitHub provider **Enabled** on `core`. Google still Disabled. Email Enabled — Agentmail path works.  
-**Done product:** mig 107 bootstrap; settings GET/PATCH; vault seal; Settings/billing CORS preflight; free connect → `TIER_FORBIDDEN` (GitHub WS still `free`).
+**Done product:** mig 107 bootstrap; settings GET profile/notifications/brokers/keys **200**; Observer `PATCH /notifications` **200**; Observer profile/keys/brokers writes **`TIER_FORBIDDEN`**; ops-custom oauth connect **`OAUTH_NOT_CONFIGURED`**; vault seal; Settings/billing CORS preflight. GitHub personal WS still `free`.
 
 ---
 
