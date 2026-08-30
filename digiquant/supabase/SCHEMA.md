@@ -57,7 +57,7 @@ erDiagram
 | `positions` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Daily position book; one row per held ticker. Legacy unique retained until P6. |
 | `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. **No** `workspace_id` in T0 — shared research stays tenant-agnostic (system workspace conceptually; column deferred). |
 | `position_events` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Every open / close / rebalance against a position with reason tag. |
-| `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. **No** `workspace_id` in T0 (same as theses). |
+| `documents` | `(workspace_id, date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. T4 migration 105 adds `workspace_id` (NOT NULL, house-backfilled) and **replaces** the legacy `UNIQUE(date, document_key)` so overlay+house same-key rows do not collide. Overlay H7/H8 keys are also prefixed `overlay/{workspace_id}/…`. Private-phase writes require `OLYMPUS_OVERLAY_PERSIST=1` after the T1-train anon-policy drop; `anon_read` is untouched. |
 | `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
 | `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
@@ -635,7 +635,7 @@ T0/T1 release train is reviewed.
 | `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write) + `last_stripe_event_created` (bigint, CAS watermark for webhook ordering). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
 | `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
 | `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). Payload stores Stripe `created`. `applied_at` is NULL until workspace+claim apply succeeds; duplicate with `applied_at` NULL re-applies (poison-pill fix). service_role has column-level `UPDATE (applied_at)` only (migration 101). |
-| `job_runs` | `(id uuid)` | Per-workspace job telemetry stub (T4 dispatch). |
+| `job_runs` | `(id uuid)` | Per-workspace job telemetry. T4 overlay dispatch writes here via `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`); `MemoryJobRunStore` is the test seam. Status vocabulary: 104 adds `skipped` / `budget_exhausted`; 105 adds `persist_disabled`. Idempotency key `{workspace_id}:overlay_daily:{run_date}`. |
 | `audit_log` | `(id uuid)` | Connect/revoke/settings audit trail (K3 first writer). |
 
 **Billing flow (T2):** Edge Functions under `digiquant/supabase/functions/` —
@@ -649,9 +649,21 @@ Claim-sync failure sets `workspaces.claim_sync_pending=true` and still returns H
 to Stripe after marking `applied_at`. Migrations: `100_workspaces_claim_sync_pending.sql`,
 `101_stripe_webhook_applied_and_ordering.sql` (099 reserved for K3).
 
+
 Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 `broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
-BYOK `workspace_provider_credentials` and `profiles` are out of scope (K3/T3).
+`profiles` remains out of scope (T3). BYOK LLM keys land in migration 104
+(`workspace_provider_credentials`).
+
+### Notification prefs — migration 103 (K5, Kairos tenancy)
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `notification_prefs` | `(workspace_id)` | Per-workspace email toggles: `daily_digest`, `holding_change_alerts`, `execution_alerts`, `digest_hour_utc` (0–23 UTC). T3 settings UI is the product writer. |
+| `notification_log` | `(workspace_id, event_key, sent_date)` | Dedupe ledger — insert-before-send; duplicate PK ⇒ skip. Append-only (INSERT grant only). |
+
+RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT on log.
+Typed dispatch: `digiquant.notify.dispatch` (fail-soft Mailgun client in `notify/mailgun.py`).
 
 ### `workspace_id` on the private set (097)
 
@@ -682,6 +694,110 @@ both marked `TODO(T5)` for the tier CHECK. **No existing `anon_read` policy is d
 or narrowed in this WP** — that cutover ships inside T1's release train. Two-JWT
 executable proof is documented in the 098 header; structural assertions live in
 `tests/dq/olympus/test_migration_tenancy.py`.
+
+### Broker credential vault — migration 099 (K3, Kairos tenancy)
+
+Sealed broker credentials, one row per `(workspace_id, broker, env)`. This is the only
+table in the schema whose contents are a *secret* rather than research output, so it is
+built to a different standard than everything above it: the plaintext never exists in
+Postgres at all. The secret is an AES-256-GCM envelope produced by
+`digiquant.vault.envelope` before the row is written, and the row stores only
+`ciphertext`, `nonce`, `key_id`, and a `fingerprint`.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `broker_connections` | `(id UUID)` | Sealed per-workspace broker credential; partial unique on `(workspace_id, broker, env) WHERE status = 'active'`. |
+
+The envelope's AAD is the string `workspace_id:broker:env`, which makes the row's own
+identity part of what the tag authenticates. That is what stops the attack this table
+would otherwise invite: a `ciphertext`/`nonce` pair copied from another row (another
+workspace, or the same workspace's paper row pasted onto its live row) fails
+authentication instead of decrypting, so a writer who can INSERT cannot promote a
+paper credential to live by moving bytes between rows. `key_id` names the *master-key
+version* that sealed the row (`DIGIQUANT_VAULT_KEY_ID`, e.g. `v1`) — it is not a
+broker-side key identifier; an API key's own key id lives *inside* the sealed payload,
+and conflating the two is the fastest way for a reviewer to conclude a secret is in
+the clear. `fingerprint` is the first 8 hex chars of `sha256` over the secret material
+and is the only display-safe artifact: a label, never an identity — 32 bits collide,
+so it must never be compared to decide two rows hold the same credential.
+
+`workspace_id` **REFERENCES `public.workspaces(id)`** (T0 migrations 096–098 land first
+on this branch, so 099 constrains at CREATE time rather than staying FK-less). `CHECK`
+constraints pin the envelope's shape at the storage layer rather than trusting the
+writer — `octet_length(nonce) = 12`,
+`octet_length(ciphertext) > 16` (a GCM tag alone is not a message), 8 lowercase hex for
+`fingerprint`, a closed vocabulary for `status`/`broker`/`env`/`auth_kind`, and
+`revoked_at` tied to `status = 'revoked'` so a revoked row cannot lack its timestamp.
+Re-connecting a broker is **revoke + insert**, never an update — which is why uniqueness
+is a **partial** unique index on `(workspace_id, broker, env) WHERE status = 'active'`
+rather than a table-wide UNIQUE. DELETE is not granted to `service_role`, so an
+unconditional unique on the triple would make that documented reconnect flow collide;
+a revoked row and a new active row for the same triple must be able to coexist.
+
+There is no rotation path in this migration and no historical backfill; `key_id` exists
+so one can be added without a schema change. Nothing in a live-trading path reads this
+table yet — K3 is the vault and its store; K4's router/sync opens a lease only for the
+duration of one broker call.
+
+### Kairos broker mirror — migration 102 (K4)
+
+Append-only mirrors for external-venue orders, fills, and position snapshots (D10: the
+broker is authoritative; digithings never forges internal `portfolio_ledger_paper_executions`
+from them). Status changes append a new `broker_orders` row with backward
+`supersedes_id` (same convention as `portfolio_ledger_order_intents`). **No `upsert`.**
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `broker_orders` | `(id uuid)` | Submission + status mirror; deterministic submit id `uuid5(ns, order_intent_id:broker:date)`; `connection_id` → `broker_connections`; `workspace_id` → `workspaces`. |
+| `broker_executions` | `(id uuid)` | Fill mirror; id = `uuid5(connection_id, external_fill_id)`; `UNIQUE (broker_order_id, external_fill_id)`. |
+| `broker_position_snapshots` | `(id uuid)` | Point-in-time broker truth; `UNIQUE (connection_id, as_of)`; `reconciliation_diverged` + report when mirror disagrees — never auto-trades. |
+
+**Router authority (writers, not DDL):** `route_pending_orders` may only submit intents
+whose `workspace_id` matches the connection; house/system identities and
+`connection.env != paper` never reach `submit_order`. Live venue tokens raise
+`LiveVenueNotAuthorizedError` on the public `resolve_venue` / router path. Ledger reads
+remain date-scoped at the helper layer; the router post-filters to the connection
+workspace (see `digiquant/ARCHITECTURE.md` → Kairos router + mirror).
+
+RLS enabled with **no** policies (deny-by-default). `service_role` holds SELECT + INSERT
+only; BEFORE UPDATE/DELETE/TRUNCATE triggers reject mutation (069 pattern). Migration
+number 102 originally skipped 100/101 for the sibling T2 branch; those migrations
+now live in-tree (`100_workspaces_claim_sync_pending.sql`,
+`101_stripe_webhook_applied_and_ordering.sql`). Structural tests:
+`tests/dq/olympus/kairos/test_migration_102.py`.
+
+### BYOK LLM keys + job_runs status — migration 104 (T4)
+
+Sealed overlay LLM credentials. Mirrors 099 (`broker_connections`): RLS-none,
+column-level UPDATE on lifecycle columns only, partial unique on the active row,
+credential-column immutability trigger. Crypto is K3's envelope unchanged.
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `workspace_provider_credentials` | `(id uuid)` | Sealed BYOK LLM key; partial unique on `(workspace_id, provider) WHERE status = 'active'`. AAD = `workspace_id:provider:llm`. FK → `workspaces`. |
+
+`job_runs.status` CHECK is extended to `skipped` (reason in `error`:
+`not_entitled` / `no_credentials`) and `budget_exhausted` (research budget hard
+stop). Structural tests: `tests/dq/olympus/overlay/test_migration_104.py`.
+
+### Documents workspace_id — migration 105 (T4)
+
+Adds `documents.workspace_id` (nullable → backfill house
+`6b753576-ced9-5319-9bfa-c5d0aacd9319` → NOT NULL + FK). The legacy
+`UNIQUE(date, document_key)` is **dropped and replaced** by
+`UNIQUE(workspace_id, date, document_key)` — keeping the old unique would still
+collide overlay+house rows that share a key. Authenticated policy
+`authenticated_select_documents`: house + system readable; other workspaces are
+own-member only. **`anon_read` is not dropped or rewritten** (T1-train).
+
+`job_runs.status` CHECK is extended with `persist_disabled` (overlay
+private-phase refuse when `OLYMPUS_OVERLAY_PERSIST` is off). Production may set
+that flag only after the T1-train anon-policy drop. Structural tests:
+`tests/dq/olympus/overlay/test_migration_105.py`.
+
+Every live `documents` upsert writer is enumerated in the migration header and
+updated to `on_conflict="workspace_id,date,document_key"` plus a workspace stamp
+in the same change.
 
 ## RLS (consistent across all tables above)
 
@@ -773,6 +889,23 @@ executable proof is documented in the 098 header; structural assertions live in
   revoked. It is harmless only because nothing subscribes to it any more; a message pushed
   there lands in an empty room. Adding any broadcast subscriber to this project re-opens the
   hole in full. See [`README.md`](README.md), "The transport is a table we own".
+- **Exception — `broker_connections` (migration 099, K3): RLS enabled with ZERO policies,
+  every client grant revoked, and `service_role`'s UPDATE narrowed to three columns.**
+  Follows the `prices_live_lease` idiom above (no policy at all, so only `rolbypassrls`
+  holders get past row security, and `REVOKE ALL … FROM PUBLIC, anon, authenticated` means
+  anon never reaches RLS in the first place) and then goes further, because the failure mode
+  here is credential disclosure rather than a burned lease. `service_role` gets `SELECT` and
+  `INSERT`, but **no table-wide `UPDATE` and no `DELETE`**; `UPDATE` is granted
+  column-level on exactly `(status, revoked_at, last_used_at)`. So the compromise of a
+  service-role key still cannot rewrite `ciphertext`, `nonce`, `key_id`, `fingerprint`,
+  `workspace_id`, `broker`, or `env` — the lifecycle is writable and the credential is not.
+  A `BEFORE UPDATE` trigger re-rejects any change to those columns anyway: the
+  column-level grant is the control, and the trigger is the thing that still holds if a
+  future migration widens the grant by accident. `DELETE` is **deliberately not blocked**,
+  unlike every append-only table above — those are audit history, whereas a credential
+  store must stay erasable, and "we cannot delete your broker credential" is not a
+  position this schema should be able to take. Do not "complete" the policy set and do not
+  add a DELETE-blocking trigger by analogy with 069/094.
 - **Views (migrations 041, 050, 066):** RLS does not apply to views; the curated public
   views are intentionally security-DEFINER (`security_invoker = false`) so the column
   projection — not base-table policy — decides what anon sees. Supabase's advisor flags

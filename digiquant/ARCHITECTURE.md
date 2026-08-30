@@ -2842,6 +2842,72 @@ The package imports without the extra (`brokers/__init__.py` lazy-exports `Alpac
 `tests/dq/brokers/test_alpaca_integration.py` behind the `alpaca_paper` marker + env keys
 (excluded from CI).
 
+### Credential vault (K3)
+
+`digiquant/src/digiquant/vault/envelope.py` seals broker credentials so that the
+plaintext exists only inside a process, only for the duration of a `with` block, and
+never in Postgres, a log record, a `repr`, or a traceback. `brokers/connections.py` is
+the store that puts sealed rows in `public.broker_connections` (migration 099) through
+the same Supabase client seam Atlas uses (`olympus/atlas/supabase_io.py`), and the
+vault has no database import of its own — the crypto is testable without a DB and the
+store is testable without a key.
+
+**Envelope.** AES-256-GCM (`cryptography`), a fresh 96-bit random nonce per seal, and
+AAD = `f"{workspace_id}:{broker}:{env}"`. The AAD is the design's load-bearing part: it
+binds a ciphertext to the row that holds it, so bytes lifted from another workspace's
+row — or from the same workspace's `paper` row pasted onto its `live` row — fail
+authentication rather than decrypt. Nonces are never reused because they are never
+derived; a seal that cannot obtain 12 fresh random bytes fails instead of falling back.
+
+**Master key.** `DIGIQUANT_VAULT_MASTER_KEY`, base64 of exactly 32 raw bytes, read at
+first use with **no default and no fallback**: a wrong length, bad base64, or missing
+variable raises `VaultConfigurationError` naming the problem without echoing the value.
+`DIGIQUANT_VAULT_KEY_ID` (default `v1`) is recorded on every row as `key_id` so a later
+rotation can tell which rows are sealed under which key; opening a row whose `key_id`
+does not match the loaded key raises `VaultKeyMismatchError` rather than attempting a
+decrypt that would fail confusingly. There is no rotation implementation in K3 — only
+the field that makes one possible without a schema change.
+
+**Payloads.** Plaintext is canonical JSON (sorted keys, no spaces) of a Pydantic tagged
+union with `extra="forbid"`: `OAuthCredential` (`kind="oauth"`) or `ApiKeyCredential`
+(`kind="api_key"`). Validation happens *before* the seal, so a malformed credential
+cannot be stored as an opaque blob that only fails at unseal time on a live path.
+Unseal re-validates, because a row is untrusted input even after its tag verifies.
+
+**Fingerprint.** First 8 hex chars of `sha256` over the secret material — the only
+displayable artifact anywhere in this subsystem. It is a label, not an identity: 32 bits
+collide, so nothing compares fingerprints to conclude two rows hold the same credential.
+
+**Lease.** `unseal_credential` yields a `CredentialLease` context manager rather than
+returning the credential, and the lease refuses to hand out plaintext after the block
+exits (`CredentialLeaseExpiredError`). This does not "erase" the secret — CPython gives
+no such guarantee, and the docstring says so instead of implying it. What it does buy is
+that a caller cannot *accidentally* hold a credential past its use site, and that the
+plaintext has an explicit, greppable lifetime in every caller.
+
+**Store.** `create_connection` seals and inserts; `get_connection` / `open_credential`
+read and unseal, failing closed on a revoked or non-active row
+(`ConnectionRevokedError`); `revoke_connection` sets `status`/`revoked_at`;
+`list_connection_fingerprints` returns a display model that carries no sealed columns at
+all — it is built with `extra="forbid"` over a narrowed `select`, so a future widening of
+that projection breaks a test instead of leaking ciphertext into a UI payload.
+Re-connecting a broker is revoke + insert, never an update — uniqueness is a partial
+unique index on `(workspace_id, broker, env) WHERE status = 'active'` so a revoked row
+and a new active row can coexist (DELETE is not granted to service_role).
+
+**Test vectors.** `tests/dq/vault/vectors.json` commits `(key, nonce, aad, plaintext,
+ciphertext)` tuples plus negative cases, generated deterministically from this
+implementation with synthetic keys. The K4-era Supabase Edge Function TypeScript
+implementation must pass the identical suite — that file, not this prose, is the
+cross-language contract. `tests/dq/vault/test_envelope.py` verifies the vectors
+round-trip, and covers wrong-key, wrong-AAD, truncated-ciphertext, flipped-bit, and
+key-id-mismatch failures alongside a test that captures logging across seal/unseal and
+asserts no plaintext reaches any log record, `repr`, or exception message.
+
+**Not in K3:** no key rotation, no broker adapter wiring, no Edge Function, no HTTP
+surface, and nothing on a live-trading path. Migration 099 is not applied live without
+the repository's human migration review gate.
+
 ### IBKR adapter
 
 `digiquant/src/digiquant/brokers/ibkr.py` (K2) implements `BrokerAdapter` against IBKR's
@@ -2869,6 +2935,86 @@ Broker exceptions use the shared family in `contracts.py` (`BrokerAuthError`,
 `BrokerOrderRejected`, `BrokerRateLimited`, `BrokerTransportError`); IBKR-only
 `IbkrOrdersDisabledError` and `SessionCompetingError` remain in `ibkr.py`.
 Tests: `tests/dq/brokers/test_ibkr_adapter.py` (mocked transport only).
+
+### Kairos router + mirror
+
+`digiquant/src/digiquant/olympus/kairos/` (K4) routes approved Hermes order intents to an
+external paper venue after H9 / `execute_at_open`, and mirrors acks / fills / positions
+append-only (D10). The internal `paper_internal` path is unchanged.
+
+**Venue resolution (`policy.py`).** `resolve_venue(workspace_id, *, active_paper_brokers)`
+performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
+`house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
+(hard-coded; those identities can never route externally). Kill switch
+`OLYMPUS_KAIROS_ROUTING` defaults **off** (inverse polarity of `OLYMPUS_PORTFOLIO_LEDGER`):
+off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
+workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
+`IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
+store an execution-policy column on `workspaces` (T0 untouched; richer policy lands with
+T4). Live venue / broker tokens in `active_paper_brokers` (e.g. `"alpaca_live"`,
+`ExecutionVenue.ALPACA_LIVE`) raise `LiveVenueNotAuthorizedError` on the **public** API
+(not a bare `ValueError`); `_assert_not_live` remains defense-in-depth on the return path.
+
+**Router (`router.py`) — authority boundary.** Gates evaluate first:
+`workspace_id` is passed to `resolve_venue` **unchanged** (`None` / house /
+system UUID ⇒ `PAPER_INTERNAL`; never substituted with
+`connection.workspace_id`). `connection.env != paper` raises
+`LiveVenueNotAuthorizedError` before any `submit_order`. After a non-internal
+venue is resolved for a real overlay workspace, ledger reads are **threaded**
+with that `workspace_id` (T4 omitted workspace ⇒ house, so overlay intents are
+otherwise invisible). `_scope_ledger_rows_to_workspace` then asserts every
+returned row matches the connection; a same-date pending head missing
+`workspace_id` raises `ForeignWorkspaceIntentError` (scoped `eq` cannot observe
+a null column, so the router does a date-scoped missing-id scan that never
+submits). Foreign-workspace intents are never submitted. Builds
+`BrokerOrderRequest` from a pending `OrderIntent` (`client_order_id = str(order_intent_id)`;
+side from `DecisionIntent.action` via `_directions_by_order` — never from the positions
+book). `NO_OP`/`REJECT` with a pending intent → `InconsistentOrderChainError`. Appends one
+`broker_orders` row with deterministic id `uuid5(ns, f"{order_intent_id}:{broker}:{date}")`
+— retries collide, never duplicate. `upsert` is forbidden.
+
+**Sync (`sync.py`).** Per active connection: refresh order status (supersede chain), pull
+fills since a `SyncCursor`, append `broker_executions` (`uuid5(connection_id,
+external_fill_id)`), and take a positions/account snapshot. Alpaca ≤6 REST
+calls/connection/cycle (`SyncBudgetExceeded`); IBKR pacing lives in the adapter (≥5s).
+Credentials are unsealed only inside the caller's `open_credential` lease — sync never
+sees plaintext. Unlinked (orphan) fills hold `fills_since` at the previous cursor so
+exclusive-`since` adapters re-read them next cycle (`unlinked_fills_held_cursor`);
+operator remedy: ensure the submit mirror exists or resolve symbol ambiguity.
+Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverged` +
+structured report on the snapshot row + log; **never** auto-submit corrective orders
+(`SyncResult.refused_corrective_orders` is always true).
+
+**`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
+invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
+(`paper_internal`). Default (no workspace / kill switch off) stays on
+`build_events_from_paper_fills`. Migration 102 + `tests/dq/olympus/kairos/`.
+
+## Notifications (email v0)
+
+K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
+Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
+`frontend/olympus/lib/entitlements.ts` artifact-class matrix).
+
+**Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
+`NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
+
+**Behavior:** fail-soft everywhere — Mailgun/network errors log a warning and return;
+dedupe via `notification_log` insert-first PK `(workspace_id, event_key, sent_date)`;
+suppression checked **before** claim (skipped sends do not burn dedupe slots); tier gates
+on digest sections and event types (`house_weights_nav` for holding-change,
+`private_book` for execution alerts); templates carry unsubscribe link, no broker
+ids/tokens/keys.
+
+**Entry points:**
+
+| Caller | Function | Digest hour gate |
+|--------|----------|------------------|
+| Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
+| `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
+| K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
+
+Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
 
 ## Billing (T2)
 
@@ -2899,3 +3045,97 @@ never stack traces or keys.
 Structural SQL coverage: `tests/dq/olympus/test_migration_billing.py`. Deno unit tests
 (colocated under `functions/`) cover signature reject, duplicate no-op, out-of-order,
 checkout→active→cancel, and claim-sync failure. CI Deno wiring is a documented follow-up.
+
+## Overlay runs
+
+T4 overlay pipeline (`digiquant/src/digiquant/olympus/overlay/`) gives entitled
+Custom/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
+`run_type` fork, no planner changes).
+
+**Dispatch (`dispatch.py`).** Entitlement is `plan_tier ∈ {custom, enterprise}` AND
+`subscription_status = active` AND BYOK present-and-unsealable. Misses write a
+`job_runs` row `skipped` with `error` = `not_entitled` / `no_credentials` (visible,
+never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; claim
+is insert-first + skip-locked (first claimer wins). Production persistence is
+`SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`);
+`MemoryJobRunStore` is the test seam. Overlay failures never write house job rows.
+
+**Omitted `workspace_id` means the house.** Readers and writers that leave the
+argument off (`load_prior_book`, `_prune_orphan_positions`, `_rows_for_date`,
+`_pending_order_heads`) filter **and** stamp `house_workspace_id()`. They never
+mean "every row".
+
+**Test-fake vs PostgREST `eq` (workspace_id).** The in-memory `_FakeQuery` in
+`tests/dq/atlas/test_supabase_io.py` treats a missing `workspace_id` column as
+matching `house_workspace_id()` when filtering — a **TEST-FAKE courtesy** for
+legacy house fixtures only. Production PostgREST does not: `.eq("workspace_id",
+house)` matches only rows where the column equals `house`. Migration 097's
+backfill stamps `workspace_id` on live tables; pre-097 rows without the column
+are invisible to scoped readers, which is correct post-backfill (PostgREST `eq`
+semantics, not the fake's).
+
+**Runner (`runner.py`).** ProfileConfig pin (`requested_version_id` + `workspace_id`
+at the preflight seam — the pin loader is unchanged) → publish-if-missing into the
+shared corpus under `theme:` / `asset:` / `segment:` keys → private H7–H9 book.
+A write-time assertion rejects any corpus key containing the workspace or user id.
+House callers that omit `workspace_id` keep the T0 house stamp (byte-identical).
+Overlay commit manifests use `overlay-commit/{workspace_id}/…`; H7/H8 document
+keys use `overlay/{workspace_id}/pm-direction-memo` (and the same prefix for
+`pm-rebalance`, `analyst/…`, `deliberation/…`) so they cannot collide with house
+keys after the documents unique is `(workspace_id, date, document_key)`.
+
+**Documents tenancy (migration 105).** `documents.workspace_id` is NOT NULL
+(backfilled house). The legacy `UNIQUE(date, document_key)` is **replaced** by
+`UNIQUE(workspace_id, date, document_key)` — keeping both would still collide
+overlay+house same-key rows. Authenticated own-workspace SELECT is added for
+non-house/non-system rows; **`anon_read` is not touched** (T1-train rule).
+
+**Persist flag.** Overlay private-phase writes (`documents` / `positions` /
+`nav_history` / ledger) require `OLYMPUS_OVERLAY_PERSIST=1` (default off).
+Production may enable that flag **only after** the T1-train anon-policy drop
+ships. With the flag off, research/corpus phases still run; private-phase
+persistence refuses and the job row is `persist_disabled`.
+
+**Budget (`budget.py`).** At overlay start the runner calls
+`digigraph.usage.start(run_id=<job id>)`, which clears process-global `_CALLS`,
+then reads `snapshot()["cost_usd"]`. `usage.start` / `usage.reset` are
+**process-global** — overlay jobs must run in a **separate process** from the
+house run, else house WP1 capture is clobbered; a run-scoped ledger is the
+future fix if co-residence is ever needed. Budget is checked after each corpus
+pin **and after the chain**. Crossing `ProfileConfig.research_budget_usd` skips
+remaining research, commits what is already consistent, and marks the job
+`budget_exhausted`. Post-chain overrun: the chain has already returned, so
+whatever it persisted stays; the job is `budget_exhausted` rather than
+`succeeded`.
+
+**BYOK (`byok.py`).** Sealed rows in `workspace_provider_credentials` (migration 104)
+reuse the K3 AES-256-GCM envelope. AAD is `workspace_id:provider:llm`. Overlay LLM
+clients are constructed only inside `digillm.client.byok` — house `OPENAI_API_KEY` /
+LiteLLM proxy keys are never a fallback. `_invoke_chain` / `invoke_overlay_chain`
+with `credential is None` refuses (`no_credentials`) and never calls `chain()`.
+A prefixed model not covered by the unsealed provider (`anthropic/…` with an
+openai BYOK row) refuses `byok_provider_mismatch` rather than falling through
+to house env keys. Missing or unsealable user key ⇒ skip.
+
+**Venue.** K4 `policy.py` (review-fix `9b4e9c86`) hard-codes `PAPER_INTERNAL`
+for `None` / house / system UUIDs. Overlay tenant routing threads
+`workspace_id` into `_pending_order_heads` after those gates.
+
+**Authority note (ledger / paper fills).** Overlay's runner path writes the
+shared corpus (tenant-agnostic keys), the pin-seam `workspace_id` on
+`AtlasConfigBundle`, H9 commit manifests (`overlay-commit/{workspace_id}/…`),
+the private book / NAV (`commit_io`), and the ledger chain (`ledger_io` models
+receive `workspace_id=` when overlay; house constructors stay on
+`house_workspace_id()`). It does **not** call `execution_io.execute_pending_orders`
+or `kairos.router.route_pending_orders`. Those stay on their existing authorities:
+house paper fills are the `execute_at_open` job (date-scoped, house stamp);
+external venue submit is K4's router (`9b4e9c86` gates first: None/house/system →
+`PAPER_INTERNAL`, live-env raise before submit; then overlay `workspace_id` is
+threaded into `_pending_order_heads` / `_directions_by_order`; missing ledger
+`workspace_id` → `ForeignWorkspaceIntentError`). Omitted `workspace_id` on those
+helpers is house (same as `_rows_for_date`). `documents.workspace_id` landed in
+migration 105; overlay isolation is the column plus the
+`overlay/{workspace_id}/…` key prefix.
+
+Tests: `tests/dq/olympus/overlay/`.
+

@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from digiquant.olympus.tenancy import house_workspace_id
 
 pytestmark = pytest.mark.unit
 
@@ -120,9 +121,15 @@ class _FakeQuery:
 
     def execute(self) -> Any:
         rows = list(self.rows)
+        house = str(house_workspace_id())
         for op, col, val in self._filters:
             if op == "eq":
-                rows = [r for r in rows if r.get(col) == val]
+                rows = [
+                    r
+                    for r in rows
+                    if r.get(col) == val
+                    or (col == "workspace_id" and val == house and r.get(col) is None)
+                ]
             elif op == "neq":
                 rows = [r for r in rows if r.get(col) != val]
             elif op == "lt":

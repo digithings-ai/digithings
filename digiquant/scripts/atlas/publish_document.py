@@ -109,9 +109,13 @@ def main() -> int:
         "document_key": args.document_key,
         "payload": payload,
         "content": content,
+        # House stamp — 096 seed. UNIQUE is (workspace_id, date, document_key).
+        "workspace_id": "6b753576-ced9-5319-9bfa-c5d0aacd9319",
     }
 
-    sb.table("documents").upsert(row, on_conflict="date,document_key").execute()
+    sb.table("documents").upsert(
+        row, on_conflict="workspace_id,date,document_key"
+    ).execute()
     print(f"✅ published documents:{date_str}/{args.document_key}")
     return 0
 

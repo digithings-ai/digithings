@@ -436,6 +436,42 @@ def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
     return marks
 
 
+def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
+    """Kairos venue-dispatch seam (K4).
+
+    House cron passes ``workspace_id=None`` → always ``paper_internal``, so the
+    existing ``build_events_from_paper_fills`` path and its outputs stay
+    byte-identical. External venues are reachable only when
+    ``OLYMPUS_KAIROS_ROUTING`` is on *and* a workspace with an active paper
+    ``broker_connections`` row is supplied — that path is wired by the Kairos
+    router, not by mutating the paper-fill writer.
+
+    Invalid / empty ``OLYMPUS_KAIROS_WORKSPACE_ID`` values warn and fall back to
+    ``None`` (house) rather than crashing the open job.
+
+    Returns the venue's string value (``ExecutionVenue`` value) so this script
+    does not need a top-level digiquant import at module load time.
+    """
+    _ensure_importable()
+    from uuid import UUID
+
+    from digiquant.olympus.kairos.policy import resolve_venue
+
+    resolved: Optional[UUID] = None
+    raw = (workspace_id or "").strip()
+    if raw:
+        try:
+            resolved = UUID(raw)
+        except ValueError:
+            print(
+                f"⚠️  OLYMPUS_KAIROS_WORKSPACE_ID={workspace_id!r} is not a valid UUID; "
+                f"treating as house (paper_internal).",
+                file=sys.stderr,
+            )
+            resolved = None
+    return resolve_venue(resolved).value
+
+
 def build_events_from_paper_fills(
     sb,
     run_d: str,
@@ -875,6 +911,18 @@ def main() -> int:
         return 2
 
     sb = _sb()
+
+    # Kairos venue-dispatch seam (K4). House path: workspace_id is unset →
+    # paper_internal → existing ledger paper fills, unchanged. External routing
+    # is env-gated inside resolve_venue; this script does not submit to brokers.
+    venue = resolve_execution_venue_for_run(os.environ.get("OLYMPUS_KAIROS_WORKSPACE_ID"))
+    if venue != "paper_internal":
+        print(
+            f"error: execute_at_open external venue {venue!r} requires the Kairos "
+            f"router (route_pending_orders); this script keeps the paper_internal path only",
+            file=sys.stderr,
+        )
+        return 4
 
     # Authoritative first. The prose paths below run only when the ledger declines.
     ledger_events: Optional[List[Dict[str, Any]]] = None

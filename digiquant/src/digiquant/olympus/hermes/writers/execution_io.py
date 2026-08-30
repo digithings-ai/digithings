@@ -266,7 +266,10 @@ def ledger_is_authoritative(*, client: SupabaseClient, run_date: date) -> bool:
 
 
 def _pending_order_heads(
-    *, client: SupabaseClient, run_date: date
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: UUID | str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """``(pending heads, all order rows)`` for ``run_date``.
 
@@ -274,8 +277,13 @@ def _pending_order_heads(
     chain root, which after one recommit is the *stale* order (see
     :func:`ledger_io._heads`). A pending row that some later row supersedes was already
     replaced and must never be filled.
+
+    ``workspace_id`` omitted ⇒ house (same as :func:`ledger_io._rows_for_date`). Overlay
+    / Kairos callers pass the connection's workspace so private books stay isolated.
     """
-    rows = _rows_for_date(client=client, table=ORDER_INTENTS, run_date=run_date)
+    rows = _rows_for_date(
+        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=workspace_id
+    )
     pending = [
         row
         for row in _heads(rows)
@@ -289,7 +297,11 @@ def _by_id(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 def _directions_by_order(
-    *, client: SupabaseClient, run_date: date, order_rows: list[dict[str, Any]]
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    order_rows: list[dict[str, Any]],
+    workspace_id: UUID | str | None = None,
 ) -> tuple[dict[str, DecisionAction], set[str]]:
     """Walk order → approved → requested → decision to recover each order's direction.
 
@@ -300,11 +312,17 @@ def _directions_by_order(
 
     Three ``in_`` reads, not one per order: the chain fans in by id, and the fan-out is
     bounded by the day's symbol count (~30). The whole walk is scoped to ``run_date``
-    because every table in it carries one.
+    because every table in it carries one. ``workspace_id`` omitted ⇒ house.
     """
-    approved_rows = _rows_for_date(client=client, table=APPROVED_TARGETS, run_date=run_date)
-    requested_rows = _rows_for_date(client=client, table=REQUESTED_TARGETS, run_date=run_date)
-    decision_rows = _rows_for_date(client=client, table=DECISION_INTENTS, run_date=run_date)
+    approved_rows = _rows_for_date(
+        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=workspace_id
+    )
+    requested_rows = _rows_for_date(
+        client=client, table=REQUESTED_TARGETS, run_date=run_date, workspace_id=workspace_id
+    )
+    decision_rows = _rows_for_date(
+        client=client, table=DECISION_INTENTS, run_date=run_date, workspace_id=workspace_id
+    )
 
     approved = _by_id(approved_rows)
     requested = _by_id(requested_rows)

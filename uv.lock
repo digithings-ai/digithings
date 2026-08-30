@@ -1288,9 +1288,11 @@ version = "0.1.0"
 source = { editable = "digiquant" }
 dependencies = [
     { name = "click" },
+    { name = "cryptography" },
     { name = "digibase" },
     { name = "digikey" },
     { name = "fastapi" },
+    { name = "jinja2" },
     { name = "langgraph" },
     { name = "optuna" },
     { name = "polars" },
@@ -1313,6 +1315,9 @@ atlas = [
 ]
 brokers-alpaca = [
     { name = "alpaca-py" },
+]
+brokers-ibkr = [
+    { name = "httpx" },
 ]
 data = [
     { name = "curl-cffi" },
@@ -1375,6 +1380,7 @@ dev = [
 requires-dist = [
     { name = "alpaca-py", marker = "extra == 'brokers-alpaca'", specifier = ">=0.40,<1" },
     { name = "click", specifier = ">=8" },
+    { name = "cryptography", specifier = ">=42" },
     { name = "curl-cffi", marker = "extra == 'data'", specifier = ">=0.15.0" },
     { name = "digibase", editable = "digibase" },
     { name = "digibase", extras = ["otel"], marker = "extra == 'otel'", editable = "digibase" },
@@ -1387,6 +1393,8 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "fredapi", marker = "extra == 'm2'", specifier = ">=0.5" },
     { name = "httpx", marker = "extra == 'atlas'", specifier = ">=0.27" },
+    { name = "httpx", marker = "extra == 'brokers-ibkr'", specifier = ">=0.27" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "jsonschema", marker = "extra == 'atlas'", specifier = ">=4.21" },
     { name = "langgraph", specifier = ">=0.2" },
     { name = "mcp", marker = "extra == 'mcp'", specifier = ">=1.2,<2" },
@@ -1413,7 +1421,7 @@ requires-dist = [
     { name = "yfinance", marker = "extra == 'm2'", specifier = ">=0.2" },
     { name = "yfinance", marker = "extra == 'prices'", specifier = ">=0.2" },
 ]
-provides-extras = ["nautilus", "indicators", "visualization", "data", "prices", "atlas", "optimize", "m2", "all", "dev", "mcp", "otel", "brokers-alpaca"]
+provides-extras = ["nautilus", "indicators", "visualization", "data", "prices", "atlas", "optimize", "m2", "all", "dev", "mcp", "otel", "brokers-alpaca", "brokers-ibkr"]
 
 [package.metadata.requires-dev]
 dev = [

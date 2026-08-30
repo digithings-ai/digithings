@@ -57,7 +57,8 @@ from digiquant.olympus.hermes.models.portfolio_ledger import (
 from digiquant.olympus.hermes.sizing import SizingCaps
 from digiquant.olympus.hermes.sizing_events import SizingAdjustment
 from digiquant.olympus.hermes.turnover import no_trade_band_pp
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.olympus.overlay.persist import require_overlay_persist
+from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -141,8 +142,22 @@ def _symbol(raw: Any) -> str:
     return str(raw or "").strip().upper()
 
 
-def _rows_for_date(*, client: SupabaseClient, table: str, run_date: date) -> list[dict[str, Any]]:
-    resp = client.table(table).select("*").eq("run_date", run_date.isoformat()).execute()
+def _rows_for_date(
+    *,
+    client: SupabaseClient,
+    table: str,
+    run_date: date,
+    workspace_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Date + workspace. Omitted ``workspace_id`` is the house, never every row."""
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table(table)
+        .select("*")
+        .eq("run_date", run_date.isoformat())
+        .eq("workspace_id", scoped)
+    )
+    resp = query.execute()
     return list(resp.data or [])
 
 
@@ -409,9 +424,17 @@ def append_commit_chain(
     h8_requested = {_symbol(k): float(v) for k, v in (requested_pct or {}).items()}
     adjustments_by_symbol = _pct_adjustments_by_symbol(h8_adjustments)
 
-    prior_commits = _rows_for_date(client=client, table=COMMITS, run_date=run_date)
-    prior_approved = _rows_for_date(client=client, table=APPROVED_TARGETS, run_date=run_date)
-    prior_orders = _rows_for_date(client=client, table=ORDER_INTENTS, run_date=run_date)
+    overlay_ws = getattr(state.config, "workspace_id", None)
+    require_overlay_persist(overlay_ws)
+    prior_commits = _rows_for_date(
+        client=client, table=COMMITS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_approved = _rows_for_date(
+        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=overlay_ws
+    )
+    prior_orders = _rows_for_date(
+        client=client, table=ORDER_INTENTS, run_date=run_date, workspace_id=overlay_ws
+    )
 
     commit_heads = _heads(prior_commits)
     if len(commit_heads) > 1:
@@ -443,6 +466,9 @@ def append_commit_chain(
     )
 
     commit_id = uuid4()
+    ws_kw: dict[str, UUID] = {}
+    if overlay_ws:
+        ws_kw["workspace_id"] = UUID(str(overlay_ws))
     commit = PortfolioCommit(
         id=commit_id,
         run_date=run_date,
@@ -450,6 +476,7 @@ def append_commit_chain(
         supersedes_id=_id_of(commit_heads[0] if commit_heads else None),
         effective_at=effective_at,
         recorded_at=recorded_at,
+        **ws_kw,
     )
 
     intent_rows: list[dict[str, Any]] = []
@@ -485,6 +512,7 @@ def append_commit_chain(
             reason=reason,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         requested = RequestedTarget(
             id=uuid4(),
@@ -495,6 +523,7 @@ def append_commit_chain(
             requested_quantity=None,
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         for event in symbol_adjustments:
             adjustment_rows.append(
@@ -509,6 +538,7 @@ def append_commit_chain(
                     reason=event.reason,
                     effective_at=effective_at,
                     recorded_at=recorded_at,
+                    **ws_kw,
                 ).model_dump(mode="json")
             )
         approved = ApprovedTarget(
@@ -521,6 +551,7 @@ def append_commit_chain(
             supersedes_id=_id_of(approved_heads.get(symbol)),
             effective_at=effective_at,
             recorded_at=recorded_at,
+            **ws_kw,
         )
         intent_rows.append(intent.model_dump(mode="json"))
         requested_rows.append(requested.model_dump(mode="json"))
@@ -546,6 +577,7 @@ def append_commit_chain(
                 supersedes_id=_id_of(order_heads.get(symbol)),
                 effective_at=effective_at,
                 recorded_at=recorded_at,
+                **ws_kw,
             ).model_dump(mode="json")
         )
 

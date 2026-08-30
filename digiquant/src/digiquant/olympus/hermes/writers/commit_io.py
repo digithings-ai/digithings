@@ -30,7 +30,8 @@ from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.olympus.overlay.persist import hermes_document_key, require_overlay_persist
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -396,7 +397,13 @@ def _canonical_thesis_ids(
     return {str(r["ticker"]): str(r["thesis_id"]) for r in rows if r.get("thesis_id")}
 
 
-def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[str]) -> list[str]:
+def _prune_orphan_positions(
+    *,
+    client: SupabaseClient,
+    date_str: str,
+    keep: set[str],
+    workspace_id: str | None = None,
+) -> list[str]:
     """Delete same-date ``positions`` rows absent from the book just written (#1744).
 
     ``positions`` is upserted on ``(date, ticker)``, so a second commit for the same
@@ -423,20 +430,22 @@ def _prune_orphan_positions(*, client: SupabaseClient, date_str: str, keep: set[
     DELETE per orphan; this issues a single ``in_`` delete instead — same effect,
     one round trip.
 
-    T0 (#5-T0): deliberately NOT scoped by ``workspace_id`` — the house pipeline is the
-    only writer today, so a date-only filter is equivalent to a
-    ``(workspace_id, date)`` filter in practice. Scoping every read in this module by
-    workspace belongs to whichever WP lands multi-tenant pipeline execution (T4); this
-    WP only had to keep INSERT/upsert payloads satisfying the new NOT NULL column.
+    Omitted ``workspace_id`` means the house workspace — never an unfiltered
+    date scan. Overlay passes its id so a private book cannot prune house rows.
     """
-    resp = client.table("positions").select("ticker").eq("date", date_str).execute()
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table("positions").select("ticker").eq("date", date_str).eq("workspace_id", scoped)
+    )
+    resp = query.execute()
     existing = {
         str(row.get("ticker")) for row in getattr(resp, "data", None) or [] if row.get("ticker")
     }
     orphans = sorted(existing - keep)
     if not orphans:
         return []
-    client.table("positions").delete().eq("date", date_str).in_("ticker", orphans).execute()
+    delete = client.table("positions").delete().eq("date", date_str).eq("workspace_id", scoped)
+    delete.in_("ticker", orphans).execute()
     logger.warning(
         "commit_io: pruned %d orphan position row(s) for %s not in the committed book: %s",
         len(orphans),
@@ -489,7 +498,10 @@ def book_portfolio(
             row["rationale"] = rationale
 
     prior_book = load_prior_book(
-        client, run_date, include_risk_fields=_position_risk_fields_enabled()
+        client,
+        run_date,
+        include_risk_fields=_position_risk_fields_enabled(),
+        workspace_id=getattr(state.config, "workspace_id", None),
     )
     nav = _compute_nav(client, run_date, prior_book)
 
@@ -521,13 +533,9 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
-    # T0 (#5-T0): workspace_id is NOT NULL as of migration 097; the house pipeline is
-    # single-tenant today, so every row this writer books stamps the house workspace
-    # explicitly rather than relying on the column's DEFAULT (roadmap P6 tracks the
-    # remaining legacy writers — e.g. scripts/update_tearsheet.py — that still lean on
-    # the DEFAULT). The widened UNIQUE constraint is (workspace_id, date, ticker) /
-    # (workspace_id, date), so on_conflict must include it too.
-    workspace_id = str(house_workspace_id())
+    overlay_ws = getattr(state.config, "workspace_id", None)
+    workspace_id = str(resolved_workspace_id(overlay_ws))
+    require_overlay_persist(workspace_id)
 
     client.table("nav_history").upsert(
         {
@@ -560,6 +568,7 @@ def book_portfolio(
         client=client,
         date_str=date_str,
         keep={str(r["ticker"]) for r in pos_rows},
+        workspace_id=overlay_ws,
     )
 
     return BookedPortfolio(
@@ -572,11 +581,24 @@ def book_portfolio(
     )
 
 
-def manifest_document_key(source_run_id: str) -> str:
+OVERLAY_MANIFEST_PREFIX = "overlay-commit/"
+
+
+def manifest_document_key(source_run_id: str, workspace_id: str | None = None) -> str:
+    """House keys stay ``commit-run/{run_id}``. Overlay is namespaced so a
+    date-scoped house lookup cannot see (or last-writer-wins over) a private book.
+    """
+    if workspace_id:
+        return f"{OVERLAY_MANIFEST_PREFIX}{workspace_id}/{source_run_id}"
     return f"{_MANIFEST_DOC_PREFIX}{source_run_id}"
 
 
-def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dict[str, Any]]:
+def load_commit_manifests(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Every commit manifest already persisted for ``run_date`` (#1744).
 
     Keyed on the **date**, never on ``source_run_id``. ``AtlasResearchState.run_id``
@@ -592,17 +614,14 @@ def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dic
     attempt keeps its own audit artefact; only the idempotency lookup is date-scoped.
     """
     date_str = run_date.isoformat()
+    prefix = f"{OVERLAY_MANIFEST_PREFIX}{workspace_id}/" if workspace_id else _MANIFEST_DOC_PREFIX
     out: list[dict[str, Any]] = []
 
     store = getattr(client, "store", None)
     if isinstance(store, dict):
         for row in store.get("documents", []):
             key = row.get("document_key")
-            if (
-                row.get("date") == date_str
-                and isinstance(key, str)
-                and key.startswith(_MANIFEST_DOC_PREFIX)
-            ):
+            if row.get("date") == date_str and isinstance(key, str) and key.startswith(prefix):
                 payload = row.get("payload")
                 if isinstance(payload, dict):
                     out.append(dict(payload))
@@ -613,7 +632,7 @@ def load_commit_manifests(*, client: SupabaseClient, run_date: date) -> list[dic
         client.table("documents")
         .select("payload")
         .eq("date", date_str)
-        .like("document_key", f"{_MANIFEST_DOC_PREFIX}%")
+        .like("document_key", f"{prefix}%")
         .execute()
     )
     for row in getattr(resp, "data", None) or []:
@@ -659,9 +678,10 @@ def save_commit_manifest(
 ) -> PublishedArtifact:
     source_run_id = str(state.run_id)
     date_str = state.run_date.isoformat()
+    workspace_id = getattr(state.config, "workspace_id", None)
     return publish_document(
         client=client,
-        document_key=manifest_document_key(source_run_id),
+        document_key=manifest_document_key(source_run_id, workspace_id),
         payload=manifest,
         doc_type="Commit Run",
         run_type=state.run_type,
@@ -669,6 +689,7 @@ def save_commit_manifest(
         date_str=date_str,
         category="portfolio",
         segment="commit_run",
+        workspace_id=workspace_id,
     )
 
 
@@ -685,16 +706,18 @@ def publish_portfolio_brief(
     ``pm-rebalance`` document would duplicate lineage without a reader contract.
     """
     date_str = state.run_date.isoformat()
+    workspace_id = getattr(state.config, "workspace_id", None)
     payload = {k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}}
     return publish_document(
         client=client,
-        document_key="pm-rebalance",
+        document_key=hermes_document_key("pm-rebalance", workspace_id),
         payload=payload,
         doc_type="Rebalance Decision",
         run_type=state.run_type,
         title=f"PM Rebalance {date_str}",
         date_str=date_str,
         category="portfolio",
+        workspace_id=workspace_id,
     )
 
 
@@ -706,13 +729,14 @@ def publish_hermes_documents(
     """Publish H5/H6/H7 artifacts not covered by Atlas publish."""
     date_str = state.run_date.isoformat()
     run_type = state.run_type
+    workspace_id = getattr(state.config, "workspace_id", None)
     artifacts: list[PublishedArtifact] = []
 
     for ticker, payload in analyst_payloads(state).items():
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=f"analyst/{ticker}",
+                document_key=hermes_document_key(f"analyst/{ticker}", workspace_id),
                 payload=dict(payload),
                 doc_type=None,
                 run_type=run_type,
@@ -721,6 +745,7 @@ def publish_hermes_documents(
                 category="deep-dive",
                 segment="analyst",
                 sector=ticker,
+                workspace_id=workspace_id,
             )
         )
 
@@ -730,7 +755,7 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=f"deliberation/{ticker}",
+                document_key=hermes_document_key(f"deliberation/{ticker}", workspace_id),
                 payload=dict(debate),
                 doc_type=None,
                 run_type=run_type,
@@ -739,6 +764,7 @@ def publish_hermes_documents(
                 category="deep-dive",
                 segment="deliberation",
                 sector=ticker,
+                workspace_id=workspace_id,
             )
         )
 
@@ -748,13 +774,14 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key="pm-direction-memo",
+                document_key=hermes_document_key("pm-direction-memo", workspace_id),
                 payload=payload,
                 doc_type="PM Direction Memo",
                 run_type=run_type,
                 title=f"PM Direction {date_str}",
                 date_str=date_str,
                 category="portfolio",
+                workspace_id=workspace_id,
             )
         )
 
@@ -1074,6 +1101,7 @@ __all__ = [
     "held_tickers",
     "load_commit_manifests",
     "manifest_commit_seq",
+    "OVERLAY_MANIFEST_PREFIX",
     "manifest_document_key",
     "persist_decision_log",
     "persist_validated_pretrade_risk_report",
