@@ -128,6 +128,11 @@ canvases/
 
 # Strategy calibrations — proprietary tuning values
 **/calibrations.json
+# SDCA BTC power-law fit — reproducible from real price history via the
+# digiquant_fit_btc_power_law MCP tool, not committed so a local/stale fit
+# never masquerades as the checked-in real one (#1082). The synthetic
+# btc_power_law_coefficients.example.json placeholder IS committed.
+**/btc_power_law_coefficients.json
 # Strategy Pine files embed calibrated inputs (input.int(70, ...)) — keep private.
 # The indicator library (pinescript/indicators/*.pine) is calibration-free and is
 # committed as reusable fallback code.

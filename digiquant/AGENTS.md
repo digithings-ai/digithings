@@ -143,6 +143,33 @@ the full module map.
   standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
   silently diverging.
 
+### RiskModel providers (#1082)
+
+`strategies/sdca/btc_power_law.py` is the first concrete `RiskModel`
+(`BtcPowerLawRiskModel`) — a fitted BTC power-law (RAQQR). Anti-patterns:
+
+- **Never treat `btc_power_law_coefficients.example.json` as a real fit.**
+  It is a synthetic placeholder (git-ignored `btc_power_law_coefficients.json`
+  doesn't exist yet in most checkouts/environments — no network access to
+  BTC price history or the reference artifact was available when this
+  provider was built). `load_coefficients()` logs a warning when it falls
+  back to the placeholder; don't silence or ignore that warning in code
+  reviewing this area — the fitted curve underneath a `SdcaStrategy` run may
+  not be real.
+- **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
+  (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
+  price history through `data/prices/history_cache.py` — the same cache
+  every other price consumer uses. Don't write a bespoke fetch path for this;
+  don't reuse the separate CCXT/Coinbase script pipeline behind
+  `digiquant_fetch_coinbase_ohlcv` either — that's a different, script-local
+  cache.
+- **`low_quantile`/`high_quantile` (default 10th/95th) are an unvalidated
+  judgment call**, not verified against the reference artifact's corridor —
+  revisit once that artifact is reachable, don't assume the default is
+  correct.
+- The other three #1082 providers (generic per-asset valuation-z, RS-driven
+  risk) are not implemented yet.
+
 ### Adding a preset
 
 Presets are public, hand-authored `curve_nodes`/`long_only` personalities in
