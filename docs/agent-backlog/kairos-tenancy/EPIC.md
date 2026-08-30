@@ -63,23 +63,25 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, post-#3181)
+## Agent delivery status (2026-08-30, post-#3185)
 
 **Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Through NotifyTab hydrate [#3184](https://github.com/digithings-ai/digithings/pull/3184) — **merged** (develop tip `732a77d0`).
+**Code:** all 12 WPs on `develop` (promotion #3141). Through NotifyTab hydrate [#3184](https://github.com/digithings-ai/digithings/pull/3184) + land note [#3185](https://github.com/digithings-ai/digithings/pull/3185) — **merged** (develop tip `ae11f0d3`).
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
 **Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v12** ACTIVE — thin GitHub-raw pin → `732a77d0` (GET `/notifications` + PATCH). Smoke 401 (`settings-v12-smoke.log`). Still no `sbp_` / no EF secrets push.
 
-**Secrets (names only; re-scanned post-#3181):**
+**Secrets (names only; re-scanned post-#3185):**
 - **SET in VM:** `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **No new nonempty secrets.** No captcha vendor signups.
+- **No new nonempty secrets.** No captcha vendor signups. No EF push / Mailgun smoke.
 - **Cursor env:** `SUPABASE_ACCESS_TOKEN` = JWT (`eyJ…`, not `sbp_`). Mailgun/Stripe/Alpaca/Auth keys empty or absent.
-- **Setup actions:** cursor-cloud `request-environment-setup-actions` recorded (minimal blocking set).
-- **Review gate:** findings drafted (`/opt/cursor/artifacts/kairos-reviews/`); agent `gh` **cannot** comment/label (403). Parent must post `<!-- in-session-review -->` + `reviewed:agent`.
 
-**Pages promote:** branch `cursor/promote-kairos-pages-3d52` pushed (= develop tip, ~199 ahead of `main`). Draft PR create **403** — parent opens draft `base=main`. Flag off; no cutover 900.
+**Agent-reachable paper E2E (fakes/mocks — NOT live staging):** 145 passed — `kairos-e2e-paper-fakes-refresh.log` (tenancy chain + Alpaca + venue contracts + kairos router/sync + IBKR). Staging E2E still **BLOCKED**.
 
-**Do not mark epic complete** until E2E + human/legal/IBKR gates clear.
+**Review gate (parent):** #3184 hatched (`reviewed:agent` + in-session-review). #3185 + older unhatched merges still need parent hatch before `main`. Leave [#3183](https://github.com/digithings-ai/digithings/pull/3183) draft.
+
+**Pages promote:** branch `cursor/promote-kairos-pages-3d52` pushed; human opens/merges when ready. Flag off; no cutover 900.
+
+**Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
