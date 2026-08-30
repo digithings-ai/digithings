@@ -11,6 +11,8 @@ tags:
 # Olympus
 > The human-facing dashboard for digiquant's finance sub-graphs — Atlas research, Hermes deliberation, and Kairos strategy work in one surface.
 
+**Rebrand pending:** a 2026-08-30 brief proposes retiring olympus / atlas / hermes / kairos as product names. See [docs/plans/2026-08-30-product-rebrand-scope.md](../plans/2026-08-30-product-rebrand-scope.md). This page is the current shipped description until that decision lands.
+
 ## What it is
 
 Olympus is the dashboard frontend (`frontend/olympus`) for the finance sub-graph trio that lives inside digiquant as `digiquant.olympus`. It turns the outputs of Atlas, Hermes, and Kairos into a navigable, daily decision surface rather than raw research dumps: a "Morning Read" overview, surfaced bull/bear theses and risk debate, portfolio/NAV tracking, and entry points into interactive strategy work.

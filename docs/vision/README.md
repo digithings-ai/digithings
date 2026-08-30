@@ -75,7 +75,7 @@ Shared headless-fetch engine: browser session lifecycle, composable retry/backof
 Drop-in kit that gives AI coding agents a structured task backlog, a 4-dimension scoring gate, PreToolUse guardrails, and generated MCP config for existing tools (Jira, Linear, Slack, Notion, Supabase, GitLab). Installs onto any repo; this monorepo dogfoods it.
 
 ### Olympus — finance dashboard
-Human-facing dashboard (`frontend/olympus`) for the digiquant sub-graph trio — Atlas research, Hermes deliberation, Kairos strategy work — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution.
+Human-facing dashboard (`frontend/olympus`) for the digiquant sub-graph trio — Atlas research, Hermes deliberation, Kairos strategy work — with a "Morning Read" overview, risk-debate surfaces, and portfolio/NAV tracking. The locus of the human approval gate before execution. Rebrand under discussion: [product-rebrand-scope](../plans/2026-08-30-product-rebrand-scope.md).
 
 **Note — not yet shipped:** digistore (unified storage abstraction over Supabase, SQLite, S3/MinIO) and digilink (the protocol translation and connector layer) are designed and specced but not yet implemented as standalone modules. Their functions exist today within individual services. (By contrast, digillm and digifetch *have* shipped as standalone libraries.)
 
