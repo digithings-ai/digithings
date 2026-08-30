@@ -94,9 +94,9 @@ LANGUAGE sql
 STABLE
 AS $$
   SELECT NULLIF(
-    current_setting('request.jwt.claims', true),
+    NULLIF(current_setting('request.jwt.claims', true), '')::json ->> 'sub',
     ''
-  )::json ->> 'sub'
+  )::uuid
 $$;
 
 CREATE OR REPLACE FUNCTION auth.jwt()
@@ -114,7 +114,7 @@ GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.jwt() TO anon, authenticated, service_role;
 
 DO $$ BEGIN
-  RAISE NOTICE 'SHIM: auth.uid() reads request.jwt.claims->>'sub'; auth.jwt() returns claims json';
+  RAISE NOTICE 'SHIM: auth.uid() reads request.jwt.claims ->> sub; auth.jwt() returns claims json';
 END $$;
 
 -- Alias used by unmerged 103_notification_prefs.sql (chain has trigger_set_updated_at only).
@@ -187,4 +187,33 @@ BEGIN
 END $$;
 
 -- Grant current tables (none yet) — after migrations, seed runs as owner.
+
+-- ---------------------------------------------------------------------------
+-- Out-of-repo / platform tables that in-repo migrations ALTER but never CREATE
+-- ---------------------------------------------------------------------------
+-- 031 enables RLS on fx_economic_calendar, which entered prod via an out-of-repo
+-- twelve-x port (see 031 header / 047 note). Minimal stub so 031 can apply.
+CREATE TABLE IF NOT EXISTS public.fx_economic_calendar (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  event_date date NOT NULL,
+  country text NOT NULL DEFAULT '',
+  event_name text NOT NULL DEFAULT '',
+  external_id text UNIQUE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+DO $$ BEGIN
+  RAISE NOTICE 'SHIM: stub public.fx_economic_calendar (out-of-repo prod table; 031 ALTERs it)';
+END $$;
+
+-- db-migrate.yml creates olympus_schema_migrations before applying files;
+-- migration 057 locks it. Stub the ledger table here.
+CREATE TABLE IF NOT EXISTS public.olympus_schema_migrations (
+  filename text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
+DO $$ BEGIN
+  RAISE NOTICE 'SHIM: stub public.olympus_schema_migrations (normally created by db-migrate.yml)';
+END $$;
+
 \echo '=== SHIM: bootstrap complete ==='

@@ -53,16 +53,16 @@ BEGIN
   -- Group A private book (legacy UNIQUE(date[,ticker]) still active — distinct dates/tickers)
   INSERT INTO public.positions (date, ticker, name, category, weight_pct, workspace_id)
   VALUES
-    (run_a, 'AAA', 'Asset A', 'equity', 0.40, ws_a),
-    (run_b, 'BBB', 'Asset B', 'equity', 0.55, ws_b),
-    (house_date, 'HOUSE', 'House Asset', 'equity', 0.25, house)
+    (run_a, 'AAA', 'Asset A', 'equity_broad', 40, ws_a),
+    (run_b, 'BBB', 'Asset B', 'equity_broad', 55, ws_b),
+    (house_date, 'HOUSE', 'House Asset', 'equity_broad', 25, house)
   ON CONFLICT DO NOTHING;
 
   INSERT INTO public.position_events (date, ticker, event, weight_pct, workspace_id)
   VALUES
-    (run_a, 'AAA', 'OPEN', 0.40, ws_a),
-    (run_b, 'BBB', 'OPEN', 0.55, ws_b),
-    (house_date, 'HOUSE', 'OPEN', 0.25, house)
+    (run_a, 'AAA', 'OPEN', 40, ws_a),
+    (run_b, 'BBB', 'OPEN', 55, ws_b),
+    (house_date, 'HOUSE', 'OPEN', 25, house)
   ON CONFLICT DO NOTHING;
 
   INSERT INTO public.nav_history (date, nav, cash_pct, invested_pct, workspace_id)
@@ -72,11 +72,11 @@ BEGIN
     (house_date, 500000, 0.05, 0.95, house)
   ON CONFLICT DO NOTHING;
 
-  INSERT INTO public.portfolio_metrics (date, pnl_pct, sharpe, cash_pct, workspace_id)
+  INSERT INTO public.portfolio_metrics (date, pnl_pct, sharpe, invested_pct, workspace_id)
   VALUES
-    (run_a, 1.0, 1.2, 0.1, ws_a),
-    (run_b, 2.0, 0.8, 0.2, ws_b),
-    (house_date, 0.5, 1.5, 0.05, house)
+    (run_a, 1.0, 1.2, 90, ws_a),
+    (run_b, 2.0, 0.8, 80, ws_b),
+    (house_date, 0.5, 1.5, 95, house)
   ON CONFLICT DO NOTHING;
 
   -- Minimal portfolio_ledger chain (commit → decision → requested_target) per workspace
@@ -236,7 +236,7 @@ BEGIN
 
   -- Shared research row on theses (anon KEEP)
   INSERT INTO public.theses (date, thesis_id, name, status, notes)
-  VALUES (house_date, 'geo-risk-gold', 'Geo Risk Gold', 'active', 'shared thesis')
+  VALUES (house_date, 'geo-risk-gold', 'Geo Risk Gold', 'ACTIVE', 'shared thesis')
   ON CONFLICT DO NOTHING;
 
 END $$;
