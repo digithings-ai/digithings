@@ -30,7 +30,7 @@ The dashboard **already** uses functional nav: Brief, Portfolio, Pipeline, FX Hu
 The mark itself (nested arcs + a small circle, used as favicon and as `OlympusMark` / `AtlasMark`) is what prompted the “letter A → alphabox / autobox / ai box” instinct:
 
 ```
-frontend/dashboard/public/icons/olympus-app-dark.svg
+frontend/dashboard/public/icons/dashboard-app-dark.svg
 frontend/digiquant-web/components/landing/OlympusMark.tsx
 ```
 

@@ -68,3 +68,41 @@ def test_dashboard_does_not_ship_olympus_public_env_keys() -> None:
     ).read_text(encoding="utf-8")
     assert "dashboard-sidebar-collapsed" in shell
     assert "localStorage.setItem(STORAGE_KEY" in shell
+
+
+def test_dockerfiles_copy_dashboard_package_json() -> None:
+    for rel in ("frontend/digichat/Dockerfile", "Dockerfile.digichat-cloudflare"):
+        text = (REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert "frontend/dashboard/package.json" in text
+        assert "frontend/olympus/package.json" not in text
+
+
+def test_gitignore_ignores_dashboard_static_portfolio() -> None:
+    text = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "frontend/dashboard/public/dashboard-data.json" in text
+    assert "frontend/olympus/public/dashboard-data.json" not in text
+
+
+def test_dashboard_has_no_nested_lockfile() -> None:
+    assert not (REPO_ROOT / "frontend" / "dashboard" / "package-lock.json").exists()
+
+
+def test_dashboard_icons_and_theme_keys_are_not_olympus() -> None:
+    layout = (REPO_ROOT / "frontend" / "dashboard" / "app" / "layout.tsx").read_text(
+        encoding="utf-8"
+    )
+    manifest = (REPO_ROOT / "frontend" / "dashboard" / "app" / "manifest.ts").read_text(
+        encoding="utf-8"
+    )
+    theme = (REPO_ROOT / "frontend" / "dashboard" / "components" / "theme-provider.tsx").read_text(
+        encoding="utf-8"
+    )
+    icons = REPO_ROOT / "frontend" / "dashboard" / "public" / "icons"
+    assert "dashboard-app-dark.svg" in layout
+    assert "olympus-app-" not in layout
+    assert "olympus-app-" not in manifest
+    assert "dashboard-theme" in layout
+    assert "dashboard-theme" in theme
+    assert "localStorage.setItem(STORAGE_KEY" in theme
+    assert (icons / "dashboard-app-dark.svg").is_file()
+    assert not (icons / "olympus-app-dark.svg").exists()

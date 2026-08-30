@@ -89,18 +89,18 @@ gh run list -w agent-quota-reset.yml -L 3
 
 | Artifact | Purpose |
 |----------|---------|
-| `frontend/olympus/app/api/snapshots/route.ts` | `GET /api/snapshots` (service role) |
-| `frontend/olympus/lib/snapshot-fetch.ts` | `NEXT_PUBLIC_DASHBOARD_USE_BFF=1` → fetch BFF |
-| `frontend/olympus/examples/bff-snapshots-route.example.ts` | Mirror of route for static-export docs |
+| `frontend/dashboard/app/api/snapshots/route.ts` | `GET /api/snapshots` (service role) |
+| `frontend/dashboard/lib/snapshot-fetch.ts` | `NEXT_PUBLIC_DASHBOARD_USE_BFF=1` → fetch BFF |
+| `frontend/dashboard/examples/bff-snapshots-route.example.ts` | Mirror of route for static-export docs |
 | `digiquant/supabase/migrations/028_olympus_bff_notes.sql` | BFF migration notes |
-| `frontend/olympus/README.md` | Threat model + env table |
+| `frontend/dashboard/README.md` | Threat model + env table |
 
 ### Executable checklist (Node / dev hosting)
 
-- [ ] Copy `frontend/olympus/.env.local.example` → `.env.local`.
+- [ ] Copy `frontend/dashboard/.env.local.example` → `.env.local`.
 - [ ] Set `NEXT_PUBLIC_SUPABASE_URL`, `OLYMPUS_SUPABASE_SERVICE_ROLE_KEY` (server-only).
 - [ ] Set `NEXT_PUBLIC_DASHBOARD_USE_BFF=1`.
-- [ ] Run `npm --workspace frontend/olympus run dev` (not static export).
+- [ ] Run `npm --workspace dashboard run dev` (not static export).
 - [ ] `curl -s http://localhost:3001/dashboard/api/snapshots | jq .snapshot.date`
 
 ### Static export (digiquant.io)

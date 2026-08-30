@@ -14,17 +14,17 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#0A0E0C', // canon-allow: manifests cannot reference CSS tokens
     icons: [
       {
-        src: '/dashboard/icons/olympus-app-192.png',
+        src: '/dashboard/icons/dashboard-app-192.png',
         sizes: '192x192',
         type: 'image/png',
       },
       {
-        src: '/dashboard/icons/olympus-app-512.png',
+        src: '/dashboard/icons/dashboard-app-512.png',
         sizes: '512x512',
         type: 'image/png',
       },
       {
-        src: '/dashboard/icons/olympus-app-maskable-512.png',
+        src: '/dashboard/icons/dashboard-app-maskable-512.png',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable',
