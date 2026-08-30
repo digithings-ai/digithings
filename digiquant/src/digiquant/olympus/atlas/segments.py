@@ -248,13 +248,39 @@ def _string_value(value: object) -> str | None:
     return None
 
 
+def _as_field_mapping(value: object) -> Mapping[str, Any] | None:
+    """Gemini Struct maps arrive as JSON objects *or* lists of ``[key, value]`` pairs.
+
+    House GHA 33426508863 truncated the live envelope as
+    ``'{"completionState":"comp...k."}]],"type":"Object"}'`` — the ``}]],`` before
+    ``type`` is a list-of-pairs map, not a JSON object. A mixed/invalid sequence is
+    not flattened.
+    """
+    if isinstance(value, Mapping):
+        return value
+    if isinstance(value, str) or not isinstance(value, (list, tuple)) or not value:
+        return None
+    out: dict[str, Any] = {}
+    for item in value:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            key, val = item[0], item[1]
+        elif isinstance(item, Mapping) and isinstance(item.get("key"), str):
+            key, val = item["key"], item.get("value")
+        else:
+            return None
+        if not isinstance(key, str) or not key.strip() or key in out:
+            return None
+        out[key] = val
+    return out
+
+
 def _flatten_wrapped_record(data: Mapping[str, Any]) -> dict[str, Any]:
     """Unwrap Gemini/LiteLLM object envelopes onto a flat Finding/Source dict."""
     if any(key in data for key in ("label", "summary", "id", "text", "description", "detail")):
         return dict(data)
     for wrapper_key in ("properties", "fields", "structValue", "value"):
-        inner = data.get(wrapper_key)
-        if not isinstance(inner, Mapping):
+        inner = _as_field_mapping(data.get(wrapper_key))
+        if inner is None:
             continue
         flat: dict[str, Any] = {}
         for key, val in inner.items():
