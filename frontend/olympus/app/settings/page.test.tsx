@@ -44,6 +44,10 @@ vi.mock('@/components/settings/billing-tab', () => ({
 vi.mock('@/components/settings-content', () => ({
   SettingsContent: () => createElement('div', { 'data-about': '1' }, 'about-body'),
 }));
+vi.mock('@/components/settings/remaining-hop-status', () => ({
+  RemainingHopStatus: () =>
+    createElement('div', { 'data-testid': 'remaining-hop-status' }, 'remaining-hops'),
+}));
 vi.mock('@/components/subpage-tab-bar', () => ({
   subpageTabButtonClass: (active: boolean) => (active ? 'tab-on' : 'tab-off'),
   SubpageStickyTabBar: ({ children }: { children?: unknown }) =>
@@ -141,6 +145,18 @@ describe('Settings page tab visibility', () => {
     });
     expect(container.textContent).toContain('billing-body');
     expect(container.textContent).not.toContain('about-body');
+  });
+
+  it('Observer About mounts remaining hops next to the about body', async () => {
+    window.location.hash = 'about';
+    await act(async () => {
+      root.render(createElement(SettingsPage));
+    });
+    expect(container.querySelector('[data-testid="settings-about"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="remaining-hop-status"]')).not.toBeNull();
+    expect(container.textContent).toContain('remaining-hops');
+    expect(container.textContent).toContain('about-body');
+    expect(container.textContent).not.toContain('notify-body');
   });
 
   it('clicking Billing writes #billing and shows the billing body', async () => {
