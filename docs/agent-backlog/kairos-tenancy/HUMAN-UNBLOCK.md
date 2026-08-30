@@ -1,12 +1,12 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` path unlocked (PAT **recreated** as **cursor cloud agent**; old kairos-named token **revoked** — re-paste into Cursor env). Vault + `APP_URL` on EF; settings **v18** ACTIVE; **GitHub Auth Enabled** on `core`. Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` path unlocked (PAT **cursor cloud agent**; env `SUPABASE_ACCESS_TOKEN` works this session). Vault + `APP_URL` on EF; settings **v18** ACTIVE; **GitHub Auth Enabled** on `core`. Docs [#3209](https://github.com/digithings-ai/digithings/pull/3209)/[#3211](https://github.com/digithings-ai/digithings/pull/3211)/[#3213](https://github.com/digithings-ai/digithings/pull/3213) **merged**. Agent-reachable gates re-run: RLS **59/59**, vault unit + brokers/overlay **317**, settings unauth **401**. `auth.users=0` — human must sign in once (GitHub). Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
 Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)  
 Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
-Docs branch: `cursor/cursor-cloud-agent-secrets-status-c8be`
+Docs branch: `cursor/kairos-post-3213-gates-3d52`
 
 ---
 

@@ -126,15 +126,15 @@ ORDER BY version;
 
 ## 3. Edge Function deploys
 
-### Live status on `core` (2026-08-30, sbp unlock + settings v17)
+### Live status on `core` (2026-08-30, sbp unlock + settings v18)
 
 | Function | Status | Notes |
 |----------|--------|-------|
-| `prices-live` | ACTIVE | Pre-existing |
-| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
+| `prices-live` | ACTIVE v8 | Pre-existing |
+| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Awaits `STRIPE_WEBHOOK_SECRET` — unauth POST → `STRIPE_NOT_CONFIGURED` |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v17** (full monorepo CLI from `origin/develop` `8bb9690a`) | Workspace `plan_tier` entitlement gate (#3196) + GET `/profile` + GET `/notifications` hydrate + PATCH. Smoke: missing/invalid JWT → gateway `401` (`settings-v17-smoke.log`). Deployed with `npx supabase@2.116.0` + `sbp_` PAT. EF secrets set: `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (Alpaca/Stripe/Mailgun still absent). Migration `106` stamped on `core`.
+| `settings` | ACTIVE **v18** | Workspace `plan_tier` entitlement gate (#3196) + GET `/profile` + GET `/notifications` hydrate + PATCH. Smoke: missing/invalid JWT → gateway `401` (`settings-v18-smoke.log`). EF secrets set: `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (Alpaca/Stripe/Mailgun still absent). Migration `106` stamped on `core`.
 
 ### Schema alignment (agent, 2026-08-30)
 
@@ -259,7 +259,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | PR [#3184](https://github.com/digithings-ai/digithings/pull/3184) | **Merged** to `develop` (2026-08-30; tip `732a77d0`) | GET `/notifications` + NotifyTab hydrate; settings EF **v12** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3187](https://github.com/digithings-ai/digithings/pull/3187) | **Merged** to `develop` (2026-08-30; tip `17a84b30`) | GET `/profile` + ProfileTab hydrate; settings EF **v13** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3196](https://github.com/digithings-ai/digithings/pull/3196) | **Merged** to `develop` (2026-08-30; tip `5b526914`) | Settings entitlement prefers `workspaces.plan_tier` (no JWT fail-open); settings EF **v14** thin pin; smoke 401. No `sbp_` / no EF secrets. |
-| Agent unlock (2026-08-30) | **Partial** — `sbp_` + EF vault/APP_URL + settings **v18** + **GitHub Auth Enabled** | Waiting `PARTIAL_UNLOCK`. Stripe/Mailgun/Google/Alpaca still blocked. #3183 left draft. |
+| Agent unlock (2026-08-30) | **Partial** — `sbp_` + EF vault/APP_URL + settings **v18** + **GitHub Auth Enabled**; docs [#3209](https://github.com/digithings-ai/digithings/pull/3209)/[#3211](https://github.com/digithings-ai/digithings/pull/3211) merged | Waiting `PARTIAL_UNLOCK`. GitHub Actions org/repo secrets have **no** Stripe/Alpaca/Mailgun names. Cursor env PAT paste + vendors still blocked. #3183 left draft. |
 | PR [#3183](https://github.com/digithings-ai/digithings/pull/3183) | **Draft** promote `develop`→`main` | Tip synced to `baa7766d` (= `origin/develop`). **Do not merge** until secrets live **and** intentional Pages cutover. |
 ---
 
