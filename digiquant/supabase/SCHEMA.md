@@ -712,9 +712,14 @@ NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).
 | `olympus_profile_config` | **system** (house-default row) | **none** | column + FK only |
 
 House pipeline writers (`commit_io`, `ledger_io` / `execution_io` / `opening_snapshot`,
-`accounting.io`, `execute_at_open`) stamp `house_workspace_id()` explicitly.
-Legacy scripts (`refresh_performance_metrics.py`, `sync_positions_from_rebalance.py`,
-`update_tearsheet.py`, …) lean on Group A DEFAULTs + legacy UNIQUEs until roadmap P6.
+`accounting.io`, `execute_at_open`, `portfolio_materialize`,
+`refresh_performance_metrics`) stamp `house_workspace_id()` explicitly.
+Ops / recovery scripts (`sync_positions_from_rebalance.py`, `update_tearsheet.py`,
+`materialize_snapshot.py` positions, `backfill_execution_prices.py`,
+`reconcile_position_events_from_positions.py`) now stamp the same house id and
+target the widened UNIQUEs. P6 still must **drop** the 097 legacy date-only
+arbiters on `core` before overlay private books can persist; do not drop them
+until `main` house GHA writers are on the widened conflict.
 
 ### Authenticated RLS (098) — anon untouched until T1
 
