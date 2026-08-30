@@ -32,7 +32,8 @@ export interface AuthContextValue {
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue | null>(null);
+/** Exported so entitlement hooks can read session without throwing outside the tree. */
+export const AuthContext = createContext<AuthContextValue | null>(null);
 
 const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
 

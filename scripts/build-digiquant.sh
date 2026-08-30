@@ -96,6 +96,12 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 # Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
 [ -f dist/olympus/login/index.html ] || { echo "ERROR: dist/olympus/login/index.html missing — Auth login route not exported" >&2; exit 1; }
 [ -f dist/olympus/auth/callback/index.html ] || { echo "ERROR: dist/olympus/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
+# Settings (T3 + Pipeline/Keys) — must not regress to pre-T3 Status/Appearance shell alone.
+[ -f dist/olympus/settings/index.html ] || { echo "ERROR: dist/olympus/settings/index.html missing — Settings route not exported" >&2; exit 1; }
+grep -q 'settings-tab-pipeline' dist/olympus/settings/index.html \
+  || { echo "ERROR: settings export missing Pipeline tab marker — stale pre-T3 shell?" >&2; exit 1; }
+grep -q 'settings-tab-keys' dist/olympus/settings/index.html \
+  || { echo "ERROR: settings export missing Keys tab marker — BYOK surface not in export?" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
