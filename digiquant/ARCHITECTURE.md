@@ -3156,6 +3156,16 @@ skipped rows are not a remaining-hop proof. The cron module does
 not import `byok`/`digillm` (digiquant-only CI). Production apply passes
 `byok=None` so `dispatch_overlay_daily` lazy-probes per workspace.
 
+**Scheduled probe (separate process).** Overlay must never share
+`pipeline-olympus.yml`'s Hermes chain job (`usage.start` is process-global).
+The fail-closed GHA spec is
+`docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
+(`15 12 * * *`, `make kairos-cron-check` / overlay `--dry-run` / sync
+`--dry-run`). `cursor/*` cannot write `.github/workflows/`; copy the spec
+to `kairos-cron-check.yml` on a `chore/` or `feat/` branch. Missing
+`CORE_SUPABASE_*` / Mailgun GitHub secrets fail closed (exit 2). That job
+must never pass `--execute`, `--all`, or invoke `hermes.chain`.
+
 **Omitted `workspace_id` means the house.** Readers and writers that leave the
 argument off (`load_prior_book`, `_prune_orphan_positions`, `_rows_for_date`,
 `_pending_order_heads`) filter **and** stamp `house_workspace_id()`. They never

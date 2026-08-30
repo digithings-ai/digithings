@@ -67,7 +67,8 @@ Wave E
 
 **Verdict: NOT COMPLETE** — staging E2E still blocked on Stripe/Mailgun/Alpaca OAuth
 captchas and Google Auth. All 12 WPs have code on `develop`. This branch adds
-production cron CLIs and remaining-hop proofs from Settings product state.
+production cron CLIs, remaining-hop proofs from Settings product state, and a
+fail-closed GHA **spec** (not installed: `cursor/*` cannot write `.github/workflows/`).
 
 **Schema (`core`):** migrations **096–109** applied (`109_authenticated_house_teaser_read`).
 Cutover **900 not applied**.
@@ -75,8 +76,10 @@ Cutover **900 not applied**.
 **Edge Functions (`core`):** `settings` **v29 ACTIVE** (`verify_jwt=true`); checkout/portal
 await Stripe price secrets (`PRICE_NOT_CONFIGURED`).
 
-**Remaining hops (Observer JWT, 2026-08-31):** all five unproven. `job_runs` /
-`broker_executions` / `notification_log` / `stripe_events` / BYOK rows = **0**.
+**Remaining hops (Observer JWT, re-audit 2026-08-31T04:30Z):** all five unproven.
+`job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK
+rows = **0**. Migrations **096–109** applied; cutover **900 not applied**.
+Settings EF **v29 ACTIVE**. Checkout v6 / portal v7 / stripe-webhook v6.
 One ops-custom workspace has an Alpaca **paper `api_key`** connection (not OAuth;
 does not prove the remaining hop). House is `enterprise`/`active` **without**
 Stripe ids — must not prove checkout.
@@ -85,7 +88,13 @@ Stripe ids — must not prove checkout.
 - `python -m digiquant.olympus.overlay` — overlay_daily dispatch; `--execute` runs the graph
   (hop proves on `succeeded` only; `chain=None` / persist-disabled / running do not)
 - `python -m digiquant.olympus.kairos.sync_cron` — Alpaca paper fill mirror
-- `python scripts/kairos_cron_check.py` — combined `--check` (overlay + sync + Mailgun)
+- `python scripts/kairos_cron_check.py` / `make kairos-cron-check` — combined `--check`
+  (overlay + sync + Mailgun)
+- Scheduled GHA spec: `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
+  (`15 12 * * *`, `--check`/`--dry-run` only, separate process from
+  `pipeline-olympus.yml`). `cursor/*` cannot write `.github/workflows/`; copy onto a
+  `chore/` or `feat/` branch as `.github/workflows/kairos-cron-check.yml`. Never
+  `--execute` / `--all` / `hermes.chain` on that job.
 
 **Auth (`core`):** GitHub Enabled + Email Enabled; **Google Disabled**. Mailgun MCP still
 auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.

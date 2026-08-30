@@ -18,12 +18,18 @@ Loud-fail gates (after paste):
 ```bash
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
+PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --check
 # After Stripe + BYOK only — never `--execute --all` on Observer:
 # PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --execute --workspace-id <uuid>
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.kairos.sync_cron --check
 ```
+
+Scheduled probe (not installed from `cursor/*` — `.github/workflows/` is protected):
+copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` to
+`.github/workflows/kairos-cron-check.yml` on a `chore/` or `feat/` branch. Probe is
+`--check` / `--dry-run` only; house daily stays on `pipeline-olympus.yml`.
 
 ### 0a) Auth Pages on `main` — DONE (#3231) + GitHub login proven
 
