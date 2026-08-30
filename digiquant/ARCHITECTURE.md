@@ -2972,3 +2972,22 @@ auto-submit corrective orders (`SyncResult.refused_corrective_orders` is always 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
 default (no workspace / kill switch off) stays on `build_events_from_paper_fills`.
 Migration 102 + `tests/dq/olympus/kairos/`.
+
+## Notifications (email v0)
+
+K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
+Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
+`frontend/olympus/lib/entitlements.ts` artifact-class matrix).
+
+**Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
+`NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
+
+**Behavior:** fail-soft everywhere — Mailgun/network errors log a warning and return;
+dedupe via `notification_log` insert-first PK `(workspace_id, event_key, sent_date)`;
+suppression check before send; tier-filtered digest content (`can(tier, class)`);
+templates carry unsubscribe link, no broker ids/tokens/keys.
+
+**Entry points:** `python -m digiquant.notify.dispatch` (cron); `run_db_first.py`
+close-out calls `dispatch_notifications(run_date=…, hour_utc=None)` after DB validation.
+
+Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.

@@ -285,6 +285,15 @@ def main() -> int:
     if rc != 0:
         return rc
 
+    # 4) K5 email notifications — fail-soft; never blocks pipeline completion
+    if not args.dry_run:
+        try:
+            from digiquant.notify.dispatch import dispatch_notifications
+
+            dispatch_notifications(run_date=dt_date.fromisoformat(d), hour_utc=None)
+        except Exception as exc:
+            print(f"⚠️ notify dispatch skipped: {exc}", file=sys.stderr)
+
     print("✅ run_db_first.py completed.")
     return 0
 
