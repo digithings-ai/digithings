@@ -220,16 +220,14 @@ def _audit(event_type: str, payload: dict[str, Any]) -> None:
 
 
 def _json_safe(value: Any) -> Any:
-    """Recursively coerce ``date``/``datetime`` to ISO strings.
+    """Recursively coerce values the stdlib ``json`` encoder cannot handle.
 
-    The Supabase client serializes upsert bodies with the stdlib ``json``
-    encoder (via httpx), which cannot encode ``date``/``datetime``. Atlas/Hermes
-    payloads are heterogeneous dicts: e.g. a ``PMDirectionMemo`` rehydrated from
-    a LangGraph checkpoint as a plain dict — rather than the Pydantic model
-    whose ``model_dump(mode="json")`` would coerce it — carries a raw ``date``
-    in ``payload["date"]``. Coercing here, at the single write boundary,
-    protects every caller (analyst/deliberation/book/memo/delta/snapshot) at
-    once instead of relying on each one to pre-serialize its dates.
+    The Supabase client serializes upsert bodies with httpx ``json.dumps``.
+    LangGraph checkpoint rehydration yields plain dicts with raw ``date`` /
+    ``datetime`` / ``UUID`` instead of a Pydantic ``model_dump(mode="json")``.
+    House GHA ``33426508863`` retried H9 ``publish_document`` after a ledger
+    ``23502`` and died with ``TypeError: Object of type UUID is not JSON
+    serializable``. Coercing at this write boundary covers every caller.
     """
     if isinstance(value, dict):
         return {key: _json_safe(val) for key, val in value.items()}
@@ -237,6 +235,8 @@ def _json_safe(value: Any) -> Any:
         return [_json_safe(item) for item in value]
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
     return value
 
 
