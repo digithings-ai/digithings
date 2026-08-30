@@ -1,9 +1,18 @@
-# Kairos epic — completion audit (live-retry, 2026-08-30T20:30Z)
+# Kairos epic — completion audit (Auth Pages, 2026-08-30T20:42Z)
 
 **Verdict: NOT COMPLETE** — do not UpdateGoal complete.
 
-Full artifact: `/opt/cursor/artifacts/kairos-completion-audit-live-retry.md`
+Full artifact: `/opt/cursor/artifacts/kairos-completion-audit-auth-pages.md`
 
-Staging E2E remains **BLOCKED** on Stripe / Mailgun / Alpaca OAuth. This turn: secrets re-scan (0 vendor EF secrets), Agentmail JWT live chain + free→`TIER_FORBIDDEN`→restore custom, vault seal, notify prefs→Agentmail, `MAILGUN_NOT_CONFIGURED` CLI loud-fail, overlay/router units 45 pass, local Olympus Auth UI + GitHub OAuth start. Draft #3183 left open.
+## Summary
 
-**Closest real chain ≠ staging E2E.** Ops `plan_tier=custom` is not Stripe-sourced.
+- **Secrets:** still no Stripe / Mailgun / Alpaca OAuth / Google API keys (Agentmail empty of pastes; Mailgun MCP auth-fail; core EF = vault/APP_URL/Supabase builtins only).
+- **Staging E2E:** harness exit **2**; notify `--require-mailgun` → `MAILGUN_NOT_CONFIGURED`.
+- **Prod `/olympus/login` 404 root cause:** login routes on `develop` only; Pages builds from `main` @ `980e3e18` (pre-T1).
+- **Fix (narrow, no cutover 900):** branch `cursor/olympus-auth-pages-e036` → `main`  
+  compare https://github.com/digithings-ai/digithings/compare/main...cursor/olympus-auth-pages-e036  
+  (`gh pr create` 403). **Do not merge draft #3183** for this gap.
+- **Local proof:** AUTH=1 static export `/olympus/login/` → **200** Login UI.
+- **Cutover 900:** not applied.
+
+Closest real chain ≠ staging E2E. Ops `plan_tier=custom` is not Stripe-sourced.

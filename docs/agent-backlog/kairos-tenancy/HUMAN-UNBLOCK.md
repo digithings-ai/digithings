@@ -1,19 +1,27 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30 live-retry) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + live vault seal + free-tier `TIER_FORBIDDEN` + notify prefs→Agentmail unlocked. Notify CLI loud-fails `MAILGUN_NOT_CONFIGURED`. Still need Stripe/Mailgun/Google/Alpaca for staging E2E (checkout = `PRICE_NOT_CONFIGURED`). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30 Auth Pages) — NOT COMPLETE.** Workspace bootstrap + settings JWT **200** + vault seal + free-tier `TIER_FORBIDDEN` + notify prefs→Agentmail unlocked. Notify CLI loud-fails `MAILGUN_NOT_CONFIGURED`. Staging E2E still needs Stripe/Mailgun/Google/Alpaca. Prod `/olympus/login` **404** until narrow Auth Pages PR merges to `main`.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
-Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-live-retry.md`  
+Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md) · artifact `/opt/cursor/artifacts/kairos-completion-audit-auth-pages.md`  
 Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
-Branch: `cursor/kairos-live-retry-3d52`  
-Compare: https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-live-retry-3d52
+**Auth Pages (merge to `main`):** `cursor/olympus-auth-pages-e036` — https://github.com/digithings-ai/digithings/compare/main...cursor/olympus-auth-pages-e036  
+**Docs/audit (`develop`):** `cursor/kairos-auth-pages-audit-e036`  
+**Do not merge** draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) for the login 404. **Never apply cutover 900** with this Pages fix.
 
 Loud-fail gates (after paste):
 ```bash
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
 ```
+
+### 0a) Merge Auth Pages to `main` (agent-unblocked; human merge)
+
+1. Open/merge compare URL above (`cursor/olympus-auth-pages-e036` → `main`).
+2. Wait for Cloudflare Pages rebuild (`scripts/build-digiquant.sh`; AUTH defaults on under `CF_PAGES` when unset).
+3. Smoke: `https://digiquant.io/olympus/login` → **200** + Login UI (GitHub works; Google still Disabled on `core`).
+4. Keep Access on `/olympus/*` until intentional cutover. Do **not** apply `900_*`.
 
 ---
 

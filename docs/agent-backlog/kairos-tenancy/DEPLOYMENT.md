@@ -57,7 +57,7 @@ Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
 
 | Item | Status |
 |------|--------|
-| `NEXT_PUBLIC_OLYMPUS_AUTH` | Keep **off** (unset/empty) on Cloudflare Pages — safe for pre-cutover promote |
+| `NEXT_PUBLIC_OLYMPUS_AUTH` | Narrow Auth Pages PR defaults **on** under `CF_PAGES=1` when unset (UI gate only; anon RLS remains). Set `=0` to force classic shell. Full tenancy still needs cutover `900` (human, §6) |
 | Cutover `900` | **Not applied**; stays under `migrations/cutover/` (not top-level) |
 | Branch | `cursor/promote-kairos-pages-3d52` = `origin/develop` tip (`f92a8810`, merge of #3181) |
 | Draft PR develop→main | **Not opened** — agent `gh` token can merge/ready existing PRs + push branches, but **cannot** `createPullRequest` / comment / label (`Resource not accessible by integration`). **Parent:** open draft PR `base=main` `head=cursor/promote-kairos-pages-3d52` (title/body recipe in `COMPLETION_AUDIT.md`). |
