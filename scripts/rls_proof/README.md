@@ -22,9 +22,9 @@ real `core` Supabase project.
 ## Migration apply order
 
 1. **Shim** (`00_supabase_shim.sql`)
-2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…101, lexicographic `sort` — same as `db-migrate.yml`)
+2. **develop** top-level `digiquant/supabase/migrations/*.sql` (001…109, lexicographic `sort` — same as `db-migrate.yml`). Includes `109_authenticated_house_teaser_read` (pre-cutover Auth Pages JWT hotfix).
 3. **Kairos/T4 migrations** `099`, `102`–`105` — now canonical in `digiquant/supabase/migrations/`, applied by the same glob (vendor step dropped after the K3–T4 merges)
-4. **Cutover** `digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql` (staged; not auto-applied in CI)
+4. **Cutover** `digiquant/supabase/migrations/cutover/900_drop_anon_read_cutover.sql` (staged; not auto-applied in CI). Section A2 restores 098 membership-only SELECT on the house book tables so 109's teaser does not leak weights to free JWTs after `anon_read` is dropped.
 
 ## Run
 
@@ -64,7 +64,7 @@ LOG=/opt/cursor/artifacts/rls_isolation_proof.log ./scripts/rls_proof/run.sh
 
 ## Re-run at real cutover
 
-After 096–105 are on `core` and cutover `900` is promoted:
+After 096–109 are on `core` and cutover `900` is promoted:
 
 1. Prefer proving against a Supabase branch / preview DB with the same SQL identity switches, **or**
 2. Vendor step dropped 2026-08-30 after K3/K4/K5/T4 merged — the harness now proves the canonical migration chain directly.
