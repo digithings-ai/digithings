@@ -50,21 +50,23 @@ digichat and the marketing site render at identical contrast.
 
 ### Typography
 
-**Canonical fonts (all surfaces), per [`EVOLUTION.md` §4](EVOLUTION.md#4-typography-direction):**
+**Canonical fonts (all surfaces), utilitarian v0.1 — see [`BLEND.md`](BLEND.md):**
 
 | Role                    | Font                             | Weight  | Token(s)                       |
 | ------------------------ | -------------------------------- | ------- | ------------------------------- |
-| Marketing hero display    | Fraunces *or* Instrument Serif   | 400     | `--font-display`                |
-| Dashboard display         | Instrument Serif                 | 400     | `--font-display`                |
-| Body                      | Geist Sans                       | 400–500 | `--font-sans`                   |
-| Labels / eyebrows         | Geist Mono, uppercase, tracked   | 400     | `--font-mono`                   |
-| Data / metrics            | Geist Mono, tabular nums         | 400–600 | `--font-mono` + `qn-metric`     |
+| Display / claims          | Geist Mono                       | 400–500 | `--font-display`                |
+| Body                      | Geist Mono                       | 400     | `--font-sans`                   |
+| Chrome / labels           | Geist Mono, uppercase, tracked   | 400     | `--font-mono`                   |
+| Data / metrics            | Geist Mono, tabular nums         | 400–500 | `--font-mono` + `qn-metric`     |
 | Code                      | Geist Mono                       | 400     | `--font-mono`                   |
 
 `--font-sans`, `--font-mono`, `--font-display` are declared in the
-`[data-theme]` redesign layer of `tokens.css` and are already loaded in
-every Next.js app. **Rule:** serif is display-only on marketing pages;
-dashboards and twelve-x use sans + mono exclusively.
+`[data-theme]` redesign layer of `tokens.css` and all default to the Geist
+Mono stack. **Rule:** one mono voice; hierarchy is size and tracking, not a
+second face. Serif (`serif-legacy` / Instrument Serif or Fraunces) is an
+escape hatch for rare editorial moments — quotes, legal names — never the
+default marketing H1. Product apps that still override with Fraunces are
+Phase 2/3 debt ([`ROLLOUT.md`](ROLLOUT.md)).
 
 **Deprecated:** `--font-family` (`'Inter', …`) and `--font-family-mono`
 (`'JetBrains Mono', …`) are the legacy `:root` tokens — still resolved

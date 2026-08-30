@@ -39,9 +39,9 @@ Do not invent a second design system per product. If a landing needs a new block
 
 ## Phase 1 — Shared React/CSS layer ✅ (this branch)
 
-Sweep `@digithings/web` hardcoded pills and shadcn `--radius-*` fallbacks on chrome (buttons, chips, tabs, cards, toasts). **Keep** true circles (spinners, live dots, avatars, radios, slider thumbs). Align every dress axis (reference *and* chat) with fill-vs-outline, not pills. Loud primary → ink/paper fill in `.ctl-btn-ref--primary`, `.ctl-btn-chat--default`, and reference `.btn-primary`.
+Sweep `@digithings/web` hardcoded pills and shadcn `--radius-*` fallbacks on chrome (buttons, chips, tabs, cards, toasts). **Keep** true circles (spinners, live dots, avatars, radios, slider thumbs). Align every dress axis (reference *and* chat) with fill-vs-outline, not pills. Loud primary → ink/paper fill in `.ctl-btn-ref--primary`, `.ctl-btn-chat--default`, reference `.btn-primary`, `.cw-btn--primary`, composer send, and `design/site/site.css` `.btn-primary`.
 
-Product-local `--radius-*` in digichat no longer wins on shared classes — shared sheets pin `border-radius: 0`.
+Product-local `--radius-*` in digichat no longer wins on shared classes — shared sheets pin `border-radius: 0`. Native nav `<select>` in the design-reference uses appearance:none + opaque canvas fill so the UA does not paint a pill track.
 
 ## Phase 2 — Marketing sites (strip local overrides)
 

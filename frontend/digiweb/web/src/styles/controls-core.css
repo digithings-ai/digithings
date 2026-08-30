@@ -19,8 +19,8 @@
      controls grammar, value-for-value copies of the specimen CSS —
      .btn-primary / .btn-ghost / .btn-quiet / .btn-danger / .btn-icon
      (reference/app/globals.css + styles/nav-shell.css), .ff-input
-     (reference/app/controls/controls.css), and the .dg-tier pill
-     (styles/web-theme.css). Mono type, pill radii, hairline borders,
+     (reference/app/controls/controls.css), and the .dg-tier badge
+     (styles/web-theme.css). Mono type, radius 0, hairline borders,
      srgb color-mix — kept verbatim so a specimen swap is pixel-faithful.
 
    - the CHAT dress (`*-chat` classes): digichat's current shadcn-derived
@@ -436,7 +436,7 @@
   border-radius: 0;
 }
 
-/* ── Badge — reference dress (web-theme.css .dg-tier pill grammar) ──────── */
+/* ── Badge — reference dress (web-theme.css .dg-tier badge grammar) ──────── */
 
 .ctl-badge-ref {
   font-family: var(--font-mono);
