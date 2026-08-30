@@ -240,7 +240,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
-| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) | **Merged** to `develop` (2026-08-30) | notifications wiring + schema/docs align on develop; settings EF **v10** |
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) + [#3177](https://github.com/digithings-ai/digithings/pull/3177) + [#3179](https://github.com/digithings-ai/digithings/pull/3179) | **Merged** to `develop` (2026-08-30) | notifications + schema/docs + cred-push status; settings EF **v11** |
 
 ---
 
