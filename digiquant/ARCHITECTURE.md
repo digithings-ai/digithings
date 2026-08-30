@@ -3354,12 +3354,13 @@ configured.
 **House pipeline proof:** `python scripts/digiquant_house_pipeline_proof.py` lists
 `pipeline-olympus.yml` runs (landed [#3367](https://github.com/digithings-ai/digithings/pull/3367)
 on `develop` `207dd0a68`). Exit **0** only for a **schedule** success strictly
-after #3334 on `main` (`2026-08-31T20:39Z`). `workflow_dispatch` never counts.
-Exit **3** until the next `cron: "0 12 * * *"`. Exit **2** if that schedule
-fails. The CLI refuses `--dispatch` / `--apply`. Fail-softs for the last
-schedule's Gemini schema errors are still human-merge on `main` (#3343 → #3348
-→ #3351 → #3354) — merge them before the cron or checkout `ref: main` stays at
-`3601f72df`.
+after #3334 on `main` (`2026-08-31T20:39Z`) whose `head_sha` is **not** the
+UUID-hotfix prefix `3601f72df`. `workflow_dispatch` never counts. Exit **5**
+while `origin/main` is still `3601f72df` — merge fail-softs #3343 → #3348 →
+#3351 → #3354 before the next cron or checkout `ref: main` still misses those
+writers. Exit **3** until a counting `cron: "0 12 * * *"` (including a schedule
+that ran on `3601f72df` after fail-softs landed). Exit **2** if a counting
+schedule fails. The CLI refuses `--dispatch` / `--apply`.
 
 **Entry points:**
 

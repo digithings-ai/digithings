@@ -33,7 +33,8 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_staging_e2e.py
 # Observer also requires POST /settings/access/redeem-invite (short dummy →
 # INVITE_INVALID). Live v32 404s that route until --apply.
 PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_house_pipeline_proof.py
-# schedule success after #3334 only; never workflow_dispatch. Exit 3 until 12:00 UTC.
+# exit 5 while origin/main is still 3601f72df (merge #3343 → #3348 → #3351 → #3354
+# before cron). Exit 3 until a counting 0 12 * * * schedule. Never workflow_dispatch.
 PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_route_cron.py --check
 # --dry-run never submits. --all requires DIGIQUANT_EXECUTION_ROUTING=1 (default off → exit 3).
 PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_cron_check.py

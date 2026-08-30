@@ -74,14 +74,15 @@ Wave E
       [#3332](https://github.com/digithings-ai/digithings/pull/3332) (atlas-graph
       red: `test_h9_is_the_only_ledger_writer`; overlaps #3335 `_json_safe`).
       Next scheduled GHA (`cron: "0 12 * * *"`, ~12:00 UTC) is still the live
-      *pipeline* book-commit proof (`python scripts/kairos_house_pipeline_proof.py`,
+      *pipeline* book-commit proof (`python scripts/digiquant_house_pipeline_proof.py`,
       [#3367](https://github.com/digithings-ai/digithings/pull/3367) on `develop`
-      `207dd0a68`; live exit 3 until that schedule). Human should merge fail-softs
+      `207dd0a68`). The CLI exits **5** while `origin/main` is still UUID-hotfix
+      `3601f72df` so a 12:00 UTC checkout would miss fail-softs
       [#3343](https://github.com/digithings-ai/digithings/pull/3343) →
       [#3348](https://github.com/digithings-ai/digithings/pull/3348) →
       [#3351](https://github.com/digithings-ai/digithings/pull/3351) →
-      [#3354](https://github.com/digithings-ai/digithings/pull/3354) onto `main`
-      **before** that cron so checkout `ref: main` includes them. Do **not**
+      [#3354](https://github.com/digithings-ai/digithings/pull/3354). Human should
+      merge those onto `main` **before** that cron. Do **not**
       `workflow_dispatch`; do **not** apply staged 113 while main writers still
       upsert date-only. Unit green is not a substitute for a green house publish.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
@@ -104,9 +105,10 @@ Wave E
 
 **Verdict: NOT COMPLETE** — staging E2E still blocked on Stripe/Mailgun/Alpaca OAuth
 captchas and Google Auth. All 12 WPs have code on `develop`. This branch adds
-production cron CLIs, remaining-hop proofs from Settings product state, staged
-900 §A2 membership-only restore, and a fail-closed GHA **spec** (not installed:
-`cursor/*` cannot write `.github/workflows/`).
+production cron CLIs, remaining-hop proofs from Settings product state, and staged
+900 §A2 membership-only restore. House cron-check GHA is installed
+(`kairos-cron-check.yml`, [#3380](https://github.com/digithings-ai/digithings/pull/3380));
+`cursor/*` still cannot rename workflow files.
 
 **Schema (`core`):** migrations **096–110** plus **112** applied. `110_anon_house_only_private_books`
 narrows `anon_read` on private books to house; documents house+system. **112**
