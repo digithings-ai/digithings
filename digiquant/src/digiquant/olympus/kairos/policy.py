@@ -6,9 +6,10 @@ does **not** store an execution-policy column on ``workspaces`` (T0's table is
 untouched by this work package; a richer stored policy lands with T4). Instead
 venue is resolved from:
 
-1. **House / system** (``workspace_id is None``) → always
+1. **House / system** — ``workspace_id is None`` **or** the well-known
+   ``house_workspace_id()`` / ``system_workspace_id()`` UUIDs → always
    :attr:`~digiquant.brokers.contracts.ExecutionVenue.PAPER_INTERNAL`,
-   hard-coded, not configurable.
+   hard-coded, not configurable. Those identities can never route externally.
 2. **Kill switch** ``OLYMPUS_KAIROS_ROUTING`` (default **off** / absent) → only
    ``PAPER_INTERNAL`` is reachable regardless of connections. Polarity is the
    inverse of ``OLYMPUS_PORTFOLIO_LEDGER`` (ledger defaults on; routing defaults
@@ -16,11 +17,15 @@ venue is resolved from:
 3. **Active paper connection** (kill switch on) → the matching paper venue
    (``alpaca`` → ``ALPACA_PAPER``, ``ibkr`` → ``IBKR_PAPER``). Exactly one active
    paper broker is required; zero → ``PAPER_INTERNAL``; two or more →
-   :class:`AmbiguousVenueError`.
+   :class:`AmbiguousVenueError`. Live broker / venue names in
+   ``active_paper_brokers`` raise
+   :class:`~digiquant.brokers.contracts.LiveVenueNotAuthorizedError` on the
+   public API (not a bare ``ValueError``).
 4. **Any ``*_LIVE`` value** attempting to leave this function →
    :class:`~digiquant.brokers.contracts.LiveVenueNotAuthorizedError`
-   (test-pinned invariant). Live is enumerated on ``ExecutionVenue`` for
-   vocabulary completeness only; nothing here ever returns one.
+   (test-pinned invariant on the public path). Live is enumerated on
+   ``ExecutionVenue`` for vocabulary completeness only; nothing here ever
+   returns one.
 
 Callers that need to look up connections do so themselves (via
 :mod:`digiquant.brokers.connections`) and pass the resulting broker names into
@@ -36,6 +41,7 @@ from uuid import UUID
 
 from digiquant.brokers.connections import Broker
 from digiquant.brokers.contracts import ExecutionVenue, LiveVenueNotAuthorizedError
+from digiquant.olympus.tenancy import house_workspace_id, system_workspace_id
 
 _ROUTING_ENV = "OLYMPUS_KAIROS_ROUTING"
 # Opt-in (default off). Mirror the *shape* of ledger_io's env parse, not its polarity.
@@ -52,6 +58,7 @@ _LIVE_VENUES = frozenset(
         ExecutionVenue.IBKR_LIVE,
     }
 )
+_LIVE_VENUE_VALUES = frozenset(v.value for v in _LIVE_VENUES)
 
 
 class AmbiguousVenueError(ValueError):
@@ -72,6 +79,16 @@ class InconsistentOrderChainError(ValueError):
     """
 
 
+class ForeignWorkspaceIntentError(ValueError):
+    """A ledger row the router would consume does not match the connection workspace.
+
+    The router is an authority boundary: it may only act on
+    ``connection.workspace_id``'s intents. A missing or mismatched
+    ``workspace_id`` on a consumed row is refused loudly — never skipped as a
+    quiet no-op that could hide a tenancy bug.
+    """
+
+
 def routing_enabled() -> bool:
     """Whether external venue routing is reachable. Defaults to **off**.
 
@@ -82,50 +99,98 @@ def routing_enabled() -> bool:
     return os.environ.get(_ROUTING_ENV, "").strip().lower() in _ON_VALUES
 
 
-def _coerce_broker(raw: Broker | str) -> Broker:
-    return raw if isinstance(raw, Broker) else Broker(str(raw).strip().lower())
+def is_house_or_system_workspace(workspace_id: UUID | None) -> bool:
+    """True for ``None`` and the well-known house / system workspace UUIDs."""
+    if workspace_id is None:
+        return True
+    return workspace_id in {house_workspace_id(), system_workspace_id()}
+
+
+def _reject_live_token(raw: str) -> None:
+    """Raise :class:`LiveVenueNotAuthorizedError` for live venue / broker tokens."""
+    text = raw.strip().lower()
+    if text in _LIVE_VENUE_VALUES or text.endswith("_live") or text == "live":
+        raise LiveVenueNotAuthorizedError(
+            f"resolve_venue refused live token {raw!r}; "
+            "live routing is not authorized in this program"
+        )
+
+
+def _coerce_broker(raw: Broker | str | ExecutionVenue) -> Broker:
+    """Coerce a paper broker token; live tokens raise on the public API."""
+    if isinstance(raw, Broker):
+        return raw
+    if isinstance(raw, ExecutionVenue):
+        _assert_not_live(raw)
+        # Map paper venues back to brokers; PAPER_INTERNAL is not a broker.
+        for broker, venue in _BROKER_TO_PAPER_VENUE.items():
+            if raw is venue:
+                return broker
+        raise LiveVenueNotAuthorizedError(
+            f"resolve_venue refused venue {raw.value!r}; "
+            "only paper broker venues may appear in active_paper_brokers"
+        )
+    text = str(raw).strip().lower()
+    _reject_live_token(text)
+    try:
+        return Broker(text)
+    except ValueError as exc:
+        if "live" in text:
+            raise LiveVenueNotAuthorizedError(
+                f"resolve_venue refused live token {raw!r}; "
+                "live routing is not authorized in this program"
+            ) from exc
+        raise
 
 
 def resolve_venue(
     workspace_id: UUID | None,
     *,
-    active_paper_brokers: Sequence[Broker | str] = (),
+    active_paper_brokers: Sequence[Broker | str | ExecutionVenue] = (),
 ) -> ExecutionVenue:
     """Resolve the execution venue for a workspace (or the house book).
 
     Parameters
     ----------
     workspace_id:
-        ``None`` for the house / system cron path — always ``PAPER_INTERNAL``.
+        ``None``, ``house_workspace_id()``, or ``system_workspace_id()`` → always
+        ``PAPER_INTERNAL`` (hard-coded). Caller must pass the identity through
+        unchanged — do not substitute a connection's workspace for ``None``.
     active_paper_brokers:
         Brokers with an **active** ``broker_connections`` row in the ``paper``
-        env for this workspace. Ignored when the kill switch is off or when
-        ``workspace_id is None``. Pass the result of listing connections; do
-        not pass live-env brokers (they are ignored here and live venues can
-        never be returned).
+        env for this workspace. Ignored when the kill switch is off or when the
+        workspace is house/system. Live venue / broker tokens raise
+        :class:`LiveVenueNotAuthorizedError` (public-API contract).
 
     Returns
     -------
     ExecutionVenue
-        Never a ``*_LIVE`` member. Raising on live is the test-pinned invariant
-        that keeps this function honest if a future caller tries to force one
-        through ``active_paper_brokers`` via an unexpected mapping.
+        Never a ``*_LIVE`` member.
 
     Raises
     ------
     AmbiguousVenueError
-        Kill switch on, workspace set, and two or more distinct paper brokers
+        Kill switch on, tenant workspace, and two or more distinct paper brokers
         are active.
     LiveVenueNotAuthorizedError
-        Internal invariant: any path that would produce a ``*_LIVE`` venue.
+        Any live venue / broker token in ``active_paper_brokers``, or any path
+        that would produce a ``*_LIVE`` venue.
     """
-    if workspace_id is None:
+    if is_house_or_system_workspace(workspace_id):
+        # Still reject live tokens so the public API never silently accepts them
+        # even when the workspace hard-codes PAPER_INTERNAL.
+        if active_paper_brokers:
+            tuple(_coerce_broker(b) for b in active_paper_brokers)
         return ExecutionVenue.PAPER_INTERNAL
+
+    # Validate live tokens before the kill-switch early return so
+    # ``resolve_venue(..., active_paper_brokers=["alpaca_live"])`` raises
+    # ``LiveVenueNotAuthorizedError`` on the public API regardless of env.
+    brokers = tuple(dict.fromkeys(_coerce_broker(b) for b in active_paper_brokers))
 
     if not routing_enabled():
         return ExecutionVenue.PAPER_INTERNAL
 
-    brokers = tuple(dict.fromkeys(_coerce_broker(b) for b in active_paper_brokers))
     if not brokers:
         return ExecutionVenue.PAPER_INTERNAL
     if len(brokers) > 1:
@@ -142,7 +207,7 @@ def resolve_venue(
 
 
 def _assert_not_live(venue: ExecutionVenue) -> None:
-    """Raise if ``venue`` is any ``*_LIVE`` member — test-pinned invariant."""
+    """Raise if ``venue`` is any ``*_LIVE`` member — defense-in-depth."""
     if venue in _LIVE_VENUES or venue.value.endswith("_live"):
         raise LiveVenueNotAuthorizedError(
             f"resolve_venue refused live venue {venue.value!r}; "
@@ -152,7 +217,9 @@ def _assert_not_live(venue: ExecutionVenue) -> None:
 
 __all__ = [
     "AmbiguousVenueError",
+    "ForeignWorkspaceIntentError",
     "InconsistentOrderChainError",
+    "is_house_or_system_workspace",
     "routing_enabled",
     "resolve_venue",
 ]

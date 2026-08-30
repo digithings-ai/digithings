@@ -446,6 +446,9 @@ def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
     ``broker_connections`` row is supplied — that path is wired by the Kairos
     router, not by mutating the paper-fill writer.
 
+    Invalid / empty ``OLYMPUS_KAIROS_WORKSPACE_ID`` values warn and fall back to
+    ``None`` (house) rather than crashing the open job.
+
     Returns the venue's string value (``ExecutionVenue`` value) so this script
     does not need a top-level digiquant import at module load time.
     """
@@ -455,8 +458,17 @@ def resolve_execution_venue_for_run(workspace_id: Optional[str] = None) -> str:
     from digiquant.olympus.kairos.policy import resolve_venue
 
     resolved: Optional[UUID] = None
-    if workspace_id:
-        resolved = UUID(str(workspace_id))
+    raw = (workspace_id or "").strip()
+    if raw:
+        try:
+            resolved = UUID(raw)
+        except ValueError:
+            print(
+                f"⚠️  OLYMPUS_KAIROS_WORKSPACE_ID={workspace_id!r} is not a valid UUID; "
+                f"treating as house (paper_internal).",
+                file=sys.stderr,
+            )
+            resolved = None
     return resolve_venue(resolved).value
 
 
