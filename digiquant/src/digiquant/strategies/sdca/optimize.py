@@ -19,6 +19,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from digiquant.data.loader import load_ohlcv_csv
 from digiquant.models import OptimizeResult
 from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, fit_btc_power_law
+from digiquant.strategies.sdca.indicator_catalog import (
+    ExtraIndicatorSources,
+    SdcaCompositeWeights,
+    composite_weights_from_params,
+    extra_indicators_for_window,
+    extra_z_vectors,
+    load_date_value_frame,
+    missing_extra_names,
+)
 from digiquant.strategies.sdca.risk_model import RiskModel
 from digiquant.strategies.sdca.walk_forward import (
     SENSITIVITY_SPIKE_PCT,
@@ -55,6 +64,9 @@ SDCA_SHAPE_DEFAULTS: dict[str, float] = {
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
     "valuation_weight": 1.0,
+    "m2_weight": 0.0,
+    "rs_eth_weight": 0.0,
+    "dxy_weight": 0.0,
 }
 
 
@@ -149,6 +161,60 @@ def load_sdca_ohlcv(
     return dates, prices
 
 
+def _first_existing(root: Path, names: tuple[str, ...]) -> Path | None:
+    for name in names:
+        candidate = root / name
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def load_sdca_extra_z(
+    dates: list[date],
+    prices: list[float],
+    *,
+    data_path: str | Path | None,
+    data_dir: str | Path | None,
+) -> dict[str, list[float | None]]:
+    """Load independent extras from sibling files next to the BTC OHLCV CSV.
+
+    Looks for ``M2SL.csv``/``M2.csv``, ``ETH-USD.csv``, ``DTWEXBGS.csv``/``DXY.csv``.
+    Missing files omit that extra (trials that need it are skipped).
+    """
+    root = Path(data_path).parent if data_path is not None else None
+    if root is None and data_dir is not None:
+        root = Path(data_dir)
+    if root is None:
+        return {}
+    m2_path = _first_existing(root, ("M2SL.csv", "M2.csv", "M2SL.parquet"))
+    eth_path = _first_existing(root, ("ETH-USD.csv", "ETH-USD.parquet"))
+    dxy_path = _first_existing(root, ("DTWEXBGS.csv", "DXY.csv", "DTWEXBGS.parquet"))
+    m2_dates, m2_values = load_date_value_frame(m2_path) if m2_path else (None, None)
+    eth_dates, eth_close = load_date_value_frame(eth_path) if eth_path else (None, None)
+    dxy_dates, dxy_values = load_date_value_frame(dxy_path) if dxy_path else (None, None)
+    weights = SdcaCompositeWeights(
+        valuation=1.0,
+        m2=1.0 if m2_dates is not None else 0.0,
+        rs_eth=1.0 if eth_dates is not None else 0.0,
+        dxy=1.0 if dxy_dates is not None else 0.0,
+    )
+    if not weights.enabled_extras():
+        return {}
+    return extra_z_vectors(
+        pl.Series("date", list(dates), dtype=pl.Date),
+        pl.Series("price", list(prices), dtype=pl.Float64),
+        weights,
+        ExtraIndicatorSources(
+            m2_dates=m2_dates,
+            m2_values=m2_values,
+            eth_dates=eth_dates,
+            eth_close=eth_close,
+            dxy_dates=dxy_dates,
+            dxy_values=dxy_values,
+        ),
+    )
+
+
 def _mean_oos(scores: list[FoldScore]) -> float:
     if not scores:
         return float("-inf")
@@ -181,6 +247,7 @@ def run_sdca_walk_forward(
     holdout_frac: float = 0.2,
     oos_frac: float = 0.25,
     sensitivity_frac: float = 0.05,
+    extra_z: dict[str, list[float | None]] | None = None,
 ) -> SdcaWalkForwardResult:
     """Search ``trials`` under walk-forward; score the winner on the held-out tail."""
     obj = objective or SdcaOptimizeObjective()
@@ -193,8 +260,12 @@ def run_sdca_walk_forward(
         merged = {**SDCA_SHAPE_DEFAULTS, **params}
         if not params_are_valid(merged):
             continue
+        if missing_extra_names(composite_weights_from_params(merged), extra_z):
+            continue
         evaluated += 1
-        scores = score_trial_on_folds(merged, dates, prices, folds, rails_fitter, evaluator, obj)
+        scores = score_trial_on_folds(
+            merged, dates, prices, folds, rails_fitter, evaluator, obj, extra_z=extra_z
+        )
         ranked.append((_trial_oos_objective(scores, obj), merged, scores))
     if not ranked:
         raise ValueError("no valid SDCA trials to evaluate")
@@ -215,9 +286,10 @@ def run_sdca_walk_forward(
         evaluator,
         obj,
         sensitivity_frac,
+        extra_z,
     )
     holdout_metrics = _holdout_metrics(
-        best_params, dates, prices, folds, holdout, rails_fitter, evaluator
+        best_params, dates, prices, folds, holdout, rails_fitter, evaluator, extra_z
     )
     return SdcaWalkForwardResult(
         best_params=best_params,
@@ -246,12 +318,22 @@ def _sensitivity_of(
     evaluator: SdcaTrialEvaluator,
     objective: SdcaOptimizeObjective,
     frac: float,
+    extra_z: dict[str, list[float | None]] | None,
 ) -> SensitivityReport:
     deltas: list[float] = []
     neighbors = sensitivity_neighbors(best_params, frac=frac)
     for neighbor in neighbors:
+        if missing_extra_names(composite_weights_from_params(neighbor), extra_z):
+            continue
         scores = score_trial_on_folds(
-            neighbor, dates, prices, folds, rails_fitter, evaluator, objective
+            neighbor,
+            dates,
+            prices,
+            folds,
+            rails_fitter,
+            evaluator,
+            objective,
+            extra_z=extra_z,
         )
         deltas.append(abs(_mean_oos(scores) - mean_oos))
     max_delta = max(deltas) if deltas else 0.0
@@ -272,6 +354,7 @@ def _holdout_metrics(
     holdout: tuple[date, date],
     rails_fitter: RailsFitter,
     evaluator: SdcaTrialEvaluator,
+    extra_z: dict[str, list[float | None]] | None,
 ) -> SdcaTrialMetrics:
     """Fit rails on the searchable span (everything before holdout), score the tail."""
     search_end = folds[-1].oos_end
@@ -279,8 +362,9 @@ def _holdout_metrics(
     hold_dates, hold_prices = window_slice(dates, prices, holdout[0], holdout[1])
     model = rails_fitter(search_dates, search_prices)
     shape = shape_from_params(params)
-    weight = float(params.get("valuation_weight", 1.0))
-    return evaluator(hold_dates, hold_prices, model, shape, weight)
+    weights = composite_weights_from_params(params)
+    extras = extra_indicators_for_window(hold_dates, dates, extra_z or {}, weights)
+    return evaluator(hold_dates, hold_prices, model, shape, weights.valuation, extras)
 
 
 def persist_btc_optimized(
@@ -370,6 +454,7 @@ __all__ = [
     "SdcaWalkForwardResult",
     "SensitivityReport",
     "btc_power_law_rails_fitter",
+    "load_sdca_extra_z",
     "load_sdca_ohlcv",
     "persist_btc_optimized",
     "run_sdca_walk_forward",

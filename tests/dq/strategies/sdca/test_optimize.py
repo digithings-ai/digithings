@@ -39,6 +39,7 @@ _HIDDEN = {
     "buy_curvature": 1.0,
     "sell_curvature": 2.0,
     "valuation_weight": 1.0,
+    "m2_weight": 0.0,
 }
 
 
@@ -49,9 +50,7 @@ def _dates(n: int = 60) -> list[date]:
 class _ConstRails:
     def rails(self, dates: pl.Series) -> pl.DataFrame:
         n = dates.len()
-        return pl.DataFrame(
-            {"low": [50.0] * n, "median": [100.0] * n, "high": [200.0] * n}
-        )
+        return pl.DataFrame({"low": [50.0] * n, "median": [100.0] * n, "high": [200.0] * n})
 
 
 def _fitter(dates: list[date], prices: list[float]) -> RiskModel:
@@ -59,13 +58,14 @@ def _fitter(dates: list[date], prices: list[float]) -> RiskModel:
     return _ConstRails()
 
 
-def _distance(shape: SdcaCurveShape, weight: float) -> float:
+def _distance(shape: SdcaCurveShape, weight: float, m2_weight: float = 0.0) -> float:
     return (
         (shape.buy_max_rate - _HIDDEN["buy_max_rate"]) ** 2
         + ((shape.buy_knee_risk - _HIDDEN["buy_knee_risk"]) / 10.0) ** 2
         + ((shape.sell_knee_risk - _HIDDEN["sell_knee_risk"]) / 10.0) ** 2
         + (shape.sell_max_rate - _HIDDEN["sell_max_rate"]) ** 2
         + (weight - _HIDDEN["valuation_weight"]) ** 2
+        + (m2_weight - _HIDDEN.get("m2_weight", 0.0)) ** 2
     )
 
 
@@ -75,10 +75,15 @@ def _evaluator(
     model: RiskModel,
     shape: SdcaCurveShape,
     valuation_weight: float,
+    extra_indicators: object = None,
 ) -> SdcaTrialMetrics:
     assert isinstance(model, _ConstRails)
-    # Shorter (OOS) windows score slightly worse so the IS/OOS gap is visible.
-    vs_flat = 5.0 - _distance(shape, valuation_weight) - 0.02 * len(dates)
+    extras = extra_indicators or []
+    m2_w = 0.0
+    for ind in extras:
+        if getattr(ind, "name", "") == "m2":
+            m2_w = float(ind.weight)
+    vs_flat = 5.0 - _distance(shape, valuation_weight, m2_w) - 0.02 * len(dates)
     return SdcaTrialMetrics(
         vs_flat_dca_pct=vs_flat,
         vs_lump_pct=-1.0,
@@ -102,11 +107,16 @@ class TestStrategySpecsSdca:
             "buy_curvature",
             "sell_curvature",
             "valuation_weight",
+            "m2_weight",
+            "rs_eth_weight",
+            "dxy_weight",
         ):
             assert name in specs
         lo_buy, hi_buy, _, _, _ = specs["buy_knee_risk"]
         lo_sell, hi_sell, _, _, _ = specs["sell_knee_risk"]
         assert hi_buy < lo_sell
+        assert specs["valuation_weight"][0] == 0.0
+        assert specs["m2_weight"][2] == 0.0
 
     def test_alias_get_param_specs(self) -> None:
         assert set(get_param_specs("btc_sdca")) == set(get_param_specs("sdca"))
@@ -150,9 +160,7 @@ class TestWalkForwardSearch:
             evaluator=_evaluator,
             evaluator_label="synthetic_fixture",
         )
-        opt = walk_forward_to_optimize_result(
-            result, strategy_name="sdca", symbols=["BTC-USD"]
-        )
+        opt = walk_forward_to_optimize_result(result, strategy_name="sdca", symbols=["BTC-USD"])
         assert opt.best_backtest is None
         assert "mean_oos_vs_flat_dca_pct" in opt.message
         assert "beats_flat_dca_oos" in opt.message
@@ -245,9 +253,47 @@ class TestPersistAndDispatch:
         trials = _sdca_trials(None, "grid", 10, None)
         assert trials
         assert all("buy_curvature" not in t or t["buy_curvature"] == 1.0 for t in trials)
-        assert len(trials) == len(infer_param_grid(
-            "sdca",
-            num_points_per_param=2,
-            exclude_params={"buy_curvature", "sell_curvature", "trade_size"},
-            base_params={"buy_curvature": 1.0, "sell_curvature": 2.0},
-        ))
+        extra_keys = {"m2_weight", "rs_eth_weight", "dxy_weight"}
+        assert all(t.get(k, 0.0) == 0.0 for t in trials for k in extra_keys)
+        assert len(trials) == len(
+            infer_param_grid(
+                "sdca",
+                num_points_per_param=2,
+                exclude_params={
+                    "buy_curvature",
+                    "sell_curvature",
+                    "trade_size",
+                    *extra_keys,
+                },
+                base_params={
+                    "buy_curvature": 1.0,
+                    "sell_curvature": 2.0,
+                    "m2_weight": 0.0,
+                    "rs_eth_weight": 0.0,
+                    "dxy_weight": 0.0,
+                },
+            )
+        )
+
+    def test_random_samples_include_extra_weights(self) -> None:
+        samples = sample_random_params("sdca", n=20)
+        assert all("m2_weight" in s and "rs_eth_weight" in s and "dxy_weight" in s for s in samples)
+        assert min(s["m2_weight"] for s in samples) < max(s["m2_weight"] for s in samples)
+
+    def test_walk_forward_searches_extra_weights(self) -> None:
+        dates = _dates()
+        prices = [100.0 + i for i in range(len(dates))]
+        hidden = {**_HIDDEN, "valuation_weight": 0.4, "m2_weight": 0.6}
+        worse = {**SDCA_SHAPE_DEFAULTS, "m2_weight": 0.0, "valuation_weight": 1.0}
+        extra_z = {"m2": [0.0] * len(dates)}
+        result = run_sdca_walk_forward(
+            dates,
+            prices,
+            [worse, dict(hidden)],
+            rails_fitter=_fitter,
+            evaluator=_evaluator,
+            evaluator_label="synthetic_fixture",
+            extra_z=extra_z,
+        )
+        assert result.best_params["m2_weight"] == pytest.approx(0.6)
+        assert result.best_params["valuation_weight"] == pytest.approx(0.4)

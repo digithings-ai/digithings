@@ -212,9 +212,13 @@ from digiquant.strategies.sdca.optimize import persist_btc_optimized, run_sdca_w
 `run_optimize(strategy_name='sdca'|'btc_sdca', ...)` is the MCP/HTTP path
 (`digiquant_run_optimize`). Objective is maximize `vs_flat_dca_pct` subject to
 a 10% capital-deployed floor and a 50% drawdown cap — **not** vs-lump, **not**
-Sharpe. Persist with `persist_btc_optimized()` and commit the provenance JSON
-even if OOS vs-flat-DCA is negative. Do not publish `btc_optimized` to
-digiquant.io from this WP.
+Sharpe. Extra-indicator weights (`m2_weight`, `rs_eth_weight`, `dxy_weight`)
+are searched by `method=random`/`bayesian` or an explicit `param_grid`; auto-grid
+holds them at 0 (valuation-only, current BTC charts). Place `M2SL.csv`,
+`ETH-USD.csv`, and/or `DTWEXBGS.csv` next to the BTC OHLCV file to enable those
+rails — missing files skip trials that need them. Persist with
+`persist_btc_optimized()` and commit the provenance JSON even if OOS vs-flat-DCA
+is negative. Do not publish `btc_optimized` to digiquant.io from this WP.
 
 ### SDCA test commands
 

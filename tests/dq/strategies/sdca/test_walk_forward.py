@@ -130,6 +130,7 @@ class TestRailsRefitPerFold:
             model: RiskModel,
             shape: SdcaCurveShape,
             weight: float,
+            extra_indicators: object = None,
         ) -> SdcaTrialMetrics:
             assert isinstance(model, _ConstRails)
             assert 0.5 <= weight <= 1.0

@@ -1,8 +1,9 @@
 """Walk-forward schedule and DCA-native objective for SDCA (#3174).
 
 The owner's curve *shape* is frozen (#3169). This module searches the six
-bounded parameters plus ``valuation_weight``. The primary score is
-``vs_flat_dca_pct`` (did the signal beat blind averaging?) subject to a
+bounded parameters plus composite indicator weights (``valuation_weight`` and
+optional ``m2_weight`` / ``rs_eth_weight`` / ``dxy_weight``). The primary score
+is ``vs_flat_dca_pct`` (did the signal beat blind averaging?) subject to a
 capital-deployed floor and a drawdown cap. ``vs_lump_pct`` is reported, never
 optimized — maximizing it collapses to lump-sum on an uptrend.
 
@@ -14,13 +15,18 @@ full-history fit for every fold is forbidden here.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.sdca.indicator_catalog import (
+    composite_weights_from_params,
+    extra_indicators_for_window,
+)
 from digiquant.strategies.sdca.risk_model import RiskModel
 
 RailsFitter = Callable[[Sequence[date], Sequence[float]], RiskModel]
@@ -80,6 +86,7 @@ class SdcaTrialEvaluator(Protocol):
         risk_model: RiskModel,
         shape: SdcaCurveShape,
         valuation_weight: float,
+        extra_indicators: Sequence[IndicatorWeight] | None = None,
     ) -> SdcaTrialMetrics: ...
 
 
@@ -157,18 +164,18 @@ def shape_from_params(params: dict[str, float | int | str]) -> SdcaCurveShape:
 
 
 def params_are_valid(params: dict[str, float | int | str]) -> bool:
-    """True when the six shape fields satisfy ``SdcaCurveShape`` invariants."""
+    """True when shape invariants hold and at least one indicator weight is > 0."""
     try:
         shape_from_params(params)
+        composite_weights_from_params(params)
     except (KeyError, TypeError, ValueError):
         return False
     return True
 
 
 def valuation_weight_from_params(params: dict[str, float | int | str]) -> float:
-    """Indicator weight; defaults to 1.0 (valuation-only) when omitted."""
-    raw = params.get("valuation_weight", 1.0)
-    return float(raw)
+    """Valuation rail weight; defaults to 1.0 (valuation-only) when omitted."""
+    return composite_weights_from_params(params).valuation
 
 
 def window_slice(
@@ -213,23 +220,40 @@ def score_trial_on_folds(
     rails_fitter: RailsFitter,
     evaluator: SdcaTrialEvaluator,
     objective: SdcaOptimizeObjective,
+    extra_z: Mapping[str, Sequence[float | None]] | None = None,
 ) -> list[FoldScore]:
     """Refit rails on each fold's IS window, then score IS and OOS on those rails.
 
     OOS never enters ``rails_fitter`` — #3173 truncated quadratic log-time fits
-    do not extrapolate, so a full-history fit would leak and mislead.
+    do not extrapolate, so a full-history fit would leak and mislead. Extra-z
+    series are sliced from a full-calendar causal precompute (no OOS refit).
     """
     if not params_are_valid(params):
         raise ValueError("params do not form a valid SdcaCurveShape")
     shape = shape_from_params(params)
-    weight = valuation_weight_from_params(params)
+    weights = composite_weights_from_params(params)
+    zmap = extra_z or {}
     scores: list[FoldScore] = []
     for fold in folds:
         is_dates, is_prices = window_slice(dates, prices, fold.is_start, fold.is_end)
         oos_dates, oos_prices = window_slice(dates, prices, fold.oos_start, fold.oos_end)
         model = rails_fitter(is_dates, is_prices)
-        in_sample = evaluator(is_dates, is_prices, model, shape, weight)
-        out_of_sample = evaluator(oos_dates, oos_prices, model, shape, weight)
+        in_sample = evaluator(
+            is_dates,
+            is_prices,
+            model,
+            shape,
+            weights.valuation,
+            extra_indicators_for_window(is_dates, dates, zmap, weights),
+        )
+        out_of_sample = evaluator(
+            oos_dates,
+            oos_prices,
+            model,
+            shape,
+            weights.valuation,
+            extra_indicators_for_window(oos_dates, dates, zmap, weights),
+        )
         scores.append(
             FoldScore(
                 fold=fold,

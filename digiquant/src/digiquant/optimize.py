@@ -292,7 +292,11 @@ def _sdca_trials(
     n_trials: int,
     base_params: dict[str, float | int | str] | None,
 ) -> list[dict[str, float | int | str]]:
-    """SDCA search points. Auto-grid drops curvatures (held at defaults) to stay small."""
+    """SDCA search points. Auto-grid drops curvatures and extra-indicator
+    weights (held at defaults: valuation=1, extras=0) so the grid stays small.
+    Random/bayesian and an explicit ``param_grid`` search the extra weights.
+    """
+    extra_weight_keys = {"m2_weight", "rs_eth_weight", "dxy_weight"}
     if param_grid is not None:
         return param_grid
     if method in {"random", "bayesian"}:
@@ -302,10 +306,18 @@ def _sdca_trials(
         base_params={
             "buy_curvature": 1.0,
             "sell_curvature": 2.0,
+            "m2_weight": 0.0,
+            "rs_eth_weight": 0.0,
+            "dxy_weight": 0.0,
             **dict(base_params or {}),
         },
         num_points_per_param=2,
-        exclude_params={"buy_curvature", "sell_curvature", "trade_size"},
+        exclude_params={
+            "buy_curvature",
+            "sell_curvature",
+            "trade_size",
+            *extra_weight_keys,
+        },
     )
 
 
@@ -323,6 +335,7 @@ def _run_sdca_optimize(
     """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe."""
     from digiquant.strategies.sdca.optimize import (
         btc_power_law_rails_fitter,
+        load_sdca_extra_z,
         load_sdca_ohlcv,
         run_sdca_walk_forward,
         walk_forward_to_optimize_result,
@@ -335,6 +348,7 @@ def _run_sdca_optimize(
             "SDCA walk-forward requires nautilus_trader (install digiquant[nautilus])."
         ) from exc
     dates, prices = load_sdca_ohlcv(symbols=symbols, data_path=data_path, data_dir=data_dir)
+    extra_z = load_sdca_extra_z(dates, prices, data_path=data_path, data_dir=data_dir)
     result = run_sdca_walk_forward(
         dates,
         prices,
@@ -342,5 +356,6 @@ def _run_sdca_optimize(
         rails_fitter=btc_power_law_rails_fitter,
         evaluator=evaluate_sdca_trial_nautilus,
         evaluator_label="nautilus",
+        extra_z=extra_z,
     )
     return walk_forward_to_optimize_result(result, strategy_name=strategy_name, symbols=symbols)

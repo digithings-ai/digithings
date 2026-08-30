@@ -373,6 +373,10 @@ def create_mcp_server() -> Any:
         risk_model: str = "btc_power_law",
         coefficients_path: str | None = None,
         output_path: str | None = None,
+        indicator_weights: str = "{}",
+        m2_path: str | None = None,
+        dxy_path: str | None = None,
+        eth_ticker: str = "ETH-USD",
     ) -> str:
         """Build the SDCA ``date``/``risk`` parquet from a ``RiskModel`` + cached prices (#3168).
 
@@ -382,7 +386,12 @@ def create_mcp_server() -> Any:
         ``refresh=False`` reads whatever is already cached. ``risk_model`` is a
         string selector so later providers (#3175) can be added without changing
         this signature; currently only ``"btc_power_law"`` is implemented.
-        Writes the two-column parquet ``SdcaStrategy`` loads via ``risk_path``.
+        ``indicator_weights`` is a JSON object ``{valuation, m2, rs_eth, dxy}``.
+        Default ``valuation=1`` and extras ``0`` keeps the published BTC chart
+        on a single rail. Positive extra weights require ``m2_path`` /
+        ``dxy_path`` (FRED CSV/parquet already on disk) and/or cached
+        ``eth_ticker`` in the same ``cache_dir``. Writes the two-column parquet
+        ``SdcaStrategy`` loads via ``risk_path``.
         Returns JSON ``{path, row_count, date_start, date_end, null_risk_days}``
         or ``{"error": ...}`` (never raises — missing cache / coefficients /
         unknown selector surface as error JSON).
@@ -400,6 +409,11 @@ def create_mcp_server() -> Any:
             from digiquant.strategies.sdca.btc_power_law import (
                 BtcPowerLawRiskModel,
                 load_coefficients,
+            )
+            from digiquant.strategies.sdca.indicator_catalog import (
+                build_extra_indicators,
+                parse_indicator_weights_json,
+                sources_from_optional_paths,
             )
             from digiquant.strategies.sdca.risk_index import (
                 RiskIndexBuildResult,
@@ -434,7 +448,41 @@ def create_mcp_server() -> Any:
                 .sort("date")
             )
             model = BtcPowerLawRiskModel(load_coefficients(coeff_path))
-            frame = build_risk_index(prices["date"], prices["close"], model)
+            weights = parse_indicator_weights_json(indicator_weights)
+            eth_dates = eth_close = None
+            if weights.rs_eth > 0.0:
+                eth_df = load_cached(eth_ticker, cdir)
+                if eth_df is None or eth_df.is_empty():
+                    return json.dumps(
+                        {"error": f"no cached price history for {eth_ticker!r} (rs_eth weight > 0)"}
+                    )
+                eth_frame = (
+                    eth_df.select(
+                        pl.col("timestamp").cast(pl.Date).alias("date"),
+                        pl.col("close"),
+                    )
+                    .unique(subset=["date"], keep="last")
+                    .sort("date")
+                )
+                eth_dates, eth_close = eth_frame["date"], eth_frame["close"]
+            extras = build_extra_indicators(
+                prices["date"],
+                prices["close"],
+                weights,
+                sources_from_optional_paths(
+                    m2_path=m2_path,
+                    dxy_path=dxy_path,
+                    eth_dates=eth_dates,
+                    eth_close=eth_close,
+                ),
+            )
+            frame = build_risk_index(
+                prices["date"],
+                prices["close"],
+                model,
+                extra_indicators=extras,
+                valuation_weight=weights.valuation,
+            )
             dest = Path(output_path) if output_path else Path(f"{ticker}_sdca_risk.parquet")
             path = write_risk_index(frame, dest)
         except Exception as exc:  # surface as JSON, never crash the server

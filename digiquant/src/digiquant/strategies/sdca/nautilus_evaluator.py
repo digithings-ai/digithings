@@ -23,6 +23,7 @@ from nautilus_trader.model.objects import Money
 from nautilus_trader.persistence.wranglers import BarDataWrangler
 from nautilus_trader.test_kit.providers import TestInstrumentProvider
 
+from digiquant.strategies.sdca.composite_risk import IndicatorWeight
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
 from digiquant.strategies.sdca.dca_metrics import (
     breakdown_from_daily,
@@ -90,6 +91,7 @@ def evaluate_sdca_trial_nautilus(
     risk_model: RiskModel,
     shape: SdcaCurveShape,
     valuation_weight: float,
+    extra_indicators: Sequence[IndicatorWeight] | None = None,
     *,
     initial_cash: float = DEFAULT_TRIAL_CASH,
 ) -> SdcaTrialMetrics:
@@ -98,7 +100,13 @@ def evaluate_sdca_trial_nautilus(
         raise ValueError("evaluate_sdca_trial_nautilus needs aligned non-empty dates/prices")
     date_s = pl.Series("date", list(dates), dtype=pl.Date)
     price_s = pl.Series("price", list(prices), dtype=pl.Float64)
-    index = build_risk_index(date_s, price_s, risk_model, valuation_weight=valuation_weight)
+    index = build_risk_index(
+        date_s,
+        price_s,
+        risk_model,
+        extra_indicators=list(extra_indicators) if extra_indicators is not None else None,
+        valuation_weight=valuation_weight,
+    )
     instrument = TestInstrumentProvider.btcusdt_binance()
     bar_type = BarType(instrument.id, BarSpecification(1, BarAggregation.DAY, PriceType.LAST))
     with tempfile.TemporaryDirectory(prefix="sdca-opt-") as tmp:

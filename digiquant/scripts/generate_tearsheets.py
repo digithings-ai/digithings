@@ -59,6 +59,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import polars as pl
 
+    from digiquant.strategies.sdca.composite_risk import IndicatorWeight
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -98,11 +100,14 @@ def materialize_sdca_risk_index(
     output_path: Path,
     *,
     coefficients_path: Path | None = None,
+    extra_indicators: list[IndicatorWeight] | None = None,
+    valuation_weight: float = 1.0,
 ) -> pl.DataFrame:
     """Build the SDCA ``risk_path`` parquet from *this* OHLCV frame only (#1462).
 
     Callers must pass the already-``apply_signal_delay()``-truncated frame so
-    the index cannot leak bars beyond the published window.
+    the index cannot leak bars beyond the published window. Default
+    ``valuation_weight=1`` and no extras matches the published BTC chart.
     """
     import polars as pl
 
@@ -114,7 +119,13 @@ def materialize_sdca_risk_index(
     if dates.dtype != pl.Date:
         dates = dates.cast(pl.Date)
     model = BtcPowerLawRiskModel(load_coefficients(coefficients_path))
-    index = build_risk_index(dates, ohlcv["close"], model)
+    index = build_risk_index(
+        dates,
+        ohlcv["close"],
+        model,
+        extra_indicators=extra_indicators,
+        valuation_weight=valuation_weight,
+    )
     write_risk_index(index, output_path)
     return index
 
@@ -588,13 +599,21 @@ def run_and_write(
         import tempfile
 
         from digiquant.strategies.sdca.btc_power_law import load_coefficients
+        from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
         from digiquant.strategies.sdca.presets import load_preset
 
         sdca_cfg = entry.get("sdca") or {}
         preset_name = str(sdca_cfg.get("preset") or "balanced")
         preset = load_preset(preset_name)
         tmp_risk = Path(tempfile.mkdtemp(prefix="sdca_risk_")) / "risk.parquet"
-        index = materialize_sdca_risk_index(ohlcv, tmp_risk)
+        raw_w = sdca_cfg.get("indicator_weights") or {}
+        weights = SdcaCompositeWeights(
+            valuation=float(raw_w.get("valuation", 1.0)),
+            m2=float(raw_w.get("m2", 0.0)),
+            rs_eth=float(raw_w.get("rs_eth", 0.0)),
+            dxy=float(raw_w.get("dxy", 0.0)),
+        )
+        index = materialize_sdca_risk_index(ohlcv, tmp_risk, valuation_weight=weights.valuation)
         coefficients = load_coefficients()
         calibration = {
             "risk_path": str(tmp_risk),
@@ -605,7 +624,9 @@ def run_and_write(
         provenance_notes.append(
             "SDCA risk index built from the signal-delayed OHLCV frame "
             f"{index['date'].min()} → {index['date'].max()} "
-            f"({index.height} rows, risk_model={sdca_cfg.get('risk_model', 'btc_power_law')})."
+            f"({index.height} rows, risk_model={sdca_cfg.get('risk_model', 'btc_power_law')}, "
+            f"weights=valuation:{weights.valuation}/m2:{weights.m2}/"
+            f"rs_eth:{weights.rs_eth}/dxy:{weights.dxy})."
         )
         provenance_notes.append(
             f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "

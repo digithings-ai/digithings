@@ -116,7 +116,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `optimize_bayesian.py` | Optuna Bayesian optimization |
 | `export.py` | Artifact writing with path confinement |
 | `strategies/registry.py` | Strategy registration and lookup |
-| `strategy_specs.py` | Param ranges, alias map, grid/random/Optuna space inference. `sdca` (#3174) holds the six shape params + `valuation_weight`; `btc_sdca` aliases to it. |
+| `strategy_specs.py` | Param ranges, alias map, grid/random/Optuna space inference. `sdca` holds the six shape params plus `valuation_weight` / `m2_weight` / `rs_eth_weight` / `dxy_weight`; `btc_sdca` aliases to it. |
 | `models.py` | Pydantic v2 result models |
 | `constraints.py` | `satisfies_constraints()` filter |
 | `addm.py` | Rolling Sharpe Z-score drift detection |
@@ -215,7 +215,7 @@ The MCP server (`mcp_server.py`) listens on `127.0.0.1:8767` by default with `st
 | `digiquant_run_pipeline` | Runs the full LangGraph pipeline |
 | `digiquant_fetch_coinbase_ohlcv` | Fetches daily OHLCV from Coinbase (CCXT) into the price-history cache |
 | `digiquant_fit_btc_power_law` | Fits the SDCA BTC power-law (RAQQR) valuation rails from cached daily price history (`data/prices/history_cache.py`, not a bespoke fetch) and persists the coefficients to `strategies/sdca/btc_power_law_coefficients.json` (#1082) |
-| `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `risk_model` is a string selector (`btc_power_law` today; #3175 adds providers). Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
+| `digiquant_build_sdca_risk_index` | Builds the SDCA `date`/`risk` parquet from a `RiskModel` + cached daily prices (`history_cache.py`, never a bespoke fetch) and writes it for `SdcaStrategy.risk_path` (#3168). `indicator_weights` JSON `{valuation, m2, rs_eth, dxy}` defaults to valuation=1 / extras=0 (published BTC charts unchanged). Positive extra weights need on-disk `m2_path` / `dxy_path` and/or cached `eth_ticker`. Returns `{path, row_count, date_start, date_end, null_risk_days}` or `{"error": ...}` |
 | `digiquant_generate_slapper_tearsheet` | Runs the NautilusTrader backtest for the Slapper family and writes TV-style tearsheet JSON to the digiquant.io frontend. Delegates each strategy to `generate_tearsheets.run_strategy_isolated` (spawn-per-strategy, #1389 — a second in-process engine would SIGABRT the long-lived server); resolves calibrations file → Supabase (example only via `allow_example_calibrations`), accepts `signal_delay_days` (#1462), and returns `{"entries", "failures"}` with per-strategy errors as data. Does **not** write `index.json` (the CLI `main()` owns that) |
 | `digiquant_validate_slapper_vs_tradingview` | Trade-level parity check of a Slapper strategy against a TradingView "List of Trades" CSV export |
 | `olympus_run_policy_replay` | Register a policy replay run (summary IDs only; never activates) |
@@ -240,7 +240,7 @@ The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to
 
 Structural settings (symbol, capital, sizing, 2018 trade window, precision) live in the **public** `strategies/settings.json`; proprietary indicator calibrations live in the **gitignored** `strategies/calibrations.json` (shape shown in `calibrations.example.json`). The `SlapperConfig.trade_start` gate mirrors Pine's `in_date_range` so warmup uses earlier bars while reported trades match the TradingView window.
 
-**Strategy families (#3170).** Each settings entry may set `"strategy_type": "slapper" | "sdca"` (default `slapper`, so existing Slapper entries are unchanged). `sdca` entries carry an `sdca` block (`preset`, `risk_model`, `long_only`, `initial_cash`). For `strategy_type == "sdca"`, `run_and_write()` calls `materialize_sdca_risk_index()` on the **already signal-delayed** OHLCV frame, writes a temp `risk_path` parquet, and injects it (plus preset `curve_nodes`) through `get_strategy` overrides. The calibrations gate is skipped; tearsheet notes record the coefficients fit window and the preset. `get_strategy` / `run_nautilus` pass `trade_size` only when the config class declares it. Do not `--push-supabase` for `btc_sdca` until the real BTC fit (#3173) is the coefficients file in use.
+**Strategy families (#3170).** Each settings entry may set `"strategy_type": "slapper" | "sdca"` (default `slapper`, so existing Slapper entries are unchanged). `sdca` entries carry an `sdca` block (`preset`, `risk_model`, `long_only`, `initial_cash`, `indicator_weights`). `indicator_weights` defaults `{valuation: 1, m2: 0, rs_eth: 0, dxy: 0}` so published BTC charts stay on power-law `valuation_z` until extras are enabled. For `strategy_type == "sdca"`, `run_and_write()` calls `materialize_sdca_risk_index()` on the **already signal-delayed** OHLCV frame, writes a temp `risk_path` parquet, and injects it (plus preset `curve_nodes`) through `get_strategy` overrides. The calibrations gate is skipped; tearsheet notes record the coefficients fit window and the preset. `get_strategy` / `run_nautilus` pass `trade_size` only when the config class declares it. Do not `--push-supabase` for `btc_sdca` until the real BTC fit (#3173) is the coefficients file in use.
 
 **Tearsheet schema 1.1** (`tearsheet_data.SCHEMA_VERSION`) adds two back-compatible fields the renderer can opt into:
 
@@ -554,24 +554,41 @@ upstream for cached price history.
 | `sdca/valuation.py` | `valuation_z_score(price, low, median, high)` — log-space position of price within the `RiskModel` rails, in `[-3, 3]` (cheap = +3, rich = −3). The default/primary indicator. Validates finite, positive rails with `low < median < high` on rows where all four inputs are present; a row with any null input passes through as null. |
 | `sdca/risk_model.py` | `RiskModel` — a `runtime_checkable` `Protocol` with one method, `rails(dates) -> pl.DataFrame` (`low`/`median`/`high` columns). Any object with a matching `rails()` satisfies it structurally; the engine never imports a concrete provider. |
 | `sdca/btc_power_law.py` | `BtcPowerLawRiskModel` — the first concrete `RiskModel` (#1082): fits 7 quantile rails (`q01`…`q99`) as `price_q(t) = 10 ** (c + a*x + b*x**2)`, `x = ln(days_since_genesis(t)) - mu`, one quantile regression (`statsmodels.QuantReg`, lazily imported) per rail. `rails()`/`rails_full()` sort each row's fitted quantiles ascending (rearrangement method) so independently-fit curves never cross. `fit_btc_power_law()`/`save_coefficients()`/`load_coefficients()` handle fitting and JSON persistence; `load_coefficients()` prefers the real fit (`btc_power_law_coefficients.json`, git-ignored) and falls back to the checked-in synthetic placeholder (`btc_power_law_coefficients.example.json`) with a warning. The `digiquant_fit_btc_power_law` MCP tool is the orchestration layer — this module has no data-fetching or MCP dependency of its own. `low_quantile`/`high_quantile` (default `q10`/`q95`) pick which fitted rails map to the protocol's `low`/`high`; this default and the model itself are unvalidated against the reference artifact — network access to it was blocked in the environment #1082 was built in. |
-| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Rejects duplicate enabled indicator names and a non-finite/zero total weight. Mirrors the equal-weighted vote pattern in `indicators/m2_signals.py`. |
+| `sdca/composite_risk.py` | `IndicatorWeight` (strict Pydantic v2 model: `name`, `z: pl.Series`, `weight`, `enabled`) and `compute_composite_risk()` — weight-normalized blend of enabled indicators' z-scores into `composite_z` (`[-3, 3]`) and `risk` (`[0, 100]`, 0 = max buy, 100 = max sell). Formula: `composite_z = clip(Σ(zᵢ·wᵢ)/Σ(wᵢ), -3, 3)`, `risk = 50 − composite_z×50/3`. Zero-weight extras are omitted (`enabled`/weight 0), so they cannot null a day. Rejects duplicate enabled names and a non-finite/zero total weight. |
+| `sdca/indicator_catalog.py` | Named extras independent of BTC price: **m2** (FRED M2SL YoY growth rolling-z, expanding liquidity → +z), **rs_eth** (`log(BTC/ETH)` rolling-z sign-flipped so BTC cheap vs ETH → +z), **dxy** (DTWEXBGS rolling-z sign-flipped so a strong dollar → −z). `SdcaCompositeWeights` defaults `valuation=1`, extras `0` (published BTC charts unchanged). Causal rolling z (window 90) — no lookahead. Omitted: BTC rolling-z / generic rails (same-price family), on-chain MVRV (#1086), equity CAPE (#3176), RS rotation pool (#1084). |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. This is the **runtime** representation; it is unchanged by #3169. |
 | `sdca/curve_shape.py` | `SdcaCurveShape` (frozen Pydantic v2, #3169) — the **authoring and optimization** surface. Six parameters (`buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`, `sell_max_rate`, `buy_curvature`, `sell_curvature`) generate the 21 nodes via `to_nodes()`. Enforces a non-empty dead zone, sign/monotonicity, and `*_max_rate <= 100` (the generated-path answer to #2552). The raw `AccumDistCurve` constructor stays unbounded. |
 | `sdca/backtest.py` | `run_backtest(dates, price, risk, curve, initial_cash) -> (SdcaBacktestReport, pl.DataFrame)` — the daily state loop and its strict Pydantic v2 summary report. Validates non-empty, equal-length inputs; a non-null, strictly-increasing `dates` series (#2539, #2544); and a finite, positive, non-null price series and `initial_cash` before running. Export frame includes `flat_dca_value` (#3171); the report's `vs_flat_dca_pct` is ×100, same as `vs_lump_pct`. CI-only — never the published number. |
 | `sdca/dca_metrics.py` | Schema 1.3 DCA block from Nautilus fills + daily MTM (`breakdown_from_daily`, `fills_from_nautilus_report`). Publish path uses this; tests assert parity with `SdcaBacktestReport`. |
-| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`). `write_risk_index()` persists the two-column parquet under every validation `SdcaStrategy._load_risk_index()` already enforces (Date dtype, numeric finite-or-null risk, no null/duplicate dates). `RiskIndexBuildResult` is the Pydantic v2 JSON envelope the MCP tool returns. |
+| `sdca/risk_index.py` | `build_risk_index(dates, price, risk_model, extra_indicators=None, valuation_weight=1.0) -> pl.DataFrame` and `write_risk_index(df, path)` (#3168). Pure wiring: `risk_model.rails()` → `valuation_z_score()` → `IndicatorWeight(name="valuation")` + extras from `indicator_catalog` → `compute_composite_risk()`. Returns `date`/`risk` plus diagnostics (`price`, `low`, `median`, `high`, `valuation_z`, `composite_z`, and `{name}_z` for each extra). Default extras-off matches a single-indicator index. |
 | `sdca/nautilus_strategy.py` | `SdcaStrategyConfig` (frozen `StrategyConfig`: `instrument_id`, `bar_type`, `initial_cash`, `risk_path`, `curve_nodes` default `DEFAULT_BTC_NODES`, `long_only` default `False`) and `SdcaStrategy(Strategy)` — the NautilusTrader wrapper (#1081). Not registered in `strategies/registry.py` (see above). `risk_path` is produced by `sdca/risk_index.py` (#3168), not assembled by hand. |
 | `sdca/presets.py` / `sdca/presets.json` | `SdcaPreset` (frozen Pydantic v2 model: `curve_nodes`, `long_only`, `description`, optional `shape`, validated at load time), `list_presets() -> list[str]`, `load_preset(name) -> SdcaPreset` — named public curve personalities. Since #3169, `presets.json` stores `SdcaCurveShape` parameters; nodes are generated at load. `btc_optimized` (#3174) is the walk-forward slot. |
-| `sdca/walk_forward.py` | Walk-forward folds, held-out tail, DCA-native objective (`vs_flat_dca_pct` s.t. capital floor + drawdown cap). Rails **must** be refit on each fold's IS window (#3173). |
-| `sdca/optimize.py` | Search loop, sensitivity, `persist_btc_optimized()`, `OptimizeResult` mapping. Injected `SdcaTrialEvaluator` — never `SdcaBacktestReport`. |
+| `sdca/walk_forward.py` | Walk-forward folds, held-out tail, DCA-native objective (`vs_flat_dca_pct` s.t. capital floor + drawdown cap). Rails **must** be refit on each fold's IS window (#3173). Extra-z is a full-calendar causal precompute sliced per window (no OOS refit, no leakage). |
+| `sdca/optimize.py` | Search loop, sensitivity, `persist_btc_optimized()`, `OptimizeResult` mapping. Injected `SdcaTrialEvaluator` — never `SdcaBacktestReport`. Random/bayesian search extra-indicator weights in `[0, 1]` (composite already normalizes). Auto-grid holds extras at 0. Sibling files `M2SL.csv` / `ETH-USD.csv` / `DTWEXBGS.csv` next to the BTC CSV enable those extras. |
 | `sdca/nautilus_evaluator.py` | Production fitness: Nautilus fills → `dca_metrics`. pandas only at the BarDataWrangler boundary. |
 | `sdca/btc_optimized_provenance.json` | Fit window, folds, objective, OOS vs-flat-DCA, sensitivity. Honest even when OOS is negative. |
 
 **Composite-risk null rule.** If any *enabled* indicator's z-score is null on a
 day, `composite_z` and `risk` are null that day too — `compute_composite_risk`
 uses `pl.sum_horizontal(..., ignore_nulls=False)` so there is never a partial
-blend. `run_backtest` treats a null-risk day as a no-trade day: state (cash,
-holdings) carries forward unchanged, but the day is still marked to market.
+blend. Weight `0` means the indicator is **not enabled**, so a missing M2/DXY/ETH
+row cannot null a valuation-only day. `run_backtest` treats a null-risk day as a
+no-trade day: state (cash, holdings) carries forward unchanged, but the day is
+still marked to market.
+
+**Composite formula (BTC charts default to a single rail).**
+
+```
+composite_z = clip( Σ_i (z_i · w_i) / Σ_i w_i , -3, 3 )
+risk        = 50 − composite_z × 50/3
+```
+
+`z_i` are daily series in `[-3, 3]` (cheap = +3, rich = −3). `settings.json`
+`btc_sdca.sdca.indicator_weights` defaults `valuation=1`, `m2=rs_eth=dxy=0`.
+The MCP tool `digiquant_build_sdca_risk_index` and `build_risk_index()` use
+that default unless callers pass extras. Walk-forward (`method=random` /
+explicit `param_grid`) searches the extra weights; auto-grid does not, so a
+default optimize run still matches the power-law-only chart.
 
 **Backtest state is a sequential Python loop, not a vectorized Polars
 expression** — `cash`/`asset_units` are running balances that each day's buy/sell
@@ -611,9 +628,12 @@ The dispatch in `run_optimize()`:
    `vs_flat_dca_pct`** subject to `capital_deployed_pct >= 10` and
    `max_drawdown_pct <= 50` (magnitudes, ×100). `vs_lump_pct` is reported
    never optimized — maximizing it collapses to lump-sum on an uptrend.
-   Auto-grid holds `buy_curvature`/`sell_curvature` at defaults (2-point
-   grid on the remaining params). `method=random`/`bayesian` samples all
-   seven. Rails are refit per fold on the IS window only.
+   Auto-grid holds `buy_curvature`/`sell_curvature` and extra-indicator
+   weights at defaults (valuation=1, extras=0; 2-point grid on the remaining
+   shape params). `method=random`/`bayesian` samples all ten, including
+   `m2_weight` / `rs_eth_weight` / `dxy_weight` in `[0, 1]` (the composite
+   already normalizes by `Σ w`). Rails are refit per fold on the IS window
+   only. Extra-z is causal on the full calendar, then sliced.
 2. If `param_grid` is provided explicitly, skip method inference and run that grid directly
 3. If `method == "bayesian"`, delegate to `run_optimize_bayesian()` (Optuna)
 4. If `method == "random"`, call `sample_random_params()` then `_run_trials_parallel()`

@@ -26,7 +26,13 @@
         "preset": "balanced",
         "risk_model": "btc_power_law",
         "long_only": true,
-        "initial_cash": 1000.0
+        "initial_cash": 1000.0,
+        "indicator_weights": {
+          "valuation": 1.0,
+          "m2": 0.0,
+          "rs_eth": 0.0,
+          "dxy": 0.0
+        }
       }
     }
   }
