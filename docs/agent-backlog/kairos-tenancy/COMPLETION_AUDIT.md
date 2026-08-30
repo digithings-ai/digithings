@@ -4,8 +4,8 @@
 
 Agent run (audit write): https://cursor.com/agents/bc-c5b145ca-ac4a-56ed-ab78-919d4208ab35  
 Agent run (merge + unlock hunt): https://cursor.com/agents/bc-cc69ce13-26ad-5258-9eda-8d2f22c2b5bb  
-Develop tip: `f92a8810` (merge of [#3181](https://github.com/digithings-ai/digithings/pull/3181))  
-Settings EF on `core`: **v11** ACTIVE (thin GitHub-raw pin; no EF redeploy — still no `sbp_` / no new vendor secrets)
+Develop tip: `732a77d0` (merge of [#3184](https://github.com/digithings-ai/digithings/pull/3184))  
+Settings EF on `core`: **v12** ACTIVE (thin GitHub-raw → `732a77d0`; GET `/notifications` + smoke 401 — still no `sbp_` / no new vendor secrets)
 
 ---
 
@@ -169,7 +169,7 @@ Open develop drafts (#3149 settings tier gate, coverage/bugfix drafts, etc.) sim
 
 | Function | Version | Notes |
 |----------|---------|-------|
-| `settings` | **v11** | Thin GitHub-raw pin (post-#3179 tip). Full 9-file bundle staged; CLI needs `sbp_`. No redeploy this follow-up (docs-only tip move). |
+| `settings` | **v12** | Thin GitHub-raw pin → `732a77d0` (#3184 GET `/notifications`). Full 9-file bundle staged; CLI/secrets need `sbp_`. Smoke: `settings-v12-smoke.log`. |
 | `stripe-webhook` | v3 | Awaits Stripe secrets |
 | `create-checkout-session` | v1 | Awaits Stripe secrets |
 | `customer-portal` | v3 | Awaits Stripe secrets |

@@ -67,11 +67,11 @@ Wave E
 
 **Verdict: NOT COMPLETE.** Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).
 
-**Code:** all 12 WPs on `develop` (promotion #3141). Through audit refresh [#3181](https://github.com/digithings-ai/digithings/pull/3181) — **merged** (develop tip `f92a8810`).
+**Code:** all 12 WPs on `develop` (promotion #3141). Through NotifyTab hydrate [#3184](https://github.com/digithings-ai/digithings/pull/3184) — **merged** (develop tip `732a77d0`).
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
-**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v11** ACTIVE — thin pin; **no** redeploy (still no `sbp_` / no new vendor secrets).
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v12** ACTIVE — thin GitHub-raw pin → `732a77d0` (GET `/notifications` + PATCH). Smoke 401 (`settings-v12-smoke.log`). Still no `sbp_` / no EF secrets push.
 
 **Secrets (names only; re-scanned post-#3181):**
 - **SET in VM:** `DIGIQUANT_VAULT_*`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.

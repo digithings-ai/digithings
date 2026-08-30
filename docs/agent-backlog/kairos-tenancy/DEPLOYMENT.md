@@ -133,7 +133,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v11** (thin GitHub-raw → `0f235935…` / post-#3179 develop tip) | Notifications upsert live (#3161+#3177 on develop). Smoke: missing/invalid JWT → gateway `401` (`settings-v11-smoke.log`). Full monorepo 9-file bundle staged; prefer once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Supabase MCP has no secrets tool; Management API 403 without `sbp_`). Migration `106` stamped on `core`.
+| `settings` | ACTIVE **v12** (thin GitHub-raw → `732a77d0…` / #3184 develop tip) | GET `/notifications` hydrate + PATCH upsert live (#3161+#3177+#3184). Smoke: missing/invalid JWT → gateway `401` (`settings-v12-smoke.log`). Full monorepo 9-file bundle staged; prefer once `sbp_` PAT exists. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set (Supabase MCP has no secrets tool; Management API 403 without `sbp_`). Migration `106` stamped on `core`.
 
 ### Schema alignment (agent, 2026-08-30)
 
@@ -249,7 +249,8 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
-| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) … [#3181](https://github.com/digithings-ai/digithings/pull/3181) | **Merged** to `develop` (2026-08-30; tip `f92a8810`) | notifications + schema/docs + audits; settings EF **v11** (no redeploy — no `sbp_` / no new secrets) |
+| PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) … [#3181](https://github.com/digithings-ai/digithings/pull/3181) | **Merged** to `develop` (2026-08-30; tip `f92a8810`) | notifications + schema/docs + audits; settings EF was **v11** |
+| PR [#3184](https://github.com/digithings-ai/digithings/pull/3184) | **Merged** to `develop` (2026-08-30; tip `732a77d0`) | GET `/notifications` + NotifyTab hydrate; settings EF **v12** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 ---
 
 ## 6. Cutover checklist
