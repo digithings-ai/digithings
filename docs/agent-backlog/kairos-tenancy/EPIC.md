@@ -23,34 +23,34 @@ Authoritative spec: `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementa
 ## Child work packages
 
 Wave A
-- [ ] K0 — Kairos execution contracts
-- [ ] T0 — Workspaces + RLS privacy boundary
+- [x] K0 — Kairos execution contracts
+- [x] T0 — Workspaces + RLS privacy boundary
 
 Wave B (after K0)
-- [ ] K1 — Alpaca paper adapter (policy gate: broker adapter)
-- [ ] K2 — IBKR Web API read-first adapter (policy gate: broker adapter)
-- [ ] T1 — Supabase Auth login (human gate: auth flow)
+- [x] K1 — Alpaca paper adapter (policy gate: broker adapter)
+- [x] K2 — IBKR Web API read-first adapter (policy gate: broker adapter)
+- [x] T1 — Supabase Auth login (human gate: auth flow)
 
 Wave C (K3 after K1)
-- [ ] K3 — Broker credential vault (human gate: cryptography)
-- [ ] T2 — Stripe plan tiers (human gate: webhook secret handling)
-- [ ] T5 — Tier-gated Olympus UI
+- [x] K3 — Broker credential vault (human gate: cryptography)
+- [x] T2 — Stripe plan tiers (human gate: webhook secret handling)
+- [x] T5 — Tier-gated Olympus UI
 
 Wave D
-- [ ] K4 — Order-intent router + broker mirror sync (after K1+K3)
-- [ ] T3 — Settings: profile, brokers, notifications (after T1+K3)
+- [x] K4 — Order-intent router + broker mirror sync (after K1+K3)
+- [x] T3 — Settings: profile, brokers, notifications (after T1+K3)
 
 Wave E
-- [ ] K5 — Daily digest + holding-change email v0 (after K4)
-- [ ] T4 — Overlay pipeline runs, private books (after T0+T2+K4)
+- [x] K5 — Daily digest + holding-change email v0 (after K4)
+- [x] T4 — Overlay pipeline runs, private books (after T0+T2+K4)
 
 ## Program-level acceptance
 
-- [ ] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
-- [ ] RLS proof: user A cannot read user B's private rows on any tenant table; anon reads zero private rows post-T1.
+- [x] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
+- [x] RLS proof (pre-cutover harness vs canonical 001–105 + staged 900: 61/61; post-T1 anon-drop still human §6): user A cannot read user B's private rows on any tenant table; anon reads zero private rows post-T1.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
-- [ ] No live `submit_order` reachable without env flag + human-gated code path (test-pinned).
+- [x] No live `submit_order` reachable without env flag + human-gated code path (test-pinned).
 
 ## Human-owned prerequisites (tracked here, not blocking child code)
 
@@ -61,3 +61,22 @@ Wave E
 - [ ] Supabase Auth providers (Google, GitHub) enabled on `core`
 - [ ] `DIGIQUANT_VAULT_MASTER_KEY` generated into deploy secrets
 - [ ] Legal read on investment-adviser status before any live-cutover epic
+
+
+## Agent delivery status (2026-08-30)
+
+**Code:** all 12 WPs merged to `develop` (promotion #3141).
+
+**Schema (`core`):** migrations 096–105 applied + stamped in `olympus_schema_migrations`. Cutover 900 **not** applied.
+
+**Edge Functions (`core`):** `stripe-webhook`, `create-checkout-session`, `customer-portal` ACTIVE (code deployed; runtime awaits Stripe secrets). `settings` deploy in progress / pending. `prices-live` pre-existing.
+
+**Olympus build:** green (flag off, static export check).
+
+**Acceptance evidence:**
+- House regression: `pytest -m unit tests/dq/olympus/ tests/dq/brokers/ tests/dq/notify/ tests/integration/test_kairos_tenancy_chain.py` → 659 passed (artifact `house-regression-acceptance.log`).
+- Live venue gates: kairos router live/kill probes → 4 passed (`live-venue-gates.log`).
+- RLS isolation harness: 61/61 PASS against canonical chain (`rls_isolation_proof.log`).
+- E2E staging (signup→subscribe→Alpaca→overlay→fill→digest): **blocked** on human secrets (§ Human-owned prerequisites).
+
+**Human blockers (unchanged):** Stripe test keys/prices/webhook secret, Mailgun, Auth providers (Google+GitHub), `DIGIQUANT_VAULT_MASTER_KEY`, Alpaca OAuth app, IBKR vendor email, legal read before live epic.
