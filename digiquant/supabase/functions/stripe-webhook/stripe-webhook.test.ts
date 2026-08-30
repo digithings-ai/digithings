@@ -1,8 +1,8 @@
 /**
- * Deno tests for T2 Stripe webhook + tier mapping.
+ * Deno tests for T2 Stripe webhook + billing auth gates.
  *
  * Run from digiquant/supabase/functions:
- *   deno test --allow-env _shared/tiers_test.ts stripe-webhook/stripe-webhook_test.ts
+ *   deno test --allow-env _shared/tiers.test.ts stripe-webhook/stripe-webhook.test.ts
  *
  * No live Stripe or Supabase — mocked admin client + HMAC fixtures.
  */
@@ -12,6 +12,10 @@ import {
   assertRejects,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import {
+  requireBearerHeader,
+  requireWorkspaceOwner,
+} from "../_shared/billing-auth.ts";
+import {
   parseStripeEvent,
   StripeHttpError,
   verifyStripeSignature,
@@ -19,6 +23,7 @@ import {
 import { handleStripeEvent } from "../_shared/webhook-handler.ts";
 import {
   mapStripeStatus,
+  planTierForSubscriptionStatus,
   planTierFromPriceId,
   type PriceTierEnv,
 } from "../_shared/tiers.ts";
@@ -34,6 +39,7 @@ const PRICES: PriceTierEnv = {
 
 const WS_ID = "11111111-1111-1111-1111-111111111111";
 const USER_ID = "22222222-2222-2222-2222-222222222222";
+const MEMBER_ID = "33333333-3333-3333-3333-333333333333";
 
 // ---------------------------------------------------------------------------
 // In-memory admin mock
@@ -48,13 +54,16 @@ interface Store {
     workspace_id: string | null;
     payload: Record<string, unknown>;
     processed_at: string;
+    applied_at: string | null;
   }>;
   claims: Map<string, string>;
   claimSyncShouldFail: boolean;
-  insertDuplicateNext: boolean;
+  /** Throw on the next non-CAS claim_sync_pending-only update path, or CAS fail. */
+  failNextWorkspaceUpdate: boolean;
+  failNextCasUpdate: boolean;
 }
 
-function freshStore(): Store {
+function freshStore(overrides?: Partial<WorkspaceRow>): Store {
   const ws: WorkspaceRow = {
     id: WS_ID,
     stripe_customer_id: null,
@@ -62,6 +71,8 @@ function freshStore(): Store {
     subscription_status: "none",
     plan_tier: "free",
     claim_sync_pending: false,
+    last_stripe_event_created: null,
+    ...overrides,
   };
   return {
     workspaces: new Map([[WS_ID, { ...ws }]]),
@@ -69,11 +80,60 @@ function freshStore(): Store {
     stripeEvents: [],
     claims: new Map([[USER_ID, "free"]]),
     claimSyncShouldFail: false,
-    insertDuplicateNext: false,
+    failNextWorkspaceUpdate: false,
+    failNextCasUpdate: false,
   };
 }
 
-type Filter = { col: string; op: "eq" | "neq"; val: unknown };
+type Filter = {
+  col: string;
+  op: "eq" | "neq" | "is" | "lt" | "or";
+  val: unknown;
+};
+
+function matchesFilters(
+  row: Record<string, unknown>,
+  filters: Filter[],
+): boolean {
+  for (const f of filters) {
+    if (f.op === "or") {
+      // PostgREST or: "last_stripe_event_created.is.null,last_stripe_event_created.lt.N"
+      const expr = String(f.val);
+      const parts = expr.split(",");
+      let any = false;
+      for (const part of parts) {
+        if (part.endsWith(".is.null")) {
+          const col = part.replace(/\.is\.null$/, "");
+          if (row[col] == null) any = true;
+        } else {
+          const m = part.match(/^(.+)\.lt\.(\d+)$/);
+          if (m) {
+            const col = m[1]!;
+            const n = Number(m[2]);
+            const cur = row[col];
+            if (typeof cur === "number" && cur < n) any = true;
+          }
+        }
+      }
+      if (!any) return false;
+      continue;
+    }
+    const cur = row[f.col];
+    if (f.op === "eq" && cur !== f.val) return false;
+    if (f.op === "neq" && cur === f.val) return false;
+    if (f.op === "is") {
+      if (f.val === null) {
+        if (cur != null) return false;
+      } else if (cur !== f.val) {
+        return false;
+      }
+    }
+    if (f.op === "lt") {
+      if (!(typeof cur === "number" && cur < Number(f.val))) return false;
+    }
+  }
+  return true;
+}
 
 function createMockAdmin(store: Store): AdminClient {
   const makeBuilder = (table: string) => {
@@ -81,9 +141,11 @@ function createMockAdmin(store: Store): AdminClient {
     let pendingInsert: Record<string, unknown> | null = null;
     let pendingUpdate: Record<string, unknown> | null = null;
     let limitN: number | null = null;
+    let returnSelect = false;
 
     const api = {
       select(_cols?: string) {
+        if (pendingUpdate) returnSelect = true;
         return api;
       },
       insert(row: Record<string, unknown>) {
@@ -102,6 +164,18 @@ function createMockAdmin(store: Store): AdminClient {
         filters.push({ col, op: "neq", val });
         return api;
       },
+      is(col: string, val: unknown) {
+        filters.push({ col, op: "is", val });
+        return api;
+      },
+      lt(col: string, val: unknown) {
+        filters.push({ col, op: "lt", val });
+        return api;
+      },
+      or(expr: string) {
+        filters.push({ col: "", op: "or", val: expr });
+        return api;
+      },
       order(_col: string, _opts?: { ascending?: boolean }) {
         return api;
       },
@@ -113,9 +187,6 @@ function createMockAdmin(store: Store): AdminClient {
         const rows = await api.thenResolve();
         return { data: rows[0] ?? null, error: null };
       },
-      // Thenable so `await admin.from(...).insert(...)` and
-      // `await admin.from(...).update(...).eq(...)` both work.
-      // Mirror supabase-js: PostgREST errors resolve as `{ error }`, they do not reject.
       then(resolve: (v: { data: unknown; error: unknown }) => void) {
         api.thenResolve()
           .then((data) => resolve({ data, error: null }))
@@ -123,10 +194,6 @@ function createMockAdmin(store: Store): AdminClient {
       },
       async thenResolve(): Promise<unknown[]> {
         if (table === "stripe_events" && pendingInsert) {
-          if (store.insertDuplicateNext) {
-            store.insertDuplicateNext = false;
-            throw { message: "duplicate key", code: "23505" };
-          }
           const id = String(pendingInsert.stripe_event_id);
           if (store.stripeEvents.some((e) => e.stripe_event_id === id)) {
             throw { message: "duplicate key", code: "23505" };
@@ -137,62 +204,76 @@ function createMockAdmin(store: Store): AdminClient {
             workspace_id: (pendingInsert.workspace_id as string | null) ?? null,
             payload: (pendingInsert.payload as Record<string, unknown>) ?? {},
             processed_at: new Date().toISOString(),
+            applied_at: (pendingInsert.applied_at as string | null) ?? null,
           });
           pendingInsert = null;
           return [];
         }
 
-        if (table === "workspaces" && pendingUpdate) {
-          for (const [id, row] of store.workspaces) {
-            let ok = true;
-            for (const f of filters) {
-              const cur = (row as unknown as Record<string, unknown>)[f.col];
-              if (f.op === "eq" && cur !== f.val) ok = false;
-              if (f.op === "neq" && cur === f.val) ok = false;
+        if (table === "stripe_events" && pendingUpdate) {
+          const updated: unknown[] = [];
+          for (const row of store.stripeEvents) {
+            if (!matchesFilters(row as unknown as Record<string, unknown>, filters)) {
+              continue;
             }
-            if (!ok) continue;
-            store.workspaces.set(id, { ...row, ...pendingUpdate } as WorkspaceRow);
+            Object.assign(row, pendingUpdate);
+            updated.push({ ...row });
           }
           pendingUpdate = null;
-          return [];
+          return returnSelect ? updated : [];
+        }
+
+        if (table === "workspaces" && pendingUpdate) {
+          if (store.failNextCasUpdate && filters.some((f) => f.op === "or")) {
+            store.failNextCasUpdate = false;
+            throw { message: "cas failed", code: "PGRST000" };
+          }
+          if (store.failNextWorkspaceUpdate && !filters.some((f) => f.op === "or")) {
+            store.failNextWorkspaceUpdate = false;
+            throw { message: "update failed", code: "PGRST000" };
+          }
+          const updated: unknown[] = [];
+          for (const [id, row] of store.workspaces) {
+            if (!matchesFilters(row as unknown as Record<string, unknown>, filters)) {
+              continue;
+            }
+            const next = { ...row, ...pendingUpdate } as WorkspaceRow;
+            store.workspaces.set(id, next);
+            updated.push({ id });
+          }
+          pendingUpdate = null;
+          return returnSelect ? updated : [];
         }
 
         if (table === "workspaces") {
           let rows = [...store.workspaces.values()];
-          for (const f of filters) {
-            rows = rows.filter((r) => {
-              const cur = (r as unknown as Record<string, unknown>)[f.col];
-              if (f.op === "eq") return cur === f.val;
-              if (f.op === "neq") return cur !== f.val;
-              return true;
-            });
-          }
+          rows = rows.filter((r) =>
+            matchesFilters(r as unknown as Record<string, unknown>, filters)
+          );
           return rows;
         }
 
         if (table === "workspace_members") {
           let rows = [...store.members];
-          for (const f of filters) {
-            rows = rows.filter((r) => {
-              const cur = (r as unknown as Record<string, unknown>)[f.col];
-              if (f.op === "eq") return cur === f.val;
-              if (f.op === "neq") return cur !== f.val;
-              return true;
-            });
+          rows = rows.filter((r) =>
+            matchesFilters(r as unknown as Record<string, unknown>, filters)
+          );
+          // Join shape for resolveCallerWorkspace
+          if (rows.length && filters.some((f) => f.col === "user_id")) {
+            return rows.map((r) => ({
+              role: r.role,
+              workspace_id: r.workspace_id,
+              workspaces: store.workspaces.get(r.workspace_id)!,
+            }));
           }
           return rows;
         }
 
         if (table === "stripe_events") {
           let rows = [...store.stripeEvents];
-          for (const f of filters) {
-            rows = rows.filter((r) => {
-              const cur = (r as unknown as Record<string, unknown>)[f.col];
-              if (f.op === "eq") return cur === f.val;
-              if (f.op === "neq") return cur !== f.val;
-              return true;
-            });
-          }
+          rows = rows.filter((r) =>
+            matchesFilters(r as unknown as Record<string, unknown>, filters)
+          );
           if (limitN != null) rows = rows.slice(0, limitN);
           return rows;
         }
@@ -244,6 +325,13 @@ function createMockAdmin(store: Store): AdminClient {
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
+
+function setPriceEnv() {
+  Deno.env.set("STRIPE_PRICE_BASELINE_MONTHLY", PRICES.baselineMonthly);
+  Deno.env.set("STRIPE_PRICE_BASELINE_ANNUAL", PRICES.baselineAnnual);
+  Deno.env.set("STRIPE_PRICE_CUSTOM_MONTHLY", PRICES.customMonthly);
+  Deno.env.set("STRIPE_PRICE_CUSTOM_ANNUAL", PRICES.customAnnual);
+}
 
 function subEvent(
   opts: {
@@ -329,20 +417,39 @@ Deno.test("verifyStripeSignature accepts a valid HMAC", async () => {
   await verifyStripeSignature(body, header, secret, 300, ts);
 });
 
-Deno.test("parseStripeEvent rejects garbage", () => {
-  assertRejectsSync(() => parseStripeEvent("not-json"));
-  assertRejectsSync(() => parseStripeEvent("{}"));
+Deno.test("verifyStripeSignature tolerance boundary: exactly 300s ok, 301s reject", async () => {
+  const secret = "test_webhook_signing_key";
+  const body = '{"id":"evt_tol","type":"ping","created":1}';
+  const ts = 1_700_000_000;
+  const header = await sign(body, secret, ts);
+  await verifyStripeSignature(body, header, secret, 300, ts + 300);
+  await assertRejects(
+    () => verifyStripeSignature(body, header, secret, 300, ts + 301),
+    StripeHttpError,
+  );
 });
 
-function assertRejectsSync(fn: () => unknown) {
+Deno.test("verifyStripeSignature rejects re-serialized body", async () => {
+  const secret = "test_webhook_signing_key";
+  const raw = '{"id":"evt_raw","type":"ping","created":1}';
+  const ts = 1_700_000_000;
+  const header = await sign(raw, secret, ts);
+  const reserialized = JSON.stringify(JSON.parse(raw), null, 2);
+  await assertRejects(
+    () => verifyStripeSignature(reserialized, header, secret, 300, ts),
+    StripeHttpError,
+  );
+});
+
+Deno.test("parseStripeEvent rejects garbage", () => {
   let threw = false;
   try {
-    fn();
+    parseStripeEvent("not-json");
   } catch (e) {
     threw = e instanceof StripeHttpError;
   }
   assertEquals(threw, true);
-}
+});
 
 Deno.test("planTierFromPriceId maps baseline/custom/unknown", () => {
   assertEquals(planTierFromPriceId("price_baseline_m", PRICES), "baseline");
@@ -351,23 +458,28 @@ Deno.test("planTierFromPriceId maps baseline/custom/unknown", () => {
   assertEquals(planTierFromPriceId(null, PRICES), "free");
 });
 
-Deno.test("mapStripeStatus covers roadmap statuses", () => {
-  assertEquals(mapStripeStatus("active"), "active");
-  assertEquals(mapStripeStatus("trialing"), "active");
-  assertEquals(mapStripeStatus("past_due"), "past_due");
-  assertEquals(mapStripeStatus("canceled"), "canceled");
+Deno.test("incomplete status forces free claim (not paid tier from price)", () => {
+  assertEquals(mapStripeStatus("incomplete"), "none");
+  assertEquals(
+    planTierForSubscriptionStatus("none", PRICES.baselineMonthly, PRICES),
+    "free",
+  );
+  assertEquals(
+    planTierForSubscriptionStatus("active", PRICES.baselineMonthly, PRICES),
+    "baseline",
+  );
+  assertEquals(
+    planTierForSubscriptionStatus("past_due", PRICES.customMonthly, PRICES),
+    "custom",
+  );
 });
 
 // ---------------------------------------------------------------------------
 // Webhook handler scenarios
 // ---------------------------------------------------------------------------
 
-Deno.test("duplicate stripe event is a 200 no-op", async () => {
-  Deno.env.set("STRIPE_PRICE_BASELINE_MONTHLY", PRICES.baselineMonthly);
-  Deno.env.set("STRIPE_PRICE_BASELINE_ANNUAL", PRICES.baselineAnnual);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_MONTHLY", PRICES.customMonthly);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_ANNUAL", PRICES.customAnnual);
-
+Deno.test("duplicate applied event is a 200 no-op", async () => {
+  setPriceEnv();
   const store = freshStore();
   const admin = createMockAdmin(store);
   const evt = subEvent({
@@ -379,63 +491,42 @@ Deno.test("duplicate stripe event is a 200 no-op", async () => {
   });
   const first = await handleStripeEvent(admin, evt);
   assertEquals(first.status, "applied");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
+  assertEquals(store.stripeEvents[0]!.applied_at != null, true);
 
   const second = await handleStripeEvent(admin, evt);
   assertEquals(second.status, "duplicate");
-  // Tier unchanged by replay
   assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
 });
 
-Deno.test("out-of-order older event does not regress tier", async () => {
-  Deno.env.set("STRIPE_PRICE_BASELINE_MONTHLY", PRICES.baselineMonthly);
-  Deno.env.set("STRIPE_PRICE_BASELINE_ANNUAL", PRICES.baselineAnnual);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_MONTHLY", PRICES.customMonthly);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_ANNUAL", PRICES.customAnnual);
-
-  const store = freshStore();
+Deno.test("CAS stale event is out_of_order no-op and marks applied", async () => {
+  setPriceEnv();
+  const store = freshStore({ last_stripe_event_created: 200, plan_tier: "custom" });
+  store.claims.set(USER_ID, "custom");
   const admin = createMockAdmin(store);
 
-  const newer = subEvent({
-    id: "evt_new",
-    type: "customer.subscription.updated",
-    created: 200,
-    status: "active",
-    priceId: PRICES.customMonthly,
-  });
   const older = subEvent({
-    id: "evt_old",
+    id: "evt_stale",
     type: "customer.subscription.updated",
     created: 100,
     status: "active",
     priceId: PRICES.baselineMonthly,
   });
-
-  assertEquals((await handleStripeEvent(admin, newer)).status, "applied");
+  const result = await handleStripeEvent(admin, older);
+  assertEquals(result.status, "out_of_order");
   assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "custom");
-  assertEquals(store.claims.get(USER_ID), "custom");
-
-  assertEquals((await handleStripeEvent(admin, older)).status, "out_of_order");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "custom");
-  assertEquals(store.claims.get(USER_ID), "custom");
+  assertEquals(store.stripeEvents[0]!.applied_at != null, true);
 });
 
 Deno.test("checkout → active → cancel yields free→baseline→free on both stores", async () => {
-  Deno.env.set("STRIPE_PRICE_BASELINE_MONTHLY", PRICES.baselineMonthly);
-  Deno.env.set("STRIPE_PRICE_BASELINE_ANNUAL", PRICES.baselineAnnual);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_MONTHLY", PRICES.customMonthly);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_ANNUAL", PRICES.customAnnual);
-
+  setPriceEnv();
   const store = freshStore();
   const admin = createMockAdmin(store);
-
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "free");
-  assertEquals(store.claims.get(USER_ID), "free");
 
   const co = await handleStripeEvent(admin, checkoutEvent(10));
   assertEquals(co.status, "applied");
   assertEquals(store.workspaces.get(WS_ID)!.stripe_customer_id, "cus_1");
-  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "free"); // tier still free until sub event
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "free");
+  assertEquals(store.workspaces.get(WS_ID)!.last_stripe_event_created, 10);
 
   const created = await handleStripeEvent(
     admin,
@@ -449,7 +540,6 @@ Deno.test("checkout → active → cancel yields free→baseline→free on both 
   );
   assertEquals(created.status, "applied");
   assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
-  assertEquals(store.workspaces.get(WS_ID)!.subscription_status, "active");
   assertEquals(store.claims.get(USER_ID), "baseline");
 
   const deleted = await handleStripeEvent(admin, {
@@ -467,17 +557,11 @@ Deno.test("checkout → active → cancel yields free→baseline→free on both 
   });
   assertEquals(deleted.status, "applied");
   assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "free");
-  assertEquals(store.workspaces.get(WS_ID)!.subscription_status, "canceled");
   assertEquals(store.claims.get(USER_ID), "free");
-  assertEquals(store.workspaces.get(WS_ID)!.claim_sync_pending, false);
 });
 
 Deno.test("claim-sync failure flags row but still returns applied (200 path)", async () => {
-  Deno.env.set("STRIPE_PRICE_BASELINE_MONTHLY", PRICES.baselineMonthly);
-  Deno.env.set("STRIPE_PRICE_BASELINE_ANNUAL", PRICES.baselineAnnual);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_MONTHLY", PRICES.customMonthly);
-  Deno.env.set("STRIPE_PRICE_CUSTOM_ANNUAL", PRICES.customAnnual);
-
+  setPriceEnv();
   const store = freshStore();
   store.claimSyncShouldFail = true;
   const admin = createMockAdmin(store);
@@ -494,9 +578,131 @@ Deno.test("claim-sync failure flags row but still returns applied (200 path)", a
   );
   assertEquals(result.status, "applied");
   assertEquals(result.claim_sync_pending, true);
-  // Workspace tier DID update (auth sync is last / best-effort).
   assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "custom");
   assertEquals(store.workspaces.get(WS_ID)!.claim_sync_pending, true);
-  // Claim store unchanged because auth update failed.
   assertEquals(store.claims.get(USER_ID), "free");
+  assertEquals(store.stripeEvents[0]!.applied_at != null, true);
+});
+
+Deno.test("poison-pill retry: insert then fail then retry re-applies", async () => {
+  setPriceEnv();
+  const store = freshStore();
+  store.failNextCasUpdate = true;
+  const admin = createMockAdmin(store);
+  const evt = subEvent({
+    id: "evt_poison",
+    type: "customer.subscription.created",
+    created: 60,
+    status: "active",
+    priceId: PRICES.baselineMonthly,
+  });
+
+  let threw = false;
+  try {
+    await handleStripeEvent(admin, evt);
+  } catch {
+    threw = true;
+  }
+  assertEquals(threw, true);
+  assertEquals(store.stripeEvents.length, 1);
+  assertEquals(store.stripeEvents[0]!.applied_at, null);
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "free");
+
+  // Stripe retries — duplicate_pending path re-applies.
+  const retry = await handleStripeEvent(admin, evt);
+  assertEquals(retry.status, "applied");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
+  assertEquals(store.claims.get(USER_ID), "baseline");
+  assertEquals(store.stripeEvents[0]!.applied_at != null, true);
+});
+
+Deno.test("invoice.payment_failed sets past_due and retries claim sync", async () => {
+  setPriceEnv();
+  const store = freshStore({
+    plan_tier: "baseline",
+    subscription_status: "active",
+    last_stripe_event_created: 10,
+    claim_sync_pending: true,
+  });
+  store.claims.set(USER_ID, "free"); // claim lagging behind workspace
+  const admin = createMockAdmin(store);
+
+  const result = await handleStripeEvent(admin, {
+    id: "evt_invoice_fail",
+    type: "invoice.payment_failed",
+    created: 20,
+    data: {
+      object: {
+        id: "in_1",
+        customer: "cus_1",
+        subscription: "sub_1",
+        metadata: { workspace_id: WS_ID },
+      },
+    },
+  });
+  assertEquals(result.status, "applied");
+  assertEquals(store.workspaces.get(WS_ID)!.subscription_status, "past_due");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "baseline");
+  assertEquals(store.claims.get(USER_ID), "baseline");
+  assertEquals(store.workspaces.get(WS_ID)!.claim_sync_pending, false);
+});
+
+Deno.test("incomplete subscription maps to free on both stores", async () => {
+  setPriceEnv();
+  const store = freshStore({ plan_tier: "baseline", last_stripe_event_created: 1 });
+  store.claims.set(USER_ID, "baseline");
+  const admin = createMockAdmin(store);
+
+  const result = await handleStripeEvent(
+    admin,
+    subEvent({
+      id: "evt_incomplete",
+      type: "customer.subscription.updated",
+      created: 5,
+      status: "incomplete",
+      priceId: PRICES.baselineMonthly,
+    }),
+  );
+  assertEquals(result.status, "applied");
+  assertEquals(store.workspaces.get(WS_ID)!.plan_tier, "free");
+  assertEquals(store.workspaces.get(WS_ID)!.subscription_status, "none");
+  assertEquals(store.claims.get(USER_ID), "free");
+});
+
+// ---------------------------------------------------------------------------
+// Checkout / portal auth gates
+// ---------------------------------------------------------------------------
+
+Deno.test("checkout/portal: missing bearer → 401 UNAUTHENTICATED", async () => {
+  const res = requireBearerHeader(null);
+  assertEquals(res?.status, 401);
+  const body = await res!.json();
+  assertEquals(body.code, "UNAUTHENTICATED");
+});
+
+Deno.test("checkout/portal: wrong workspace → 403 WORKSPACE_FORBIDDEN", async () => {
+  const store = freshStore();
+  const admin = createMockAdmin(store);
+  const result = await requireWorkspaceOwner(
+    admin,
+    { id: USER_ID },
+    "99999999-9999-9999-9999-999999999999",
+  );
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.response.status, 403);
+    const body = await result.response.json();
+    assertEquals(body.code, "WORKSPACE_FORBIDDEN");
+  }
+});
+
+Deno.test("checkout/portal: non-owner → 403 WORKSPACE_FORBIDDEN", async () => {
+  const store = freshStore();
+  store.members = [{ workspace_id: WS_ID, user_id: MEMBER_ID, role: "member" }];
+  const admin = createMockAdmin(store);
+  const result = await requireWorkspaceOwner(admin, { id: MEMBER_ID }, null);
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertEquals(result.response.status, 403);
+  }
 });

@@ -31,6 +31,21 @@ export function mapStripeStatus(status: string | null | undefined): Subscription
   }
 }
 
+/**
+ * Paid claim only while Stripe status maps to active / past_due
+ * (covers trialing→active and unpaid→past_due). incomplete / canceled / none ⇒ free.
+ */
+export function planTierForSubscriptionStatus(
+  status: SubscriptionStatus,
+  priceId: string | null | undefined,
+  prices?: PriceTierEnv,
+): PlanTier {
+  if (status === "active" || status === "past_due") {
+    return planTierFromPriceId(priceId, prices);
+  }
+  return "free";
+}
+
 export interface PriceTierEnv {
   baselineMonthly: string;
   baselineAnnual: string;
@@ -76,6 +91,7 @@ export function planTierFromPriceId(
   ) {
     return "custom";
   }
+  console.warn("stripe price id not mapped to a plan_tier; defaulting to free", priceId);
   return "free";
 }
 

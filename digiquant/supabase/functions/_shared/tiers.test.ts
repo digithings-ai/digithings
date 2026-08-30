@@ -7,6 +7,7 @@ import {
   extractSubscriptionPriceId,
   loadPriceTierEnv,
   mapStripeStatus,
+  planTierForSubscriptionStatus,
   planTierFromPriceId,
 } from "./tiers.ts";
 
@@ -45,4 +46,17 @@ Deno.test("planTierFromPriceId with empty env is free", () => {
     }),
     "free",
   );
+});
+
+Deno.test("planTierForSubscriptionStatus gates paid tiers", () => {
+  const prices = {
+    baselineMonthly: "bm",
+    baselineAnnual: "ba",
+    customMonthly: "cm",
+    customAnnual: "ca",
+  };
+  assertEquals(planTierForSubscriptionStatus("none", "bm", prices), "free");
+  assertEquals(planTierForSubscriptionStatus("canceled", "bm", prices), "free");
+  assertEquals(planTierForSubscriptionStatus("active", "bm", prices), "baseline");
+  assertEquals(planTierForSubscriptionStatus("past_due", "cm", prices), "custom");
 });

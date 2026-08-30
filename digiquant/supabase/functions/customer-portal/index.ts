@@ -11,10 +11,13 @@ import {
   StripeHttpError,
 } from "../_shared/stripe.ts";
 import {
+  requireBearerHeader,
+  requireWorkspaceOwner,
+} from "../_shared/billing-auth.ts";
+import {
   createAdminClient,
   jsonError,
   jsonOk,
-  resolveCallerWorkspace,
 } from "../_shared/supabase-admin.ts";
 import { createClient } from "@supabase/supabase-js";
 
@@ -24,9 +27,8 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return jsonError(401, "UNAUTHENTICATED", "Missing bearer token");
-  }
+  const missing = requireBearerHeader(authHeader);
+  if (missing) return missing;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("CORE_SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("CORE_SUPABASE_ANON_KEY");
@@ -35,7 +37,7 @@ Deno.serve(async (req) => {
   }
 
   const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: authHeader! } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: userData, error: userErr } = await userClient.auth.getUser();
@@ -65,18 +67,14 @@ Deno.serve(async (req) => {
     return jsonError(500, "ADMIN_NOT_CONFIGURED", "Billing backend not configured");
   }
 
-  const resolved = await resolveCallerWorkspace(admin, userData.user.id);
-  if (!resolved) {
-    return jsonError(403, "WORKSPACE_FORBIDDEN", "No workspace membership");
-  }
-  if (requestedWorkspaceId && requestedWorkspaceId !== resolved.workspace.id) {
-    return jsonError(403, "WORKSPACE_FORBIDDEN", "Wrong workspace");
-  }
-  if (resolved.role !== "owner") {
-    return jsonError(403, "WORKSPACE_FORBIDDEN", "Owner role required");
-  }
+  const authz = await requireWorkspaceOwner(
+    admin,
+    { id: userData.user.id, email: userData.user.email },
+    requestedWorkspaceId,
+  );
+  if (!authz.ok) return authz.response;
 
-  const customerId = resolved.workspace.stripe_customer_id;
+  const customerId = authz.workspace.stripe_customer_id;
   if (!customerId) {
     return jsonError(409, "NO_STRIPE_CUSTOMER", "No Stripe customer on workspace");
   }

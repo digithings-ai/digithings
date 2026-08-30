@@ -11,10 +11,13 @@ import {
   StripeHttpError,
 } from "../_shared/stripe.ts";
 import {
+  requireBearerHeader,
+  requireWorkspaceOwner,
+} from "../_shared/billing-auth.ts";
+import {
   createAdminClient,
   jsonError,
   jsonOk,
-  resolveCallerWorkspace,
 } from "../_shared/supabase-admin.ts";
 import { createClient } from "@supabase/supabase-js";
 import { loadPriceTierEnv, type PlanTier } from "../_shared/tiers.ts";
@@ -28,9 +31,8 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return jsonError(401, "UNAUTHENTICATED", "Missing bearer token");
-  }
+  const missing = requireBearerHeader(authHeader);
+  if (missing) return missing;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? Deno.env.get("CORE_SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("CORE_SUPABASE_ANON_KEY");
@@ -39,7 +41,7 @@ Deno.serve(async (req) => {
   }
 
   const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
+    global: { headers: { Authorization: authHeader! } },
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data: userData, error: userErr } = await userClient.auth.getUser();
@@ -77,16 +79,12 @@ Deno.serve(async (req) => {
     return jsonError(500, "ADMIN_NOT_CONFIGURED", "Billing backend not configured");
   }
 
-  const resolved = await resolveCallerWorkspace(admin, user.id);
-  if (!resolved) {
-    return jsonError(403, "WORKSPACE_FORBIDDEN", "No workspace membership");
-  }
-  if (body.workspace_id && body.workspace_id !== resolved.workspace.id) {
-    return jsonError(403, "WORKSPACE_FORBIDDEN", "Wrong workspace");
-  }
-  if (resolved.role !== "owner") {
-    return jsonError(403, "WORKSPACE_FORBIDDEN", "Owner role required");
-  }
+  const authz = await requireWorkspaceOwner(
+    admin,
+    { id: user.id, email: user.email },
+    body.workspace_id ?? null,
+  );
+  if (!authz.ok) return authz.response;
 
   const appUrl = (Deno.env.get("NEXT_PUBLIC_APP_URL") ?? "").replace(/\/$/, "");
   if (!appUrl) {
@@ -96,10 +94,10 @@ Deno.serve(async (req) => {
   try {
     const secret = requireStripeSecret();
     const session = await createCheckoutSession(secret, {
-      customerId: resolved.workspace.stripe_customer_id,
+      customerId: authz.workspace.stripe_customer_id,
       customerEmail: user.email,
       priceId,
-      workspaceId: resolved.workspace.id,
+      workspaceId: authz.workspace.id,
       successUrl: `${appUrl}/settings/billing?checkout=success`,
       cancelUrl: `${appUrl}/settings/billing?checkout=cancel`,
     });

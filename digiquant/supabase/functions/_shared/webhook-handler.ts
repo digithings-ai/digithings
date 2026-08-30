@@ -1,14 +1,18 @@
 /**
  * Pure Stripe webhook apply path (T2) — imported by stripe-webhook/index.ts and tests.
  *
- * Does not call Deno.serve. Admin + Stripe clients are injected.
+ * Invariants (review):
+ * - An inserted-but-not-applied event remains retryable (applied_at NULL).
+ * - Every applied event retries claim sync.
+ * - Ordering is atomic via workspaces.last_stripe_event_created CAS.
  */
 
 import type { StripeEvent } from "./stripe.ts";
 import {
+  casUpdateWorkspaceBilling,
   insertStripeEvent,
   listWorkspaceMembers,
-  maxAppliedEventCreated,
+  markStripeEventApplied,
   syncPlanTierClaims,
   type AdminClient,
   type WorkspaceRow,
@@ -16,7 +20,7 @@ import {
 import {
   extractSubscriptionPriceId,
   mapStripeStatus,
-  planTierFromPriceId,
+  planTierForSubscriptionStatus,
   type PlanTier,
   type SubscriptionStatus,
 } from "./tiers.ts";
@@ -55,35 +59,35 @@ export async function handleStripeEvent(
     },
   });
 
-  if (insertStatus === "duplicate") {
+  if (insertStatus.status === "duplicate_applied") {
     return { ok: true, status: "duplicate" };
   }
-  if (insertStatus === "error") {
+  if (insertStatus.status === "error") {
     throw new Error("stripe_events insert failed");
   }
+  // "inserted" | "duplicate_pending" → continue to (re-)apply.
 
-  // Out-of-order guard: ignore older events for the same subscription.
-  if (subscriptionId || workspace) {
-    const priorMax = await maxAppliedEventCreated(admin, {
-      workspaceId: workspace?.id ?? null,
-      subscriptionId,
-      excludeEventId: event.id,
-    });
-    if (priorMax > 0 && event.created < priorMax) {
+  try {
+    const applied = await applyEventMapping(admin, event, workspace);
+    // Mark applied only after the apply path finishes without throw.
+    // Stale / ignored paths also mark applied so Stripe stops retrying.
+    await markStripeEventApplied(admin, event.id);
+
+    if (!applied) {
+      return { ok: true, status: "ignored" };
+    }
+    if (applied.stale) {
       return { ok: true, status: "out_of_order" };
     }
+    return {
+      ok: true,
+      status: "applied",
+      claim_sync_pending: applied.claimSyncPending,
+    };
+  } catch (err) {
+    // Leave applied_at NULL so Stripe's retry re-enters via duplicate_pending.
+    throw err;
   }
-
-  const applied = await applyEventMapping(admin, event, workspace);
-  if (!applied) {
-    return { ok: true, status: "ignored" };
-  }
-
-  return {
-    ok: true,
-    status: "applied",
-    claim_sync_pending: applied.claimSyncPending,
-  };
 }
 
 function extractWorkspaceId(obj: Record<string, unknown>): string | null {
@@ -109,6 +113,9 @@ function extractSubscriptionId(
   return null;
 }
 
+const WORKSPACE_SELECT =
+  "id, stripe_customer_id, stripe_subscription_id, subscription_status, plan_tier, claim_sync_pending, last_stripe_event_created";
+
 async function resolveWorkspace(
   admin: AdminClient,
   args: {
@@ -120,9 +127,7 @@ async function resolveWorkspace(
   if (args.workspaceId) {
     const { data } = await admin
       .from("workspaces")
-      .select(
-        "id, stripe_customer_id, stripe_subscription_id, subscription_status, plan_tier, claim_sync_pending",
-      )
+      .select(WORKSPACE_SELECT)
       .eq("id", args.workspaceId)
       .maybeSingle();
     if (data) return data as WorkspaceRow;
@@ -130,9 +135,7 @@ async function resolveWorkspace(
   if (args.subscriptionId) {
     const { data } = await admin
       .from("workspaces")
-      .select(
-        "id, stripe_customer_id, stripe_subscription_id, subscription_status, plan_tier, claim_sync_pending",
-      )
+      .select(WORKSPACE_SELECT)
       .eq("stripe_subscription_id", args.subscriptionId)
       .maybeSingle();
     if (data) return data as WorkspaceRow;
@@ -140,9 +143,7 @@ async function resolveWorkspace(
   if (args.customerId) {
     const { data } = await admin
       .from("workspaces")
-      .select(
-        "id, stripe_customer_id, stripe_subscription_id, subscription_status, plan_tier, claim_sync_pending",
-      )
+      .select(WORKSPACE_SELECT)
       .eq("stripe_customer_id", args.customerId)
       .maybeSingle();
     if (data) return data as WorkspaceRow;
@@ -152,6 +153,7 @@ async function resolveWorkspace(
 
 interface ApplyResult {
   claimSyncPending: boolean;
+  stale?: boolean;
 }
 
 async function applyEventMapping(
@@ -169,17 +171,27 @@ async function applyEventMapping(
       const patch: Record<string, unknown> = {};
       if (customerId) patch.stripe_customer_id = customerId;
       if (subscriptionId) patch.stripe_subscription_id = subscriptionId;
-      if (Object.keys(patch).length === 0) return null;
-      await admin.from("workspaces").update(patch).eq("id", workspace.id);
-      if (workspace.claim_sync_pending) {
-        const pending = !(await runClaimSync(admin, workspace.id, workspace.plan_tier as PlanTier));
-        await admin
-          .from("workspaces")
-          .update({ claim_sync_pending: pending })
-          .eq("id", workspace.id);
-        return { claimSyncPending: pending };
+      if (Object.keys(patch).length === 0) {
+        // Nothing to write, but still retry claim sync for any pending flag.
+        return await finishWithClaimSync(
+          admin,
+          workspace.id,
+          workspace.plan_tier as PlanTier,
+        );
       }
-      return { claimSyncPending: false };
+      const won = await casUpdateWorkspaceBilling(
+        admin,
+        workspace.id,
+        event.created,
+        patch,
+      );
+      if (!won) return { claimSyncPending: workspace.claim_sync_pending, stale: true };
+      // Re-read plan_tier after CAS (unchanged by checkout) for claim sync.
+      return await finishWithClaimSync(
+        admin,
+        workspace.id,
+        workspace.plan_tier as PlanTier,
+      );
     }
 
     case "customer.subscription.created":
@@ -191,11 +203,8 @@ async function applyEventMapping(
       const priceId = extractSubscriptionPriceId(
         obj as { items?: { data?: Array<{ price?: { id?: string } }> } },
       );
-      let planTier: PlanTier = planTierFromPriceId(priceId);
-      if (status === "canceled") {
-        planTier = "free";
-      }
-      return await writeBillingAndSyncClaims(admin, workspace.id, {
+      const planTier = planTierForSubscriptionStatus(status, priceId);
+      return await writeBillingAndSyncClaims(admin, workspace.id, event.created, {
         stripe_subscription_id: typeof obj.id === "string"
           ? obj.id
           : workspace.stripe_subscription_id,
@@ -209,7 +218,7 @@ async function applyEventMapping(
 
     case "customer.subscription.deleted": {
       if (!workspace) return null;
-      return await writeBillingAndSyncClaims(admin, workspace.id, {
+      return await writeBillingAndSyncClaims(admin, workspace.id, event.created, {
         subscription_status: "canceled" satisfies SubscriptionStatus,
         plan_tier: "free",
       });
@@ -217,11 +226,11 @@ async function applyEventMapping(
 
     case "invoice.payment_failed": {
       if (!workspace) return null;
-      await admin
-        .from("workspaces")
-        .update({ subscription_status: "past_due" satisfies SubscriptionStatus })
-        .eq("id", workspace.id);
-      return { claimSyncPending: workspace.claim_sync_pending };
+      return await writeBillingAndSyncClaims(admin, workspace.id, event.created, {
+        subscription_status: "past_due" satisfies SubscriptionStatus,
+        // Keep current plan_tier during grace; claim sync still runs.
+        plan_tier: workspace.plan_tier as PlanTier,
+      });
     }
 
     default:
@@ -232,6 +241,7 @@ async function applyEventMapping(
 async function writeBillingAndSyncClaims(
   admin: AdminClient,
   workspaceId: string,
+  eventCreated: number,
   patch: {
     stripe_subscription_id?: string | null;
     stripe_customer_id?: string | null;
@@ -239,16 +249,28 @@ async function writeBillingAndSyncClaims(
     plan_tier: PlanTier;
   },
 ): Promise<ApplyResult> {
-  const { error } = await admin.from("workspaces").update(patch).eq("id", workspaceId);
-  if (error) {
-    throw new Error("workspaces update failed");
+  const won = await casUpdateWorkspaceBilling(admin, workspaceId, eventCreated, patch);
+  if (!won) {
+    return { claimSyncPending: false, stale: true };
   }
-  const claimOk = await runClaimSync(admin, workspaceId, patch.plan_tier);
+  return await finishWithClaimSync(admin, workspaceId, patch.plan_tier);
+}
+
+/** Claim sync on every applied event; propagate claim_sync_pending flag errors. */
+async function finishWithClaimSync(
+  admin: AdminClient,
+  workspaceId: string,
+  planTier: PlanTier,
+): Promise<ApplyResult> {
+  const claimOk = await runClaimSync(admin, workspaceId, planTier);
   const claimSyncPending = !claimOk;
-  await admin
+  const { error } = await admin
     .from("workspaces")
     .update({ claim_sync_pending: claimSyncPending })
     .eq("id", workspaceId);
+  if (error) {
+    throw new Error("workspaces claim_sync_pending update failed");
+  }
   return { claimSyncPending };
 }
 

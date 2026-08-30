@@ -29,11 +29,20 @@ export interface WorkspaceRow {
   subscription_status: string;
   plan_tier: string;
   claim_sync_pending: boolean;
+  last_stripe_event_created: number | null;
 }
 
 export interface MemberRow {
   user_id: string;
   role: string;
+}
+
+export interface StripeEventRow {
+  stripe_event_id: string;
+  event_type: string;
+  workspace_id: string | null;
+  payload: Record<string, unknown> | null;
+  applied_at: string | null;
 }
 
 /** Stable JSON error body — never include stack traces or secrets. */
@@ -65,7 +74,9 @@ export async function resolveCallerWorkspace(
 ): Promise<{ workspace: WorkspaceRow; role: string } | null> {
   const { data, error } = await admin
     .from("workspace_members")
-    .select("role, workspace_id, workspaces!inner(id, stripe_customer_id, stripe_subscription_id, subscription_status, plan_tier, claim_sync_pending)")
+    .select(
+      "role, workspace_id, workspaces!inner(id, stripe_customer_id, stripe_subscription_id, subscription_status, plan_tier, claim_sync_pending, last_stripe_event_created)",
+    )
     .eq("user_id", userId);
   if (error || !data || data.length === 0) {
     return null;
@@ -128,11 +139,15 @@ export async function syncPlanTierClaims(
   return ok;
 }
 
+export type InsertStripeEventResult =
+  | { status: "inserted" }
+  | { status: "duplicate_applied" }
+  | { status: "duplicate_pending" }
+  | { status: "error" };
+
 /**
- * Insert stripe_events row. Returns:
- *   - "inserted" on success
- *   - "duplicate" on unique violation (idempotent no-op)
- *   - "error" on other failures
+ * Insert stripe_events with applied_at NULL.
+ * On PK conflict: look up the row — already-applied ⇒ no-op; pending ⇒ re-apply.
  */
 export async function insertStripeEvent(
   admin: AdminClient,
@@ -142,54 +157,80 @@ export async function insertStripeEvent(
     workspaceId: string | null;
     payload: Record<string, unknown>;
   },
-): Promise<"inserted" | "duplicate" | "error"> {
+): Promise<InsertStripeEventResult> {
   const { error } = await admin.from("stripe_events").insert({
     stripe_event_id: args.stripeEventId,
     event_type: args.eventType.slice(0, 100),
     workspace_id: args.workspaceId,
     payload: args.payload,
+    applied_at: null,
   });
-  if (!error) return "inserted";
+  if (!error) return { status: "inserted" };
+
   const msg = (error.message ?? "").toLowerCase();
   const code = (error as { code?: string }).code ?? "";
-  if (code === "23505" || msg.includes("duplicate") || msg.includes("unique")) {
-    return "duplicate";
+  if (!(code === "23505" || msg.includes("duplicate") || msg.includes("unique"))) {
+    return { status: "error" };
   }
-  return "error";
+
+  const existing = await getStripeEvent(admin, args.stripeEventId);
+  if (!existing) return { status: "error" };
+  if (existing.applied_at != null) return { status: "duplicate_applied" };
+  return { status: "duplicate_pending" };
+}
+
+export async function getStripeEvent(
+  admin: AdminClient,
+  stripeEventId: string,
+): Promise<StripeEventRow | null> {
+  const { data, error } = await admin
+    .from("stripe_events")
+    .select("stripe_event_id, event_type, workspace_id, payload, applied_at")
+    .eq("stripe_event_id", stripeEventId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as StripeEventRow;
+}
+
+/** Mark an event applied after a successful (or deliberately no-op) apply path. */
+export async function markStripeEventApplied(
+  admin: AdminClient,
+  stripeEventId: string,
+): Promise<void> {
+  const { error } = await admin
+    .from("stripe_events")
+    .update({ applied_at: new Date().toISOString() })
+    .eq("stripe_event_id", stripeEventId)
+    .is("applied_at", null);
+  if (error) {
+    throw new Error("stripe_events applied_at update failed");
+  }
 }
 
 /**
- * Max Stripe event `created` previously applied for this subscription / workspace.
- * Used for the out-of-order guard (T2 binding #1).
+ * CAS billing write: update workspace columns only if this event is newer than
+ * `last_stripe_event_created`. Returns false when zero rows matched (stale).
+ * Propagates PostgREST errors as throws (500-retryable; applied_at stays NULL).
  */
-export async function maxAppliedEventCreated(
+export async function casUpdateWorkspaceBilling(
   admin: AdminClient,
-  args: {
-    workspaceId: string | null;
-    subscriptionId: string | null;
-    excludeEventId: string;
-  },
-): Promise<number> {
-  // Prefer workspace-scoped history; fall back to scanning recent events when
-  // workspace is not yet attached (first checkout).
-  let query = admin
-    .from("stripe_events")
-    .select("stripe_event_id, payload")
-    .neq("stripe_event_id", args.excludeEventId)
-    .order("processed_at", { ascending: false })
-    .limit(50);
-  if (args.workspaceId) {
-    query = query.eq("workspace_id", args.workspaceId);
+  workspaceId: string,
+  eventCreated: number,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  const { data, error } = await admin
+    .from("workspaces")
+    .update({
+      ...patch,
+      last_stripe_event_created: eventCreated,
+    })
+    .eq("id", workspaceId)
+    .or(
+      `last_stripe_event_created.is.null,last_stripe_event_created.lt.${eventCreated}`,
+    )
+    .select("id");
+  if (error) {
+    throw new Error("workspaces CAS update failed");
   }
-  const { data, error } = await query;
-  if (error || !data) return 0;
-  let maxCreated = 0;
-  for (const row of data as Array<{ stripe_event_id: string; payload: Record<string, unknown> | null }>) {
-    const payload = row.payload ?? {};
-    const created = typeof payload.created === "number" ? payload.created : 0;
-    const subId = typeof payload.subscription_id === "string" ? payload.subscription_id : null;
-    if (args.subscriptionId && subId && subId !== args.subscriptionId) continue;
-    if (created > maxCreated) maxCreated = created;
-  }
-  return maxCreated;
+  return Array.isArray(data) && data.length > 0;
 }
