@@ -58,15 +58,13 @@ def test_canon_census_app_is_dashboard_folder() -> None:
 
 
 def test_dashboard_does_not_ship_olympus_public_env_keys() -> None:
-    env = (REPO_ROOT / "frontend" / "dashboard" / ".env.local.example").read_text(
-        encoding="utf-8"
-    )
+    env = (REPO_ROOT / "frontend" / "dashboard" / ".env.local.example").read_text(encoding="utf-8")
     assert "NEXT_PUBLIC_OLYMPUS" not in env
     assert "NEXT_PUBLIC_DASHBOARD_AUTH" in env
     build = BUILD.read_text(encoding="utf-8")
     assert "NEXT_PUBLIC_OLYMPUS" not in build
-    shell = (REPO_ROOT / "frontend" / "dashboard" / "components" / "app-shell-context.tsx").read_text(
-        encoding="utf-8"
-    )
+    shell = (
+        REPO_ROOT / "frontend" / "dashboard" / "components" / "app-shell-context.tsx"
+    ).read_text(encoding="utf-8")
     assert "dashboard-sidebar-collapsed" in shell
     assert "localStorage.setItem(STORAGE_KEY" in shell
