@@ -45,15 +45,27 @@ Static export inlines `NEXT_PUBLIC_*` at build — there is no runtime server en
 3. Do **not** add custom cookie/session wiring in the app — session storage stays
    inside supabase-js (`flowType: 'pkce'`, `persistSession: true`).
 
+### Pages Auth UI (without anon-drop cutover 900)
+
+`/olympus/login` and `/olympus/auth/callback` are static routes. They must exist
+on `main` for Cloudflare Pages to stop 404ing those paths. Enabling
+`NEXT_PUBLIC_OLYMPUS_AUTH=1` (build-time; `scripts/build-digiquant.sh` defaults
+it on when `CF_PAGES=1` and the var is unset) shows the LoginScreen / AuthGate
+**without** applying `migrations/cutover/900_*`. Anon RLS stays until the
+coordinated cutover below — do **not** treat Auth-UI-on as full tenancy cutover.
+
 ### Cutover checklist (coordinated release — human)
 
 1. Merge T0 workspaces/RLS (incl. drafted anon-policy drop) when ready.
-2. Flip `NEXT_PUBLIC_OLYMPUS_AUTH=1` on the digiquant.io Cloudflare Pages build.
+2. Confirm `NEXT_PUBLIC_OLYMPUS_AUTH=1` on the digiquant.io Cloudflare Pages build
+   (or leave unset so `build-digiquant.sh` defaults it on under `CF_PAGES=1`).
 3. Redeploy the static Olympus bundle.
-4. Owner removes Cloudflare Access from production `/olympus/*` (D7).
-5. Keep Access on **staging** only (below).
+4. Apply cutover SQL `900_*` only after Access + Auth UI plan (never auto).
+5. Owner removes Cloudflare Access from production `/olympus/*` (D7).
+6. Keep Access on **staging** only (below).
 
 **HUMAN GATE:** auth flow review before merge; production cutover is owner-led.
+**Never apply cutover 900** as part of the narrow Auth Pages PR.
 
 ## Cloudflare Access (staging-only overlay after T1)
 

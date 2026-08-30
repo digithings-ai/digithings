@@ -68,6 +68,13 @@ cp -r frontend/digiquant-web/out/. dist/
 
 # 2. Olympus dashboard (basePath /olympus) → dist/olympus/.
 echo "--- building Olympus dashboard ---"
+# T1 Pages gap: default Auth login UI on Cloudflare Pages without cutover 900
+# (anon RLS remains until intentional human cutover). Explicit
+# NEXT_PUBLIC_OLYMPUS_AUTH=0 keeps the classic pre-auth shell.
+if [ "${CF_PAGES:-}" = "1" ] && [ -z "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" ]; then
+  export NEXT_PUBLIC_OLYMPUS_AUTH=1
+fi
+echo "NEXT_PUBLIC_OLYMPUS_AUTH=${NEXT_PUBLIC_OLYMPUS_AUTH:-<unset>}"
 npm --workspace frontend/olympus run build
 mkdir -p dist/olympus
 cp -r frontend/olympus/out/. dist/olympus/
@@ -86,6 +93,9 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 [ -f dist/subsystems/atlas/index.html ] || { echo "ERROR: subsystem pages missing" >&2; exit 1; }
 [ -f dist/_headers ] || { echo "ERROR: dist/_headers missing — CSP would not apply" >&2; exit 1; }
 [ -f dist/olympus/index.html ] || { echo "ERROR: dist/olympus/index.html missing — Olympus did not export" >&2; exit 1; }
+# Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
+[ -f dist/olympus/login/index.html ] || { echo "ERROR: dist/olympus/login/index.html missing — Auth login route not exported" >&2; exit 1; }
+[ -f dist/olympus/auth/callback/index.html ] || { echo "ERROR: dist/olympus/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
