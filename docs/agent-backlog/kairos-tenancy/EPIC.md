@@ -155,6 +155,8 @@ pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exi
 personal workspace (`kairos-e2e-…+s3101@`, `plan_tier=free`) appeared on core;
 it does not prove Stripe.
 
+**Landed 2026-08-31T09:48Z (not epic-complete):** account Settings IA [#3264](https://github.com/digithings-ai/digithings/pull/3264) + remaining-hop harness [#3269](https://github.com/digithings-ai/digithings/pull/3269) on `develop`; Pages account UI [#3266](https://github.com/digithings-ai/digithings/pull/3266) on `main` (live HTML at 09:49Z still showed the pre-IA tab set; wait for Cloudflare Pages). Remaining hops stay on `develop` until a later promote.
+
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
 Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
 [#3256](https://github.com/digithings-ai/digithings/pull/3256). Never apply cutover 900.
