@@ -9,6 +9,7 @@ import { KeysTab } from '@/components/settings/keys-tab';
 import { BrokersTab } from '@/components/settings/brokers-tab';
 import { NotifyTab } from '@/components/settings/notify-tab';
 import { BillingTab } from '@/components/settings/billing-tab';
+import { RemainingHopStatus } from '@/components/settings/remaining-hop-status';
 import { subpageTabButtonClass, SubpageStickyTabBar } from '@/components/subpage-tab-bar';
 import { useDashboard } from '@/lib/dashboard-context';
 import { useAppShell } from '@/components/app-shell-context';
@@ -125,7 +126,8 @@ export default function SettingsPage() {
         {activeTab === 'notifications' ? <NotifyTab api={api} /> : null}
         {activeTab === 'billing' ? <BillingTab api={api} /> : null}
         {activeTab === 'about' ? (
-          <div data-testid="settings-about">
+          <div className="space-y-5" data-testid="settings-about">
+            <RemainingHopStatus api={api} />
             <SettingsContent
               variant="popover"
               lastRunDate={meta?.last_updated ?? null}
