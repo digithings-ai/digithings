@@ -644,9 +644,14 @@ def orchestrator_invoke(
         else:
             path_prefix = normalize_vault_path(str(path_prefix_raw))
             if not path_prefix:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
+                # Match digivault_get_note: ok=False (HTTP 200), not a raised 400.
+                # digigraph's invoke_digivault_tool calls raise_for_status(), which
+                # drops the response body on a 400 — the model would see only a bare
+                # status code (#2408 / #2410 follow-up).
+                return OrchestratorInvokeResponse(
+                    ok=False,
+                    tool=tool,
+                    error=(
                         "path_prefix was provided but normalizes to empty; "
                         "omit it entirely to search without a prefix"
                     ),

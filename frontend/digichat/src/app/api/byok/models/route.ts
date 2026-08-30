@@ -5,6 +5,10 @@ import { checkBffRateLimit } from "@/lib/bff-rate-limit";
 import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { OPENROUTER_API_BASE } from "@/lib/byok-openrouter";
 import { bucketOpenRouterModels, type OpenRouterCatalogEntry } from "@/lib/openrouter-catalog";
+import {
+  readOpenRouterCatalogCache,
+  writeOpenRouterCatalogCache,
+} from "@/lib/openrouter-catalog-cache";
 
 export const maxDuration = 15;
 
@@ -82,6 +86,11 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   try {
+    const cached = readOpenRouterCatalogCache();
+    if (cached) {
+      return jsonResponse({ ok: true, ...cached }, 200);
+    }
+
     const resp = await fetchWithTimeout(`${OPENROUTER_API_BASE}/models`, { method: "GET" });
     if (!resp.ok) {
       return jsonResponse({ error: "upstream_error", message: `OpenRouter returned HTTP ${resp.status}` }, 502);
@@ -105,6 +114,7 @@ export async function GET(req: Request): Promise<Response> {
       return jsonResponse({ error: "malformed_response" }, 502);
     }
     const buckets = bucketOpenRouterModels(data as OpenRouterCatalogEntry[]);
+    writeOpenRouterCatalogCache(buckets);
     return jsonResponse({ ok: true, ...buckets }, 200);
   } catch (e) {
     console.error("[byok/models] upstream fetch failed:", e);
