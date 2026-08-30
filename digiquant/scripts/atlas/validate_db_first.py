@@ -95,9 +95,14 @@ def _pass(msg: str) -> None:
     print(f"✅ {msg}")
 
 
-def _has_research_delta(sb, d: str) -> bool:
-    """True if any documents row for this date carries a research_delta payload (any document_key)."""
-    res = sb.table("documents").select("payload").eq("date", d).limit(500).execute()
+def _has_research_delta(sb: Any, d: str) -> bool:
+    """True if any house documents row for this date carries a research_delta payload."""
+    res = (
+        eq_house_workspace(sb.table("documents").select("payload"))
+        .eq("date", d)
+        .limit(500)
+        .execute()
+    )
     for r in getattr(res, "data", None) or []:
         p = r.get("payload")
         if isinstance(p, dict) and p.get("doc_type") == "research_delta":
@@ -105,10 +110,9 @@ def _has_research_delta(sb, d: str) -> bool:
     return False
 
 
-def _has_research_doc(sb, d: str) -> bool:
+def _has_research_doc(sb: Any, d: str) -> bool:
     res = (
-        sb.table("documents")
-        .select("payload,document_key")
+        eq_house_workspace(sb.table("documents").select("payload,document_key"))
         .eq("date", d)
         .limit(500)
         .execute()
@@ -131,10 +135,21 @@ def _has_research_doc(sb, d: str) -> bool:
     return False
 
 
-def _has_rebalance_doc(sb, d: str) -> bool:
+def house_digest_on_date(sb: Any, d: str) -> list[dict[str, Any]]:
+    """House ``digest`` row for ``d``. Overlay same-key rows must not pass validation."""
     res = (
-        sb.table("documents")
-        .select("payload")
+        eq_house_workspace(sb.table("documents").select("date,document_key,payload"))
+        .eq("date", d)
+        .eq("document_key", "digest")
+        .limit(1)
+        .execute()
+    )
+    return list(getattr(res, "data", None) or [])
+
+
+def _has_rebalance_doc(sb: Any, d: str) -> bool:
+    res = (
+        eq_house_workspace(sb.table("documents").select("payload"))
         .eq("date", d)
         .eq("document_key", "rebalance-decision.json")
         .limit(1)
@@ -195,15 +210,7 @@ def main() -> int:
         else:
             _pass("documents: digest or research_delta present")
     else:
-        doc = (
-            sb.table("documents")
-            .select("date,document_key,payload")
-            .eq("date", d)
-            .eq("document_key", "digest")
-            .limit(1)
-            .execute()
-        )
-        drows = getattr(doc, "data", None) or []
+        drows = house_digest_on_date(sb, d)
         if not drows:
             _fail(f"documents missing digest for {d}")
             fails += 1

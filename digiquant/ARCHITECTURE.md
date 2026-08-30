@@ -3235,9 +3235,13 @@ argument off (`load_prior_book`, `load_portfolio_performance_snapshot`,
 mean "every row". House atlas ops readers (`repair_supabase_portfolio_data`,
 `seed_ledger_opening_snapshot`, `backfill_position_events`,
 `ensure_position_activity_through_today`, `backfill_positions_entry_from_events`,
-`validate_db_first` Group A checks, `backfill_export_state` positions export,
-`backfill_pm_rebalance_and_activity` thesis map, `backfill_position_event_reasons`
-house event pages, `audit_activity_coverage_api` Group A max-dates) pin via
+`validate_db_first` Group A checks and house ``documents`` presence
+(`_has_research_*` / `house_digest_on_date`), `backfill_export_state` positions
+and documents export, `backfill_pm_rebalance_and_activity` thesis map,
+`backfill_position_event_reasons` house event pages and document payload
+lookups, `materialize_snapshot.house_digest_documents` (digest sync must not
+copy overlay ``DIGEST.md`` into house ``daily_snapshots.digest_markdown``),
+`audit_activity_coverage_api` Group A max-dates) pin via
 `eq_house_workspace()`
 (omitted id = house). House research/MCP `query_data` / `digiquant_query_data`
 stamps house `workspace_id` on those same Group A tables when `eq` omits it
