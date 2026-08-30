@@ -1,6 +1,8 @@
 # Kairos epic — completion audit (GitHub Auth proven, 2026-08-30T21:18Z)
 
-**Verdict: NOT COMPLETE** — do not mark goal complete. Staging E2E still blocked on vendor captchas / secrets. Observer `GET /settings/app-urls` currently fails the develop `/dashboard` pin against live `/olympus` Pages+EF (exit 3). Observer now also requires live `POST /settings/access/redeem-invite` (short dummy → `INVITE_INVALID`); v32 404s that route. Scheduled house GHA book-commit is still unproven (last schedule failed; #3331 stamp + #3334 UUID stringify are on `main` awaiting next cron). Prove with `python scripts/digiquant_house_pipeline_proof.py` (exit **5** while `origin/main` is still `3601f72df`; exit **3** until a counting `0 12 * * *` schedule after current `main` committer time; never `workflow_dispatch`). Monday 2026-08-31 ledger was recovered operator-side (`8ab9840f-0946-4026-860b-cce20f75eb93` / `commit-run/52066e03-6c50-44bb-af18-e263664eacd4`); that is not a green `pipeline-olympus.yml` run.
+**Verdict: DELIVERED (owner closed 2026-09-01)** — live E2E and house schedule proof were **not** obtained. Follow-up [#3388](https://github.com/digithings-ai/digithings/issues/3388) stays open: pick it up after the next `pipeline-olympus.yml` `cron: "0 12 * * *"` schedule and stamp this file with the run id and probe exits. Do not claim house GHA or staging E2E passed. Do not re-open the epic unless a probe contradicts delivery.
+
+**2026-09-01T09:30Z — owner close.** Issue [#3388](https://github.com/digithings-ai/digithings/issues/3388) opened (`[agent] validate execution/tenancy on next house pipeline run`). Epic / INDEX / HUMAN-UNBLOCK stamped delivered. Last live probes (still true, **not** proof): house proof exit **5** (`failsofts=#3343 OPEN MERGEABLE CLEAN #3348 OPEN MERGEABLE CLEAN #3351 OPEN MERGEABLE CLEAN #3354 OPEN MERGEABLE CLEAN stack ready (do not merge from authoring agent)`); `--dispatch` **4**; pages gate **3** (all `/dashboard/*` 404 including Alpaca callback; `/olympus/.../callback/` **200**); route `--check` **0** (`routing_enabled=false`); overlay `--check` **0**; cron check **2** (`MAILGUN_NOT_CONFIGURED`). `origin/main` still `3601f72df`. Unique-conflict writers [#3387](https://github.com/digithings-ai/digithings/pull/3387) are draft on `main` — merge **after** fail-softs, never from the authoring agent. Labels / Project #1 add on #3388 failed from this agent token.
 
 **2026-09-01T09:00Z — [#3356](https://github.com/digithings-ai/digithings/pull/3356) HEAD `ebbb311b5`.** Pages twin now fail-closes unless `dist/dashboard/settings/brokers/callback/` exports with `alpaca-oauth-callback`. CI green (review coverage + `bash scripts/build-digiquant.sh`); Next listed `○ /settings/brokers/callback` on both `/olympus` and `/dashboard` passes. Live `/olympus/settings/brokers/callback/` **200**, `/dashboard/.../callback/` **404**. **Human-merge only** (parallel to house fail-softs). Do not `--apply` until live `/dashboard/` **and** `/dashboard/settings/brokers/callback/` are 200. Authoring agent must not merge #3356.
 
@@ -81,7 +83,7 @@ Captcha-ask docs: [#3239](https://github.com/digithings-ai/digithings/pull/3239)
 | Identity | **digithings** ([#3236](https://github.com/digithings-ai/digithings/pull/3236) merged) |
 | Stripe / Mailgun / Alpaca API secrets | **MISSING** — captchas (forms re-filled digithings@) |
 | Core EF vendor secrets | **not set** (vault / APP_URL / SUPABASE_* only) |
-| Staging E2E | exit **3** — live EF `/olympus` vs develop `/dashboard` pin; next miss exit **2** (9 named secrets) |
+| Staging E2E | exit **3** — not proven; deferred to [#3388](https://github.com/digithings-ai/digithings/issues/3388) |
 | Mailgun notify loud-fail | exit **2** — `MAILGUN_NOT_CONFIGURED` |
 | Olympus Auth Pages (#3231) | live on prod Pages |
 | **GitHub Auth login** | **PROVEN** on `digiquant.io` + `core` DB |
@@ -89,6 +91,7 @@ Captcha-ask docs: [#3239](https://github.com/digithings-ai/digithings/pull/3239)
 | Email/password on login UI | **absent** (Google + GitHub only) — cannot use digithings@ Agentmail password path |
 | Draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) | left draft |
 | Cutover `900` | **not applied** |
+| Epic | **DELIVERED** (owner closed 2026-09-01) — live house/E2E proof is [#3388](https://github.com/digithings-ai/digithings/issues/3388) |
 
 ## GitHub Auth — prod evidence (no secrets)
 
@@ -120,13 +123,17 @@ None of the staging-required vendor API secrets. Present locally (not EF vendors
 
 **Yes — all three.** Reply `Stripe captcha done` / `Mailgun captcha done` / `Alpaca turnstile done` after solving in open Cloud Agent browser tabs (do not close sibling vendor tabs).
 
-## Next steps (staging E2E)
+## Next steps (live proof — [#3388](https://github.com/digithings-ai/digithings/issues/3388))
 
-1. Human solves vendor captchas → agent writes `digithings-*.env` + EF `secrets set`.
-2. Re-run `scripts/kairos_staging_e2e.py` (expect exit **2** while vendor secrets are empty and remaining hops are unproven; once secrets land expect exit **4** + `KAIROS_STAGING_E2E_REMAINING_HOPS` until product-state reads prove Stripe (`active` **and** `has_stripe_subscription`), Alpaca paper OAuth, overlay, fill, and digest log **plus** inbox confirmation. House `active` without Stripe ids does not prove checkout. Exit **0** only when those five hops are proven).
-3. Optional: elevate a test workspace `plan_tier` only via documented ops path — GitHub user’s personal WS stays `free` until Stripe checkout.
+The epic is closed. On the next house schedule, pick up #3388:
+
+1. Run `python scripts/digiquant_house_pipeline_proof.py` (never `workflow_dispatch`; `--dispatch` must stay **4**). Stamp the schedule run id and exit.
+2. Re-probe Pages gate, staging E2E (`python scripts/digiquant_staging_e2e.py`), route/overlay/cron. Do not `--apply` while `/dashboard/` or the Alpaca callback 404. Do not weaken `public_app_urls_ok`.
+3. Record whether fail-softs #3343 → #3348 → #3351 → #3354 and unique-conflict #3387 are MERGED (authoring agent must not merge them).
+4. Human solves vendor captchas when ready → agent writes `digithings-*.env` + EF `secrets set`. Staging E2E still expects exit **3** until Pages+EF `/dashboard` cutover, then **2** while vendor secrets are empty. Exit **0** only when the five remaining hops are proven. Optional: elevate a test workspace `plan_tier` only via documented ops path — GitHub user’s personal WS stays `free` until Stripe checkout.
+5. Do not re-open the epic unless a probe contradicts delivery.
 
 ## Docs branch
 
-`cursor/kairos-github-auth-proof-3d52` — compare  
-https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-github-auth-proof-3d52
+`cursor/kairos-epic-complete-validate-3d52` — compare  
+https://github.com/digithings-ai/digithings/compare/develop...cursor/kairos-epic-complete-validate-3d52

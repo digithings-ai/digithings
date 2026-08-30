@@ -20,6 +20,17 @@ Authoritative spec: `docs/superpowers/specs/2026-08-29-kairos-tenancy-implementa
   `portfolio_ledger_*` stays authoritative only for `paper_internal`.
 - **No live trading in this epic.** Live cutover is a separate, human-gated epic.
 
+## Status (2026-09-01)
+
+**DELIVERED** — owner closed without a live end-to-end pipeline run. All 12 work
+packages are on `develop`. Live house GHA book-commit, Pages `/dashboard/` cutover
+(including Alpaca callback), and staging E2E remaining hops are **not** proven;
+they are tracked in [#3388](https://github.com/digithings-ai/digithings/issues/3388).
+Pick that issue up after the next `pipeline-olympus.yml` `cron: "0 12 * * *"`
+schedule. Do not claim those probes passed. Do not re-open this epic unless a
+probe contradicts delivery (house GHA red for a new writer bug, or Pages/EF
+cutover broke Auth).
+
 ## Child work packages
 
 Wave A
@@ -92,6 +103,8 @@ Wave E
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
+      **Not proven.** Owner closed the epic anyway; live proof is
+      [#3388](https://github.com/digithings-ai/digithings/issues/3388).
 - [x] No live `submit_order` reachable without env flag + human-gated code path (test-pinned).
 
 ## Human-owned prerequisites (tracked here, not blocking child code)
@@ -105,12 +118,15 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-31, remaining hops + cron CLIs)
+## Agent delivery status (2026-09-01 — owner closed)
 
-**Verdict: NOT COMPLETE** — staging E2E still blocked on Stripe/Mailgun/Alpaca OAuth
-captchas and Google Auth. All 12 WPs have code on `develop`. This branch adds
-production cron CLIs, remaining-hop proofs from Settings product state, and staged
-900 §A2 membership-only restore. House cron-check GHA is installed
+**Verdict: DELIVERED** — owner closed without waiting on live E2E or a green house
+schedule. Staging E2E, vendor captchas/secrets, Pages `/dashboard/` 404s, and
+house proof exit **5** remain true as of 2026-09-01T09:26Z; they are
+[#3388](https://github.com/digithings-ai/digithings/issues/3388), not an open
+epic. All 12 WPs have code on `develop`. Production cron CLIs, remaining-hop
+proofs from Settings product state, and staged 900 §A2 membership-only restore
+are on `develop`. House cron-check GHA is installed
 (`kairos-cron-check.yml`, [#3380](https://github.com/digithings-ai/digithings/pull/3380));
 `cursor/*` still cannot rename workflow files.
 
@@ -281,7 +297,7 @@ committed). [#3331](https://github.com/digithings-ai/digithings/pull/3331) is on
 `origin/main` (`9f898ec1d`) — stamp is live in the tree the next schedule will
 check out. Do **not** `workflow_dispatch`. Live book commit is still **unproven**.
 
-**Landed 2026-08-31T14:30Z (not epic-complete):** staged unique-drop **113**
+**Landed 2026-08-31T14:30Z (not live-proven; epic later owner-closed, see #3388):** staged unique-drop **113**
 under `digiquant/supabase/migrations/cutover/` (not auto-applied, not on
 `core`). Overlay book fail-closed [#3277](https://github.com/digithings-ai/digithings/pull/3277)
 on `develop` (`11d45bfb0`) still raises `legacy_book_unique` until 113 is
