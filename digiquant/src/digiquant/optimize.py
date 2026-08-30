@@ -27,11 +27,6 @@ from digiquant.strategy_specs import (
 
 logger = logging.getLogger(__name__)
 
-try:
-    from digiquant.strategies.sdca.nautilus_evaluator import evaluate_sdca_trial_nautilus
-except ImportError:  # nautilus extra not installed
-    evaluate_sdca_trial_nautilus = None
-
 # Number of parallel workers for grid/random optimization.
 # Default: os.cpu_count() or 1. Override with DIGIQUANT_OPTIMIZE_WORKERS env var.
 _DEFAULT_WORKERS = int(os.environ.get("DIGIQUANT_OPTIMIZE_WORKERS", os.cpu_count() or 1))
@@ -332,10 +327,12 @@ def _run_sdca_optimize(
     base_params: dict[str, float | int | str] | None,
 ) -> OptimizeResult:
     """Walk-forward SDCA path. Objective is vs-flat-DCA, not Sharpe."""
-    if evaluate_sdca_trial_nautilus is None:
+    try:
+        from digiquant.strategies.sdca.nautilus_evaluator import evaluate_sdca_trial_nautilus
+    except ImportError as exc:
         raise RuntimeError(
             "SDCA walk-forward requires nautilus_trader (install digiquant[nautilus])."
-        )
+        ) from exc
     dates, prices = load_sdca_ohlcv(symbols=symbols, data_path=data_path, data_dir=data_dir)
     result = run_sdca_walk_forward(
         dates,
