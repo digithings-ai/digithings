@@ -57,7 +57,7 @@ erDiagram
 | `positions` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Daily position book; one row per held ticker. Legacy unique retained until P6. |
 | `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. **No** `workspace_id` in T0 — shared research stays tenant-agnostic (system workspace conceptually; column deferred). |
 | `position_events` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Every open / close / rebalance against a position with reason tag. |
-| `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. **No** `workspace_id` in T0 (same as theses). |
+| `documents` | `(workspace_id, date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. T4 migration 105 adds `workspace_id` (NOT NULL, house-backfilled) and **replaces** the legacy `UNIQUE(date, document_key)` so overlay+house same-key rows do not collide. Overlay H7/H8 keys are also prefixed `overlay/{workspace_id}/…`. Private-phase writes require `OLYMPUS_OVERLAY_PERSIST=1` after the T1-train anon-policy drop; `anon_read` is untouched. |
 | `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
 | `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
@@ -635,7 +635,7 @@ T0/T1 release train is reviewed.
 | `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_customer_id`, `stripe_subscription_id`, `subscription_status`) + T2 `claim_sync_pending` (bool, default false — set when Auth `app_metadata.plan_tier` sync fails after a workspace tier write) + `last_stripe_event_created` (bigint, CAS watermark for webhook ordering). Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
 | `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
 | `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). Payload stores Stripe `created`. `applied_at` is NULL until workspace+claim apply succeeds; duplicate with `applied_at` NULL re-applies (poison-pill fix). service_role has column-level `UPDATE (applied_at)` only (migration 101). |
-| `job_runs` | `(id uuid)` | Per-workspace job telemetry. T4 overlay dispatch writes here; status vocabulary is extended in migration 104 (`skipped`, `budget_exhausted`). Idempotency key `{workspace_id}:overlay_daily:{run_date}`. |
+| `job_runs` | `(id uuid)` | Per-workspace job telemetry. T4 overlay dispatch writes here via `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`); `MemoryJobRunStore` is the test seam. Status vocabulary: 104 adds `skipped` / `budget_exhausted`; 105 adds `persist_disabled`. Idempotency key `{workspace_id}:overlay_daily:{run_date}`. |
 | `audit_log` | `(id uuid)` | Connect/revoke/settings audit trail (K3 first writer). |
 
 **Billing flow (T2):** Edge Functions under `digiquant/supabase/functions/` —
@@ -770,6 +770,25 @@ credential-column immutability trigger. Crypto is K3's envelope unchanged.
 `job_runs.status` CHECK is extended to `skipped` (reason in `error`:
 `not_entitled` / `no_credentials`) and `budget_exhausted` (research budget hard
 stop). Structural tests: `tests/dq/olympus/overlay/test_migration_104.py`.
+
+### Documents workspace_id — migration 105 (T4)
+
+Adds `documents.workspace_id` (nullable → backfill house
+`6b753576-ced9-5319-9bfa-c5d0aacd9319` → NOT NULL + FK). The legacy
+`UNIQUE(date, document_key)` is **dropped and replaced** by
+`UNIQUE(workspace_id, date, document_key)` — keeping the old unique would still
+collide overlay+house rows that share a key. Authenticated policy
+`authenticated_select_documents`: house + system readable; other workspaces are
+own-member only. **`anon_read` is not dropped or rewritten** (T1-train).
+
+`job_runs.status` CHECK is extended with `persist_disabled` (overlay
+private-phase refuse when `OLYMPUS_OVERLAY_PERSIST` is off). Production may set
+that flag only after the T1-train anon-policy drop. Structural tests:
+`tests/dq/olympus/overlay/test_migration_105.py`.
+
+Every live `documents` upsert writer is enumerated in the migration header and
+updated to `on_conflict="workspace_id,date,document_key"` plus a workspace stamp
+in the same change.
 
 ## RLS (consistent across all tables above)
 

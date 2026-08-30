@@ -30,7 +30,8 @@ from digiquant.olympus.hermes.candidates import holdings_from_prior_book
 from digiquant.olympus.hermes.payloads import analyst_payloads, deliberation_summaries
 from digiquant.olympus.hermes.risk_envelope import risk_horizon_days
 from digiquant.olympus.hermes.sector_map import sector_bucket
-from digiquant.olympus.tenancy import house_workspace_id
+from digiquant.olympus.overlay.persist import hermes_document_key, require_overlay_persist
+from digiquant.olympus.tenancy import resolved_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -429,13 +430,13 @@ def _prune_orphan_positions(
     DELETE per orphan; this issues a single ``in_`` delete instead — same effect,
     one round trip.
 
-    T0 (#5-T0) used a date-only filter. T4 threads ``workspace_id`` for overlay
-    so a private book cannot prune house rows. ``workspace_id is None`` keeps the
-    house query byte-identical (date-only).
+    Omitted ``workspace_id`` means the house workspace — never an unfiltered
+    date scan. Overlay passes its id so a private book cannot prune house rows.
     """
-    query = client.table("positions").select("ticker").eq("date", date_str)
-    if workspace_id is not None:
-        query = query.eq("workspace_id", workspace_id)
+    scoped = str(resolved_workspace_id(workspace_id))
+    query = (
+        client.table("positions").select("ticker").eq("date", date_str).eq("workspace_id", scoped)
+    )
     resp = query.execute()
     existing = {
         str(row.get("ticker")) for row in getattr(resp, "data", None) or [] if row.get("ticker")
@@ -443,9 +444,7 @@ def _prune_orphan_positions(
     orphans = sorted(existing - keep)
     if not orphans:
         return []
-    delete = client.table("positions").delete().eq("date", date_str)
-    if workspace_id is not None:
-        delete = delete.eq("workspace_id", workspace_id)
+    delete = client.table("positions").delete().eq("date", date_str).eq("workspace_id", scoped)
     delete.in_("ticker", orphans).execute()
     logger.warning(
         "commit_io: pruned %d orphan position row(s) for %s not in the committed book: %s",
@@ -534,10 +533,9 @@ def book_portfolio(
                 for r in pos_rows
             ]
 
-    # T0 stamped house_workspace_id(). T4 overlay threads config.workspace_id
-    # through the pin seam; omitting it keeps the house stamp byte-identical.
     overlay_ws = getattr(state.config, "workspace_id", None)
-    workspace_id = str(house_workspace_id()) if not overlay_ws else str(overlay_ws)
+    workspace_id = str(resolved_workspace_id(overlay_ws))
+    require_overlay_persist(workspace_id)
 
     client.table("nav_history").upsert(
         {
@@ -680,11 +678,10 @@ def save_commit_manifest(
 ) -> PublishedArtifact:
     source_run_id = str(state.run_id)
     date_str = state.run_date.isoformat()
+    workspace_id = getattr(state.config, "workspace_id", None)
     return publish_document(
         client=client,
-        document_key=manifest_document_key(
-            source_run_id, getattr(state.config, "workspace_id", None)
-        ),
+        document_key=manifest_document_key(source_run_id, workspace_id),
         payload=manifest,
         doc_type="Commit Run",
         run_type=state.run_type,
@@ -692,6 +689,7 @@ def save_commit_manifest(
         date_str=date_str,
         category="portfolio",
         segment="commit_run",
+        workspace_id=workspace_id,
     )
 
 
@@ -708,16 +706,18 @@ def publish_portfolio_brief(
     ``pm-rebalance`` document would duplicate lineage without a reader contract.
     """
     date_str = state.run_date.isoformat()
+    workspace_id = getattr(state.config, "workspace_id", None)
     payload = {k: v for k, v in dict(book).items() if k not in {"adjustments", "requested_pct"}}
     return publish_document(
         client=client,
-        document_key="pm-rebalance",
+        document_key=hermes_document_key("pm-rebalance", workspace_id),
         payload=payload,
         doc_type="Rebalance Decision",
         run_type=state.run_type,
         title=f"PM Rebalance {date_str}",
         date_str=date_str,
         category="portfolio",
+        workspace_id=workspace_id,
     )
 
 
@@ -729,13 +729,14 @@ def publish_hermes_documents(
     """Publish H5/H6/H7 artifacts not covered by Atlas publish."""
     date_str = state.run_date.isoformat()
     run_type = state.run_type
+    workspace_id = getattr(state.config, "workspace_id", None)
     artifacts: list[PublishedArtifact] = []
 
     for ticker, payload in analyst_payloads(state).items():
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=f"analyst/{ticker}",
+                document_key=hermes_document_key(f"analyst/{ticker}", workspace_id),
                 payload=dict(payload),
                 doc_type=None,
                 run_type=run_type,
@@ -744,6 +745,7 @@ def publish_hermes_documents(
                 category="deep-dive",
                 segment="analyst",
                 sector=ticker,
+                workspace_id=workspace_id,
             )
         )
 
@@ -753,7 +755,7 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key=f"deliberation/{ticker}",
+                document_key=hermes_document_key(f"deliberation/{ticker}", workspace_id),
                 payload=dict(debate),
                 doc_type=None,
                 run_type=run_type,
@@ -762,6 +764,7 @@ def publish_hermes_documents(
                 category="deep-dive",
                 segment="deliberation",
                 sector=ticker,
+                workspace_id=workspace_id,
             )
         )
 
@@ -771,13 +774,14 @@ def publish_hermes_documents(
         artifacts.append(
             publish_document(
                 client=client,
-                document_key="pm-direction-memo",
+                document_key=hermes_document_key("pm-direction-memo", workspace_id),
                 payload=payload,
                 doc_type="PM Direction Memo",
                 run_type=run_type,
                 title=f"PM Direction {date_str}",
                 date_str=date_str,
                 category="portfolio",
+                workspace_id=workspace_id,
             )
         )
 

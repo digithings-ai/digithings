@@ -147,6 +147,7 @@ def _publish_segment_bag(
     bag: dict[str, SegmentSlot],
     run_type: str,
     date_str: str,
+    workspace_id: str | None = None,
 ) -> list[PublishedArtifact]:
     """Publish all fresh ('today') slots in a phase output dict (skipping degenerate ones)."""
     published: list[PublishedArtifact] = []
@@ -166,6 +167,7 @@ def _publish_segment_bag(
             date_str=date_str,
             category=_segment_category(slug),
             segment=slug,
+            workspace_id=workspace_id,
         )
         published.append(artifact)
     return published
@@ -190,6 +192,7 @@ def _publish_document_deltas(
                 target_document_key=target_key,
                 patch=patch,
                 run_type=run_type,
+                workspace_id=getattr(state.config, "workspace_id", None),
             )
         )
     return published
@@ -291,6 +294,7 @@ def _maybe_publish_compiled_research_views(
                 date_str=date_str,
                 category="output",
                 segment=key,
+                workspace_id=getattr(state.config, "workspace_id", None),
             )
         )
 
@@ -317,6 +321,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
     def publish(state: AtlasResearchState) -> dict[str, Any]:
         date_str = state.run_date.isoformat()
         run_type = state.run_type
+        workspace_id = getattr(state.config, "workspace_id", None)
         artifacts: list[PublishedArtifact] = []
 
         # Track C glass-box (#2622): shadow AttentionPlan for Pipeline Inputs.
@@ -340,7 +345,11 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
         ):
             artifacts.extend(
                 _publish_segment_bag(
-                    client=deps.client, bag=bag, run_type=run_type, date_str=date_str
+                    client=deps.client,
+                    bag=bag,
+                    run_type=run_type,
+                    date_str=date_str,
+                    workspace_id=workspace_id,
                 )
             )
 
@@ -360,6 +369,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                         date_str=date_str,
                         category="macro",
                         segment="macro",
+                        workspace_id=workspace_id,
                     )
                 )
 
@@ -396,6 +406,7 @@ def build_publish_node(deps: PublishDeps) -> Callable[[AtlasResearchState], dict
                     title=title,
                     date_str=date_str,
                     category=digest_category,
+                    workspace_id=workspace_id,
                 )
             )
             if not state.custom_prompt:
