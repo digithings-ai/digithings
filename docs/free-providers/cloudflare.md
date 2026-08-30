@@ -11,7 +11,7 @@ access_requirements:
   - email
   - cloudflare_account
 data_privacy_on_free: no_training
-verified_at: 2026-05-03
+verified_at: 2026-08-30
 source_urls:
   - https://developers.cloudflare.com/workers-ai/platform/pricing/
   - https://developers.cloudflare.com/workers-ai/models/
@@ -29,15 +29,9 @@ Cloudflare Workers AI runs inference at the Cloudflare edge network, metered in 
 
 ## Free-Tier Models (selection)
 
-| Model ID | Context Window | Max Output | Neurons/call (approx) | Notes |
-|---|---|---|---|---|
-| `@cf/meta/llama-3.3-70b-instruct` | 8,192 | 8,192 | ~100–200 | Llama 3.3 70B |
-| `@cf/meta/llama-3.1-8b-instruct` | 8,192 | 8,192 | ~20–50 | Llama 3.1 8B; cheapest |
-| `@cf/qwen/qwen1.5-14b-chat-awq` | 8,192 | 8,192 | ~50 | Qwen 1.5 14B |
-| `@cf/deepseek-ai/deepseek-r1-distill-qwen-32b` | 8,192 | 8,192 | ~100 | DeepSeek R1 Qwen distill |
-| `@cf/baai/bge-large-en-v1.5` | 512 | — | ~5 | BGE embeddings |
-| `@cf/openai/whisper` | — | — | variable | Whisper STT |
-| `@cf/black-forest-labs/flux-1-schnell` | — | — | variable | Image generation |
+| Model ID | Context Window | Max Output | Notes |
+|---|---|---|---|
+| `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | 8,192 | 8,192 | active |
 
 > At ~100–200 neurons per 70B call, the 10k daily budget = ~50–100 Llama 70B calls.
 
@@ -104,3 +98,4 @@ $0.011 per 1,000 neurons beyond the free 10,000/day. Effective cost: ~$0.001–$
 | Date | Change | Source |
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |

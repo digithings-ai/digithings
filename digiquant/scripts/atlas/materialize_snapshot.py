@@ -429,8 +429,10 @@ def _upsert_snapshot(snapshot: Dict[str, Any], digest_markdown: Optional[str]) -
             "document_key": "digest",
             "payload": snapshot,
             "content": digest_markdown,
+            # House stamp — 096 seed. UNIQUE is (workspace_id, date, document_key).
+            "workspace_id": "6b753576-ced9-5319-9bfa-c5d0aacd9319",
         }
-        _safe_upsert("documents", doc_row, on_conflict="date,document_key")
+        _safe_upsert("documents", doc_row, on_conflict="workspace_id,date,document_key")
 
 
 def sync_digest_markdown_from_documents(dates: List[str]) -> None:
@@ -489,8 +491,10 @@ def backfill_digest_markdown(dates: List[str]) -> None:
             "document_key": "digest",
             "payload": snap,
             "content": dm,
+            # House stamp — 096 seed. UNIQUE is (workspace_id, date, document_key).
+            "workspace_id": "6b753576-ced9-5319-9bfa-c5d0aacd9319",
         }
-        _safe_upsert("documents", doc_row, on_conflict="date,document_key")
+        _safe_upsert("documents", doc_row, on_conflict="workspace_id,date,document_key")
         print(f"✅ backfilled digest_markdown + document for {date_str}")
 
 

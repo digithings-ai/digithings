@@ -19,6 +19,7 @@ class Workspace:
           classified.jsonl
           assets/
           html/
+          search_md/   # HTML→markdown sidecars for digisearch ingest (#2191)
           meta/source_map.jsonl
     """
 
@@ -28,6 +29,7 @@ class Workspace:
         self.classified_path = self.root / "classified.jsonl"
         self.assets_dir = self.root / "assets"
         self.html_dir = self.root / "html"
+        self.search_md_dir = self.root / "search_md"
         self.meta_dir = self.root / "meta"
         self.source_map_path = self.meta_dir / "source_map.jsonl"
 
@@ -38,6 +40,7 @@ class Workspace:
         ws.root.mkdir(parents=True, exist_ok=True)
         ws.assets_dir.mkdir(parents=True, exist_ok=True)
         ws.html_dir.mkdir(parents=True, exist_ok=True)
+        ws.search_md_dir.mkdir(parents=True, exist_ok=True)
         ws.meta_dir.mkdir(parents=True, exist_ok=True)
         return ws
 

@@ -1554,10 +1554,10 @@ def completion(
         )
         raise
 
-    # Empty-response self-heal. An empty body is transient; retry with backoff. The first
-    # retry also adds OpenRouter provider-fallback routing for openrouter/ models (a flaky
-    # primary is swapped out); other providers just re-ask the same model. A persistent
-    # blank falls through unchanged so downstream stays graceful (no crash).
+    # Empty-response self-heal. An empty body is transient; retry with backoff.
+    # OPENROUTER_FALLBACK_MODELS (attached on the primary request above, not here) covers
+    # provider errors via route=fallback — it does not swap models on an empty 200. Empty
+    # retries re-ask the same model. A persistent blank falls through unchanged.
     empty_attempts = 0
     while _is_empty_completion(r) and empty_attempts < _EMPTY_RETRY_MAX:
         empty_attempts += 1
@@ -1570,6 +1570,10 @@ def completion(
             empty_attempts,
             _EMPTY_RETRY_MAX,
             _EMPTY_RETRY_DELAY,
+        )
+        _record_usage(
+            kind="empty_retry",
+            model=getattr(r, "model", None) or effective_model,
         )
         time.sleep(_EMPTY_RETRY_DELAY)  # intentional short backoff on empty
         attempt_scope = _attempt_scope.get()

@@ -69,13 +69,16 @@ jobs:
           # manifest (build-digithings.sh now asserts that manifest instead) — so
           # probe /docs/, still a prerendered static-export route.
           probe "https://digithings.ai/docs/" "text/html"
-          # Stable non-HTML asset (public/design/assets/og.png) — the canary for
-          # the SPA-fallback MIME-masking regression #671 was written to catch.
-          probe "https://digithings.ai/design/assets/og.png" "image/png"
+          # Stable non-HTML asset (public/og.png) — the canary for the
+          # SPA-fallback MIME-masking regression #671 was written to catch.
+          # Brand OG cards live at the export root (not /design/assets/); the
+          # old path 404'd and kept #800 open as a daily false alarm.
+          probe "https://digithings.ai/og.png" "image/png"
           # digiquant.io — Next.js static export (frontend/digiquant-web) +
           # Olympus dashboard mounted at basePath /olympus.
           probe "https://digiquant.io/" "text/html"
           probe "https://digiquant.io/olympus/" "text/html"
+          probe "https://digiquant.io/og.png" "image/png"
           exit "$fail"
 
       - name: Open issue on failure

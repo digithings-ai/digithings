@@ -160,14 +160,14 @@ export function SnapshotErrorBanner({
       role="alert"
       className={flat
         ? 'border-y border-warn/40 bg-warn/5 px-5 py-5'
-        : 'glass-card p-5 border-down/30 bg-down/5'}
+        : 'glass-card p-5 border-danger/30 bg-danger/5'}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           {flat ? (
             <h3 className="mb-3 font-display text-xl text-warn">Brief unavailable</h3>
           ) : (
-            <SectionTitle className="text-down">Brief unavailable</SectionTitle>
+            <SectionTitle className="text-danger">Brief unavailable</SectionTitle>
           )}
           <p className="text-sm text-ink-soft break-words">{message}</p>
         </div>
@@ -176,7 +176,7 @@ export function SnapshotErrorBanner({
           onClick={onRetry}
           className={flat
             ? 'shrink-0 rounded-md border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-semibold text-warn hover:bg-warn/20'
-            : 'shrink-0 rounded-md border border-down/40 bg-down/10 px-3 py-1.5 text-xs font-semibold text-down hover:bg-down/20'}
+            : 'shrink-0 rounded-md border border-danger/40 bg-danger/10 px-3 py-1.5 text-xs font-semibold text-danger hover:bg-danger/20'}
         >
           Retry
         </button>

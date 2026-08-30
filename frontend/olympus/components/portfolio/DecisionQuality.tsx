@@ -58,7 +58,7 @@ export default function DecisionQuality({
           <Skeleton variant="block" className="h-64 w-full" />
         </SkeletonGroup>
       ) : error ? (
-        <p className="text-sm text-down">{error}</p>
+        <p className="text-sm text-danger">{error}</p>
       ) : (
         <DecisionScorecardTab decisions={decisions ?? []} />
       )}

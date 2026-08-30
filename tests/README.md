@@ -8,6 +8,8 @@ Production-grade test layout for Phase 0+. See CONTRIBUTING.md for requirements.
   - **`tests/dq/`** – Unit + API tests for digiquant (models, backtest, data, optimize, export, pipeline, brokers, FastAPI). Phase 2 complete.
   - **`tests/dg/`** – Unit + API tests for digigraph (models, workflow, graph, LLM, FastAPI).
   - **`tests/dc/`** – Unit tests for digiclaw (audit). Phase 3.
+  - **`tests/fixtures/`** – Shared doubles (canonical `FakeSupabaseClient` in `fake_supabase.py`; #1196).
+  - **`tests/contracts/`** – Cross-service HTTP surface contracts (CORS / `/healthz` / `/metrics`; #1196).
   - **`tests/test_e2e.py`** – E2E tests (require stack: `docker compose up` or local servers).
 
 ## Markers

@@ -358,7 +358,7 @@ export default function GenericDiffDocumentView({
     return (
       <div className="space-y-3">
         {toolbar}
-        <p className="text-down text-xs">{error}</p>
+        <p className="text-danger text-xs">{error}</p>
         <SafeMarkdown>{fallbackMarkdown}</SafeMarkdown>
       </div>
     );

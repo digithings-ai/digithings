@@ -5,6 +5,7 @@ import type {
   RiskItem,
 } from '@/lib/types';
 import { isMaterialBookEvent } from '@/lib/brief-book-event';
+import { isMaterialRebalanceAction } from '@/lib/rebalance-actions';
 import { resolvePmRationale } from '@/lib/pm-rationale';
 import { buildPipelineHref } from '@/lib/pipeline-links';
 import { ledgerHref, tickerDossierHref } from '@/lib/portfolio-url-state';
@@ -69,10 +70,7 @@ function titleCaseAction(action: string): string {
 
 /** Non-HOLD book moves (EXIT at 0% current weight is a no-op). */
 export function activeRebalanceActions(actions: RebalanceAction[]): RebalanceAction[] {
-  return actions.filter((action) => {
-    const kind = (action.action || '').trim().toUpperCase();
-    return kind !== 'HOLD' && !(kind === 'EXIT' && (action.current_pct ?? 0) === 0);
-  });
+  return actions.filter(isMaterialRebalanceAction);
 }
 
 function rationaleFor(
