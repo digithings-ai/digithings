@@ -1967,7 +1967,9 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   tell whether the figure is real. House GHA 33426508863 `sector-real-estate` then showed a
   second failure class: missing `summary` (prose under `text`/`detail`) and Gemini JSON-string
   Object envelopes. `Finding`/`Source` coerce those shapes before validate so the node does
-  not carry the sector baseline; an `as_of`-only finding with no prose is still rejected.
+  not carry the sector baseline; summary/label fill only from explicit prose aliases
+  (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
+  with no prose is still rejected.
 - Standalone CLI: `python -m digiquant.olympus.atlas.graph` — research-only consumers.
 - Terminal `publish_phase` is wired only when `deps.publish` is provided;
   the chain orchestrator passes `None` so publish runs once at the end (Atlas artifacts).

@@ -59,6 +59,35 @@ class TestSummaryAliases:
         with pytest.raises(ValidationError, match="summary"):
             SectorReport.model_validate(_sector(material_findings=[{"as_of": "2026-08-28"}]))
 
+    def test_url_and_completion_state_are_not_promoted_to_summary(self) -> None:
+        """Residual long strings that are not prose aliases must not become research."""
+        with pytest.raises(ValidationError, match="summary"):
+            SectorReport.model_validate(
+                _sector(
+                    material_findings=[
+                        {
+                            "as_of": "2026-08-28",
+                            "url": "https://example.com/xlre-range-notes",
+                            "completionState": "complete",
+                            "source_id": "price_technicals:XLRE",
+                        }
+                    ]
+                )
+            )
+
+    def test_question_mark_cuts_derived_label(self) -> None:
+        report = SectorReport.model_validate(
+            _sector(
+                material_findings=[
+                    {
+                        "text": "Did XLRE break out? It remains uncertain on the weekly.",
+                        "as_of": "2026-08-28",
+                    }
+                ]
+            )
+        )
+        assert report.material_findings[0].label == "Did XLRE break out"
+
 
 class TestJsonStringItems:
     def test_finding_json_string_validates(self) -> None:

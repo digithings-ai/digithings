@@ -291,25 +291,20 @@ def _coerce_finding_record(data: object) -> object:
     out = _flatten_wrapped_record(data)
     if _string_value(out.get("summary")) is None:
         picked = _pick_aliased_str(
-            out, ("text", "description", "detail", "body", "finding", "content")
+            out, ("text", "description", "detail", "body", "finding", "content", "narrative")
         )
-        if picked is None:
-            candidates = [
-                value
-                for key, value in out.items()
-                if key not in {"as_of", "source_ids", "label", "title", "headline"}
-                and isinstance(value, str)
-                and len(value.strip()) > 20
-            ]
-            candidates.sort(key=len, reverse=True)
-            picked = candidates[0] if candidates else None
         if picked is not None:
             out["summary"] = picked
     if _string_value(out.get("label")) is None:
         picked = _pick_aliased_str(out, ("title", "headline", "name"))
         if picked is None:
             summary = _string_value(out.get("summary")) or ""
-            picked = summary.split(".")[0].strip()[:80] or None
+            cut = len(summary)
+            for sep in (".", "?", "!"):
+                idx = summary.find(sep)
+                if 0 < idx < cut:
+                    cut = idx
+            picked = summary[:cut].strip()[:80] or None
         if picked is not None:
             out["label"] = picked
     return out
