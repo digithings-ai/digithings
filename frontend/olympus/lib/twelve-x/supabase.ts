@@ -33,7 +33,16 @@ const twelveXAnonKey =
  * typed fetchers in `./fetch.ts` cast their selected rows to the contract types
  * in `./types.ts`.
  */
+/** Secondary client: never share GoTrue storage with the Olympus auth singleton. */
 export const twelveXSupabase: SupabaseClient | null =
-  twelveXUrl && twelveXAnonKey ? createClient(twelveXUrl, twelveXAnonKey) : null;
+  twelveXUrl && twelveXAnonKey
+    ? createClient(twelveXUrl, twelveXAnonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      })
+    : null;
 
 export const isTwelveXConfigured = (): boolean => Boolean(twelveXSupabase);

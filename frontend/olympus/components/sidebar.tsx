@@ -2,12 +2,13 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Search } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, LogOut, Search } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@digithings/web';
 import { AtlasMark } from '@/components/atlas-mark';
 import { useAppShell } from '@/components/app-shell-context';
 import SidebarSettings from '@/components/sidebar-settings';
+import { useAuth } from '@/lib/auth-context';
 import { NAV, type NavItem } from '@/lib/nav';
 
 function routeActive(pathname: string, base: string, href: string): boolean {
@@ -53,10 +54,27 @@ export default function Sidebar() {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   const { sidebarCollapsed, toggleSidebar, mobileNavOpen, setMobileNavOpen, openCommandPalette } =
     useAppShell();
+  const { authEnabled, user, signOut } = useAuth();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname, setMobileNavOpen]);
+
+  async function handleSignOut() {
+    setSignOutError(null);
+    try {
+      await signOut();
+    } catch (err) {
+      setSignOutError(err instanceof Error ? err.message : 'Sign-out failed');
+    }
+  }
+
+  const identityLabel =
+    user?.email?.trim() ||
+    (typeof user?.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : null) ||
+    (typeof user?.user_metadata?.name === 'string' ? user.user_metadata.name : null) ||
+    'Signed in';
 
   const renderLink = (item: NavItem) => {
     const { href, label, icon: Icon, demoted } = item;
@@ -178,6 +196,35 @@ export default function Sidebar() {
             sidebarCollapsed ? 'md:px-2 px-6 py-4' : 'px-6 py-4'
           }`}
         >
+          {authEnabled && user ? (
+            <div
+              className={`mb-3 flex flex-col gap-2 ${sidebarCollapsed ? 'md:items-center' : ''}`}
+              data-testid="sidebar-auth-identity"
+            >
+              <p
+                className={`truncate text-xs text-ink-mute ${sidebarCollapsed ? 'md:sr-only' : ''}`}
+                title={identityLabel}
+              >
+                {identityLabel}
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleSignOut()}
+                className={`inline-flex items-center gap-2 rounded-lg border border-hair px-3 py-1.5 text-xs text-ink-soft hover:text-ink hover:bg-ink/[0.04] ${
+                  sidebarCollapsed ? 'md:justify-center md:px-2' : ''
+                }`}
+                aria-label="Sign out"
+              >
+                <LogOut size={14} className="shrink-0" />
+                <span className={sidebarCollapsed ? 'md:sr-only' : ''}>Sign out</span>
+              </button>
+              {signOutError ? (
+                <p className="text-xs text-down" role="alert">
+                  {signOutError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <SidebarSettings sidebarCollapsed={sidebarCollapsed} />
         </div>
       </aside>
