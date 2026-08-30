@@ -57,7 +57,7 @@ def test_require_overlay_persist_refuses_private_when_flag_off(
 
 
 def test_require_overlay_legacy_book_safe_blocks_private_allows_house() -> None:
-    """positions/NAV/ledger stay single-tenant until P6 drops legacy UNIQUEs."""
+    """positions/NAV/ledger stay single-tenant until staged 113 is applied."""
     with pytest.raises(OverlayLegacyBookBlocked) as exc:
         require_overlay_legacy_book_safe(uuid4())
     assert exc.value.code == LEGACY_BOOK_UNIQUE_CODE

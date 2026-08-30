@@ -13,12 +13,15 @@ still carry migration 097's legacy single-tenant arbiters
 the widened ``(workspace_id, …)`` keys. House ops writers on ``develop`` now
 target those widened keys, but the legacy arbiters still reject a second
 workspace's same-date row (and ``main`` house GHA must be on the widened
-conflict before P6 can drop them). An overlay row for the same calendar
+conflict before the drop can be applied). An overlay row for the same calendar
 date therefore still fails the leftover unique. ``require_overlay_legacy_book_safe``
-refuses those writes until P6 drops the legacy keys.
+refuses those writes until staged cutover 113
+(``migrations/cutover/113_drop_legacy_book_uniques.sql``) is **applied** on
+the target — staging the file under ``cutover/`` does not lift this gate.
 
 Ledger ``uq_portfolio_ledger_commits_one_root`` is likewise ``(run_date)`` only
-(migration 069) — overlay + house cannot both root a commit on the same date.
+(migration 069) until 113 widens it to ``(workspace_id, run_date)`` —
+overlay + house cannot both root a commit on the same date until then.
 
 ``daily_snapshots`` stays a house-only ``UNIQUE(date)`` table — overlay
 publish must skip it (see ``publish_phase``) even with persist on.
@@ -60,7 +63,9 @@ class OverlayLegacyBookBlocked(Exception):
             "legacy UNIQUE(date) / UNIQUE(date,ticker) and ledger "
             "one-root-per-run_date still apply; "
             f"{OVERLAY_PERSIST_ENV}=1 after migration 110 only covers documents. "
-            "Roadmap P6 must drop those arbiters and patch house writers first"
+            "Staged cutover 113 drops those arbiters; do not lift this gate "
+            "until 113 is applied on the target after main house GHA writers "
+            "use the widened conflict"
         )
         super().__init__(self.message)
 

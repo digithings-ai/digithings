@@ -22,8 +22,9 @@ That is the standard, defensible behavior for an EOD-priced paper index.
 All writes are idempotent upserts (``positions`` on
 ``(workspace_id, date, ticker)``, ``nav_history`` / ``portfolio_metrics`` on
 ``(workspace_id, date)``). This path stamps the house workspace. Overlay books
-stay refused (``legacy_book_unique``) until P6 drops 097's legacy ``UNIQUE(date)``
-arbiters. A re-run of the same house date is a no-op-equivalent.
+stay refused (``legacy_book_unique``) until staged cutover 113 is applied
+(after ``main`` house GHA writers use the widened conflict). A re-run of the
+same house date is a no-op-equivalent.
 """
 
 from __future__ import annotations
