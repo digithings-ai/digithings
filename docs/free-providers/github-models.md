@@ -10,7 +10,7 @@ free_tier_type: standing
 access_requirements:
   - github_account
 data_privacy_on_free: unknown
-verified_at: 2026-07-19
+verified_at: 2026-08-30
 source_urls:
   - https://docs.github.com/en/github-models/about-github-models
   - https://docs.github.com/en/github-models/prototyping-with-ai-models
@@ -31,7 +31,7 @@ GitHub Models provides free access to GPT-5, Claude (subset), Llama, Mistral, an
 
 | Model ID | Context Window | Max Output | Notes |
 |---|---|---|---|
-| `gpt-4o-mini` | 128,000 | 16,384 | ⚠️ Error code: 401 - {'error': {'code': 'unauthorized', 'message': 'The `models` permission is required to access this endpoint', 'details': 'The `models` permission is required to access this endpoint'}} |
+| `gpt-4o-mini` | 128,000 | 16,384 | ⚠️ Connection error. |
 | `gpt-4o` | 128,000 | 16,384 | **deprecated** |
 | `meta-llama/Llama-3.3-70B-Instruct` | 131,072 | 4,096 | **deprecated** |
 | `mistral-large-2411` | 131,072 | 4,096 | **deprecated** |
@@ -109,3 +109,4 @@ Graduate to Azure AI Foundry (same models, production SLA, full rate limits). Pr
 |---|---|---|
 | 2026-05-03 | Initial deep-reference entry | manual + snapshot |
 | 2026-07-19 | Automated snapshot sync | provider-review scan |
+| 2026-08-30 | Automated snapshot sync | provider-review scan |
