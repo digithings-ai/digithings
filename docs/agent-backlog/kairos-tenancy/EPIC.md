@@ -67,41 +67,40 @@ Wave E
 
 **Verdict: NOT COMPLETE** — staging E2E still blocked on Stripe/Mailgun/Alpaca OAuth
 captchas and Google Auth. All 12 WPs have code on `develop`. This branch adds
-production cron CLIs, remaining-hop proofs from Settings product state, and a
-fail-closed GHA **spec** (not installed: `cursor/*` cannot write `.github/workflows/`).
+production cron CLIs, remaining-hop proofs from Settings product state, staged
+900 §A2 membership-only restore, and a fail-closed GHA **spec** (not installed:
+`cursor/*` cannot write `.github/workflows/`).
 
 **Schema (`core`):** migrations **096–109** applied (`109_authenticated_house_teaser_read`).
-Cutover **900 not applied**.
+Cutover **900 not applied**. Local RLS harness (throwaway DB + staged 900 A2):
+**59/59 PASS** (2026-08-31). CI on this branch `6fcd7316`: **37/37 green**.
 
-**Edge Functions (`core`):** `settings` **v29 ACTIVE** (`verify_jwt=true`); checkout/portal
-await Stripe price secrets (`PRICE_NOT_CONFIGURED`).
+**Edge Functions (`core`):** `settings` **v29 ACTIVE** (`verify_jwt=true`, includes
+`GET /jobs` `/fills` `/notifications/log`); checkout/portal await Stripe price
+secrets (`PRICE_NOT_CONFIGURED`). EF secret **names** on core: vault + `APP_URL` +
+Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
 
-**Remaining hops (Observer JWT, re-audit 2026-08-31T04:30Z):** all five unproven.
+**Remaining hops (Observer JWT, re-audit 2026-08-31T05:11Z):** all five unproven.
 `job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK
-rows = **0**. Migrations **096–109** applied; cutover **900 not applied**.
-Settings EF **v29 ACTIVE**. Checkout v6 / portal v7 / stripe-webhook v6.
-One ops-custom workspace has an Alpaca **paper `api_key`** connection (not OAuth;
-does not prove the remaining hop). House is `enterprise`/`active` **without**
-Stripe ids — must not prove checkout.
+rows = **0**. One ops-custom workspace has an Alpaca **paper `api_key`** connection
+(not OAuth; does not prove the remaining hop). House is `enterprise`/`active`
+**without** Stripe ids — must not prove checkout. Overlay `--dry-run` against core:
+`considered=5 targets=3 billing_active=0` — no entitled overlay workspace, so
+`--execute` would dispatch nothing.
 
-**Cron CLIs (do not run `--all` on Observer until Stripe + BYOK + Alpaca OAuth land):**
-- `python -m digiquant.olympus.overlay` — overlay_daily dispatch; `--execute` runs the graph
-  (hop proves on `succeeded` only; `chain=None` / persist-disabled / running do not)
-- `python -m digiquant.olympus.kairos.sync_cron` — Alpaca paper fill mirror
-- `python scripts/kairos_cron_check.py` / `make kairos-cron-check` — combined `--check`
-  (overlay + sync + Mailgun)
-- House daily (`hermes.chain` CLI success) now fail-soft dispatches K5 digest
-  (`force_digest=True`). Overlay nested chain does not. Mailgun still empty → skip.
-  House GHA must still splice `pipeline-olympus-mailgun.env.yml` into the chain
-  step on a `chore/`/`feat/` branch or the close-out never sees Mailgun secrets.
-- Scheduled GHA spec: `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml`
-  (`15 12 * * *`, `--check`/`--dry-run` only, separate process from
-  `pipeline-olympus.yml`). `cursor/*` cannot write `.github/workflows/`; copy onto a
-  `chore/` or `feat/` branch as `.github/workflows/kairos-cron-check.yml`. Never
-  `--execute` / `--all` / `hermes.chain` on that job.
+**Cron CLIs (do not run `--all` / `--execute --all` on Observer or the api_key row):**
+- Overlay `--check` / `--dry-run` **exit 0** when `CORE_SUPABASE_URL` +
+  `CORE_SUPABASE_SERVICE_KEY` are in the process env (Cloud Agent env does not
+  ship them; load from a gitignored PAT-fetched file for this VM only).
+- Sync `--check` / `--dry-run` **exit 0**; dry-run `runnable=1` is the ops-custom
+  Alpaca **api_key** paper row — do not poll/execute it (oauth hop still unproven).
+- Combined `kairos_cron_check.py` still **exit 2** — Mailgun names empty. Overlay
+  + sync store probes pass once `CORE_SUPABASE_*` are set.
+- House GHA must still splice `pipeline-olympus-mailgun.env.yml` on a `chore/` /
+  `feat/` branch. Scheduled probe spec still not installed under `.github/workflows/`.
 
-**Auth (`core`):** GitHub Enabled + Email Enabled; **Google Disabled**. Mailgun MCP still
-auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
+**Auth (`core`):** GitHub Enabled + Email Enabled; **Google Disabled**. Mailgun MCP
+still auth-fails. Canonical inbox `digithings@agentmail.to` has no vendor API-key mail.
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **2** (9 named vendor secrets).
 Observer Settings hops all ok (`TIER_FORBIDDEN` on Custom writes).
