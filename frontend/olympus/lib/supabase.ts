@@ -13,16 +13,20 @@ export function isOlympusAuthEnabled(): boolean {
   return process.env.NEXT_PUBLIC_OLYMPUS_AUTH === '1';
 }
 
-export type SupabaseClientMode = 'anon' | 'pkce';
-
-/** Which client shape `buildSupabaseClient` / the module singleton use. */
-export function getSupabaseClientMode(): SupabaseClientMode {
-  return isOlympusAuthEnabled() ? 'pkce' : 'anon';
+/**
+ * App basePath for client URLs. Sourced from next.config.mjs `env` (same value
+ * as `basePath: '/olympus'`). Hard fallback keeps OAuth correct if env is missing.
+ */
+export function olympusBasePath(): string {
+  const raw = process.env.NEXT_PUBLIC_OLYMPUS_BASE_PATH ?? '/olympus';
+  const trimmed = raw.replace(/\/+$/, '');
+  return trimmed || '/olympus';
 }
 
 /**
  * Build the browser Supabase client.
- * - Flag off: plain anon client (byte-compatible with pre-T1).
+ * - Flag off: plain anon client (no behavior change vs pre-T1; prerendered DOM
+ *   verified identical under flag-off builds).
  * - Flag on: PKCE OAuth; session lives in supabase-js storage only (no custom cookies).
  */
 export function buildSupabaseClient(
@@ -62,6 +66,5 @@ export const isSupabaseConfigured = (): boolean => Boolean(supabase);
 /** OAuth redirect target for Google/GitHub PKCE (must match Supabase dashboard allow-list). */
 export function oauthRedirectTo(): string {
   if (typeof window === 'undefined') return '';
-  const base = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/+$/, '');
-  return `${window.location.origin}${base}/auth/callback/`;
+  return `${window.location.origin}${olympusBasePath()}/auth/callback/`;
 }

@@ -18,8 +18,8 @@ storage). Routes:
 | `/olympus/auth/callback/` | Client-side PKCE completion (static page — no route handlers) |
 
 Everything is behind `NEXT_PUBLIC_OLYMPUS_AUTH=1` (build-time). Flag **off**
-(default) ⇒ byte-compatible with today's behavior: `AuthGate` passes children
-through and queries use the classic anon client.
+(default) ⇒ no behavior change; prerendered DOM verified identical to today's
+shell: `AuthGate` passes children through and queries use the classic anon client.
 
 Flag **on** + signed out ⇒ login UI (never empty chrome). Flag on + signed in ⇒
 dashboard shell; the same PKCE client attaches the user JWT so RLS can scope

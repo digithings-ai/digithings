@@ -233,7 +233,14 @@ async function fetchByDocumentKey(
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) return null;
 
-  const supabase = createClient(url, key);
+  // Secondary client — do not share GoTrue storage with the auth singleton.
+  const supabase = createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
   // Defensive limit(1) rather than .maybeSingle(): maybeSingle ERRORS on >1
   // row, which rendered as "No output found" — the same failure class as the
   // #1538 digest headline (a retried/backfilled publish can duplicate a
