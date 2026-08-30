@@ -653,6 +653,16 @@ Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
 `broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
 BYOK `workspace_provider_credentials` and `profiles` are out of scope (K3/T3).
 
+### Notification prefs — migration 103 (K5, Kairos tenancy)
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `notification_prefs` | `(workspace_id)` | Per-workspace email toggles: `daily_digest`, `holding_change_alerts`, `execution_alerts`, `digest_hour_utc` (0–23 UTC). T3 settings UI is the product writer. |
+| `notification_log` | `(workspace_id, event_key, sent_date)` | Dedupe ledger — insert-before-send; duplicate PK ⇒ skip. Append-only (INSERT grant only). |
+
+RLS enabled, no client policies; `service_role` SELECT/INSERT/UPDATE on prefs, SELECT/INSERT on log.
+Typed dispatch: `digiquant.notify.dispatch` (fail-soft Mailgun client in `notify/mailgun.py`).
+
 ### `workspace_id` on the private set (097)
 
 NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).

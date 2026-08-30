@@ -24,6 +24,8 @@ dependencies = [
     # vanish under a green install if digikey ever changes JWT backends. Unbounded
     # per CLAUDE.md (runtime dep, no known incompatibility).
     "cryptography>=42",
+    # K5 email templates (notify/dispatch).
+    "jinja2>=3.1",
 ]
 [project.optional-dependencies]
 nautilus = ["nautilus_trader>=1.190,<2", "requests>=2.28", "statsmodels>=0.14"]
@@ -117,6 +119,9 @@ where = ["src"]
 ]
 "digiquant.olympus.replay" = [
     "shadow_criteria/**/*.json",
+]
+"digiquant.notify" = [
+    "templates/**/*.j2",
 ]
 
 [tool.ruff]

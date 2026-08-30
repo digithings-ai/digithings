@@ -2986,6 +2986,32 @@ invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
 (`paper_internal`). Default (no workspace / kill switch off) stays on
 `build_events_from_paper_fills`. Migration 102 + `tests/dq/olympus/kairos/`.
 
+## Notifications (email v0)
+
+K5 Mailgun dispatch for daily digest, holding-change, and execution-alert emails.
+Module: `digiquant/src/digiquant/notify/` (`entitlements.py` mirrors T5
+`frontend/olympus/lib/entitlements.ts` artifact-class matrix).
+
+**Env:** `MAILGUN_API_KEY`, `MAILGUN_DOMAIN`, `NOTIFY_FROM` (required to send);
+`NOTIFY_UNSUBSCRIBE_BASE` optional (defaults to digiquant.io settings placeholder).
+
+**Behavior:** fail-soft everywhere — Mailgun/network errors log a warning and return;
+dedupe via `notification_log` insert-first PK `(workspace_id, event_key, sent_date)`;
+suppression checked **before** claim (skipped sends do not burn dedupe slots); tier gates
+on digest sections and event types (`house_weights_nav` for holding-change,
+`private_book` for execution alerts); templates carry unsubscribe link, no broker
+ids/tokens/keys.
+
+**Entry points:**
+
+| Caller | Function | Digest hour gate |
+|--------|----------|------------------|
+| Cron `python -m digiquant.notify.dispatch` | `dispatch_notifications(hour_utc=now.hour)` | Yes — matches `digest_hour_utc` |
+| `run_db_first.py` post-run | `dispatch_notifications(run_date=…, force_digest=True)` | No — always attempts today's digest; dedupe prevents double-send |
+| K4 `run_sync_batch` tail | `dispatch_execution_alerts(run_date=…)` | N/A — execution alerts only |
+
+Migration 103 (`notification_prefs`, `notification_log`) + `tests/dq/notify/`.
+
 ## Billing (T2)
 
 Olympus **consumer** subscription tiers are driven by Stripe Checkout + Customer Portal +
