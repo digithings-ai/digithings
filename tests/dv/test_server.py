@@ -142,6 +142,41 @@ def test_create_note_overwrite_upsert(vault_dir: Path) -> None:
     assert "page_class" in raw
 
 
+def test_prune_children_handler_deletes_only_stale_children(vault_dir: Path) -> None:
+    vault = Vault(vault_dir)
+    vault.write_note(
+        "guide__stale",
+        frontmatter={"parent_doc": "guide"},
+        body="stale\n",
+        subdir="clients/acme",
+    )
+    vault.write_note(
+        "guide__current",
+        frontmatter={"parent_doc": "guide"},
+        body="current\n",
+        subdir="clients/acme",
+    )
+    vault.write_note(
+        "other__stale",
+        frontmatter={"parent_doc": "other"},
+        body="keep\n",
+        subdir="clients/acme",
+    )
+
+    result = server.prune_children(
+        server.PruneChildrenRequest(
+            parent_doc="guide",
+            keep_names=["guide__current"],
+            subdir="clients/acme",
+        )
+    )
+
+    assert result.deleted == ["guide__stale"]
+    assert Vault(vault_dir).get_note("guide__stale") is None
+    assert Vault(vault_dir).get_note("guide__current") is not None
+    assert Vault(vault_dir).get_note("other__stale") is not None
+
+
 def test_lint_handler(vault_dir: Path) -> None:
     report = server.lint()
     assert report.ok is True

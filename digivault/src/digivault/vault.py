@@ -260,6 +260,38 @@ class Vault:
         self.reindex()
         return self._notes[name]
 
+    def prune_children(self, parent_doc: str, keep_names: set[str], subdir: str = "") -> list[str]:
+        """Delete stale segment children for one parent note inside ``subdir``.
+
+        A note is removable only if its name begins with the exact parent prefix,
+        its frontmatter identifies that same parent, and its resolved path remains
+        under the supplied subdirectory. This narrow operation intentionally cannot
+        remove a hub note or another document's children.
+        """
+        self._require_writable()
+        parent = parent_doc.strip()
+        if not parent or "/" in parent or parent.startswith("."):
+            raise VaultError(f"Invalid parent note name: {parent_doc!r}")
+        prefix = f"{parent}__"
+        if any(not name.startswith(prefix) for name in keep_names):
+            raise VaultError("keep_names must contain only children of parent_doc")
+        clean_subdir = subdir.strip("/")
+        subdir_path = self._safe_path(clean_subdir or ".")
+        deleted: list[str] = []
+        for name, note in self._notes.items():
+            path = self._safe_path(note.rel_path)
+            if (
+                name.startswith(prefix)
+                and name not in keep_names
+                and note.frontmatter.get("parent_doc") == parent
+                and (path == subdir_path or subdir_path in path.parents)
+            ):
+                path.unlink()
+                deleted.append(name)
+        if deleted:
+            self.reindex()
+        return sorted(deleted)
+
     def rename(self, old_name: str, new_name: str) -> Note:
         """Rename a note and rewrite every inbound ``[[wikilink]]`` to match."""
         self._require_writable()
