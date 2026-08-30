@@ -124,7 +124,7 @@ ORDER BY version;
 | `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
 | `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
 | `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
-| `settings` | ACTIVE **v7** | Thin entry imports PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) `_shared/*` from GitHub raw (notifications upsert wired). Smoke: missing/invalid JWT → `401`. Replace with monorepo bundle once `sbp_` PAT or merge+#3161+CLI available. EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set on the project. |
+| `settings` | ACTIVE **v7** (thin GitHub-raw) | Notifications upsert live via PR [#3161](https://github.com/digithings-ai/digithings/pull/3161) raw imports. Prefer monorepo bundle redeploy once Cursor env has `SUPABASE_ACCESS_TOKEN`=`sbp_…` (or MCP full-file deploy succeeds). EF secrets (`DIGIQUANT_VAULT_*`, `APP_URL`, Alpaca OAuth) still **not** set on the project. Migration `106` / `notification_prefs_align_canonical` already applied on `core`. |
 
 ### Schema alignment (agent, 2026-08-30)
 
@@ -235,8 +235,8 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — MCP auth fails (placeholder/unset key); desktop re-auth required | K5 digest / alerts |
 | Supabase Auth providers (Google, GitHub) on `core` | **Blocked** — dashboard login / OAuth browser failed in agent VM | T1 login when flag on |
-| Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — signup tab open; not completed | Product broker connect |
-| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Blocked** — env has JWT only; CLI/Management secrets API need personal access token | EF `secrets set`; monorepo `functions deploy` |
+| Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; Agent Mail inbox has no Alpaca verification thread; KYC/browser wall | Product broker connect |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Blocked** — env has JWT only; CLI/Management secrets API need personal access token. **Unlock:** set Cursor Cloud environment secret `SUPABASE_ACCESS_TOKEN` (name only — value is a Supabase personal access token `sbp_…`, not the project JWT) via the environment dashboard, then re-run agents. | EF `secrets set`; monorepo `functions deploy` |
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
