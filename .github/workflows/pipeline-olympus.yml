@@ -3,10 +3,23 @@ name: "Pipeline: Olympus research"
 # Unified Atlas+Hermes daily cron (replaces atlas-baseline/delta/monthly/fed-odds).
 # Single daily cadence + optional workflow_dispatch refresh_scope.
 # Tunables: .github/olympus-pipeline.yml.
+#
+# GitHub `schedule` at minute 0 is best-effort and routinely slips hours at
+# 12:00 UTC (same class as FX Hub `17 */2` in pipeline-digiquant-prices.yml).
+# House must finish before the 09:30 America/New_York open so at-open execution
+# can read today's book. Primary is 09:17 UTC (05:17 ET / 11:17 Italy in CEST);
+# retries at 10:17 / 11:17 / 12:17 skip when today's run already succeeded.
+# `repository_dispatch` type `olympus-daily` is the external watchdog hook
+# (Cloudflare cron / ops runner) — not a substitute for `workflow_dispatch`.
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "17 9 * * *"
+    - cron: "17 10 * * *"
+    - cron: "17 11 * * *"
+    - cron: "17 12 * * *"
+  repository_dispatch:
+    types: [olympus-daily]
   workflow_dispatch:
     inputs:
       refresh_scope:
@@ -81,8 +94,39 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "Resolved: refresh_scope=$refresh_scope run_date=$run_date"
 
-  run:
+  already-committed:
+    name: Skip if today's house run already succeeded
     needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      skip: ${{ steps.gate.outputs.skip }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve skip
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_DATE: ${{ needs.resolve.outputs.run_date }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          ARGS=(
+            python3 digiquant/scripts/atlas/house_schedule_skip.py
+            --run-date "$RUN_DATE"
+            --current-run-id "$CURRENT_RUN_ID"
+          )
+          if [ "$FORCE_RUN" = "true" ]; then
+            ARGS+=(--force)
+          fi
+          "${ARGS[@]}" >> "$GITHUB_OUTPUT"
+
+  run:
+    needs: [resolve, already-committed]
+    if: needs.already-committed.outputs.skip != 'true'
     runs-on: ubuntu-latest
     # 240 min — full-refresh worst case: 3 outer attempts x in-process LLM retry (#461).
     timeout-minutes: 240
