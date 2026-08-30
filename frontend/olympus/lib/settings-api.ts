@@ -51,7 +51,28 @@ export type ProfileTip = {
   recorded_at: string | null;
   investment: Record<string, unknown> | null;
   assets: Record<string, unknown> | null;
+  watchlist?: string[];
+  themes?: string[];
+  research_budget_usd?: number | null;
 };
+
+export type ProviderCredentialView = {
+  id: string;
+  provider: string;
+  auth_kind?: string;
+  fingerprint: string;
+  status: string;
+  last_used_at: string | null;
+  created_at?: string;
+};
+
+export type LlmProviderName =
+  | 'openai'
+  | 'anthropic'
+  | 'groq'
+  | 'openrouter'
+  | 'xai'
+  | 'gemini';
 
 export type SettingsApiOptions = {
   /** Absolute or relative functions base, e.g. https://xxx.supabase.co/functions/v1 */
@@ -134,6 +155,9 @@ export async function saveProfile(
     label: string;
     investment?: Record<string, unknown> | null;
     assets?: Record<string, unknown> | null;
+    watchlist?: string[];
+    themes?: string[];
+    research_budget_usd?: number | null;
     expected_version_id?: string | null;
     workspace_id?: string;
   },
@@ -192,6 +216,42 @@ export async function revokeBroker(
   payload: { connection_id: string; workspace_id?: string },
 ): Promise<BrokerConnectionView> {
   return request<BrokerConnectionView>(opts, 'POST', '/settings/brokers/revoke', payload);
+}
+
+export async function listKeys(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<ProviderCredentialView[]> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const data = await request<{ keys: ProviderCredentialView[] }>(
+    opts,
+    'GET',
+    `/settings/keys${q}`,
+  );
+  return data.keys ?? [];
+}
+
+export async function connectProviderKey(
+  opts: SettingsApiOptions,
+  payload: {
+    provider: LlmProviderName;
+    secret: string;
+    key_id?: string;
+    workspace_id?: string;
+  },
+): Promise<ProviderCredentialView> {
+  return request<ProviderCredentialView>(opts, 'POST', '/settings/keys/connect', {
+    kind: 'api_key',
+    key_id: payload.key_id ?? 'api_key',
+    ...payload,
+  });
+}
+
+export async function revokeProviderKey(
+  opts: SettingsApiOptions,
+  payload: { credential_id: string; workspace_id?: string },
+): Promise<ProviderCredentialView> {
+  return request<ProviderCredentialView>(opts, 'POST', '/settings/keys/revoke', payload);
 }
 
 export type NotificationPrefs = {

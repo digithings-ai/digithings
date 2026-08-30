@@ -4,6 +4,8 @@ import { useMemo, useState } from 'react';
 import { SUBPAGE_MAX } from '@/components/layout-constants';
 import { SettingsContent } from '@/components/settings-content';
 import { ProfileTab } from '@/components/settings/profile-tab';
+import { PipelineTab } from '@/components/settings/pipeline-tab';
+import { KeysTab } from '@/components/settings/keys-tab';
 import { BrokersTab } from '@/components/settings/brokers-tab';
 import { NotifyTab } from '@/components/settings/notify-tab';
 import { BillingTab } from '@/components/settings/billing-tab';
@@ -18,10 +20,19 @@ import { dataSourceHost } from '@/lib/data-source-host';
 import { useAuth } from '@/lib/auth-context';
 import type { SettingsApiOptions } from '@/lib/settings-api';
 
-type SettingsTab = 'profile' | 'brokers' | 'notifications' | 'billing' | 'about';
+type SettingsTab =
+  | 'profile'
+  | 'pipeline'
+  | 'keys'
+  | 'brokers'
+  | 'notifications'
+  | 'billing'
+  | 'about';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
+  { id: 'pipeline', label: 'Pipeline' },
+  { id: 'keys', label: 'Keys' },
   { id: 'brokers', label: 'Brokers' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'billing', label: 'Billing' },
@@ -68,6 +79,20 @@ export default function SettingsPage() {
               lastVersionId={lastVersionId}
               onVersionSaved={setLastVersionId}
             />
+          </OverlayProfileSurface>
+        ) : null}
+        {tab === 'pipeline' ? (
+          <OverlayProfileSurface>
+            <PipelineTab
+              api={api}
+              lastVersionId={lastVersionId}
+              onVersionSaved={setLastVersionId}
+            />
+          </OverlayProfileSurface>
+        ) : null}
+        {tab === 'keys' ? (
+          <OverlayProfileSurface>
+            <KeysTab api={api} />
           </OverlayProfileSurface>
         ) : null}
         {tab === 'brokers' ? (

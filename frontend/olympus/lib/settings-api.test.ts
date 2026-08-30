@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   connectBrokerApiKey,
+  connectProviderKey,
   getNotifications,
   getProfile,
   isBillingConfigured,
@@ -72,6 +73,35 @@ describe('settings-api', () => {
     const sent = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
     expect(sent.kind).toBe('api_key');
     expect(sent.env).toBe('paper');
+    expect(row.fingerprint).toBe('abcd1234');
+    expect(JSON.stringify(row)).not.toContain(secret);
+  });
+
+  it('connectProviderKey posts api_key kind without echoing secret in response path', async () => {
+    const secret = 'sk-never-in-row';
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          id: 'k1',
+          provider: 'openai',
+          fingerprint: 'abcd1234',
+          status: 'active',
+          last_used_at: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    const row = await connectProviderKey(
+      {
+        accessToken: 'tok',
+        functionsBaseUrl: 'https://example.supabase.co/functions/v1',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      },
+      { provider: 'openai', secret },
+    );
+    const sent = JSON.parse(String(fetchImpl.mock.calls[0]![1]?.body));
+    expect(sent.kind).toBe('api_key');
+    expect(sent.provider).toBe('openai');
     expect(row.fingerprint).toBe('abcd1234');
     expect(JSON.stringify(row)).not.toContain(secret);
   });

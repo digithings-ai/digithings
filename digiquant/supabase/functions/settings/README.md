@@ -53,16 +53,24 @@ Profile schema re-validation imports the real
 | `GET` | `/brokers` | Fingerprint projection only |
 | `POST` | `/brokers/connect` | Tier gate; `api_key` or Alpaca `oauth` (server-pinned `redirect_uri`); seal via vault; reconnect = revoke-then-insert |
 | `POST` | `/brokers/revoke` | Fail closed on unknown row |
+| `GET` | `/keys` | BYOK fingerprint projection only (`workspace_provider_credentials`) |
+| `POST` | `/keys/connect` | Tier gate; seal LLM `api_key` with AAD `workspace:provider:llm`; reconnect = revoke-then-insert |
+| `POST` | `/keys/revoke` | Fail closed on unknown row |
 | `GET` | `/notifications` | Load `notification_prefs` for workspace member (`?workspace_id=` optional). **Empty contract:** no row → **200** with defaults (`daily_digest`/`holding_change_alerts`/`execution_alerts` false, `digest_hour_utc` 12, `email` from JWT when present, `updated_at: null`) — read-only, never inserts. Missing table → **503 `NOT_READY`**. |
 | `PATCH` | `/notifications` | Upsert `notification_prefs` (member authz; validates email + `digest_hour_utc` 0–23) |
 
 ## Tier gate
 
-`plan_tier ∈ {custom, enterprise}` is required for profile writes and broker
-connect, gated on **`workspaces.plan_tier` only** (authoritative after Stripe
-CAS). JWT `app_metadata.plan_tier` is presentation / claim-sync side — never
-prefer it here (stale elevated claim after cancel would fail-open). Otherwise
+`plan_tier ∈ {custom, enterprise}` is required for profile writes, BYOK key
+connect, and broker connect, gated on **`workspaces.plan_tier` only** (authoritative
+after Stripe CAS). JWT `app_metadata.plan_tier` is presentation / claim-sync side —
+never prefer it here (stale elevated claim after cancel would fail-open). Otherwise
 **403 `TIER_FORBIDDEN`**. UI `can()` is presentation only.
+
+Profile GET returns `watchlist`, `themes`, and `research_budget_usd` from the tip
+payload (SETTINGS-IA Pipeline tab). PATCH accepts the same fields (budget ≥ 0 or null).
+
+See `docs/agent-backlog/kairos-tenancy/SETTINGS-IA.md`.
 
 ## Secrets
 

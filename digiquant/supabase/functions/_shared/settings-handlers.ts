@@ -7,6 +7,9 @@
  *   GET    /brokers            — list fingerprints only
  *   POST   /brokers/connect    — api_key | oauth (Alpaca code exchange server-side)
  *   POST   /brokers/revoke     — mark revoked (fail closed on unknown)
+ *   GET    /keys               — BYOK fingerprint projection only
+ *   POST   /keys/connect       — seal LLM api_key (AAD workspace:provider:llm)
+ *   POST   /keys/revoke        — mark revoked (fail closed on unknown)
  *   GET    /notifications      — load notification_prefs (or empty defaults; no write)
  *   PATCH  /notifications      — upsert notification_prefs (workspace member)
  *
@@ -62,8 +65,24 @@ export type SettingsDeps = {
 const FINGERPRINT_COLUMNS =
   "id, workspace_id, broker, env, auth_kind, fingerprint, scopes, status, created_at, revoked_at, last_used_at";
 
-/** Custom/enterprise only — baseline cannot write profiles or connect brokers. */
+const KEY_FINGERPRINT_COLUMNS =
+  "id, workspace_id, provider, auth_kind, fingerprint, scopes, status, created_at, revoked_at, last_used_at";
+
+/** Custom/enterprise only — baseline cannot write overlays, BYOK, or brokers. */
 const ELIGIBLE_TIERS = new Set(["custom", "enterprise"]);
+
+/** Closed vocabulary matching migration 104 workspace_provider_credentials.provider. */
+const LLM_PROVIDERS = new Set([
+  "openai",
+  "anthropic",
+  "groq",
+  "openrouter",
+  "xai",
+  "gemini",
+]);
+
+/** AAD env-slot for BYOK — must match digiquant.olympus.overlay.byok.BYOK_AAD_PURPOSE. */
+export const BYOK_AAD_PURPOSE = "llm";
 
 /** Fixed OAuth callback path under Olympus (must match frontend alpacaOAuthCallbackPath). */
 export const ALPACA_OAUTH_CALLBACK_PATH = "/olympus/settings/brokers/callback/";
@@ -109,6 +128,15 @@ export async function handleSettingsRequest(
   }
   if (method === "POST" && path === "/brokers/revoke") {
     return revokeBroker(req, deps);
+  }
+  if (method === "GET" && (path === "/keys" || path === "/keys/")) {
+    return listKeys(req, deps);
+  }
+  if (method === "POST" && path === "/keys/connect") {
+    return connectKey(req, deps);
+  }
+  if (method === "POST" && path === "/keys/revoke") {
+    return revokeKey(req, deps);
   }
   if (
     method === "GET" &&
@@ -191,7 +219,38 @@ function emptyProfileBody(
     recorded_at: null,
     investment: null,
     assets: null,
+    watchlist: [],
+    themes: [],
+    research_budget_usd: null,
   };
+}
+
+function normalizeStringList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const cleaned = item.trim();
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+  }
+  return out;
+}
+
+function parseResearchBudget(
+  raw: unknown,
+): { ok: true; value: number | null } | { ok: false; message: string } {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, value: null };
+  }
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
+    return { ok: false, message: "research_budget_usd must be a number ≥ 0 or null" };
+  }
+  return { ok: true, value: raw };
 }
 
 function profileResponseBody(row: Record<string, unknown>): Record<string, unknown> {
@@ -209,6 +268,13 @@ function profileResponseBody(row: Record<string, unknown>): Record<string, unkno
     recorded_at: row.recorded_at ?? null,
     investment: payload.investment ?? null,
     assets: payload.assets ?? null,
+    watchlist: normalizeStringList(payload.watchlist).map((t) => t.toUpperCase()),
+    themes: normalizeStringList(payload.themes).map((t) => t.toLowerCase()),
+    research_budget_usd:
+      typeof payload.research_budget_usd === "number" &&
+        Number.isFinite(payload.research_budget_usd)
+        ? payload.research_budget_usd
+        : null,
   };
 }
 
@@ -268,6 +334,7 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     supersedes_id?: string | null;
     watchlist?: string[];
     themes?: string[];
+    research_budget_usd?: number | null;
   };
   try {
     body = await req.json();
@@ -356,6 +423,13 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     }
   }
 
+  const budgetParsed = parseResearchBudget(body.research_budget_usd);
+  if (!budgetParsed.ok) {
+    return jsonError(400, "INVALID_BUDGET", budgetParsed.message);
+  }
+  const watchlist = normalizeStringList(body.watchlist).map((t) => t.toUpperCase());
+  const themes = normalizeStringList(body.themes).map((t) => t.toLowerCase());
+
   // Bind crypto: unbound `crypto.randomUUID` throws TypeError ("expected Crypto") on Deno/Edge.
   const versionId = deps.uuid ? deps.uuid() : crypto.randomUUID();
   const payload = {
@@ -364,9 +438,9 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     schema_version: 1,
     is_house_default: false,
     label,
-    watchlist: body.watchlist ?? [],
-    themes: body.themes ?? [],
-    research_budget_usd: null,
+    watchlist,
+    themes,
+    research_budget_usd: budgetParsed.value,
     investment: body.investment ?? null,
     assets: body.assets ?? null,
   };
@@ -732,6 +806,254 @@ async function revokeBroker(req: Request, deps: SettingsDeps): Promise<Response>
     id: existing.id,
     broker: existing.broker,
     env: existing.env,
+    fingerprint: existing.fingerprint,
+    status: existing.status,
+    last_used_at: existing.last_used_at,
+    revoked_at: existing.revoked_at,
+  });
+}
+
+async function listKeys(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data, error } = await deps.admin
+    .from("workspace_provider_credentials")
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return jsonError(
+      503,
+      "NOT_READY",
+      "workspace_provider_credentials not available (blocked on T4)",
+    );
+  }
+
+  const keys = (data ?? []).map((row: Record<string, unknown>) => ({
+    id: row.id,
+    provider: row.provider,
+    auth_kind: row.auth_kind,
+    fingerprint: row.fingerprint,
+    status: row.status,
+    last_used_at: row.last_used_at,
+    created_at: row.created_at,
+  }));
+
+  return jsonOk({ keys });
+}
+
+async function connectKey(req: Request, deps: SettingsDeps): Promise<Response> {
+  let body: {
+    workspace_id?: string;
+    provider?: string;
+    kind?: string;
+    key_id?: string;
+    secret?: string;
+    scopes?: string[];
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
+  }
+
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
+  if (!authz.ok) return authz.response;
+
+  const tierErr = requireEligibleTier(authz.workspace.plan_tier);
+  if (tierErr) return tierErr;
+
+  const provider = (body.provider ?? "").toLowerCase().trim();
+  if (!LLM_PROVIDERS.has(provider)) {
+    return jsonError(
+      400,
+      "INVALID_PROVIDER",
+      "provider must be one of openai, anthropic, groq, openrouter, xai, gemini",
+    );
+  }
+
+  const kind = body.kind ?? "api_key";
+  if (kind !== "api_key") {
+    return jsonError(400, "INVALID_KIND", "BYOK keys require kind=api_key");
+  }
+
+  let credential: BrokerCredential;
+  try {
+    credential = parseCredential({
+      kind: "api_key",
+      key_id: typeof body.key_id === "string" && body.key_id.trim()
+        ? body.key_id.trim()
+        : "api_key",
+      secret: body.secret,
+    });
+  } catch (err) {
+    if (err instanceof VaultPayloadError) {
+      return jsonError(400, "INVALID_CREDENTIAL", "credential payload is invalid");
+    }
+    throw err;
+  }
+
+  const aad = buildAad(authz.workspace.id, provider, BYOK_AAD_PURPOSE);
+  const envelope = await sealCredential(credential, {
+    aad,
+    key: deps.vaultKey,
+  });
+  const fp = await fingerprint(credential);
+  const scopes = Array.isArray(body.scopes) ? body.scopes : [];
+
+  return insertProviderCredential(deps, {
+    workspaceId: authz.workspace.id,
+    provider,
+    credentialKind: credential.kind,
+    envelope,
+    fingerprint: fp,
+    scopes,
+  });
+}
+
+async function insertProviderCredential(
+  deps: SettingsDeps,
+  args: {
+    workspaceId: string;
+    provider: string;
+    credentialKind: string;
+    envelope: { ciphertext: Uint8Array; nonce: Uint8Array; key_id: string };
+    fingerprint: string;
+    scopes: string[];
+  },
+): Promise<Response> {
+  const id = deps.uuid ? deps.uuid() : crypto.randomUUID();
+  const row = {
+    id,
+    workspace_id: args.workspaceId,
+    provider: args.provider,
+    auth_kind: args.credentialKind,
+    ciphertext: encodeBytea(args.envelope.ciphertext),
+    nonce: encodeBytea(args.envelope.nonce),
+    key_id: args.envelope.key_id,
+    fingerprint: args.fingerprint,
+    scopes: args.scopes,
+    status: "active",
+  };
+
+  const { data: inserted, error: insertErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .insert(row)
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .single();
+
+  if (!insertErr && inserted) {
+    return jsonOk({
+      id: inserted.id,
+      provider: inserted.provider,
+      auth_kind: inserted.auth_kind,
+      fingerprint: inserted.fingerprint,
+      status: inserted.status,
+      last_used_at: inserted.last_used_at,
+      created_at: inserted.created_at,
+    });
+  }
+
+  if (!insertErr || !isUniqueViolation(insertErr)) {
+    console.error("byok connect insert failed", insertErr?.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to store provider credential");
+  }
+
+  const stamp = (deps.now ?? (() => new Date))().toISOString();
+  const { error: revokeErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .update({ status: "revoked", revoked_at: stamp })
+    .eq("workspace_id", args.workspaceId)
+    .eq("provider", args.provider)
+    .eq("status", "active");
+
+  if (revokeErr) {
+    console.error("byok reconnect revoke failed", revokeErr.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to store provider credential");
+  }
+
+  const retryId = deps.uuid ? deps.uuid() : crypto.randomUUID();
+  const { data: retried, error: retryErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .insert({ ...row, id: retryId })
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .single();
+
+  if (retryErr || !retried) {
+    console.error("byok reconnect insert failed", retryErr?.code ?? "unknown");
+    return jsonError(500, "CONNECT_FAILED", "Unable to store provider credential");
+  }
+
+  return jsonOk({
+    id: retried.id,
+    provider: retried.provider,
+    auth_kind: retried.auth_kind,
+    fingerprint: retried.fingerprint,
+    status: retried.status,
+    last_used_at: retried.last_used_at,
+    created_at: retried.created_at,
+  });
+}
+
+async function revokeKey(req: Request, deps: SettingsDeps): Promise<Response> {
+  let body: { workspace_id?: string; credential_id?: string };
+  try {
+    body = await req.json();
+  } catch {
+    return jsonError(400, "INVALID_PAYLOAD", "Body must be JSON");
+  }
+
+  const authz = await resolveMember(deps, body.workspace_id ?? null);
+  if (!authz.ok) return authz.response;
+
+  const credentialId = body.credential_id;
+  if (typeof credentialId !== "string" || !credentialId) {
+    return jsonError(400, "INVALID_PAYLOAD", "credential_id is required");
+  }
+
+  const stamp = (deps.now ?? (() => new Date))().toISOString();
+  const { data: updated, error: updErr } = await deps.admin
+    .from("workspace_provider_credentials")
+    .update({ status: "revoked", revoked_at: stamp })
+    .eq("id", credentialId)
+    .eq("workspace_id", authz.workspace.id)
+    .neq("status", "revoked")
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .maybeSingle();
+
+  if (updErr) {
+    return jsonError(500, "REVOKE_FAILED", "Unable to revoke credential");
+  }
+
+  if (updated) {
+    return jsonOk({
+      id: updated.id,
+      provider: updated.provider,
+      fingerprint: updated.fingerprint,
+      status: updated.status,
+      last_used_at: updated.last_used_at,
+      revoked_at: updated.revoked_at,
+    });
+  }
+
+  const { data: existing } = await deps.admin
+    .from("workspace_provider_credentials")
+    .select(KEY_FINGERPRINT_COLUMNS)
+    .eq("id", credentialId)
+    .eq("workspace_id", authz.workspace.id)
+    .maybeSingle();
+
+  if (!existing) {
+    return jsonError(404, "CREDENTIAL_NOT_FOUND", "Unknown provider credential");
+  }
+
+  return jsonOk({
+    id: existing.id,
+    provider: existing.provider,
     fingerprint: existing.fingerprint,
     status: existing.status,
     last_used_at: existing.last_used_at,
