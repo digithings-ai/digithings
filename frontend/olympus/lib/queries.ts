@@ -711,7 +711,9 @@ export async function getFullDashboardData(): Promise<DashboardData> {
     metricsRes, docsRes, deltaDocsRes, changelogDocsRes, tickerViewRes, snapshotRunTypesRes,
     pmRebalanceRes,
   ] = await Promise.all([
-    supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).single(),
+    // maybeSingle: empty RLS (or no Sunday run) must not 406/PGRST116 — Brief
+    // falls through to the empty-digest shell instead of a hard query failure.
+    supabase.from('daily_snapshots').select('id,date,run_type,baseline_date,snapshot,digest_markdown,created_at').order('date', { ascending: false }).limit(1).maybeSingle(),
     supabase.from('positions').select('*').order('date', { ascending: false }).limit(5000),
     supabase.from('instruments').select('*').order('ticker', { ascending: true }),
     supabase.from('theses').select('*').order('date', { ascending: false }).limit(50),
