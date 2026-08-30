@@ -3044,7 +3044,10 @@ templates carry unsubscribe link, no broker ids/tokens/keys.
 
 **Loud-fail probe:** `python -m digiquant.notify.dispatch --require-mailgun` (alias
 `--check`) exits **2** with `MAILGUN_NOT_CONFIGURED` listing missing env *names*
-when vendor keys are empty. Staging inventory also covers these names in
+when vendor keys are empty. Combined cron probe:
+`python scripts/kairos_cron_check.py` (overlay `--check` + kairos sync `--check` +
+Mailgun names) exits **2** with `KAIROS_CRON_CHECK` listing which probes failed.
+Staging inventory also covers these names in
 `digiquant.olympus.kairos.staging_secrets`. `scripts/kairos_staging_e2e.py` runs
 Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password
 is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if

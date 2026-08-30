@@ -17,7 +17,10 @@ Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
 Loud-fail gates (after paste):
 ```bash
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun
+PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.overlay --check
+PATH="$PWD/.venv/bin:$PATH" python -m digiquant.olympus.kairos.sync_cron --check
 ```
 
 ### 0a) Auth Pages on `main` — DONE (#3231) + GitHub login proven
