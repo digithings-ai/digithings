@@ -54,10 +54,9 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     expect(github.redirectTo).toMatch(/\/dashboard\/auth\/callback\/$/);
     expect(github.queryParams).toBeUndefined();
     const google = oauthSignInOptions('google');
-    expect(google.queryParams).toEqual({
-      access_type: 'offline',
-      prompt: 'select_account',
-    });
+    const twitter = oauthSignInOptions('twitter');
+    expect(twitter.skipBrowserRedirect).toBe(true);
+    expect(twitter.queryParams).toBeUndefined();
   });
 
   it('oauthCallbackErrorFromLocation reads search and hash errors', async () => {

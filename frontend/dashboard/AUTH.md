@@ -10,7 +10,12 @@ key cannot be hidden in a static bundle. The public path is `/dashboard/` only.
 
 Product login is **Supabase Auth** with **Google + GitHub OAuth** (and email/password) over the
 browser PKCE flow (`@supabase/supabase-js` only — no custom cookies or token
-storage). Routes:
+storage). The login UI is the compact `AuthCard` from `@digithings/web`: tool
+mark + **`digiquant`** wordmark beside it, then email, password, and one row of
+icon-only OAuth (`[G][GH][X]`) plus **Sign in** / **Sign up**. Provider id for X
+is `twitter`; visible label/aria is **X** (never Twitter). The X icon ships in
+the card; enabling Twitter in the Supabase dashboard is a separate owner hop
+(X developer portal). No olympus branding. Routes:
 
 | Path | Role |
 |------|------|
@@ -144,6 +149,7 @@ already drops anon SELECT on operator cost telemetry (`atlas_run_diagnostics`);
 
 - [x] T1 code path: flag-gated PKCE login, `/login` + `/signup` + `/auth/callback`, AuthGate.
 - [ ] **Owner:** enable **Google** (still often Disabled on `core`) and GitHub + Redirect URLs.
+- [ ] **Owner:** enable **X** (Supabase provider id `twitter`) after the X developer portal app exists. The compact card already shows the X icon.
 - [ ] **Owner:** Auth SMTP (Mailgun) or turn Confirm email off until SMTP delivers.
 - [ ] **Owner:** set `FX_HUB_INVITE_HASH` (sha256 hex of the 12x invite) on the settings
       Edge Function, apply migration **112**, share the plaintext only out of band.
