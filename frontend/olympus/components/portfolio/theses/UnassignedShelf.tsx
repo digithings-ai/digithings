@@ -48,7 +48,7 @@ export function UnassignedShelf({
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-ink-soft">Held, not yet tied to a market view</h3>
           <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
-            <div className="glass-card divide-y divide-hair overflow-hidden p-0">
+            <div className="oly-slab divide-y divide-hair overflow-hidden p-0">
               {heldUnmapped.map((p) => (
                 <Link
                   key={p.ticker}
@@ -74,7 +74,7 @@ export function UnassignedShelf({
       {proposedUnheld.length > 0 ? (
         <div className="space-y-2">
           <h3 className="text-sm font-semibold text-ink-soft">Proposed, not held</h3>
-          <div className="glass-card divide-y divide-hair overflow-hidden p-0">
+          <div className="oly-slab divide-y divide-hair overflow-hidden p-0">
             {proposedUnheld.map((d) => (
               <div key={d.ticker} className="flex items-center gap-3 px-4 py-3">
                 <Link

@@ -113,7 +113,7 @@ export function TodayActionsPanel({
   /** Per-ticker rationale from the PM rebalance memo (#704); the rationale line
    *  is omitted entirely for tickers with no memo entry. */
   rationaleByTicker?: Record<string, string>;
-  /** Hero/embedded mode: drop the panel's own glass-card frame and the
+  /** Hero/embedded mode: drop the panel's own slab frame and the
    *  "Today's actions" header (the host supplies the title and the frame). */
   bare?: boolean;
 }) {
@@ -136,7 +136,7 @@ export function TodayActionsPanel({
   return (
     <div
       className={
-        bare ? 'rounded-lg border border-hair/70 overflow-hidden' : 'glass-card p-0 overflow-hidden'
+        bare ? 'border border-hair/70 overflow-hidden' : 'oly-slab p-0 overflow-hidden'
       }
     >
       {!bare && (

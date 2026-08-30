@@ -59,8 +59,8 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
       })
     );
 
-    // The vehicle row should render as a native <details> without nested glass-card styling
-    // The parent (ThesisStoryCard) wraps vehicles in a glass-card, but individual rows should not
+    // The vehicle row should render as a native <details> without nested card styling.
+    // Individual rows stay unframed; parent ThesisStoryCard is a disclosure spine.
     expect(html).toContain('<details');
     expect(html).not.toMatch(/<details[^>]*class="[^"]*glass-card/);
   });

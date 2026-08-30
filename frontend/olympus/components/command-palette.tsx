@@ -221,7 +221,7 @@ export function filterCommandItems(items: CmdItem[], docs: Doc[], query: string)
 
 /**
  * App-wide ⌘K palette, riding the promoted @digithings/web CommandPalette
- * shell (dress="glass" — olympus's shipped look) since #1548. The shell owns
+ * shell (dress="glass" — API name; overlay chrome, not a glass surface) since #1548. The shell owns
  * the overlay/portal, keyboard loop and listbox ARIA; this component keeps
  * everything data- and router-shaped: the ⌘K binding (the shell binds no
  * shortcut), the open flag in app-shell context, the item pipeline

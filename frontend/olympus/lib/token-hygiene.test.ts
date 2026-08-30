@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
@@ -35,6 +35,23 @@ describe('canon token hygiene (#1402)', () => {
     const offenders = files.filter((f) => {
       const s = readFileSync(f, 'utf8');
       return s.includes('#a78bfa') || s.includes('rgba(59,130,246') || s.includes('rgba(59, 130, 246');
+    });
+    expect(offenders).toEqual([]);
+  });
+
+  it('olympus core has no glass-card class (tonal slabs are .oly-slab)', () => {
+    // twelve-x / FX Hub is a parallel Phase 3 owner; they still have call sites
+    // until they switch to .oly-slab. Tests keep `not.toContain('glass-card')`.
+    const appFiles = walk(join(__dirname, '..', 'app'));
+    const core = [...files, ...appFiles]
+      .filter((f) => !f.includes(`${sep}twelve-x${sep}`))
+      .filter((f) => !/\.test\.tsx?$/.test(f));
+    const offenders = core.filter((f) => {
+      const stripped = readFileSync(f, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, '')
+        .replace(/\/\/.*$/gm, '');
+      return /\bglass-card\b/.test(stripped);
     });
     expect(offenders).toEqual([]);
   });

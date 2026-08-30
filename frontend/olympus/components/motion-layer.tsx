@@ -2,7 +2,7 @@
 /**
  * MotionLayer — non-invasive "comes to life" scroll reveals for the dashboard.
  * Adds `html.motion-on` only when motion is allowed (JS active + not reduced),
- * then reveals `.glass-card` and `[data-reveal]` elements. With JS off or
+ * then reveals `.oly-slab` and `[data-reveal]` elements. With JS off or
  * reduced-motion, nothing is hidden (content always shown). Pure CSS +
  * IntersectionObserver — no animation library, no edits to data components,
  * CSP-safe.
@@ -61,7 +61,7 @@ export default function MotionLayer() {
       };
 
       const observe = () => {
-        document.querySelectorAll<HTMLElement>(".glass-card, [data-reveal]").forEach((el) => {
+        document.querySelectorAll<HTMLElement>(".oly-slab, [data-reveal]").forEach((el) => {
           if (seen.has(el)) return;
           seen.add(el);
           // Reveal anything already on-screen now (initial load, or a card mounted

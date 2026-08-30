@@ -14,9 +14,9 @@ import { SUBPAGE_MAX } from '@/components/layout-constants';
  *
  * #1548: the card is the promoted @digithings/web EmptyState — variant="error"
  * (semantic; the glass dresses carry no glyph disc, so no down tint shows) in
- * the dress="glass-display" cut, which reproduces the shipped look exactly
- * (font-display 2xl title, relaxed body, accent Retry). The `.glass-card`
- * surface stays a call-site class so the app's motion-reveal hook keeps firing.
+ * the dress="glass-display" cut (API name; the surface is a tonal slab, not
+ * glass). Title uses font-display (mono voice). The `.oly-slab` surface is
+ * the call-site class so MotionLayer's reveal hook keeps firing.
  *
  * Copy fix (full-UI-suite critique, P2): this used to say "It'll reconnect
  * automatically", but dbStatus (lib/dashboard-context.tsx) is set once from a
@@ -31,7 +31,7 @@ export default function DbUnavailable() {
       <EmptyState
         variant="error"
         dress="glass-display"
-        className="glass-card mx-auto max-w-md"
+        className="oly-slab mx-auto max-w-md"
         title="Live data is temporarily unavailable"
         body={
           <>
@@ -43,7 +43,7 @@ export default function DbUnavailable() {
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-5 inline-flex items-center rounded-lg border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
+            className="mt-5 inline-flex items-center border border-hair px-4 py-2 text-sm font-medium text-accent transition-colors hover:bg-ink/[0.06]"
           >
             Retry
           </button>

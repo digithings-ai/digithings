@@ -9,7 +9,7 @@ import { TodayActionsPanel } from '@/components/overview/today-actions-panel';
 /**
  * The move-led hero — the single full-weight element of the Brief (landing) page.
  *
- * Quiet regime ribbon → "Brief" (display serif) + the move (reusing the tested
+ * Quiet regime ribbon → "Brief" (display face) + the move (reusing the tested
  * TodayActionsPanel, which already renders the empty and all-HOLD states) → a
  * one-line NAV status. The regime accent is localized here ONLY; the page no
  * longer washes regime colour across the whole viewport.

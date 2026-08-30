@@ -32,7 +32,7 @@ export function MarketViewCard({
   return (
     <Link
       href={href}
-      className="group glass-card block p-5 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
+      className="group oly-slab block p-5 transition-colors hover:bg-ink/[0.03] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent/50"
     >
       <div className="flex items-start justify-between gap-4">
         <h3 className="font-display text-xl leading-snug text-ink">
