@@ -3130,8 +3130,10 @@ T4 overlay pipeline (`digiquant/src/digiquant/olympus/overlay/`) gives entitled
 Custom/Enterprise workspaces a scheduled run of the **one** Olympus graph (no
 `run_type` fork, no planner changes).
 
-**Dispatch (`dispatch.py`).** Entitlement is `plan_tier ∈ {custom, enterprise}` AND
-`subscription_status = active` AND BYOK present-and-unsealable. Misses write a
+**Dispatch (`dispatch.py`).** Entitlement is paid Custom/Enterprise
+(`plan_tier ∈ {custom, enterprise}` AND `subscription_status = active`) **or**
+D1 `entitlement_grants.plan_floor ∈ {custom, enterprise}` (creator/ops without
+Stripe), **and** BYOK present-and-unsealable. Misses write a
 `job_runs` row `skipped` with `error` = `not_entitled` / `no_credentials` (visible,
 never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; claim
 is insert-first + skip-locked (first claimer wins). Production persistence is

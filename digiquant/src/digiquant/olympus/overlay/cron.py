@@ -32,6 +32,7 @@ from digiquant.olympus.overlay.dispatch import (
     SupabaseJobRunStore,
     WorkspaceEntitlement,
     dispatch_overlay_daily,
+    overlay_billing_entitled,
 )
 from digiquant.olympus.tenancy import (
     PlanTier,
@@ -82,11 +83,19 @@ def parse_workspace_row(row: dict[str, object]) -> WorkspaceEntitlement | None:
     raw_status = row.get("subscription_status")
     if raw_id is None or not isinstance(raw_tier, str) or not isinstance(raw_status, str):
         return None
+    raw_floor = row.get("plan_floor")
+    plan_floor: PlanTier | None = None
+    if isinstance(raw_floor, str) and raw_floor:
+        try:
+            plan_floor = PlanTier(raw_floor)
+        except ValueError:
+            plan_floor = None
     try:
         return WorkspaceEntitlement(
             workspace_id=UUID(str(raw_id)),
             plan_tier=PlanTier(raw_tier),
             subscription_status=SubscriptionStatus(raw_status),
+            plan_floor=plan_floor,
         )
     except (ValueError, TypeError):
         return None
@@ -121,6 +130,91 @@ def format_overlay_store_not_configured(missing: Sequence[str]) -> str:
     return "OVERLAY_STORE_NOT_CONFIGURED: " + ", ".join(missing)
 
 
+def _select_rows(
+    client: object, table: str, columns: str, eq: tuple[str, str] | None = None
+) -> list[object]:
+    handle = client.table(table)
+    query = handle.select(columns)
+    if eq is not None:
+        query = query.eq(eq[0], eq[1])
+    result = query.execute()
+    data = getattr(result, "data", result)
+    return data if isinstance(data, list) else []
+
+
+def _auth_emails_by_user_id(client: object) -> dict[str, str]:
+    auth = getattr(client, "auth", None)
+    admin = getattr(auth, "admin", None) if auth is not None else None
+    list_users = getattr(admin, "list_users", None) if admin is not None else None
+    if not callable(list_users):
+        return {}
+    raw = list_users()
+    users = getattr(raw, "users", raw)
+    if not isinstance(users, list):
+        return {}
+    out: dict[str, str] = {}
+    for user in users:
+        uid: object
+        email: object
+        if isinstance(user, dict):
+            uid = user.get("id")
+            email = user.get("email")
+        else:
+            uid = getattr(user, "id", None)
+            email = getattr(user, "email", None)
+        if uid is None or not isinstance(email, str) or not email.strip():
+            continue
+        out[str(uid)] = email.strip().lower()
+    return out
+
+
+def load_workspace_plan_floors(client: object) -> dict[UUID, PlanTier]:
+    """Owner ``entitlement_grants.plan_floor`` keyed by workspace id.
+
+    Missing grant tables, members, or Auth admin are treated as no floors
+    (Stripe-only entitlement), not as a hard failure.
+    """
+    try:
+        grants_raw = _select_rows(client, "entitlement_grants", "email,plan_floor")
+        members_raw = _select_rows(
+            client, "workspace_members", "workspace_id,user_id,role", eq=("role", "owner")
+        )
+    except (AttributeError, TypeError):
+        return {}
+    grant_by_email: dict[str, PlanTier] = {}
+    for row in grants_raw:
+        if not isinstance(row, dict):
+            continue
+        email = row.get("email")
+        raw_floor = row.get("plan_floor")
+        if not isinstance(email, str) or not isinstance(raw_floor, str):
+            continue
+        try:
+            grant_by_email[email.strip().lower()] = PlanTier(raw_floor)
+        except ValueError:
+            continue
+    if not grant_by_email:
+        return {}
+    emails = _auth_emails_by_user_id(client)
+    if not emails:
+        return {}
+    floors: dict[UUID, PlanTier] = {}
+    for row in members_raw:
+        if not isinstance(row, dict):
+            continue
+        email = emails.get(str(row.get("user_id") or ""))
+        if email is None:
+            continue
+        floor = grant_by_email.get(email)
+        if floor is None:
+            continue
+        try:
+            floors[UUID(str(row["workspace_id"]))] = floor
+        except (ValueError, TypeError, KeyError):
+            continue
+    return floors
+
+
 def load_overlay_cron_workspaces(client: object) -> list[WorkspaceEntitlement]:
     """Select workspace billing columns via the injected PostgREST client."""
     result = client.table("workspaces").select("id,plan_tier,subscription_status").execute()
@@ -134,7 +228,17 @@ def load_overlay_cron_workspaces(client: object) -> list[WorkspaceEntitlement]:
         parsed = parse_workspace_row(row)
         if parsed is not None:
             loaded.append(parsed)
-    return loaded
+    floors = load_workspace_plan_floors(client)
+    if not floors:
+        return loaded
+    attached: list[WorkspaceEntitlement] = []
+    for ws in loaded:
+        floor = floors.get(ws.workspace_id)
+        if floor is None:
+            attached.append(ws)
+        else:
+            attached.append(ws.model_copy(update={"plan_floor": floor}))
+    return attached
 
 
 def run_overlay_cron(
@@ -256,12 +360,7 @@ def _log_dry_run(
     run_date: date,
 ) -> None:
     targets = overlay_cron_targets(loaded)
-    entitled = [
-        ws
-        for ws in targets
-        if ws.plan_tier in {PlanTier.CUSTOM, PlanTier.ENTERPRISE}
-        and ws.subscription_status is SubscriptionStatus.ACTIVE
-    ]
+    entitled = [ws for ws in targets if overlay_billing_entitled(ws)]
     log(
         f"overlay dry-run date={run_date.isoformat()} "
         f"considered={len(loaded)} targets={len(targets)} "
@@ -380,6 +479,7 @@ __all__ = [
     "OverlayCronRow",
     "format_overlay_store_not_configured",
     "load_overlay_cron_workspaces",
+    "load_workspace_plan_floors",
     "main",
     "missing_overlay_cron_env_names",
     "overlay_cron_targets",

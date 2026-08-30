@@ -55,11 +55,13 @@ def _ws(
     *,
     tier: PlanTier = PlanTier.CUSTOM,
     status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
+    plan_floor: PlanTier | None = None,
 ) -> WorkspaceEntitlement:
     return WorkspaceEntitlement(
         workspace_id=workspace_id or uuid4(),
         plan_tier=tier,
         subscription_status=status,
+        plan_floor=plan_floor,
     )
 
 
@@ -168,6 +170,41 @@ def test_dry_run_does_not_write_job_runs() -> None:
     assert "billing_active=1" in logs[0]
 
 
+def test_dry_run_counts_plan_floor_custom_without_stripe() -> None:
+    logs: list[str] = []
+    rc = main(
+        ["--dry-run", "--run-date", _RUN.isoformat()],
+        environ={},
+        workspaces=[
+            _ws(
+                _USER,
+                tier=PlanTier.FREE,
+                status=SubscriptionStatus.NONE,
+                plan_floor=PlanTier.CUSTOM,
+            ),
+        ],
+        log=logs.append,
+        log_err=lambda _m: None,
+    )
+    assert rc == 0
+    assert "targets=1" in logs[0]
+    assert "billing_active=1" in logs[0]
+
+
+def test_parse_workspace_row_reads_plan_floor() -> None:
+    parsed = parse_workspace_row(
+        {
+            "id": str(_USER),
+            "plan_tier": "free",
+            "subscription_status": "none",
+            "plan_floor": "custom",
+        }
+    )
+    assert parsed is not None
+    assert parsed.plan_tier is PlanTier.FREE
+    assert parsed.plan_floor is PlanTier.CUSTOM
+
+
 def test_apply_without_store_and_missing_env_exits_2() -> None:
     err: list[str] = []
     rc = main(
@@ -270,6 +307,9 @@ class _WorkspacesQuery:
     def select(self, *_args: object, **_kwargs: object) -> _WorkspacesQuery:
         return self
 
+    def eq(self, *_args: object, **_kwargs: object) -> _WorkspacesQuery:
+        return self
+
     def execute(self) -> SimpleNamespace:
         return SimpleNamespace(data=self._rows)
 
@@ -279,7 +319,8 @@ class _WorkspacesClient:
         self._rows = rows
 
     def table(self, name: str) -> _WorkspacesQuery:
-        assert name == "workspaces"
+        if name != "workspaces":
+            return _WorkspacesQuery([])
         return _WorkspacesQuery(self._rows)
 
 
@@ -294,6 +335,55 @@ def test_load_overlay_cron_workspaces_parses_valid_rows() -> None:
     assert len(loaded) == 1
     assert loaded[0].workspace_id == _USER
     assert loaded[0].subscription_status is SubscriptionStatus.NONE
+    assert loaded[0].plan_floor is None
+
+
+class _GrantClient:
+    """Workspaces + grants + owner membership + Auth admin emails."""
+
+    def __init__(
+        self,
+        *,
+        workspaces: list[dict[str, object]],
+        grants: list[dict[str, object]],
+        members: list[dict[str, object]],
+        users: list[SimpleNamespace],
+    ) -> None:
+        self._tables = {
+            "workspaces": workspaces,
+            "entitlement_grants": grants,
+            "workspace_members": members,
+        }
+        self.auth = SimpleNamespace(admin=SimpleNamespace(list_users=lambda: users))
+
+    def table(self, name: str) -> _WorkspacesQuery:
+        return _WorkspacesQuery(self._tables.get(name, []))
+
+
+def test_load_overlay_cron_workspaces_attaches_owner_plan_floor() -> None:
+    client = _GrantClient(
+        workspaces=[
+            {"id": str(_USER), "plan_tier": "free", "subscription_status": "none"},
+        ],
+        grants=[{"email": "chris.stefan@proton.me", "plan_floor": "custom"}],
+        members=[
+            {
+                "workspace_id": str(_USER),
+                "user_id": "0408ba97-caba-44d3-b2d0-5690ab5160a9",
+                "role": "owner",
+            }
+        ],
+        users=[
+            SimpleNamespace(
+                id="0408ba97-caba-44d3-b2d0-5690ab5160a9",
+                email="chris.stefan@proton.me",
+            )
+        ],
+    )
+    loaded = load_overlay_cron_workspaces(client)
+    assert len(loaded) == 1
+    assert loaded[0].plan_tier is PlanTier.FREE
+    assert loaded[0].plan_floor is PlanTier.CUSTOM
 
 
 def _module_header(name: str) -> str:
