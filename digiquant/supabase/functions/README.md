@@ -12,8 +12,15 @@ the existing `prices-live/` lane (`deno.json` import map → `npm:@supabase/supa
 | `settings` | `true` | Profile / brokers / notifications (T3) |
 
 Shared modules live under [`_shared/`](_shared/): `stripe.ts`, `tiers.ts`,
-`supabase-admin.ts`, `webhook-handler.ts`, `billing-auth.ts`, `vault.ts`
+`supabase-admin.ts`, `webhook-handler.ts`, `billing-auth.ts`, `cors.ts`
+(browser preflight for digiquant.io → Functions), `vault.ts`
 (K3 public contract mirror), `profile-schemas.ts`, `settings-handlers.ts`.
+
+Browser callers on `digiquant.io` send `Authorization` (and often `Content-Type`),
+which triggers an OPTIONS preflight. `settings`, `create-checkout-session`, and
+`customer-portal` answer OPTIONS with `204` + `Access-Control-Allow-*` before
+auth; `jsonError` / `jsonOk` also emit those headers so error responses stay
+readable from the static origin.
 
 ## Settings (T3) — architecture note
 

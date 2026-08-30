@@ -19,6 +19,7 @@ import {
   jsonError,
   jsonOk,
 } from "../_shared/supabase-admin.ts";
+import { corsPreflight } from "../_shared/cors.ts";
 import { createClient } from "@supabase/supabase-js";
 import {
   loadPriceTierEnv,
@@ -30,6 +31,9 @@ type Interval = "monthly" | "annual";
 type PaidTier = Extract<PlanTier, "baseline" | "custom">;
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflight();
+  }
   if (req.method !== "POST") {
     return jsonError(405, "METHOD_NOT_ALLOWED", "POST only");
   }

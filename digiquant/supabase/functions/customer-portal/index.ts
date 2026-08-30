@@ -19,9 +19,13 @@ import {
   jsonError,
   jsonOk,
 } from "../_shared/supabase-admin.ts";
+import { corsPreflight } from "../_shared/cors.ts";
 import { createClient } from "@supabase/supabase-js";
 
 Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return corsPreflight();
+  }
   if (req.method !== "POST" && req.method !== "GET") {
     return jsonError(405, "METHOD_NOT_ALLOWED", "GET or POST only");
   }

@@ -6,6 +6,7 @@ connect/revoke, and notification prefs.
 | Setting | Value |
 |---------|-------|
 | `verify_jwt` | **true** |
+| CORS | OPTIONS → 204 + Allow-* (digiquant.io browser callers) |
 | Deploy | **BLOCKED ON K3 MERGE** + module migrations **096–098** |
 
 ## Deploy gate — blocked on K3 + tenancy migrations

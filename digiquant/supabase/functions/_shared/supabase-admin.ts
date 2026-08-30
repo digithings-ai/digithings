@@ -6,6 +6,7 @@
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { CORS_HEADERS } from "./cors.ts";
 
 export type AdminClient = SupabaseClient;
 
@@ -53,14 +54,14 @@ export function jsonError(
 ): Response {
   return new Response(JSON.stringify({ code, message }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
 }
 
 export function jsonOk(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
 }
 
