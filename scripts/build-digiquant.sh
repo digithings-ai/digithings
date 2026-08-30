@@ -136,6 +136,12 @@ fi
 [ -f dist/dashboard/index.html ] || { echo "ERROR: dist/dashboard/index.html missing — dashboard twin did not export" >&2; exit 1; }
 [ -f dist/dashboard/login/index.html ] || { echo "ERROR: dist/dashboard/login/index.html missing — Auth login route not exported on /dashboard" >&2; exit 1; }
 [ -f dist/dashboard/auth/callback/index.html ] || { echo "ERROR: dist/dashboard/auth/callback/index.html missing — Auth callback route not exported on /dashboard" >&2; exit 1; }
+# Alpaca OAuth callback (K1/T3). develop's pages gate --apply pins
+# ALPACA_OAUTH_CALLBACK_PATH here. A twin that 200s /dashboard/settings/
+# but 404s this path would still strand broker connect after EF deploy.
+[ -f dist/dashboard/settings/brokers/callback/index.html ] || { echo "ERROR: dist/dashboard/settings/brokers/callback/index.html missing — Alpaca OAuth callback not exported on /dashboard" >&2; exit 1; }
+grep -q 'alpaca-oauth-callback' dist/dashboard/settings/brokers/callback/index.html \
+  || { echo "ERROR: dashboard twin Alpaca OAuth callback export missing page marker" >&2; exit 1; }
 [ -f dist/dashboard/settings/index.html ] || { echo "ERROR: dist/dashboard/settings/index.html missing — Settings route not exported on /dashboard" >&2; exit 1; }
 grep -q 'The desk, not the product' dist/dashboard/settings/index.html \
   || { echo "ERROR: dashboard twin settings export missing Observer IA heading" >&2; exit 1; }

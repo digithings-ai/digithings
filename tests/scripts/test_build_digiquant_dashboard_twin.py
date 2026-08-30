@@ -42,6 +42,8 @@ def test_build_exports_olympus_and_dashboard_twins() -> None:
     assert "[ -f dist/dashboard/index.html ]" in text
     assert "[ -f dist/dashboard/login/index.html ]" in text
     assert "[ -f dist/dashboard/auth/callback/index.html ]" in text
+    assert "[ -f dist/dashboard/settings/brokers/callback/index.html ]" in text
+    assert "alpaca-oauth-callback" in text
     assert "[ -f dist/dashboard/settings/index.html ]" in text
     assert "[ -f dist/olympus/index.html ]" in text
 
