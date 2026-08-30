@@ -44,7 +44,7 @@ export function dcaRateCopy(dailyRatePct: number | null | undefined): string | n
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
-  if (dailyRatePct > 0) return `buying ${abs}% of cash today`;
-  if (dailyRatePct < 0) return `selling ${abs}% of units today`;
+  if (dailyRatePct > 0) return `buying ${abs}% of remaining cash today`;
+  if (dailyRatePct < 0) return `selling ${abs}% of remaining holdings today`;
   return "holding, no trade today";
 }

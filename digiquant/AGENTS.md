@@ -144,20 +144,35 @@ the full module map.
   reimplement it.** This is what keeps the Nautilus-run result and the
   standalone parity harness (`tests/dq/strategies/sdca/test_backtest.py`) from
   silently diverging.
+- **Sizing is remaining-book, not initial.** `size_trade(rate, cash, units)`
+  does `buy_usd = cash * rate / 100` and `sell_units = holdings * |rate| / 100`.
+  Both `run_backtest` and `on_bar` pass the running cash/holdings, never
+  `initial_cash`. A high daily buy rate (balanced `buy_max_rate=8`) compounds
+  remaining cash toward dust during a cheap window — that is intended
+  remaining-% math, not a percent-of-initial bug, and it is **not** a
+  long/short book. Pin: `tests/dq/strategies/sdca/test_remaining_pct.py`.
+- **Publish copies #3168 diagnostics** (`rails`, `risk_curve`,
+  `cost_basis_curve`, `capital_deployed_curve`, `lump_equity_curve`,
+  `flat_dca_equity_curve`) plus a DCA `current_signal` (today's risk, band,
+  daily remaining-book rate) onto the tearsheet JSON so the #3172 charts do
+  not degrade. Trade KPIs stay `null` for `kind=dca`.
+- **Library, not broker live.** `btc_sdca` ships into the public strategy
+  library (delayed signals, #1462). Do **not** enable Nautilus live-trading
+  or broker adapters for SDCA. `--push-supabase` is an operator step after
+  a real Nautilus generate; do not run it from an agent environment.
+- **Published personality is `balanced`.** Walk-forward OOS
+  `beats_flat_dca_oos` is currently false (`btc_composite_*.json`). Do not
+  publish `btc_optimized` as a winner.
 
 ### RiskModel providers (#1082)
 
 `strategies/sdca/btc_power_law.py` is the first concrete `RiskModel`
 (`BtcPowerLawRiskModel`) — a fitted BTC power-law (RAQQR). Anti-patterns:
 
-- **Never treat `btc_power_law_coefficients.example.json` as a real fit.**
-  It is a synthetic placeholder (git-ignored `btc_power_law_coefficients.json`
-  doesn't exist yet in most checkouts/environments — no network access to
-  BTC price history or the reference artifact was available when this
-  provider was built). `load_coefficients()` logs a warning when it falls
-  back to the placeholder; don't silence or ignore that warning in code
-  reviewing this area — the fitted curve underneath a `SdcaStrategy` run may
-  not be real.
+- **Never treat `btc_power_law_coefficients.example.json` as a real fit**
+  when the committed `btc_power_law_coefficients.json` is present (#3173).
+  `load_coefficients()` still falls back to the placeholder with a warning
+  if the real file is deleted. Don't silence that warning.
 - **Fit real coefficients via the `digiquant_fit_btc_power_law` MCP tool**
   (or `fit_btc_power_law()` + `save_coefficients()` directly), which sources
   price history through `data/prices/history_cache.py` — the same cache
@@ -282,7 +297,9 @@ pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
 3. Skip `resolve_calibrations()` for non-Slapper families. Record provenance in
    tearsheet notes instead.
 4. Pass `trade_size` only when `config_declares_field(name, "trade_size")`.
-5. Do not `--push-supabase` a new family until its rails/calibrations are real.
+5. Do not `--push-supabase` a new family from an agent environment. After a
+   real Nautilus `generate_tearsheets.py --strategy btc_sdca` the operator
+   may push. Nightly pipeline is the intended live-library path.
 
 ---
 

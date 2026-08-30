@@ -23,8 +23,8 @@ describe("riskBandLabel", () => {
 
 describe("dcaRateCopy", () => {
   it("describes buy / sell / hold without implying a 100× unit error", () => {
-    expect(dcaRateCopy(4)).toBe("buying 4.0% of cash today");
-    expect(dcaRateCopy(-2.5)).toBe("selling 2.5% of units today");
+    expect(dcaRateCopy(4)).toBe("buying 4.0% of remaining cash today");
+    expect(dcaRateCopy(-2.5)).toBe("selling 2.5% of remaining holdings today");
     expect(dcaRateCopy(0)).toBe("holding, no trade today");
     expect(dcaRateCopy(null)).toBeNull();
   });

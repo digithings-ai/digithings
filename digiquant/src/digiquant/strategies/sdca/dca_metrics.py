@@ -234,6 +234,134 @@ def _fill_float(rec: Mapping[str, object], keys: tuple[str, ...]) -> float | Non
     return None
 
 
+def risk_band_label(risk: float | None) -> str | None:
+    """Band copy for composite risk in [0, 100]. Matches the frontend labels (#3172)."""
+    if risk is None:
+        return None
+    if risk < 10.0:
+        return "Fire sale"
+    if risk < 25.0:
+        return "Accumulate"
+    if risk < 50.0:
+        return "Value"
+    if risk < 75.0:
+        return "Above mid"
+    if risk < 95.0:
+        return "Hot"
+    return "Bubble"
+
+
+def running_cost_basis(
+    prices: Sequence[float], daily_trade_usd: Sequence[float]
+) -> list[float | None]:
+    """Average buy price after each day (None until the first buy). Sells do not rebase."""
+    if len(prices) != len(daily_trade_usd):
+        raise ValueError("running_cost_basis requires equal-length prices and daily_trade_usd")
+    spent = 0.0
+    bought = 0.0
+    out: list[float | None] = []
+    for price, trade_usd in zip(prices, daily_trade_usd, strict=True):
+        if trade_usd > 0:
+            spent += float(trade_usd)
+            bought += float(trade_usd) / float(price)
+        out.append((spent / bought) if bought > 0 else None)
+    return out
+
+
+def tearsheet_overlays(
+    *,
+    dates: Sequence[str],
+    prices: Sequence[float],
+    daily_trade_usd: Sequence[float],
+    net_deployed: Sequence[float],
+    initial_cash: float,
+    rails: Sequence[tuple[float | None, float | None, float | None]],
+    risk: Sequence[float | None],
+) -> dict[str, list[dict[str, float | str]]]:
+    """Diagnostic series for schema 1.3 charts (#3168 columns → #3172 overlays).
+
+    Keys match the optional ``TearsheetData`` fields the renderer already reads:
+    ``rails``, ``risk_curve``, ``cost_basis_curve``, ``capital_deployed_curve``,
+    ``lump_equity_curve``, ``flat_dca_equity_curve``. Null rail/risk/cost days
+    are omitted so the SVG path does not have to encode gaps.
+    """
+    n = len(dates)
+    if not (
+        len(prices) == len(daily_trade_usd) == len(net_deployed) == len(rails) == len(risk) == n
+    ):
+        raise ValueError("tearsheet_overlays requires equal-length daily series")
+    if n == 0:
+        return {
+            "rails": [],
+            "risk_curve": [],
+            "cost_basis_curve": [],
+            "capital_deployed_curve": [],
+            "lump_equity_curve": [],
+            "flat_dca_equity_curve": [],
+        }
+
+    lump = lump_mark_to_market(prices, initial_cash)
+    flat = flat_dca_mark_to_market(prices, initial_cash)
+    cost = running_cost_basis(prices, daily_trade_usd)
+
+    rails_out: list[dict[str, float | str]] = []
+    risk_out: list[dict[str, float | str]] = []
+    cost_out: list[dict[str, float | str]] = []
+    deployed_out: list[dict[str, float | str]] = []
+    lump_out: list[dict[str, float | str]] = []
+    flat_out: list[dict[str, float | str]] = []
+
+    for i, day in enumerate(dates):
+        low, median, high = rails[i]
+        if low is not None and median is not None and high is not None:
+            rails_out.append(
+                {"t": day, "low": float(low), "median": float(median), "high": float(high)}
+            )
+        if risk[i] is not None:
+            risk_out.append({"t": day, "v": float(risk[i])})
+        if cost[i] is not None:
+            cost_out.append({"t": day, "v": float(cost[i])})
+        deployed_out.append({"t": day, "v": float(net_deployed[i]) / initial_cash * 100.0})
+        lump_out.append({"t": day, "v": float(lump[i])})
+        flat_out.append({"t": day, "v": float(flat[i])})
+
+    return {
+        "rails": rails_out,
+        "risk_curve": risk_out,
+        "cost_basis_curve": cost_out,
+        "capital_deployed_curve": deployed_out,
+        "lump_equity_curve": lump_out,
+        "flat_dca_equity_curve": flat_out,
+    }
+
+
+def dca_current_signal(
+    *,
+    last_date: str,
+    last_price: float | None,
+    last_risk: float | None,
+    last_rate: float | None,
+    units_accumulated: float,
+) -> dict[str, float | str | None]:
+    """Today's DCA signal: risk, band, daily buy/sell rate — not long/short.
+
+    ``position`` stays ``long``/``flat`` only because ``strategy_signals.position``
+    is CHECK-constrained to those values. The product story is ``risk`` / ``band``
+    / ``daily_rate_pct`` (percent of remaining cash on buys, remaining holdings
+    on sells).
+    """
+    band = risk_band_label(last_risk)
+    return {
+        "position": "long" if units_accumulated > 0 else "flat",
+        "entry_label": band or "",
+        "last_signal_date": last_date,
+        "last_price": last_price,
+        "risk": last_risk,
+        "band": band,
+        "daily_rate_pct": last_rate,
+    }
+
+
 __all__ = [
     "SdcaFill",
     "flat_dca_mark_to_market",
@@ -241,4 +369,8 @@ __all__ = [
     "breakdown_from_daily",
     "daily_state_from_fills",
     "fills_from_nautilus_report",
+    "risk_band_label",
+    "running_cost_basis",
+    "tearsheet_overlays",
+    "dca_current_signal",
 ]

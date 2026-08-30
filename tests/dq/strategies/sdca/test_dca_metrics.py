@@ -78,3 +78,58 @@ class _Empty:
 def test_empty_nautilus_fills_report_is_empty_list() -> None:
     assert fills_from_nautilus_report(_Empty()) == []
     assert fills_from_nautilus_report(None) == []
+
+
+def test_risk_band_label_matches_frontend() -> None:
+    from digiquant.strategies.sdca.dca_metrics import risk_band_label
+
+    assert risk_band_label(0.0) == "Fire sale"
+    assert risk_band_label(9.9) == "Fire sale"
+    assert risk_band_label(10.0) == "Accumulate"
+    assert risk_band_label(25.0) == "Value"
+    assert risk_band_label(50.0) == "Above mid"
+    assert risk_band_label(75.0) == "Hot"
+    assert risk_band_label(95.0) == "Bubble"
+    assert risk_band_label(None) is None
+
+
+def test_tearsheet_overlays_copy_rails_and_three_way_equity() -> None:
+    from digiquant.strategies.sdca.dca_metrics import tearsheet_overlays
+
+    overlays = tearsheet_overlays(
+        dates=["2020-01-01", "2020-01-02"],
+        prices=[100.0, 110.0],
+        daily_trade_usd=[50.0, 0.0],
+        net_deployed=[50.0, 50.0],
+        initial_cash=100.0,
+        rails=[(90.0, 100.0, 120.0), (91.0, 101.0, 121.0)],
+        risk=[20.0, 22.0],
+    )
+    assert overlays["rails"][0] == {
+        "t": "2020-01-01",
+        "low": 90.0,
+        "median": 100.0,
+        "high": 120.0,
+    }
+    assert overlays["risk_curve"][1]["v"] == 22.0
+    assert overlays["cost_basis_curve"][0]["v"] == pytest.approx(100.0)
+    assert overlays["capital_deployed_curve"][0]["v"] == pytest.approx(50.0)
+    assert len(overlays["lump_equity_curve"]) == 2
+    assert len(overlays["flat_dca_equity_curve"]) == 2
+
+
+def test_dca_current_signal_is_risk_band_rate_not_mr_long() -> None:
+    from digiquant.strategies.sdca.dca_metrics import dca_current_signal
+
+    sig = dca_current_signal(
+        last_date="2020-01-02",
+        last_price=110.0,
+        last_risk=12.0,
+        last_rate=4.0,
+        units_accumulated=0.5,
+    )
+    assert sig["band"] == "Accumulate"
+    assert sig["daily_rate_pct"] == 4.0
+    assert sig["risk"] == 12.0
+    assert sig["entry_label"] == "Accumulate"
+    assert sig["position"] in {"long", "flat"}

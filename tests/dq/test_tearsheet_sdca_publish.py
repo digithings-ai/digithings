@@ -134,6 +134,24 @@ def test_run_and_write_btc_sdca_skips_calibrations(
     assert payload["profit_factor"] is None
     assert payload["long"] is None
     assert payload["short"] is None
+    assert payload["kind"] == "dca"
+    assert payload["current_signal"]["band"] in {
+        "Fire sale",
+        "Accumulate",
+        "Value",
+        "Above mid",
+        "Hot",
+        "Bubble",
+    }
+    assert "daily_rate_pct" in payload["current_signal"]
+    assert "risk" in payload["current_signal"]
+    assert payload["current_signal"]["entry_label"] != "MR Long"
+    assert payload["rails"]
+    assert payload["risk_curve"]
+    assert payload["lump_equity_curve"]
+    assert payload["flat_dca_equity_curve"]
+    assert payload["capital_deployed_curve"]
+    assert {"t", "low", "median", "high"} <= set(payload["rails"][0])
     assert "Coefficients" in " ".join(payload["notes"])
     assert "Preset balanced" in " ".join(payload["notes"])
     assert not any("calibrations.example" in rec.message for rec in caplog.records)

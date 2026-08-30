@@ -218,6 +218,54 @@ def test_dca_block_nulls_trade_kpis_not_zero() -> None:
     assert dumped["dca"]["vs_lump_pct"] < -1.0 or dumped["dca"]["vs_lump_pct"] > 1.0
     assert dumped["dca"]["final_cost_basis_vs_price"] == 50.0
     assert dumped["dca"]["final_cost_basis_vs_price"] != pytest.approx(0.5)
+    # Overlay keys stay unset unless passed — slapper identity.
+    assert "rails" not in dumped
+    assert "current_signal" not in dumped
+
+
+def test_dca_overlays_roundtrip_in_json() -> None:
+    from digiquant.tearsheet_data import TearsheetDcaBreakdown
+
+    dca = TearsheetDcaBreakdown(
+        vs_lump_pct=-12.5,
+        vs_flat_dca_pct=3.0,
+        avg_cost_basis=50.0,
+        final_cost_basis_vs_price=50.0,
+        capital_deployed_pct=80.0,
+        capital_deployed_peak_pct=80.0,
+        units_accumulated=1.6,
+        buy_days=4,
+        sell_days=0,
+        no_trade_days=1,
+        avg_risk=20.0,
+        avg_rate=5.0,
+    )
+    ts = from_nautilus_run(
+        _pine_summary(),
+        _pine_trades(),
+        equity_curve=[("2020-01-01", 1000.0), ("2020-01-02", 1100.0)],
+        dca=dca,
+        kind="dca",
+        current_signal={
+            "position": "long",
+            "entry_label": "Accumulate",
+            "last_signal_date": "2020-01-02",
+            "last_price": 110.0,
+            "risk": 12.0,
+            "band": "Accumulate",
+            "daily_rate_pct": 4.0,
+        },
+        rails=[{"t": "2020-01-01", "low": 90.0, "median": 100.0, "high": 120.0}],
+        risk_curve=[("2020-01-01", 12.0)],
+        lump_equity_curve=[("2020-01-01", 1000.0)],
+        flat_dca_equity_curve=[("2020-01-01", 1000.0)],
+    )
+    dumped = json.loads(ts.to_json())
+    assert dumped["kind"] == "dca"
+    assert dumped["current_signal"]["band"] == "Accumulate"
+    assert dumped["current_signal"]["daily_rate_pct"] == 4.0
+    assert dumped["rails"][0]["low"] == 90.0
+    assert dumped["win_rate_pct"] is None
 
 
 def test_ohlc_bars_default_empty_and_back_compatible() -> None:

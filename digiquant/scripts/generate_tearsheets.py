@@ -37,9 +37,9 @@ lag via ``signal_delay_days``.
 
 Usage:
     python scripts/generate_tearsheets.py
-    python scripts/generate_tearsheets.py --strategy eth_slapper
-    python scripts/generate_tearsheets.py --cache-dir digiquant/data/price-history
+    python scripts/generate_tearsheets.py --strategy btc_sdca --cache-dir data/price-history
     python scripts/generate_tearsheets.py --signal-delay-days 3
+    # Operator-only (not this environment): --push-supabase after a real run.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DIGIQUANT_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_STRATEGIES = REPO_ROOT / "frontend" / "digiquant-web" / "public" / "strategies"
-DEFAULT_CACHE = DIGIQUANT_ROOT / "data" / "price-history"
+DEFAULT_CACHE = REPO_ROOT / "data" / "price-history"
 SETTINGS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "settings.json"
 CALIBRATIONS_PATH = DIGIQUANT_ROOT / "src" / "digiquant" / "strategies" / "calibrations.json"
 _SCRIPTS_DIR = Path(__file__).resolve().parent
@@ -504,13 +504,23 @@ def _sdca_tearsheet_from_nautilus(
     *,
     calibration: dict | None,
     trade_start: str,
-) -> tuple[object, list[tuple[str, float]], list[dict]]:
-    """DCA metrics + MTM equity from Nautilus fills, not ``SdcaBacktestReport``."""
+    risk_index: object | None = None,
+) -> tuple[object, list[tuple[str, float]], list[dict], dict, dict]:
+    """DCA metrics + MTM equity + #3168 diagnostic overlays from Nautilus fills.
+
+    Published numbers come from fills, never ``SdcaBacktestReport``. Rails/risk
+    come from the in-memory risk-index frame (diagnostic columns); the parquet
+    written for ``SdcaStrategy`` is date/risk only.
+    """
+    import polars as pl
+
     from digiquant.strategies.sdca.curve import AccumDistCurve
     from digiquant.strategies.sdca.dca_metrics import (
         breakdown_from_daily,
         daily_state_from_fills,
+        dca_current_signal,
         fills_from_nautilus_report,
+        tearsheet_overlays,
     )
 
     windowed = [(d, c) for d, c in bars_list if not trade_start or d >= trade_start]
@@ -519,20 +529,42 @@ def _sdca_tearsheet_from_nautilus(
 
     risk_vals: list[float | None] = [None] * len(windowed)
     rate_vals: list[float | None] = [None] * len(windowed)
-    risk_path = (calibration or {}).get("risk_path")
-    nodes = (calibration or {}).get("curve_nodes")
-    if risk_path and nodes is not None:
-        import polars as pl
+    rail_vals: list[tuple[float | None, float | None, float | None]] = [(None, None, None)] * len(
+        windowed
+    )
 
-        risk_df = pl.read_parquet(risk_path).select(["date", "risk"])
-        by_date = {
-            str(d): (None if r is None else float(r))
-            for d, r in zip(risk_df["date"].to_list(), risk_df["risk"].to_list(), strict=True)
-        }
+    risk_df = None
+    if risk_index is not None and hasattr(risk_index, "columns"):
+        risk_df = risk_index
+    else:
+        risk_path = (calibration or {}).get("risk_path")
+        if risk_path:
+            risk_df = pl.read_parquet(risk_path)
+
+    nodes = (calibration or {}).get("curve_nodes")
+    if risk_df is not None and nodes is not None:
+        by_date: dict[str, tuple[float | None, float | None, float | None, float | None]] = {}
+        dates = [str(d)[:10] for d in risk_df["date"].to_list()]
+        risks = risk_df["risk"].to_list()
+        has_rails = all(c in risk_df.columns for c in ("low", "median", "high"))
+        lows = risk_df["low"].to_list() if has_rails else [None] * len(dates)
+        medians = risk_df["median"].to_list() if has_rails else [None] * len(dates)
+        highs = risk_df["high"].to_list() if has_rails else [None] * len(dates)
+        for day, r, lo, med, hi in zip(dates, risks, lows, medians, highs, strict=True):
+            by_date[day] = (
+                None if r is None else float(r),
+                None if lo is None else float(lo),
+                None if med is None else float(med),
+                None if hi is None else float(hi),
+            )
         curve = AccumDistCurve(tuple(float(n) for n in nodes))
         for i, (day, _close) in enumerate(windowed):
-            r = by_date.get(day)
+            packed = by_date.get(day)
+            if packed is None:
+                continue
+            r, lo, med, hi = packed
             risk_vals[i] = r
+            rail_vals[i] = (lo, med, hi)
             rate_vals[i] = None if r is None else curve.value_at_risk(r)
 
     dca = breakdown_from_daily(
@@ -546,7 +578,25 @@ def _sdca_tearsheet_from_nautilus(
         initial_cash=initial_capital,
     )
     equity_curve = [(d, v) for (d, _c), v in zip(windowed, state["portfolio_values"], strict=True)]
-    return dca, equity_curve, []
+    overlays = tearsheet_overlays(
+        dates=[d for d, _c in windowed],
+        prices=state["prices"],
+        daily_trade_usd=state["daily_trade_usd"],
+        net_deployed=state["net_deployed"],
+        initial_cash=initial_capital,
+        rails=rail_vals,
+        risk=risk_vals,
+    )
+    last_date = windowed[-1][0] if windowed else ""
+    last_price = windowed[-1][1] if windowed else None
+    signal = dca_current_signal(
+        last_date=last_date,
+        last_price=last_price,
+        last_risk=risk_vals[-1] if risk_vals else None,
+        last_rate=rate_vals[-1] if rate_vals else None,
+        units_accumulated=dca.units_accumulated,
+    )
+    return dca, equity_curve, [], overlays, signal
 
 
 def run_and_write(
@@ -585,6 +635,7 @@ def run_and_write(
 
     calibration: dict | None = None
     provenance_notes: list[str] = []
+    sdca_index = None
     if family == "slapper":
         calibration = resolve_calibrations(
             strategy,
@@ -643,6 +694,7 @@ def run_and_write(
             extra_indicators=extras or None,
             valuation_weight=weights.valuation,
         )
+        sdca_index = index
         coefficients = load_coefficients()
         calibration = {
             "risk_path": str(tmp_risk),
@@ -679,13 +731,16 @@ def run_and_write(
     trades = carry_open_at_period_end(trades, bars_list, trade_start)
 
     dca_block = None
+    sdca_overlays: dict = {}
+    sdca_signal: dict | None = None
     if family == "sdca":
-        dca_block, equity_curve, closed = _sdca_tearsheet_from_nautilus(
+        dca_block, equity_curve, closed, sdca_overlays, sdca_signal = _sdca_tearsheet_from_nautilus(
             fills_report,
             bars_list,
             initial_capital,
             calibration=calibration,
             trade_start=trade_start,
+            risk_index=sdca_index,
         )
     else:
         equity_curve, closed = build_equity_and_trades(
@@ -737,14 +792,10 @@ def run_and_write(
         for t in closed
     ]
 
-    # Current signal: slapper uses the open round-trip; SDCA uses units still held.
-    if dca_block is not None:
-        current_signal = {
-            "position": "long" if dca_block.units_accumulated > 0 else "flat",
-            "entry_label": "",
-            "last_signal_date": window[-1][0] if window else "",
-            "last_price": bars_list[-1][1] if bars_list else None,
-        }
+    # Current signal: slapper uses the open round-trip. SDCA is not long/short —
+    # today's risk, band, and remaining-book daily rate.
+    if sdca_signal is not None:
+        current_signal = sdca_signal
     else:
         open_leg = next((t for t in trade_dicts if t.get("exit_reason") == "open"), None)
         current_signal = {
@@ -759,8 +810,9 @@ def run_and_write(
     if family == "sdca":
         notes = [
             f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
-            f"DCA book marked to market (not 100% equity compounding), "
-            f"trade window from {trade_start}."
+            f"DCA book (buy % of remaining cash / sell % of remaining holdings), "
+            f"marked to market (not 100% equity compounding), "
+            f"trade window from {trade_start}. Not a long/short book."
         ]
     else:
         notes = [
@@ -773,6 +825,19 @@ def run_and_write(
             f"Public signal delay: end date shifted back {signal_delay_days} days; "
             f"all figures are as of {window[-1][0] if window else ''}."
         )
+    dca_kwargs: dict = {}
+    if dca_block is not None:
+        dca_kwargs = {
+            "current_signal": current_signal,
+            "rails": sdca_overlays.get("rails"),
+            "risk_curve": sdca_overlays.get("risk_curve"),
+            "cost_basis_curve": sdca_overlays.get("cost_basis_curve"),
+            "capital_deployed_curve": sdca_overlays.get("capital_deployed_curve"),
+            "lump_equity_curve": sdca_overlays.get("lump_equity_curve"),
+            "flat_dca_equity_curve": sdca_overlays.get("flat_dca_equity_curve"),
+            "label": entry.get("label"),
+            "kind": entry.get("kind"),
+        }
     td = from_nautilus_run(
         summary,
         trade_dicts,
@@ -782,6 +847,7 @@ def run_and_write(
         notes=notes,
         signal_delay_days=signal_delay_days,
         dca=dca_block,
+        **dca_kwargs,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
