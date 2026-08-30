@@ -230,6 +230,8 @@ def test_load_commit_manifests_house_uuid_ignores_overlay(
     Persist-on does not lift this. A truthy house UUID used to search
     overlay-commit/{house}/ and miss existing commit-run/ manifests.
     Overlay listed first so dropping the is_private_workspace prefix fails.
+    Overlay-owned ``commit-run/overlay-spoof`` proves the workspace_id pin:
+    prefix alone would still return it on a house ``commit-run/%`` like.
     """
     monkeypatch.setenv("OLYMPUS_OVERLAY_PERSIST", "1")
     overlay = uuid4()
@@ -244,6 +246,12 @@ def test_load_commit_manifests_house_uuid_ignores_overlay(
                     "document_key": f"overlay-commit/{overlay}/ov-run",
                     "workspace_id": str(overlay),
                     "payload": {"weights_fingerprint": "overlay"},
+                },
+                {
+                    "date": iso,
+                    "document_key": "commit-run/overlay-spoof",
+                    "workspace_id": str(overlay),
+                    "payload": {"weights_fingerprint": "spoof"},
                 },
                 {
                     "date": iso,

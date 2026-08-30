@@ -487,6 +487,12 @@ class TestCommitRunIdempotency:
                     },
                     {
                         "date": iso,
+                        "document_key": "commit-run/overlay-spoof",
+                        "workspace_id": str(overlay),
+                        "payload": {"weights_fingerprint": "spoof"},
+                    },
+                    {
+                        "date": iso,
                         "document_key": "commit-run/house-run",
                         "workspace_id": house,
                         "payload": {"weights_fingerprint": "house"},
