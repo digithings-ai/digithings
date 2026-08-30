@@ -12,7 +12,8 @@ executes the unified Atlas+Hermes pipeline via
 
 | Workflow | Trigger | `refresh_scope` | Timeout |
 | --- | --- | --- | --- |
-| `pipeline-olympus.yml` | `cron '0 12 * * *'` (daily UTC) | Sunday → `all`; else `none` | 240 min |
+| `pipeline-olympus.yml` | `cron '17 9/10/11/12 * * *'` (off-peak UTC retries) | Sunday → `all`; else `none` | 240 min |
+| `pipeline-olympus.yml` | `repository_dispatch` `olympus-daily` | same as schedule | 240 min |
 | `pipeline-olympus.yml` | `workflow_dispatch` | `none` \| `all` \| `segments` \| `hermes` \| `digest` \| `beliefs` | 240 min |
 | Kairos cron check (spec) | `cron '15 12 * * *'` — copy `docs/agent-backlog/kairos-tenancy/kairos-cron-check.workflow.yml` onto a `chore/`/`feat/` branch; never `--execute`/`--all`/`hermes.chain` | n/a (probe) | 10 min |
 | `test-atlas-graph.yml` | `push` / `pull_request` touching `digiquant/src/digiquant/olympus/{atlas,hermes}/**`, `tests/dq/{atlas,hermes}/**`, or `pipeline-olympus.yml` | unit tests + ruff | 15 min |
@@ -210,5 +211,16 @@ Quiet-day cost is controlled by `OLYMPUS_MODEL_TIER` + edit-mode — not graph f
 
 ## Changing the schedule
 
-Cron string: `0 12 * * *` UTC in `pipeline-olympus.yml`. After edits, re-run `actionlint` and
-trigger a `workflow_dispatch` dry-run.
+Cron strings: `17 9/10/11/12 * * *` UTC in `pipeline-olympus.yml` (off-peak
+minute, hourly retries; later slots skip after a success). After edits, re-run
+`actionlint`. Do not `workflow_dispatch` the house pipeline from an agent.
+
+External watchdog (optional, beats GitHub `schedule` lag): a Cloudflare Cron
+Trigger or ops runner POSTs `repository_dispatch` with `event_type=olympus-daily`.
+That is not `workflow_dispatch` and does not count as house-proof for #3391
+until a **schedule** success lands. Example:
+
+```bash
+gh api repos/digithings-ai/digithings/dispatches \
+  -f event_type=olympus-daily
+```
