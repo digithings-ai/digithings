@@ -32,6 +32,8 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_seal_byok.py
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 # Observer also requires POST /settings/access/redeem-invite (short dummy →
 # INVITE_INVALID). Live v32 404s that route until --apply.
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_house_pipeline_proof.py
+# schedule success after #3334 only; never workflow_dispatch. Exit 3 until 12:00 UTC.
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_cron_check.py
 PATH="$PWD/.venv/bin:$PATH" make kairos-cron-check
 PATH="$PWD/.venv/bin:$PATH" python -m digiquant.notify.dispatch --require-mailgun

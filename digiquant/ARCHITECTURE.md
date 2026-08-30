@@ -3320,6 +3320,12 @@ leave broker connect / overlay / fill `TIER_FORBIDDEN` after Stripe lands.
 Recipient for staging digests can be an Agentmail inbox once Mailgun is
 configured.
 
+**House pipeline proof:** `python scripts/kairos_house_pipeline_proof.py` lists
+`pipeline-olympus.yml` runs. Exit **0** only for a **schedule** success strictly
+after #3334 on `main` (`2026-08-31T20:39Z`). `workflow_dispatch` never counts.
+Exit **3** until the next `cron: "0 12 * * *"`. Exit **2** if that schedule
+fails. The CLI refuses `--dispatch` / `--apply`.
+
 **Entry points:**
 
 | Caller | Function | Digest hour gate |
