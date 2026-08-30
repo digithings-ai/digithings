@@ -6,6 +6,8 @@ from datetime import UTC, date, datetime
 from uuid import uuid4
 
 import pytest
+
+pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
 from digiquant.olympus.overlay.byok import ByokProbe
 from digiquant.olympus.overlay.dispatch import (
     JOB_TYPE_OVERLAY_DAILY,

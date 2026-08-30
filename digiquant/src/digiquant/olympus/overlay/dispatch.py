@@ -21,13 +21,15 @@ from __future__ import annotations
 import threading
 from datetime import UTC, date, datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from digiquant.olympus.overlay.byok import ByokProbe, probe_byok
 from digiquant.olympus.tenancy import PlanTier, SubscriptionStatus
+
+if TYPE_CHECKING:
+    from digiquant.olympus.overlay.byok import ByokProbe
 
 JOB_TYPE_OVERLAY_DAILY = "overlay_daily"
 ENTITLED_TIERS: frozenset[str] = frozenset({PlanTier.CUSTOM.value, PlanTier.ENTERPRISE.value})
@@ -295,11 +297,14 @@ def dispatch_overlay_daily(
     if existing is not None and existing.status is not JobStatus.PENDING:
         return DispatchResult(job=existing, claimed=False)
 
-    probe = (
-        byok
-        if byok is not None
-        else probe_byok(client=byok_client, workspace_id=workspace.workspace_id)
-    )
+    if byok is not None:
+        probe = byok
+    else:
+        # Dependency-isolation exception to the no-inline-imports rule: byok pulls
+        # digillm/openai, which the digiquant-only CI lane deliberately omits.
+        from digiquant.olympus.overlay.byok import probe_byok
+
+        probe = probe_byok(client=byok_client, workspace_id=workspace.workspace_id)
     reason = evaluate_entitlement(workspace, probe)
     now = _now()
     if reason is not None:

@@ -69,4 +69,20 @@ describe('AllocationsTab', () => {
     expect(html).toContain('45.0%'); // cash = 100 − invested
     expect(html).not.toContain('60.0%');
   });
+
+  it('shows locked surface for Observer (free) instead of weights', () => {
+    const html = renderToStaticMarkup(
+      createElement(AllocationsTab, { ...base, tier: 'free', positions: [] }),
+    );
+    expect(html).toContain('locked-surface');
+    expect(html).not.toContain('data-region="holdings-frame"');
+  });
+
+  it('passthrough when Baseline may see house weights', () => {
+    const html = renderToStaticMarkup(
+      createElement(AllocationsTab, { ...base, tier: 'baseline' }),
+    );
+    expect(html).toContain('data-region="holdings-frame"');
+    expect(html).not.toContain('locked-surface');
+  });
 });

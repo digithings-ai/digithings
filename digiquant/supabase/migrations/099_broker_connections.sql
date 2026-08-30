@@ -72,9 +72,9 @@
 -- current-state, and its lineage lives in the audit trail, not in superseded credential
 -- rows.
 --
--- workspace_id carries no FK: `workspaces` does not exist yet.
--- T0 will constrain it (matching the spec §3 sketch's own note); until then the house
--- operator row uses the system workspace id.
+-- workspace_id REFERENCES public.workspaces(id): T0's migrations 096–098 create that
+-- table first, so 099 can constrain at CREATE time (K3 owns broker_connections' own
+-- workspace_id rather than receiving it from 097's private-set backfill).
 --
 -- Unwrapped on purpose: db-migrate.yml applies the file and its ledger row in one psql
 -- single-transaction call. All DDL is replay-safe through IF NOT EXISTS, CREATE OR
@@ -82,8 +82,7 @@
 
 CREATE TABLE IF NOT EXISTS public.broker_connections (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    -- T0 will constrain this to public.workspaces(id); FK-less until that table exists.
-    workspace_id uuid NOT NULL,
+    workspace_id uuid NOT NULL REFERENCES public.workspaces (id),
     broker text NOT NULL CHECK (broker IN ('alpaca', 'ibkr')),
     env text NOT NULL DEFAULT 'paper' CHECK (env IN ('paper', 'live')),
     auth_kind text NOT NULL CHECK (auth_kind IN ('oauth', 'api_key')),
@@ -200,8 +199,8 @@ COMMENT ON COLUMN public.broker_connections.fingerprint IS
     'fingerprints to conclude two rows hold the same credential.';
 
 COMMENT ON COLUMN public.broker_connections.workspace_id IS
-    'Owning workspace. FK-less until T0 creates public.workspaces, which will constrain '
-    'it; the house operator row uses the system workspace id.';
+    'Owning workspace; FK to public.workspaces(id) (created by T0 migration 096). '
+    'The house operator row uses the system/house workspace ids seeded there.';
 
 COMMENT ON FUNCTION public.reject_broker_connection_credential_mutation() IS
     'Rejects any UPDATE that changes a credential/identity column, and rejects TRUNCATE. '

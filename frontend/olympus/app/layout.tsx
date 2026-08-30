@@ -2,10 +2,9 @@ import './globals.css';
 import { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono, Fraunces } from 'next/font/google';
-import { DashboardProvider } from '@/lib/dashboard-context';
-import { AppShellProvider } from '@/components/app-shell-context';
+import { AuthProvider } from '@/lib/auth-context';
+import { AuthGate } from '@/lib/auth-gate';
 import { ThemeProvider } from '@/components/theme-provider';
-import AppFrame from '@/components/app-frame';
 import MotionLayer from '@/components/motion-layer';
 
 /** Default + invalid keys → follow prefers-color-scheme; light/dark fixed; auto → OS */
@@ -74,11 +73,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="qn-blueprint-bg min-h-screen bg-bg text-ink antialiased">
         <ThemeProvider>
           <MotionLayer />
-          <DashboardProvider>
-            <AppShellProvider>
-              <AppFrame>{children}</AppFrame>
-            </AppShellProvider>
-          </DashboardProvider>
+          <AuthProvider>
+            <AuthGate>{children}</AuthGate>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>
