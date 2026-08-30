@@ -98,16 +98,15 @@ class RiskItem(BaseModel):
     @classmethod
     def _alias_horizon_hours(cls, data: object) -> object:
         # Same live typo as phase7_synthesis.RiskItem (house GHA 33426508863).
-        # Must pop the alias: extra=forbid would otherwise reject horizon_hourse.
+        # Pop always: extra=forbid rejects leftover alias, and a dual-key edit
+        # merge must take the newly patched typo over a stale canonical value.
         if not isinstance(data, Mapping):
             return data
-        if "horizon_hours" in data:
+        if "horizon_hourse" not in data:
             return data
-        if "horizon_hourse" in data:
-            out = dict(data)
-            out["horizon_hours"] = out.pop("horizon_hourse")
-            return out
-        return data
+        out = dict(data)
+        out["horizon_hours"] = out.pop("horizon_hourse")
+        return out
 
 
 # ─── Source citation primitives (mirrors digiquant.olympus.atlas.segments) ──────────

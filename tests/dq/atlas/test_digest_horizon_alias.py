@@ -54,6 +54,28 @@ def test_snapshot_mirror_accepts_the_same_typo() -> None:
     assert payload.risk_radar[0].horizon_hours == 36
 
 
+def test_alias_overwrites_stale_canonical_on_dual_key_merge() -> None:
+    """Edit merge can leave both keys; the typo is the newly patched value."""
+    digest = DigestSnapshot.model_validate(
+        _digest(
+            horizon_hours=24,
+            horizon_hourse=72,
+            label="Breadth fade",
+            trigger="Three consecutive daily breadth prints.",
+        )
+    )
+    assert digest.risk_radar[0].horizon_hours == 72
+    item = RiskItem.model_validate(
+        {
+            "horizon_hours": 24,
+            "horizon_hourse": 48,
+            "label": "CPI",
+            "trigger": "Core above 0.3%.",
+        }
+    )
+    assert item.horizon_hours == 48
+
+
 def test_missing_horizon_still_rejected() -> None:
     with pytest.raises(ValidationError, match="horizon_hours"):
         DigestSnapshot.model_validate(_digest(label="No horizon", trigger="Missing."))

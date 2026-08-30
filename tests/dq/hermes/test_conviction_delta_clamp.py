@@ -41,3 +41,12 @@ def test_in_range_delta_is_unchanged() -> None:
 def test_non_numeric_delta_still_rejected() -> None:
     with pytest.raises(ValidationError, match="conviction_delta"):
         DeliberationAnalystTurn.model_validate({"conviction_delta": "hot"})
+
+
+def test_bool_delta_is_rejected_on_all_three_models() -> None:
+    with pytest.raises(ValidationError, match="conviction_delta"):
+        DeliberationAnalystTurn.model_validate({"conviction_delta": True})
+    with pytest.raises(ValidationError, match="conviction_delta"):
+        DeliberationPmTurn.model_validate({"conviction_delta": True})
+    with pytest.raises(ValidationError, match="conviction_delta"):
+        DeliberationSummary.model_validate({"ticker": "BITO", "conviction_delta": True})

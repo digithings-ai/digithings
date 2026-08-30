@@ -72,20 +72,16 @@ class ActionableItem(BaseModel):
 
 
 # Live digest edit merge (house GHA 33426508863) sent ``horizon_hourse``.
-_HORIZON_HOURS_ALIASES = ("horizon_hourse",)
 
 
 def _alias_horizon_hours_payload(data: object) -> object:
     if not isinstance(data, Mapping):
         return data
-    if "horizon_hours" in data:
+    if "horizon_hourse" not in data:
         return data
-    for key in _HORIZON_HOURS_ALIASES:
-        if key in data:
-            out = dict(data)
-            out["horizon_hours"] = out.pop(key)
-            return out
-    return data
+    out = dict(data)
+    out["horizon_hours"] = out.pop("horizon_hourse")
+    return out
 
 
 class RiskItem(BaseModel):

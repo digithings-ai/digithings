@@ -20,9 +20,12 @@ def _clamp_conviction_delta(value: object) -> object:
 
     House GHA 33426508863 failed ``DeliberationAnalystTurn`` at ``input_value=-3``
     (``ge=-2``). A -3 is a max-bearish revision; clamp, don't drop the debate.
-    ``bool`` is excluded because it subclasses ``int``.
+    ``bool`` is rejected (it subclasses ``int`` and would otherwise coerce to 0/1).
     """
-    if isinstance(value, bool) or not isinstance(value, int):
+    if isinstance(value, bool):
+        msg = "conviction_delta must be an int, not bool"
+        raise ValueError(msg)
+    if not isinstance(value, int):
         return value
     if value < CONVICTION_DELTA_MIN:
         return CONVICTION_DELTA_MIN
