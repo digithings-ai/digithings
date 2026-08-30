@@ -3398,7 +3398,8 @@ as EF secrets land, without a Pages rebuild. Settings UI opens the Billing tab f
 
 **Pages `/dashboard` cutover.** `scripts/kairos_pages_dashboard_gate.py` probes
 live Pages. `--apply` deploys `settings` / `create-checkout-session` /
-`customer-portal` only when `/dashboard` login/callback/settings are 200, this
+`customer-portal` only when `/dashboard` login / auth callback / settings /
+Alpaca brokers callback are 200, this
 checkout mounts `POST /access/redeem-invite` and pins `/dashboard` in
 `_shared/app-url.ts`, **and** the live ESZIP for each of those three functions
 (`GET https://api.supabase.com/v1/projects/{ref}/functions/{slug}/body`)

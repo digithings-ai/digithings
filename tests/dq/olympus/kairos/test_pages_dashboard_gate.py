@@ -78,6 +78,34 @@ def test_live_404_is_not_ready() -> None:
     assert "http=404" in msg
 
 
+def test_dashboard_paths_include_alpaca_oauth_callback() -> None:
+    assert "/dashboard/settings/brokers/callback/" in DASHBOARD_PATHS
+
+
+def test_alpaca_callback_404_blocks_apply_when_other_dashboard_paths_are_200() -> None:
+    """EF --apply pins ALPACA_OAUTH_CALLBACK_PATH here; a 404 would strand OAuth."""
+
+    def probe(url: str) -> tuple[int, str]:
+        if url.rstrip("/").endswith("/dashboard/settings/brokers/callback"):
+            return 404, url
+        return 200, url
+
+    report = probe_pages_dashboard(origin=ORIGIN, probe=probe)
+    assert report.ready is False
+    msg = format_pages_dashboard_blocked(report)
+    assert "/dashboard/settings/brokers/callback/" in msg
+    assert "http=404" in msg
+    deployed: list[str] = []
+    code = run_pages_dashboard_gate(
+        apply=True,
+        log=lambda _msg: None,
+        probe=probe,
+        run=lambda argv: deployed.append(" ".join(argv)),
+    )
+    assert code == EXIT_PAGES_DASHBOARD_NOT_READY
+    assert deployed == []
+
+
 def test_olympus_redirect_is_not_ready() -> None:
     report = probe_pages_dashboard(origin=ORIGIN, probe=_olympus_redirect_probe)
     assert report.ready is False
