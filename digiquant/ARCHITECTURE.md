@@ -1966,7 +1966,9 @@ separately so research nodes never pay the per-ticker decision-artifact token ta
   informational field discards the whole patch. It makes a quoted figure auditable; it cannot
   tell whether the figure is real. House GHA 33426508863 `sector-real-estate` then showed a
   second failure class: missing `summary` (prose under `text`/`detail`) and Gemini JSON-string
-  Object envelopes. `Finding`/`Source` coerce those shapes before validate so the node does
+  Object envelopes whose `properties`/`fields` maps arrive as JSON objects *or* lists of
+  `[key, {stringValue}]` pairs (`}]],"type":"Object"` in the live ValidationError).
+  `Finding`/`Source` coerce those shapes before validate so the node does
   not carry the sector baseline; summary/label fill only from explicit prose aliases
   (`text`/`detail`/…), never from leftover URLs or envelope keys. An `as_of`-only finding
   with no prose is still rejected.

@@ -128,3 +128,49 @@ class TestJsonStringItems:
         )
         assert report.material_findings[0].label == "XLRE range"
         assert report.sources[0].id == "price_technicals:XLRE"
+
+    def test_gemini_pair_list_envelope_json_string_validates(self) -> None:
+        """Production 33426508863 shape: properties/fields as ``[[key, {stringValue}]]``."""
+        finding_envelope = {
+            "completionState": "complete",
+            "type": "Object",
+            "properties": [
+                ["label", {"stringValue": "XLRE range"}],
+                ["summary", {"stringValue": "XLRE traded between $38 and $45.36 all week."}],
+                ["as_of", {"stringValue": "2026-08-28"}],
+            ],
+        }
+        source_envelope = {
+            "completionState": "complete",
+            "type": "Object",
+            "fields": [
+                ["id", {"stringValue": "price_technicals:XLRE"}],
+                ["title", {"stringValue": "XLRE technicals"}],
+            ],
+        }
+        report = SectorReport.model_validate(
+            _sector(
+                material_findings=[json.dumps(finding_envelope)],
+                sources=[json.dumps(source_envelope)],
+            )
+        )
+        assert report.material_findings[0].label == "XLRE range"
+        assert report.material_findings[0].summary.startswith("XLRE traded")
+        assert report.sources[0].id == "price_technicals:XLRE"
+
+    def test_mixed_properties_list_is_not_treated_as_a_map(self) -> None:
+        with pytest.raises(ValidationError, match="summary"):
+            SectorReport.model_validate(
+                _sector(
+                    material_findings=[
+                        {
+                            "completionState": "complete",
+                            "type": "Object",
+                            "properties": [
+                                ["label", {"stringValue": "XLRE range"}],
+                                "not-a-pair",
+                            ],
+                        }
+                    ]
+                )
+            )
