@@ -741,6 +741,33 @@ Deno.test("POST brokers/connect oauth: pins redirect_uri; rejects client mismatc
   assertEquals(JSON.stringify(ok.json).includes("alpaca-access-token-xyz"), false);
 });
 
+Deno.test("POST brokers/connect oauth: OAUTH_NOT_CONFIGURED when Alpaca client secrets missing", async () => {
+  const store = freshStore();
+  Deno.env.delete("ALPACA_OAUTH_CLIENT_ID");
+  Deno.env.delete("NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID");
+  Deno.env.delete("ALPACA_OAUTH_CLIENT_SECRET");
+  const res = await handleSettingsRequest(
+    authReq("POST", "/brokers/connect", {
+      broker: "alpaca",
+      env: "paper",
+      kind: "oauth",
+      code: "auth-code-no-secrets",
+      redirect_uri: pinnedAlpacaRedirectUri(APP_URL),
+    }),
+    {
+      admin: mockAdmin(store),
+      user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+      vaultKey: TEST_KEY,
+      appUrl: APP_URL,
+      // Intentionally omit exchangeAlpacaCode → production default path.
+    },
+  );
+  const json = await res.json();
+  assertEquals(res.status, 500);
+  assertEquals(json.code, "OAUTH_NOT_CONFIGURED");
+  assertEquals(String(json.message).includes("ALPACA_OAUTH_CLIENT_ID"), true);
+});
+
 Deno.test("POST brokers/connect reconnect: revoke-then-insert on active unique", async () => {
   const store = freshStore();
   const first = await call(store, "POST", "/brokers/connect", {

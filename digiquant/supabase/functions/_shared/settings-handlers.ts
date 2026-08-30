@@ -532,6 +532,13 @@ async function connectBroker(req: Request, deps: SettingsDeps): Promise<Response
       try {
         tokens = await exchanger({ code, redirectUri: expectedRedirect });
       } catch (err) {
+        if (err instanceof AlpacaOAuthNotConfiguredError) {
+          return jsonError(
+            500,
+            "OAUTH_NOT_CONFIGURED",
+            "ALPACA_OAUTH_CLIENT_ID and ALPACA_OAUTH_CLIENT_SECRET must be set",
+          );
+        }
         console.error(
           "alpaca oauth exchange failed",
           err instanceof Error ? err.name : "unknown",
@@ -917,6 +924,14 @@ async function patchNotifications(
   return jsonOk(prefsResponseBody(upserted as Record<string, unknown>));
 }
 
+/** Raised when Alpaca OAuth client id/secret are missing from EF secrets. */
+export class AlpacaOAuthNotConfiguredError extends Error {
+  constructor() {
+    super("Alpaca OAuth client not configured");
+    this.name = "AlpacaOAuthNotConfiguredError";
+  }
+}
+
 async function exchangeAlpacaCodeDefault(args: {
   code: string;
   redirectUri: string;
@@ -925,7 +940,7 @@ async function exchangeAlpacaCodeDefault(args: {
     Deno.env.get("NEXT_PUBLIC_ALPACA_OAUTH_CLIENT_ID");
   const clientSecret = Deno.env.get("ALPACA_OAUTH_CLIENT_SECRET");
   if (!clientId || !clientSecret) {
-    throw new Error("Alpaca OAuth client not configured");
+    throw new AlpacaOAuthNotConfiguredError();
   }
   const body = new URLSearchParams({
     grant_type: "authorization_code",

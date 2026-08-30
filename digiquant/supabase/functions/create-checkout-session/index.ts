@@ -20,7 +20,11 @@ import {
   jsonOk,
 } from "../_shared/supabase-admin.ts";
 import { createClient } from "@supabase/supabase-js";
-import { loadPriceTierEnv, type PlanTier } from "../_shared/tiers.ts";
+import {
+  loadPriceTierEnv,
+  priceEnvKey,
+  type PlanTier,
+} from "../_shared/tiers.ts";
 
 type Interval = "monthly" | "annual";
 type PaidTier = Extract<PlanTier, "baseline" | "custom">;
@@ -69,7 +73,12 @@ Deno.serve(async (req) => {
   const prices = loadPriceTierEnv();
   const priceId = pickPriceId(tier, interval, prices);
   if (!priceId) {
-    return jsonError(500, "PRICE_NOT_CONFIGURED", "Price id not configured");
+    const envName = priceEnvKey(tier, interval);
+    return jsonError(
+      500,
+      "PRICE_NOT_CONFIGURED",
+      `${envName} is not set on Edge Function secrets`,
+    );
   }
 
   let admin;
