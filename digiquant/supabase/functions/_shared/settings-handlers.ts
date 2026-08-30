@@ -356,7 +356,8 @@ async function patchProfile(req: Request, deps: SettingsDeps): Promise<Response>
     }
   }
 
-  const versionId = (deps.uuid ?? crypto.randomUUID)();
+  // Bind crypto: unbound `crypto.randomUUID` throws TypeError ("expected Crypto") on Deno/Edge.
+  const versionId = deps.uuid ? deps.uuid() : crypto.randomUUID();
   const payload = {
     version_id: versionId,
     profile_key: profileKey,
@@ -586,7 +587,7 @@ async function insertBrokerConnection(
     scopes: string[];
   },
 ): Promise<Response> {
-  const id = (deps.uuid ?? crypto.randomUUID)();
+  const id = deps.uuid ? deps.uuid() : crypto.randomUUID();
   const row = {
     id,
     workspace_id: args.workspaceId,
@@ -640,7 +641,7 @@ async function insertBrokerConnection(
     return jsonError(500, "CONNECT_FAILED", "Unable to revoke prior connection");
   }
 
-  const retryId = (deps.uuid ?? crypto.randomUUID)();
+  const retryId = deps.uuid ? deps.uuid() : crypto.randomUUID();
   const retryRow = { ...row, id: retryId };
   const { data: retried, error: retryErr } = await deps.admin
     .from("broker_connections")
