@@ -288,6 +288,16 @@ function createMockAdmin(store: Store): AdminClient {
     from(table: string) {
       return makeBuilder(table);
     },
+    async rpc(fn: string, args?: Record<string, unknown>) {
+      // Observer bootstrap (migration 107) — only used when membership missing.
+      if (fn !== "ensure_personal_workspace") {
+        return { data: null, error: { message: `unknown rpc ${fn}` } };
+      }
+      const userId = String(args?.p_user_id ?? "");
+      const existing = store.members.find((m) => m.user_id === userId);
+      if (existing) return { data: existing.workspace_id, error: null };
+      return { data: null, error: { message: "bootstrap not simulated in stripe mock" } };
+    },
     auth: {
       admin: {
         async getUserById(userId: string) {

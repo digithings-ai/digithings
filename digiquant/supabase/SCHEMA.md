@@ -628,6 +628,23 @@ Multi-tenant privacy boundary. Typed contracts live in
 live Supabase from this WP alone** — schema files + structural tests only until the
 T0/T1 release train is reviewed.
 
+### Observer workspace bootstrap (107)
+
+New Auth users need a personal `type='user'` workspace + `owner` membership before
+settings/checkout can resolve the caller. Migration **107** adds:
+
+| Object | Purpose |
+|--------|---------|
+| `ensure_personal_workspace(p_user_id uuid)` | SECURITY DEFINER, idempotent; creates `plan_tier='free'` workspace (`slug = 'u-' \|\| hex(uuid)`) + owner row when the user has none. Refuses system/house seed ids. |
+| `ensure_my_workspace()` | Authenticated wrapper (`auth.uid()`). |
+| Trigger `on_auth_user_created_ensure_workspace` | `AFTER INSERT ON auth.users` → `ensure_personal_workspace(NEW.id)`. |
+| Backfill DO block | Existing `auth.users` with zero memberships (e.g. Agentmail users created before 107). |
+
+Settings / billing Edge Functions call the RPC via `service_role` when
+`resolveCallerWorkspace` returns null (`ensureCallerWorkspace` in
+`_shared/supabase-admin.ts`), so pre-trigger users still bootstrap on first JWT
+settings call.
+
 ### New tables (096)
 
 | Table | PK | Purpose |
