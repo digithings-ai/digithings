@@ -215,6 +215,11 @@ def run_observer_hops(
     return results
 
 
+def _digest_inbox_confirmed(environ: Mapping[str, str]) -> bool:
+    raw = (environ.get("KAIROS_STAGING_DIGEST_INBOX_CONFIRMED") or "").strip().lower()
+    return raw in {"1", "true", "yes"}
+
+
 def collect_remaining_evidence(
     *,
     http: HttpJson,
@@ -227,10 +232,13 @@ def collect_remaining_evidence(
     if anon_key:
         headers["apikey"] = anon_key
     base = functions_base.rstrip("/")
+    surface_ok = True
 
     def _get(path: str) -> dict[str, object]:
+        nonlocal surface_ok
         status, body = http("GET", f"{base}{path}", headers=headers, body=None)
         if status != 200 or not isinstance(body, dict):
+            surface_ok = False
             return {}
         return body
 
@@ -239,7 +247,7 @@ def collect_remaining_evidence(
     jobs_body = _get("/settings/jobs")
     fills_body = _get("/settings/fills")
     log_body = _get("/settings/notifications/log")
-    connections: list[tuple[str, str, str]] = []
+    connections: list[tuple[str, str, str, str]] = []
     raw_conns = brokers.get("connections")
     if isinstance(raw_conns, list):
         for row in raw_conns:
@@ -250,6 +258,7 @@ def collect_remaining_evidence(
                     str(row.get("broker") or ""),
                     str(row.get("env") or ""),
                     str(row.get("status") or ""),
+                    str(row.get("auth_kind") or ""),
                 )
             )
     jobs: list[tuple[str, str]] = []
@@ -259,8 +268,12 @@ def collect_remaining_evidence(
             if not isinstance(row, dict):
                 continue
             jobs.append((str(row.get("job_type") or ""), str(row.get("status") or "")))
+    fill_count = 0
     fills = fills_body.get("fills")
-    fill_count = len(fills) if isinstance(fills, list) else 0
+    if isinstance(fills, list):
+        for row in fills:
+            if isinstance(row, dict) and str(row.get("symbol") or "").strip():
+                fill_count += 1
     keys: list[str] = []
     raw_events = log_body.get("events")
     if isinstance(raw_events, list):
@@ -270,10 +283,12 @@ def collect_remaining_evidence(
     sub = profile.get("subscription_status")
     return RemainingHopEvidence(
         subscription_status=str(sub) if isinstance(sub, str) else None,
+        has_stripe_subscription=profile.get("has_stripe_subscription") is True,
         connections=tuple(connections),
         jobs=tuple(jobs),
         fill_count=fill_count,
         digest_event_keys=tuple(keys),
+        surface_http_ok=surface_ok,
     )
 
 
@@ -385,6 +400,15 @@ def run_staging_e2e(
             anon_key=_anon_from_env(env),
             functions_base=functions_base,
         )
+        if not evidence.surface_http_ok:
+            err(
+                "Remaining-hop Settings GETs failed "
+                "(profile/brokers/jobs/fills/notifications/log must be HTTP 200)."
+            )
+            return 3
+        evidence = evidence.model_copy(
+            update={"digest_inbox_confirmed": _digest_inbox_confirmed(env)}
+        )
         proven = proven_remaining_hops(evidence)
         log("kairos_staging_e2e: remaining hop product-state")
         for name in REMAINING_LIVE_HOPS:
@@ -463,6 +487,7 @@ __all__ = [
     "ObserverHop",
     "ProbeResult",
     "RemainingHopEvidence",
+    "_digest_inbox_confirmed",
     "collect_remaining_evidence",
     "format_remaining_hops_failure",
     "hop_ok",

@@ -3038,13 +3038,19 @@ is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
 vendor secrets are missing (and prints `KAIROS_STAGING_E2E_REMAINING_HOPS` so
 the five live hops are named even before secrets land). After Observer hops
 pass, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
-`/jobs`, `/fills`, and `/notifications/log` and marks a hop proven only from
-that product state (`subscription_status=active`, Alpaca paper `active`,
-`overlay_daily` running/succeeded — not skipped/`not_entitled`, a fill row, a
-`digest:` event key). Ops grants with `subscription_status=none` do not prove
-checkout. Exit **0** only when all five remaining hops are proven. Checkout
-URL + unsigned webhook with hops still unproven is **exit 4**. Recipient for
-staging digests can be an Agentmail inbox once Mailgun is configured.
+`/jobs`, `/fills`, and `/notifications/log`. A hop is proven only from that
+product state: `subscription_status=active` **and** `has_stripe_subscription`
+(boolean; house is seeded `enterprise`/`active` without Stripe ids and must
+not prove checkout; ops grants with `subscription_status=none` also do not);
+Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` running/succeeded
+— not skipped/`not_entitled`; a fill fingerprint with a symbol; a `digest:`
+log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
+(claim-ledger rows are inserted before Mailgun send). Remaining-hop GETs that
+are not HTTP 200 exit **3**. Exit **0** only when all five remaining hops are
+proven. Exit **2** when hops are unproven **and** named vendor secrets are
+missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
+Recipient for staging digests can be an Agentmail inbox once Mailgun is
+configured.
 
 **Entry points:**
 

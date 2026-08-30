@@ -1339,6 +1339,7 @@ Deno.test("GET profile: includes workspace billing snapshot without Stripe ids",
   assertEquals(status, 200);
   assertEquals(json.plan_tier, "free");
   assertEquals(json.subscription_status, "none");
+  assertEquals(json.has_stripe_subscription, true);
   assertEquals(json.stripe_customer_id, undefined);
   assertEquals(json.stripe_subscription_id, undefined);
 });

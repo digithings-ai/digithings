@@ -16,9 +16,12 @@ Usage (repo root)::
     PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_staging_e2e.py
 
 Exit codes:
-  0 — all five remaining hops proven from Settings product-state reads
-  2 — named required secrets missing (or JWT missing after secrets present)
-  3 — Observer hop regression, or secrets present but core EF misconfigured
+  0 — all five remaining hops proven (Stripe subscription boolean + status,
+      Alpaca paper OAuth, overlay run, fill fingerprint, digest log + inbox flag)
+  2 — remaining hops unproven and named required secrets missing
+      (or JWT missing after secrets present)
+  3 — Observer hop regression, remaining-hop Settings GET not 200, or secrets
+      present but core EF misconfigured
   4 — secrets present and checkout/webhook cleared config errors, but remaining
       live hops (browser Stripe, Alpaca paper, overlay, fill, digest) unproven
 """

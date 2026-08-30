@@ -1,9 +1,17 @@
 """Named EPIC.md staging hops that Settings reads can prove or leave unproven.
 
-Exit 0 is allowed only when every hop here is proven from product state
-(Stripe ``subscription_status=active``, Alpaca paper connection, overlay
-``job_runs`` succeeded/running, a broker fill, a digest event key). Ops grants
-with ``subscription_status=none`` do not prove checkout.
+Exit 0 is allowed only when every hop here is proven from product state:
+
+- Stripe: ``subscription_status=active`` **and** ``has_stripe_subscription``
+  (workspace has a Stripe subscription id; the id is never returned). House is
+  seeded ``enterprise``/``active`` without Stripe ids — that must not prove
+  checkout. Ops grants with ``subscription_status=none`` also do not.
+- Alpaca: paper connection ``active`` with ``auth_kind=oauth``.
+- Overlay: ``job_type=overlay_daily`` in ``running``/``succeeded`` (not
+  ``skipped``/``not_entitled``).
+- Fill: at least one fingerprint with a symbol.
+- Digest: a ``digest:`` notification_log key **and** an inbox confirmation
+  (claim-ledger rows are inserted before Mailgun send).
 """
 
 from __future__ import annotations
@@ -29,10 +37,13 @@ class RemainingHopEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     subscription_status: str | None = None
-    connections: tuple[tuple[str, str, str], ...] = Field(default_factory=tuple)
+    has_stripe_subscription: bool = False
+    connections: tuple[tuple[str, str, str, str], ...] = Field(default_factory=tuple)
     jobs: tuple[tuple[str, str], ...] = Field(default_factory=tuple)
     fill_count: int = 0
     digest_event_keys: tuple[str, ...] = Field(default_factory=tuple)
+    digest_inbox_confirmed: bool = False
+    surface_http_ok: bool = True
 
 
 def remaining_hops_unproven(proven: Mapping[str, object] | None = None) -> tuple[str, ...]:
@@ -48,20 +59,22 @@ def format_remaining_hops_failure(unproven: Sequence[str]) -> str:
 def proven_remaining_hops(evidence: RemainingHopEvidence) -> dict[str, bool]:
     """Map each remaining hop to whether product state proves it."""
     alpaca = any(
-        broker == "alpaca" and env == "paper" and status == "active"
-        for broker, env, status in evidence.connections
+        broker == "alpaca" and env == "paper" and status == "active" and auth_kind == "oauth"
+        for broker, env, status, auth_kind in evidence.connections
     )
     overlay = any(
         job_type == "overlay_daily" and status in OVERLAY_RUN_STATUSES
         for job_type, status in evidence.jobs
     )
-    digest = any(key.startswith("digest:") for key in evidence.digest_event_keys)
+    digest_log = any(key.startswith("digest:") for key in evidence.digest_event_keys)
     return {
-        "browser_stripe_checkout": evidence.subscription_status == "active",
+        "browser_stripe_checkout": (
+            evidence.subscription_status == "active" and evidence.has_stripe_subscription
+        ),
         "alpaca_paper_oauth_connect": alpaca,
         "overlay_daily_claimed": overlay,
         "paper_fill_mirrored": evidence.fill_count > 0,
-        "digest_email_received": digest,
+        "digest_email_received": evidence.digest_inbox_confirmed and digest_log,
     }
 
 

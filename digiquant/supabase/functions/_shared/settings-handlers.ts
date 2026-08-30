@@ -230,12 +230,19 @@ const DEFAULT_PROFILE_KEY = "workspace";
 
 function withWorkspaceBilling(
   body: Record<string, unknown>,
-  workspace: { plan_tier: string; subscription_status: string },
+  workspace: {
+    plan_tier: string;
+    subscription_status: string;
+    stripe_subscription_id?: string | null;
+  },
 ): Record<string, unknown> {
+  const stripeSub = workspace.stripe_subscription_id;
   return {
     ...body,
     plan_tier: workspace.plan_tier,
     subscription_status: workspace.subscription_status,
+    // Boolean only — never the Stripe customer/subscription id.
+    has_stripe_subscription: typeof stripeSub === "string" && stripeSub.length > 0,
   };
 }
 

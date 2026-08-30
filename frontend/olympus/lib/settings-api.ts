@@ -57,6 +57,7 @@ export type ProfileTip = {
   /** Workspace billing snapshot — never Stripe customer/subscription ids. */
   plan_tier?: string;
   subscription_status?: string;
+  has_stripe_subscription?: boolean;
 };
 
 export type JobRunView = {

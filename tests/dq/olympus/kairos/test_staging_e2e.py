@@ -249,6 +249,20 @@ def test_proven_remaining_hops_ops_custom_none_does_not_count_as_stripe() -> Non
 
 
 @pytest.mark.unit
+def test_proven_remaining_hops_house_active_without_stripe_does_not_count() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(subscription_status="active", has_stripe_subscription=False)
+    )
+    assert proven["browser_stripe_checkout"] is False
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_digest_log_without_inbox_is_not_received() -> None:
+    proven = proven_remaining_hops(RemainingHopEvidence(digest_event_keys=("digest:2026-08-31",)))
+    assert proven["digest_email_received"] is False
+
+
+@pytest.mark.unit
 def test_proven_remaining_hops_skipped_overlay_is_not_claimed() -> None:
     skipped = proven_remaining_hops(RemainingHopEvidence(jobs=(("overlay_daily", "skipped"),)))
     assert skipped["overlay_daily_claimed"] is False
@@ -263,7 +277,15 @@ def test_proven_remaining_hops_skipped_overlay_is_not_claimed() -> None:
 @pytest.mark.unit
 def test_proven_remaining_hops_alpaca_live_does_not_count_as_paper() -> None:
     proven = proven_remaining_hops(
-        RemainingHopEvidence(connections=(("alpaca", "live", "active"),))
+        RemainingHopEvidence(connections=(("alpaca", "live", "active", "oauth"),))
+    )
+    assert proven["alpaca_paper_oauth_connect"] is False
+
+
+@pytest.mark.unit
+def test_proven_remaining_hops_alpaca_api_key_does_not_count_as_oauth() -> None:
+    proven = proven_remaining_hops(
+        RemainingHopEvidence(connections=(("alpaca", "paper", "active", "api_key"),))
     )
     assert proven["alpaca_paper_oauth_connect"] is False
 
@@ -273,10 +295,12 @@ def test_proven_remaining_hops_all_five_from_product_state() -> None:
     proven = proven_remaining_hops(
         RemainingHopEvidence(
             subscription_status="active",
-            connections=(("alpaca", "paper", "active"),),
+            has_stripe_subscription=True,
+            connections=(("alpaca", "paper", "active", "oauth"),),
             jobs=(("overlay_daily", "succeeded"),),
             fill_count=1,
             digest_event_keys=("digest:2026-08-31",),
+            digest_inbox_confirmed=True,
         )
     )
     assert remaining_hops_unproven(proven) == ()
@@ -297,8 +321,36 @@ def test_collect_remaining_evidence_reads_member_scoped_settings() -> None:
         functions_base="https://example.test/functions/v1",
     )
     assert evidence.subscription_status == "none"
+    assert evidence.has_stripe_subscription is False
     assert evidence.fill_count == 0
+    assert evidence.surface_http_ok is True
     assert proven_remaining_hops(evidence)["browser_stripe_checkout"] is False
+
+
+@pytest.mark.unit
+def test_collect_remaining_evidence_ignores_fills_without_symbol() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/fills")] = (200, {"fills": [{}, {"symbol": ""}]})
+    evidence = collect_remaining_evidence(
+        http=_FakeHttp(fakes),
+        jwt="test-jwt",
+        anon_key=None,
+        functions_base="https://example.test/functions/v1",
+    )
+    assert evidence.fill_count == 0
+
+
+@pytest.mark.unit
+def test_run_staging_e2e_remaining_hop_surface_503_exits_3() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("GET", "/settings/jobs")] = (503, {"code": "NOT_READY"})
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=lambda _m: None,
+        log_err=lambda _m: None,
+    )
+    assert rc == 3
 
 
 @pytest.mark.unit
@@ -306,11 +358,20 @@ def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> No
     fakes = _observer_ok_fakes()
     fakes[("GET", "/settings/profile")] = (
         200,
-        {"workspace_id": "ws", "subscription_status": "active", "plan_tier": "quant"},
+        {
+            "workspace_id": "ws",
+            "subscription_status": "active",
+            "plan_tier": "quant",
+            "has_stripe_subscription": True,
+        },
     )
     fakes[("GET", "/settings/brokers")] = (
         200,
-        {"connections": [{"broker": "alpaca", "env": "paper", "status": "active"}]},
+        {
+            "connections": [
+                {"broker": "alpaca", "env": "paper", "status": "active", "auth_kind": "oauth"}
+            ]
+        },
     )
     fakes[("GET", "/settings/jobs")] = (
         200,
@@ -324,7 +385,10 @@ def test_run_staging_e2e_exit_0_when_product_state_proves_remaining_hops() -> No
     logs: list[str] = []
     rc = run_staging_e2e(
         http=_FakeHttp(fakes),
-        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        environ={
+            "KAIROS_STAGING_USER_JWT": "test-jwt",
+            "KAIROS_STAGING_DIGEST_INBOX_CONFIRMED": "1",
+        },
         log=logs.append,
         log_err=logs.append,
     )
