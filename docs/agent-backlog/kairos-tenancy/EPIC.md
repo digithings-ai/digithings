@@ -254,7 +254,7 @@ free, not house/system, not ops-custom `custom`/`none` without a grant).
   (#3380); `cursor/*` cannot rename it. Canonical CLI is `scripts/digiquant_cron_check.py`.
 
 **Auth (`core`):** GitHub Enabled + Email Enabled. Vendor consoles use
-`admin@digithings.ai` Google (owner signs in on the desktop) — not Agentmail.
+`admin@digithings.ai` on Proton — not Agentmail and not a company Google account.
 See [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 
 **Harness:** `python scripts/kairos_staging_e2e.py` → exit **3** (Observer

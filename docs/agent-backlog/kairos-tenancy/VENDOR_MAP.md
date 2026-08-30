@@ -8,16 +8,17 @@
 > **Naming correction (2026-08-30):** prior drafts used `cursor-cloud-agent-*.env` —
 > those paths are **wrong**. Resume under **digithings** paths only.
 
-## Vendor identity (company Google)
+## Vendor identity (Proton `admin@digithings.ai`)
 
 Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 
 | Item | Value |
 |------|-------|
-| **Vendor email** | `admin@digithings.ai` |
-| **Login** | Google account for that address. Owner signs into Google on the desktop; agents use **Sign in with Google** in that session. |
-| **Not used** | `digithings@agentmail.to`, `cursor-cloud-agent6060@agentmail.to` — no completed vendor accounts; do not create any |
-| Never store | Google password / 2FA in git or GitHub Secrets |
+| **Vendor email** | `admin@digithings.ai` (Proton; domain connected) |
+| **Login** | Email + password / vendor 2FA. Owner completes CAPTCHA and Proton confirm codes on the desktop. **No company Google account** (Workspace not purchased). |
+| **Not used** | `digithings@agentmail.to`, `cursor-cloud-agent6060@agentmail.to`; Sign in with Google as the company path |
+| Never store | Proton / Google passwords or 2FA in git or GitHub Secrets |
+| Later | Add `admin@digithings.ai` as owner on Google Cloud / GitHub / Supabase and transfer off the personal Google |
 
 ## Stripe (TEST mode) — BLOCKED on hCaptcha
 
@@ -34,7 +35,7 @@ Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 | Webhook secret | Endpoint → Signing secret (`whsec_…`) → `STRIPE_WEBHOOK_SECRET` |
 | Local file (when ready) | `.local/secrets/digithings-stripe.env` |
 | Human gate | hCaptcha on signup — owner on the desktop |
-| Account email | `admin@digithings.ai` (Google SSO if Stripe offers it). Do not use Agentmail. |
+| Account email | `admin@digithings.ai`. Do not use Agentmail or company Google SSO. |
 
 ## Mailgun — BLOCKED on reCAPTCHA
 
@@ -64,7 +65,7 @@ Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 | Fallback | Paper API Key ID + Secret (if OAuth console blocked) — map per settings EF / DEPLOYMENT.md |
 | Local file (when ready) | `.local/secrets/digithings-alpaca.env` |
 | Human gate | Cloudflare Turnstile — owner on the desktop |
-| Account email | `admin@digithings.ai` (Alpaca often has no Google SSO). Do not use Agentmail. |
+| Account email | `admin@digithings.ai`. Do not use Agentmail. |
 
 ## Google OAuth (optional Supabase Auth) — not started
 
@@ -76,7 +77,7 @@ Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 | Env names | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` |
 | Enable in Supabase | Authentication → Providers → Google |
 | Local file (when ready) | `.local/secrets/digithings-google.env` |
-| Note | GitHub Auth already Enabled on `core`. Product Google login (Supabase) is separate from the **admin@digithings.ai** Google account used on vendor consoles. |
+| Note | GitHub Auth already Enabled on `core`. Product Google login (Supabase) rides the existing personal Google Cloud OAuth client until org transfer. |
 
 ## Already set on `core` EF (names only)
 
@@ -98,5 +99,6 @@ PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py
 
 ## Human gate
 
-Owner signs into **`admin@digithings.ai` Google** on the desktop, then agents resume
-with Sign in with Google. Abandoned Agentmail form fills are not a signup path.
+Owner uses **`admin@digithings.ai`** (Proton) on vendor forms and completes
+CAPTCHA / confirm codes on the desktop. No company Google account. Abandoned
+Agentmail form fills are not a signup path.
