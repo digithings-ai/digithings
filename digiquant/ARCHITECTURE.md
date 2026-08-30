@@ -3323,7 +3323,9 @@ overwrite the house Brief). Overlay H1–H5 / Phase 9D **skip** `theses`,
 `analyst_coverage`, and `thesis_vehicles` for a private workspace
 (`skip_overlay_shared_register`): those tables have no `workspace_id` column
 and leftover `UNIQUE(date, …)` keys, so persist-on would last-writer-win the
-house corpus. Staged cutover 113 does not change that. Private overlay remains
+house corpus. Overlay `preflight_reflect` / `persist_pending` likewise **skip**
+`decision_log` (`UNIQUE(run_date, ticker)` — resolving would stamp house
+reflections by id). Staged cutover 113 does not change that. Private overlay remains
 H7–H9 book only (T4). Cutover 900 is still required before dropping
 the house teaser for anon / free JWTs; it is not the persist precondition.
 With the flag off, research/corpus phases still run; private-phase
