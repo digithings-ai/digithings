@@ -290,6 +290,8 @@ Staging E2E exit **3** (app-urls path contract). Vendor secrets still missing.
 
 **2026-09-01T00:05Z — Pages `/dashboard` twin:** [#3356](https://github.com/digithings-ai/digithings/pull/3356) on `main` (`6ea1846ec`) dual-exports `/olympus` + `/dashboard` from `frontend/olympus`. **Human-merge only**; parallel to house Python hotfixes. Live still `/olympus` 200 / `/dashboard` 404 until that merge + Pages rebuild. Do **not** redeploy settings EF until live `/dashboard` is 200. After 200: human Auth redirect + Access, then EF.
 
+**2026-09-01T03:11Z — [#3369](https://github.com/digithings-ai/digithings/pull/3369) on `develop` (`986082b76`):** fail-closed overlay route cron (`python scripts/kairos_route_cron.py`). Kill switch still defaults **off**. Do not set `OLYMPUS_KAIROS_ROUTING=1` without an explicit human decision. Does not merge human-gated main PRs. Next scheduled house GHA is still the live book-commit proof.
+
 **Do not mark epic complete** until the next scheduled house GHA is green,
 staging E2E + human/legal/IBKR gates clear. Do not merge draft
 [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
