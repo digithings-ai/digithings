@@ -2177,7 +2177,12 @@ rerun: `python digiquant/scripts/atlas/recover_h9_ledger_commit.py --date YYYY-M
 weights and calls `append_commit_chain` + a `commit-run/{run_id}` manifest tagged
 `recovery=append_from_existing_book`. It does not call H8 or rewrite positions. It is an
 operator recovery *caller* of the same writer, not a second implementation.
-`test_h9_is_the_only_ledger_writer` allowlists that file explicitly.
+`test_h9_is_the_only_ledger_writer` allowlists that file explicitly. Idempotent only when
+a committed manifest fingerprint matches the booked weights **and** approved-target rows
+cover that book; a fingerprint mismatch is `conflict` (nonzero exit); a commit row without
+children falls through to `append_commit_chain` (supersede), never a false-finalized
+manifest. Prior weights are mark-to-market (`query_price_deltas` + `mark_to_market_weights`)
+and house `portfolio.json` hydrates `policy_version_id`.
 
 `append_commit_chain(...)` writes one `PortfolioCommit` plus, per symbol, a `DecisionIntent`, a
 `RequestedTarget`, an `ApprovedTarget`, and — when the share delta is non-zero — an

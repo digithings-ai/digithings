@@ -22,6 +22,7 @@ try:
     load_dotenv(Path(__file__).resolve().parents[3] / ".env")
     load_dotenv()
 except ImportError:
+    # dotenv is optional when the operator already exported CORE_SUPABASE_*.
     pass
 
 from digiquant.olympus.hermes.writers.recover_ledger import main

@@ -13,23 +13,28 @@ import logging
 import sys
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 from typing import Literal
 from uuid import UUID, uuid4
 
+from digiquant.olympus.atlas.dashboard_digest import portfolio_preferences_static
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
 from digiquant.olympus.atlas.supabase_io import (
     SupabaseClient,
     SupabaseConfig,
     build_client,
     load_prior_book,
+    prior_book_current_weights,
     publish_document,
+    query_price_deltas,
 )
+from digiquant.olympus.hermes.turnover import mark_to_market_weights
 from digiquant.olympus.hermes.writers.commit_io import (
     load_commit_manifests,
     weights_fingerprint,
 )
 from digiquant.olympus.hermes.writers.ledger_io import (
-    COMMITS,
+    APPROVED_TARGETS,
     LedgerAppend,
     _rows_for_date,
     append_commit_chain,
@@ -39,7 +44,8 @@ from digiquant.olympus.tenancy import house_workspace_id, resolved_workspace_id
 logger = logging.getLogger(__name__)
 
 _CASH = "CASH"
-RecoveryStatus = Literal["dry_run", "committed", "already_committed", "no_book"]
+_PORTFOLIO_JSON = Path(__file__).resolve().parents[2] / "atlas" / "config" / "portfolio.json"
+RecoveryStatus = Literal["dry_run", "committed", "already_committed", "no_book", "conflict"]
 
 
 @dataclass(frozen=True)
@@ -109,13 +115,12 @@ def _load_book(
 def _prior_current_weights(
     *, client: SupabaseClient, run_date: date, workspace_id: str | None
 ) -> dict[str, float]:
+    """Mark-to-market prior book — the same baseline H9 preflight feeds the ledger."""
     prior = load_prior_book(client, run_date, workspace_id=workspace_id)
-    out: dict[str, float] = {}
-    for row in prior:
-        ticker = _symbol(row.get("ticker"))
-        if ticker:
-            out[ticker] = _coerce_pct(row.get("weight_pct"))
-    return out
+    current = prior_book_current_weights(list(prior))
+    held = tuple(ticker for ticker in current if _symbol(ticker) != _CASH)
+    deltas = query_price_deltas(client=client, tickers=held, run_date=run_date) if held else {}
+    return mark_to_market_weights(current, deltas)
 
 
 def _decision_log_rows(*, client: SupabaseClient, run_date: date) -> int:
@@ -125,6 +130,12 @@ def _decision_log_rows(*, client: SupabaseClient, run_date: date) -> int:
     return len(list(resp.data or []))
 
 
+def _house_preferences(*, current_weights: dict[str, float]) -> dict[str, object]:
+    prefs: dict[str, object] = dict(portfolio_preferences_static(_PORTFOLIO_JSON))
+    prefs["current_weights"] = current_weights
+    return prefs
+
+
 def _recovery_state(
     *,
     run_date: date,
@@ -132,12 +143,14 @@ def _recovery_state(
     current_weights: dict[str, float],
     workspace_id: str | None,
 ) -> AtlasResearchState:
-    prefs: dict[str, object] = {"current_weights": current_weights}
     return AtlasResearchState(
         run_id=source_run_id,
         run_type="delta",
         run_date=run_date,
-        config=AtlasConfigBundle(preferences=prefs, workspace_id=workspace_id),
+        config=AtlasConfigBundle(
+            preferences=_house_preferences(current_weights=current_weights),
+            workspace_id=workspace_id,
+        ),
     )
 
 
@@ -192,6 +205,47 @@ def _publish_manifest(
     )
 
 
+def _approved_covers_book(
+    *,
+    client: SupabaseClient,
+    run_date: date,
+    workspace_id: str | None,
+    weights: dict[str, float],
+) -> bool:
+    approved = _rows_for_date(
+        client=client, table=APPROVED_TARGETS, run_date=run_date, workspace_id=workspace_id
+    )
+    symbols = {_symbol(row.get("symbol")) for row in approved}
+    needed = {_symbol(ticker) for ticker in weights} | {_CASH}
+    return bool(needed) and needed <= symbols
+
+
+def _matching_complete_commit(
+    *,
+    manifests: list[dict[str, object]],
+    weights: dict[str, float],
+    chain_complete: bool,
+) -> tuple[str | None, str | None, bool]:
+    """Return ``(commit_id, source_run_id, fingerprint_conflict)`` for committed manifests."""
+    committed = [row for row in manifests if row.get("status") == "committed"]
+    if not committed:
+        return None, None, False
+    latest = committed[0]
+    book_fp = weights_fingerprint(weights)
+    manifest_fp = str(latest.get("weights_fingerprint") or "")
+    if manifest_fp != book_fp:
+        return (
+            str(latest.get("ledger_commit_id") or "") or None,
+            str(latest.get("source_run_id") or "") or None,
+            True,
+        )
+    commit_id = str(latest.get("ledger_commit_id") or "") or None
+    source_run_id = str(latest.get("source_run_id") or "") or None
+    if commit_id and chain_complete:
+        return commit_id, source_run_id, False
+    return None, source_run_id, False
+
+
 def recover_ledger_from_book(
     *,
     client: SupabaseClient,
@@ -218,22 +272,37 @@ def recover_ledger_from_book(
         )
 
     manifests = load_commit_manifests(client=client, run_date=run_date, workspace_id=overlay)
-    committed_manifests = [m for m in manifests if m.get("status") == "committed"]
-    prior_commits = _rows_for_date(
-        client=client, table=COMMITS, run_date=run_date, workspace_id=overlay
+    chain_complete = _approved_covers_book(
+        client=client, run_date=run_date, workspace_id=overlay, weights=weights
     )
-    existing_id = None
-    if committed_manifests:
-        existing_id = str(committed_manifests[0].get("ledger_commit_id") or "") or None
-    if existing_id is None and prior_commits:
-        existing_id = str(prior_commits[0].get("id") or "") or None
-
-    if existing_id and committed_manifests:
+    existing_id, existing_source, conflict = _matching_complete_commit(
+        manifests=manifests, weights=weights, chain_complete=chain_complete
+    )
+    if conflict:
+        logger.warning(
+            "recover_ledger: fingerprint mismatch for %s (commit=%s)",
+            run_date.isoformat(),
+            existing_id,
+        )
+        return LedgerRecovery(
+            run_date=run_date,
+            status="conflict",
+            commit_id=existing_id,
+            source_run_id=existing_source,
+            weights=weights,
+            cash_pct=cash_pct,
+            nav=nav,
+            message=(
+                f"committed manifest fingerprint does not match booked positions "
+                f"for {run_date.isoformat()}"
+            ),
+        )
+    if existing_id:
         return LedgerRecovery(
             run_date=run_date,
             status="already_committed",
             commit_id=existing_id,
-            source_run_id=str(committed_manifests[0].get("source_run_id") or "") or None,
+            source_run_id=existing_source,
             weights=weights,
             cash_pct=cash_pct,
             nav=nav,
@@ -253,7 +322,7 @@ def recover_ledger_from_book(
         return LedgerRecovery(
             run_date=run_date,
             status="dry_run",
-            commit_id=existing_id,
+            commit_id=None,
             source_run_id=str(source_run_id),
             weights=weights,
             cash_pct=cash_pct,
@@ -264,28 +333,25 @@ def recover_ledger_from_book(
             ),
         )
 
-    if existing_id:
-        ledger = LedgerAppend(commit_id=existing_id, frozen_symbols=[], unpriced_symbols=[])
-    else:
-        appended = append_commit_chain(
-            client=client,
-            state=state,
+    appended = append_commit_chain(
+        client=client,
+        state=state,
+        weights=weights,
+        cash_pct=cash_pct,
+        nav=nav,
+    )
+    if appended is None:
+        return LedgerRecovery(
+            run_date=run_date,
+            status="no_book",
+            commit_id=None,
+            source_run_id=str(source_run_id),
             weights=weights,
             cash_pct=cash_pct,
             nav=nav,
+            message="OLYMPUS_PORTFOLIO_LEDGER disabled; no commit written",
         )
-        if appended is None:
-            return LedgerRecovery(
-                run_date=run_date,
-                status="no_book",
-                commit_id=None,
-                source_run_id=str(source_run_id),
-                weights=weights,
-                cash_pct=cash_pct,
-                nav=nav,
-                message="OLYMPUS_PORTFOLIO_LEDGER disabled; no commit written",
-            )
-        ledger = appended
+    ledger = appended
 
     n_decisions = _decision_log_rows(client=client, run_date=run_date)
     _publish_manifest(
@@ -300,10 +366,9 @@ def recover_ledger_from_book(
             decision_log_rows=n_decisions,
         ),
     )
-    status: RecoveryStatus = "already_committed" if existing_id and prior_commits else "committed"
     return LedgerRecovery(
         run_date=run_date,
-        status=status,
+        status="committed",
         commit_id=ledger.commit_id,
         source_run_id=str(source_run_id),
         weights=weights,
@@ -343,6 +408,8 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps(payload, indent=2, sort_keys=True))
     if result.status == "no_book":
         return 2
+    if result.status == "conflict":
+        return 3
     return 0
 
 

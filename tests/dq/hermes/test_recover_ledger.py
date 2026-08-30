@@ -4,10 +4,17 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
-from digiquant.olympus.hermes.writers.ledger_io import COMMITS
-from digiquant.olympus.hermes.writers.recover_ledger import recover_ledger_from_book
+from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState
+from digiquant.olympus.hermes.writers.commit_io import weights_fingerprint
+from digiquant.olympus.hermes.writers.ledger_io import APPROVED_TARGETS, COMMITS, _policy_version_id
+from digiquant.olympus.hermes.writers.recover_ledger import (
+    _prior_current_weights,
+    _recovery_state,
+    recover_ledger_from_book,
+)
 from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.fixtures.fake_supabase import FakeSupabaseClient
@@ -17,6 +24,7 @@ pytestmark = pytest.mark.unit
 RUN_DATE = date(2026, 8, 31)
 PRIOR_DATE = date(2026, 8, 28)
 HOUSE = str(house_workspace_id())
+TICKERS = ("EWZ", "FXI", "GLD", "VGK", "XLF", "XLV")
 
 
 def _pos(day: date, ticker: str, weight: float) -> dict:
@@ -28,7 +36,14 @@ def _pos(day: date, ticker: str, weight: float) -> dict:
     }
 
 
-def _seed_booked_day(client: FakeSupabaseClient) -> None:
+def _price_rows(*, moved: bool = False) -> list[dict]:
+    rows = [{"date": "2026-08-27", "ticker": t, "close": 50.0} for t in TICKERS]
+    later = 55.0 if moved else 50.0
+    rows.extend({"date": "2026-08-28", "ticker": t, "close": later} for t in TICKERS)
+    return rows
+
+
+def _seed_booked_day(client: FakeSupabaseClient, *, moved_prices: bool = False) -> None:
     """Monday book matching the 2026-08-31 house positions (already decided)."""
     client.canned_reads["positions"] = [
         _pos(PRIOR_DATE, "CASH", 25.2189),
@@ -54,13 +69,17 @@ def _seed_booked_day(client: FakeSupabaseClient) -> None:
             "workspace_id": HOUSE,
         }
     ]
-    client.canned_reads["price_history"] = [
-        {"date": "2026-08-28", "ticker": t, "close": 50.0}
-        for t in ("EWZ", "FXI", "GLD", "VGK", "XLF", "XLV")
-    ]
+    client.canned_reads["price_history"] = _price_rows(moved=moved_prices)
     client.canned_reads["decision_log"] = [{"run_date": RUN_DATE.isoformat(), "ticker": "VGK"}]
     client.canned_reads[COMMITS] = []
+    client.canned_reads[APPROVED_TARGETS] = []
     client.canned_reads["documents"] = []
+
+
+def _mirror_writes(client: FakeSupabaseClient) -> None:
+    """Fake reads come from canned_reads; production PostgREST reads inserted rows."""
+    for table, rows in client.store.items():
+        client.canned_reads[table] = list(client.canned_reads.get(table, [])) + list(rows)
 
 
 class TestRecoverLedgerFromBook:
@@ -87,9 +106,17 @@ class TestRecoverLedgerFromBook:
         assert len(commits) == 1
         assert commits[0]["workspace_id"] == HOUSE
         assert commits[0]["run_date"] == RUN_DATE.isoformat()
+        default_policy = _policy_version_id(
+            AtlasResearchState(
+                run_id=uuid4(),
+                run_type="delta",
+                run_date=RUN_DATE,
+                config=AtlasConfigBundle(preferences={"current_weights": {}}),
+            )
+        )
+        assert commits[0]["policy_version_id"] != default_policy
         approved = {
-            r["symbol"]: float(r["approved_weight"])
-            for r in client.store.get("portfolio_ledger_approved_targets", [])
+            r["symbol"]: float(r["approved_weight"]) for r in client.store.get(APPROVED_TARGETS, [])
         }
         assert approved["VGK"] == pytest.approx(0.25)
         assert approved["FXI"] == pytest.approx(0.05)
@@ -106,11 +133,83 @@ class TestRecoverLedgerFromBook:
         client = FakeSupabaseClient()
         _seed_booked_day(client)
         first = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        _mirror_writes(client)
         second = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
         assert first.status == "committed"
         assert second.status == "already_committed"
         assert second.commit_id == first.commit_id
         assert len(client.store.get(COMMITS, [])) == 1
+
+    def test_partial_commit_without_approved_still_appends(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        client.canned_reads[COMMITS] = [
+            {
+                "id": "11111111-2222-3333-4444-555555555555",
+                "run_date": RUN_DATE.isoformat(),
+                "workspace_id": HOUSE,
+                "supersedes_id": None,
+            }
+        ]
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "committed"
+        assert result.commit_id != "11111111-2222-3333-4444-555555555555"
+        assert len(client.store.get(COMMITS, [])) == 1
+        assert client.store.get(APPROVED_TARGETS, [])
+        docs = client.store.get("documents", [])
+        payload = next(
+            r["payload"] for r in docs if str(r.get("document_key", "")).startswith("commit-run/")
+        )
+        assert payload["ledger_commit_id"] == result.commit_id
+        assert payload["status"] == "committed"
+
+    def test_fingerprint_mismatch_is_conflict(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client)
+        book_fp = weights_fingerprint(
+            {"EWZ": 5.0771, "FXI": 5.0, "GLD": 9.4215, "VGK": 25.0, "XLF": 20.0, "XLV": 14.8384}
+        )
+        client.store["documents"] = [
+            {
+                "date": RUN_DATE.isoformat(),
+                "document_key": "commit-run/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "workspace_id": HOUSE,
+                "payload": {
+                    "status": "committed",
+                    "weights_fingerprint": "definitely-not-the-book-on-disk",
+                    "ledger_commit_id": "11111111-2222-3333-4444-555555555555",
+                    "source_run_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                },
+            }
+        ]
+        result = recover_ledger_from_book(client=client, run_date=RUN_DATE, apply=True)
+        assert result.status == "conflict"
+        assert result.commit_id == "11111111-2222-3333-4444-555555555555"
+        assert book_fp != "definitely-not-the-book-on-disk"
+        assert client.store.get(COMMITS, []) == []
+        assert client.store.get(APPROVED_TARGETS, []) == []
+
+    def test_prior_weights_are_mark_to_market(self) -> None:
+        client = FakeSupabaseClient()
+        _seed_booked_day(client, moved_prices=True)
+        mtm = _prior_current_weights(client=client, run_date=RUN_DATE, workspace_id=None)
+        assert mtm["FXI"] != pytest.approx(9.8561)
+        assert mtm["FXI"] > 9.8561
+
+    def test_recovery_policy_is_not_default_caps(self) -> None:
+        hydrated = _recovery_state(
+            run_date=RUN_DATE,
+            source_run_id=uuid4(),
+            current_weights={"FXI": 9.8561},
+            workspace_id=None,
+        )
+        default = AtlasResearchState(
+            run_id=uuid4(),
+            run_type="delta",
+            run_date=RUN_DATE,
+            config=AtlasConfigBundle(preferences={"current_weights": {"FXI": 9.8561}}),
+        )
+        assert _policy_version_id(hydrated) != _policy_version_id(default)
 
     def test_no_book_when_positions_missing(self) -> None:
         client = FakeSupabaseClient()
