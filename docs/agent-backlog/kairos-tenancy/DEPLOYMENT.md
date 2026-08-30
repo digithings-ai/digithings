@@ -249,9 +249,9 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Agent Mail inbox | **Available:** `digithings@agentmail.to` | Signup verification |
 | Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty Mailgun into EF secrets when obtained. | K5 digest / alerts |
-| Supabase Auth providers (Google, GitHub) on `core` | **Partial** — Supabase dashboard SSO as `chrizefan` works (Playwright). Auth **provider client secrets** for Olympus login still missing. | T1 login when flag on |
+| Supabase Auth providers (Google, GitHub) on `core` | **Partial** — **GitHub Enabled** (OAuth App `digiquant olympus` + callback). Site URL `https://digiquant.io` + Olympus `/olympus/auth/callback/` allow-list. **Google Disabled** (skipped captcha console). | T1 login when flag on (GitHub path ready; Google still human) |
 | Alpaca OAuth / paper (`ALPACA_OAUTH_CLIENT_ID` / `_SECRET`) | **Blocked** — half-finished signup notes in `.local/secrets/`; no API secrets to push. | Product broker connect |
-| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Unlocked (agent VM)** — legacy PAT `cursor-kairos-cloud-agent` created via dashboard Access Tokens; stored gitignored under `.local/secrets/supabase_access_token`. Used for EF `secrets set` + settings **v17** full deploy. **Recommend:** paste same `sbp_…` into Cursor environment secret store (replace JWT). | EF secrets; CLI deploy |
+| `SUPABASE_ACCESS_TOKEN` (`sbp_…`) | **Unlocked (agent VM)** — PAT rotated via **recreate+revoke**: new token labeled **cursor cloud agent**; old kairos-named token revoked. Local file `.local/secrets/cursor-cloud-agent-supabase-pat` updated; Management API `secrets list` OK (12 names). EF vault/`APP_URL` intact; settings **v18** ACTIVE. **Human:** re-paste **new** `sbp_…` into Cursor env as **cursor cloud agent** (old paste invalid). | EF secrets; CLI deploy |
 | IBKR vendor / OAuth 1.0a onboarding | **Human / vendor** — not attempted; do not fake | K2 live verify |
 | Cloudflare Access (D7) | Unchanged — keep prod Access on through §6 | Ungated prod URL |
 | Legal read on adviser status | Human / counsel | Any **live** trading epic |
@@ -259,7 +259,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | PR [#3184](https://github.com/digithings-ai/digithings/pull/3184) | **Merged** to `develop` (2026-08-30; tip `732a77d0`) | GET `/notifications` + NotifyTab hydrate; settings EF **v12** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3187](https://github.com/digithings-ai/digithings/pull/3187) | **Merged** to `develop` (2026-08-30; tip `17a84b30`) | GET `/profile` + ProfileTab hydrate; settings EF **v13** thin pin; smoke 401. No `sbp_` / no EF secrets. #3183 draft promote left open. |
 | PR [#3196](https://github.com/digithings-ai/digithings/pull/3196) | **Merged** to `develop` (2026-08-30; tip `5b526914`) | Settings entitlement prefers `workspaces.plan_tier` (no JWT fail-open); settings EF **v14** thin pin; smoke 401. No `sbp_` / no EF secrets. |
-| Agent unlock (2026-08-30) | **Partial** — `sbp_` + EF vault/APP_URL secrets + settings **v17** full deploy | Waiting artifact `PARTIAL_UNLOCK`. Stripe/Mailgun/Auth/Alpaca still blocked. #3183 left draft. |
+| Agent unlock (2026-08-30) | **Partial** — `sbp_` + EF vault/APP_URL + settings **v18** + **GitHub Auth Enabled** | Waiting `PARTIAL_UNLOCK`. Stripe/Mailgun/Google/Alpaca still blocked. #3183 left draft. |
 | PR [#3183](https://github.com/digithings-ai/digithings/pull/3183) | **Draft** promote `develop`→`main` | Tip synced to `baa7766d` (= `origin/develop`). **Do not merge** until secrets live **and** intentional Pages cutover. |
 ---
 

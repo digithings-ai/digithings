@@ -63,21 +63,24 @@ Wave E
 - [ ] Legal read on investment-adviser status before any live-cutover epic
 
 
-## Agent delivery status (2026-08-30, settings EF v17 + `sbp_` partial unlock)
+## Agent delivery status (2026-08-30, settings EF v18 + GitHub Auth + `sbp_` partial unlock)
 
-**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
-**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — remaining vendor keys + paste `sbp_…` into Cursor env from gitignored `.local/secrets/supabase_access_token`. Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).
+**Verdict: NOT COMPLETE** (staging E2E still blocked on Stripe/Mailgun/Google Auth/Alpaca). Full audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md).  
+**Human checklist:** [`HUMAN-UNBLOCK.md`](HUMAN-UNBLOCK.md) — remaining vendor keys + paste `sbp_…` into Cursor env labeled **cursor cloud agent**. Linked from [`DEPLOYMENT.md`](DEPLOYMENT.md).  
+**Docs branch:** `cursor/cursor-cloud-agent-secrets-status-c8be` (parent opens PR if `gh` 403).
 
 **Code:** all 12 WPs on `develop` (promotion #3141). Wins-hunt [#3191](https://github.com/digithings-ai/digithings/pull/3191) + profile GET [#3187](https://github.com/digithings-ai/digithings/pull/3187) + settings tier gate [#3196](https://github.com/digithings-ai/digithings/pull/3196) — **merged**. Entitlement uses `workspaces.plan_tier` only (no JWT fail-open after cancel).
 
 **Schema (`core`):** migrations **096–106** applied + stamped. Cutover **900 not applied**.
 
-**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v17** ACTIVE — **full monorepo CLI deploy** from `origin/develop` tip `8bb9690a` (GET `/profile` + GET `/notifications` + PATCH + `requireEligibleTier` on `workspaces.plan_tier`). Smoke 401 (`settings-v17-smoke.log`).
+**Edge Functions (`core`):** billing EFs ACTIVE (await Stripe secrets). `settings` **v18** ACTIVE (full monorepo path; smoke 401).
 
-**Secrets (names only; unlocked this turn via Supabase dashboard as `chrizefan`):**
-- **`sbp_` PAT obtained** (legacy Access Token `cursor-kairos-cloud-agent`, 90d) — stored gitignored under `.local/secrets/` (not committed). Prefer pasting into Cursor env as `SUPABASE_ACCESS_TOKEN`.
-- **EF secrets pushed on `core`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
-- **Still empty / blocked:** Mailgun, Stripe test keys+prices+whsec, Auth Google/GitHub client secrets, Alpaca OAuth. Mailgun smoke **skipped** (empty).
+**Auth (`core`):** **GitHub Enabled** (OAuth App `digiquant olympus` → Supabase callback). Site URL `https://digiquant.io`; Olympus redirect allow-list set. **Google still Disabled** (skipped captcha / no client).
+
+**Secrets (names only):**
+- **`sbp_` path unlocked** — PAT rotated via recreate+revoke (new label **cursor cloud agent**; kairos-named revoked). Management API `secrets list` OK; local `.local/secrets/cursor-cloud-agent-supabase-pat`. **Human must re-paste** into Cursor env (old paste invalid).
+- **EF secrets on `core`:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL` (+ platform `SUPABASE_*` / `FINNHUB_API_KEY`).
+- **Still empty / blocked:** Mailgun (empty + MCP auth fail), Stripe (hCaptcha), Google OAuth client, Alpaca OAuth. Mailgun smoke **skipped**.
 - **Waiting artifact:** `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` → `PARTIAL_UNLOCK`.
 
 **Agent-reachable paper E2E (fakes/mocks — NOT live staging):** 145 passed — `kairos-e2e-paper-fakes-refresh.log`. Staging E2E still **BLOCKED**.

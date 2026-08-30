@@ -1,11 +1,12 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` obtained in agent VM; vault + `APP_URL` EF secrets pushed; settings EF **v17** full deploy + 401 smoke. Still need Stripe/Mailgun/Auth/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` path unlocked (PAT **recreated** as **cursor cloud agent**; old kairos-named token **revoked** — re-paste into Cursor env). Vault + `APP_URL` on EF; settings **v18** ACTIVE; **GitHub Auth Enabled** on `core`. Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  
 Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)  
-Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)
+Waiting artifact: `/opt/cursor/artifacts/kairos-WAITING-ON-SECRETS.json` (`PARTIAL_UNLOCK`)  
+Docs branch: `cursor/cursor-cloud-agent-secrets-status-c8be`
 
 ---
 
@@ -15,7 +16,7 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 
 | Name | Format hint |
 |------|-------------|
-| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — **agent already created** token `cursor-kairos-cloud-agent` (gitignored `.local/secrets/supabase_access_token`); **paste into Cursor env** to replace JWT |
+| `SUPABASE_ACCESS_TOKEN` | Personal access token `sbp_…` — **re-paste the NEW token** from gitignored `.local/secrets/cursor-cloud-agent-supabase-pat` into Cursor env labeled **cursor cloud agent**. Old kairos-named token was revoked (recreate+revoke rename); prior paste is invalid. |
 | `STRIPE_SECRET_KEY` | Stripe **test** secret `sk_test_…` |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` from Stripe Dashboard → EF webhook |
 | `STRIPE_PRICE_BASELINE_MONTHLY` | `price_…` |
@@ -25,11 +26,11 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `MAILGUN_API_KEY` | Mailgun private API key |
 | `MAILGUN_DOMAIN` | Verified sending domain |
 | `NOTIFY_FROM` | Verified From address on that domain |
-| `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client |
-| `AUTH_GITHUB_CLIENT_ID` / `AUTH_GITHUB_CLIENT_SECRET` | GitHub OAuth App |
+| `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client (still needed) |
 | `ALPACA_OAUTH_CLIENT_ID` / `ALPACA_OAUTH_CLIENT_SECRET` | Alpaca **paper** OAuth app |
 
-**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.
+**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.  
+**Done Auth:** GitHub provider **Enabled** on `core` (OAuth App `digiquant olympus`). Google still Disabled.
 
 ---
 
@@ -68,7 +69,8 @@ Smoke: unauth → gateway `401`; Stripe webhook without key must not stay `STRIP
 
 ## 3) Supabase Auth providers on `core`
 
-In dashboard: enable **Google** + **GitHub** with the client IDs/secrets from step 0. Confirm redirect URLs match Olympus / Auth config.
+- **GitHub:** Enabled (callback `https://rwagjbkvxkdwqmouagad.supabase.co/auth/v1/callback`). Site URL + Olympus redirect allow-list set.
+- **Google:** Still Disabled — create OAuth client when captcha-free console access is available; then enable in dashboard.
 
 ---
 
