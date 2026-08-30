@@ -1420,17 +1420,59 @@ _MIGRATION_069 = (
     / "migrations"
     / "069_olympus_portfolio_ledger.sql"
 )
+_MIGRATION_097 = (
+    pathlib.Path(__file__).resolve().parents[3]
+    / "digiquant"
+    / "supabase"
+    / "migrations"
+    / "097_workspaces_tenant_columns.sql"
+)
+
+
+def _strip_sql_comments(raw: str) -> str:
+    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
 
 
 def _migration_sql() -> str:
-    raw = _MIGRATION_069.read_text(encoding="utf-8")
-    return "\n".join(re.sub(r"--.*$", "", line) for line in raw.split("\n"))
+    """Migration 069 DDL (CHECKs / CREATE TABLE bodies)."""
+    return _strip_sql_comments(_MIGRATION_069.read_text(encoding="utf-8"))
+
+
+def _migration_097_sql() -> str:
+    """Migration 097 DDL (tenant ``workspace_id`` ADD COLUMNs)."""
+    return _strip_sql_comments(_MIGRATION_097.read_text(encoding="utf-8"))
 
 
 def _table_body(sql: str, table: str) -> str:
     match = re.search(rf"CREATE TABLE IF NOT EXISTS public\.{table} \((.*?)\n\);", sql, re.S)
     assert match, f"table {table} not found in migration 069"
     return match.group(1)
+
+
+def _columns_for_table(table: str) -> set[str]:
+    """Columns the live schema permits: CREATE TABLE (069) ∪ ADD COLUMN (097).
+
+    T0 (#5-T0) stamped ``workspace_id`` on every ledger writer. That column is not in
+    migration 069's CREATE TABLE — 097 ADDs it — so the emitted-columns guard must
+    union both migrations or it falsely rejects a legitimate stamped row.
+    """
+    create_cols = set(
+        re.findall(
+            r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
+            _table_body(_migration_sql(), table),
+            re.M,
+        )
+    )
+    alter_cols = set(
+        re.findall(
+            rf"ALTER TABLE public\.{table}\s+ADD COLUMN IF NOT EXISTS ([a-z_]+) ",
+            _migration_097_sql(),
+            re.I,
+        )
+    )
+    columns = create_cols | alter_cols
+    assert columns, f"parsed no columns for {table}"
+    return columns
 
 
 def _allowed_values(sql: str, table: str, column: str) -> set[str]:
@@ -1509,28 +1551,24 @@ class TestLedgerRowsSatisfyMigration069:
     ``test_emitted_columns_all_exist_in_the_migration`` covers the one thing no
     validator can: ``extra="forbid"`` guards what a caller passes *into* a model, not
     a model field with no column behind it, which is a PostgREST 400 rather than a
-    CHECK violation.
+    CHECK violation. Column membership is the live schema = 069 CREATE ∪ 097 ADD
+    (``workspace_id`` and any later tenant columns).
     """
 
     def test_emitted_columns_all_exist_in_the_migration(self) -> None:
         # A key the table lacks is a PostgREST 400, not a CHECK violation.
-        sql = _migration_sql()
         client = _ledger_client(SPY=100.0)
         _run(client, _state())
         for table in _LEDGER_TABLES:
-            columns = set(
-                re.findall(
-                    r"^\s{4}([a-z_]+) (?:uuid|date|text|numeric|timestamptz)",
-                    _table_body(sql, table),
-                    re.M,
-                )
-            )
-            assert columns, f"parsed no columns for {table}"
+            columns = _columns_for_table(table)
             rows = _rows(client, table)
             assert rows, f"{table} got no rows — the assertion below would be vacuous"
             for row in rows:
                 unknown = set(row) - columns
                 assert not unknown, f"{table} row carries column(s) the table lacks: {unknown}"
+            # T0: every ledger writer stamps workspace_id; vacuous if we forget the ADD.
+            assert "workspace_id" in columns, f"{table} schema must include workspace_id (097)"
+            assert all("workspace_id" in row for row in rows)
 
     def test_closed_vocabulary_columns_only_emit_permitted_values(self) -> None:
         sql = _migration_sql()

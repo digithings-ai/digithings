@@ -25,6 +25,21 @@ try:
 except ImportError:
     pass
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+
+def _ensure_importable() -> None:
+    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
+    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
+        path = str(_REPO_ROOT / rel)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+# Bootstrap before importing digiquant packages — this file is also a standalone script.
+_ensure_importable()
+from digiquant.olympus.tenancy import house_workspace_id  # noqa: E402
+
 
 def _sb():
     if not _HAS_SB:
@@ -276,14 +291,21 @@ BOOK_SOURCE_LEGACY = "legacy"
 BOOK_SOURCE_AUTHORITATIVE = "authoritative"
 
 
-def _with_book_source(
-    events: List[Dict[str, Any]], book_source: str
-) -> List[Dict[str, Any]]:
-    """Return shallow copies stamped with ``book_source`` (never mutates inputs)."""
+def _with_book_source(events: List[Dict[str, Any]], book_source: str) -> List[Dict[str, Any]]:
+    """Return shallow copies stamped with ``book_source`` (never mutates inputs).
+
+    T0 (#5-T0): also stamps ``workspace_id`` here, the single choke point every
+    ``position_events`` upsert in this script passes through. The column is NOT NULL
+    as of migration 097 (with a house-workspace column DEFAULT as a legacy-writer
+    safety net); this script is patched to pass it explicitly like every other writer
+    this WP touches, rather than relying on the fallback.
+    """
+    house_id = str(house_workspace_id())
     out: List[Dict[str, Any]] = []
     for event in events:
         row = dict(event)
         row["book_source"] = book_source
+        row["workspace_id"] = house_id
         out.append(row)
     return out
 
@@ -361,16 +383,6 @@ def _hold_events_for_positions_not_in_rebalance(
 # on production reaching 070 — not part of this change. `--require-ledger` is the lever
 # that makes a silent fallback fatal once that is true.
 # ---------------------------------------------------------------------------
-
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-
-
-def _ensure_importable() -> None:
-    """Add the monorepo ``*/src`` paths to sys.path so the hermes writers import."""
-    for rel in ("digiquant/src", "digigraph/src", "digibase/src", "digismith/src"):
-        path = str(_REPO_ROOT / rel)
-        if path not in sys.path:
-            sys.path.insert(0, path)
 
 
 def _open_marks(sb, tickers: List[str], d: str) -> Dict[str, Decimal]:
@@ -765,7 +777,7 @@ def _record_ledger_events(sb, d: str, rebalance_d: str, ledger_events: List[Dict
         return 0
 
     for e in events:
-        sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+        sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
 
     # No null-price hint here on purpose: a ledger row's price *is* the fill price, so it
     # cannot be missing. Only the HOLD rows read price_history, hence the narrower count.
@@ -905,7 +917,9 @@ def main() -> int:
             if digest_events:
                 digest_events = _with_book_source(digest_events, BOOK_SOURCE_LEGACY)
                 for e in digest_events:
-                    sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+                    sb.table("position_events").upsert(
+                        e, on_conflict="workspace_id,date,ticker"
+                    ).execute()
                 null_px = sum(1 for e in digest_events if e.get("price") is None)
                 if null_px:
                     print(
@@ -930,7 +944,7 @@ def main() -> int:
             print("No positions rows for this date — nothing to record.")
             return 0
         for e in extra:
-            sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+            sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
@@ -955,7 +969,7 @@ def main() -> int:
             print("No positions rows for this date — nothing to record.")
             return 0
         for e in extra:
-            sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+            sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
         null_px = sum(1 for e in extra if e.get("price") is None)
         if null_px:
             print(
@@ -1052,7 +1066,7 @@ def main() -> int:
     # Upsert by date,ticker (current schema). Prose path is permanently legacy (#2422).
     events = _with_book_source(events, BOOK_SOURCE_LEGACY)
     for e in events:
-        sb.table("position_events").upsert(e, on_conflict="date,ticker").execute()
+        sb.table("position_events").upsert(e, on_conflict="workspace_id,date,ticker").execute()
 
     null_px = sum(1 for e in events if e.get("price") is None)
     if null_px:

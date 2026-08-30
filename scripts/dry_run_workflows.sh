@@ -41,6 +41,12 @@ else
   echo "skip: tests/scripts/test_check_worktree_conflicts.sh missing"
 fi
 
+echo "== project-stub-fields pause + infer_row (#2566/#2476) =="
+python3 -m pytest \
+  tests/scripts/test_project_stub_fields_pause.py \
+  tests/scripts/test_infer_project_fields_row.py \
+  -m unit -q --tb=line
+
 echo "== REM-008: provider-review unit tests (no Claude) =="
 python3 -m pytest tests/provider_review/ -m unit -q --tb=line
 

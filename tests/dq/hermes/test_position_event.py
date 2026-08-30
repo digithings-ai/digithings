@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from digiquant.olympus.hermes.models.position_event import PositionEventRow
+from digiquant.olympus.tenancy import house_workspace_id
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.unit
@@ -54,7 +55,10 @@ class TestPositionEventRow:
             "reason",
             "thesis_id",
             "book_source",
+            "workspace_id",
         }
+        # Default is the house workspace (T0); wire form is a UUID string.
+        assert dumped["workspace_id"] == str(house_workspace_id())
 
     def test_bad_book_source_fails_at_construction(self) -> None:
         payload = dict(_VALID, book_source="prose")

@@ -1,5 +1,9 @@
 # Atlas Supabase Schema
 
+<!--
+# score:allow todo
+-->
+
 Live Atlas Supabase schema. Source of truth: the numbered migrations under
 `digiquant/supabase/migrations/`. This document inventories the high-value tables and
 relationships; later sections cover internal operational tables added after the original Atlas
@@ -50,12 +54,12 @@ erDiagram
 | Table | PK | Purpose |
 |-------|----|---------|
 | `daily_snapshots` | `(date)` | One consolidated JSON snapshot per calendar day. Root of the daily pipeline. |
-| `positions` | `(date, ticker)` | Daily position book; one row per held ticker. |
-| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. |
-| `position_events` | `(id uuid)` | Every open / close / rebalance against a position with reason tag. |
-| `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. |
-| `nav_history` | `(date)` | Daily portfolio NAV. |
-| `portfolio_metrics` | `(date, metric)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
+| `positions` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Daily position book; one row per held ticker. Legacy unique retained until P6. |
+| `theses` | `(date, thesis_id)` | Active investment theses per day; H1–H3 writers + H9 sync. Migration 025 adds daily thesis fields. Migration 056 adds stable `topic_key` and a partial unique `(date, topic_key)` index so only one nonterminal market opinion exists per topic/date. **No** `workspace_id` in T0 — shared research stays tenant-agnostic (system workspace conceptually; column deferred). |
+| `position_events` | `(date, ticker)` unique kept; T0 also adds `(workspace_id, date, ticker)` | Every open / close / rebalance against a position with reason tag. |
+| `documents` | `(date, document_key)` | JSONB payload store for every narrative / structured artifact. Doc-type CHECK set by migration 023. **No** `workspace_id` in T0 (same as theses). |
+| `nav_history` | PK `(date)` kept; T0 also adds UNIQUE `(workspace_id, date)` | Daily portfolio NAV. |
+| `portfolio_metrics` | `(date)` unique kept; T0 also adds `(workspace_id, date)` | Pre-computed Sharpe, vol, drawdown, exposure metrics. |
 
 > `benchmark_history` was dropped in migration 010 — benchmark close series (SPY / QQQ / IWM …) now live as rows in `price_history`.
 
@@ -110,8 +114,10 @@ They pair with the `functions/prices-live/` edge function (see [`README.md`](REA
 
 Curated security-definer views over private `olympus_accounting_*` tips. Prefer these
 for digiquant.io / Olympus performance readers after the shadow reconciliation gate.
-**Never GRANT** base accounting tables to `anon`/`authenticated`. Rollback = repoint
-adapters to `public_nav_history` / `nav_history` without deleting accounting rows.
+**Never GRANT** base accounting tables to `anon`. T0 migration 098 adds workspace-scoped
+`authenticated` SELECT (own-workspace RLS only; `service_role` remains the sole writer).
+Rollback = repoint adapters to `public_nav_history` / `nav_history` without deleting
+accounting rows.
 
 | View | Purpose |
 |------|---------|
@@ -518,8 +524,9 @@ of `--no-ledger` (see ARCHITECTURE.md cutover section), not on this migration al
 ### Period accounting - migration 072 (#2596) + finalizer (#2597)
 
 Private event-boundary EOD accounting schema (Phase 0 Tasks 3.1–3.2). User-private
-portfolio/accounting — never grant base tables to `anon`/`authenticated`; curated public
-views land in migration `074_olympus_accounting_views.sql` (#2599).
+portfolio/accounting — never grant base tables to `anon`. T0 migration 098 adds
+`authenticated` SELECT (workspace-scoped RLS) only; writes remain `service_role`.
+Curated public views land in migration `074_olympus_accounting_views.sql` (#2599).
 
 | Table | PK | Purpose |
 |-------|----|---------|
@@ -527,11 +534,12 @@ views land in migration `074_olympus_accounting_views.sql` (#2599).
 | `olympus_accounting_contributions` | `(id UUID)` | Per-ticker gross/net PnL, fees, slippage, contribution fraction; FK `(period_id, period_date)` → periods. Deterministic ids from `(period_id, symbol)`. |
 | `olympus_accounting_holdings` | `(id UUID)` | EOD holdings (`quantity`, nullable `mark`/`market_value`); FK to periods. Deterministic ids from `(period_id, symbol)`. |
 
-RLS enabled with **zero** policies; `PUBLIC`/`anon`/`authenticated` fully revoked;
-`service_role` reset then `SELECT, INSERT` only; `reject_olympus_accounting_mutation()`
-blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial unique indexes enforce one current root period
-per `period_date` and at most one superseder per prior id. Models/engine/io:
-`digiquant.olympus.accounting`.
+RLS enabled with **zero anon policies**; T0 migration 098 adds workspace-scoped
+`authenticated` SELECT. `PUBLIC`/`anon` fully revoked; `authenticated` receives
+SELECT only via 098. `service_role` reset then `SELECT, INSERT` only;
+`reject_olympus_accounting_mutation()` blocks `UPDATE`/`DELETE`/`TRUNCATE`. Partial
+unique indexes enforce one current root period per `period_date` and at most one
+superseder per prior id. Models/engine/io: `digiquant.olympus.accounting`.
 
 **Finalizer semantics (`accounting/io.py` + `scripts/atlas/finalize_period_accounting.py`):**
 
@@ -563,11 +571,13 @@ Realized rows come from the accounting finalizer (#2597), not the lookback job.
 All eight use `timestamptz` producer event times (`effective_at`, or `executed_at` /
 `opened_at` where the domain name reads better) plus a `recorded_at timestamptz NOT NULL
 DEFAULT now()` database write clock, matching the migration-067 telemetry idiom. RLS is
-enabled with **zero** policies and all privileges revoked from `PUBLIC`, `anon`, and
-`authenticated`. `service_role` is reset then granted `SELECT, INSERT` only — no
-`UPDATE`/`DELETE` at the grant layer — and a shared `reject_portfolio_ledger_mutation()`
-trigger denies `UPDATE`/`DELETE` per row and `TRUNCATE` per statement on every table, so
-append-only holds even for a `service_role` session that bypasses the grant.
+enabled; migration 069 revoked `PUBLIC`/`anon`/`authenticated` entirely, and T0
+migration 098 re-grants workspace-scoped `authenticated` SELECT (own-workspace via
+`workspace_members` only — no system-workspace OR branch on the ledger). `service_role`
+is reset then granted `SELECT, INSERT` only — no `UPDATE`/`DELETE` at the grant layer —
+and a shared `reject_portfolio_ledger_mutation()` trigger denies `UPDATE`/`DELETE` per row
+and `TRUNCATE` per statement on every table, so append-only holds even for a
+`service_role` session that bypasses the grant.
 
 **Currency via partial unique indexes, not status.** A plain table `UNIQUE` constraint
 cannot carry a `WHERE` clause, so "at most one current row" is expressed instead as six
@@ -610,6 +620,58 @@ producer (dual-writing from H7/H8/H9) before any consumer (a paper executor, the
 accounting/learning) can read them. See `digiquant/ARCHITECTURE.md` → "Portfolio lineage
 ledger (private, #2415)" for the full chain and failure-mode writeup.
 
+## Tenancy — migrations 096–098 (T0, Kairos + tenancy program)
+
+Multi-tenant privacy boundary. Typed contracts live in
+`digiquant.olympus.tenancy` (`Workspace`, `PlanTier`, deterministic
+`system_workspace_id()` / `house_workspace_id()`). **Do not apply these migrations to
+live Supabase from this WP alone** — schema files + structural tests only until the
+T0/T1 release train is reviewed.
+
+### New tables (096)
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `workspaces` | `(id uuid)` | Tenant registry. `type` ∈ (`system`,`user`); partial unique `uq_workspaces_one_system_row` enforces exactly one `type='system'`. `plan_tier` ∈ (`free`,`baseline`,`custom`,`enterprise`). Billing columns (`stripe_*`, `subscription_status`) land here for T2. Seeds: deterministic **system** + **house** rows (`ON CONFLICT (id) DO NOTHING`). |
+| `workspace_members` | `(workspace_id, user_id)` | Membership; `role` ∈ (`owner`,`member`). `user_id` will reference `auth.users` once T1 ships login — no FK yet. |
+| `stripe_events` | `(stripe_event_id text)` | Stripe webhook idempotency (T2 writer). |
+| `job_runs` | `(id uuid)` | Per-workspace job telemetry stub (T4 dispatch). |
+| `audit_log` | `(id uuid)` | Connect/revoke/settings audit trail (K3 first writer). |
+
+Skipped in T0 (K3/K4/K5 own CREATE-time `workspace_id`): `broker_connections`,
+`broker_orders`, `broker_executions`, `broker_position_snapshots`, `notification_prefs`.
+BYOK `workspace_provider_credentials` and `profiles` are out of scope (K3/T3).
+
+### `workspace_id` on the private set (097)
+
+NULLable → backfill → `SET NOT NULL` (explicit steps in one migration).
+
+| Table | Backfill target | Column DEFAULT | Constraints changed |
+|-------|-----------------|----------------|---------------------|
+| `positions` | house | house id | **keep** `positions_date_ticker_key`; **add** `uq_positions_workspace_date_ticker (workspace_id, date, ticker)` (P6 drops legacy) |
+| `position_events` | house | house id | **keep** `position_events_date_ticker_key`; **add** `uq_position_events_workspace_date_ticker` |
+| `nav_history` | house | house id | **keep** PK `(date)`; **add** `uq_nav_history_workspace_date (workspace_id, date)` |
+| `portfolio_metrics` | house | house id | **keep** `portfolio_metrics_date_key`; **add** `uq_portfolio_metrics_workspace_date` |
+| all `portfolio_ledger_*` (8) | house | **none** | column + FK only (lineage UNIQUEs unchanged — T4) |
+| all `olympus_accounting_*` (3) | house | **none** | column + FK only |
+| `olympus_profile_config` | **system** (house-default row) | **none** | column + FK only |
+
+House pipeline writers (`commit_io`, `ledger_io` / `execution_io` / `opening_snapshot`,
+`accounting.io`, `execute_at_open`) stamp `house_workspace_id()` explicitly.
+Legacy scripts (`refresh_performance_metrics.py`, `sync_positions_from_rebalance.py`,
+`update_tearsheet.py`, …) lean on Group A DEFAULTs + legacy UNIQUEs until roadmap P6.
+
+### Authenticated RLS (098) — anon untouched until T1
+
+New `authenticated` SELECT policies. Private-book tables (positions / NAV / ledger /
+accounting) are **own-workspace only** — no system-workspace OR branch (a mis-stamped
+system row must not expose the house book). System-workspace OR branch is kept **only**
+on `workspaces` (`type='system'`) and `olympus_profile_config` (house-default overlay),
+both marked `TODO(T5)` for the tier CHECK. **No existing `anon_read` policy is dropped
+or narrowed in this WP** — that cutover ships inside T1's release train. Two-JWT
+executable proof is documented in the 098 header; structural assertions live in
+`tests/dq/olympus/test_migration_tenancy.py`.
+
 ### Broker credential vault — migration 099 (K3, Kairos tenancy)
 
 Sealed broker credentials, one row per `(workspace_id, broker, env)`. This is the only
@@ -636,8 +698,7 @@ the clear. `fingerprint` is the first 8 hex chars of `sha256` over the secret ma
 and is the only display-safe artifact: a label, never an identity — 32 bits collide,
 so it must never be compared to decide two rows hold the same credential.
 
-`workspace_id` is deliberately **FK-less**: `public.workspaces` does not exist yet, and
-T0 will constrain it when it lands. `CHECK` constraints pin the envelope's shape at the
+`workspace_id` **REFERENCES `workspaces(id)`** (T0 migrations 096–098 are on this branch). `CHECK` constraints pin the envelope's shape at the
 storage layer rather than trusting the writer — `octet_length(nonce) = 12`,
 `octet_length(ciphertext) > 16` (a GCM tag alone is not a message), 8 lowercase hex for
 `fingerprint`, a closed vocabulary for `status`/`broker`/`env`/`auth_kind`, and
@@ -660,6 +721,16 @@ table yet — K3 is the vault and its store, and a broker adapter wiring comes l
 - Writes: require the Supabase `service_role` key. Supabase grants
   service_role bypass at the GRANT layer, so there is no explicit
   `service_role` policy on any Atlas table.
+- **Exception — Tenancy authenticated SELECT (migrations 096–098, T0):** new
+  `authenticated_select_own_*` policies on `workspaces`, `workspace_members`, and every
+  private-set table that gained `workspace_id`. Private-book policies are
+  own-workspace only; the system-workspace OR branch is kept **only** on `workspaces`
+  and `olympus_profile_config` (`TODO(T5)` tier CHECK deferred). **Anon `USING (true)`
+  policies are deliberately untouched** — removal ships inside T1's login release
+  train. `GRANT SELECT TO authenticated` is added on `portfolio_ledger_*` /
+  `olympus_accounting_*` / `olympus_profile_config` / `workspaces` /
+  `workspace_members` (previously fully revoked) so the new policies can fire; write
+  grants stay `service_role`-only.
 - **Exception — `strategy_calibrations` (migration 046):** RLS enabled with **no**
   anon policy, so anon reads return an empty set (not an error) while the service
   role keeps full access. The fitted calibration is private; mirrors the
