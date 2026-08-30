@@ -148,6 +148,15 @@ SQL prefs upsert smoke succeeded (service-role path).
 Functions live under `digiquant/supabase/functions/`. Deploy from a checkout that
 already contains the merged function code + migrations on the target DB.
 
+**Pages `/dashboard` gate:** do **not** deploy `settings` / `create-checkout-session`
+/ `customer-portal` with `/dashboard` URLs until live Pages serves that path.
+Fail-closed probe (exit 3 while `/dashboard` 404s; `--apply` only after 200):
+
+```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py
+# PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py --apply
+```
+
 ```bash
 cd digiquant/supabase
 supabase link --project-ref rwagjbkvxkdwqmouagad

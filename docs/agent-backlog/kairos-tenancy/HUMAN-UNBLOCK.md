@@ -16,6 +16,9 @@ Audit: [`COMPLETION_AUDIT.md`](COMPLETION_AUDIT.md)
 
 Loud-fail gates (after paste):
 ```bash
+PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py
+# when live /dashboard/ login/ callback/ settings/ are all 200:
+# PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_pages_dashboard_gate.py --apply
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py
 # when all three .local/secrets/digithings-{stripe,mailgun,alpaca}.env exist:
 PATH="$PWD/.venv/bin:$PATH" python scripts/kairos_apply_vendor_secrets.py --apply
