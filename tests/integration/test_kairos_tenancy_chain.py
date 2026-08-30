@@ -793,9 +793,9 @@ def test_entitled_overlay_to_paper_fill_to_alert(
     dispatch_workspace(sb, mailgun, cfg, free_pref, _RUN, hour_utc=99)
     assert mailgun.sent == []  # free-tier: no fills in-scope + broker_status entitlement false
 
-    # Digest force path (hour_utc=None) — tier-appropriate content.
+    # Digest force path (K5 review: hour mismatch still sends when force_digest).
     mailgun.sent.clear()
-    dispatch_workspace(sb, mailgun, cfg, free_pref, _RUN, hour_utc=None)
+    dispatch_workspace(sb, mailgun, cfg, free_pref, _RUN, hour_utc=99, force_digest=True)
     free_digests = [s for s in mailgun.sent if "daily digest" in s["subject"]]
     assert len(free_digests) == 1
     free_body = free_digests[0]["text"] + free_digests[0]["html"]
@@ -805,7 +805,7 @@ def test_entitled_overlay_to_paper_fill_to_alert(
 
     mailgun.sent.clear()
     # Re-claim digest for custom (execution already claimed; digest still open).
-    dispatch_workspace(sb, mailgun, cfg, custom_pref, _RUN, hour_utc=None)
+    dispatch_workspace(sb, mailgun, cfg, custom_pref, _RUN, hour_utc=99, force_digest=True)
     custom_digests = [s for s in mailgun.sent if "daily digest" in s["subject"]]
     assert len(custom_digests) == 1
     custom_body = custom_digests[0]["text"] + custom_digests[0]["html"]
