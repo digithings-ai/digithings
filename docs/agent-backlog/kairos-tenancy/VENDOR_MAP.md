@@ -8,14 +8,16 @@
 > **Naming correction (2026-08-30):** prior drafts used `cursor-cloud-agent-*.env` —
 > those paths are **wrong**. Resume under **digithings** paths only.
 
-## Agentmail (verification inbox)
+## Vendor identity (company Google)
+
+Canonical rules: [`DIGITHINGS-IDENTITY.md`](DIGITHINGS-IDENTITY.md).
 
 | Item | Value |
 |------|-------|
-| **Canonical inbox** | `digithings@agentmail.to` |
-| Interim inbox (accidental; do not prefer) | `cursor-cloud-agent6060@agentmail.to` — created mid-onboard; migrate any pending vendor signups back to digithings@ when re-trying |
-| How to re-fetch mail | Agentmail MCP `list_messages` / `list_threads` on inboxId |
-| Purpose | Email verification for Stripe / Mailgun / Alpaca / Supabase Auth |
+| **Vendor email** | `admin@digithings.ai` |
+| **Login** | Google account for that address. Owner signs into Google on the desktop; agents use **Sign in with Google** in that session. |
+| **Not used** | `digithings@agentmail.to`, `cursor-cloud-agent6060@agentmail.to` — no completed vendor accounts; do not create any |
+| Never store | Google password / 2FA in git or GitHub Secrets |
 
 ## Stripe (TEST mode) — BLOCKED on hCaptcha
 
@@ -31,8 +33,8 @@
 | Webhook URL | `https://rwagjbkvxkdwqmouagad.supabase.co/functions/v1/stripe-webhook` |
 | Webhook secret | Endpoint → Signing secret (`whsec_…`) → `STRIPE_WEBHOOK_SECRET` |
 | Local file (when ready) | `.local/secrets/digithings-stripe.env` |
-| Human gate | hCaptcha on signup — screenshot `/opt/cursor/artifacts/stripe-hcaptcha-human-needed.png` |
-| Signup attempt email | `digithings@agentmail.to` (re-filled 2026-08-30; hCaptcha image challenge after Create account) |
+| Human gate | hCaptcha on signup — owner on the desktop |
+| Account email | `admin@digithings.ai` (Google SSO if Stripe offers it). Do not use Agentmail. |
 
 ## Mailgun — BLOCKED on reCAPTCHA
 
@@ -43,12 +45,11 @@
 | API key | Settings → API Security → Private API key → `MAILGUN_API_KEY` |
 | Domain | Sending → Domains (sandbox `sandbox….mailgun.org` OK for staging) → `MAILGUN_DOMAIN` |
 | From | Verified sender on that domain → `NOTIFY_FROM` |
-| Sandbox recipients | Authorize **`digithings@agentmail.to`** (canonical). Interim `cursor-cloud-agent6060@agentmail.to` only if that signup already completed |
+| Sandbox recipients | Authorize **`admin@digithings.ai`** |
 | Test send | Sending → Send email, or `python -m digiquant.notify.dispatch --require-mailgun` |
 | Local file (when ready) | `.local/secrets/digithings-mailgun.env` |
-| Human gate | reCAPTCHA failed (“Could not validate”) — may also require SMS |
-| Screenshot | `/opt/cursor/artifacts/mailgun-recaptcha-human-needed.png` |
-| Signup attempt email | **digithings@agentmail.to** (re-filled 2026-08-30 recheck; still reCAPTCHA-blocked) |
+| Human gate | reCAPTCHA / SMS — owner on the desktop |
+| Account email | `admin@digithings.ai`. Do not use Agentmail. |
 | MCP status | Mailgun MCP auth fails until API key set |
 
 ## Alpaca (paper) — BLOCKED on Cloudflare Turnstile
@@ -62,10 +63,8 @@
 | Env names | `ALPACA_OAUTH_CLIENT_ID`, `ALPACA_OAUTH_CLIENT_SECRET` |
 | Fallback | Paper API Key ID + Secret (if OAuth console blocked) — map per settings EF / DEPLOYMENT.md |
 | Local file (when ready) | `.local/secrets/digithings-alpaca.env` |
-| Human gate | Cloudflare Turnstile — Sign up stays disabled until solved |
-| Screenshot | `/opt/cursor/artifacts/alpaca-turnstile-human-needed.png` |
-| Signup attempt | **digithings@agentmail.to** (re-filled 2026-08-30; Turnstile still blocks Sign up) |
-| Prior login | `digithings@agentmail.to` → Cognito `NotAuthorizedException` (account never completed) |
+| Human gate | Cloudflare Turnstile — owner on the desktop |
+| Account email | `admin@digithings.ai` (Alpaca often has no Google SSO). Do not use Agentmail. |
 
 ## Google OAuth (optional Supabase Auth) — not started
 
@@ -77,7 +76,7 @@
 | Env names | `AUTH_GOOGLE_CLIENT_ID`, `AUTH_GOOGLE_CLIENT_SECRET` |
 | Enable in Supabase | Authentication → Providers → Google |
 | Local file (when ready) | `.local/secrets/digithings-google.env` |
-| Note | GitHub Auth already Enabled on `core`; Google optional |
+| Note | GitHub Auth already Enabled on `core`. Product Google login (Supabase) is separate from the **admin@digithings.ai** Google account used on vendor consoles. |
 
 ## Already set on `core` EF (names only)
 
@@ -97,10 +96,7 @@ Check-only (exit 2 until files + required key names exist; never prints values):
 PATH="$PWD/.venv/bin:$PATH" python scripts/digiquant_apply_vendor_secrets.py
 ```
 
-## Browser tabs left open for human (paused)
+## Human gate
 
-1. Stripe register + hCaptcha image challenge (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-stripe-hcaptcha-2026-08-30.png`
-2. Mailgun signup + reCAPTCHA error (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-mailgun-recaptcha-2026-08-30.png`
-3. Alpaca signup + Turnstile (`digithings@agentmail.to`) — `/opt/cursor/artifacts/vendor-alpaca-turnstile-2026-08-30.png`
-
-Human ask: `/opt/cursor/artifacts/HUMAN-CAPTCHA-ALL-VENDORS.md`
+Owner signs into **`admin@digithings.ai` Google** on the desktop, then agents resume
+with Sign in with Google. Abandoned Agentmail form fills are not a signup path.
