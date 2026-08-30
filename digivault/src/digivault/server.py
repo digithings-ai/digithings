@@ -593,7 +593,8 @@ def create_notes_batch(req: CreateNotesBatchRequest) -> NoteList:
         notes = [_write_note_request(vault, note) for note in req.notes]
         for prune in req.prunes:
             vault.prune_children(prune.parent_doc, set(prune.keep_names), subdir=prune.subdir)
-        return NoteList(notes=[vault.get_note(note.name) or note for note in notes])
+        current_notes = [vault.get_note(note.name) for note in notes]
+        return NoteList(notes=[note for note in current_notes if note is not None])
     except VaultError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

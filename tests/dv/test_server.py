@@ -165,6 +165,24 @@ def test_batch_note_upsert_keeps_links_consistent(vault_dir: Path) -> None:
     assert server.get_backlinks("d").backlinks == ["c"]
 
 
+def test_batch_note_upsert_omits_notes_pruned_in_same_batch(vault_dir: Path) -> None:
+    result = server.create_notes_batch(
+        server.CreateNotesBatchRequest(
+            notes=[
+                server.CreateNoteRequest(
+                    name="guide__stale",
+                    frontmatter={"parent_doc": "guide"},
+                    body="stale\n",
+                )
+            ],
+            prunes=[server.PruneChildrenRequest(parent_doc="guide", keep_names=[])],
+        )
+    )
+
+    assert result.notes == []
+    assert not (vault_dir / "guide__stale.md").exists()
+
+
 def test_prune_children_handler_deletes_only_stale_children(vault_dir: Path) -> None:
     vault = Vault(vault_dir)
     vault.write_note(
