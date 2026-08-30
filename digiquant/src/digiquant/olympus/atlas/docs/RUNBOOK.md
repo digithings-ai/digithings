@@ -381,6 +381,11 @@ When the scheduled Atlas pipeline fails (`atlas baseline`, `atlas delta`, or `at
 
 ### OpenRouter empty completions (degraded book, "empty completion from …" in logs)
 
+**First check:** `atlas_run_diagnostics.breakdown.empty_retries` on the run row — `total` and
+`by_model` count every digillm empty-retry self-heal (the `empty-retry n/4` log lines). A green
+`status` with a rising `empty_retries.total` means the provider is flaking but recovering; treat
+it as a warning before it escalates to a hard failure (see 2026-07-20 → 07-21 in #1639).
+
 Every phase uses **pinned open-weight models** from `config/olympus_models.yaml` (via
 `get_model_for_phase`). Legacy `openrouter/openrouter/auto` paths are blocked from frontier
 providers. Every research call is a **structured-output** (`response_format` json_schema) or
