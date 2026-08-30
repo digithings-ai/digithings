@@ -9,12 +9,13 @@ from __future__ import annotations
 import json
 import logging
 import re
+from collections.abc import Mapping
 from datetime import date
 from typing import Any, Literal  # score:allow untyped any — used for JSON-derived dict shape
 
 from digigraph.graph.pipeline_builder import NodeSpec, PipelinePhase
 from digigraph.graph.research_agent import run_research_agent
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from digiquant.olympus.atlas.phases._node_factory import (
     _edit_phase_inputs,
@@ -70,10 +71,28 @@ class ActionableItem(BaseModel):
     rationale: str = Field()
 
 
+# Live digest edit merge (house GHA 33426508863) sent ``horizon_hourse``.
+
+
+def _alias_horizon_hours_payload(data: object) -> object:
+    if not isinstance(data, Mapping):
+        return data
+    if "horizon_hourse" not in data:
+        return data
+    out = dict(data)
+    out["horizon_hours"] = out.pop("horizon_hourse")
+    return out
+
+
 class RiskItem(BaseModel):
     horizon_hours: int = Field(ge=1, le=168)
     label: str = Field()
     trigger: str = Field()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _alias_horizon_hours(cls, data: object) -> object:
+        return _alias_horizon_hours_payload(data)
 
 
 class DigestSnapshot(SegmentReport):
