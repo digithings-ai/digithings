@@ -686,6 +686,37 @@ Deno.test("POST brokers/connect api_key: seals with AAD; response has no secret"
   assertEquals(parsed.secret, secret);
 });
 
+Deno.test(
+  "POST brokers/connect: crypto.randomUUID bound when deps.uuid omitted (Edge TypeError regression)",
+  async () => {
+    // Production createDefaultDeps does not inject uuid. Unbound
+    // `(crypto.randomUUID)()` throws TypeError "expected Crypto" on Deno/Edge.
+    const store = freshStore();
+    const secret = "EDGE-UUID-BIND-SECRET";
+    const res = await handleSettingsRequest(
+      authReq("POST", "/brokers/connect", {
+        broker: "alpaca",
+        env: "paper",
+        kind: "api_key",
+        key_id: "PKTEST",
+        secret,
+      }),
+      {
+        admin: mockAdmin(store),
+        user: { id: USER_A, email: "owner@example.com", plan_tier: "custom" },
+        vaultKey: TEST_KEY,
+        appUrl: APP_URL,
+      },
+    );
+    const json = await res.json();
+    assertEquals(res.status, 200);
+    assertEquals(typeof json.id, "string");
+    assertEquals((json.id as string).length, 36);
+    assertEquals(store.brokers.length, 1);
+    assertEquals(JSON.stringify(json).includes(secret), false);
+  },
+);
+
 Deno.test("POST brokers/connect oauth: pins redirect_uri; rejects client mismatch", async () => {
   const store = freshStore();
   const mismatch = await call(store, "POST", "/brokers/connect", {
