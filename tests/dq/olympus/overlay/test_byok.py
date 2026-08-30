@@ -6,8 +6,11 @@ import os
 from datetime import UTC, date, datetime
 from uuid import uuid4
 
-import digillm.client as digillm_client
 import pytest
+
+pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
+
+import digillm.client as digillm_client
 from digillm.client import get_byok
 from digiquant.olympus.overlay.byok import (
     BYOK_AAD_PURPOSE,

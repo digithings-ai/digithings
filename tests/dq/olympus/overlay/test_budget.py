@@ -7,6 +7,8 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+
+pytest.importorskip("digigraph.usage", reason="digiquant-only CI lane omits full-workspace deps")
 from digigraph.usage import record as usage_record
 from digigraph.usage import reset as usage_reset
 from digigraph.usage import start as usage_start

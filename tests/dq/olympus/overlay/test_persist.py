@@ -6,6 +6,8 @@ from datetime import date
 from uuid import uuid4
 
 import pytest
+
+pytest.importorskip("digillm.client", reason="digiquant-only CI lane omits full-workspace deps")
 from digiquant.olympus.atlas.state import AtlasConfigBundle, AtlasResearchState, PhaseHermesState
 from digiquant.olympus.hermes.writers.commit_io import publish_hermes_documents
 from digiquant.olympus.overlay.byok import ByokProbe
