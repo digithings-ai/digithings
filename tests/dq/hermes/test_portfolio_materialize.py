@@ -67,11 +67,16 @@ class TestFreshSeed:
         assert navs[0]["date"] == "2026-06-12"
         assert navs[0]["invested_pct"] == 100.0
         assert navs[0]["_on_conflict"] == "date"
+        assert navs[0]["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
         positions = {r["ticker"]: r for r in client.store["positions"]}
         assert positions["SPY"]["weight_pct"] == 60.0
         assert positions["TLT"]["weight_pct"] == 40.0
         assert all(r["_on_conflict"] == "date,ticker" for r in client.store["positions"])
+        assert all(
+            r["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
+            for r in client.store["positions"]
+        )
 
     def test_duplicate_tickers_coalesced(self) -> None:
         client = FakeSupabaseClient()
@@ -633,6 +638,7 @@ class TestPortfolioMetricsWriter:
         # Sanity: sharpe should be positive for a positive-return series
         assert row["sharpe"] > 0
         assert row["_on_conflict"] == "date"
+        assert row["workspace_id"] == "6b753576-ced9-5319-9bfa-c5d0aacd9319"
 
     def test_metrics_null_when_insufficient_history(self) -> None:
         """With < 20 NAV points, risk metrics must be NULL (not 0)."""

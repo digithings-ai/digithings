@@ -41,7 +41,7 @@ from typing import (
 from uuid import UUID, uuid4
 
 from digiquant.olympus.atlas.state import AtlasResearchState
-from digiquant.olympus.atlas.supabase_io import SupabaseClient
+from digiquant.olympus.atlas.supabase_io import HOUSE_WORKSPACE_ID, SupabaseClient
 from digiquant.olympus.hermes.models.portfolio_ledger import (
     ApprovedTarget,
     DecisionAction,
@@ -116,10 +116,24 @@ def _insert(*, client: SupabaseClient, table: str, rows: list[dict[str, Any]]) -
     resolvable global is what lets a test simulate a mid-chain failure, and keeping
     the verb literally ``insert`` here is what keeps ``upsert`` — which the
     append-only trigger would reject in production — out of this module entirely.
+
+    Migration 097 made ``workspace_id`` NOT NULL with no column DEFAULT. House GHA
+    pins ``ref: main`` and this tree has no ``digiquant.olympus.tenancy`` module, so
+    this gate stamps the house UUID (same constant as documents #3278) as a string —
+    a UUID object here is ``TypeError`` on json serialization. A row that already
+    carries ``workspace_id`` keeps it (``{house, **row}``). Do not change this to
+    ``upsert``; do not import tenancy on main.
     """
     if not rows:
         return
-    client.table(table).insert(rows).execute()
+    stamped: list[dict[str, Any]] = []
+    for row in rows:
+        payload = {"workspace_id": HOUSE_WORKSPACE_ID, **row}
+        ws = payload.get("workspace_id")
+        if isinstance(ws, UUID):
+            payload["workspace_id"] = str(ws)
+        stamped.append(payload)
+    client.table(table).insert(stamped).execute()
 
 
 def _is_cash(ticker: Any) -> bool:
