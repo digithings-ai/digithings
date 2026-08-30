@@ -170,7 +170,9 @@ def test_vault_and_search_sinks_for_repo_doc(tmp_path: Path) -> None:
 
     n = write_vault_notes(manifest, ws, Vault(vault_root))
     assert n == 1
-    bodies = " ".join(Vault(vault_root).read_text(note.name) for note in Vault(vault_root).list_notes())
+    bodies = " ".join(
+        Vault(vault_root).read_text(note.name) for note in Vault(vault_root).list_notes()
+    )
     assert "Orchestrates graphs" in bodies
 
     posted: list[dict] = []
@@ -192,9 +194,7 @@ def test_digivault_api_writer_posts_overwrite(tmp_path: Path) -> None:
         seen.append({"url": url, "payload": payload, "headers": headers})
         return {"name": payload["name"]}
 
-    writer = DigivaultApiWriter(
-        "http://digivault:8004", bearer_token="tok", post_json=post_json
-    )
+    writer = DigivaultApiWriter("http://digivault:8004", bearer_token="tok", post_json=post_json)
     writer.write_note(
         "n1",
         frontmatter={"title": "T", "tags": ["onboard"]},
@@ -205,3 +205,21 @@ def test_digivault_api_writer_posts_overwrite(tmp_path: Path) -> None:
     assert seen[0]["url"].endswith("/v1/notes")
     assert seen[0]["payload"]["overwrite"] is True
     assert seen[0]["headers"]["Authorization"] == "Bearer tok"
+
+
+def test_digivault_api_writer_batches_upserts() -> None:
+    seen: list[dict] = []
+
+    def post_json(url: str, payload: dict, headers: dict) -> dict:
+        seen.append({"url": url, "payload": payload, "headers": headers})
+        return {"notes": payload["notes"]}
+
+    writer = DigivaultApiWriter("http://digivault:8004", post_json=post_json)
+    writer.begin_batch()
+    writer.write_note("a", body="links to [[b]]\n", overwrite=True)
+    writer.write_note("b", body="links to [[a]]\n", overwrite=True)
+    writer.flush()
+
+    assert len(seen) == 1
+    assert seen[0]["url"].endswith("/v1/notes/batch")
+    assert [note["name"] for note in seen[0]["payload"]["notes"]] == ["a", "b"]
