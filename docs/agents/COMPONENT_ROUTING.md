@@ -15,6 +15,8 @@ When editing paths under **Prefix**, read the **Doc** row first, then run **Test
 | `frontend/olympus/` | — | [frontend/olympus/README.md](../../frontend/olympus/README.md) | static export | `cd frontend/olympus && npm run lint && npm run test && npm run build` (not in `make test-unit`; see `olympus-test.yml`) |
 | `website/` | [AGENTS.md](../../AGENTS.md) (starfield note) | — | static | manual / visual |
 | `config/` | — | [config/MODELS.md](../../config/MODELS.md) | LiteLLM 4000 | stack integration |
+| `tests/fixtures/` | — | — | — | Shared doubles (e.g. `FakeSupabaseClient` in `fake_supabase.py`) |
+| `tests/contracts/` | — | — | — | Cross-service HTTP surface (`test_cross_service_surface.py` — CORS/`/healthz`/`/metrics`; `pytest -m unit tests/contracts/`) |
 
 **Architecture cross-cutting:** [ARCHITECTURE.md](../../ARCHITECTURE.md) for ports, auth, and MCP topology.
 
