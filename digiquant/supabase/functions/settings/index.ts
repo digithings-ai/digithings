@@ -61,4 +61,4 @@ Deno.serve(async (req) => {
     console.error("settings error", err instanceof Error ? err.name : "unknown");
     return jsonError(500, "INTERNAL", "Settings request failed");
   }
-);
+});

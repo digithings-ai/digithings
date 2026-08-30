@@ -461,10 +461,16 @@ export interface ViewWindow {
   lo: number;
   hi: number;
 }
-/** Smallest allowed window (2% of the span) — keeps zoom from collapsing. */
-const MIN_VIEW = 0.02;
+/**
+ * Smallest allowed window (2% of the span) — keeps zoom from collapsing into
+ * an empty/degenerate range that blanks the chart (legacy ComboPnl bug #1180;
+ * the SVG tearsheet grammar owns that surface after the digiquant-web → digiweb
+ * promotion).
+ */
+export const MIN_VIEW = 0.02;
 
-function clampView(lo: number, hi: number): ViewWindow {
+/** Clamp a zoom window into `[0,1]` and enforce {@link MIN_VIEW} width. */
+export function clampView(lo: number, hi: number): ViewWindow {
   let l = Math.max(0, Math.min(lo, 1));
   let h = Math.max(0, Math.min(hi, 1));
   if (h - l < MIN_VIEW) {

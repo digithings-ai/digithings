@@ -46,8 +46,8 @@ echo "NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN=${NEXT_PUBLIC_DIGICHAT_EMBED_ORIGIN}"
 # an app bug. `next dev` is untouched; it never reproduced this.
 npm --workspace frontend/digithings-web run build
 
-# Assemble dist/ from the static export (includes /design/assets/og.png for the
-# stable OG URL, and self-hosted fonts under /_next/static/media).
+# Assemble dist/ from the static export (includes /og.png for the stable OG
+# URL, and self-hosted fonts under /_next/static/media).
 rm -rf dist
 mkdir -p dist
 cp -r frontend/digithings-web/out/. dist/
@@ -106,7 +106,7 @@ if [ ! -f functions/api/chat.ts ]; then
   echo "ERROR: functions/api/chat.ts missing after mirror" >&2
   exit 1
 fi
-if find functions -type f -name "*.test.ts" 2>/dev/null | grep -q .; then
+if find functions -type f \( -name "*.test.ts" -o -name "*.test.tsx" \) 2>/dev/null | grep -q .; then
   echo "ERROR: test files still present under functions/ after exclusion (#2348)" >&2
   exit 1
 fi

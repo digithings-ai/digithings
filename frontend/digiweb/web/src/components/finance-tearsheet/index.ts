@@ -24,6 +24,8 @@ export {
   ChartLegend,
   ChartResetButton,
   LOOKBACK_OPTIONS,
+  MIN_VIEW,
+  clampView,
   viewWindowForPreset,
   viewWindowLastYear,
   matchLookbackPreset,

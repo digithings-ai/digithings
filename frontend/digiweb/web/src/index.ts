@@ -294,6 +294,8 @@ export {
   TearsheetCardKpi,
   LiveBadge,
   LOOKBACK_OPTIONS,
+  MIN_VIEW,
+  clampView,
   viewWindowForPreset,
   viewWindowLastYear,
   matchLookbackPreset,

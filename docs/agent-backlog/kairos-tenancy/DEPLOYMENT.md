@@ -12,44 +12,44 @@
 
 ## 1. Merge-state snapshot (as of 2026-08-30)
 
-### Merged (8 work packages + plan)
+### Code — all 12 WPs on `develop`
 
 | WP | PR | Landed on | Notes |
 |----|-----|-----------|-------|
 | Plan / spec | [#3081](https://github.com/digithings-ai/digithings/pull/3081) | `develop` | Locked decisions |
-| K0 contracts | [#3098](https://github.com/digithings-ai/digithings/pull/3098) | `module/digiquant` | |
-| K1 Alpaca paper | [#3114](https://github.com/digithings-ai/digithings/pull/3114) | `module/digiquant` | |
-| K2 IBKR read-first | [#3116](https://github.com/digithings-ai/digithings/pull/3116) | `module/digiquant` | |
-| T0 workspaces + RLS | [#3115](https://github.com/digithings-ai/digithings/pull/3115) | `module/digiquant` | Migrations **096–098**; anon policies untouched |
-| T1 Auth login | [#3099](https://github.com/digithings-ai/digithings/pull/3099) | `develop` | Flag-gated UI only; anon-drop deferred |
-| T2 Stripe tiers | [#3118](https://github.com/digithings-ai/digithings/pull/3118) | `module/digiquant` | Migrations **100–101** + Edge Functions |
+| K0–K5, T0, T2, T4 | [#3141](https://github.com/digithings-ai/digithings/pull/3141) | `develop` | Module→develop promotion (backend) |
+| T1 Auth login | [#3099](https://github.com/digithings-ai/digithings/pull/3099) | `develop` | Flag-gated UI; anon-drop deferred |
+| T3 Settings UI | [#3120](https://github.com/digithings-ai/digithings/pull/3120) | `develop` | `settings` Edge Function |
 | T5 Tier UI | [#3119](https://github.com/digithings-ai/digithings/pull/3119) | `develop` | |
-| T3 Settings UI | [#3120](https://github.com/digithings-ai/digithings/pull/3120) | `develop` | `settings` Edge Function; deploy blocked on K3 |
+| Chain + RLS harness | [#3140](https://github.com/digithings-ai/digithings/pull/3140) | `develop` via #3141 | 61/61 proof vs canonical chain |
+| 103 trigger fix | [#3147](https://github.com/digithings-ai/digithings/pull/3147) | `develop` | `trigger_set_updated_at` (prod apply found the typo) |
 
-### Remaining queue (merge order)
+### Schema on `core` (`rwagjbkvxkdwqmouagad`) — **096–105 applied 2026-08-30**
+
+Applied via the runbook §2 manual path (`execute_sql` / `apply_migration` +
+`olympus_schema_migrations` stamps). `097` used the documented
+`session_replication_role = replica` wrap (075/069 append-only triggers).
+**Cutover `900` was not applied** (human-gated, §6).
+
+| # | File | WP | Ledger |
+|---|------|-----|--------|
+| 096–098 | workspaces / tenant columns / RLS | T0 | stamped |
+| 099 | `broker_connections` | K3 | stamped |
+| 100–101 | Stripe claim sync + webhook ordering | T2 | stamped |
+| 102 | `broker_orders` / executions / snapshots | K4 | stamped |
+| 103 | `notification_prefs` + `notification_log` | K5 | stamped (fixed function name) |
+| 104 | `workspace_provider_credentials` (BYOK) | T4 | stamped |
+| 105 | `documents.workspace_id` | T4 | stamped |
+| (cutover) | staged `migrations/cutover/900_…` | human | **not applied** |
+
+### Remaining (human / production gates)
 
 ```
-K3 (#3117, open on module/digiquant)
-  → K4 (broker mirror + router)
-  → K5 (notification prefs + Mailgun digest)
-  → T4 (overlay runs + documents.workspace_id)
-  → module/digiquant → develop promotion
-  → develop → main (schema via db-migrate; Pages rebuild)
+§5 secrets + Auth providers + Stripe/Mailgun/Alpaca apps
+  → Edge Function deploys (§3)
+  → develop → main (Pages rebuild; db-migrate will no-op 096–105 already stamped)
+  → §6 cutover (Access on → flag flip → anon-drop 900 → verify → Access off)
 ```
-
-Expected migration numbers once the queue lands (allocated on feature branches;
-renumber at merge if gaps fill differently):
-
-| # | File | WP |
-|---|------|-----|
-| 096–098 | workspaces / tenant columns / RLS | T0 |
-| 099 | `broker_connections` | K3 |
-| 100–101 | Stripe claim sync + webhook ordering | T2 |
-| 102 | `broker_orders` / executions / snapshots | K4 |
-| 103 | `notification_prefs` + `notification_log` | K5 |
-| 104 | `workspace_provider_credentials` (BYOK) | T4 |
-| 105 | `documents.workspace_id` | T4 |
-| (cutover) | staged `migrations/cutover/900_drop_anon_read_cutover.sql` → rename to next free | human |
 
 ---
 
@@ -114,6 +114,18 @@ ORDER BY version;
 ---
 
 ## 3. Edge Function deploys
+
+### Live status on `core` (2026-08-30)
+
+| Function | Status | Notes |
+|----------|--------|-------|
+| `prices-live` | ACTIVE | Pre-existing |
+| `stripe-webhook` | ACTIVE (`verify_jwt=false`) | Full shared sources deployed; runtime needs Stripe secrets |
+| `create-checkout-session` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
+| `customer-portal` | ACTIVE | Runtime needs Stripe + `NEXT_PUBLIC_APP_URL` |
+| `settings` | ACTIVE (placeholder v1) | Returns `503 NOT_READY` until vault secret + **full** shared-source redeploy (`supabase functions deploy settings` with `_shared/*`); payload at `/opt/cursor/artifacts/SETTINGS_DEPLOY_NOW.json` |
+
+### Deploy commands
 
 Functions live under `digiquant/supabase/functions/`. Deploy from a checkout that
 already contains the merged function code + migrations on the target DB.
