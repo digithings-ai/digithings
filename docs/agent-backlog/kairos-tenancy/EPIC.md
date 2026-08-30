@@ -194,7 +194,9 @@ or applied on `core` while `origin/main` `commit_io` / `portfolio_materialize`
 still upsert `on_conflict=date`. Staging 113 does **not** lift
 `require_overlay_legacy_book_safe`. Do not set
 `OLYMPUS_OVERLAY_PERSIST=1` expecting a private book — persist-on still cannot
-prove the overlay remaining hop until 113 is applied on the target. BYOK rows on
+prove the overlay remaining hop until 113 is applied on the target. Persist-on
+with a no-op / fail-soft H9 chain used to finish `succeeded`; `execute_overlay`
+now refuses that after the chain (`legacy_book_unique`). BYOK rows on
 that workspace are still **0**, so `--execute` would skip `no_credentials` even
 with persist on. Settings Pipeline / Brokers / Notifications tabs now read
 `GET /jobs` `/fills` `/notifications/log` so skip reasons and empty remaining

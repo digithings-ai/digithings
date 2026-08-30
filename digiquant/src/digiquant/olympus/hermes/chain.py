@@ -39,7 +39,7 @@ from digiquant.olympus.hermes.graph import (
     build_hermes_graph,
 )
 from digiquant.olympus.learning.beliefs_distillation import run_beliefs_distillation_if_triggered
-from digiquant.olympus.overlay.persist import skip_overlay_shared_register
+from digiquant.olympus.overlay.persist import OverlayLegacyBookBlocked, skip_overlay_shared_register
 
 _logger = logging.getLogger(__name__)
 
@@ -273,6 +273,10 @@ def _safe_invoke_graph(
     the belt-and-suspenders for a rare whole-graph raise (infra / checkpointer)."""
     try:
         return _invoke_resumable(graph, state, checkpointer, thread_base, label)
+    except OverlayLegacyBookBlocked:
+        # Overlay leftover UNIQUE refuse must reach execute_overlay (FAILED +
+        # legacy_book_unique). House never raises this.
+        raise
     except Exception as exc:  # a late crash must still reach publish/materialize
         _logger.exception("chain: %s graph failed; continuing with last-good state", label)
         _record_chain_error(state, label, exc)
@@ -293,6 +297,8 @@ def _run_terminal_phase(
         return _coerce_atlas_state(
             build_pipeline(AtlasResearchState, [build_phase(phase_deps)]).invoke(state)
         )
+    except OverlayLegacyBookBlocked:
+        raise
     except Exception as exc:  # one terminal phase failing must not abort the rest
         _logger.exception("chain: terminal phase %s failed; continuing", label)
         _record_chain_error(state, label, exc)
