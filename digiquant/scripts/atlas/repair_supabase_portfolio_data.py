@@ -19,6 +19,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any  # score:allow untyped any — duck-typed Supabase client + rows
 
 try:
     from supabase import create_client  # type: ignore
@@ -36,6 +37,17 @@ except ImportError:
     pass
 
 ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _ensure_importable() -> None:
+    path = str(_REPO_ROOT / "digiquant" / "src")
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+
+_ensure_importable()
+from digiquant.olympus.tenancy import eq_house_workspace  # noqa: E402
 
 
 def _sb():
@@ -46,6 +58,23 @@ def _sb():
     if not url or not key:
         raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required")
     return create_client(url, key)
+
+
+def house_zero_weight_non_cash(sb: Any) -> list[dict[str, Any]]:
+    """House-book zero-weight non-CASH rows. Overlay books are out of scope."""
+    res = (
+        eq_house_workspace(sb.table("positions").select("date,ticker,weight_pct"))
+        .neq("ticker", "CASH")
+        .eq("weight_pct", 0)
+        .execute()
+    )
+    return list(getattr(res, "data", None) or [])
+
+
+def delete_house_zero_weight_non_cash(sb: Any) -> None:
+    eq_house_workspace(sb.table("positions").delete()).neq("ticker", "CASH").eq(
+        "weight_pct", 0
+    ).execute()
 
 
 def main() -> int:
@@ -59,14 +88,7 @@ def main() -> int:
 
     sb = _sb()
 
-    res = (
-        sb.table("positions")
-        .select("date,ticker,weight_pct")
-        .neq("ticker", "CASH")
-        .eq("weight_pct", 0)
-        .execute()
-    )
-    rows = getattr(res, "data", None) or []
+    rows = house_zero_weight_non_cash(sb)
     print(f"Found {len(rows)} zero-weight non-CASH position row(s).")
     for r in rows[:50]:
         print(f"  — {r.get('date')} {r.get('ticker')} weight_pct={r.get('weight_pct')}")
@@ -79,7 +101,7 @@ def main() -> int:
     if not rows:
         print("Nothing to delete; still running update_tearsheet to refresh metrics/NAV.")
     else:
-        sb.table("positions").delete().neq("ticker", "CASH").eq("weight_pct", 0).execute()
+        delete_house_zero_weight_non_cash(sb)
         print("Deleted zero-weight non-CASH position rows.")
 
     ts = ROOT / "scripts" / "update_tearsheet.py"

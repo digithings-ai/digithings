@@ -69,6 +69,10 @@ class _FakeQuery:
         self._filters.append(("eq", col, val))
         return self
 
+    def neq(self, col: str, val: Any) -> "_FakeQuery":
+        self._filters.append(("neq", col, val))
+        return self
+
     def in_(self, col: str, vals: list[Any] | tuple[Any, ...]) -> "_FakeQuery":
         # Match the Supabase Python client surface — ``in_`` filters rows whose
         # column value is one of ``vals``.
@@ -140,6 +144,8 @@ class _FakeQuery:
                 # NULL/missing rows; migration 097 backfill stamps live rows.
                 continue
             if op == "eq" and row_val != val:
+                return False
+            if op == "neq" and row_val == val:
                 return False
             if op == "lt" and str(row.get(col, "")) >= str(val):
                 return False
