@@ -18,11 +18,10 @@ import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
-
-from digiquant.olympus.tenancy import house_workspace_id
 from unittest.mock import MagicMock
 
 import pytest
+from digiquant.olympus.tenancy import house_workspace_id
 
 from tests.dq.atlas.test_supabase_io import FakeSupabaseClient
 
