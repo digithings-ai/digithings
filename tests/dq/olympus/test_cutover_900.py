@@ -94,3 +94,17 @@ def test_post_cutover_proof_expects_zero_house_book_for_non_members() -> None:
     proof = (REPO_ROOT / "scripts" / "rls_proof" / "02_proof.sql").read_text(encoding="utf-8")
     assert "user_a_custom', 'positions', 'house', '0'" in proof
     assert "user_c_free', 'positions', 'no_private', '0'" in proof
+
+
+def test_pre_cutover_110_proof_expects_house_book_for_anon() -> None:
+    """110 proof runs before 900: anon still sees house, never overlay."""
+    pre = (
+        REPO_ROOT / "scripts" / "rls_proof" / "02_pre_cutover_110.sql"
+    ).read_text(encoding="utf-8")
+    assert "positions_total" in pre
+    assert "'1'" in pre
+    assert "overlay_positions_hidden" in pre
+    assert "overlay_docs_hidden" in pre
+    assert "BEFORE 900" in pre or "before 900" in pre.lower()
+    # Must not encode the post-cutover anon-positions=0 contract.
+    assert "SELECT count(*)::text FROM public.positions', '0'" not in pre
