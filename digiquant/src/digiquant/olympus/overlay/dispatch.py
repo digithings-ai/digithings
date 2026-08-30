@@ -49,6 +49,7 @@ class JobStatus(StrEnum):
     FAILED = "failed"
     SKIPPED = "skipped"
     BUDGET_EXHAUSTED = "budget_exhausted"
+    PERSIST_DISABLED = "persist_disabled"
 
 
 class JobRun(BaseModel):
@@ -125,6 +126,101 @@ class MemoryJobRunStore:
         with self._lock:
             self._rows[row.idempotency_key] = row
             return row
+
+
+def _parse_dt(value: object) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
+def _job_payload(row: JobRun) -> dict[str, object]:
+    return {
+        "id": str(row.id),
+        "workspace_id": str(row.workspace_id),
+        "job_type": row.job_type,
+        "status": row.status.value,
+        "started_at": row.started_at.isoformat() if row.started_at else None,
+        "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+        "error": row.error,
+        "idempotency_key": row.idempotency_key,
+    }
+
+
+def _row_to_job(row: dict[str, object]) -> JobRun:
+    return JobRun(
+        id=UUID(str(row["id"])),
+        workspace_id=UUID(str(row["workspace_id"])),
+        job_type=str(row["job_type"]),
+        status=JobStatus(str(row["status"])),
+        started_at=_parse_dt(row.get("started_at")),
+        finished_at=_parse_dt(row.get("finished_at")),
+        error=str(row["error"]) if row.get("error") is not None else None,
+        idempotency_key=str(row["idempotency_key"]),
+    )
+
+
+def _result_rows(result: object) -> list[dict[str, object]]:
+    data = getattr(result, "data", result)
+    if not isinstance(data, list):
+        return []
+    return [row for row in data if isinstance(row, dict)]
+
+
+class SupabaseJobRunStore:
+    """PostgREST ``job_runs`` store: insert-first claim + status updates.
+
+    ``insert`` is ``INSERT … ON CONFLICT (idempotency_key) DO NOTHING`` via
+    ``upsert(..., ignore_duplicates=True)``. The winner is the first row;
+    a later caller reads that row and does not start a second run.
+    """
+
+    def __init__(self, client: object) -> None:
+        self._client = client
+
+    def get_by_idempotency_key(self, key: str) -> JobRun | None:
+        result = (
+            self._client.table("job_runs")
+            .select("id,workspace_id,job_type,status,started_at,finished_at,error,idempotency_key")
+            .eq("idempotency_key", key)
+            .limit(1)
+            .execute()
+        )
+        rows = _result_rows(result)
+        return _row_to_job(rows[0]) if rows else None
+
+    def insert(self, row: JobRun) -> JobRun:
+        self._client.table("job_runs").upsert(
+            _job_payload(row),
+            on_conflict="idempotency_key",
+            ignore_duplicates=True,
+        ).execute()
+        stored = self.get_by_idempotency_key(row.idempotency_key)
+        return stored if stored is not None else row
+
+    def claim(self, key: str, *, started_at: datetime) -> JobRun | None:
+        result = (
+            self._client.table("job_runs")
+            .update({"status": JobStatus.RUNNING.value, "started_at": started_at.isoformat()})
+            .eq("idempotency_key", key)
+            .eq("status", JobStatus.PENDING.value)
+            .execute()
+        )
+        rows = _result_rows(result)
+        return _row_to_job(rows[0]) if rows else None
+
+    def update(self, row: JobRun) -> JobRun:
+        self._client.table("job_runs").update(
+            {
+                "status": row.status.value,
+                "started_at": row.started_at.isoformat() if row.started_at else None,
+                "finished_at": row.finished_at.isoformat() if row.finished_at else None,
+                "error": row.error,
+            }
+        ).eq("idempotency_key", row.idempotency_key).execute()
+        return row
 
 
 class WorkspaceEntitlement(BaseModel):
@@ -243,6 +339,7 @@ __all__ = [
     "JobStatus",
     "MemoryJobRunStore",
     "OverlaySkipReason",
+    "SupabaseJobRunStore",
     "WorkspaceEntitlement",
     "dispatch_overlay_daily",
     "evaluate_entitlement",

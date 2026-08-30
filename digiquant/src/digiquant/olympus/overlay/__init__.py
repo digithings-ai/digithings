@@ -27,6 +27,7 @@ from digiquant.olympus.overlay.dispatch import (
     JobStatus,
     MemoryJobRunStore,
     OverlaySkipReason,
+    SupabaseJobRunStore,
     dispatch_overlay_daily,
     overlay_idempotency_key,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "JobStatus",
     "LLM_PROVIDERS",
     "MemoryJobRunStore",
+    "SupabaseJobRunStore",
     "OverlayBudget",
     "OverlayError",
     "OverlayRunRequest",
