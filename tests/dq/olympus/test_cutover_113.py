@@ -137,6 +137,7 @@ def test_widens_ledger_one_root_indexes(sql: str) -> None:
         sql,
         re.I,
     )
+    assert len(re.findall(r"WHERE\s+supersedes_id\s+IS\s+NULL", sql, re.I)) == 3
 
 
 def test_does_not_drop_anon_or_rls_policies(sql: str) -> None:
