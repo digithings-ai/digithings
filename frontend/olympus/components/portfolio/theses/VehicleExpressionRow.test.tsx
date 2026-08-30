@@ -85,7 +85,7 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
     expect(latestCallSection).not.toContain('text-[10px]');
   });
 
-  it('Observer: locks weight panel; summary weight redacted', () => {
+  it('Observer: locks weight panel; summary weight and P&L redacted', () => {
     const html = renderToStaticMarkup(
       createElement(VehicleExpressionRow, {
         ticker: 'AAA',
@@ -101,6 +101,7 @@ describe('VehicleExpressionRow — no nested glass-card', () => {
     expect(html).toContain('locked-surface');
     expect(html).not.toContain('vehicle-weight-panel');
     expect(html).not.toContain('20.0%');
+    expect(html).not.toContain('+5.5%');
     expect(html).toContain('AAA');
   });
 

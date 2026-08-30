@@ -418,64 +418,66 @@ export default function TickerDossierView({
                 title="Position history"
                 meta={`${positionEvents.length} material ${positionEvents.length === 1 ? 'action' : 'actions'}`}
               />
-              {positionEvents.length ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-sm tabular-nums">
-                    <thead>
-                      <tr className="border-b border-hair text-left font-mono text-[11px] uppercase text-ink-mute">
-                        <th className="px-4 py-2.5 font-normal md:px-5">Date</th>
-                        <th className="py-2.5 pr-4 font-normal">Action</th>
-                        <th className="py-2.5 pr-4 text-right font-normal">Allocation</th>
-                        <th className="py-2.5 pr-4 text-right font-normal">Change</th>
-                        <th className="py-2.5 pr-4 text-right font-normal">Price</th>
-                        <th className="py-2.5 pr-4 font-normal">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {visiblePositionEvents.map((event, index) => (
-                        <tr key={`${event.date}-${event.event}-${index}`} className="border-b border-hair/50">
-                          <td className="px-4 py-3 font-mono text-xs text-ink-mute md:px-5">
-                            {event.date}
-                          </td>
-                          <td className="py-3 pr-4 font-medium text-ink">{event.event}</td>
-                          <td className="py-3 pr-4 text-right text-ink-soft">
-                            {formatWeight(event.weight_pct)}
-                          </td>
-                          <td className="py-3 pr-4 text-right text-ink-soft">
-                            {formatWeightChange(event.weight_change_pct)}
-                          </td>
-                          <td className="py-3 pr-4 text-right text-ink-soft">
-                            {formatPrice(event.price)}
-                          </td>
-                          <td className="max-w-xl py-3 pr-4 text-ink-soft">
-                            {eventReason(event.reason)}
-                          </td>
+              <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
+                {positionEvents.length ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[760px] text-sm tabular-nums">
+                      <thead>
+                        <tr className="border-b border-hair text-left font-mono text-[11px] uppercase text-ink-mute">
+                          <th className="px-4 py-2.5 font-normal md:px-5">Date</th>
+                          <th className="py-2.5 pr-4 font-normal">Action</th>
+                          <th className="py-2.5 pr-4 text-right font-normal">Allocation</th>
+                          <th className="py-2.5 pr-4 text-right font-normal">Change</th>
+                          <th className="py-2.5 pr-4 text-right font-normal">Price</th>
+                          <th className="py-2.5 pr-4 font-normal">Reason</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p className="px-4 py-6 text-sm text-ink-mute md:px-5">
-                  {held
-                    ? 'No material allocation changes are recorded after entry.'
-                    : 'No portfolio actions are recorded for this ticker.'}
-                </p>
-              )}
-              {hiddenActionCount > 0 ? (
-                <div className="flex justify-center border-t border-hair px-4 py-3">
-                  <Button
-                    dress="reference"
-                    variant="quiet"
-                    onClick={() => setShowAllActions(!showAllActions)}
-                    aria-label={showAllActions
-                      ? 'Show fewer position actions'
-                      : `Show ${hiddenActionCount} older position actions`}
-                  >
-                    {showAllActions ? 'Show fewer' : `Show ${hiddenActionCount} older actions`}
-                  </Button>
-                </div>
-              ) : null}
+                      </thead>
+                      <tbody>
+                        {visiblePositionEvents.map((event, index) => (
+                          <tr key={`${event.date}-${event.event}-${index}`} className="border-b border-hair/50">
+                            <td className="px-4 py-3 font-mono text-xs text-ink-mute md:px-5">
+                              {event.date}
+                            </td>
+                            <td className="py-3 pr-4 font-medium text-ink">{event.event}</td>
+                            <td className="py-3 pr-4 text-right text-ink-soft">
+                              {formatWeight(event.weight_pct)}
+                            </td>
+                            <td className="py-3 pr-4 text-right text-ink-soft">
+                              {formatWeightChange(event.weight_change_pct)}
+                            </td>
+                            <td className="py-3 pr-4 text-right text-ink-soft">
+                              {formatPrice(event.price)}
+                            </td>
+                            <td className="max-w-xl py-3 pr-4 text-ink-soft">
+                              {eventReason(event.reason)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="px-4 py-6 text-sm text-ink-mute md:px-5">
+                    {held
+                      ? 'No material allocation changes are recorded after entry.'
+                      : 'No portfolio actions are recorded for this ticker.'}
+                  </p>
+                )}
+                {hiddenActionCount > 0 ? (
+                  <div className="flex justify-center border-t border-hair px-4 py-3">
+                    <Button
+                      dress="reference"
+                      variant="quiet"
+                      onClick={() => setShowAllActions(!showAllActions)}
+                      aria-label={showAllActions
+                        ? 'Show fewer position actions'
+                        : `Show ${hiddenActionCount} older position actions`}
+                    >
+                      {showAllActions ? 'Show fewer' : `Show ${hiddenActionCount} older actions`}
+                    </Button>
+                  </div>
+                ) : null}
+              </EntitledSurface>
             </section>
 
             <section className="border-y border-hair" data-region="measured-outcome">
@@ -484,42 +486,44 @@ export default function TickerDossierView({
                 title="Measured outcome"
                 meta={latestAttribution ? `lookback ending ${latestAttribution.date}` : null}
               />
-              <div className="border-b border-hair px-4 py-3 md:px-5">
-                <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
-                  Latest current-book lookback (diagnostic)
-                </p>
-              </div>
-              <dl className="grid grid-cols-2 border-l border-t border-hair lg:grid-cols-4">
-                <Metric
-                  label="Since entry"
-                  value={held && sinceEntry != null ? formatPct(sinceEntry) : '—'}
-                  tone={held && sinceEntry != null ? pnlColor(sinceEntry) : 'text-ink-mute'}
-                  sub={held ? 'current holding' : 'not available for a closed position'}
-                />
-                <Metric
-                  label="Position return"
-                  value={formatPct(latestAttribution?.position_return_pct ?? null)}
-                  tone={pnlColor(latestAttribution?.position_return_pct ?? null)}
-                  sub={latestAttribution ? 'lookback window (not realized day)' : 'no snapshot'}
-                />
-                <Metric
-                  label="Lookback contribution"
-                  value={formatPct(latestAttribution?.contribution_pct ?? null)}
-                  tone={pnlColor(latestAttribution?.contribution_pct ?? null)}
-                  sub="weight × lookback return"
-                />
-                <Metric
-                  label="Lookback active"
-                  value={formatPct(latestAttribution?.total_attribution_pct ?? null)}
-                  tone={pnlColor(latestAttribution?.total_attribution_pct ?? null)}
-                  sub="versus SPY (same window)"
-                />
-              </dl>
-              {!latestAttribution ? (
-                <p className="border-t border-hair px-4 py-4 text-xs text-ink-mute md:px-5">
-                  No stored current-book lookback snapshot is available for this ticker.
-                </p>
-              ) : null}
+              <EntitledSurface artifactClass="house_weights_nav" tier={tier}>
+                <div className="border-b border-hair px-4 py-3 md:px-5">
+                  <p className="font-mono text-[0.62rem] uppercase tracking-wider text-ink-mute">
+                    Latest current-book lookback (diagnostic)
+                  </p>
+                </div>
+                <dl className="grid grid-cols-2 border-l border-t border-hair lg:grid-cols-4">
+                  <Metric
+                    label="Since entry"
+                    value={held && sinceEntry != null ? formatPct(sinceEntry) : '—'}
+                    tone={held && sinceEntry != null ? pnlColor(sinceEntry) : 'text-ink-mute'}
+                    sub={held ? 'current holding' : 'not available for a closed position'}
+                  />
+                  <Metric
+                    label="Position return"
+                    value={formatPct(latestAttribution?.position_return_pct ?? null)}
+                    tone={pnlColor(latestAttribution?.position_return_pct ?? null)}
+                    sub={latestAttribution ? 'lookback window (not realized day)' : 'no snapshot'}
+                  />
+                  <Metric
+                    label="Lookback contribution"
+                    value={formatPct(latestAttribution?.contribution_pct ?? null)}
+                    tone={pnlColor(latestAttribution?.contribution_pct ?? null)}
+                    sub="weight × lookback return"
+                  />
+                  <Metric
+                    label="Lookback active"
+                    value={formatPct(latestAttribution?.total_attribution_pct ?? null)}
+                    tone={pnlColor(latestAttribution?.total_attribution_pct ?? null)}
+                    sub="versus SPY (same window)"
+                  />
+                </dl>
+                {!latestAttribution ? (
+                  <p className="border-t border-hair px-4 py-4 text-xs text-ink-mute md:px-5">
+                    No stored current-book lookback snapshot is available for this ticker.
+                  </p>
+                ) : null}
+              </EntitledSurface>
             </section>
 
             <ConvictionHistory decisions={decisions} />

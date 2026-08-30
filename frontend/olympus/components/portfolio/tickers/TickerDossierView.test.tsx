@@ -176,6 +176,34 @@ describe('TickerDossierView — command band structure', () => {
             unrealized_pnl_pct: null,
           },
         ],
+        position_history: [
+          { date: '2026-01-15', ticker: 'XLE', weight_pct: 4, category: 'energy', thesis_id: 'energy' },
+          { date: '2026-07-18', ticker: 'XLE', weight_pct: 17.2, category: 'energy', thesis_id: 'energy' },
+        ],
+        position_events: [
+          {
+            date: '2026-01-15',
+            ticker: 'XLE',
+            event: 'OPEN',
+            weight_pct: 4,
+            prev_weight_pct: 0,
+            weight_change_pct: 4,
+            price: 84.2,
+            thesis_id: 'energy',
+            reason: 'Entered energy sleeve',
+          },
+          {
+            date: '2026-07-18',
+            ticker: 'XLE',
+            event: 'ADD',
+            weight_pct: 17.2,
+            prev_weight_pct: 4,
+            weight_change_pct: 13.2,
+            price: 90,
+            thesis_id: 'energy',
+            reason: 'Added on confirmation',
+          },
+        ],
       },
       loading: false,
     } as any);
@@ -192,6 +220,14 @@ describe('TickerDossierView — command band structure', () => {
     expect(html).toContain('locked-surface');
     expect(html).not.toContain('17.20%');
     expect(html).not.toContain('data-region="metrics"');
+    // Position-history Allocation/Change must not leak historical house weights
+    expect(html).toContain('data-region="position-history"');
+    expect(html).not.toContain('>4.0%<');
+    expect(html).not.toContain('>13.2pp<');
+    expect(html).not.toContain('+13.2pp');
+    expect(html).not.toMatch(/Allocation[\s\S]*?4\.0%/);
+    // Book P&L (since-entry) also house_weights_nav
+    expect(html).not.toContain('+4.80%');
   });
 
   it('renders covered-unheld state with explicit "covered · unheld" label', () => {

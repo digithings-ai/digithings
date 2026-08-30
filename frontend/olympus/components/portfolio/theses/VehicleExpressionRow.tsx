@@ -40,8 +40,8 @@ function EnvelopeChip({ label, value }: { label: string; value: string }) {
  * expanding reveals the stock-level TIMING story (entry/exit envelope, the latest
  * signed analyst call, and the dossier / deliberation deep links).
  *
- * Weight figures are `house_weights_nav` (Baseline+) — Observer sees locked chrome
- * for the weight panel, not raw `weight_actual`.
+ * Weight and since-entry P&L are `house_weights_nav` (Baseline+) — Observer sees
+ * locked chrome for the book panel and redacted summary figures, not raw book data.
  */
 export function VehicleExpressionRow({
   ticker,
@@ -95,8 +95,12 @@ export function VehicleExpressionRow({
         </span>
         {held ? (
           <span className="hidden shrink-0 items-center gap-3 sm:flex">
-            <span className={`font-mono text-sm tabular-nums ${pnlTone(sinceEntry)}`}>
-              {fmtPct(sinceEntry, true)}
+            <span
+              className={`font-mono text-sm tabular-nums ${
+                weightsAllowed ? pnlTone(sinceEntry) : 'text-ink-mute'
+              }`}
+            >
+              {weightsAllowed ? fmtPct(sinceEntry, true) : '—'}
             </span>
             <span className="w-14 text-right font-mono text-sm tabular-nums text-ink">
               {weightsAllowed ? fmtPct(position?.weight_actual) : '—'}
