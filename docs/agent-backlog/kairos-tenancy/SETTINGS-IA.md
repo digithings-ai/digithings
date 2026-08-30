@@ -44,20 +44,46 @@ A future `preferred_model` field is out of scope until schemas + overlay dispatc
 
 Matches locked D1 / T5. Server authority = `workspaces.plan_tier` (not JWT claim alone).
 
-| Action | free (Observer) | baseline | custom / enterprise |
-|--------|-----------------|----------|---------------------|
-| View house research / narrative | ✓ | ✓ | ✓ |
-| View house weights / glass-box | — | ✓ | ✓ |
-| Notifications GET/PATCH | ✓ (member) | ✓ | ✓ |
-| Billing links | ✓ | ✓ | ✓ |
-| Profile / Pipeline write | locked UI + `TIER_FORBIDDEN` | locked + `TIER_FORBIDDEN` | ✓ |
-| Keys (BYOK) seal/revoke | locked + `TIER_FORBIDDEN` | locked + `TIER_FORBIDDEN` | ✓ |
-| Brokers connect/revoke | locked + `TIER_FORBIDDEN` | locked + `TIER_FORBIDDEN` | ✓ |
-| Profile/Pipeline/Keys/Brokers GET hydrate | member (empty/locked presentation) | same | full |
+| Action | free (Observer teaser) | baseline (paid) | custom / enterprise | creator/ops grant |
+|--------|------------------------|-----------------|---------------------|-------------------|
+| Digest summary conclusions | ✓ teaser | ✓ | ✓ | ✓ (floor) |
+| Portfolio glimpse (names only) | ✓ teaser | full book | full book | per floor |
+| House weights / glass-box pipeline | — | ✓ | ✓ | ✓ if floor ≥ baseline |
+| Notifications GET/PATCH | ✓ (member) | ✓ | ✓ | ✓ |
+| Billing links | ✓ | ✓ | ✓ | ✓ |
+| Profile / Pipeline write | omitted (no tab) | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
+| Keys (BYOK) seal/revoke | omitted (no tab) | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
+| Brokers connect/revoke | omitted (no tab) — **no connections on free** | omitted (no tab) | ✓ | ✓ if floor ≥ custom |
+| Automations / overlay runs | — | — | ✓ | ✓ if floor ≥ custom |
 
-**Product tension (documented, not amended):** human feedback suggested baseline may
-“connect their broker.” Locked D1 keeps broker connect on Custom+. Widening requires
-an explicit D1/T5 change + EF gate update in a dedicated PR.
+**UI rule:** Settings tabs the current *effective* tier cannot use are **omitted**,
+not greyed or locked. Observer (free) and Baseline see Notifications | Billing |
+About only. Custom / enterprise / creator floor see the full set. Server still
+returns `TIER_FORBIDDEN` if a hidden path is called directly.
+
+Deep links: `/settings#billing` (and `#notifications`, `#about`, plus Custom+
+`#profile` / `#pipeline` / `#keys` / `#brokers`) select that tab when it is
+visible. Upgrade CTAs in `LockedSurface` / `ClientProductGate` use `#billing`.
+A gated hash (e.g. Observer `#profile`) is ignored.
+
+**Supersedes prior note:** baseline does **not** unlock broker connect. Free is
+teaser-only (digest conclusions + light portfolio glimpse — not enough to
+reverse-engineer the PM product). Full product for everyone else requires a
+subscription. The **creator** email (seeded `chris.stefan@proton.me`) holds
+`plan_floor=custom` so baseline pipeline + Kairos Settings writes work **without
+Stripe**; paying customers still go through Checkout.
+
+## Client products (FX Hub + future)
+
+| Product key | Visibility |
+|-------------|------------|
+| `fx_hub` | Creator + rows in `client_product_grants` (12x email allowlist — human supplies list later; empty/configurable now) |
+| *(future)* | Same table + `ClientProductGate` / nav filter |
+
+Maintain grants in Supabase (`core`) near auth. Optional later: sync from the
+twelve-x repo. Env fallbacks for UI before migration apply:
+`NEXT_PUBLIC_OLYMPUS_CREATOR_EMAILS`, `NEXT_PUBLIC_OLYMPUS_PRODUCT_GRANTS`.
+
 
 ## API surface (settings Edge Function)
 

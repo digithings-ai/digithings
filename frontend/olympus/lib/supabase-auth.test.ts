@@ -33,8 +33,11 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     createClient.mockClear();
     buildSupabaseClient('https://example.supabase.co', 'anon-key', true);
     expect(createClient).toHaveBeenCalledTimes(1);
-    const opts = createClient.mock.calls[0]?.[2] as { auth?: { flowType?: string } };
+    const opts = createClient.mock.calls[0]?.[2] as {
+      auth?: { flowType?: string; detectSessionInUrl?: boolean };
+    };
     expect(opts?.auth?.flowType).toBe('pkce');
+    expect(opts?.auth?.detectSessionInUrl).toBe(false);
   });
 
   it('house client never persists a session (stays role=anon)', async () => {
@@ -57,6 +60,36 @@ describe('buildSupabaseClient / oauthRedirectTo', () => {
     expect(olympusBasePath()).toBe('/olympus');
     // happy-dom default origin
     expect(oauthRedirectTo()).toBe(`${window.location.origin}/olympus/auth/callback/`);
+  });
+
+  it('oauthSignInOptions always skipBrowserRedirect and add Google query params', async () => {
+    const { oauthSignInOptions } = await import('./supabase');
+    const github = oauthSignInOptions('github');
+    expect(github.skipBrowserRedirect).toBe(true);
+    expect(github.redirectTo).toMatch(/\/olympus\/auth\/callback\/$/);
+    expect(github.queryParams).toBeUndefined();
+    const google = oauthSignInOptions('google');
+    expect(google.queryParams).toEqual({
+      access_type: 'offline',
+      prompt: 'select_account',
+    });
+  });
+
+  it('oauthCallbackErrorFromLocation reads search and hash errors', async () => {
+    const { oauthCallbackErrorFromLocation, oauthPkceCodeFromLocation } = await import(
+      './supabase'
+    );
+    expect(oauthCallbackErrorFromLocation('', '')).toBeNull();
+    expect(oauthCallbackErrorFromLocation('?error=access_denied', '')).toBe('access_denied');
+    expect(
+      oauthCallbackErrorFromLocation(
+        '?error=access_denied&error_description=Provider+not+enabled',
+        '',
+      ),
+    ).toBe('access_denied: Provider not enabled');
+    expect(oauthCallbackErrorFromLocation('', '#error=server_error')).toBe('server_error');
+    expect(oauthPkceCodeFromLocation('?code=pkce-abc')).toBe('pkce-abc');
+    expect(oauthPkceCodeFromLocation('')).toBeNull();
   });
 
   it('olympusBasePath falls back to /olympus when env unset', async () => {

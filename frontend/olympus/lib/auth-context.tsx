@@ -14,9 +14,11 @@ import {
   getSupabaseClient,
   isOlympusAuthEnabled,
   oauthRedirectTo,
+  oauthSignInOptions,
+  type OAuthProvider,
 } from './supabase';
 
-export type OAuthProvider = 'google' | 'github';
+export type { OAuthProvider };
 
 export interface AuthContextValue {
   /** True when NEXT_PUBLIC_OLYMPUS_AUTH=1 (build-time). */
@@ -29,13 +31,19 @@ export interface AuthContextValue {
    */
   loading: boolean;
   signInWithOAuth: (provider: OAuthProvider) => Promise<void>;
+  signInWithPassword: (email: string, password: string) => Promise<void>;
+  signUpWithPassword: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 /** Exported so entitlement hooks can read session without throwing outside the tree. */
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
-const SIGN_IN_FAILED = 'Sign-in did not complete. Return to login and try again.';
+function missingClient(): Error {
+  return new Error(
+    'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+  );
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const authEnabled = isOlympusAuthEnabled();
@@ -79,13 +87,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithOAuth = useCallback(async (provider: OAuthProvider) => {
     const client = getSupabaseClient();
     if (!client) {
+      throw missingClient();
+    }
+    const { data, error } = await client.auth.signInWithOAuth({
+      provider,
+      options: oauthSignInOptions(provider),
+    });
+    if (error) throw error;
+    if (!data.url) {
       throw new Error(
-        'Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.',
+        provider === 'google'
+          ? 'Google did not return a redirect URL. Enable the Google provider in Supabase Auth and add this origin to Redirect URLs.'
+          : 'Sign-in did not return a redirect URL. Enable the provider in Supabase Auth.',
       );
     }
-    const { error } = await client.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: oauthRedirectTo() },
+    window.location.assign(data.url);
+  }, []);
+
+  const signInWithPassword = useCallback(async (email: string, password: string) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      throw missingClient();
+    }
+    const { error } = await client.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }, []);
+
+  const signUpWithPassword = useCallback(async (email: string, password: string) => {
+    const client = getSupabaseClient();
+    if (!client) {
+      throw missingClient();
+    }
+    const { error } = await client.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: oauthRedirectTo() },
     });
     if (error) throw error;
   }, []);
@@ -108,9 +144,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user: session?.user ?? null,
       loading,
       signInWithOAuth,
+      signInWithPassword,
+      signUpWithPassword,
       signOut,
     }),
-    [authEnabled, session, loading, signInWithOAuth, signOut],
+    [
+      authEnabled,
+      session,
+      loading,
+      signInWithOAuth,
+      signInWithPassword,
+      signUpWithPassword,
+      signOut,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
