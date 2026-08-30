@@ -193,12 +193,14 @@ COMMENT ON FUNCTION public.my_access() IS
     'Authenticated entitlement snapshot: workspace plan_tier, ops plan_floor, '
     'effective tier, and client_product_grants keys (fx_hub, …).';
 
-REVOKE ALL ON FUNCTION public.my_access() FROM PUBLIC;
+-- Supabase grants EXECUTE to anon/authenticated/service_role by default
+-- (not PUBLIC). REVOKE FROM PUBLIC alone does not drop the anon grant.
+REVOKE ALL ON FUNCTION public.my_access() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.my_access() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.my_access() TO service_role;
 
-REVOKE ALL ON FUNCTION public.plan_tier_rank(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.plan_tier_rank(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.plan_tier_rank(text) TO service_role;
 
-REVOKE ALL ON FUNCTION public.max_plan_tier(text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.max_plan_tier(text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.max_plan_tier(text, text) TO service_role;
