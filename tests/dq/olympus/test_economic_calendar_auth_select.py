@@ -14,11 +14,11 @@ MIGRATIONS_DIR = REPO_ROOT / "digiquant" / "supabase" / "migrations"
 MIGRATION_114 = MIGRATIONS_DIR / "114_economic_calendar_authenticated_select.sql"
 
 
-def _sql_without_line_comments(raw: str) -> str:
-    kept = [
-        line for line in raw.splitlines() if line.strip() and not line.lstrip().startswith("--")
-    ]
-    return re.sub(r"\s+", " ", "\n".join(kept)).strip()
+def _sql_without_comments(raw: str) -> str:
+    """Drop `--` line comments and `/* */` block comments before asserting DDL."""
+    no_block = re.sub(r"/\*.*?\*/", " ", raw, flags=re.DOTALL)
+    no_line = re.sub(r"--[^\n]*", " ", no_block)
+    return re.sub(r"\s+", " ", no_line).strip()
 
 
 def test_authenticated_select_is_ledger_114_not_113() -> None:
@@ -26,7 +26,7 @@ def test_authenticated_select_is_ledger_114_not_113() -> None:
     assert MIGRATION_114.is_file()
     assert list(MIGRATIONS_DIR.glob("113_*.sql")) == []
     raw = MIGRATION_114.read_text(encoding="utf-8")
-    sql = _sql_without_line_comments(raw)
+    sql = _sql_without_comments(raw)
     assert "cutover/113_drop_legacy_book_uniques.sql" in raw
     assert (
         "DROP POLICY IF EXISTS economic_calendar_authenticated_select ON public.economic_calendar;"
