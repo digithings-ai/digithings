@@ -128,7 +128,7 @@ All three adapters (`IBAdapterStub`, `AlpacaAdapterStub`, `QuantConnectAdapterSt
 | `tearsheet.py` | Plotly HTML tearsheet generation (`digiquant[visualization]`) |
 | `tearsheet_data.py` | Unified `TearsheetData` schema + `from_pine`/`from_nautilus` adapters; emits the JSON consumed by the React strategy-tearsheet library (`frontend/digiquant-web` `/strategies` routes on digiquant.io) |
 | `sweep.py` | Grid sweep loop (not VectorBT fast path) |
-| `cli.py` | `digiquant backtest | optimize | export` CLI |
+| `cli/` | `digiquant backtest | optimize | export | strategy | prices | policy-replay` CLI |
 
 ---
 
@@ -229,6 +229,20 @@ promote/activate/set-live/rollback-live tool on any surface.
 
 The `digiquant_pipeline_delegate` tool is a second name in the orchestrator manifest (same function), used by digigraph's hub dispatch to alias the pipeline call.
 
+### CLI (`python -m digiquant` / `digiquant`)
+
+Top-level click group in `cli/__init__.py`. Subgroups live under `cli/` (or olympus for policy-replay). Pipeline commands call the same functions as HTTP/MCP via `service.py` where applicable.
+
+| Command | Implementation | Notes |
+|---|---|---|
+| `backtest` / `optimize` / `export` | `cli/__init__.py` | Direct `run_*` entrypoints (same as HTTP handlers) |
+| `strategy list` | `cli/strategy.py` → `service_list_strategies` | JSON; twin of MCP `digiquant_list_strategies` / `GET /strategies` (#160) |
+| `strategy search <query>` | `cli/strategy.py` | Case-insensitive filter on name, aliases, description |
+| `prices …` | `cli/prices.py` | OHLCV / technicals / macro cron surface |
+| `policy-replay …` | `olympus/replay/cli.py` | Read-only governance summaries |
+
+Still open from #160 AC: dedicated `indicator list` / `indicator compute` (closest today: `prices compute-technicals`; MCP indicator tools tracked in #152).
+
 #### Slapper tearsheet pipeline
 
 The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to-end by digiquant's own pipeline:
@@ -306,7 +320,7 @@ Defined in `models.py`. Returned by `run_backtest()`, the pipeline's backtest no
 | `total_pnl` | `float` | `final_balance - 1_000_000.0` (hardcoded starting capital) |
 | `total_return_pct` | `float` | `total_pnl / 1_000_000.0 * 100` |
 | `sharpe_ratio` | `float | None` | Annualised (252 days) from Nautilus portfolio analyzer |
-| `max_drawdown_pct` | `float | None` | From `get_performance_stats_pnls()` or returns series fallback |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%), from `get_performance_stats_pnls()` or returns series fallback |
 | `num_trades` | `int` | Row count of `generate_order_fills_report()` |
 | `per_symbol_pnl` | `dict[str, float]` | Populated for multi-symbol runs; empty for single-symbol |
 | `status` | `str` | `ok` | `partial` | `error` |
@@ -319,7 +333,7 @@ Applied as a hard filter before scoring candidates. Any trial that fails these c
 | Field | Type | Meaning |
 |---|---|---|
 | `min_trades` | `int | None` | Minimum trade count |
-| `max_drawdown_pct` | `float | None` | e.g. `-0.15` for −15% |
+| `max_drawdown_pct` | `float | None` | Negative percent (e.g. `-15` is −15%); compared directly with `BacktestResult.max_drawdown_pct` |
 | `min_sharpe` | `float | None` | Minimum Sharpe ratio |
 | `min_return_pct` | `float | None` | Minimum total return |
 | `max_trades_per_year` | `float | None` | Activity cap |
