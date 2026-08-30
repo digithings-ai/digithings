@@ -10,7 +10,9 @@ from __future__ import annotations
 
 from digiquant.olympus.kairos.policy import (
     AmbiguousVenueError,
+    ForeignWorkspaceIntentError,
     InconsistentOrderChainError,
+    is_house_or_system_workspace,
     resolve_venue,
     routing_enabled,
 )
@@ -31,6 +33,7 @@ from digiquant.olympus.kairos.sync import (
 
 __all__ = [
     "AmbiguousVenueError",
+    "ForeignWorkspaceIntentError",
     "InconsistentOrderChainError",
     "RouteResult",
     "SyncCursor",
@@ -39,6 +42,7 @@ __all__ = [
     "broker_order_id",
     "broker_order_status_id",
     "broker_snapshot_id",
+    "is_house_or_system_workspace",
     "route_pending_orders",
     "routing_enabled",
     "resolve_venue",

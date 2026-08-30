@@ -382,3 +382,40 @@ def test_sync_module_has_no_upsert() -> None:
 
 def test_sync_budget_exceeded_type() -> None:
     assert issubclass(SyncBudgetExceeded, RuntimeError)
+
+
+def test_orphan_fill_holds_cursor() -> None:
+    """Orphan at T1 + linked fill at T2 must not advance cursor past the orphan."""
+    t1 = _NOW - timedelta(minutes=10)
+    t2 = _NOW - timedelta(minutes=1)
+    store = {
+        BROKER_ORDERS: [_seed_order(status="filled")],
+        BROKER_EXECUTIONS: [],
+        BROKER_POSITION_SNAPSHOTS: [],
+    }
+    # Orphan: symbol with no matching head (MSFT); linked: AAPL.
+    orphan = BrokerFill(
+        external_fill_id="orphan-1",
+        symbol="MSFT",
+        quantity=Decimal("1"),
+        price=Decimal("50"),
+        fee=None,
+        executed_at=t1,
+    )
+    linked = _fill(fill_id="fill-linked", qty="5", when=t2)
+    adapter = _SyncAdapter(fills=[orphan, linked], positions=[])
+    result = sync_connection(
+        client=_FakeClient(store),
+        adapter=adapter,
+        connection=_connection(),
+        cursor=_CURSOR,
+        now=_NOW,
+        pull_snapshot=False,
+    )
+    assert result.fills_appended == 1
+    assert result.unlinked_fills_held_cursor is True
+    assert "orphan-1" in result.unlinked_fill_ids
+    assert result.cursor is not None
+    # Held at previous cursor so exclusive-since adapters re-read the orphan.
+    assert result.cursor.fills_since == _CURSOR.fills_since
+    assert result.cursor.fills_since < t2

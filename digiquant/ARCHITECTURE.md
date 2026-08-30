@@ -2943,35 +2943,48 @@ external paper venue after H9 / `execute_at_open`, and mirrors acks / fills / po
 append-only (D10). The internal `paper_internal` path is unchanged.
 
 **Venue resolution (`policy.py`).** `resolve_venue(workspace_id, *, active_paper_brokers)`
-performs **no I/O**. House / system (`workspace_id is None`) → always `PAPER_INTERNAL`
-(hard-coded). Kill switch `OLYMPUS_KAIROS_ROUTING` defaults **off** (inverse polarity of
-`OLYMPUS_PORTFOLIO_LEDGER`): off ⇒ only `PAPER_INTERNAL` regardless of connections. With
-the switch on, a workspace with exactly one active paper `broker_connections` row maps to
-`ALPACA_PAPER` / `IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`.
-v1 does **not** store an execution-policy column on `workspaces` (T0 untouched; richer
-policy lands with T4). Any path that would return a `*_LIVE` venue raises
-`LiveVenueNotAuthorizedError` (test-pinned).
+performs **no I/O**. House / system — `workspace_id is None` **or** the well-known
+`house_workspace_id()` / `system_workspace_id()` UUIDs → always `PAPER_INTERNAL`
+(hard-coded; those identities can never route externally). Kill switch
+`OLYMPUS_KAIROS_ROUTING` defaults **off** (inverse polarity of `OLYMPUS_PORTFOLIO_LEDGER`):
+off ⇒ only `PAPER_INTERNAL` regardless of connections. With the switch on, a **tenant**
+workspace with exactly one active paper `broker_connections` row maps to `ALPACA_PAPER` /
+`IBKR_PAPER`; zero → `PAPER_INTERNAL`; two or more → `AmbiguousVenueError`. v1 does **not**
+store an execution-policy column on `workspaces` (T0 untouched; richer policy lands with
+T4). Live venue / broker tokens in `active_paper_brokers` (e.g. `"alpaca_live"`,
+`ExecutionVenue.ALPACA_LIVE`) raise `LiveVenueNotAuthorizedError` on the **public** API
+(not a bare `ValueError`); `_assert_not_live` remains defense-in-depth on the return path.
 
-**Router (`router.py`).** Builds `BrokerOrderRequest` from a pending `OrderIntent`
-(`client_order_id = str(order_intent_id)`; side from `DecisionIntent.action` via the same
-`_directions_by_order` walk as `execution_io` — never from the positions book).
-`NO_OP`/`REJECT` with a pending intent → `InconsistentOrderChainError` (refuse, don't
-guess). Appends one `broker_orders` row with deterministic id
-`uuid5(ns, f"{order_intent_id}:{broker}:{date}")` — retries collide, never duplicate.
-`upsert` is forbidden.
+**Router (`router.py`) — authority boundary.** `workspace_id` is passed to `resolve_venue`
+**unchanged** (`None` stays `None`; never substituted with `connection.workspace_id`).
+`connection.env != paper` raises `LiveVenueNotAuthorizedError` before any
+`submit_order`. Pending intents are read via the date-only ledger helpers
+(`_pending_order_heads` / `_directions_by_order` still filter by `run_date` alone — the
+ledger predates tenancy query filters) and then **post-filtered** to
+`connection.workspace_id`; foreign-workspace intents are never submitted, and a pending
+row missing `workspace_id` raises `ForeignWorkspaceIntentError`. Builds
+`BrokerOrderRequest` from a pending `OrderIntent` (`client_order_id = str(order_intent_id)`;
+side from `DecisionIntent.action` via `_directions_by_order` — never from the positions
+book). `NO_OP`/`REJECT` with a pending intent → `InconsistentOrderChainError`. Appends one
+`broker_orders` row with deterministic id `uuid5(ns, f"{order_intent_id}:{broker}:{date}")`
+— retries collide, never duplicate. `upsert` is forbidden.
 
 **Sync (`sync.py`).** Per active connection: refresh order status (supersede chain), pull
 fills since a `SyncCursor`, append `broker_executions` (`uuid5(connection_id,
 external_fill_id)`), and take a positions/account snapshot. Alpaca ≤6 REST
 calls/connection/cycle (`SyncBudgetExceeded`); IBKR pacing lives in the adapter (≥5s).
 Credentials are unsealed only inside the caller's `open_credential` lease — sync never
-sees plaintext. Reconciliation: snapshot vs fill-implied expectation →
-`reconciliation_diverged` + structured report on the snapshot row + log; **never**
-auto-submit corrective orders (`SyncResult.refused_corrective_orders` is always true).
+sees plaintext. Unlinked (orphan) fills hold `fills_since` at the previous cursor so
+exclusive-`since` adapters re-read them next cycle (`unlinked_fills_held_cursor`);
+operator remedy: ensure the submit mirror exists or resolve symbol ambiguity.
+Reconciliation: snapshot vs fill-implied expectation → `reconciliation_diverged` +
+structured report on the snapshot row + log; **never** auto-submit corrective orders
+(`SyncResult.refused_corrective_orders` is always true).
 
 **`execute_at_open` seam.** `resolve_execution_venue_for_run` is the only new call site;
-default (no workspace / kill switch off) stays on `build_events_from_paper_fills`.
-Migration 102 + `tests/dq/olympus/kairos/`.
+invalid / empty `OLYMPUS_KAIROS_WORKSPACE_ID` warns and falls back to house
+(`paper_internal`). Default (no workspace / kill switch off) stays on
+`build_events_from_paper_fills`. Migration 102 + `tests/dq/olympus/kairos/`.
 
 ## Notifications (email v0)
 

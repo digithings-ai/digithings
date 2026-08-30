@@ -739,6 +739,13 @@ from them). Status changes append a new `broker_orders` row with backward
 | `broker_executions` | `(id uuid)` | Fill mirror; id = `uuid5(connection_id, external_fill_id)`; `UNIQUE (broker_order_id, external_fill_id)`. |
 | `broker_position_snapshots` | `(id uuid)` | Point-in-time broker truth; `UNIQUE (connection_id, as_of)`; `reconciliation_diverged` + report when mirror disagrees — never auto-trades. |
 
+**Router authority (writers, not DDL):** `route_pending_orders` may only submit intents
+whose `workspace_id` matches the connection; house/system identities and
+`connection.env != paper` never reach `submit_order`. Live venue tokens raise
+`LiveVenueNotAuthorizedError` on the public `resolve_venue` / router path. Ledger reads
+remain date-scoped at the helper layer; the router post-filters to the connection
+workspace (see `digiquant/ARCHITECTURE.md` → Kairos router + mirror).
+
 RLS enabled with **no** policies (deny-by-default). `service_role` holds SELECT + INSERT
 only; BEFORE UPDATE/DELETE/TRUNCATE triggers reject mutation (069 pattern). Migration
 number 102 skips 100/101 deliberately (sibling T2 holds them) — renumber-at-merge if the
