@@ -12,7 +12,7 @@ const authMock = vi.hoisted(() => ({
   loading: false,
   signInWithOAuth: vi.fn(async () => {}),
   signInWithPassword: vi.fn(async () => {}),
-  signUpWithPassword: vi.fn(async () => {}),
+  signUpWithPassword: vi.fn(async () => ({ session: null })),
   signOut: vi.fn(async () => {}),
 }));
 
@@ -129,5 +129,51 @@ describe('LoginScreen', () => {
     });
     expect(authMock.signInWithPassword).toHaveBeenCalledWith('you@desk.tld', 'secret12');
     expect(replace).toHaveBeenCalledWith('/');
+  });
+
+  it('signup with a session replaces home and does not claim email arrived', async () => {
+    authMock.signUpWithPassword.mockResolvedValueOnce({ session: { access_token: 'tok' } });
+    await act(async () => {
+      root.render(createElement(LoginScreen, { initialMode: 'signup' }));
+    });
+    const email = container.querySelector('#acct-email') as HTMLInputElement;
+    const password = container.querySelector('#acct-password') as HTMLInputElement;
+    await act(async () => {
+      const proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      proto?.call(email, 'you@desk.tld');
+      email.dispatchEvent(new Event('input', { bubbles: true }));
+      proto?.call(password, 'secret12');
+      password.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const form = container.querySelector('form');
+    await act(async () => {
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(authMock.signUpWithPassword).toHaveBeenCalledWith('you@desk.tld', 'secret12');
+    expect(replace).toHaveBeenCalledWith('/');
+    expect(container.textContent).not.toContain('Check your email');
+  });
+
+  it('signup without a session tells the truth about Auth SMTP', async () => {
+    authMock.signUpWithPassword.mockResolvedValueOnce({ session: null });
+    await act(async () => {
+      root.render(createElement(LoginScreen, { initialMode: 'signup' }));
+    });
+    const email = container.querySelector('#acct-email') as HTMLInputElement;
+    const password = container.querySelector('#acct-password') as HTMLInputElement;
+    await act(async () => {
+      const proto = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+      proto?.call(email, 'you@desk.tld');
+      email.dispatchEvent(new Event('input', { bubbles: true }));
+      proto?.call(password, 'secret12');
+      password.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const form = container.querySelector('form');
+    await act(async () => {
+      form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(replace).not.toHaveBeenCalled();
+    expect(container.textContent).toMatch(/Auth SMTP is not delivering/i);
+    expect(container.textContent).not.toContain('Check your email to confirm');
   });
 });
