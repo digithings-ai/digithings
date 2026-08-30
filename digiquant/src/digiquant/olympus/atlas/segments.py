@@ -14,6 +14,7 @@ to read, and leaves room for richer per-segment fields in sub-classes.
 
 from __future__ import annotations
 
+import json
 import logging
 import time as _time
 from collections.abc import Mapping
@@ -228,6 +229,104 @@ def canonical_literal(raw: str, members: frozenset[str]) -> str | None:
     return None
 
 
+def _parse_json_object(value: object) -> object:
+    """Parse a JSON-object string; leave anything else untouched."""
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if not stripped.startswith("{"):
+        return value
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return value
+    return parsed if isinstance(parsed, dict) else value
+
+
+def _string_value(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    if isinstance(value, Mapping):
+        inner = value.get("stringValue") or value.get("string_value")
+        if isinstance(inner, str) and inner.strip():
+            return inner
+    return None
+
+
+def _flatten_wrapped_record(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Unwrap Gemini/LiteLLM object envelopes onto a flat Finding/Source dict."""
+    if any(key in data for key in ("label", "summary", "id", "text", "description", "detail")):
+        return dict(data)
+    for wrapper_key in ("properties", "fields", "structValue", "value"):
+        inner = data.get(wrapper_key)
+        if not isinstance(inner, Mapping):
+            continue
+        flat: dict[str, Any] = {}
+        for key, val in inner.items():
+            text = _string_value(val)
+            flat[key] = text if text is not None else val
+        if flat:
+            return flat
+    return dict(data)
+
+
+def _pick_aliased_str(data: Mapping[str, Any], names: tuple[str, ...]) -> str | None:
+    for name in names:
+        text = _string_value(data.get(name))
+        if text is not None:
+            return text
+    return None
+
+
+def _coerce_finding_record(data: object) -> object:
+    """Map LLM hedges onto Finding without a full-mode regeneration.
+
+    House GHA 33426508863 ``sector-real-estate``: attempt 1 omitted ``summary``
+    (``as_of`` + a long prose field); attempt 2 emitted JSON-string Gemini
+    Object envelopes. Carrying the sector baseline is the expensive outcome.
+    """
+    data = _parse_json_object(data)
+    if not isinstance(data, Mapping):
+        return data
+    out = _flatten_wrapped_record(data)
+    if _string_value(out.get("summary")) is None:
+        picked = _pick_aliased_str(
+            out, ("text", "description", "detail", "body", "finding", "content")
+        )
+        if picked is None:
+            candidates = [
+                value
+                for key, value in out.items()
+                if key not in {"as_of", "source_ids", "label", "title", "headline"}
+                and isinstance(value, str)
+                and len(value.strip()) > 20
+            ]
+            candidates.sort(key=len, reverse=True)
+            picked = candidates[0] if candidates else None
+        if picked is not None:
+            out["summary"] = picked
+    if _string_value(out.get("label")) is None:
+        picked = _pick_aliased_str(out, ("title", "headline", "name"))
+        if picked is None:
+            summary = _string_value(out.get("summary")) or ""
+            picked = summary.split(".")[0].strip()[:80] or None
+        if picked is not None:
+            out["label"] = picked
+    return out
+
+
+def _coerce_source_record(data: object) -> object:
+    data = _parse_json_object(data)
+    if not isinstance(data, Mapping):
+        return data
+    out = _flatten_wrapped_record(data)
+    if _string_value(out.get("id")) is None:
+        picked = _pick_aliased_str(out, ("source_id", "sourceId", "name"))
+        if picked is not None:
+            out["id"] = picked
+    return out
+
+
 class Finding(BaseModel):
     """One material finding produced by a segment analyst."""
 
@@ -301,6 +400,11 @@ class Finding(BaseModel):
         # Unparseable but non-empty: keep it, capped. Disclosure beats silence.
         return raw[:32]
 
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_llm_shape(cls, data: object) -> object:
+        return _coerce_finding_record(data)
+
 
 class Source(BaseModel):
     """One source cited by the segment's findings."""
@@ -308,6 +412,11 @@ class Source(BaseModel):
     id: str = Field(description="Stable identifier used by Finding.source_ids")
     title: str | None = Field(default=None)
     url: str | None = Field(default=None)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_llm_shape(cls, data: object) -> object:
+        return _coerce_source_record(data)
 
 
 class SegmentReport(BaseModel):
@@ -363,6 +472,14 @@ class SegmentReport(BaseModel):
             "high. Note in 'notes' when it diverges from the data_quality grade."
         ),
     )
+
+    @field_validator("material_findings", "sources", mode="before")
+    @classmethod
+    def _parse_json_list_items(cls, v: object) -> object:
+        """Gemini sometimes emits nested objects as JSON strings (house GHA 33426508863)."""
+        if not isinstance(v, list):
+            return v
+        return [_parse_json_object(item) for item in v]
 
     @model_validator(mode="before")
     @classmethod
