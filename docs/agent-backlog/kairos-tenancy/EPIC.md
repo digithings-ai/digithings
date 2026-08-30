@@ -81,6 +81,8 @@ narrows `anon_read` on private books to house; documents house+system). Live pro
 `GET /jobs` `/fills` `/notifications/log`); checkout/portal await Stripe price
 secrets (`PRICE_NOT_CONFIGURED`). EF secret **names** on core: vault + `APP_URL` +
 Finnhub + platform `SUPABASE_*`. Still **no** `STRIPE_*` / `MAILGUN_*` / `ALPACA_*`.
+`APP_URL` must be `https://digiquant.io` (not loopback). Checkout return URLs are
+`/olympus/settings/?tab=billing`. `GET /settings/app-urls` is the Observer probe.
 
 **Remaining hops (Observer JWT, re-audit 2026-08-31T05:11Z):** all five unproven.
 `job_runs` / `broker_executions` / `notification_log` / `stripe_events` / BYOK

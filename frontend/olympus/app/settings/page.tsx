@@ -20,15 +20,10 @@ import { useAppShell } from '@/components/app-shell-context';
 import { dataSourceHost } from '@/lib/data-source-host';
 import { useAuth } from '@/lib/auth-context';
 import type { SettingsApiOptions } from '@/lib/settings-api';
-
-type SettingsTab =
-  | 'profile'
-  | 'pipeline'
-  | 'keys'
-  | 'brokers'
-  | 'notifications'
-  | 'billing'
-  | 'about';
+import {
+  settingsTabFromSearch,
+  type SettingsTab,
+} from '@/lib/settings/tab-from-search';
 
 const TABS: { id: SettingsTab; label: string }[] = [
   { id: 'profile', label: 'Profile' },
@@ -45,7 +40,9 @@ export default function SettingsPage() {
   const { openCommandPalette } = useAppShell();
   const { session } = useAuth();
   const meta = data?.portfolio?.meta ?? null;
-  const [tab, setTab] = useState<SettingsTab>('profile');
+  const [tab, setTab] = useState<SettingsTab>(() =>
+    settingsTabFromSearch(typeof window === 'undefined' ? '' : window.location.search),
+  );
   const [lastVersionId, setLastVersionId] = useState<string | null>(null);
 
   const api: SettingsApiOptions | null = useMemo(() => {

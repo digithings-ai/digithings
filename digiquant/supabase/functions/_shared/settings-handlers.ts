@@ -15,6 +15,7 @@
  *   GET    /notifications/log  — notification_log event keys (digest proof; no bodies)
  *   GET    /jobs               — job_runs for the caller's workspace (overlay hop proof)
  *   GET    /fills              — broker_executions fingerprints (paper fill hop proof)
+ *   GET    /app-urls           — pinned Alpaca redirect_uri + billing return URL
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
  * olympus_profile_config.workspace_id), K3 vault + broker_connections, and
@@ -52,6 +53,10 @@ import {
   type BrokerCredential,
   type MasterKey,
 } from "./vault.ts";
+import {
+  pinnedAlpacaRedirectUriFromOrigin,
+  settingsBillingReturnUrl,
+} from "./app-url.ts";
 
 export type SettingsDeps = {
   admin: AdminClient;
@@ -90,7 +95,7 @@ const LLM_PROVIDERS = new Set([
 export const BYOK_AAD_PURPOSE = "llm";
 
 /** Fixed OAuth callback path under Olympus (must match frontend alpacaOAuthCallbackPath). */
-export const ALPACA_OAUTH_CALLBACK_PATH = "/olympus/settings/brokers/callback/";
+export { ALPACA_OAUTH_CALLBACK_PATH } from "./app-url.ts";
 
 function pathOf(url: URL): string {
   // Supabase mounts at /settings or /functions/v1/settings — strip both prefixes.
@@ -161,6 +166,9 @@ export async function handleSettingsRequest(
   if (method === "GET" && (path === "/fills" || path === "/fills/")) {
     return listFills(req, deps);
   }
+  if (method === "GET" && (path === "/app-urls" || path === "/app-urls/")) {
+    return getAppUrls(req, deps);
+  }
   return jsonError(404, "NOT_FOUND", "Unknown settings route");
 }
 
@@ -213,11 +221,7 @@ export function pinnedAlpacaRedirectUri(appUrl?: string): string {
     Deno.env.get("APP_URL") ??
     Deno.env.get("NEXT_PUBLIC_APP_URL") ??
     "";
-  const base = raw.replace(/\/+$/, "");
-  if (!base) {
-    throw new Error("APP_URL unset");
-  }
-  return `${base}${ALPACA_OAUTH_CALLBACK_PATH}`;
+  return pinnedAlpacaRedirectUriFromOrigin(raw);
 }
 
 function isUniqueViolation(err: { code?: string; message?: string }): boolean {
@@ -317,6 +321,27 @@ function profileResponseBody(row: Record<string, unknown>): Record<string, unkno
         ? payload.research_budget_usd
         : null,
   };
+}
+
+/** GET /app-urls — member read of pinned Alpaca + billing URLs (no secrets). */
+async function getAppUrls(req: Request, deps: SettingsDeps): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+  try {
+    const raw =
+      deps.appUrl ??
+      Deno.env.get("APP_URL") ??
+      Deno.env.get("NEXT_PUBLIC_APP_URL") ??
+      "";
+    return jsonOk({
+      alpaca_redirect_uri: pinnedAlpacaRedirectUri(raw),
+      billing_return_url: settingsBillingReturnUrl(raw),
+    });
+  } catch {
+    return jsonError(500, "APP_URL_NOT_CONFIGURED", "APP_URL is not configured");
+  }
 }
 
 /**

@@ -3099,8 +3099,14 @@ spec D1) and denormalized `workspaces` billing columns for RLS.
 | Function | Auth | Role |
 |----------|------|------|
 | `stripe-webhook` | Stripe-Signature (`STRIPE_WEBHOOK_SECRET`); `verify_jwt=false` | Idempotent `stripe_events` insert → roadmap P4 column mapping → Auth claim sync |
-| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env |
-| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id` |
+| `create-checkout-session` | Supabase user JWT (`verify_jwt=true`) | Owner's workspace via `workspace_members`; reuses `stripe_customer_id`; price ids from env; success/cancel → `{APP_URL}/olympus/settings/?tab=billing&checkout=…` (`_shared/app-url.ts`) |
+| `customer-portal` | Supabase user JWT (`verify_jwt=true`) | Portal session for existing `stripe_customer_id`; return `{APP_URL}/olympus/settings/?tab=billing` |
+
+`APP_URL` / `NEXT_PUBLIC_APP_URL` is the **site origin** (`https://digiquant.io`).
+Helpers strip a trailing `/olympus` so a mistaken path does not double the basePath.
+Loopback origins (`127.0.0.1`) break Alpaca `redirect_uri` and Stripe return URLs;
+`GET /settings/app-urls` is the Observer probe. Settings UI opens the Billing tab from
+`?tab=billing` / `?checkout=success|cancel`.
 
 Shared helpers: `_shared/{stripe.ts,tiers.ts,supabase-admin.ts,webhook-handler.ts,billing-auth.ts}`.
 Price → tier map keys off `STRIPE_PRICE_BASELINE_{MONTHLY,ANNUAL}` /

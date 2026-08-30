@@ -78,7 +78,8 @@ Replace / fill these in the Cursor environment secret store. **Values never go i
 | `AUTH_GOOGLE_CLIENT_ID` / `AUTH_GOOGLE_CLIENT_SECRET` | Google OAuth client (still needed) |
 | `ALPACA_OAUTH_CLIENT_ID` / `ALPACA_OAUTH_CLIENT_SECRET` | Alpaca **paper** OAuth app |
 
-**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`, `APP_URL`, `NEXT_PUBLIC_APP_URL`.  
+**Done on `core` EF secrets:** `DIGIQUANT_VAULT_MASTER_KEY`, `DIGIQUANT_VAULT_KEY_ID`.  
+**`APP_URL` / `NEXT_PUBLIC_APP_URL`:** must be `https://digiquant.io` (origin). Loopback `http://127.0.0.1:3001` on `core` breaks Alpaca OAuth + Stripe return. Checkout returns to `/olympus/settings/?tab=billing`.
 **Done Auth:** GitHub provider **Enabled** on `core`. Google still Disabled. Email Enabled — Agentmail path works.  
 **Done product:** mig 107 bootstrap; settings GET/PATCH; vault seal; Settings/billing CORS preflight; free connect → `TIER_FORBIDDEN` (GitHub WS still `free`).
 

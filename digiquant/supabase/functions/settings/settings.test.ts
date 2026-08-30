@@ -1325,6 +1325,10 @@ Deno.test("pinnedAlpacaRedirectUri uses APP_URL + /olympus callback", () => {
     pinnedAlpacaRedirectUri("https://app.example"),
     "https://app.example/olympus/settings/brokers/callback/",
   );
+  assertEquals(
+    pinnedAlpacaRedirectUri("https://app.example/olympus"),
+    "https://app.example/olympus/settings/brokers/callback/",
+  );
 });
 
 Deno.test("GET profile: includes workspace billing snapshot without Stripe ids", async () => {
@@ -1422,4 +1426,18 @@ Deno.test("GET /notifications/log: member lists digest event keys only", async (
   const events = json.events as Array<Record<string, unknown>>;
   assertEquals(events.length, 1);
   assertEquals(events[0]!.event_key, "digest:2026-08-31");
+});
+
+Deno.test("GET /app-urls: pinned Alpaca + billing return under /olympus", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", "/app-urls");
+  assertEquals(status, 200);
+  assertEquals(
+    json.alpaca_redirect_uri,
+    "https://app.example/olympus/settings/brokers/callback/",
+  );
+  assertEquals(
+    json.billing_return_url,
+    "https://app.example/olympus/settings/?tab=billing",
+  );
 });

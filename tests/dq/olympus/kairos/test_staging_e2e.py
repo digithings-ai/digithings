@@ -29,6 +29,7 @@ from digiquant.olympus.kairos.staging_e2e import (
     collect_remaining_evidence,
     format_remaining_hops_failure,
     hop_ok,
+    public_app_urls_ok,
     remaining_hops_unproven,
     resolve_staging_jwt,
     run_observer_hops,
@@ -117,10 +118,35 @@ def test_empty_and_placeholder_values_count_as_missing(
         (HopExpectation.PRICE_OR_SESSION, 403, "TIER_FORBIDDEN", False),
         (HopExpectation.NOT_FOUND, 404, "NOT_FOUND", True),
         (HopExpectation.NOT_FOUND, 403, "TIER_FORBIDDEN", False),
+        (HopExpectation.PUBLIC_URLS_OK, 200, None, False),
     ),
 )
 def test_observer_hop_ok(kind: HopExpectation, http: int, code: str | None, expected: bool) -> None:
     assert hop_ok(kind, http, code) is expected
+
+
+@pytest.mark.unit
+def test_public_app_urls_ok_requires_digiquant_origin() -> None:
+    good = {
+        "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
+        "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, good) is True
+    loopback = {
+        **good,
+        "alpaca_redirect_uri": "http://127.0.0.1:3001/olympus/settings/brokers/callback/",
+    }
+    assert public_app_urls_ok(200, loopback) is False
+    named_loopback = {
+        **good,
+        "billing_return_url": "http://localhost:3001/olympus/settings/?tab=billing",
+    }
+    assert public_app_urls_ok(200, named_loopback) is False
+    missing_olympus = {
+        **good,
+        "billing_return_url": "https://digiquant.io/settings/billing",
+    }
+    assert public_app_urls_ok(200, missing_olympus) is False
 
 
 class _FakeHttp:
@@ -156,6 +182,13 @@ def _observer_ok_fakes() -> dict[tuple[str, str], tuple[int, dict[str, object]]]
         ("GET", "/settings/notifications/log"): (200, {"events": []}),
         ("GET", "/settings/brokers"): (200, {"connections": []}),
         ("GET", "/settings/keys"): (200, {"keys": []}),
+        ("GET", "/settings/app-urls"): (
+            200,
+            {
+                "alpaca_redirect_uri": "https://digiquant.io/olympus/settings/brokers/callback/",
+                "billing_return_url": "https://digiquant.io/olympus/settings/?tab=billing",
+            },
+        ),
         ("GET", "/settings/jobs"): (200, {"jobs": []}),
         ("GET", "/settings/fills"): (200, {"fills": []}),
         ("PATCH", "/settings/profile"): forbidden,

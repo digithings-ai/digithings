@@ -33,7 +33,8 @@ plaintext. `GET /notifications` hydrates prefs (empty → 200 defaults, `updated
 no write). `PATCH /notifications` upserts `notification_prefs` (migration 103 / K5).
 Member-scoped service-role reads: `GET /jobs` (`job_runs`), `GET /fills`
 (`broker_executions` fingerprints, no `external_fill_id`), `GET /notifications/log`
-(event keys only). `GET /profile` includes workspace `plan_tier` +
+(event keys only), `GET /app-urls` (pinned Alpaca redirect_uri + billing return
+URL under `/olympus`). `GET /profile` includes workspace `plan_tier` +
 `subscription_status` and `has_stripe_subscription` (boolean only) and never Stripe ids.
 
 **Deploy requires** K3 vault + `broker_connections` and K5 `notification_prefs`
@@ -69,6 +70,10 @@ supabase secrets set \
   ALPACA_OAUTH_CLIENT_SECRET=…
 ```
 
+**Checkout / portal return URLs** append `/olympus/settings/?tab=billing`.
+`APP_URL` on `core` must be `https://digiquant.io` (origin only — never loopback,
+never a path that already includes `/olympus`).
+
 `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` are injected by
 the Edge Runtime — do not put the service role key in app env files that ship to
 browsers. Local names also accepted as fallbacks: `CORE_SUPABASE_URL`,
@@ -94,6 +99,7 @@ cd digiquant/supabase/functions
 
 # Install Deno if needed: https://deno.land (# or: curl -fsSL https://deno.land/install.sh | sh)
 deno test --allow-env --allow-read \
+  _shared/app-url.test.ts \
   _shared/tiers.test.ts \
   _shared/vault.test.ts \
   stripe-webhook/stripe-webhook.test.ts \

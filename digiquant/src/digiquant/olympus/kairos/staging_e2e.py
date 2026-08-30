@@ -46,7 +46,22 @@ CHECKOUT_CONFIG_MISS_CODES: frozenset[str] = frozenset(
     }
 )
 
-# Until each remaining hop is proven, the harness must not exit 0.
+DEFAULT_PUBLIC_APP_ORIGIN = "https://digiquant.io"
+_LOOPBACK_MARKERS: tuple[str, ...] = ("127.0.0.1", "localhost")
+
+
+def public_app_urls_ok(http: int, body: Mapping[str, object]) -> bool:
+    """Pinned core APP_URL must be the public origin, not loopback."""
+    if http != 200:
+        return False
+    alpaca = str(body.get("alpaca_redirect_uri") or "")
+    billing = str(body.get("billing_return_url") or "")
+    blob = f"{alpaca} {billing}".lower()
+    if any(marker in blob for marker in _LOOPBACK_MARKERS):
+        return False
+    return alpaca.startswith(
+        f"{DEFAULT_PUBLIC_APP_ORIGIN}/olympus/settings/brokers/callback"
+    ) and billing.startswith(f"{DEFAULT_PUBLIC_APP_ORIGIN}/olympus/settings/")
 
 
 class HttpJson(Protocol):
@@ -67,6 +82,7 @@ class HopExpectation(StrEnum):
     TIER_FORBIDDEN = "tier_forbidden"
     PRICE_OR_SESSION = "price_or_session"
     NOT_FOUND = "not_found"
+    PUBLIC_URLS_OK = "public_urls_ok"
 
 
 class ObserverHop(BaseModel):
@@ -117,6 +133,12 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
         label="GET /settings/keys", method="GET", path="/settings/keys", kind=HopExpectation.READ_OK
     ),
     ObserverHop(
+        label="GET /settings/app-urls",
+        method="GET",
+        path="/settings/app-urls",
+        kind=HopExpectation.PUBLIC_URLS_OK,
+    ),
+    ObserverHop(
         label="PATCH /settings/profile",
         method="PATCH",
         path="/settings/profile",
@@ -158,7 +180,12 @@ OBSERVER_HOPS: tuple[ObserverHop, ...] = (
 )
 
 
-def hop_ok(kind: HopExpectation, http: int, code: str | None) -> bool:
+def hop_ok(
+    kind: HopExpectation,
+    http: int,
+    code: str | None,
+    body: Mapping[str, object] | None = None,
+) -> bool:
     """Return whether a live response matches the Observer-phase expectation."""
     if kind is HopExpectation.READ_OK:
         return http == 200
@@ -170,6 +197,8 @@ def hop_ok(kind: HopExpectation, http: int, code: str | None) -> bool:
         return http in {200, 201}
     if kind is HopExpectation.NOT_FOUND:
         return http == 404 and code == "NOT_FOUND"
+    if kind is HopExpectation.PUBLIC_URLS_OK:
+        return public_app_urls_ok(http, body or {})
     unhandled: HopExpectation = kind
     raise AssertionError(f"unhandled hop kind {unhandled}")
 
@@ -208,7 +237,7 @@ def run_observer_hops(
                 label=hop.label,
                 http=status,
                 code=code,
-                ok=hop_ok(hop.kind, status, code),
+                ok=hop_ok(hop.kind, status, code, body),
                 kind=hop.kind,
             )
         )

@@ -245,7 +245,7 @@ NEXT_PUBLIC_OLYMPUS_AUTH=1 npm run build
 | Prerequisite | Status (2026-08-30) | Blocks |
 |--------------|---------------------|--------|
 | Vault master key `DIGIQUANT_VAULT_MASTER_KEY` + `DIGIQUANT_VAULT_KEY_ID` | **SET in VM `.env`** and **pushed to `core` EF secrets** (2026-08-30 via `sbp_` + `supabase secrets set`). | K3 seal; settings brokers; T4 BYOK at runtime |
-| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **SET in VM** → `http://127.0.0.1:3001` and **pushed to `core` EF secrets**. | OAuth redirect pin; checkout return URLs |
+| `APP_URL` / `NEXT_PUBLIC_APP_URL` | **Must be `https://digiquant.io`** (site origin). Loopback `http://127.0.0.1:3001` was pushed to `core` earlier and **breaks** Alpaca redirect_uri + Stripe return URLs. Checkout/portal append `/olympus/settings/?tab=billing`. | OAuth redirect pin; checkout return URLs |
 | Agent Mail inbox | **Available:** `digithings@agentmail.to` | Signup verification |
 | Stripe test products/prices + `STRIPE_SECRET_KEY` + webhook secret | **Blocked** — signup hit hCaptcha; partial signup notes only in `.local/secrets/` (no live keys) | T2 EFs; checkout/portal; claim sync |
 | Mailgun `MAILGUN_API_KEY` / `MAILGUN_DOMAIN` / `NOTIFY_FROM` | **Blocked** — values still **empty** in VM/Cursor env; smoke skipped. Fail-soft notify path OK. `sbp_` available now — paste nonempty Mailgun into EF secrets when obtained. | K5 digest / alerts |
