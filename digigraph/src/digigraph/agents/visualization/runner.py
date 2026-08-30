@@ -10,6 +10,7 @@ from digigraph.agents._common import finalize_agent_output, load_dataset_path, r
 from digigraph.agents.visualization.tools_schema import VIZ_TOOLS
 from digigraph.llm_client import run_tools
 from digigraph.model_config import get_model_for_mode
+from digigraph.tool_policy import tool_choice_for_require
 from digigraph.tools.analytics import (
     build_relationship_graph,
     entity_co_occurrence,
@@ -42,6 +43,7 @@ def run_visualization_agent(
     task: str,
     session_id: str | None = None,
     options: dict[str, Any] | None = None,
+    require_tool_calls: bool = False,
 ) -> str:
     """Run the visualization sub-agent; returns JSON of the last tool result."""
     dataset_path, err = load_dataset_path(session_id, dataset_ref)
@@ -162,6 +164,7 @@ def run_visualization_agent(
         tools=VIZ_TOOLS,
         execute_tool=execute_tool,
         on_tool_step=None,
+        tool_choice=tool_choice_for_require(require_tool_calls),
     )
 
     return finalize_agent_output(
