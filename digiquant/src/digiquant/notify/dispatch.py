@@ -6,7 +6,7 @@ import logging
 from datetime import UTC, date, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol  # score:allow untyped any — Supabase / Jinja render Protocol surface
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Any, Protocol
+from typing import Any, Protocol  # score:allow untyped any — Supabase reader Protocol surface
 
 from digiquant.notify.mailgun import MailgunConfig, unsubscribe_url
 
