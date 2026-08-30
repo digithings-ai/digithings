@@ -724,7 +724,33 @@ a revoked row and a new active row for the same triple must be able to coexist.
 
 There is no rotation path in this migration and no historical backfill; `key_id` exists
 so one can be added without a schema change. Nothing in a live-trading path reads this
-table yet — K3 is the vault and its store, and a broker adapter wiring comes later.
+table yet — K3 is the vault and its store; K4's router/sync opens a lease only for the
+duration of one broker call.
+
+### Kairos broker mirror — migration 102 (K4)
+
+Append-only mirrors for external-venue orders, fills, and position snapshots (D10: the
+broker is authoritative; digithings never forges internal `portfolio_ledger_paper_executions`
+from them). Status changes append a new `broker_orders` row with backward
+`supersedes_id` (same convention as `portfolio_ledger_order_intents`). **No `upsert`.**
+
+| Table | PK | Purpose |
+|-------|----|---------|
+| `broker_orders` | `(id uuid)` | Submission + status mirror; deterministic submit id `uuid5(ns, order_intent_id:broker:date)`; `connection_id` → `broker_connections`; `workspace_id` → `workspaces`. |
+| `broker_executions` | `(id uuid)` | Fill mirror; id = `uuid5(connection_id, external_fill_id)`; `UNIQUE (broker_order_id, external_fill_id)`. |
+| `broker_position_snapshots` | `(id uuid)` | Point-in-time broker truth; `UNIQUE (connection_id, as_of)`; `reconciliation_diverged` + report when mirror disagrees — never auto-trades. |
+
+**Router authority (writers, not DDL):** `route_pending_orders` may only submit intents
+whose `workspace_id` matches the connection; house/system identities and
+`connection.env != paper` never reach `submit_order`. Live venue tokens raise
+`LiveVenueNotAuthorizedError` on the public `resolve_venue` / router path. Ledger reads
+remain date-scoped at the helper layer; the router post-filters to the connection
+workspace (see `digiquant/ARCHITECTURE.md` → Kairos router + mirror).
+
+RLS enabled with **no** policies (deny-by-default). `service_role` holds SELECT + INSERT
+only; BEFORE UPDATE/DELETE/TRUNCATE triggers reject mutation (069 pattern). Migration
+number 102 skips 100/101 deliberately (sibling T2 holds them) — renumber-at-merge if the
+gap remains. Structural tests: `tests/dq/olympus/kairos/test_migration_102.py`.
 
 ## RLS (consistent across all tables above)
 
