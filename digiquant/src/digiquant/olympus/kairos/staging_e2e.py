@@ -466,7 +466,10 @@ def run_staging_e2e(
             if not row.ok:
                 failed = True
         if failed:
-            err("Observer hops failed — Settings EF TIER_FORBIDDEN / read contract regression.")
+            err(
+                "Observer hops failed — app-urls path contract, "
+                "redeem-invite not mounted, or TIER_FORBIDDEN / read regression."
+            )
             return 3
         evidence = collect_remaining_evidence(
             http=http,

@@ -184,6 +184,23 @@ def test_observer_hops_fail_when_redeem_invite_is_missing() -> None:
 
 
 @pytest.mark.unit
+def test_run_staging_e2e_redeem_invite_404_exits_3() -> None:
+    fakes = _observer_ok_fakes()
+    fakes[("POST", "/settings/access/redeem-invite")] = (404, {"code": "NOT_FOUND"})
+    logs: list[str] = []
+    rc = run_staging_e2e(
+        http=_FakeHttp(fakes),
+        environ={"KAIROS_STAGING_USER_JWT": "test-jwt"},
+        log=logs.append,
+        log_err=logs.append,
+    )
+    assert rc == 3
+    blob = "\n".join(logs)
+    assert "redeem-invite not mounted" in blob
+    assert "POST /settings/access/redeem-invite http=404" in blob
+
+
+@pytest.mark.unit
 def test_public_app_urls_ok_requires_digiquant_origin() -> None:
     good = {
         "alpaca_redirect_uri": "https://digiquant.io/dashboard/settings/brokers/callback/",
