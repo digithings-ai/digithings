@@ -12,8 +12,11 @@ import {
 } from '@/lib/settings-api';
 import {
   provenRemainingHops,
+  remainingHopBlockers,
+  REMAINING_HOP_BLOCKER_LABELS,
   REMAINING_HOP_LABELS,
   REMAINING_LIVE_HOPS,
+  type RemainingHopBlockers,
   type RemainingHopEvidence,
   type RemainingHopProven,
 } from '@/lib/remaining-hops';
@@ -66,6 +69,7 @@ export function RemainingHopStatus({
   getNotificationsFn = getNotifications,
 }: RemainingHopStatusProps) {
   const [proven, setProven] = useState<RemainingHopProven | null>(null);
+  const [blockers, setBlockers] = useState<RemainingHopBlockers>({});
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -82,23 +86,22 @@ export function RemainingHopStatus({
         getLogFn(api).catch(() => []),
         getNotificationsFn(api).catch(() => null),
       ]);
-      setProven(
-        provenRemainingHops(
-          evidenceFromPayloads({
-            subscription_status: profile?.subscription_status,
-            has_stripe_subscription: profile?.has_stripe_subscription,
-            plan_tier: profile?.plan_tier,
-            connections,
-            jobs,
-            fills,
-            events,
-            daily_digest_enabled: prefs?.daily_digest === true,
-          }),
-        ),
-      );
+      const evidence = evidenceFromPayloads({
+        subscription_status: profile?.subscription_status,
+        has_stripe_subscription: profile?.has_stripe_subscription,
+        plan_tier: profile?.plan_tier,
+        connections,
+        jobs,
+        fills,
+        events,
+        daily_digest_enabled: prefs?.daily_digest === true,
+      });
+      setProven(provenRemainingHops(evidence));
+      setBlockers(remainingHopBlockers(evidence));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load remaining hops.');
       setProven(null);
+      setBlockers({});
     } finally {
       setLoading(false);
     }
@@ -138,19 +141,27 @@ export function RemainingHopStatus({
       ) : null}
       {proven ? (
         <ul className="divide-y divide-hair border border-hair">
-          {REMAINING_LIVE_HOPS.map((hop) => (
-            <li
-              key={hop}
-              className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-              data-testid={`remaining-hop-${hop}`}
-              data-proven={proven[hop] ? 'true' : 'false'}
-            >
-              <span className="text-ink-soft">{REMAINING_HOP_LABELS[hop]}</span>
-              <span className="font-mono text-xs text-ink-mute">
-                {proven[hop] ? 'proven' : 'unproven'}
-              </span>
-            </li>
-          ))}
+          {REMAINING_LIVE_HOPS.map((hop) => {
+            const blocker = blockers[hop];
+            return (
+              <li
+                key={hop}
+                className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                data-testid={`remaining-hop-${hop}`}
+                data-proven={proven[hop] ? 'true' : 'false'}
+                data-blocker={blocker ?? ''}
+              >
+                <span className="text-ink-soft">{REMAINING_HOP_LABELS[hop]}</span>
+                <span className="text-right font-mono text-xs text-ink-mute">
+                  {proven[hop]
+                    ? 'proven'
+                    : blocker
+                      ? `unproven · ${REMAINING_HOP_BLOCKER_LABELS[blocker]}`
+                      : 'unproven'}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </div>

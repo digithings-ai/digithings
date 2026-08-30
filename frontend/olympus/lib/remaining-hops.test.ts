@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   provenRemainingHops,
+  remainingHopBlockers,
   remainingHopsUnproven,
   REMAINING_LIVE_HOPS,
 } from './remaining-hops';
@@ -126,5 +127,53 @@ describe('provenRemainingHops', () => {
     for (const name of REMAINING_LIVE_HOPS) {
       expect(proven[name]).toBe(true);
     }
+    expect(remainingHopBlockers({
+      subscription_status: 'active',
+      has_stripe_subscription: true,
+      plan_tier: 'custom',
+      connections: [['alpaca', 'paper', 'active', 'oauth']],
+      jobs: [['overlay_daily', 'succeeded']],
+      fill_count: 1,
+      digest_event_keys: ['digest:2026-08-31'],
+      digest_inbox_confirmed: true,
+      daily_digest_enabled: true,
+    })).toEqual({});
+  });
+
+  it('surfaces closed-vocabulary blockers for Observer product state', () => {
+    const blockers = remainingHopBlockers({
+      plan_tier: 'free',
+      subscription_status: 'none',
+      connections: [['alpaca', 'paper', 'active', 'api_key']],
+      fill_count: 1,
+      digest_event_keys: ['digest:2026-08-31'],
+      daily_digest_enabled: true,
+    });
+    expect(blockers.browser_stripe_checkout).toBe('plan_tier_not_custom');
+    expect(blockers.alpaca_paper_oauth_connect).toBe('alpaca_api_key_not_oauth');
+    expect(blockers.overlay_daily_claimed).toBe('overlay_not_succeeded');
+    expect(blockers.paper_fill_mirrored).toBe('fill_without_oauth');
+    expect(blockers.digest_email_received).toBe('digest_inbox_unconfirmed');
+  });
+
+  it('names house missing Stripe ids and persist_disabled overlay', () => {
+    expect(
+      remainingHopBlockers({
+        plan_tier: 'enterprise',
+        subscription_status: 'active',
+        has_stripe_subscription: false,
+      }).browser_stripe_checkout,
+    ).toBe('missing_stripe_ids');
+    expect(
+      remainingHopBlockers({ jobs: [['overlay_daily', 'persist_disabled']] })
+        .overlay_daily_claimed,
+    ).toBe('overlay_persist_disabled');
+    expect(
+      remainingHopBlockers({
+        digest_event_keys: ['digest:2026-08-31'],
+        digest_inbox_confirmed: true,
+        daily_digest_enabled: false,
+      }).digest_email_received,
+    ).toBe('digest_pref_off');
   });
 });

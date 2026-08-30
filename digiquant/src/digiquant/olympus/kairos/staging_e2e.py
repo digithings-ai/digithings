@@ -28,6 +28,7 @@ from digiquant.olympus.kairos.remaining_hops import (
     RemainingHopEvidence,
     format_remaining_hops_failure,
     proven_remaining_hops,
+    remaining_hop_blockers,
     remaining_hops_unproven,
 )
 from digiquant.olympus.kairos.staging_secrets import (
@@ -460,9 +461,13 @@ def run_staging_e2e(
             update={"digest_inbox_confirmed": _digest_inbox_confirmed(env)}
         )
         proven = proven_remaining_hops(evidence)
+        blockers = remaining_hop_blockers(evidence)
         log("kairos_staging_e2e: remaining hop product-state")
         for name in REMAINING_LIVE_HOPS:
-            log(f"  {name} proven={proven[name]}")
+            if proven[name]:
+                log(f"  {name} proven=True")
+            else:
+                log(f"  {name} proven=False blocker={blockers.get(name, '')}")
         unproven = remaining_hops_unproven(proven)
         if not unproven:
             log("kairos_staging_e2e: all remaining hops proven from Settings reads")
@@ -472,7 +477,6 @@ def run_staging_e2e(
             "kairos_staging_e2e: Observer hops skipped "
             "(set KAIROS_STAGING_USER_JWT or KAIROS_STAGING_EMAIL+PASSWORD+ANON)"
         )
-        proven = {}
         unproven = remaining_hops_unproven()
 
     log("kairos_staging_e2e: checking required secret *names* (values never printed)")
@@ -544,6 +548,7 @@ __all__ = [
     "hop_ok",
     "password_grant_access_token",
     "proven_remaining_hops",
+    "remaining_hop_blockers",
     "remaining_hops_unproven",
     "resolve_staging_jwt",
     "run_observer_hops",

@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from digiquant.olympus.kairos.remaining_hops import (
     OVERLAY_RUN_STATUSES,
+    REMAINING_HOP_BLOCKER_CODES,
     REMAINING_LIVE_HOPS,
     STRIPE_CHECKOUT_TIERS,
 )
@@ -96,3 +97,20 @@ def test_frontend_digest_hop_requires_prefs_and_inbox() -> None:
         )
         is None
     )
+
+
+def test_frontend_blocker_codes_match_python() -> None:
+    match = re.search(
+        r"export const REMAINING_HOP_BLOCKER_CODES = \[([^\]]+)\] as const",
+        _ts_source(),
+        re.S,
+    )
+    assert match is not None
+    names = tuple(re.findall(r"'([^']+)'", match.group(1)))
+    assert names == REMAINING_HOP_BLOCKER_CODES
+    source = _ts_source()
+    assert "export function remainingHopBlockers" in source
+    assert "plan_tier_not_custom" in source
+    assert "alpaca_api_key_not_oauth" in source
+    assert "overlay_persist_disabled" in source
+    assert "digest_inbox_unconfirmed" in source

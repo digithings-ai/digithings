@@ -91,7 +91,10 @@ client id from `GET /app-urls` (empty until EF secrets land; never the secret)
 so connect does not wait on a Pages `NEXT_PUBLIC_*` rebuild.
 
 **Remaining hops (Observer JWT, re-audit 2026-08-31T08:36Z):** all five unproven.
-Staging E2E **exit 2** (9 named vendor secrets); Observer hops all ok including
+Unproven hops now carry closed-vocabulary blocker codes in Settings About and
+the staging harness (Observer live: `plan_tier_not_custom`,
+`no_alpaca_paper_oauth` / `alpaca_api_key_not_oauth` on ops-custom, `overlay_not_succeeded`,
+`no_paper_fill` / `fill_without_oauth`, `digest_inbox_unconfirmed`). Staging E2E **exit 2** (9 named vendor secrets); Observer hops all ok including
 Custom checkout `PRICE_NOT_CONFIGURED`. `job_runs` / `broker_executions` /
 `notification_log` / `stripe_events` / BYOK rows = **0**. One ops-custom workspace
 has an Alpaca **paper `api_key`** connection (1 active + 2 revoked; not OAuth;

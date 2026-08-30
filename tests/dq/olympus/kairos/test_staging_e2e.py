@@ -21,6 +21,7 @@ import pytest
 from digiquant.olympus.kairos.remaining_hops import (
     RemainingHopEvidence,
     proven_remaining_hops,
+    remaining_hop_blockers,
 )
 from digiquant.olympus.kairos.staging_e2e import (
     OBSERVER_HOPS,
@@ -273,6 +274,11 @@ def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
     assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
     assert "browser_stripe_checkout" in blob
     assert "digest_email_received" in blob
+    assert "blocker=plan_tier_not_custom" in blob
+    assert "blocker=no_alpaca_paper_oauth" in blob
+    assert "blocker=overlay_not_succeeded" in blob
+    assert "blocker=no_paper_fill" in blob
+    assert "blocker=no_digest_log" in blob
 
 
 @pytest.mark.unit
@@ -449,6 +455,61 @@ def test_proven_remaining_hops_all_five_from_product_state() -> None:
     )
     assert remaining_hops_unproven(proven) == ()
     assert all(proven[name] for name in REMAINING_LIVE_HOPS)
+    assert (
+        remaining_hop_blockers(
+            RemainingHopEvidence(
+                subscription_status="active",
+                has_stripe_subscription=True,
+                plan_tier="custom",
+                connections=(("alpaca", "paper", "active", "oauth"),),
+                jobs=(("overlay_daily", "succeeded"),),
+                fill_count=1,
+                digest_event_keys=("digest:2026-08-31",),
+                digest_inbox_confirmed=True,
+                daily_digest_enabled=True,
+            )
+        )
+        == {}
+    )
+
+
+@pytest.mark.unit
+def test_remaining_hop_blockers_observer_and_house_gates() -> None:
+    observer = remaining_hop_blockers(
+        RemainingHopEvidence(
+            plan_tier="free",
+            subscription_status="none",
+            connections=(("alpaca", "paper", "active", "api_key"),),
+            fill_count=1,
+            digest_event_keys=("digest:2026-08-31",),
+            daily_digest_enabled=True,
+        )
+    )
+    assert observer["browser_stripe_checkout"] == "plan_tier_not_custom"
+    assert observer["alpaca_paper_oauth_connect"] == "alpaca_api_key_not_oauth"
+    assert observer["overlay_daily_claimed"] == "overlay_not_succeeded"
+    assert observer["paper_fill_mirrored"] == "fill_without_oauth"
+    assert observer["digest_email_received"] == "digest_inbox_unconfirmed"
+    house = remaining_hop_blockers(
+        RemainingHopEvidence(
+            plan_tier="enterprise",
+            subscription_status="active",
+            has_stripe_subscription=False,
+        )
+    )
+    assert house["browser_stripe_checkout"] == "missing_stripe_ids"
+    grant = remaining_hop_blockers(
+        RemainingHopEvidence(
+            plan_tier="custom",
+            subscription_status="none",
+            has_stripe_subscription=False,
+        )
+    )
+    assert grant["browser_stripe_checkout"] == "missing_stripe_ids"
+    persist = remaining_hop_blockers(
+        RemainingHopEvidence(jobs=(("overlay_daily", "persist_disabled"),))
+    )
+    assert persist["overlay_daily_claimed"] == "overlay_persist_disabled"
 
 
 @pytest.mark.unit

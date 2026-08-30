@@ -17,6 +17,10 @@ Exit 0 is allowed only when every hop here is proven from product state:
 - Digest: a ``digest:`` notification_log key **and** an inbox confirmation
   (claim-ledger rows are inserted before Mailgun send) **and** the workspace
   ``daily_digest`` pref enabled. Dispatch skips prefs that are off.
+
+Unproven hops carry a closed-vocabulary blocker code (never Stripe ids,
+emails, or secrets) so Settings About and the staging harness can surface
+the human-owned gate without claiming the hop.
 """
 
 from __future__ import annotations
@@ -35,6 +39,20 @@ REMAINING_LIVE_HOPS: tuple[str, ...] = (
 EXIT_REMAINING_HOPS_UNPROVEN: int = 4
 OVERLAY_RUN_STATUSES: frozenset[str] = frozenset({"succeeded"})
 STRIPE_CHECKOUT_TIERS: frozenset[str] = frozenset({"custom", "enterprise"})
+REMAINING_HOP_BLOCKER_CODES: tuple[str, ...] = (
+    "plan_tier_not_custom",
+    "missing_stripe_ids",
+    "subscription_not_active",
+    "alpaca_api_key_not_oauth",
+    "no_alpaca_paper_oauth",
+    "overlay_persist_disabled",
+    "overlay_not_succeeded",
+    "fill_without_oauth",
+    "no_paper_fill",
+    "digest_pref_off",
+    "no_digest_log",
+    "digest_inbox_unconfirmed",
+)
 
 
 class RemainingHopEvidence(BaseModel):
@@ -64,17 +82,32 @@ def format_remaining_hops_failure(unproven: Sequence[str]) -> str:
     return f"KAIROS_STAGING_E2E_REMAINING_HOPS: {', '.join(unproven)}"
 
 
-def proven_remaining_hops(evidence: RemainingHopEvidence) -> dict[str, bool]:
-    """Map each remaining hop to whether product state proves it."""
-    alpaca = any(
+def _alpaca_paper_oauth(evidence: RemainingHopEvidence) -> bool:
+    return any(
         broker == "alpaca" and env == "paper" and status == "active" and auth_kind == "oauth"
         for broker, env, status, auth_kind in evidence.connections
     )
+
+
+def _alpaca_paper_api_key(evidence: RemainingHopEvidence) -> bool:
+    return any(
+        broker == "alpaca" and env == "paper" and status == "active" and auth_kind == "api_key"
+        for broker, env, status, auth_kind in evidence.connections
+    )
+
+
+def _digest_log(evidence: RemainingHopEvidence) -> bool:
+    return any(key.startswith("digest:") for key in evidence.digest_event_keys)
+
+
+def proven_remaining_hops(evidence: RemainingHopEvidence) -> dict[str, bool]:
+    """Map each remaining hop to whether product state proves it."""
+    alpaca = _alpaca_paper_oauth(evidence)
     overlay = any(
         job_type == "overlay_daily" and status in OVERLAY_RUN_STATUSES
         for job_type, status in evidence.jobs
     )
-    digest_log = any(key.startswith("digest:") for key in evidence.digest_event_keys)
+    digest_log = _digest_log(evidence)
     return {
         "browser_stripe_checkout": (
             evidence.subscription_status == "active"
@@ -90,13 +123,59 @@ def proven_remaining_hops(evidence: RemainingHopEvidence) -> dict[str, bool]:
     }
 
 
+def remaining_hop_blockers(evidence: RemainingHopEvidence) -> dict[str, str]:
+    """Closed-vocabulary reasons for unproven hops. Proven hops are omitted.
+
+    Codes never include Stripe ids, emails, or secret values. Settings About
+    and the staging harness print these next to ``proven=false``.
+    """
+    proven = proven_remaining_hops(evidence)
+    blockers: dict[str, str] = {}
+    if not proven["browser_stripe_checkout"]:
+        if evidence.plan_tier not in STRIPE_CHECKOUT_TIERS:
+            blockers["browser_stripe_checkout"] = "plan_tier_not_custom"
+        elif not evidence.has_stripe_subscription:
+            blockers["browser_stripe_checkout"] = "missing_stripe_ids"
+        else:
+            blockers["browser_stripe_checkout"] = "subscription_not_active"
+    if not proven["alpaca_paper_oauth_connect"]:
+        blockers["alpaca_paper_oauth_connect"] = (
+            "alpaca_api_key_not_oauth"
+            if _alpaca_paper_api_key(evidence)
+            else "no_alpaca_paper_oauth"
+        )
+    if not proven["overlay_daily_claimed"]:
+        overlay_statuses = {
+            status for job_type, status in evidence.jobs if job_type == "overlay_daily"
+        }
+        blockers["overlay_daily_claimed"] = (
+            "overlay_persist_disabled"
+            if "persist_disabled" in overlay_statuses
+            else "overlay_not_succeeded"
+        )
+    if not proven["paper_fill_mirrored"]:
+        blockers["paper_fill_mirrored"] = (
+            "fill_without_oauth" if evidence.fill_count > 0 else "no_paper_fill"
+        )
+    if not proven["digest_email_received"]:
+        if not evidence.daily_digest_enabled:
+            blockers["digest_email_received"] = "digest_pref_off"
+        elif not _digest_log(evidence):
+            blockers["digest_email_received"] = "no_digest_log"
+        else:
+            blockers["digest_email_received"] = "digest_inbox_unconfirmed"
+    return blockers
+
+
 __all__ = [
     "EXIT_REMAINING_HOPS_UNPROVEN",
     "OVERLAY_RUN_STATUSES",
+    "REMAINING_HOP_BLOCKER_CODES",
     "REMAINING_LIVE_HOPS",
     "STRIPE_CHECKOUT_TIERS",
     "RemainingHopEvidence",
     "format_remaining_hops_failure",
     "proven_remaining_hops",
+    "remaining_hop_blockers",
     "remaining_hops_unproven",
 ]

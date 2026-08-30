@@ -245,8 +245,9 @@ paper brokers, seal BYOK LLM keys, and open Stripe checkout/portal.
   leave those remaining hops `TIER_FORBIDDEN`). Shows "billing not configured"
   when Supabase/billing envs are absent.
 - **About** — remaining-hop product state (member-scoped Settings reads; Observer can
-  see unproven Stripe / Alpaca OAuth / overlay / fill / digest without Custom writes)
-  plus prior ops/status/appearance card content.
+  see unproven Stripe / Alpaca OAuth / overlay / fill / digest without Custom writes).
+  Unproven hops show a closed-vocabulary blocker (Custom checkout required, missing
+  Stripe ids, api_key not OAuth, persist disabled, inbox unconfirmed) — never Stripe ids.
 
 Edge Function: `digiquant/supabase/functions/settings` (`verify_jwt` true). **Deploy is
 blocked on K3** (vault + `broker_connections`) — see that function's README.

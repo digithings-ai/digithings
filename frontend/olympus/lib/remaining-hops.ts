@@ -1,13 +1,15 @@
 /**
  * Member-visible remaining-hop predicates.
  *
- * Mirrors ``digiquant.olympus.kairos.remaining_hops.proven_remaining_hops``.
- * The Settings About panel never claims digest inbox confirmation — that flag
- * is operator-only (`KAIROS_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also
- * requires ``daily_digest`` on; dispatch skips prefs that are off. Paper fills
- * do not prove the hop unless an Alpaca paper OAuth connection is also present.
+ * Mirrors ``digiquant.olympus.kairos.remaining_hops.proven_remaining_hops``
+ * and ``remaining_hop_blockers``. The Settings About panel never claims
+ * digest inbox confirmation — that flag is operator-only
+ * (`KAIROS_STAGING_DIGEST_INBOX_CONFIRMED`). Digest also requires
+ * ``daily_digest`` on; dispatch skips prefs that are off. Paper fills do not
+ * prove the hop unless an Alpaca paper OAuth connection is also present.
  * Baseline Stripe does not prove checkout — broker connect and overlay stay
- * Custom-gated.
+ * Custom-gated. Unproven hops show a closed-vocabulary blocker code, never
+ * Stripe ids.
  */
 
 export const REMAINING_LIVE_HOPS = [
@@ -23,6 +25,23 @@ export type RemainingLiveHop = (typeof REMAINING_LIVE_HOPS)[number];
 export const OVERLAY_RUN_STATUSES = new Set(['succeeded']);
 export const STRIPE_CHECKOUT_TIERS = new Set(['custom', 'enterprise']);
 
+export const REMAINING_HOP_BLOCKER_CODES = [
+  'plan_tier_not_custom',
+  'missing_stripe_ids',
+  'subscription_not_active',
+  'alpaca_api_key_not_oauth',
+  'no_alpaca_paper_oauth',
+  'overlay_persist_disabled',
+  'overlay_not_succeeded',
+  'fill_without_oauth',
+  'no_paper_fill',
+  'digest_pref_off',
+  'no_digest_log',
+  'digest_inbox_unconfirmed',
+] as const;
+
+export type RemainingHopBlockerCode = (typeof REMAINING_HOP_BLOCKER_CODES)[number];
+
 export type RemainingHopEvidence = {
   subscription_status?: string | null;
   has_stripe_subscription?: boolean;
@@ -36,6 +55,7 @@ export type RemainingHopEvidence = {
 };
 
 export type RemainingHopProven = Record<RemainingLiveHop, boolean>;
+export type RemainingHopBlockers = Partial<Record<RemainingLiveHop, RemainingHopBlockerCode>>;
 
 export function remainingHopsUnproven(
   proven: Partial<Record<RemainingLiveHop, boolean>> | RemainingHopProven = {},
@@ -43,15 +63,30 @@ export function remainingHopsUnproven(
   return REMAINING_LIVE_HOPS.filter((name) => !proven[name]);
 }
 
-export function provenRemainingHops(evidence: RemainingHopEvidence): RemainingHopProven {
-  const alpaca = (evidence.connections ?? []).some(
+function alpacaPaperOauth(evidence: RemainingHopEvidence): boolean {
+  return (evidence.connections ?? []).some(
     ([broker, env, status, authKind]) =>
       broker === 'alpaca' && env === 'paper' && status === 'active' && authKind === 'oauth',
   );
+}
+
+function alpacaPaperApiKey(evidence: RemainingHopEvidence): boolean {
+  return (evidence.connections ?? []).some(
+    ([broker, env, status, authKind]) =>
+      broker === 'alpaca' && env === 'paper' && status === 'active' && authKind === 'api_key',
+  );
+}
+
+function digestLogPresent(evidence: RemainingHopEvidence): boolean {
+  return (evidence.digest_event_keys ?? []).some((key) => key.startsWith('digest:'));
+}
+
+export function provenRemainingHops(evidence: RemainingHopEvidence): RemainingHopProven {
+  const alpaca = alpacaPaperOauth(evidence);
   const overlay = (evidence.jobs ?? []).some(
     ([jobType, status]) => jobType === 'overlay_daily' && OVERLAY_RUN_STATUSES.has(status),
   );
-  const digestLog = (evidence.digest_event_keys ?? []).some((key) => key.startsWith('digest:'));
+  const digestLog = digestLogPresent(evidence);
   return {
     browser_stripe_checkout:
       evidence.subscription_status === 'active' &&
@@ -67,10 +102,67 @@ export function provenRemainingHops(evidence: RemainingHopEvidence): RemainingHo
   };
 }
 
+export function remainingHopBlockers(evidence: RemainingHopEvidence): RemainingHopBlockers {
+  const proven = provenRemainingHops(evidence);
+  const blockers: RemainingHopBlockers = {};
+  if (!proven.browser_stripe_checkout) {
+    if (!STRIPE_CHECKOUT_TIERS.has(evidence.plan_tier ?? '')) {
+      blockers.browser_stripe_checkout = 'plan_tier_not_custom';
+    } else if (evidence.has_stripe_subscription !== true) {
+      blockers.browser_stripe_checkout = 'missing_stripe_ids';
+    } else {
+      blockers.browser_stripe_checkout = 'subscription_not_active';
+    }
+  }
+  if (!proven.alpaca_paper_oauth_connect) {
+    blockers.alpaca_paper_oauth_connect = alpacaPaperApiKey(evidence)
+      ? 'alpaca_api_key_not_oauth'
+      : 'no_alpaca_paper_oauth';
+  }
+  if (!proven.overlay_daily_claimed) {
+    const overlayStatuses = new Set(
+      (evidence.jobs ?? [])
+        .filter(([jobType]) => jobType === 'overlay_daily')
+        .map(([, status]) => status),
+    );
+    blockers.overlay_daily_claimed = overlayStatuses.has('persist_disabled')
+      ? 'overlay_persist_disabled'
+      : 'overlay_not_succeeded';
+  }
+  if (!proven.paper_fill_mirrored) {
+    blockers.paper_fill_mirrored = (evidence.fill_count ?? 0) > 0 ? 'fill_without_oauth' : 'no_paper_fill';
+  }
+  if (!proven.digest_email_received) {
+    if (evidence.daily_digest_enabled !== true) {
+      blockers.digest_email_received = 'digest_pref_off';
+    } else if (!digestLogPresent(evidence)) {
+      blockers.digest_email_received = 'no_digest_log';
+    } else {
+      blockers.digest_email_received = 'digest_inbox_unconfirmed';
+    }
+  }
+  return blockers;
+}
+
 export const REMAINING_HOP_LABELS: Record<RemainingLiveHop, string> = {
   browser_stripe_checkout: 'Stripe checkout',
   alpaca_paper_oauth_connect: 'Alpaca paper OAuth',
   overlay_daily_claimed: 'Overlay daily succeeded',
   paper_fill_mirrored: 'Paper fill mirrored',
   digest_email_received: 'Digest email received',
+};
+
+export const REMAINING_HOP_BLOCKER_LABELS: Record<RemainingHopBlockerCode, string> = {
+  plan_tier_not_custom: 'Custom Stripe checkout required',
+  missing_stripe_ids: 'no Stripe subscription ids',
+  subscription_not_active: 'subscription not active',
+  alpaca_api_key_not_oauth: 'api_key paper does not prove OAuth',
+  no_alpaca_paper_oauth: 'no Alpaca paper OAuth',
+  overlay_persist_disabled: 'overlay persist disabled',
+  overlay_not_succeeded: 'no succeeded overlay_daily job',
+  fill_without_oauth: 'fill without Alpaca paper OAuth',
+  no_paper_fill: 'no paper fill',
+  digest_pref_off: 'daily_digest pref off',
+  no_digest_log: 'no digest: log key',
+  digest_inbox_unconfirmed: 'inbox confirmation missing',
 };

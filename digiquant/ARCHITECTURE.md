@@ -3078,7 +3078,9 @@ log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
 **and** `notification_prefs.daily_digest=true` (dispatch skips prefs that are
 off; Observer PATCH `/settings/notifications` is not Custom-gated).
 Claim-ledger rows are inserted before Mailgun send. Remaining-hop GETs that
-are not HTTP 200 exit **3**. Exit **0** only when all five remaining hops are
+are not HTTP 200 exit **3**. Unproven hops log a closed-vocabulary
+``blocker=`` code (never Stripe ids) next to ``proven=False`` so the
+human-owned gate is named. Exit **0** only when all five remaining hops are
 proven. Exit **2** when hops are unproven **and** named vendor secrets are
 missing. Checkout URL + unsigned webhook with hops still unproven is **exit 4**.
 Phase C (and the Observer checkout hop) POST `tier=custom` — Baseline would

@@ -102,5 +102,19 @@ describe('RemainingHopStatus', () => {
     expect(el.querySelector('[data-testid="remaining-hop-paper_fill_mirrored"]')?.getAttribute('data-proven')).toBe(
       'false',
     );
+    expect(
+      el.querySelector('[data-testid="remaining-hop-browser_stripe_checkout"]')?.getAttribute('data-blocker'),
+    ).toBe('plan_tier_not_custom');
+    expect(
+      el.querySelector('[data-testid="remaining-hop-alpaca_paper_oauth_connect"]')?.getAttribute('data-blocker'),
+    ).toBe('alpaca_api_key_not_oauth');
+    expect(
+      el.querySelector('[data-testid="remaining-hop-paper_fill_mirrored"]')?.getAttribute('data-blocker'),
+    ).toBe('fill_without_oauth');
+    expect(
+      el.querySelector('[data-testid="remaining-hop-digest_email_received"]')?.getAttribute('data-blocker'),
+    ).toBe('digest_inbox_unconfirmed');
+    expect(el.textContent).toContain('Custom Stripe checkout required');
+    expect(el.textContent).toContain('api_key paper does not prove OAuth');
   });
 });

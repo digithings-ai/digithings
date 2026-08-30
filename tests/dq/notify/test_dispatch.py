@@ -207,3 +207,24 @@ def test_plan_digest_dispatch_matches_workspace_gate() -> None:
     assert captured == [
         "notify dry-run considered=1 digest_on=1 skipped_prefs_off=0 skipped_no_email=0 mailgun_configured=0"
     ]
+
+
+def test_dry_run_never_dispatches_or_claims(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("dry-run must not dispatch or claim notification_log")
+
+    monkeypatch.setattr("digiquant.notify.dispatch._dispatch_with_client", boom)
+    monkeypatch.setattr("digiquant.notify.dispatch.try_claim_send_slot", boom)
+    rc = main(
+        ["--dry-run", "--workspace-id", "observer"],
+        prefs=[
+            {
+                "workspace_id": "observer",
+                "email": "obs@example.com",
+                "daily_digest": True,
+            }
+        ],
+        mailgun_configured=True,
+        log=lambda _line: None,
+    )
+    assert rc == 0
