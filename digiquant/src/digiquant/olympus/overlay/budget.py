@@ -2,8 +2,11 @@
 
 Attributed spend is the run-scoped WP1 snapshot
 (``digigraph.usage.start(run_id=job.id)`` then ``snapshot()["cost_usd"]``).
-``start`` clears process-global ``_CALLS``, so house spend from earlier
-in the process is not attributed to the overlay job. Crossing
+``usage.start`` / ``usage.reset`` are process-global: ``start`` clears
+``_CALLS``, so house spend from earlier in the process is not attributed to the
+overlay job, but co-residence would also clobber house WP1 capture — overlay
+jobs must run in a separate process from the house run (a run-scoped ledger is
+the future fix if co-residence is ever needed). Crossing
 ``ProfileConfig.research_budget_usd`` is a graceful stop: remaining
 research is skipped/carried, consistent private-phase writes still
 commit, and the job row becomes ``budget_exhausted`` (UI-visible).
@@ -40,7 +43,13 @@ class BudgetExhausted(Exception):
 
 @contextmanager
 def overlay_usage_scope(run_id: str) -> Iterator[None]:
-    """Bind WP1 capture to this overlay job and clear it on the way out."""
+    """Bind WP1 capture to this overlay job and clear it on the way out.
+
+    ``usage.start`` / ``usage.reset`` operate on process-global ``_CALLS``.
+    Overlay jobs must run in a separate process from the house run; co-residence
+    would clobber house WP1 capture. A run-scoped ledger is the future fix if
+    co-residence is ever needed.
+    """
     usage_start(run_id=run_id)
     try:
         yield

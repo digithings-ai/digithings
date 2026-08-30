@@ -141,8 +141,9 @@ class _FakeQuery:
         for op, col, val in self._filters:
             row_val = row.get(col)
             if op == "eq" and col == "workspace_id" and row_val is None and val == house:
-                # Legacy house fixtures omit the column; T0 stamped house on every
-                # live row. Missing == house so overlay ids never match a house filter.
+                # TEST-FAKE courtesy only: legacy house fixtures omit the column.
+                # Production PostgREST .eq("workspace_id", house) does not match
+                # NULL/missing rows; migration 097 backfill stamps live rows.
                 continue
             if op == "eq" and row_val != val:
                 return False

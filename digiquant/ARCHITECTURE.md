@@ -3041,6 +3041,15 @@ argument off (`load_prior_book`, `_prune_orphan_positions`, `_rows_for_date`,
 `_pending_order_heads`) filter **and** stamp `house_workspace_id()`. They never
 mean "every row".
 
+**Test-fake vs PostgREST `eq` (workspace_id).** The in-memory `_FakeQuery` in
+`tests/dq/atlas/test_supabase_io.py` treats a missing `workspace_id` column as
+matching `house_workspace_id()` when filtering — a **TEST-FAKE courtesy** for
+legacy house fixtures only. Production PostgREST does not: `.eq("workspace_id",
+house)` matches only rows where the column equals `house`. Migration 097's
+backfill stamps `workspace_id` on live tables; pre-097 rows without the column
+are invisible to scoped readers, which is correct post-backfill (PostgREST `eq`
+semantics, not the fake's).
+
 **Runner (`runner.py`).** ProfileConfig pin (`requested_version_id` + `workspace_id`
 at the preflight seam — the pin loader is unchanged) → publish-if-missing into the
 shared corpus under `theme:` / `asset:` / `segment:` keys → private H7–H9 book.
@@ -3065,8 +3074,11 @@ persistence refuses and the job row is `persist_disabled`.
 
 **Budget (`budget.py`).** At overlay start the runner calls
 `digigraph.usage.start(run_id=<job id>)`, which clears process-global `_CALLS`,
-then reads `snapshot()["cost_usd"]`. Budget is checked after each corpus pin
-**and after the chain**. Crossing `ProfileConfig.research_budget_usd` skips
+then reads `snapshot()["cost_usd"]`. `usage.start` / `usage.reset` are
+**process-global** — overlay jobs must run in a **separate process** from the
+house run, else house WP1 capture is clobbered; a run-scoped ledger is the
+future fix if co-residence is ever needed. Budget is checked after each corpus
+pin **and after the chain**. Crossing `ProfileConfig.research_budget_usd` skips
 remaining research, commits what is already consistent, and marks the job
 `budget_exhausted`. Post-chain overrun: the chain has already returned, so
 whatever it persisted stays; the job is `budget_exhausted` rather than

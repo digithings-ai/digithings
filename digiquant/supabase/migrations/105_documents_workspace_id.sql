@@ -27,6 +27,9 @@
 --   8. digiquant/scripts/atlas/materialize_snapshot.py (two upserts)
 --   9. digiquant/scripts/atlas/backfill_normalize_schemas.py
 --  10. digiquant/scripts/atlas/backfill_pm_rebalance_and_activity.py
+--  11. digiquant/scripts/atlas/update_tearsheet.py (recovery-only; on_conflict="date,file_path"
+--      is dead since migration 009 renamed file_path→document_key and swapped the unique to
+--      (date, document_key) — fail-loud if run; cannot silently collide with the new triple)
 --
 -- House workspace id (096 seed): 6b753576-ced9-5319-9bfa-c5d0aacd9319
 -- System workspace id (096 seed): 1105372f-4109-5815-be5a-21091ccfc8ad
