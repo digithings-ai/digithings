@@ -17,7 +17,9 @@ from digiquant.strategies.sdca.quantile_rails import (
     MIN_FIT_HISTORY_DAYS,
     QUANTILE_LABELS,
     REFERENCE_SPAN_DAYS,
+    evenly_spaced_fit_indices,
 )
+from digiquant.strategies.sdca.risk_index import build_risk_index
 from digiquant.strategies.sdca.risk_model import RiskModel
 
 pytestmark = pytest.mark.unit
@@ -59,10 +61,29 @@ class TestFitGenericValuation:
         with pytest.raises(ValueError, match="at least"):
             fit_generic_valuation(dates, price)
 
-    def test_rejects_unknown_form(self) -> None:
+    def test_quadratic_nonconvergence_falls_back_to_log_linear(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from digiquant.strategies.sdca import generic_valuation as gv
+
+        real = gv.fit_quantile_regression
+        calls = {"n": 0}
+
+        def flaky(design, log_prices, *, caller: str, max_iter: int = 2000):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise ValueError(
+                    f"{caller}: QuantReg failed to converge for quantile 0.95 (q95): "
+                    "Maximum number of iterations (2000) reached."
+                )
+            return real(design, log_prices, caller=caller, max_iter=max_iter)
+
+        monkeypatch.setattr(gv, "fit_quantile_regression", flaky)
         dates, price = _log_trend_series(n=900, start=date(2018, 1, 1))
-        with pytest.raises(ValueError, match="form must be"):
-            fit_generic_valuation(dates, price, form="power_law")  # type: ignore[arg-type]
+        coefficients = fit_generic_valuation(dates, price, form="log_quadratic")
+        assert coefficients.form == "log_linear"
+        assert "did not converge" in coefficients.notes
+        assert all(q.b == 0.0 for q in coefficients.quantiles.values())
 
     def test_widen_factor_is_one_on_long_history(self) -> None:
         n = REFERENCE_SPAN_DAYS + 2
@@ -141,3 +162,41 @@ class TestGenericValuationRiskModel:
         n_w = np.log(narrow.rails(probe)["high"][0] / narrow.rails(probe)["low"][0])
         w_w = np.log(wide.rails(probe)["high"][0] / wide.rails(probe)["low"][0])
         assert w_w == pytest.approx(4.0 * n_w, rel=1e-6)
+
+
+class TestEvenlySpacedFitIndices:
+    def test_none_or_cap_above_n_returns_every_row(self) -> None:
+        assert evenly_spaced_fit_indices(5, None) == [0, 1, 2, 3, 4]
+        assert evenly_spaced_fit_indices(5, 5) == [0, 1, 2, 3, 4]
+        assert evenly_spaced_fit_indices(5, 50) == [0, 1, 2, 3, 4]
+
+    def test_subsample_covers_full_span_not_a_900_prefix(self) -> None:
+        idx = evenly_spaced_fit_indices(2000, 400)
+        assert idx[0] == 0
+        assert idx[-1] == 1999
+        assert len(idx) <= 400
+        assert len(idx) >= 390
+        assert idx != list(range(400))
+        assert 900 not in {len(idx), idx[-1] + 1}
+
+
+class TestFullHistoryGenericRails:
+    def test_2000_day_series_scores_every_day_not_900(self) -> None:
+        """Prefix-clipping QuantReg at 900 days ended BTC charts in Jan 2018."""
+        dates, price = _log_trend_series(n=2000, start=date(2015, 7, 20), seed=7)
+        coefficients = fit_generic_valuation(dates, price, form="log_linear", max_fit_rows=400)
+        assert coefficients.fit_start == dates[0]
+        assert coefficients.fit_end == dates[-1]
+        assert 390 <= coefficients.fit_rows <= 400
+        assert coefficients.fit_rows != 900
+        model = GenericValuationRiskModel(coefficients)
+        rails = model.rails(dates)
+        assert rails.height == 2000
+        frame = build_risk_index(dates, price, model)
+        assert frame.height == 2000
+        assert frame["date"][0] == dates[0]
+        assert frame["date"][-1] == dates[-1]
+        assert frame["risk"].null_count() == 0
+        complete = frame.filter(pl.col("risk").is_not_null())
+        assert complete.height == 2000
+        assert complete["risk"].is_finite().all()

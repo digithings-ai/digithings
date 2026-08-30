@@ -237,13 +237,15 @@ def create_mcp_server() -> Any:
     @mcp.tool()
     def digiquant_fetch_coinbase_ohlcv(
         symbols_json: str = '["BTC/USD", "ETH/USD", "SOL/USD"]',
-        start: str = "2017-01-01",
+        start: str = "2015-07-20",
         cache_dir: str | None = None,
     ) -> str:
         """Fetch daily OHLCV from Coinbase (CCXT) into the price-history cache.
 
-        ``symbols_json`` is a JSON array of CCXT symbols. Returns JSON mapping each
-        ticker to ``{bars, first, last, path}`` (or ``{error}``).
+        ``symbols_json`` is a JSON array of CCXT symbols. ``start`` defaults
+        to Coinbase BTC listing ``2015-07-20``; ETH/SOL begin at the first
+        available Coinbase daily bar. Returns JSON mapping each ticker to
+        ``{bars, first, last, path}`` (or ``{error}``).
         """
         import sys
         from pathlib import Path

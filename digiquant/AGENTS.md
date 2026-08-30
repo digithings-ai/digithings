@@ -197,8 +197,12 @@ on the extra-indicator allowlist.
    live-trading. Do not change publish `signal_delay_days`.
 
 `pytest -m unit tests/dq/strategies/sdca/test_asset_profile.py` is the
-multi-asset smoke (ETH Coinbase cache if present, else a synthetic second
-series — document "add ETH when cache is present").
+multi-asset smoke (full ETH Coinbase cache if present, else a synthetic
+second series — document "add ETH when cache is present"). Do not prefix-
+clip QuantReg at 900 days; subsample evenly with `max_fit_rows` if the
+fit is slow, and still score every cached day. Oscillator nulls are a
+short leading warmup (`documented_warmup_calendar_days`, 105 days for
+weekly RSI 14), not a 2018/2021 cliff.
 
 ### Adding a preset
 

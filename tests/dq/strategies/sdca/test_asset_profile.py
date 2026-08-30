@@ -19,6 +19,7 @@ from digiquant.strategies.sdca.asset_profile import (
     daily_closes_from_ohlcv,
     stage_a_search_names,
     technicals_from_ohlcv,
+    union_date_range,
 )
 from digiquant.strategies.sdca.cycle_windows import CycleKind, SdcaCycleWindows
 from digiquant.strategies.sdca.indicator_catalog import (
@@ -26,7 +27,11 @@ from digiquant.strategies.sdca.indicator_catalog import (
     SdcaCompositeWeights,
     build_extra_indicators,
 )
-from digiquant.strategies.sdca.price_oscillators import SdcaOscillatorSpec, weekly_rsi_z
+from digiquant.strategies.sdca.price_oscillators import (
+    SdcaOscillatorSpec,
+    documented_warmup_calendar_days,
+    weekly_rsi_z,
+)
 from digiquant.strategies.sdca.providers import resolve_sdca_risk_model
 from digiquant.strategies.sdca.risk_index import build_risk_index
 from digiquant.strategies.sdca.stage_a import cycle_overlap_score
@@ -200,14 +205,14 @@ class TestSecondAssetSmoke:
             try:
                 dates, close = daily_closes_from_cache("ETH-USD", _ETH_CACHE.parent)
                 used_cache = dates.len() >= 730
-                if used_cache and dates.len() > 900:
-                    # Keep the 2018 ETH windows; full-history QuantReg is an operator fit.
-                    dates = dates[:900]
-                    close = close[:900]
             except ValueError:
                 used_cache = False
         if not used_cache:
             dates, close = _synthetic_second_asset()
+        if used_cache:
+            # Full Coinbase cache, not a 900-day prefix (BTC died Jan 2018).
+            assert dates.len() > 900
+            assert dates[-1].year >= 2025
         model = resolve_sdca_risk_model(
             profile.risk_model,
             dates=dates,
@@ -242,3 +247,33 @@ class TestSecondAssetSmoke:
         assert score.trough_days > 0
         assert score.peak_days > 0
         assert not used_cache or profile.symbol == "ETH-USD"
+
+
+class TestUnionDateRange:
+    def test_shared_xlim_does_not_inner_join_to_shorter_asset(self) -> None:
+        btc = _dates(2000, start=date(2015, 7, 20))
+        eth = _dates(1500, start=date(2017, 11, 9))
+        start, end = union_date_range(btc, eth)
+        assert start == btc[0]
+        assert end == max(btc[-1], eth[-1])
+        assert start < eth[0]
+        inner_end = min(btc[-1], eth[-1])
+        assert end > inner_end
+
+
+class TestOscillatorWarmupIsLeadingGap:
+    def test_weekly_rsi_nulls_are_a_short_leading_gap_not_a_2018_cliff(self) -> None:
+        n = 2000
+        dates = _dates(n, start=date(2015, 7, 20))
+        close = pl.Series([100.0 + 0.05 * i for i in range(n)])
+        z = weekly_rsi_z(dates, close)
+        values = z.to_list()
+        first_finite = next(i for i, v in enumerate(values) if v is not None and v == v)
+        warmup = documented_warmup_calendar_days()
+        assert first_finite <= warmup
+        assert first_finite < 200
+        assert dates[first_finite].year == 2015
+        assert values[-1] is not None
+        leading_nulls = first_finite
+        trailing_finite = sum(1 for v in values[first_finite:] if v is not None and v == v)
+        assert trailing_finite == n - leading_nulls

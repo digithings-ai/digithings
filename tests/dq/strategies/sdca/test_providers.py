@@ -100,3 +100,18 @@ class TestBuildRiskIndexViaSelector:
         complete = z_frame.filter(pl.col("risk").is_not_null())
         assert complete.height > 0
         assert complete["risk"].is_finite().all()
+
+    def test_generic_valuation_2000_day_index_is_not_capped_at_900(self) -> None:
+        dates, price = _series(n=2000, start=date(2015, 7, 20), seed=3)
+        model = resolve_sdca_risk_model(
+            "generic_valuation",
+            dates=dates,
+            price=price,
+            form="log_linear",
+            max_fit_rows=400,
+        )
+        frame = build_risk_index(dates, price, model)
+        assert frame.height == 2000
+        assert frame["date"][0] == dates[0]
+        assert frame["date"][-1] == dates[-1]
+        assert frame["risk"].null_count() == 0

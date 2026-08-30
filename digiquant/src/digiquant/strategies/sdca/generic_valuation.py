@@ -23,6 +23,7 @@ from digiquant.strategies.sdca.quantile_rails import (
     QUANTILES,
     QuantileCoefficients,
     evaluate_quadratic_log10,
+    evenly_spaced_fit_indices,
     fit_quantile_regression,
     quantile_frame,
     rail_span_widen_factor,
@@ -71,8 +72,17 @@ def fit_generic_valuation(
     *,
     form: ValuationForm = "log_quadratic",
     notes: str = "",
+    max_fit_rows: int | None = None,
 ) -> GenericValuationCoefficients:
-    """Fit 7 quantile rails of log10(price) vs calendar time from the first bar."""
+    """Fit 7 quantile rails of log10(price) vs calendar time from the first bar.
+
+    ``max_fit_rows`` subsamples *evenly across the full span* (endpoints
+    kept) when QuantReg would be slow on a decade of daily bars. Rails are
+    still evaluated on every input date — never a 900-day prefix clip.
+    ``fit_start``/``fit_end`` remain the full window; ``fit_rows`` is the
+    QuantReg sample size. If ``log_quadratic`` IRLS does not converge,
+    the fit retries as ``log_linear`` and records that in ``notes``.
+    """
     if form not in ("log_linear", "log_quadratic"):
         raise ValueError(f"form must be 'log_linear' or 'log_quadratic', got {form!r}")
     date_list = validate_fit_series(
@@ -83,27 +93,52 @@ def fit_generic_valuation(
     )
     origin = date_list[0]
     fit_span_days = (date_list[-1] - origin).days
+    idx = evenly_spaced_fit_indices(len(date_list), max_fit_rows)
 
     import numpy as np
 
-    t = np.array([(d - origin).days for d in date_list], dtype=float)
+    price_list = price.to_list()
+    fit_dates = [date_list[i] for i in idx]
+    t = np.array([(d - origin).days for d in fit_dates], dtype=float)
     mu = float(t.mean())
     x = t - mu
-    y = np.log10(np.array(price.to_list(), dtype=float))
-    if form == "log_linear":
+    y = np.log10(np.array([price_list[i] for i in idx], dtype=float))
+    chosen_form: ValuationForm = form
+    if chosen_form == "log_linear":
         design = np.column_stack([np.ones_like(x), x])
     else:
         design = np.column_stack([np.ones_like(x), x, x**2])
-    quantile_coeffs = fit_quantile_regression(design, y, caller="fit_generic_valuation")
+    fallback_note = ""
+    try:
+        quantile_coeffs = fit_quantile_regression(design, y, caller="fit_generic_valuation")
+    except ValueError as exc:
+        if chosen_form != "log_quadratic" or "QuantReg failed to converge" not in str(exc):
+            raise
+        # Decade-scale ETH (and similar) quadratic rails often fail IRLS on
+        # the tail quantiles. Linear trend on the same full window still
+        # scores every day; a 900-day prefix is not an acceptable workaround.
+        chosen_form = "log_linear"
+        design = np.column_stack([np.ones_like(x), x])
+        quantile_coeffs = fit_quantile_regression(design, y, caller="fit_generic_valuation")
+        fallback_note = (
+            "log_quadratic QuantReg did not converge on this window; fitted log_linear instead."
+        )
+    subsample_note = ""
+    if len(idx) < len(date_list):
+        subsample_note = (
+            f"QuantReg subsample {len(idx)}/{len(date_list)} evenly spaced bars; "
+            "scored on every day in range."
+        )
+    combined_notes = " ".join(p for p in (notes.strip(), fallback_note, subsample_note) if p)
     return GenericValuationCoefficients(
         origin=origin,
         mu=mu,
-        form=form,
+        form=chosen_form,
         widen_factor=rail_span_widen_factor(fit_span_days),
         fit_start=date_list[0],
         fit_end=date_list[-1],
-        fit_rows=len(date_list),
-        notes=notes,
+        fit_rows=len(idx),
+        notes=combined_notes,
         quantiles=quantile_coeffs,
     )
 

@@ -63,6 +63,19 @@ class SdcaOscillatorSpec(BaseModel):
         return self
 
 
+def documented_warmup_calendar_days(spec: SdcaOscillatorSpec | None = None) -> int:
+    """Leading-null budget for generic technicals — not a 2018/2021 cliff.
+
+    Weekly Wilder RSI needs ``rsi_length`` completed ISO weeks, plus the
+    first week completing (``(length + 1) * 7`` calendar days). SMA-band
+    nulls last ``sma_band_min_samples`` days (default 30), which is shorter.
+    Composite extras inherit this short leading gap via the all-nulls rule.
+    """
+    resolved = spec or SdcaOscillatorSpec()
+    rsi_days = (resolved.rsi_length + 1) * 7
+    return max(rsi_days, resolved.sma_band_min_samples)
+
+
 def completed_weekly_closes(dates: pl.Series, close: pl.Series) -> pl.DataFrame:
     """Last daily close of each *completed* ISO week. Drops the in-progress week."""
     if dates.len() != close.len():
@@ -189,6 +202,7 @@ def price_oscillator_z_vectors(
 __all__ = [
     "SdcaOscillatorSpec",
     "completed_weekly_closes",
+    "documented_warmup_calendar_days",
     "price_oscillator_z_vectors",
     "sma_band_z",
     "weekly_macd_z",

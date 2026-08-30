@@ -195,6 +195,31 @@ def rail_span_widen_factor(fit_span_days: int) -> float:
     return max(1.0, REFERENCE_SPAN_DAYS / float(fit_span_days))
 
 
+def evenly_spaced_fit_indices(n: int, max_fit_rows: int | None) -> list[int]:
+    """Index the full ``[0, n)`` span; never a prefix clip.
+
+    ``max_fit_rows is None`` or ``>= n`` returns every row. Otherwise returns
+    unique rounded linspace indices that always include both endpoints.
+    A 900-day *prefix* of Coinbase BTC (2015-07-20) ends in January 2018 —
+    that is not a subsample, and this helper must not reproduce it.
+    """
+    if n < 1:
+        raise ValueError(f"n must be positive, got {n}")
+    if max_fit_rows is None or max_fit_rows >= n:
+        return list(range(n))
+    if max_fit_rows < 2:
+        raise ValueError(f"max_fit_rows must be >= 2 to keep both endpoints, got {max_fit_rows}")
+    out: list[int] = []
+    seen: set[int] = set()
+    denom = max_fit_rows - 1
+    for k in range(max_fit_rows):
+        i = int(round(k * (n - 1) / denom))
+        if i not in seen:
+            seen.add(i)
+            out.append(i)
+    return out
+
+
 __all__ = [
     "QUANTILES",
     "QUANTILE_LABELS",
@@ -209,4 +234,5 @@ __all__ = [
     "widen_quantile_matrix",
     "quantile_frame",
     "rail_span_widen_factor",
+    "evenly_spaced_fit_indices",
 ]

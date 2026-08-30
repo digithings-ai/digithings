@@ -123,6 +123,14 @@ class TestBuildRiskIndex:
         with pytest.raises(ValueError, match="pl.Date"):
             build_risk_index(dates, price, StaticRiskModel())
 
+    def test_two_thousand_day_series_keeps_every_date(self) -> None:
+        dates, price = _dates_and_price(n=2000)
+        frame = build_risk_index(dates, price, StaticRiskModel())
+        assert frame.height == 2000
+        assert frame["date"][0] == dates[0]
+        assert frame["date"][-1] == dates[-1]
+        assert frame["risk"].null_count() == 0
+
 
 class TestWriteRiskIndex:
     def test_round_trips_through_sdca_strategy_load(self, tmp_path: Path) -> None:

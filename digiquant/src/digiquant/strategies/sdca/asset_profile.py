@@ -12,6 +12,7 @@ for that asset looks comfortable. ``eth_research_v1()`` is research-only.
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 import polars as pl
@@ -123,6 +124,24 @@ def daily_closes_from_cache(ticker: str, cache_dir: Path | str) -> tuple[pl.Seri
     return daily_closes_from_ohlcv(frame)
 
 
+def union_date_range(*date_series: pl.Series) -> tuple[date, date]:
+    """Shared x-axis span across assets — union, not an inner join.
+
+    Overlay plots must not clip BTC (Coinbase 2015-07-20) to ETH's shorter
+    overlap. Each series keeps its own rows; only the axis limits are shared.
+    """
+    if not date_series:
+        raise ValueError("union_date_range requires at least one date series")
+    starts: list[date] = []
+    ends: list[date] = []
+    for series in date_series:
+        if series.len() == 0:
+            raise ValueError("union_date_range requires non-empty date series")
+        starts.append(series[0])
+        ends.append(series[-1])
+    return min(starts), max(ends)
+
+
 def technicals_from_ohlcv(
     dates: pl.Series,
     close: pl.Series,
@@ -146,4 +165,5 @@ __all__ = [
     "daily_closes_from_ohlcv",
     "stage_a_search_names",
     "technicals_from_ohlcv",
+    "union_date_range",
 ]
