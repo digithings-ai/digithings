@@ -47,6 +47,11 @@ Wave E
 ## Program-level acceptance
 
 - [x] House pipeline regression: `pytest -m unit tests/dq/olympus/` behavior unchanged by every child PR.
+      Live GHA (`pipeline-olympus.yml` `ref: main`) was red 2026-08-30 after core
+      105 dropped `UNIQUE(date, document_key)` — [#3278](https://github.com/digithings-ai/digithings/pull/3278)
+      squash-merged to `main` as `2df473110` (2026-08-31T11:24Z). Next scheduled
+      house daily (12:00 UTC) is the live publish proof. Do not treat unit green
+      as a substitute for that run.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
 - [ ] E2E (staging): sign up → subscribe (Stripe test) → connect Alpaca paper → overlay run →
       order routed to paper venue → fill mirrored → digest email received.
@@ -106,14 +111,19 @@ creator GitHub workspace (`plan_tier=free`, `plan_floor=custom`). Dry-run now
 also prints `byok_present` and `persist_enabled` (live core: `byok_present=0
 persist_enabled=0`). Overlay `--execute` refuses without `OLYMPUS_OVERLAY_PERSIST=1`
 (`OVERLAY_EXECUTE_NOT_CONFIGURED`) so a persist-off run cannot finish
-`persist_disabled` and look like a hop. Persist is safe after migration 110.
-BYOK rows on that workspace are still **0**, so `--execute` would skip
-`no_credentials` even with persist on. Settings Pipeline / Brokers / Notifications tabs now read
+`persist_disabled` and look like a hop. Migration 110 makes overlay **documents**
+safe from anon leak; **positions / nav_history / ledger** still collide on 097's
+legacy `UNIQUE(date)` / `UNIQUE(date,ticker)` / `PRIMARY KEY (date)` and 069's
+one-root-per-run_date. House ops scripts still upsert `on_conflict=date`, so an
+overlay same-day book would fail or rewrite the house row. Do not set
+`OLYMPUS_OVERLAY_PERSIST=1` expecting a private book — persist-on still cannot
+prove the overlay remaining hop until P6 drops those arbiters. BYOK rows on
+that workspace are still **0**, so `--execute` would skip `no_credentials` even
+with persist on. Settings Pipeline / Brokers / Notifications tabs now read
 `GET /jobs` `/fills` `/notifications/log` so skip reasons and empty remaining
 hops are visible in the UI. Settings About shows the five remaining hops from
 member-scoped reads (Observer-visible; digest log without inbox confirmation
-stays unproven). Overlay persist is now **safe to enable after 110** (anon cannot
-see overlay books; overlay publish skips `daily_snapshots`). Flag still **unset**
+stays unproven). Overlay publish skips `daily_snapshots`. Flag still **unset**
 because BYOK rows = **0** — do not `--execute`. Seal resume path:
 `python scripts/kairos_seal_byok.py` → exit **2** until gitignored
 `digithings-byok.env` exists. Do not seal a placeholder; `--apply` only against
@@ -155,7 +165,7 @@ pushes names onto core EF secrets). `python scripts/kairos_seal_byok.py` → exi
 personal workspace (`kairos-e2e-…+s3101@`, `plan_tier=free`) appeared on core;
 it does not prove Stripe.
 
-**Landed 2026-08-31T10:45Z (not epic-complete):** account Settings IA [#3264](https://github.com/digithings-ai/digithings/pull/3264) + remaining-hop harness [#3269](https://github.com/digithings-ai/digithings/pull/3269) on `develop`. Pages was frozen on `f1a196e5` after #3266's Cloudflare build failed (Observer SSG missing Pipeline/Keys greps). [#3275](https://github.com/digithings-ai/digithings/pull/3275) gated those greps; live `digiquant.io/build-info.json` is `119b7838` / `2026-08-31T10:45:27Z`. Settings export is Observer IA (“The desk, not the product.”; Notifications | Billing | About). Remaining hops are in the live client chunk. Staging E2E still blocked on vendor secrets.
+**Landed 2026-08-31T11:24Z (not epic-complete):** house documents upsert hotfix [#3278](https://github.com/digithings-ai/digithings/pull/3278) on `main` (`2df473110`). Core 105 unique is `(workspace_id, date, document_key)`; `main` still upserted `(date, document_key)` so house daily run 33321137776 failed `42P10` and did not commit the book. Live probe of the new conflict target: throwaway upsert then delete, `cleanup_remaining=0`. Pages still `119b7838` / `2026-08-31T10:45:27Z` (account IA + Observer greps; remaining hops in the client chunk). Staging E2E still blocked on vendor secrets.
 
 **Do not mark epic complete** until staging E2E + human/legal/IBKR gates clear.
 Do not merge draft [#3183](https://github.com/digithings-ai/digithings/pull/3183) /
