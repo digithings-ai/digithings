@@ -1,6 +1,6 @@
 # Kairos — human unblock checklist (minimal, ordered)
 
-**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` works from `.local/secrets/cursor-cloud-agent-supabase-pat` (label **cursor cloud agent**); process env still lacks pasted `SUPABASE_ACCESS_TOKEN`. Vault + `APP_URL` on EF; settings **v18** ACTIVE; **GitHub Auth Enabled** on `core`. **Agentmail Auth path unlocked:** `auth.users=1` (confirmed) → real JWT; settings returns **403 WORKSPACE_FORBIDDEN** (`workspace_members=0` — product bootstrap gap). Still need Stripe/Mailgun/Google/Alpaca for staging E2E. Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
+**Status: PARTIAL UNLOCK (2026-08-30) — NOT COMPLETE.** `sbp_` works from `.local/secrets/cursor-cloud-agent-supabase-pat` (label **cursor cloud agent**); process env may still need pasted `SUPABASE_ACCESS_TOKEN`. Vault + `APP_URL` on EF; settings **v19** ACTIVE; **GitHub Auth Enabled** on `core`. Agentmail Auth user confirmed; **workspace bootstrap applied** (mig 107 + EF v19) — JWT settings **200** for profile/notifications/brokers. Still need Stripe/Mailgun/Google/Alpaca for staging E2E (checkout = `PRICE_NOT_CONFIGURED`). Do not merge [#3183](https://github.com/digithings-ai/digithings/pull/3183) until you intentionally cut over Pages.
 
 Env dashboard: https://cursor.com/dashboard/cloud-agents/environments/e/ea5347f2-e16e-4f90-a63d-706ffd01128f  
 Deploy detail: [`DEPLOYMENT.md`](DEPLOYMENT.md)  

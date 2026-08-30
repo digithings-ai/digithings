@@ -47,7 +47,7 @@ Profile schema re-validation imports the real
 
 | Method | Path | Behavior |
 |--------|------|----------|
-| `GET` | `/profile` | Load tip `olympus_profile_config` for workspace member (`?workspace_id=` / `?profile_key=` optional, default key `workspace`). **Empty contract:** no tip → **200** with `version_id`/`recorded_at` null, empty `label`, null investment/assets — read-only, never inserts. `house` key → **400**. Missing table → **503 `NOT_READY`**. No Custom-tier write gate (read for hydrate). |
+| `GET` | `/profile` | Load tip `olympus_profile_config` for workspace member (`?workspace_id=` / `?profile_key=` optional, default key `workspace`). **Empty contract:** no tip → **200** with `version_id`/`recorded_at` null, empty `label`, null investment/assets — read-only, never inserts. `house` key → **400**. Missing table → **503 `NOT_READY`**. No Custom-tier write gate (read for hydrate). **Observer bootstrap:** if the JWT user has no `workspace_members` row, the handler calls `ensure_personal_workspace` (migration 107) before resolve — creates a free personal workspace + owner membership (never system/house). |
 | `PATCH` | `/profile` | Tier gate; schema re-validate; append workspace-scoped version; reject `house` key; 409 on version/supersedes conflict |
 | `GET` | `/brokers` | Fingerprint projection only |
 | `POST` | `/brokers/connect` | Tier gate; `api_key` or Alpaca `oauth` (server-pinned `redirect_uri`); seal via vault; reconnect = revoke-then-insert |
