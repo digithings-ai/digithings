@@ -96,12 +96,28 @@ bash scripts/write-build-info.sh dist/build-info.json digiquant.io
 # Auth routes (T1) — trailingSlash export → login/index.html (fixes prod 404).
 [ -f dist/olympus/login/index.html ] || { echo "ERROR: dist/olympus/login/index.html missing — Auth login route not exported" >&2; exit 1; }
 [ -f dist/olympus/auth/callback/index.html ] || { echo "ERROR: dist/olympus/auth/callback/index.html missing — Auth callback route not exported" >&2; exit 1; }
-# Settings (T3 + Pipeline/Keys) — must not regress to pre-T3 Status/Appearance shell alone.
+# Settings (T3 + Observer IA). Cloudflare Pages sets CF_PAGES=1, and this script
+# then defaults NEXT_PUBLIC_OLYMPUS_AUTH=1, so the static shell is the anonymous
+# Observer view: Notifications | Billing | About. Pipeline/Keys testids are
+# Custom+ only (`settingsTabsVisible('free')`) and MUST NOT be required on that
+# path — requiring them is why #3266/#3273 never reached live digiquant.io
+# (GitHub Actions omits CF_PAGES, auth stays off, tierFromSession returns
+# enterprise, and the same greps pass there).
 [ -f dist/olympus/settings/index.html ] || { echo "ERROR: dist/olympus/settings/index.html missing — Settings route not exported" >&2; exit 1; }
-grep -q 'settings-tab-pipeline' dist/olympus/settings/index.html \
-  || { echo "ERROR: settings export missing Pipeline tab marker — stale pre-T3 shell?" >&2; exit 1; }
-grep -q 'settings-tab-keys' dist/olympus/settings/index.html \
-  || { echo "ERROR: settings export missing Keys tab marker — BYOK surface not in export?" >&2; exit 1; }
+grep -q 'The desk, not the product' dist/olympus/settings/index.html \
+  || { echo "ERROR: settings export missing Observer IA heading" >&2; exit 1; }
+grep -q 'settings-tab-notifications' dist/olympus/settings/index.html \
+  || { echo "ERROR: settings export missing Notifications tab marker" >&2; exit 1; }
+grep -q 'settings-tab-billing' dist/olympus/settings/index.html \
+  || { echo "ERROR: settings export missing Billing tab marker" >&2; exit 1; }
+grep -q 'settings-tab-about' dist/olympus/settings/index.html \
+  || { echo "ERROR: settings export missing About tab marker" >&2; exit 1; }
+if [ "${NEXT_PUBLIC_OLYMPUS_AUTH:-}" != "1" ]; then
+  grep -q 'settings-tab-pipeline' dist/olympus/settings/index.html \
+    || { echo "ERROR: settings export missing Pipeline tab marker — stale pre-T3 shell?" >&2; exit 1; }
+  grep -q 'settings-tab-keys' dist/olympus/settings/index.html \
+    || { echo "ERROR: settings export missing Keys tab marker — BYOK surface not in export?" >&2; exit 1; }
+fi
 [ -f dist/build-info.json ] || { echo "ERROR: dist/build-info.json missing — the deploy freshness probe would report every deploy as unstamped (#1759)" >&2; exit 1; }
 
 echo "--- dist/ contents ---"
