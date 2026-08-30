@@ -6,6 +6,7 @@
  *   GET    /brokers            — list fingerprints only
  *   POST   /brokers/connect    — api_key | oauth (Alpaca code exchange server-side)
  *   POST   /brokers/revoke     — mark revoked (fail closed on unknown)
+ *   GET    /notifications      — load notification_prefs (or empty defaults; no write)
  *   PATCH  /notifications      — upsert notification_prefs (workspace member)
  *
  * Deploy preconditions: module/digiquant migrations 096–098 (workspaces +
@@ -104,6 +105,12 @@ export async function handleSettingsRequest(
   }
   if (method === "POST" && path === "/brokers/revoke") {
     return revokeBroker(req, deps);
+  }
+  if (
+    method === "GET" &&
+    (path === "/notifications" || path === "/notifications/")
+  ) {
+    return getNotifications(req, deps);
   }
   if (method === "PATCH" && path === "/notifications") {
     return patchNotifications(req, deps);
@@ -639,6 +646,71 @@ async function revokeBroker(req: Request, deps: SettingsDeps): Promise<Response>
   });
 }
 
+/**
+ * Empty-prefs contract (no row yet): HTTP 200 with sensible defaults and
+ * `updated_at: null` — never writes. Clients hydrate the form from this body
+ * so an accidental Save does not overwrite with blank defaults unknowingly.
+ * Missing table → 503 NOT_READY (same as PATCH).
+ */
+function emptyNotificationPrefs(
+  workspaceId: string,
+  userEmail: string | null | undefined,
+): Record<string, unknown> {
+  const email =
+    typeof userEmail === "string" && userEmail.trim() ? userEmail.trim() : "";
+  return {
+    workspace_id: workspaceId,
+    email,
+    daily_digest: false,
+    holding_change_alerts: false,
+    execution_alerts: false,
+    digest_hour_utc: 12,
+    updated_at: null,
+  };
+}
+
+function prefsResponseBody(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    workspace_id: row.workspace_id,
+    email: row.email,
+    daily_digest: row.daily_digest,
+    holding_change_alerts: row.holding_change_alerts,
+    execution_alerts: row.execution_alerts,
+    digest_hour_utc: row.digest_hour_utc,
+    updated_at: row.updated_at ?? null,
+  };
+}
+
+async function getNotifications(
+  req: Request,
+  deps: SettingsDeps,
+): Promise<Response> {
+  const url = new URL(req.url);
+  const workspaceId = url.searchParams.get("workspace_id");
+  const authz = await resolveMember(deps, workspaceId);
+  if (!authz.ok) return authz.response;
+
+  const { data: existing, error: lookupErr } = await deps.admin
+    .from("notification_prefs")
+    .select(PREFS_COLUMNS)
+    .eq("workspace_id", authz.workspace.id)
+    .maybeSingle();
+
+  if (lookupErr) {
+    return jsonError(
+      503,
+      "NOT_READY",
+      "notification_prefs not available",
+    );
+  }
+
+  if (!existing) {
+    return jsonOk(emptyNotificationPrefs(authz.workspace.id, deps.user.email));
+  }
+
+  return jsonOk(prefsResponseBody(existing as Record<string, unknown>));
+}
+
 async function patchNotifications(
   req: Request,
   deps: SettingsDeps,
@@ -756,15 +828,7 @@ async function patchNotifications(
     return jsonError(500, "PREFS_WRITE_FAILED", "Unable to save notification preferences");
   }
 
-  return jsonOk({
-    workspace_id: upserted.workspace_id,
-    email: upserted.email,
-    daily_digest: upserted.daily_digest,
-    holding_change_alerts: upserted.holding_change_alerts,
-    execution_alerts: upserted.execution_alerts,
-    digest_hour_utc: upserted.digest_hour_utc,
-    updated_at: upserted.updated_at,
-  });
+  return jsonOk(prefsResponseBody(upserted as Record<string, unknown>));
 }
 
 async function exchangeAlpacaCodeDefault(args: {

@@ -170,6 +170,25 @@ export async function revokeBroker(
   return request<BrokerConnectionView>(opts, 'POST', '/settings/brokers/revoke', payload);
 }
 
+export type NotificationPrefs = {
+  workspace_id: string;
+  email: string;
+  daily_digest: boolean;
+  holding_change_alerts: boolean;
+  execution_alerts: boolean;
+  digest_hour_utc: number;
+  /** null when no persisted row yet (GET empty contract). */
+  updated_at: string | null;
+};
+
+export async function getNotifications(
+  opts: SettingsApiOptions,
+  workspaceId?: string,
+): Promise<NotificationPrefs> {
+  const q = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  return request<NotificationPrefs>(opts, 'GET', `/settings/notifications${q}`);
+}
+
 export async function patchNotifications(
   opts: SettingsApiOptions,
   payload: {
@@ -180,8 +199,8 @@ export async function patchNotifications(
     digest_hour_utc?: number;
     workspace_id?: string;
   },
-): Promise<Record<string, unknown>> {
-  return request(opts, 'PATCH', '/settings/notifications', payload);
+): Promise<NotificationPrefs> {
+  return request<NotificationPrefs>(opts, 'PATCH', '/settings/notifications', payload);
 }
 
 export async function createCheckoutSession(

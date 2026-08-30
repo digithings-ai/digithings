@@ -22,7 +22,8 @@ schemas, appends versioned `olympus_profile_config` overlays (never mutates;
 never the reserved `house` key), and seals broker credentials with the vault
 `parseCredential` + `sealCredential` contract (AAD =
 `{workspace_id}:{broker}:{env}`). Responses never include ciphertext or
-plaintext. `PATCH /notifications` upserts `notification_prefs` (migration 103 / K5).
+plaintext. `GET /notifications` hydrates prefs (empty → 200 defaults, `updated_at: null`;
+no write). `PATCH /notifications` upserts `notification_prefs` (migration 103 / K5).
 
 **Deploy requires** K3 vault + `broker_connections` and K5 `notification_prefs`
 on the target DB. See [`settings/README.md`](settings/README.md).

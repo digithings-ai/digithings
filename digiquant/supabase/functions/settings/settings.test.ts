@@ -645,6 +645,57 @@ Deno.test("POST brokers/revoke: fails closed on unknown row", async () => {
   assertEquals(json.code, "CONNECTION_NOT_FOUND");
 });
 
+Deno.test("GET notifications: returns row for workspace member", async () => {
+  const store = freshStore();
+  store.prefs.push({
+    workspace_id: WS_A,
+    email: "pm@example.com",
+    daily_digest: true,
+    holding_change_alerts: false,
+    execution_alerts: true,
+    digest_hour_utc: 9,
+    updated_at: "2026-01-01T00:00:00Z",
+  });
+  const { status, json } = await call(store, "GET", "/notifications");
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.email, "pm@example.com");
+  assertEquals(json.daily_digest, true);
+  assertEquals(json.execution_alerts, true);
+  assertEquals(json.digest_hour_utc, 9);
+  assertEquals(json.updated_at, "2026-01-01T00:00:00Z");
+  assertEquals(store.prefs.length, 1);
+});
+
+Deno.test("GET notifications: empty contract — 200 defaults, updated_at null, no write", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", "/notifications");
+  assertEquals(status, 200);
+  assertEquals(json.workspace_id, WS_A);
+  assertEquals(json.email, "owner@example.com");
+  assertEquals(json.daily_digest, false);
+  assertEquals(json.holding_change_alerts, false);
+  assertEquals(json.execution_alerts, false);
+  assertEquals(json.digest_hour_utc, 12);
+  assertEquals(json.updated_at, null);
+  assertEquals(store.prefs.length, 0);
+});
+
+Deno.test("GET notifications: 503 when notification_prefs missing", async () => {
+  const store = freshStore();
+  store.prefsMissing = true;
+  const { status, json } = await call(store, "GET", "/notifications");
+  assertEquals(status, 503);
+  assertEquals(json.code, "NOT_READY");
+});
+
+Deno.test("GET notifications: wrong workspace is forbidden", async () => {
+  const store = freshStore();
+  const { status, json } = await call(store, "GET", `/notifications?workspace_id=${WS_B}`);
+  assertEquals(status, 403);
+  assertEquals(json.code, "WORKSPACE_FORBIDDEN");
+});
+
 Deno.test("PATCH notifications: upserts prefs for workspace member", async () => {
   const store = freshStore();
   const { status, json } = await call(store, "PATCH", "/notifications", {

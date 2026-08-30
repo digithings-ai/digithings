@@ -1,18 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
+  getNotifications,
   patchNotifications,
   SettingsHttpError,
+  type NotificationPrefs,
   type SettingsApiOptions,
 } from '@/lib/settings-api';
 
 export type NotifyTabProps = {
   api: SettingsApiOptions | null;
+  getFn?: typeof getNotifications;
   patchFn?: typeof patchNotifications;
 };
 
-export function NotifyTab({ api, patchFn = patchNotifications }: NotifyTabProps) {
+export function NotifyTab({
+  api,
+  getFn = getNotifications,
+  patchFn = patchNotifications,
+}: NotifyTabProps) {
   const [email, setEmail] = useState('');
   const [dailyDigest, setDailyDigest] = useState(false);
   const [holdingChange, setHoldingChange] = useState(false);
@@ -21,6 +28,47 @@ export function NotifyTab({ api, patchFn = patchNotifications }: NotifyTabProps)
   const [message, setMessage] = useState<string | null>(null);
   const [notReady, setNotReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const applyPrefs = useCallback((prefs: NotificationPrefs) => {
+    setEmail(typeof prefs.email === 'string' ? prefs.email : '');
+    setDailyDigest(Boolean(prefs.daily_digest));
+    setHoldingChange(Boolean(prefs.holding_change_alerts));
+    setExecutionAlerts(Boolean(prefs.execution_alerts));
+    setDigestHour(
+      typeof prefs.digest_hour_utc === 'number' && Number.isInteger(prefs.digest_hour_utc)
+        ? prefs.digest_hour_utc
+        : 12,
+    );
+  }, []);
+
+  const hydrate = useCallback(async () => {
+    if (!api) return;
+    setLoading(true);
+    setMessage(null);
+    setNotReady(false);
+    try {
+      const prefs = await getFn(api);
+      applyPrefs(prefs);
+    } catch (err) {
+      if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
+        setNotReady(true);
+        setMessage(
+          'Notification preferences backend is temporarily unavailable. Showing empty form.',
+        );
+      } else {
+        setMessage(err instanceof Error ? err.message : 'Unable to load preferences.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [api, getFn, applyPrefs]);
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate prefs after mount */
+    void hydrate();
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [hydrate]);
 
   async function onSave() {
     setMessage(null);
@@ -31,13 +79,14 @@ export function NotifyTab({ api, patchFn = patchNotifications }: NotifyTabProps)
     }
     setBusy(true);
     try {
-      await patchFn(api, {
+      const saved = await patchFn(api, {
         email,
         daily_digest: dailyDigest,
         holding_change_alerts: holdingChange,
         execution_alerts: executionAlerts,
         digest_hour_utc: digestHour,
       });
+      applyPrefs(saved);
       setMessage('Preferences saved.');
     } catch (err) {
       if (err instanceof SettingsHttpError && (err.status === 503 || err.code === 'NOT_READY')) {
@@ -62,6 +111,12 @@ export function NotifyTab({ api, patchFn = patchNotifications }: NotifyTabProps)
           UTC.
         </p>
       </div>
+
+      {loading ? (
+        <p className="text-sm text-ink-mute" data-testid="notify-loading">
+          Loading preferences…
+        </p>
+      ) : null}
 
       <label className="block space-y-1">
         <span className="text-[10px] font-medium uppercase tracking-widest text-ink-mute">
@@ -122,7 +177,7 @@ export function NotifyTab({ api, patchFn = patchNotifications }: NotifyTabProps)
 
       <button
         type="button"
-        disabled={busy}
+        disabled={busy || loading}
         onClick={() => void onSave()}
         className="rounded-lg border border-accent/40 bg-accent/15 px-4 py-2 text-sm font-medium text-accent disabled:opacity-50"
         data-testid="notify-save"
