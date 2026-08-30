@@ -43,6 +43,25 @@ class StageAResult(BaseModel):
     num_evaluations: int = Field(ge=0)
 
 
+def _weight_complexity(weights: SdcaCompositeWeights) -> tuple[int, float]:
+    """Tie-break: fewer enabled extras, then higher valuation weight."""
+    return (len(weights.enabled_extras()), -weights.valuation)
+
+
+def _is_better(
+    score: CycleOverlapScore,
+    weights: SdcaCompositeWeights,
+    incumbent: StageAResult | None,
+) -> bool:
+    if incumbent is None:
+        return True
+    if score.objective > incumbent.score.objective:
+        return True
+    if score.objective < incumbent.score.objective:
+        return False
+    return _weight_complexity(weights) < _weight_complexity(incumbent.weights)
+
+
 def cycle_overlap_score(
     dates: Sequence[date],
     risk: Sequence[float | None],
@@ -139,7 +158,7 @@ def optimize_stage_a_weights(
             evaluated += 1
             risk = risk_from_weighted_z(dates, valuation_z, extra_z, weights)
             score = cycle_overlap_score(dates, risk, windows)
-            if best is None or score.objective > best.score.objective:
+            if _is_better(score, weights, best):
                 best = StageAResult(weights=weights, score=score, num_evaluations=evaluated)
     if best is None:
         raise ValueError("no valid Stage A weight combinations to evaluate")

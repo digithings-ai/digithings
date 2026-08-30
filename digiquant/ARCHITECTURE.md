@@ -558,9 +558,9 @@ upstream for cached price history.
 | `sdca/indicator_catalog.py` | Named extras: **m2** (FRED M2SL YoY growth rolling-z), **rs_eth** (`log(BTC/ETH)` rolling-z, BTC cheap vs ETH → +z), **dxy** (DTWEXBGS rolling-z, strong dollar → −z), plus price oscillators **weekly_rsi** (ISO-week Wilder RSI → `(50−RSI)/50×3`), **weekly_macd** (weekly MACD-hist rolling-z of −hist; default weight 0 because *r* ≈ 0.65 with RSI), **sma_band** (90d close vs SMA in σ units, below band → +z; not Mayer/200w). `SdcaCompositeWeights` defaults `valuation=1`, extras `0`. Causal; weekly series as-of backward onto daily. Omitted: Mayer/200w (*r* ≈ 0.84 vs valuation), a second power-law residual ("alpha" — collinear), on-chain MVRV (#1086), equity CAPE (#3176), RS rotation pool (#1084). |
 | `sdca/price_oscillators.py` | Weekly resample + SMA-band z used by the catalog. Completed ISO weeks only; `join_asof(..., strategy="backward")`. |
 | `sdca/cycle_windows.py` | Pydantic pin set for BTC cycle extrema (2017/2021/2025 highs, 2018/2022 lows, ±45d). Stage A must not invent ad-hoc date lists. |
-| `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. |
+| `sdca/stage_a.py` | Weight search that maximizes cycle overlap: mean risk in peak windows minus mean risk in trough windows, plus accumulate/distribute band fractions. Equal objective prefers fewer extras then higher `valuation` (parsimony). |
 | `sdca/curve_sim.py` | Injected Stage B evaluator via `run_backtest` when Nautilus SIGABRTs (#42). Provenance records `evaluator=curve_simulator`. Not a published backtest. |
-| `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates. |
+| `sdca/regularize.py` | Round Stage A weights to tenths (or 0.05) and renormalize; shrink curve max rates and round them to one decimal. |
 | `sdca/two_stage.py` | Freeze Stage A weights, run existing walk-forward curve search, persist `btc_composite_aggressive.json` + `btc_composite_regularized.json`. |
 | `sdca/curve.py` | `AccumDistCurve` — 21-node (risk 0, 5, …, 100) piecewise-linear map from risk to a daily trade rate (%). `value_at_risk()` interpolates and clamps to `[0, 100]`, rejecting non-finite risk. Nodes are fully configurable and must be finite: all-positive = long-only accumulation, signed = accumulation + distribution. The no-arg default (`DEFAULT_BTC_NODES`) is the issue's documented BTC-reference curve shape, not a hardcoded valuation constant — callers targeting another asset pass their own `nodes`. This is the **runtime** representation; it is unchanged by #3169. |
 | `sdca/curve_shape.py` | `SdcaCurveShape` (frozen Pydantic v2, #3169) — the **authoring and optimization** surface. Six parameters (`buy_max_rate`, `buy_knee_risk`, `sell_knee_risk`, `sell_max_rate`, `buy_curvature`, `sell_curvature`) generate the 21 nodes via `to_nodes()`. Enforces a non-empty dead zone, sign/monotonicity, and `*_max_rate <= 100` (the generated-path answer to #2552). The raw `AccumDistCurve` constructor stays unbounded. |
@@ -607,8 +607,9 @@ composite risk troughs overlap documented BTC cycle lows and peaks overlap
 cycle highs (`SdcaCycleWindows.btc_v1()`). Stage B freezes those weights and
 runs the existing walk-forward curve optimize (`vs_flat_dca_pct`, floors/caps,
 IS-only rails). After the aggressive fit, `regularize.py` rounds weights to
-tenths and shrinks max rates; both variants are persisted. The aggressive
-fit will overfit — that is expected.
+tenths and shrinks max rates (rounded to one decimal); both variants are
+persisted. Equal Stage A scores prefer fewer extras. The aggressive fit will
+overfit — that is expected.
 
 **Backtest state is a sequential Python loop, not a vectorized Polars
 expression** — `cash`/`asset_units` are running balances that each day's buy/sell

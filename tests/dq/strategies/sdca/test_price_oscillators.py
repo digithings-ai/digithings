@@ -74,12 +74,14 @@ class TestWeeklyRsiZ:
     def test_wednesday_does_not_see_same_week_friday_spike(self) -> None:
         n = 250
         dates = _dates(n)
-        base = [100.0 + 0.1 * i for i in range(n)]
+        # Oscillate so weekly RSI is not already clipped at ±3.
+        base = [100.0 + 8.0 * ((i % 20) - 10) for i in range(n)]
         z1 = weekly_rsi_z(dates, pl.Series(base))
         spiked = base.copy()
-        # Past RSI(14) weekly warmup. Friday 2020-05-15 = 130 days after Mon 6 Jan.
-        friday = date(2020, 5, 15)
-        idx = dates.to_list().index(friday)
+        # Spike the ISO week-end (Sunday). Wednesday of that week must not see it;
+        # the following Monday must.
+        sunday = date(2020, 5, 17)
+        idx = dates.to_list().index(sunday)
         spiked[idx] = 10_000.0
         z2 = weekly_rsi_z(dates, pl.Series(spiked))
         wednesday = date(2020, 5, 13)
@@ -108,19 +110,23 @@ class TestWeeklyMacdZ:
         assert "weekly_macd" not in w.enabled_extras()
 
     def test_macd_is_causal_asof_like_rsi(self) -> None:
-        n = 500
+        n = 800
         dates = _dates(n)
-        base = [100.0 + 0.05 * i for i in range(n)]
+        base = [100.0 + 4.0 * ((i % 30) - 15) for i in range(n)]
         z1 = weekly_macd_z(dates, pl.Series(base))
         spiked = base.copy()
-        friday = date(2021, 1, 8)
-        idx = dates.to_list().index(friday)
+        sunday = date(2021, 6, 13)
+        idx = dates.to_list().index(sunday)
         spiked[idx] = 50_000.0
         z2 = weekly_macd_z(dates, pl.Series(spiked))
-        wednesday = date(2021, 1, 6)
+        wednesday = date(2021, 6, 9)
         w_idx = dates.to_list().index(wednesday)
         assert z1[w_idx] is not None
         assert z1[w_idx] == pytest.approx(z2[w_idx])
+        next_monday = date(2021, 6, 14)
+        m_idx = dates.to_list().index(next_monday)
+        assert z1[m_idx] is not None
+        assert z1[m_idx] != pytest.approx(z2[m_idx])
 
 
 class TestSmaBandZ:
@@ -130,18 +136,19 @@ class TestSmaBandZ:
         # Flat then a crash: close sits below the 90d SMA.
         close = pl.Series([100.0] * 90 + [60.0] * 60)
         z = sma_band_z(dates, close, window=90, min_samples=30)
-        tail = [v for v in z.to_list()[-20:] if v is not None]
-        assert tail
-        assert sum(tail) / len(tail) > 1.0
+        # Right after the crash the SMA has not yet followed; the tail has.
+        after = [v for v in z.to_list()[90:110] if v is not None]
+        assert after
+        assert sum(after) / len(after) > 1.0
 
     def test_above_slow_sma_is_negative_z(self) -> None:
         n = 150
         dates = _dates(n)
         close = pl.Series([100.0] * 90 + [160.0] * 60)
         z = sma_band_z(dates, close, window=90, min_samples=30)
-        tail = [v for v in z.to_list()[-20:] if v is not None]
-        assert tail
-        assert sum(tail) / len(tail) < -1.0
+        after = [v for v in z.to_list()[90:110] if v is not None]
+        assert after
+        assert sum(after) / len(after) < -1.0
 
     def test_is_causal(self) -> None:
         n = 120

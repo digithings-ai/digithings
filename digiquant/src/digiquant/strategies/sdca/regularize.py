@@ -33,10 +33,10 @@ def regularize_curve_shape(
     if not (0.0 < rate_scale <= 1.0):
         raise ValueError(f"rate_scale must be in (0, 1], got {rate_scale}")
     return SdcaCurveShape(
-        buy_max_rate=shape.buy_max_rate * rate_scale,
+        buy_max_rate=round(shape.buy_max_rate * rate_scale, 1),
         buy_knee_risk=shape.buy_knee_risk,
         sell_knee_risk=shape.sell_knee_risk,
-        sell_max_rate=shape.sell_max_rate * rate_scale,
+        sell_max_rate=round(shape.sell_max_rate * rate_scale, 1),
         buy_curvature=shape.buy_curvature,
         sell_curvature=shape.sell_curvature,
     )

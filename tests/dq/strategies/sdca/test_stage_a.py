@@ -165,6 +165,41 @@ class TestStageAWeightSearch:
         assert result.weights.weekly_rsi == pytest.approx(1.0)
         assert result.weights.sma_band == pytest.approx(0.0)
 
+    def test_uninformative_extras_lose_to_valuation_only(self) -> None:
+        """Equal overlap prefers fewer extras and valuation=1 (parsimony)."""
+        start = date(2020, 1, 1)
+        dates = _dates(90, start)
+        windows = SdcaCycleWindows(
+            windows=(
+                CycleWindow(
+                    name="t",
+                    kind=CycleKind.TROUGH,
+                    start=start,
+                    end=date(2020, 1, 25),
+                ),
+                CycleWindow(
+                    name="p",
+                    kind=CycleKind.PEAK,
+                    start=date(2020, 3, 1),
+                    end=date(2020, 3, 30),
+                ),
+            )
+        )
+        valuation = [3.0 if d <= date(2020, 1, 25) else -3.0 for d in dates]
+        zeros = [0.0] * len(dates)
+        result = optimize_stage_a_weights(
+            dates,
+            valuation_z=valuation,
+            extra_z={"weekly_rsi": zeros, "sma_band": zeros},
+            windows=windows,
+            search_names=("weekly_rsi", "sma_band"),
+            grid=(0.0, 1.0),
+            valuation_grid=(0.5, 1.0),
+        )
+        assert result.weights.weekly_rsi == pytest.approx(0.0)
+        assert result.weights.sma_band == pytest.approx(0.0)
+        assert result.weights.valuation == pytest.approx(1.0)
+
     def test_risk_from_weighted_z_matches_composite_formula(self) -> None:
         dates = [date(2020, 1, 1), date(2020, 1, 2)]
         risk = risk_from_weighted_z(

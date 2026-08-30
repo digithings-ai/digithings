@@ -8,7 +8,9 @@ from pathlib import Path
 
 import polars as pl
 import pytest
+from digiquant.strategies.sdca import two_stage as two_stage_mod
 from digiquant.strategies.sdca.curve_shape import SdcaCurveShape
+from digiquant.strategies.sdca.curve_sim import evaluate_sdca_trial_curve_sim
 from digiquant.strategies.sdca.cycle_windows import CycleKind, CycleWindow, SdcaCycleWindows
 from digiquant.strategies.sdca.indicator_catalog import SdcaCompositeWeights
 from digiquant.strategies.sdca.optimize import SDCA_SHAPE_DEFAULTS
@@ -127,8 +129,6 @@ class TestStageBFrozenSearch:
 
 class TestCurveSimEvaluator:
     def test_returns_finite_dca_metrics(self) -> None:
-        from digiquant.strategies.sdca.curve_sim import evaluate_sdca_trial_curve_sim
-
         dates = _dates(40)
         prices = [100.0 + 0.5 * i for i in range(len(dates))]
         shape = SdcaCurveShape(
@@ -195,9 +195,43 @@ class TestPersistTwoStage:
         ] or regularized["stage_b_params"]["buy_max_rate"] == pytest.approx(
             aggressive["stage_b_params"]["buy_max_rate"] * 0.7
         )
-        SdcaTwoStageProvenance.model_validate(aggressive)
-        SdcaTwoStageProvenance.model_validate(regularized)
+        SdcaTwoStageProvenance.model_validate_json(
+            (tmp_path / "btc_composite_aggressive.json").read_text()
+        )
+        SdcaTwoStageProvenance.model_validate_json(
+            (tmp_path / "btc_composite_regularized.json").read_text()
+        )
         assert (
             "overfit" in pair.aggressive.notes.lower()
             or "overfit" in pair.regularized.notes.lower()
+        )
+
+
+class TestCheckedInTwoStageProvenance:
+    def test_sidecars_roundtrip_and_record_honest_oos(self) -> None:
+        dest = Path(two_stage_mod.__file__).resolve().parent
+        aggressive = SdcaTwoStageProvenance.model_validate_json(
+            (dest / "btc_composite_aggressive.json").read_text()
+        )
+        regularized = SdcaTwoStageProvenance.model_validate_json(
+            (dest / "btc_composite_regularized.json").read_text()
+        )
+        assert aggressive.variant == "aggressive"
+        assert regularized.variant == "regularized"
+        assert aggressive.evaluator == "curve_simulator"
+        assert regularized.evaluator == "curve_simulator"
+        assert aggressive.beats_flat_dca_oos is False
+        assert regularized.oos_from_aggressive is True
+        assert aggressive.oos_from_aggressive is False
+        assert "overfit" in aggressive.notes.lower()
+        names = {w.name for w in aggressive.windows}
+        assert names == {
+            "2017_peak",
+            "2018_trough",
+            "2021_peak",
+            "2022_trough",
+            "2025_peak",
+        }
+        assert regularized.stage_b_params["buy_max_rate"] == pytest.approx(
+            round(float(aggressive.stage_b_params["buy_max_rate"]) * 0.7, 1)
         )
