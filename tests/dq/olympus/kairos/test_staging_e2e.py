@@ -197,6 +197,10 @@ def test_run_staging_e2e_observer_pass_then_missing_secrets_exits_2() -> None:
     assert rc == 2
     assert any("TIER_FORBIDDEN" in line or "Observer hops" in line for line in logs)
     assert any("STRIPE_SECRET_KEY" in line for line in logs)
+    blob = "\n".join(logs)
+    assert "KAIROS_STAGING_E2E_REMAINING_HOPS:" in blob
+    assert "browser_stripe_checkout" in blob
+    assert "digest_email_received" in blob
 
 
 @pytest.mark.unit

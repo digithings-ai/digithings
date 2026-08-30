@@ -335,10 +335,12 @@ def run_staging_e2e(
     missing = missing_kairos_staging_secrets(env)
     if missing:
         err(format_missing_secrets_failure(missing))
+        err(format_remaining_hops_failure(remaining_hops_unproven()))
         return 2
 
     if not jwt:
         err(format_missing_secrets_failure(["KAIROS_STAGING_USER_JWT"]))
+        err(format_remaining_hops_failure(remaining_hops_unproven()))
         return 2
 
     status, body = http(

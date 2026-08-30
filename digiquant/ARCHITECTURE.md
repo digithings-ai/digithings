@@ -3035,11 +3035,12 @@ when vendor keys are empty. Staging inventory also covers these names in
 `digiquant.olympus.kairos.staging_secrets`. `scripts/kairos_staging_e2e.py` runs
 Observer Settings hops first (when `KAIROS_STAGING_USER_JWT` or email/password
 is set): reads 200, Custom writes `TIER_FORBIDDEN`, then still exits **2** if
-vendor secrets are missing. Checkout URL + unsigned webhook is **exit 4**
-(`KAIROS_STAGING_E2E_REMAINING_HOPS: …`) until browser Stripe, Alpaca paper,
-overlay, fill, and digest are proven. Exit 0 is reserved for the full EPIC.md
-chain. Recipient for staging digests can be an Agentmail inbox once Mailgun is
-configured.
+vendor secrets are missing (and prints `KAIROS_STAGING_E2E_REMAINING_HOPS` so
+the five live hops are named even before secrets land). Checkout URL + unsigned
+webhook is **exit 4** (`KAIROS_STAGING_E2E_REMAINING_HOPS: …`) until browser
+Stripe, Alpaca paper, overlay, fill, and digest are proven. Exit 0 is reserved
+for the full EPIC.md chain. Recipient for staging digests can be an Agentmail
+inbox once Mailgun is configured.
 
 **Entry points:**
 
