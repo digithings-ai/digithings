@@ -271,7 +271,13 @@ def test_proven_remaining_hops_skipped_overlay_is_not_claimed() -> None:
     )
     assert not_entitled["overlay_daily_claimed"] is False
     running = proven_remaining_hops(RemainingHopEvidence(jobs=(("overlay_daily", "running"),)))
-    assert running["overlay_daily_claimed"] is True
+    assert running["overlay_daily_claimed"] is False
+    persist_disabled = proven_remaining_hops(
+        RemainingHopEvidence(jobs=(("overlay_daily", "persist_disabled"),))
+    )
+    assert persist_disabled["overlay_daily_claimed"] is False
+    succeeded = proven_remaining_hops(RemainingHopEvidence(jobs=(("overlay_daily", "succeeded"),)))
+    assert succeeded["overlay_daily_claimed"] is True
 
 
 @pytest.mark.unit

@@ -3042,8 +3042,9 @@ pass, the harness GETs `/settings/profile` (billing snapshot), `/brokers`,
 product state: `subscription_status=active` **and** `has_stripe_subscription`
 (boolean; house is seeded `enterprise`/`active` without Stripe ids and must
 not prove checkout; ops grants with `subscription_status=none` also do not);
-Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` running/succeeded
-— not skipped/`not_entitled`; a fill fingerprint with a symbol; a `digest:`
+Alpaca paper `active` with `auth_kind=oauth`; `overlay_daily` **succeeded**
+(not `running` / `skipped` / `persist_disabled` / `not_entitled`); a fill
+fingerprint with a symbol; a `digest:`
 log key **and** `KAIROS_STAGING_DIGEST_INBOX_CONFIRMED` after an inbox check
 (claim-ledger rows are inserted before Mailgun send). Remaining-hop GETs that
 are not HTTP 200 exit **3**. Exit **0** only when all five remaining hops are
@@ -3112,6 +3113,21 @@ never silent). Idempotency key is `{workspace_id}:overlay_daily:{run_date}`; cla
 is insert-first + skip-locked (first claimer wins). Production persistence is
 `SupabaseJobRunStore` (`INSERT … ON CONFLICT (idempotency_key) DO NOTHING`);
 `MemoryJobRunStore` is the test seam. Overlay failures never write house job rows.
+
+**Cron CLI (`cron.py`, `python -m digiquant.olympus.overlay`).** Production
+entry that writes `job_runs` via `SupabaseJobRunStore`. House and system
+workspace ids are never overlay targets (even if seeded `enterprise`/`active`).
+`--check` exits **2** with `OVERLAY_STORE_NOT_CONFIGURED` listing missing env
+*names* (`SUPABASE_URL` / `CORE_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` /
+`CORE_SUPABASE_SERVICE_KEY`). `--dry-run` prints candidate counts and writes
+nothing. Apply requires `--workspace-id` or `--all` (refuses implicit writes).
+`--all` against a free workspace inserts a visible `skipped`/`not_entitled`
+row; it does not invoke the graph. Dispatch-only claims leave the row
+`running` — the staging harness proves overlay only on `succeeded` (after
+`run_overlay` + persist). Do not run `--all` against Observer until Stripe +
+BYOK land; skipped rows are not a remaining-hop proof. The cron module does
+not import `byok`/`digillm` (digiquant-only CI). Production apply passes
+`byok=None` so `dispatch_overlay_daily` lazy-probes per workspace.
 
 **Omitted `workspace_id` means the house.** Readers and writers that leave the
 argument off (`load_prior_book`, `_prune_orphan_positions`, `_rows_for_date`,

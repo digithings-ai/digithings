@@ -7,8 +7,9 @@ Exit 0 is allowed only when every hop here is proven from product state:
   seeded ``enterprise``/``active`` without Stripe ids — that must not prove
   checkout. Ops grants with ``subscription_status=none`` also do not.
 - Alpaca: paper connection ``active`` with ``auth_kind=oauth``.
-- Overlay: ``job_type=overlay_daily`` in ``running``/``succeeded`` (not
-  ``skipped``/``not_entitled``).
+- Overlay: ``job_type=overlay_daily`` with status ``succeeded`` (not
+  ``running`` / ``skipped`` / ``persist_disabled`` / ``not_entitled``). A
+  stuck claim or persist-disabled finish must not prove the EPIC overlay hop.
 - Fill: at least one fingerprint with a symbol.
 - Digest: a ``digest:`` notification_log key **and** an inbox confirmation
   (claim-ledger rows are inserted before Mailgun send).
@@ -28,7 +29,7 @@ REMAINING_LIVE_HOPS: tuple[str, ...] = (
     "digest_email_received",
 )
 EXIT_REMAINING_HOPS_UNPROVEN: int = 4
-OVERLAY_RUN_STATUSES: frozenset[str] = frozenset({"running", "succeeded"})
+OVERLAY_RUN_STATUSES: frozenset[str] = frozenset({"succeeded"})
 
 
 class RemainingHopEvidence(BaseModel):
