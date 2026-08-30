@@ -239,6 +239,8 @@ The BTC/ETH/SOL Slapper tearsheets published on digiquant.io are produced end-to
 
 Structural settings (symbol, capital, sizing, 2018 trade window, precision) live in the **public** `strategies/settings.json`; proprietary indicator calibrations live in the **gitignored** `strategies/calibrations.json` (shape shown in `calibrations.example.json`). The `SlapperConfig.trade_start` gate mirrors Pine's `in_date_range` so warmup uses earlier bars while reported trades match the TradingView window.
 
+**Strategy families (#3170).** Each settings entry may set `"strategy_type": "slapper" | "sdca"` (default `slapper`, so existing Slapper entries are unchanged). `sdca` entries carry an `sdca` block (`preset`, `risk_model`, `long_only`, `initial_cash`). For `strategy_type == "sdca"`, `run_and_write()` calls `materialize_sdca_risk_index()` on the **already signal-delayed** OHLCV frame, writes a temp `risk_path` parquet, and injects it (plus preset `curve_nodes`) through `get_strategy` overrides. The calibrations gate is skipped; tearsheet notes record the coefficients fit window and the preset. `get_strategy` / `run_nautilus` pass `trade_size` only when the config class declares it. Do not `--push-supabase` for `btc_sdca` until the real BTC fit (#3173) is the coefficients file in use.
+
 **Tearsheet schema 1.1** (`tearsheet_data.SCHEMA_VERSION`) adds two back-compatible fields the renderer can opt into:
 
 - `ohlc_bars: list[OHLCBar]` (`{t,o,h,l,c}`) — full-history candlesticks for the price chart. Note this spans the **entire** price series, while `equity_curve`/`trades` are scoped to the `trade_start` window — the renderer must not assume a shared x-axis. Defaults to `[]`; absent on 1.0 fixtures and on adapter paths with no bars.
@@ -432,7 +434,7 @@ digiquant calls this pattern in `_build_engine()` in `nautilus_runner.py`. One e
 - `default_params`: default values merged with caller overrides
 - `description`: human-readable summary
 
-`get_strategy()` resolves aliases, looks up the spec, merges `default_params` with caller overrides and required fields (`instrument_id`, `bar_type`), instantiates `config_cls(**params)`, and returns `(strategy_instance, config)`.
+`get_strategy()` resolves aliases, looks up the spec, merges `default_params` with caller overrides and required fields (`instrument_id`, `bar_type`), instantiates `config_cls(**params)`, and returns `(strategy_instance, config)`. `trade_size` is applied only when the config class declares that field (`config_declares_field`, #3170).
 
 ### SDCA Engine (#1080, #1081)
 
@@ -479,10 +481,15 @@ deducted from `_cash` when denominated in the instrument's quote currency —
 a fee paid in a different currency (e.g. the base asset) is left untouched
 rather than misapplied, since this shadow accounting has no conversion rate
 for it.
-Like `m2_liquidity`, **SDCA is not registered in `strategies/registry.py`** —
-`risk_path` has no sensible static default (it's produced by a specific
-upstream `RiskModel` run), so `SdcaStrategyConfig` must be instantiated
-directly by the caller; the registry is for discovery only.
+Like `m2_liquidity`, **SDCA's `risk_path` has no static default** — it is
+produced from a specific `RiskModel` run on a specific OHLCV window. As of
+#3170 `btc_sdca` *is* registered, with `risk_path` omitted from
+`default_params` and injected at publish time via `get_strategy(..., **overrides)`
+after `generate_tearsheets.materialize_sdca_risk_index()` writes a parquet from
+the already-`apply_signal_delay()`-truncated frame (so the index cannot leak
+bars beyond the published window, #1462). `m2_liquidity` stays unregistered;
+`trade_size` is only passed into configs that declare it
+(`registry.config_declares_field`).
 
 `strategies/sdca/presets.py` (backed by `presets.json`) ships named,
 hand-authored `curve_nodes`/`long_only` personalities as public config —

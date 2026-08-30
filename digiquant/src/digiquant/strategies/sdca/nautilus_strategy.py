@@ -51,6 +51,7 @@ from nautilus_trader.model.identifiers import InstrumentId
 from nautilus_trader.model.instruments import Instrument
 from nautilus_trader.trading.strategy import Strategy
 
+from digiquant.strategies.registry import register
 from digiquant.strategies.sdca.backtest import size_trade
 from digiquant.strategies.sdca.curve import DEFAULT_BTC_NODES, RISK_NODES, AccumDistCurve
 
@@ -262,10 +263,22 @@ class SdcaStrategy(Strategy):
         self._pending_qty = 0.0
 
 
-# ─── Registry ────────────────────────────────────────────────────────────────
-# Note: risk_path must be injected at runtime (computed upstream from a live
-# RiskModel + indicators) — no default registry entry, same as m2_liquidity.
-# Use the registry for discovery only; instantiate SdcaStrategyConfig directly.
+# ─── Registry (#3170) ────────────────────────────────────────────────────────
+# risk_path has no static default (it is materialized per run from the
+# signal-delayed OHLCV frame). default_params omit it; generate_tearsheets
+# injects the path via get_strategy(..., **overrides).
+
+register(
+    "btc_sdca",
+    SdcaStrategy,
+    SdcaStrategyConfig,
+    {
+        "initial_cash": 1000.0,
+        "long_only": True,
+        "curve_nodes": DEFAULT_BTC_NODES,
+    },
+    description="BTC Strategic DCA: composite risk → accumulation/distribution curve",
+)
 
 
 __all__ = ["SdcaStrategyConfig", "SdcaStrategy"]

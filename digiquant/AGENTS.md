@@ -131,13 +131,14 @@ the full module map.
   `nautilus_strategy.py` imports `nautilus_trader` — don't add a `nautilus_trader`
   import to any other file in this package, or `strategies.sdca` stops being
   importable without the `nautilus` extra.
-- **`SdcaStrategy` is not in `strategies/registry.py`**, the same as
-  `m2_liquidity`. Instantiate `SdcaStrategyConfig` directly — do not add a
-  `register()` call for it. Its `risk_path` (a parquet of precomputed
-  `date`/`risk`) has no sensible static default, so `get_strategy()`'s
-  param-merge model doesn't fit. Build that parquet with
-  `sdca/risk_index.py::build_risk_index()` + `write_risk_index()`, or the
-  `digiquant_build_sdca_risk_index` MCP tool — do not hand-assemble it.
+- **`SdcaStrategy` is registered as `btc_sdca` (#3170)** with `risk_path`-less
+  `default_params`. `generate_tearsheets.py` materializes the parquet from the
+  already-signal-delayed OHLCV frame (`materialize_sdca_risk_index`) and
+  injects `risk_path` via `get_strategy(..., **overrides)`. Direct
+  `SdcaStrategyConfig` construction is still valid for tests. Do not pass
+  `trade_size` into configs that do not declare it (`config_declares_field`).
+  `m2_liquidity` remains unregistered — same runtime-path pattern, not a
+  second special case.
 - **`SdcaStrategy.on_bar()` must call `AccumDistCurve.value_at_risk()` and
   mirror `sdca/backtest.py::run_backtest()`'s buy/sell sizing loop, never
   reimplement it.** This is what keeps the Nautilus-run result and the
@@ -200,6 +201,22 @@ pytest -m unit -k "sdca" -v
 # Full Nautilus BacktestEngine parity test (gated: needs nautilus_trader installed)
 pytest tests/dq/test_strategies.py::TestSdcaStrategyNautilusParity -v
 ```
+
+### Adding a strategy family to the publish pipeline
+
+`scripts/generate_tearsheets.py` is no longer Slapper-only (#3170). To add a family:
+
+1. Add `"strategy_type": "<family>"` on the `settings.json` entry (omit it to stay
+   `slapper`). Put family-specific fields in a nested block named after the type
+   (SDCA uses `"sdca": {preset, risk_model, long_only, initial_cash}`).
+2. `register()` the Nautilus class with **runtime-only paths omitted** from
+   `default_params` (`risk_path`, `signal_path`). Inject those via overrides after
+   a materialization hook that reads the **signal-delayed** OHLCV frame, never the
+   full cache.
+3. Skip `resolve_calibrations()` for non-Slapper families. Record provenance in
+   tearsheet notes instead.
+4. Pass `trade_size` only when `config_declares_field(name, "trade_size")`.
+5. Do not `--push-supabase` a new family until its rails/calibrations are real.
 
 ---
 

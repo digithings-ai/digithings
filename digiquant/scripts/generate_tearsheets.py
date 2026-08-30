@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """Generate TradingView-faithful tearsheets via the NautilusTrader engine.
 
-This is the digiquant flagship path for the Slapper family (BTC/ETH/SOL):
+This is the digiquant flagship path for published strategies:
 
     Coinbase OHLCV cache
-      → NautilusTrader backtest (digiquant.strategies.SlapperStrategy)
-      → round-trip trades from the engine's positions report
+      → (SDCA: materialize risk-index parquet from this same frame)
+      → NautilusTrader backtest
+      → round-trip trades from the engine's positions report (Slapper)
       → TradingView-style percent-of-equity compounding equity curve
-      → All / Long / Short performance summary
       → TearsheetData JSON in frontend/digiquant-web/public/strategies/
+
+``settings.json`` ``strategy_type`` selects the family (``slapper`` default,
+``sdca`` for ``btc_sdca``). Slapper calibrations stay in gitignored
+``calibrations.json``; SDCA records the coefficients file + preset in notes
+and does not use that gate.
 
 Structural config (symbol, capital, sizing, trade window, precision) comes from
 the PUBLIC ``strategies/settings.json``; indicator calibrations come from the
@@ -49,7 +54,7 @@ from datetime import timedelta
 from decimal import Decimal
 from multiprocessing.connection import Connection
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     import polars as pl
@@ -79,6 +84,39 @@ _PUBLISHED_BASELINE: dict[str, dict[str, float | int]] = {
 
 def load_settings() -> dict:
     return json.loads(SETTINGS_PATH.read_text())
+
+
+def strategy_type_of(settings: dict, strategy: str) -> str:
+    """Family selector (#3170). Missing field inherits defaults.strategy_type, then slapper."""
+    entry = settings["strategies"][strategy]
+    default = settings.get("defaults", {}).get("strategy_type", "slapper")
+    return str(entry.get("strategy_type") or default or "slapper")
+
+
+def materialize_sdca_risk_index(
+    ohlcv: pl.DataFrame,
+    output_path: Path,
+    *,
+    coefficients_path: Path | None = None,
+) -> pl.DataFrame:
+    """Build the SDCA ``risk_path`` parquet from *this* OHLCV frame only (#1462).
+
+    Callers must pass the already-``apply_signal_delay()``-truncated frame so
+    the index cannot leak bars beyond the published window.
+    """
+    import polars as pl
+
+    from digiquant.strategies.sdca.btc_power_law import BtcPowerLawRiskModel, load_coefficients
+    from digiquant.strategies.sdca.risk_index import build_risk_index, write_risk_index
+
+    ts_col = "timestamp" if "timestamp" in ohlcv.columns else ohlcv.columns[0]
+    dates = ohlcv[ts_col]
+    if dates.dtype != pl.Date:
+        dates = dates.cast(pl.Date)
+    model = BtcPowerLawRiskModel(load_coefficients(coefficients_path))
+    index = build_risk_index(dates, ohlcv["close"], model)
+    write_risk_index(index, output_path)
+    return index
 
 
 def apply_signal_delay(ohlcv: pl.DataFrame, signal_delay_days: int) -> pl.DataFrame:
@@ -210,6 +248,7 @@ def run_nautilus(
     from nautilus_trader.model.objects import Currency, Money, Price, Quantity
 
     from digiquant.strategies import get_strategy
+    from digiquant.strategies.registry import config_declares_field
 
     d = settings["defaults"]
     venue_name = "SIM"
@@ -299,13 +338,16 @@ def run_nautilus(
     )
     engine.add_instrument(inst)
     engine.add_data(bars)
+    injected: dict[str, Any] = dict(calibration or {})
+    if config_declares_field(strategy, "size_pct_equity"):
+        injected.setdefault("size_pct_equity", float(d["size_pct_equity"]))
+    trade_size = Decimal(1) if config_declares_field(strategy, "trade_size") else None
     strat, _ = get_strategy(
         strategy_name=strategy,
         instrument_id=inst.id,
         bar_type=bar_type,
-        trade_size=Decimal(1),
-        size_pct_equity=float(d["size_pct_equity"]),
-        **(calibration or {}),
+        trade_size=trade_size,
+        **injected,
     )
     engine.add_strategy(strat)
     engine.run()
@@ -471,18 +513,55 @@ def run_and_write(
     d = settings["defaults"]
     initial_capital = float(d["initial_capital"])
     trade_start = d.get("trade_start") or ""
+    family = strategy_type_of(settings, strategy)
+    entry = settings["strategies"][strategy]
 
-    calibration = resolve_calibrations(
-        strategy,
-        source=cal_source,  # type: ignore[arg-type]
-        trade_start=trade_start or None,
-    )
+    calibration: dict | None = None
+    provenance_notes: list[str] = []
+    if family == "slapper":
+        calibration = resolve_calibrations(
+            strategy,
+            source=cal_source,  # type: ignore[arg-type]
+            trade_start=trade_start or None,
+        )
+        cal_label = cal_source
+    else:
+        cal_label = "n/a"
+
+    if family == "sdca":
+        import tempfile
+
+        from digiquant.strategies.sdca.btc_power_law import load_coefficients
+        from digiquant.strategies.sdca.presets import load_preset
+
+        sdca_cfg = entry.get("sdca") or {}
+        preset_name = str(sdca_cfg.get("preset") or "balanced")
+        preset = load_preset(preset_name)
+        tmp_risk = Path(tempfile.mkdtemp(prefix="sdca_risk_")) / "risk.parquet"
+        index = materialize_sdca_risk_index(ohlcv, tmp_risk)
+        coefficients = load_coefficients()
+        calibration = {
+            "risk_path": str(tmp_risk),
+            "curve_nodes": preset.curve_nodes,
+            "long_only": bool(sdca_cfg.get("long_only", preset.long_only)),
+            "initial_cash": float(sdca_cfg.get("initial_cash", initial_capital)),
+        }
+        provenance_notes.append(
+            "SDCA risk index built from the signal-delayed OHLCV frame "
+            f"{index['date'].min()} → {index['date'].max()} "
+            f"({index.height} rows, risk_model={sdca_cfg.get('risk_model', 'btc_power_law')})."
+        )
+        provenance_notes.append(
+            f"Coefficients {coefficients.fit_start} → {coefficients.fit_end} "
+            f"({coefficients.fit_rows} rows). Preset {preset_name}."
+        )
+
     logger.info(
         "Running Nautilus backtest: %s (%s, %d bars, cal=%s, signal_delay=%dd)",
         strategy,
         symbol,
         len(ohlcv),
-        cal_source,
+        cal_label,
         signal_delay_days,
     )
     positions, bars_list, ohlc_bars, signal_log = run_nautilus(
@@ -549,6 +628,7 @@ def run_and_write(
         f"NautilusTrader backtest, {settings['strategies'][strategy].get('label', strategy)}; "
         f"100% equity compounding, trade window from {trade_start}."
     ]
+    notes.extend(provenance_notes)
     if signal_delay_days:
         notes.append(
             f"Public signal delay: end date shifted back {signal_delay_days} days; "
@@ -825,19 +905,22 @@ def main() -> None:
 
     from digiquant.strategies.calibrations_loader import pick_calibration_source
 
+    targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
+    slapper_targets = [name for name in targets if strategy_type_of(settings, name) == "slapper"]
+
     if args.from_supabase:
         cal_source = "supabase"
-        # Validate early
         from digiquant.strategies.calibrations_loader import load_calibrations_from_supabase
 
-        load_calibrations_from_supabase()
-    else:
+        if slapper_targets:
+            load_calibrations_from_supabase(slapper_targets)
+    elif slapper_targets:
         cal_source = pick_calibration_source(
             prefer_supabase=False,
             allow_example=args.allow_example_calibrations,
         )
-
-    targets = {args.strategy: strategies[args.strategy]} if args.strategy else strategies
+    else:
+        cal_source = "example"
 
     entries: list[dict] = []
     failures: list[tuple[str, str]] = []

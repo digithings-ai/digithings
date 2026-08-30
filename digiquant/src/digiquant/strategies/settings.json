@@ -1,5 +1,5 @@
 {
-  "_comment": "PUBLIC structural settings for the Slapper strategy family. Safe to publish. Proprietary indicator calibrations live in calibrations.json (gitignored); see calibrations.example.json for the shape.",
+  "_comment": "PUBLIC structural settings. strategy_type defaults to slapper when omitted. Proprietary Slapper calibrations live in calibrations.json (gitignored); SDCA uses a public preset + coefficients file instead.",
   "defaults": {
     "initial_capital": 1000.0,
     "size_pct_equity": 100.0,
@@ -9,11 +9,25 @@
     "quote_currency": "USD",
     "price_precision": 2,
     "size_precision": 8,
-    "bar_spec": "1-DAY-LAST"
+    "bar_spec": "1-DAY-LAST",
+    "strategy_type": "slapper"
   },
   "strategies": {
     "btc_slapper": {"symbol": "BTC-USD", "ccxt_symbol": "BTC/USD", "label": "BTC Slapper", "kind": "long_short"},
     "eth_slapper": {"symbol": "ETH-USD", "ccxt_symbol": "ETH/USD", "label": "ETH Slapper", "kind": "long_short"},
-    "sol_slapper": {"symbol": "SOL-USD", "ccxt_symbol": "SOL/USD", "label": "SOL Slapper", "kind": "long_short"}
+    "sol_slapper": {"symbol": "SOL-USD", "ccxt_symbol": "SOL/USD", "label": "SOL Slapper", "kind": "long_short"},
+    "btc_sdca": {
+      "symbol": "BTC-USD",
+      "ccxt_symbol": "BTC/USD",
+      "label": "BTC Strategic DCA",
+      "kind": "dca",
+      "strategy_type": "sdca",
+      "sdca": {
+        "preset": "balanced",
+        "risk_model": "btc_power_law",
+        "long_only": true,
+        "initial_cash": 1000.0
+      }
+    }
   }
 }
