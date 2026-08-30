@@ -51,7 +51,8 @@ Wave E
       105 dropped `UNIQUE(date, document_key)` — [#3278](https://github.com/digithings-ai/digithings/pull/3278)
       squash-merged to `main` as `2df473110` (2026-08-31T11:24Z). Scheduled
       house daily `33426508863` (2026-08-31 12:00 UTC cron; started 18:42Z) is
-      the live publish proof — observe only; do not `workflow_dispatch`. Do not
+      the pending live publish proof (still in_progress) — observe only; do not
+      `workflow_dispatch`. Do not
       treat unit green as a substitute for that run. `origin/main` book writers
       still upsert `on_conflict=date`; do not apply staged 113.
 - [x] RLS proof (local harness vs canonical 001–110 + staged 900 A2 membership-only: 59/59 2026-08-31; 109 house teaser is pre-cutover only; 110 narrows anon private-book reads to house so overlay persist cannot leak; post-T1 anon-drop on `core` still human §6): user A cannot read user B's private rows; anon reads zero private rows post-900; free JWT sees 0 house weights/NAV/fills. Never apply 900 to `core` from this work.
@@ -206,9 +207,9 @@ sweep. Open foreign PRs **#3293 / #3297 / #3320** are superseded. Pins:
 `tests/scripts/test_frontend_dashboard_workspace.py`. Live Pages (`main`
 `2df473110`) still serve `/olympus/` until a **human** coordinates Pages+EF
 `/dashboard` cutover. **Do not** weaken `public_app_urls_ok` to `/olympus`.
-House GHA `33426508863` (schedule, `ref: main`) is the live publish proof for
-[#3278](https://github.com/digithings-ai/digithings/pull/3278) — observe only;
-do not `workflow_dispatch`.
+House GHA `33426508863` (schedule, `ref: main`) is the pending live publish
+proof for [#3278](https://github.com/digithings-ai/digithings/pull/3278)
+(still in_progress) — observe only; do not `workflow_dispatch`.
 
 **Landed 2026-08-31T14:30Z (not epic-complete):** staged unique-drop **113**
 under `digiquant/supabase/migrations/cutover/` (not auto-applied, not on
